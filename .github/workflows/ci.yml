@@ -1,0 +1,64 @@
+name: SDCC CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    name: Bootstrap (${{ matrix.board }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [generic, lg_esl29_rev03]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install pinned SDCC toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential python3 \
+            sdcc=4.2.0+dfsg-1 sdcc-ucsim=4.2.0+dfsg-1
+          sdcc --version
+          python3 --version
+          cc --version
+
+      - name: Check repository policy and documentation links
+        run: |
+          python3 -m unittest discover -s tools -p 'test_*.py' -v
+          python3 tools/check_repository.py
+
+      - name: Build, check images and execute tests
+        env:
+          BOARD: ${{ matrix.board }}
+        run: make BOARD="$BOARD" all test
+
+      - name: Upload generated bootstrap artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cc2530-bootstrap-${{ matrix.board }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            build/${{ matrix.board }}/bringup.hex
+            build/${{ matrix.board }}/bringup.bin
+            build/${{ matrix.board }}/bringup.ihx
+            build/${{ matrix.board }}/bringup.map
+            build/${{ matrix.board }}/bringup.mem
+            build/${{ matrix.board }}/bringup.cdb
+            build/${{ matrix.board }}/build-info.json

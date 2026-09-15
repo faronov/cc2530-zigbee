@@ -1,0 +1,24 @@
+/build/
+/build-*/
+/out/
+/dist/
+/.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+
+# Generated firmware, hardware captures and local credentials stay out of Git.
+*.bin
+*.hex
+*.ihx
+*.ram
+*.dump
+*.pcap
+*.pcapng
+*.log
+*.key
+*.pem
+*.p12
+*.pfx
