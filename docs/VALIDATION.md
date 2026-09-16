@@ -333,11 +333,15 @@ Raw run JSONs remain private; only the processed operator summary is published.
 ## M2 init-time system clock automated coverage
 
 The [init-time selector](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
-is **host-tested, image-checked and simulated only**. No hardware clock-switch
-acceptance is established by either the earlier raw-register experiment or
-the accepted LG C timebase fixture. M2 #4 remains open. `make test-clock` is
-offline and is included in all six existing board/image checks; it adds no
-fourth board image and no driver object to existing board firmware.
+has **host-tested, image-checked and simulated** cancellation coverage, plus
+separate [bounded LG compiled-C hardware acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance).
+The first clock board image passed normal LG switching but
+[failed rollback acceptance](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure).
+Neither the earlier raw-register experiment nor the accepted LG C timebase
+fixture validates rollback. M2 #4 remains open. `make test-clock` is
+offline and is included in every board/image check. That initial slice added
+no board image or driver object to existing board firmware. A later separate
+clock board fixture is described below; the six earlier BINs remain unchanged.
 `clock_test.ihx` is a synthetic standalone executable: **never flash it or
 upload it as a board artifact**. The existing CI whitelist excludes it.
 
@@ -352,6 +356,14 @@ Both success and exhaustion at poll boundaries are checked, including **65,535
 polls per attempt** without a 16-bit wrap. Each failure must return its original
 cause, restore exactly once, and separately report confirmed/failed rollback;
 no original-request retry or unbounded loop is permitted.
+
+The cancellation regression additionally covers 16 command-field combinations
+in both directions with **1..32 old matches** before a delayed requested-source
+observation and return, including raw rollover. Old matches never confirm
+rollback. Never-departed deadline and stopped-counter/65,535-poll cases report
+`CLOCK_ROLLBACK_UNCONFIRMED=9`; departure at the final poll without return still
+fails. Late source confirmation before cancellation is retained as evidence
+for a later saved-source match. No fixed read count or grace interval is used.
 
 Every host read is checked against an original script for address, value and
 write count at that exact boundary; the previous read-log entry is validated
@@ -376,7 +388,7 @@ not fictional SLEEPSTA stability or SLEEPCMD power-down controls. Negative cases
 reject changed actual bytes, source/layout/status/alias/budget/stack metadata,
 and forbidden writes even when the listing is changed to match the mutated IHX.
 
-Alias-aware s51 executes **30 bounded scenarios** through actual calls/returns,
+Alias-aware s51 executes **40 bounded scenarios** through actual calls/returns,
 including both directions, clamping, entry errors, exact/late deadlines,
 counter rollover/range failures, independent rollback errors, and two stopped-
 counter attempts of 257 polls each. Every expected MMIO event is a linked
@@ -392,18 +404,21 @@ SDCC 4.2.0 model-large/code-size accounting:
 
 | Component | CODE | Ordinary XDATA | IRAM |
 | --- | ---: | ---: | --- |
-| `clock.rel` alone | 1,656 bytes | 40 bytes | 37 DATA bytes; no own BIT/overlay area |
+| `clock.rel` alone | 1,824 bytes | 44 bytes | 45 DATA bytes; no own BIT/overlay area |
 | Existing `timebase.rel`, separate | 404 bytes | 25 bytes | 3 overlay DATA bytes, 1 BIT |
-| Complete isolated `clock_test.ihx`, including tests/runtime | 3,183 bytes | 150 bytes | Stack starts `0x46`, 186 bytes reserved; upper 128-byte guard untouched |
+| Complete isolated `clock_test.ihx`, including tests/runtime | 3,351 bytes | 154 bytes | Stack starts `0x4E`, 178 bytes reserved; upper 128-byte guard untouched |
 
 The test additionally uses eight result bytes at `0x1E00`, retaining the whole
-64-byte reservation: 158 bytes used / 214 reserved nonaliased XDATA. Its linked
-IRAM also accounts for eight bank registers, 37 DATA bytes, five overlay bytes
+64-byte reservation: 162 bytes used / 218 reserved nonaliased XDATA. Its linked
+IRAM also accounts for eight bank registers, 45 DATA bytes, five overlay bytes
 and BIT storage; linker area extent is not all live DATA. These are linked
 allocations and simulated guards, not a measured hardware worst-case stack.
 The 19-byte caller-owned target diagnostic object is not persistent driver state.
-No board firmware bytes, M0 status ABI/reservation, board policy or prior
-hardware evidence change in this slice.
+The fix adds 168 CODE bytes, four ordinary XDATA bytes (one local flag and a
+three-byte pointer argument) and eight DATA bytes to each linked clock image.
+The public 19-byte diagnostics and 56-byte fixture ABI are unchanged.
+No older board firmware bytes, M0 ABI/reservation, board policy or historical
+M1/timebase evidence change.
 
 On 2026-09-16, all six `make BOARD=... IMAGE=... PYTHON=.venv/bin/python all test`
 configurations passed, including the unchanged **327-test pinned Python suite**
@@ -420,19 +435,124 @@ and whitespace guardrails passed. None of the six board maps contains
 | generic / timebase_fixture | 1,807 | `15072f87b5fe06ff56c2e303704aeefb2d6f5c87aff20dd132ea0699d29a478f` |
 | LG / timebase_fixture | 1,847 | `cd64743bc5095a37711885236fa65367dc375a57a509b322f6d5678ffdf954ef` |
 
-**Remaining manual gates:** a separately authorized board integration and safe
-non-RF board fixture are required before physical execution; this isolated
-executable is not that fixture. The parent/operator must establish board and
-recovery conditions, use matching checked artifacts, verify all physical CODE
-before resume, and observe actual calls in both RC16/XOSC32 directions,
-undivided CMD/STA confirmation, unchanged LF/TICKSPD commands and safe board/
-IRQ state. Measured bounded success/failure and rollback evidence must distinguish
-source confirmation from LF calibration completion and tick precision.
+**Manual evidence and remaining gates:** the dedicated board fixture now has
+the bounded LG normal, pending-cancel, late-source and separately reset recovery
+record linked above. It verified physical CODE before resume, compiled calls
+in both directions, CMD/STA, original failure/rollback results and the documented
+invariants. This isolated executable is still not a board image. New hardware
+work requires its own board/image/recovery authorization; generic hardware,
+frequency/calibration and the other M2 gates remain unobserved.
+Source confirmation is not LF calibration completion or tick precision.
 Oscillator-failure injection needs its own safe authorized setup; host/simulator
 timeouts are not that experiment. Do not access hardware, alter the installed
-LG timebase image, reset/flash or run USB/debugger tools through ordinary tests.
+LG image, reset/flash or run USB/debugger tools through ordinary tests.
 No LF switching, calibration service, wake/IRQ/compare, RF, AES or flash-service
 acceptance follows from this work.
+
+## M2 clock board fixture automated coverage
+
+The separate `IMAGE=clock_fixture` runs the corrected clock and unchanged
+timebase C drivers, with **host-tested, image-checked and simulated** fixture
+coverage on both boards. The manual runner has synthetic host coverage and
+separate [2026-09-17 (UTC+03) LG compiled-C hardware acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance).
+The old LG negative test exposed the pending-cancellation bug; it is not
+reclassified as success by the corrected-image record. See the
+[56-byte ABI, exact checkpoint proof, footprint, hashes and manual procedure](DEBUGGING.md#init-time-clock-board-fixture).
+M2 #4 remains open. The six older board BIN hashes in the preceding table and
+all historical LG M1/timebase records remain unchanged.
+
+The real-driver host model covers all 16 LF/TICKSPD command combinations
+through **771 successful steps each**, including source/stage progression,
+byte-counter/heartbeat wrap, explicit serialization and synthetic 24-bit
+counter rollover. Every ST0/ST1/ST2 triplet is ordered and latched while the
+model ticks between byte reads. Each read/write log entry is checked before
+consumption; existing 32-entry capacity and overflow assertions are unchanged.
+Stopped, backward and ambiguous counter samples, late timeout, confirmed and
+failed rollback, IRQ/MODE/initial-state rejection, post-call invariant errors
+and unchanged latched faults are covered. No host callback enters firmware.
+
+Both actual linked board images execute **771 steps** under alias-aware s51,
+with original startup/M0/GPIO policy, correct stage results and stack unwind.
+Eight terminal driver scenarios cover the verified pre-request deadline halt,
+backward/ambiguous observations, 4,096-poll stopped-clock failure and an
+independently exhausted 4,096-poll rollback. The simulated deadline halt proves
+the stored deadline, live DPL=0/DPS=0, actual caller return address and unchanged
+CMD before request execution. Additional cases check `C9 -> 89 -> C9` after
+cancellation without accepting the first old match, never-departed uncertainty,
+and the separate post-request hold/C-observed-source checkpoint before a late
+timestamp. Tick/STA injection is **synthetic**, not analogue
+oscillator startup, a calibrated counter or physical failure injection.
+Terminal fault-loop CPU/RAM immutability, complete records, counter/heartbeat,
+SFR, nonallocated XDATA and upper-stack guards remain checked.
+
+The board image verifier uses actual IHX/map/CDB, not a module listing that a
+later standalone test link can overwrite. It shares the clock instruction/ABI
+and relocated reader checks without weakening the original standalone
+`clock_test.ihx` listing contract or `timebase_test.ihx` 88-byte reader contract.
+Negative checks mutate every byte of the complete 148-byte deadline helper,
+its caller-to-request continuation, the 127-byte source-observation-to-sample
+continuation, post-request instruction, fixture checkpoints and relocated reader;
+they also reject extra helper calls, incorrect explicit CDB ends, overlay
+bounds, SFRs, source/field layouts and all common image/memory/alias violations.
+The helper RET is shared with an error path: opcode/tail checks alone never
+replace the live success-return and caller checks.
+
+The offline Python suite now has **345 tests**, retaining the prior 327
+regressions and adding 18 clock record/CLI/runner tests. They cover complete
+normal sequences and wrap, full CODE verification before resume, permissions,
+authorization/artifact gates, deadline/caller checks, breakpoint disable before
+hold, every composed operation failure in all three modes, malformed records,
+unexpected PC/FAULT, register/NOP preservation and cleanup failure. A host hold
+alone, wrong returned error, late/failed rollback or missing elapsed evidence
+must not pass negative acceptance. In particular, the reported driver/fixture
+STA mismatch and bounded rollback uncertainty still fail acceptance. A
+synthetic backend also verifies the real guarded hold's shared deadline,
+terminal oversleep failure and denied resume.
+No test loads a physical USB backend.
+
+The two new images preserve the 512-byte reservation budget, ordinary allocation
+below `0x1E00`, full M0 reservation and IRAM alias. They do not enable RF,
+interrupts, sleep, LF switching or a calibration service. The revised LG physical
+normal/timeout/recovery observations are separate from these automated checks.
+Measured frequency, calibration, oscillator-failure/stopped-clock and power-cut
+experiments, generic hardware and other M2 services remain outside that acceptance.
+
+All **eight local board/image `all test` configurations passed**
+after the cancellation fix, each including the 345-test pinned Python suite
+and the existing standalone clock/timebase/codec checks. All six earlier BIN lengths and full SHA-256 values
+were asserted unchanged; their maps still exclude `_clock_select_init`.
+The two new BIN hashes match the linked clock fixture record. Repository/local
+links and whitespace guardrails passed. This is offline validation, not a new
+CI publication or hardware result.
+
+### 2026-09-17 bounded LG clock hardware evidence
+
+The parent additionally reports successful full LG offline checks and physical
+acceptance of corrected SHA-256
+`77f7142d1e4ef3a662ce8ffd7ce9803d110a80e867b1a55be5540b98d16867ca`
+(3,798 bytes). All physical CODE was independently checked before CPU resume.
+The hardware runs are dated **September 17, UTC+03**, distinct from the old
+`c41dae85...` image's **September 16 23:24** failure.
+
+The original pending-timeout test passed unchanged: original TIMEOUT 3,
+14,770 raw request ticks / 1 poll, helper 0, then confirmed rollback 0 after
+64 ticks / 15 polls, with both driver and immediate fixture snapshots `C9/C9`.
+The separate late-source test passed at the real C evidence checkpoint:
+TIMEOUT 3 after 27,850 ticks / 1 poll, rollback 0 after 3 ticks / 1 poll, both
+snapshots `C9/C9`. Both preserved terminal FAULT `0x016C` and the original
+failure. A separate explicit reset/recovery run then passed 257 full sequences
+/ 771 C calls, all result 0 and rollback NOT_ATTEMPTED 8: RC idempotence
+0 ticks / 0 polls, XOSC 11..13 ticks / 3 polls, RC return 2..3 ticks / 1 poll.
+Counter/heartbeat wraps and M0/LF/TICKSPD/SLEEPCMD/IRQ/CPU-inspection invariants
+passed; final READY was `0x016A`, RC16.
+
+The [full dated record](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance)
+retains the exact scope, operator-local timeline and evidence separation.
+No frequency/calibration/LF-calibration-completion, physical oscillator absence
+or stopped-clock, power-cut, IRQ/wake/RF/AES/flash or natural 24-bit timer-wrap
+claim follows. Never-observed departure remains uncertainty 9, not confirmed
+cancellation; that path and other injected faults retain host/simulator evidence.
+Generic remains host/image/simulator-only. Full M2 #4 stays open.
 
 ## Independent Sleep Timer hardware reference (2026-09-16)
 
@@ -542,8 +662,8 @@ seeing measurements.
 ## CI and release boundary
 
 Hosted CI builds/tests without physical devices or repository secrets.
-The CI matrix covers three non-RF images (`bringup`, `debug_fixture`,
-`timebase_fixture`) on both boards: six jobs. Artifacts contain only the
+The CI matrix covers four non-RF images (`bringup`, `debug_fixture`,
+`timebase_fixture`, `clock_fixture`) on both boards: eight jobs. Artifacts contain only the
 explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.

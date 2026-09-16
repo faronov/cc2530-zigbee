@@ -179,9 +179,9 @@ it does not expand the core-SFR whitelist or add a host RAM/flash writer.
 The [2026-09-16 LG acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
 executed this C module and fixture logic on the verified 1,847-byte board
 image: 257 successful cycles, elapsed 129..130 raw ticks for requested 128,
-37 polls each, with cycle/heartbeat wrap and CPU/M0 preservation. The last
-reported target is the new timebase fixture halted at READY `0x016A`, not the
-historical M1 image. Generic hardware remains unobserved, and fault paths
+37 polls each, with cycle/heartbeat wrap and CPU/M0 preservation. That run left
+the timebase fixture halted at READY `0x016A`; later clock-fixture work is
+recorded separately below. Generic hardware remains unobserved, and fault paths
 remain host/simulator evidence. This does not add calibration, natural
 24-bit rollover in the C run, clock switching, IRQ/compare/wake or other M2
 services; the earlier register-only experiment remains separate.
@@ -190,10 +190,18 @@ services; the earlier register-only experiment remains separate.
 
 `include/clock.h` / `src/clock.c` adds original synchronous
 `clock_select_init(source, timeout_ticks, poll_limit, &diagnostics)`, using
-the real CLKCONCMD/CLKCONSTA and existing timebase. It is **not linked into
-any board image**. Its evidence is host-tested, image-checked and simulated,
-not hardware-observed; the earlier LG timebase acceptance does not validate
-this selector. M2 #4 remains open.
+the real CLKCONCMD/CLKCONSTA and existing timebase. The initial isolated slice
+did not link it into any board image; a subsequent separate `clock_fixture`
+now does, without changing any of the six older board BINs.
+The original clock board image passed one LG normal sequence but exposed a
+[pending-cancellation race](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure).
+The revised driver has host/image/simulator coverage plus separate
+[2026-09-17 (UTC+03) bounded LG compiled-C acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+both induced timeouts confirmed rollback without masking the original error,
+and a separately reset recovery run completed 257 sequences / 771 C calls.
+Generic remains hardware-unobserved. This does not confirm never-departed
+cancellation or establish frequency/calibration and other M2 services.
+The earlier LG timebase record remains separate; M2 #4 stays open.
 
 `source` is `CLOCK_RC16` (0) or `CLOCK_XOSC32` (1). The raw timeout must be
 less than `0x800000`, the 16-bit poll limit positive, and the diagnostic
@@ -212,6 +220,8 @@ Current MODE is not evidence of wake history. The caller must guarantee that
 history and exclude concurrent writers/readers throughout both attempts;
 these are not detectable/repairable ownership conditions. SDCC model-large
 helpers and compiler scratch are foreground-only, not ISR-reentrant.
+Matching entry CMD/STA alone cannot exclude a hidden pending request.
+After a failure, an idempotent call is not a cancellation/recovery test.
 
 The selector preserves CMD.OSC32K and CMD.TICKSPD, changes only OSC/CLKSPD,
 and never writes SLEEPCMD, ST0-2, GPIO, IRQ or calibration registers.
@@ -245,11 +255,30 @@ unexecuting CPU cannot be detected/recovered by this synchronous interface.
 
 After **any post-request failure**, the driver writes the saved known
 undivided CMD exactly once, even if rollback deadline construction fails.
-Rollback has a fresh start/deadline and the same poll cap, with the same
-confirmation rules. It never retries the original request, resets the chip
+Rollback has a fresh start/deadline and the same poll cap. **A matching old
+STA is not cancellation confirmation:** the pending requested source can
+still appear after that observation. The driver tracks whether STA.OSC ever
+reported the originally requested HF source, including observations before
+time/error checks or after cancellation. Only that source observation followed
+by a subsequent complete saved-settings match within the rollback bounds
+permits rollback `CLOCK_OK`. Source-bit evidence deliberately accepts the
+intermediate XOSC/CLKSPD=1 status `89`; it is not full restoration.
+
+If the requested source was never observed when the rollback deadline or poll
+cap expires, `CLOCK_ROLLBACK_UNCONFIRMED` (**9**, appended after unchanged
+`CLOCK_NOT_ATTEMPTED=8`) reports bounded cancellation uncertainty. A truly
+canceled request that never transitions, an unseen departure/return between
+polls, and a still-pending request cannot be distinguished by old STA alone.
+No number of old matches or fixed grace delay substitutes for source evidence.
+If departure was observed but return was not confirmed, ordinary timeout/cap
+errors apply. Helper, range and command errors retain their specific codes.
+All these outcomes are unconfirmed restoration, not permission to continue.
+
+It never retries the original request, resets the chip
 or converts a fallback into success: the return remains the original failure.
 `diagnostics.rollback_result` is `CLOCK_NOT_ATTEMPTED` (8), `CLOCK_OK` for
-confirmed restoration, or its separate failure code. A failed rollback is
+the observed departure/return sequence, 9 for the uncertainty above, or its
+separate failure code. A failed rollback is
 **unconfirmed clock state**, even when its last observed settings look correct;
 the caller must stop clock-dependent initialization and report both failures.
 There is no implicit retry, continued initialization or recovery policy.
@@ -263,7 +292,9 @@ the last complete observation, including on failure, not a fabricated desired
 state. This is a caller-owned C object, not a portable serialized ABI:
 SDCC lays it out in 19 bytes (phase offsets 0/7, command/result offsets 14..18);
 host padding may differ. The isolated test checks all target bytes/field offsets.
-No heap, retained epoch or persistent driver state is added.
+No heap, retained epoch or persistent driver state is added. One private
+per-call source-evidence byte is cleared before a non-idempotent request and
+shared by the two attempts; it does not change the 19-byte diagnostic ABI.
 
 With a cap `P`, at most `2*P` polls, `2*(P+1)` Sleep Timer samples and two CMD
 writes occur across request and rollback. Each attempt gets its own raw
@@ -282,6 +313,36 @@ implements no calibration procedure, LF source change, wake synchronization,
 timer compare, interrupt dispatch or runtime clock-management service.
 See [source facts](PROVENANCE.md#m2-system-clock-sources) and
 [offline evidence/manual gates](VALIDATION.md#m2-init-time-system-clock-automated-coverage).
+
+The [clock board fixture](DEBUGGING.md#init-time-clock-board-fixture) separates
+56-byte byte-oriented state/serialization and foreground C orchestration from
+target-only NOP/RET/fault-loop checkpoints. It repeats RC16 idempotence, XOSC32
+and RC16 only on success, with fixed 1,024 raw ticks and 4,096 polls per attempt.
+Any original driver failure remains terminal despite successful rollback.
+M0 clock values stay immutable startup evidence; current CMD/STA and
+SLEEPCMD/IRQ snapshots are separate fixture fields. The later cancellation
+fix changes only rollback evidence/error semantics, not the fixture sequence
+or an application clock-management service.
+
+The manual runner verifies all physical CODE before resume and uses read-only
+inspection plus existing reset/CPU/breakpoint permissions. Its optional timeout
+stimulus is a halt at the unchanged deadline helper's strictly verified shared
+RET, before the clock request. Complete linked bytes, success-return ABI,
+caller continuation and live stack/DPL distinguish that boundary from an
+unrelated/error return. It disables the breakpoint before allowing the real
+request/rollback, and accepts the negative experiment only from actual TIMEOUT
+and confirmed restoration. An uncertain cancellation fails that acceptance
+check explicitly, even if CMD/STA presently match. A separate
+`--induce-late-timeout` holds after the verified actual CMD write and verifies
+C-observed requested source and the private evidence byte before the poll's
+Sleep Timer call. It then requires actual late TIMEOUT and confirmed return.
+There is no RAM/ROM injection or generic SFR access. On the corrected LG image,
+the original pending-cancel test confirmed rollback after 64 raw ticks /
+15 polls, not the old false 3-tick / 1-poll match. The late-source case confirmed
+return after 3 ticks / 1 poll, with prior real C source evidence. Both retained
+TIMEOUT and terminal FAULT; a separate explicit reset then completed recovery.
+This finite hardware record does not turn old matches into proof of cancellation:
+never-observed departure still requires result 9 or another explicit error.
 
 ## Memory contract
 

@@ -142,26 +142,57 @@ shares the original startup/board policy and M0 ABI. Both boards have **host,
 linked-image and simulator** coverage. On 2026-09-16, the verified 1,847-byte
 LG image also passed [compiled-C hardware acceptance](docs/DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance):
 257 cycles, elapsed 129..130 raw ticks for requested 128, exactly 37 polls
-per cycle, byte-counter wrap and preserved CPU/M0 state. The last reported LG
-image is now this timebase fixture, halted at READY `0x016A`, not the old M1
-image. The manual runner independently verifies all physical CODE before
+per cycle, byte-counter wrap and preserved CPU/M0 state. That run left the LG
+timebase fixture halted at READY `0x016A`; later clock work is separate below.
+The manual runner independently verifies all physical CODE before
 resume and never flashes.
 
 Generic hardware and physical timer-fault injection remain unobserved. Stopped,
 backward and ambiguous C paths retain host/simulator coverage; the C run is
 not calibration or a natural 24-bit timer-wrap claim. CI covers both boards
-and all three board images without uploading standalone test executables.
-**M2 #4 remains open** for physical clock-control acceptance/calibration, IRQ/compare/wake and the
-other platform gates.
+and all four board images without uploading standalone test executables.
+**M2 #4 remains open** for clock measurement/calibration, IRQ/compare/wake and
+the other platform gates.
 
 The next isolated [init-time system clock selector](docs/ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
 requests RC16/XOSC32 through real CMD/STA registers, with raw-time/poll limits
 and a single bounded rollback that never hides the original failure.
 `make test-clock` provides **host, linked-image and alias-aware simulator**
-coverage only: clock switching is **hardware-unvalidated**. All six board
-BINs remain unchanged; the selector is not linked into them. Its standalone
+coverage; separate bounded LG compiled-C hardware acceptance is recorded below.
+All six older board BINs remain unchanged; the selector is not linked into them. Its standalone
 `clock_test.ihx` must never be flashed or uploaded as board firmware.
 There is no LF source switching, calibration service or new sleep/IRQ support.
+
+The subsequent [clock board fixture](docs/DEBUGGING.md#init-time-clock-board-fixture)
+links the real driver separately as `IMAGE=clock_fixture`:
+
+```sh
+make BOARD=generic IMAGE=clock_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=clock_fixture all test
+```
+
+It repeats RC16 idempotence, XOSC32 and RC16 with bounded calls, a 56-byte
+serialized result and terminal faults. Its explicitly authorized manual runner
+verifies all physical CODE before resume; optional timeout testing uses a
+strictly checked deadline-return breakpoint, not memory/code injection.
+The [first LG clock experiment](docs/DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure)
+passed `C9 -> 88 -> C9` normally but **failed rollback acceptance**: old STA briefly
+matched before a delayed XOSC transition. The fix requires observing requested
+source then return; a never-observed departure yields bounded
+`CLOCK_ROLLBACK_UNCONFIRMED=9`, not success.
+
+The corrected 3,798-byte LG image passed
+[compiled-C hardware acceptance on 2026-09-17 (UTC+03)](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+the original pending-cancel test passed unchanged, with confirmed rollback
+only after 64 raw ticks / 15 polls, and the separate late-source timeout test
+also passed. Both preserved the original TIMEOUT and terminal FAULT. A
+separate explicit reset/recovery run then passed 257 full sequences
+(771 actual C calls), including counter/heartbeat wraps and CPU/M0/clock-field
+invariants. The live LG board is now the corrected clock fixture, halted at
+READY `0x016A` on RC16. Generic remains **host/image/simulator-only**.
+This is not frequency/calibration, physical oscillator-failure/stopped-clock
+or never-departed cancellation confirmation. Prior M1/timebase evidence is
+historical and unchanged; M2 stays open.
 
 ## Intended scope
 

@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [generic, lg_esl29_rev03]
-        image: [bringup, debug_fixture, timebase_fixture]
+        image: [bringup, debug_fixture, timebase_fixture, clock_fixture]
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

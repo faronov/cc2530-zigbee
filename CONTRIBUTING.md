@@ -56,6 +56,8 @@ make BOARD=generic IMAGE=debug_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=debug_fixture all test
 make BOARD=generic IMAGE=timebase_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=timebase_fixture all test
+make BOARD=generic IMAGE=clock_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=clock_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -167,7 +169,8 @@ make test-clock
 This runs strict real-MMIO host models, separate host-only helper-error doubles,
 linked instruction/diagnostic/layout rejection checks and alias-aware s51
 execution. `clock_test.ihx` is **test-only: never flash or upload it**. It is
-not a fourth `IMAGE` and the driver must not enter any existing board `OBJECTS`.
+not a board `IMAGE`; the driver remains excluded from the six older board builds.
+The subsequent, separate `IMAGE=clock_fixture` now links it intentionally.
 CI's explicit board-artifact whitelist remains unchanged. The clock script
 validates/consumes every host read-log entry and retains the 32-entry capacity
 and overflow assertions; production code has no test callbacks.
@@ -176,7 +179,38 @@ sites, not physical oscillator startup or calibration. Preserve the existing
 standalone timebase's exact reader contract when sharing layout checks.
 See the [clock contract](docs/ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
 and [hardware gates](docs/VALIDATION.md#m2-init-time-system-clock-automated-coverage);
-the current LG timebase hardware record grants no clock-switch authorization.
+the historical LG timebase record grants no clock-switch authorization.
+
+The clock board fixture adds real-reader/clock host models, explicit diagnostic
+serialization, strict linked timeout-checkpoint proof and synthetic clock/fault
+simulation. The image checker uses its own IHX/CDB, not `clock.rst` that a later
+standalone link may overwrite. Focused runner/decoder tests are entirely offline:
+
+```sh
+PYTHONPATH=tools .venv/bin/python -B -m unittest test_clock_fixture test_clock_hardware -v
+```
+
+`tools/check_clock_hardware.py` is manual-only, never run by Make or CI.
+Both normal and `--induce-timeout` modes require separate hardware authorization;
+read the [clock fixture procedure](docs/DEBUGGING.md#init-time-clock-board-fixture).
+The latter verifies a real linked deadline RET and caller, pauses the CPU before
+the real request, and still requires actual TIMEOUT plus confirmed rollback.
+`CLOCK_ROLLBACK_UNCONFIRMED=9` explicitly fails hardware acceptance; old STA
+matches cannot prove a pending request was drained. The separate
+`--induce-late-timeout` mode holds after the checked request write, then verifies
+C-observed source evidence before the timed poll and requires confirmed return.
+Both modes need a fresh explicitly authorized run. The original LG
+pending-cancellation test exposed a real driver bug on September 16.
+The corrected image passed separate
+[2026-09-17 (UTC+03) compiled-C acceptance](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+both negative modes retained TIMEOUT/terminal FAULT with confirmed rollback,
+then an explicitly reset normal run completed 257 full sequences / 771 C calls.
+This finite LG record does not confirm never-departed cancellation, generic
+hardware, frequency/calibration, physical oscillator/stopped-clock or power-cut
+faults, or other M2 services. A host sleep, synthetic SFR input or green runner
+test is not physical clock evidence; past acceptance grants no permission to
+repeat hardware work.
+CI now has eight board/image jobs and still uploads only selected board artifacts.
 
 ## Code conventions
 
@@ -213,8 +247,9 @@ halted at `0x0173` at the end of that run. The record also includes 309 passing
 pinned-dependency host tests (including 18 offline macOS observer tests).
 Keep generic-board and standalone
 `bringup` hardware claims unobserved; shared startup evidence is limited to
-the LG M1 and timebase fixtures. The latest reported LG state is the new
-timebase image halted at READY `0x016A`, not the historical M1 image.
+the LG M1, timebase and clock fixtures. The latest reported LG state is the
+corrected clock image halted at READY `0x016A` on RC16, not the historical
+M1 or timebase image.
 Bank discrimination is conditional on future banked CODE.
 Do not turn bounded M1 completion into a universal debugger or M2/RF/network
 claim, or infer current hardware availability from finite acceptance evidence.

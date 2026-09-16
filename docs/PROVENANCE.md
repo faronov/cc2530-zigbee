@@ -265,6 +265,38 @@ The existing Sleep Timer facts remain separately cited above. The linked
 checker reviews the emitted ordinary 8051 instruction subset, genuine SFR
 operands and calls; synthetic s51 inputs do not model analogue oscillator startup.
 
+The subsequent clock board fixture, explicit 56-byte serialization, host/simulator
+models, decoder and manual runner are original BSD-3-Clause work. That initial
+fixture left both drivers unchanged. A later root fix in `clock.c` follows the
+operator-supplied [pending-cancellation failure facts](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure);
+the timebase remains unchanged. STA reports actual source, not cancellation
+drainage. The fix tracks observed requested-source departure/return and reports
+bounded uncertainty when departure was never seen, without invented oscillator
+bits or a delay heuristic. No private record was read or imported.
+The timeout checkpoint is derived from this
+project's actual SDCC 4.2.0 IHX/map/CDB, with the full relocated deadline helper
+and clock-call continuation checked, not guessed from another image or copied
+from a programmer. SDCC emits an address record, but no type declaration, for
+the helper's three-byte overlay scratch; the checker verifies that exact
+record and OSEG allocation rather than inventing a declaration.
+The live return check uses existing register snapshots and read-only IRAM alias
+access. No adapter framing, hardware SFR whitelist, memory writer, dependency,
+private recovery file or physical capture is added. The fixed host hold is a
+host-timed test stimulus, not a calibrated tick-rate fact or oscillator-failure
+experiment. A separate 127-byte observation-to-sample instruction proof
+supports the late-source experiment using existing read-only APIs. New reviewed
+SDCC instructions are XRL A,direct, JB ACC.6,rel and CJNE R4,#data,rel;
+none adds a peripheral access. The operator-supplied
+[2026-09-17 (UTC+03) compiled-C clock acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance)
+records the corrected 3,798-byte LG image, independent physical CODE verification,
+both bounded timeout/rollback cases and a separately reset 257-sequence recovery
+run. The operator checked private log timestamps; only the processed
+facts are documented, with no private logs, captures, identities or factory
+data imported. This record is distinct from the old image's
+September 16 cancellation failure and from the earlier M1/timebase evidence.
+It does not establish frequency/calibration, physical oscillator failure or
+never-departed cancellation confirmation; generic remains host/image/simulator-only.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

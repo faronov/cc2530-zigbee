@@ -167,11 +167,26 @@ of the C driver or calibrated timing. The compiled-C run is a separate
 experiment and does not establish natural 24-bit rollover in those cycles.
 A further isolated [init-time system clock selector](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
 now requests RC16/XOSC32 with raw-time and independent poll bounds, strict
-entry-state checks, and one bounded verified rollback on failure. It is
-host-tested, image-checked and simulated only; no board image links it and
-all six existing firmware BINs remain unchanged. Physical clock selection,
-calibration, interrupts, compare/wake handling and the other M2 platform
-gates remain open. The prior LG timebase evidence does not validate switching.
+entry-state checks, and one bounded restoration attempt on failure. A subsequent separate
+[clock board fixture](DEBUGGING.md#init-time-clock-board-fixture) now executes
+RC16 idempotence, XOSC32 and RC16, with serialized original/rollback results
+and terminal faults. Its manual runner includes a strictly verified pre-request
+deadline-RET halt experiment, without code/RAM injection. The
+[first LG clock experiment](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure)
+passed a normal sequence but **failed rollback acceptance**: old STA briefly
+matched after cancellation, then the still-pending XOSC change appeared.
+The root fix requires observed requested-source departure followed by return,
+or reports bounded `CLOCK_ROLLBACK_UNCONFIRMED=9`. The corrected LG image passed
+[bounded compiled-C clock acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+the unchanged pending-cancel test confirmed return after 64 raw ticks /
+15 polls, the separate verified late-source timeout test passed, and an
+explicit reset/recovery run completed 257 full sequences / 771 C calls.
+Both timeout cases retained the original error and terminal FAULT; recovery
+was a separate run, not implicit continuation. All six older BINs are unchanged.
+Generic and never-departed cancellation remain host/image/simulator evidence
+only. Frequency/calibration, physical oscillator-failure/stopped-clock,
+interrupts, compare/wake and the other M2 gates remain open. The new clock
+record is separate from the earlier LG timebase evidence; full M2 #4 is open.
 
 Deliver independent interfaces for:
 

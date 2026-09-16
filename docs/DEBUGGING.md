@@ -719,6 +719,319 @@ lower-32-KiB unbanked CODE; uCsim address stops are not CC2530 comparator slots.
 The separate LG observation below does not extend to the generic board,
 standalone `bringup`, banked CODE or interactive source-level stepping.
 
+## Init-time clock board fixture
+
+`IMAGE=clock_fixture` is a separate original non-RF board image, not
+`clock_test.ihx`. It links the C clock/timebase drivers and reuses the original
+startup/board policy and M0 status ABI. The first LG image passed normal
+switching but **failed rollback acceptance**, exposing the race recorded below.
+Both revised images are **host-tested, image-checked and alias-aware simulated**.
+The corrected LG image additionally passed
+[bounded compiled-C hardware acceptance on 2026-09-17 (UTC+03)](#2026-09-17-lg-compiled-c-clock-acceptance),
+including both timeout/rollback cases and separate reset/recovery.
+Generic remains hardware-unobserved; full M2 #4 stays open.
+The six older board BINs and all historical LG evidence remain unchanged.
+The last reported installed LG image is the corrected 3,798-byte clock fixture
+described by the hashes below, halted at READY `0x016A` on RC16.
+
+```sh
+make BOARD=generic IMAGE=clock_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=clock_fixture all test
+```
+
+Outputs are under `build/<board>/clock_fixture/`. Initialization requires
+stable undivided RC16, MODE=0 and disabled IEN0/1/2. The foreground sequence
+is stage 0 RC16 idempotence, stage 1 XOSC32, stage 2 RC16, repeating only after
+successful calls. Every `clock_select_init` uses **1,024 raw timeout ticks**
+and a **4,096-poll cap per attempt**, not milliseconds. No other fixture
+function calls `timebase_deadline_after`. This deliberately isolated exercise
+has no application/peripheral clients that depend on an unchanged HF clock.
+
+Each result is serialized explicitly, including all driver diagnostic fields.
+READY is published last, after the successful-step counter and M0 heartbeat
+advance modulo 256. An original driver error remains an error even after a
+successful rollback; it is recorded before terminal FAULT. No fault advances
+the counter, retries, or automatically resets/reinitializes. Only a separate
+explicit reset/initialization clears it. The C orchestration is host-testable;
+NOP/RET and the terminal fault loop exist only in the target example.
+
+The fixture checks unchanged SLEEPCMD/IRQ values and LF/TICKSPD command
+fields, and records current CMD/STA separately after every call. M0 offsets
+24/25 remain **startup snapshots**, not live clock telemetry. There are no
+SLEEPCMD, ST0-2, LF-source, GPIO or IRQ writes beyond the original startup
+policy; the driver changes only CMD.OSC/CLKSPD. Automatic RC calibration and
+an extra Sleep Timer tick can accompany HF selection (SWRU191F pp.64, 66-69).
+Neither source confirmation nor this fixture establishes calibrated frequency,
+LF calibration completion, wake/IRQ/compare, RF, AES or flash services.
+
+### Clock fixture byte ABI v1
+
+The 56-byte `clock_fixture_state` is ordinary linker-accounted XDATA, currently
+at `0x0000` on both boards, never unused M0 reservation or the IRAM alias.
+All multibyte values are little-endian arrays; host C struct padding is not
+serialized. Read a complete record at the matching checkpoints.
+
+| Offset | Bytes | Meaning |
+| --- | ---: | --- |
+| 0 | 4 | Signature `M2CK` |
+| 4 / 5 | 1 / 1 | Version 1 / size 56 |
+| 6 / 7 | 1 / 1 | Phase: 1 INITIALIZED, 2 RUNNING, 3 READY, 4 FAULT / reason |
+| 8 / 9 | 1 / 1 | Stage 0/1/2 / requested source 0 RC16 or 1 XOSC32 |
+| 10 / 11 | 1 / 1 | Successful steps modulo 256 (including idempotence) / original clock result |
+| 12 / 15 | 3 / 2 | Fixed raw timeout 1,024 / poll cap 4,096 |
+| 17 | 7 | Request: elapsed uint32, polls uint16, timebase status byte |
+| 24 | 7 | Rollback: elapsed uint32, polls uint16, timebase status byte |
+| 31..35 | 5 | Saved CMD, requested CMD, last driver-observed CMD, STA, rollback result |
+| 36 / 37 | 1 / 3 | Initial SLEEPCMD / IEN0, IEN1, IEN2 |
+| 40 / 41 | 1 / 1 | Current CMD / STA after the call |
+| 42 / 43 | 1 / 3 | Current SLEEPCMD / IEN0, IEN1, IEN2 |
+| 46 / 54 | 8 / 2 | Reserved zeros / guards `69 96` |
+
+Reasons are 0 none, 1 driver error, 2 invariant violation, 3 invalid phase/stage.
+Clock results retain the [driver values](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice);
+8 means NOT_ATTEMPTED; appended rollback-only 9 means bounded cancellation
+UNCONFIRMED. Existing values, 19-byte driver diagnostics and this 56-byte ABI
+are unchanged. Initial and cleared RUNNING diagnostics are eighteen
+zero bytes followed by rollback NOT_ATTEMPTED. On a pre-call phase fault,
+the preceding record is retained. Snapshot decoding does not authenticate
+arbitrary RAM corruption or invent a reset epoch.
+
+The offline `clock-state` decoder rejects incomplete records, RUNNING, unknown
+values, inconsistent source/status/bounds and altered guards. The manual runner
+alone permits the cleared RUNNING shape at strictly checked internal
+checkpoints; it is not accepted as a completed call.
+
+```text
+python3 tools/debug_image.py clock-checkpoint --board lg_esl29_rev03 --image clock_fixture --output build/lg_esl29_rev03/clock_fixture
+python3 tools/debug_image.py clock-state --board lg_esl29_rev03 --image clock_fixture --output build/lg_esl29_rev03/clock_fixture --snapshot SNAPSHOT
+```
+
+### Clock checkpoints, timeout proof and footprint
+
+| Symbol / checked boundary | generic | LG | Exact meaning |
+| --- | --- | --- | --- |
+| `_clock_fixture_before_call` | `0x0140` | `0x0168` | NOP; RET, initial or preceding READY record |
+| `_clock_fixture_ready_stop` | `0x0142` | `0x016A` | NOP; RET, completed successful call |
+| `_clock_fixture_fault_stop` | `0x0144` | `0x016C` | NOP; SJMP back, terminal fault |
+| Checked deadline-helper RET | `0x06AC` | `0x06D4` | Shared RET; require live DPL=0, DPS=0 |
+| Clock caller return address | `0x0838` | `0x0860` | Actual stack return address at that RET |
+| Following CMD write | `0x0852` | `0x087A` | MOV CLKCONCMD,R0 |
+| Post-request checkpoint | `0x0854` | `0x087C` | Immediately after that actual write |
+| Poll observation call | `0x08B6` | `0x08DE` | Calls C observation of CMD/STA |
+| Poll Sleep Timer call | `0x0932` | `0x095A` | C source evidence stored, before timestamp |
+
+These addresses belong only to the matching checked artifacts. Some numerical
+NOP addresses coincide with the older timebase fixture; that is **not** image
+identity. The verifier resolves the explicit deadline-function CDB start/end,
+checks its entire **148-byte relocated instruction body**, and checks the
+`MOV DPL,#0; RET` success tail. Its argument-error branch also reaches the RET;
+the runtime DPL check is mandatory. Only verified RAM/overlay/runtime-call
+operands relocate, with declared allocation and actual linked bytes checked.
+There is exactly one direct deadline-helper call in this board image, within
+the clock wait function. Its straight-line return continuation must save DPL,
+restore the three saved registers, store helper status, reload the owned CMD
+and reach the exact CMD write. No next-symbol-minus-one or nearest-line guess,
+code patch or injected ROM/RAM is used.
+
+The separate late-source boundary verifies the **127-byte** continuation from
+the poll's observation call through the Sleep Timer call: stored STA/source
+comparison, conditional evidence store, helper-status branch and saved
+registers. Only typed/allocated CDB RAM and verified call/end operands relocate.
+The post-request instruction is checked as well. Read-only internal inspection
+checks the original requested command at XDATA `0x0082`, computed deadline
+at `0x0087`, private source-evidence byte at `0x009A` and the target's 19-byte
+diagnostic object at `0x0038`. These are matching-artifact addresses, not a
+new public ABI or permission to write RAM. Exact CODE checks also tie those
+objects to the real pointer argument stores and the per-call evidence clear;
+an allocated but unrelated CDB address is not accepted.
+
+| SDCC 4.2.0 board image | CODE/BIN | Ordinary XDATA | Total used / reserved XDATA | Stack |
+| --- | ---: | ---: | ---: | --- |
+| generic clock_fixture | 3,758 B | 156 B | 188 / 220 B | `0x4E`, 178 B reserved |
+| LG clock_fixture | 3,798 B | 156 B | 188 / 220 B | `0x4E`, 178 B reserved |
+
+IRAM includes eight register-bank bytes, 45 DATA bytes, three overlay bytes
+and BIT storage. The upper 128-byte simulator guard remains untouched; this
+is not a measured hardware high-water mark. The 512-byte nonaliased reservation
+budget, M0 `0x1E00..0x1E3F` reservation, allocator limit below `0x1E00` and
+`0x1F00..0x1FFF` IRAM alias remain enforced.
+
+BIN SHA-256:
+
+- generic: `13bec2214263cfab52513cb5744fe971a7a254b13e674799410b5d3f7693c462`
+- LG: `77f7142d1e4ef3a662ce8ffd7ce9803d110a80e867b1a55be5540b98d16867ca`
+
+### Manual clock acceptance and induced-timeout mode
+
+**Never run during offline development or CI.** The parent/operator must
+separately authorize the board/image, safe setup, exclusive adapter access,
+verified private recovery material and programming/readback. Program only
+the checked board `clock_fixture`, never synthetic `clock_test.ihx`.
+The runner itself grants no flashing, raw SFR access or host memory writes.
+
+```text
+.venv/bin/python tools/check_clock_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/clock_fixture --cycles 1 --confirm-clock-test
+.venv/bin/python tools/check_clock_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/clock_fixture --cycles 1 --confirm-clock-test --induce-timeout
+.venv/bin/python tools/check_clock_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/clock_fixture --cycles 1 --confirm-clock-test --induce-late-timeout
+```
+
+Normal `--cycles` is 1..257 complete three-stage sequences, default 1. Current
+numeric USB selection, checked board artifacts and explicit confirmation are
+required before loading USB. The runner reset-attaches, requires reset PC 0
+and config `26`, and compares **all physical CODE in the checked BIN extent
+before any resume**. It uses existing read/reset/CPU/breakpoint permissions,
+with no memory-write permission or SFR-whitelist expansion. Stage, source,
+complete ABI, bounded diagnostics, LF/TICKSPD, MODE/IRQs, counter/heartbeat and
+immutable M0 startup fields are checked. Full CPU snapshots bracket inspection;
+NOP stepping must advance PC by exactly one without other changes.
+
+`--induce-timeout` requires one partial sequence. After successful RC
+idempotence it arms the verified RET only for the first XOSC setup. At the
+breakpoint it verifies DPL=OK/DPS=0, the actual two-byte IRAM stack return
+address through the existing read-only XDATA alias, the stored 24-bit deadline,
+and the cleared RUNNING/XOSC state. It **disables that breakpoint before
+resuming**, so rollback gets its own fresh, uninterrupted budget. The CPU is
+held for a fixed 0.25 host seconds inside a bounded guarded operation. That
+interval is only a stimulus, not proof of elapsed target time or calibration.
+Success requires the actual returned `CLOCK_TIMEOUT`, raw request elapsed
+strictly greater than 1,024 and below half range, confirmed `CLOCK_OK`
+rollback and observed/current CMD/STA restored to the original settings.
+Expected-timeout mode ends halted at terminal FAULT with exactly one prior
+successful step; it is not a successful full sequence. Normal mode never
+accepts FAULT. Recovery requires a **separate explicit normal run/reset**.
+
+The original `--induce-timeout` remains the dangerous pending-cancel test.
+It does **not** accept `CLOCK_ROLLBACK_UNCONFIRMED=9`: a never-observed
+departure is reported as uncertainty and exits with error, even with old
+CMD/STA matches. Confirmed rollback is possible only if the C driver observed
+the pending source and its subsequent return. No fixed wait or repeated old
+matches are treated as proof of cancellation.
+
+The mutually exclusive `--induce-late-timeout` also requires `--cycles 1`.
+After the same verified deadline RET it resumes to the checked post-request
+instruction, disables that breakpoint, and holds the halted CPU for 0.25 host
+seconds. It then resumes to the checked poll Sleep Timer call. Before allowing
+the timestamp, read-only inspection must find actual C-observed requested
+CMD/STA, source-evidence byte 1, zero completed polls and untouched rollback
+diagnostics. Missing source evidence fails without another resume. That
+breakpoint is disabled before the real time sample/rollback proceeds.
+Actual request TIMEOUT, elapsed beyond the raw timeout, confirmed rollback
+and agreeing driver/fixture snapshots remain mandatory. The hold is a
+stimulus only; this mode never injects a clock status or timestamp.
+
+Each debugger operation and breakpoint wait has one 10-second whole-operation
+deadline; an excessive host hold fails before resume. Errors, unexpected PC,
+wrong helper return/caller, malformed records, unconfirmed rollback and cleanup
+failures suppress success JSON, with no retry/reset/reattach or resume after
+failure. JSON is emitted only after successful cleanup, identifying the image,
+observations and final halted READY or explicitly expected FAULT. No physical
+oscillator-failure/stopped-clock injection, frequency measurement, LF
+calibration completion, source precision, wake/IRQ/compare or RF is claimed.
+
+### 2026-09-16 LG clock cancellation failure
+
+The parent/operator reports programming and readback verification of the
+**original 3,630-byte** LG clock image, SHA-256
+`c41dae85c1707bd7315f2f82835b9ee0bd2ca954892f9a2c5756964790fb2395`.
+One normal RC16-idempotent/XOSC32/RC16 sequence passed: `C9 -> 88 -> C9`,
+11 raw ticks / 3 request polls for XOSC and 2 ticks / 1 poll for RC, with no
+rollback. This is evidence for that old image's normal path, not the fix.
+
+At **2026-09-16 23:24 (UTC+03)**, the deterministic pre-request timeout runner
+**failed its acceptance check correctly**. The terminal record at FAULT `0x016C` had phase 4, reason 1,
+stage 1, completed steps 1 and original `CLOCK_TIMEOUT=3`. Request elapsed
+13,490 raw ticks exceeded 1,024, with one poll and helper status 0. Saved CMD
+was `C9`, requested CMD `88`. The old driver reported rollback elapsed 3 ticks,
+one poll, `CLOCK_OK=0`, and observed `C9/C9`, but the fixture's immediately
+subsequent snapshot was **CMD `C9`, STA `89`** (XOSC selected, CLKSPD=1).
+A later read-only parent observation found live `C9/C9` again. No reset or
+resume occurred before those captures.
+
+This demonstrates a real false-positive rollback confirmation: old STA can
+match before a still-pending source change completes. **This old image did not
+validate rollback.** The fix requires requested-source observation followed
+by restored settings, otherwise bounded uncertainty/error. That experiment
+left the old image at terminal FAULT; the corrected-image acceptance below
+is a separate later record, not a reinterpretation of this failure.
+Raw records remain private; this is only the operator-supplied processed
+summary. No frequency/calibration or other M2 service acceptance follows.
+
+### 2026-09-17 LG compiled-C clock acceptance
+
+The parent/operator reports successful bounded acceptance of the **corrected
+3,798-byte LG clock fixture**, SHA-256
+`77f7142d1e4ef3a662ce8ffd7ce9803d110a80e867b1a55be5540b98d16867ca`.
+The setup was the same LG Rev0.3 / CC Debugger / macOS 15.7.9 / Python 3.11.9 /
+PyUSB 1.3.1 used in the earlier records. Programming/readback was explicitly
+authorized; **all 3,798 physical CODE bytes were independently verified before
+CPU resume** in the acceptance runs.
+
+These corrected runs occurred on **2026-09-17 in UTC+03**, not September 16.
+The parent verified private log modification times: programming 00:25,
+pending-timeout 00:29, late-timeout 00:30, full recovery 00:37. These are
+operator-local record timestamps, not clock-frequency measurements. The old
+`c41dae85...` image's race at September 16 23:24 remains the separate failure
+above; no private log was accessed or imported for this documentation update.
+
+An initial normal sequence passed: RC16 idempotence `C9/C9`, 0 raw ticks /
+0 polls; XOSC32 `88/88`, 11 ticks / 3 polls; return to RC16 `C9/C9`, 2 ticks /
+1 poll. No rollback was attempted.
+
+Both negative tests then **passed without weakening acceptance**:
+
+| Corrected-image experiment | Original request result | Request raw ticks / polls | Rollback result | Rollback raw ticks / polls | Driver-observed and immediate fixture CMD/STA |
+| --- | --- | --- | --- | --- | --- |
+| Original `--induce-timeout`, pending cancel | `CLOCK_TIMEOUT=3` | 14,770 / 1, helper 0 | `CLOCK_OK=0` | 64 / 15 | Both `C9/C9` |
+| Separate `--induce-late-timeout`, verified real C source evidence before timestamp | `CLOCK_TIMEOUT=3` | 27,850 / 1 | `CLOCK_OK=0` | 3 / 1 | Both `C9/C9` |
+
+Both request elapsed values exceeded the 1,024-raw-tick timeout and remained
+below half range. The pending-cancel case no longer accepted the old transient
+3-tick / 1-poll match: the corrected C driver returned confirmed rollback
+only after 64 ticks / 15 polls, with agreeing driver and immediate fixture
+snapshots. The late-source case separately exercised the checked real C
+source-evidence checkpoint before its late timestamp. **Both runs ended at
+terminal FAULT `0x016C` with the original TIMEOUT**, not normal operation
+success or an implicit retry.
+
+A **separate explicit reset and normal recovery run** then completed
+**257 full RC16-idempotent / XOSC32 / RC16 sequences = 771 actual C calls**:
+
+| Stage | Occurrences | CMD/STA | Request raw ticks | Request polls |
+| --- | ---: | --- | --- | ---: |
+| 0, RC16 idempotence | 257 | `C9/C9` | 0 | 0 |
+| 1, XOSC32 | 257 | `88/88` | 11..13 | 3 |
+| 2, RC16 | 257 | `C9/C9` | 2..3 | 1 |
+
+Every recovery call returned `CLOCK_OK=0` with rollback
+`CLOCK_NOT_ATTEMPTED=8`. The runner checked completed-step/M0-heartbeat byte
+wraps, immutable M0 startup status, preserved LF/TICKSPD command fields,
+unchanged SLEEPCMD/IRQs and CPU-register preservation during inspection.
+The final target is **the corrected clock fixture, halted at READY `0x016A`
+on RC16**. All six older board BIN hashes and historical M1/timebase evidence
+remain unchanged.
+
+This is **hardware-observed execution of the compiled C clock selector and
+fixture on this LG board/image**, not just register-only observation or a
+synthetic SFR simulation. It establishes the finite normal, pending-cancel,
+late-source and separately reset recovery scenarios above. It does **not**
+establish measured frequency, calibrated timing, LF calibration completion,
+physical oscillator absence/failure, stopped-clock injection, power-cut
+tolerance, natural 24-bit counter rollover, or IRQ/compare/wake, RF, AES or
+flash services. Byte-counter wraps are not Sleep Timer rollover evidence.
+
+Never-departed cancellation is still **unconfirmed**: old STA matches alone
+cannot prove drainage, and `CLOCK_ROLLBACK_UNCONFIRMED=9` remains required
+when its bounded observation cannot establish departure. These successful
+physical cases do not validate that synthetic uncertainty/fault path as a
+hardware experiment. Generic clock-fixture evidence remains **host/image/
+simulator-only**; full **M2 #4 remains open**.
+
+Only the operator-supplied processed summary is recorded here. Factory data,
+identities, raw captures/logs and recovery files remain private. Generated
+`hardware_tested=false` metadata continues to describe automated build evidence,
+separately from this dated manual acceptance. No new hardware authorization
+follows from this historical record.
+
 ## Awake-only timebase board fixture
 
 `IMAGE=timebase_fixture` is a **separate non-RF board image**, intentionally
@@ -742,7 +1055,7 @@ python3 tools/debug_image.py breakpoint --output build/lg_esl29_rev03/timebase_f
 ```
 
 These commands are offline. Outputs are `build/<board>/timebase_fixture/`
-unless `BUILD` is overridden. CI covers both boards and all three board
+unless `BUILD` is overridden. CI covers both boards and all four board
 images; its explicit artifact whitelist excludes standalone test executables.
 
 ### Timebase state ABI v1
@@ -919,8 +1232,8 @@ service. Stopped/backward/ambiguous C paths retain **host and simulator**
 coverage only. Generic `timebase_fixture` remains host/image/simulator-only,
 and **M2 #4 remains open** for the other platform gates.
 
-The last reported installed image is now this timebase fixture, halted at
-`0x016A`, not the old M1 fixture. All four pre-existing board BIN hashes remain
+That run left the timebase fixture halted at `0x016A`, not the old M1 fixture;
+the later clock experiment is recorded separately above. All four pre-existing board BIN hashes remain
 unchanged, including the 626-byte LG M1 hash
 `e3459339d63a63ae9aa71cdc01a4dd18cb6e2b079f86968da507ac57ff133815`.
 The M1 record below remains historical evidence for that earlier image.

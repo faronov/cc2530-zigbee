@@ -20,7 +20,8 @@ typedef enum {
     CLOCK_TIMEBASE_ERROR,
     CLOCK_COUNTER_RANGE,
     CLOCK_COMMAND_CHANGED,
-    CLOCK_NOT_ATTEMPTED
+    CLOCK_NOT_ATTEMPTED,
+    CLOCK_ROLLBACK_UNCONFIRMED
 } clock_result_t;
 
 typedef struct {
@@ -42,7 +43,8 @@ typedef struct {
 /* Init-time, awake foreground only; not ISR-reentrant. Caller must exclude all
  * other CLKCONCMD writers/ST0 readers and any prior sleep/wake discontinuity.
  * Requires IEN0/1/2=0, SLEEPCMD.MODE=0 with reserved bit 2 set, stable matching
- * CMD/STA and undivided SYS. Does not repair unsupported entry state.
+ * CMD/STA and undivided SYS. Caller must independently exclude pending requests;
+ * matching CMD/STA cannot establish that. Does not repair unsupported state.
  *
  * timeout_ticks < 0x800000, poll_limit > 0, diagnostics writable/non-null.
  * Invalid arguments cause no MMIO and leave diagnostics unchanged.
@@ -51,10 +53,14 @@ typedef struct {
  * actual STA no later than the deadline (equality accepted), never CMD alone.
  * Pending at the deadline, late confirmation, bad time, or cap exhaustion fail.
  *
- * Any post-request failure restores the saved command exactly once and verifies
- * it with a fresh timeout and the same poll cap. Return the ORIGINAL failure,
- * even if rollback succeeds. rollback_result is NOT_ATTEMPTED, OK (confirmed),
- * or the separate failure: unconfirmed rollback leaves clock state uncertain.
+ * Any post-request failure restores the saved command exactly once, with a
+ * fresh timeout and the same poll cap. An old STA match cannot prove a pending
+ * request was canceled. Rollback OK requires observing the originally requested
+ * HF source (even late, or after cancellation), then the complete saved settings.
+ * At deadline/cap exhaustion, if that source has never been observed, report
+ * ROLLBACK_UNCONFIRMED (9), not OK. Other rollback errors remain explicit.
+ * Return the ORIGINAL request failure even when rollback is confirmed.
+ * Caller must stop on any failure; no automatic retry or recovery is safe.
  * At most 2*poll_limit polls, 2*(poll_limit+1) timer samples and two CMD writes.
  * Bounds require an executing CPU; raw time cannot detect missed full wraps.
  * Zero timeout permits only same-tick confirmation; no calibrated time claim.

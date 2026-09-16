@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from verify_firmware import (
-    BOARDS, IMAGES, TIMEBASE_CHECKPOINTS, CODE_LIMIT, STATUS_ADDRESS, STATUS_RESERVED,
+    BOARDS, IMAGES, TIMEBASE_CHECKPOINTS, CLOCK_CHECKPOINTS, CODE_LIMIT, STATUS_ADDRESS, STATUS_RESERVED,
     require, verify_artifacts, xdata_ranges,
 )
 from debug_image import DebugImage, decode_bootstrap, decode_fixture, decode_timebase_fixture, expected_fixture
@@ -148,6 +148,12 @@ def check_artifact_rejections(output, board, image_name="bringup"):
                 ("cdb", lambda data: data.replace(b"S:Ltimebase.timebase_read_awake_ticks24$low$",
                                                   b"S:Ltimebase.timebase_read_awake_ticks24$missing$"),
                  "scratch declaration"),
+            )
+        elif image_name == "clock_fixture":
+            mutations += (
+                ("map", lambda data: data.replace(b"_clock_fixture_ready_stop ", b"_missing_clock_stop "), "symbol"),
+                ("cdb", lambda data: data.replace(b"{56}ST", b"{55}ST"), "ABI"),
+                ("cdb", lambda data: data.replace(b"L:XG$timebase_deadline_after$", b"L:XG$missing$"), "CDB"),
             )
         for extension, mutate, message in mutations:
             path = work / f"{image_name}.{extension}"
@@ -427,6 +433,15 @@ def main():
             line = next(index for index, text in enumerate(source, 1) if text.startswith(f"void {name[1:]}("))
             require(any(location.address == symbols[name] for location in
                         debug_image.source_lines(file=source_file.name, line=line)), "Timebase source mismatch")
+    elif args.image == "clock_fixture":
+        require(debug_image.symbol("_clock_fixture_state").size == 56, "Clock symbol size mismatch")
+        source = source_file.read_text(encoding="ascii").splitlines()
+        for slot, name in enumerate(CLOCK_CHECKPOINTS):
+            require(debug_image.symbol(name).kind == "function", "Clock checkpoint is not a function")
+            require(debug_image.breakpoint(name, slot)["address"] == symbols[name], "Clock breakpoint mismatch")
+            line = next(index for index, text in enumerate(source, 1) if text.startswith(f"void {name[1:]}("))
+            require(any(location.address == symbols[name] for location in
+                        debug_image.source_lines(file=source_file.name, line=line)), "Clock source mismatch")
     check_artifact_rejections(args.output, args.board, args.image)
     check_alias(args.simulator)
     with unittest.TestCase().assertRaisesRegex(ValueError, "register bank"):
@@ -435,8 +450,11 @@ def main():
         check_boot(args.simulator, args.output, args.board, symbols)
     elif args.image == "debug_fixture":
         check_debug_fixture(args.simulator, args.output, args.board, symbols)
-    else:
+    elif args.image == "timebase_fixture":
         check_timebase_fixture(args.simulator, args.output, args.board, symbols)
+    else:
+        from boot_clock_fixture import check_clock_fixture
+        check_clock_fixture(args.simulator, args.output, args.board, symbols)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from verify_firmware import (
     ARTIFACT_EXTENSIONS, BOARDS, CODE_LIMIT, IMAGES, IRAM_ALIAS,
     parse_ihex, parse_symbols, require, verify_artifacts,
     TIMEBASE_FIXTURE_SIZE, TIMEBASE_DELAY, TIMEBASE_POLL_LIMIT,
+    CLOCK_FIXTURE_SIZE, CLOCK_TIMEOUT, CLOCK_POLL_LIMIT, verify_clock_fixture_code,
 )
 
 
@@ -136,6 +137,9 @@ class DebugImage:
         self.symbols = linked_symbols((output / f"{image_name}.map").read_text(encoding="utf-8"),
                                       debug_text, image)
         self.source_locations = linked_source_locations(debug_text, image)
+        if image_name == "clock_fixture":
+            self.clock_timeout_checkpoint = verify_clock_fixture_code(
+                image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
 
     def symbol(self, name: str) -> Symbol:
         require(name in self.symbols, f"No supported linked global/label named {name}")
@@ -254,6 +258,113 @@ def decode_timebase_fixture(data: bytes) -> dict:
     return result
 
 
+def effective_clock_status(command: int) -> int:
+    return command | 8 if command & 0x78 == 0x40 else command
+
+
+def decode_clock_fixture(data: bytes, *, allow_running: bool = False) -> dict:
+    require(isinstance(data, bytes) and len(data) == CLOCK_FIXTURE_SIZE,
+            "Clock snapshot must contain exactly 56 bytes")
+    require(data[:6] == b"M2CK\x01\x38", "Wrong clock signature/version/size")
+    require(data[46:] == b"\0" * 8 + b"\x69\x96", "Clock reserved bytes/guards changed")
+    phase, reason, stage, source, steps, result = data[6:12]
+    require(phase in (1, 3, 4) or (allow_running and phase == 2),
+            "Clock record is in progress or has an unknown phase; halt at a verified checkpoint")
+    require(reason in range(4) and stage in range(3) and source == (1 if stage == 1 else 0)
+            and result in range(9), "Unknown clock reason/stage/source/result")
+    timeout, limit = int.from_bytes(data[12:15], "little"), int.from_bytes(data[15:17], "little")
+    require(timeout == CLOCK_TIMEOUT and limit == CLOCK_POLL_LIMIT, "Clock fixed timeout/poll budget changed")
+    diag = {}
+    for name, start in (("request", 17), ("rollback", 24)):
+        wait = {"elapsed_ticks": int.from_bytes(data[start:start + 4], "little"),
+                "polls": int.from_bytes(data[start + 4:start + 6], "little"),
+                "timebase_status": data[start + 6]}
+        require(wait["elapsed_ticks"] <= 0xffffff and wait["polls"] <= limit
+                and wait["timebase_status"] in (0, 1, 2), "Clock diagnostic range/status violation")
+        diag[name] = wait
+    diag.update(zip(("saved_command", "requested_command", "observed_command", "observed_status",
+                     "rollback_result"), data[31:36]))
+    require(diag["rollback_result"] in (0, 3, 4, 5, 6, 7, 8, 9), "Unknown clock rollback result")
+    no_attempt = b"\0" * 18 + b"\x08"
+    initial_sleep, current_sleep = data[36], data[42]
+    initial_irq, current_irq = data[37:40], data[43:46]
+    command, status = data[40:42]
+    if phase in (1, 2) or result in (1, 8):
+        require((result == 8 or (phase == 4 and reason == 1 and result == 1))
+                and data[17:36] == no_attempt, "Unattempted clock record contains results")
+        if phase == 1:
+            require(reason == stage == source == steps == 0, "Invalid clock initialization")
+        if phase == 2:
+            require(reason == 0, "RUNNING clock record has a fault")
+    else:
+        require(diag["requested_command"] == (diag["saved_command"] & 0xb8) | (0x41 if source == 0 else 0),
+                "Clock requested command/source mismatch")
+        if result not in (1, 2):
+            require(diag["saved_command"] & 7 == (1 if diag["saved_command"] & 0x40 else 0),
+                    "Clock request did not start from an undivided source")
+    if phase in (1, 2, 3):
+        require(reason == 0 and initial_sleep == current_sleep and initial_sleep & 7 == 4
+                and initial_irq == current_irq == b"\0" * 3, "Clock sleep/IRQ invariant changed")
+    if phase == 1:
+        require(command & 0x47 == 0x41 and status == effective_clock_status(command),
+                "Clock fixture did not initialize on stable undivided RC16")
+    if phase == 3:
+        require(result == 0 and diag["rollback_result"] == 8 and data[24:31] == b"\0" * 7,
+                "READY clock record contains a failure/rollback")
+        require(diag["request"]["timebase_status"] == 0 and diag["request"]["elapsed_ticks"] <= timeout,
+                "READY clock request exceeded its deadline or failed")
+        require(command == diag["requested_command"] == diag["observed_command"]
+                and status == diag["observed_status"] == effective_clock_status(command),
+                "READY clock actual CMD/STA does not match the requested stable source")
+        if stage == 0:
+            require(data[17:24] == b"\0" * 7 and diag["saved_command"] == command,
+                    "RC idempotent stage performed a request")
+        else:
+            require(1 <= diag["request"]["polls"] <= limit and diag["saved_command"] != command,
+                    "Switch stage lacks a bounded request")
+    if phase == 4:
+        require(reason != 0 and (1 <= result <= 7 if reason == 1 else result in (0, 8)),
+                "Clock FAULT reason/result mismatch")
+        if reason == 1:
+            request, rollback = diag["request"], diag["rollback"]
+            if result in (1, 2):
+                require(request["polls"] == 0 and diag["rollback_result"] == 8,
+                        "Pre-request error performed polling/rollback")
+            else:
+                require(diag["rollback_result"] != 8, "Post-request error did not attempt rollback")
+            for cause, wait in ((result, request), (diag["rollback_result"], rollback)):
+                if cause == 5:
+                    require(wait["timebase_status"] != 0, "Clock timebase error has successful helper status")
+                else:
+                    require(wait["timebase_status"] == 0, "Clock cause/helper status mismatch")
+                if cause in (0, 3, 4, 6, 7, 9):
+                    require(wait["polls"] >= 1, "Clock outcome lacks a poll observation")
+                if cause == 0:
+                    require(wait["elapsed_ticks"] <= timeout, "Rollback confirmation was late")
+                if cause == 3:
+                    require(timeout <= wait["elapsed_ticks"] < 0x800000, "Clock timeout elapsed is invalid")
+                if cause == 4:
+                    require(wait["polls"] == limit and wait["elapsed_ticks"] < timeout,
+                            "Clock poll-limit result has inconsistent bounds")
+                if cause == 9:
+                    require(wait["elapsed_ticks"] < 0x800000 and
+                            (wait["elapsed_ticks"] >= timeout or wait["polls"] == limit)
+                            and diag["observed_command"] == diag["saved_command"]
+                            and (diag["observed_status"] & 0x40) == (diag["saved_command"] & 0x40),
+                            "Unconfirmed cancellation lacks bounded, never-departed source evidence")
+            if diag["rollback_result"] == 0:
+                require(diag["observed_command"] == diag["saved_command"] and
+                        diag["observed_status"] == effective_clock_status(diag["saved_command"]),
+                        "Confirmed clock rollback does not restore saved settings")
+    return {"signature": "M2CK", "abi_version": 1, "byte_size": CLOCK_FIXTURE_SIZE,
+            "phase": phase, "reason": reason, "stage": stage, "requested_source": source,
+            "completed_steps": steps, "clock_result": result, "timeout_ticks": timeout, "poll_limit": limit,
+            "diagnostics": diag, "initial_sleep_command": initial_sleep,
+            "initial_interrupt_enables": list(initial_irq), "current_clock_command": command,
+            "current_clock_status": status, "current_sleep_command": current_sleep,
+            "current_interrupt_enables": list(current_irq)}
+
+
 def snapshot_input(args, size: int) -> bytes:
     if args.hex is not None:
         data = bytes.fromhex(args.hex)
@@ -270,7 +381,8 @@ def main(argv=None) -> int:
     for name in ("decode-status", "decode-config"):
         child = commands.add_parser(name)
         child.add_argument("value", type=lambda text: int(text, 0))
-    for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state", "timebase-state"):
+    for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state", "timebase-state",
+                 "clock-state", "clock-checkpoint"):
         child = commands.add_parser(name)
         child.add_argument("--output", type=Path, required=True)
         child.add_argument("--board", choices=BOARDS, required=True)
@@ -284,7 +396,7 @@ def main(argv=None) -> int:
             source.add_argument("--pc", type=lambda text: int(text, 0))
             source.add_argument("--file")
             child.add_argument("--line", type=int)
-        if name in ("status", "fixture-state", "timebase-state"):
+        if name in ("status", "fixture-state", "timebase-state", "clock-state"):
             source = child.add_mutually_exclusive_group(required=True)
             source.add_argument("--hex")
             source.add_argument("--snapshot", type=Path)
@@ -311,9 +423,14 @@ def main(argv=None) -> int:
             elif args.command == "fixture-state":
                 require(args.image == "debug_fixture", "M1 state requires a debug_fixture image")
                 result["fixture_state"] = decode_fixture(snapshot_input(args, 16))
-            else:
+            elif args.command == "timebase-state":
                 require(args.image == "timebase_fixture", "Timebase state requires a timebase_fixture image")
                 result["timebase_state"] = decode_timebase_fixture(snapshot_input(args, TIMEBASE_FIXTURE_SIZE))
+            else:
+                require(args.image == "clock_fixture", "Clock inspection requires a clock_fixture image")
+                result["timeout_checkpoint"] = image.clock_timeout_checkpoint
+                if args.command == "clock-state":
+                    result["clock_state"] = decode_clock_fixture(snapshot_input(args, CLOCK_FIXTURE_SIZE))
     except (OSError, ValueError, KeyError) as error:
         print(f"debug-image: {error}", file=sys.stderr)
         return 1

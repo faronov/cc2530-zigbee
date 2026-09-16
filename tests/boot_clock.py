@@ -12,24 +12,10 @@ from boot_image import (
     snapshot_commands, verify_component_layout,
 )
 from boot_timebase import GUARD_SFRS, READ_OFFSETS, READER_BYTES
-from verify_firmware import CODE_LIMIT, parse_ihex, parse_symbols, require
-
-
-# Reviewed instruction-length subset emitted by this SDCC 4.2.0 component.
-INSTRUCTION_LENGTHS = {
-    opcode: size for size, opcodes in (
-        (1, "08 0f 22 29 2d 3a 3e 58 9c 9d 9e 9f a3 c3 e0 e4 e8 e9 ea eb ec ed ee ef f0 f8 f9 fa fb fc fd fe ff"),
-        (2, "25 35 40 42 45 50 54 55 60 70 74 78 79 7f 80 88 89 8a 8b 8c 8d 8e 8f 94 95 a8 a9 ab ae af c0 d0 e5 f5"),
-        (3, "02 12 30 43 53 75 85 90 b5 b8 b9 bf"),
-    ) for opcode in bytes.fromhex(opcodes)
-}
-
-
-def cdb_address(debug, record):
-    values = re.findall(rf"^{re.escape(record)}:([0-9A-Fa-f]+)$", debug, re.MULTILINE)
-    require(values and len({int(value, 16) for value in values}) == 1,
-            f"Missing/conflicting clock CDB address: {record}")
-    return int(values[0], 16)
+from verify_firmware import (
+    CODE_LIMIT, parse_ihex, parse_symbols, require, cdb_address, verify_clock_code,
+    verify_clock_diagnostics, CLOCK_INSTRUCTION_LENGTHS as INSTRUCTION_LENGTHS,
+)
 
 
 def verify_clock(image, symbols, debug, memory, listing):
@@ -60,19 +46,7 @@ def verify_clock(image, symbols, debug, memory, listing):
         address = symbols.get("_" + name, CODE_LIMIT)
         require(set(range(address, address + size)) <= allocated and address + size <= 0x1e00,
                 "Clock test object is not ordinary XDATA")
-    for module in ("clock", "test_clock"):
-        for suffix, fields in (
-            ("00", ((0, "elapsed_ticks", 4), (4, "polls", 2), (6, "timebase_status", 1))),
-            ("01", ((0, "request", 7), (7, "rollback", 7), (14, "saved_command", 1),
-                    (15, "requested_command", 1), (16, "observed_command", 1),
-                    (17, "observed_status", 1), (18, "rollback_result", 1))),
-        ):
-            records = re.findall(rf"^T:F{module}\$__000000{suffix}\[(.*)\]$", debug, re.MULTILINE)
-            require(records, "Missing clock diagnostic layout")
-            for record in records:
-                actual = re.findall(r"\(\{(\d+)\}S:S\$([^$]+)\$0_0\$0\(\{(\d+)\}", record)
-                require(tuple((int(offset), name, int(size)) for offset, name, size in actual) == fields,
-                        "Clock diagnostic field layout changed")
+    verify_clock_diagnostics(debug, ("clock", "test_clock"))
 
     start = cdb_address(debug, "L:Fclock$effective_status$0$0")
     end = cdb_address(debug, "L:XG$clock_select_init$0$0") + 1
@@ -96,32 +70,8 @@ def verify_clock(image, symbols, debug, memory, listing):
             "Clock listing differs from actual linked bytes")
     require(image[end - 1] == 0x22, "Clock module does not end in RET")
 
-    # Inspect actual direct/bit operands, including numeric SFR references.
-    # Other operands are immediates, CODE/XDATA addresses, or indirect registers.
-    direct_first = {
-        0x05, 0x15, 0x25, 0x35, 0x42, 0x43, 0x45, 0x52, 0x53, 0x55,
-        0x62, 0x63, 0x65, 0x75, 0x86, 0x87, 0x95, 0xa6, 0xa7, 0xb5,
-        0xc0, 0xc5, 0xd0, 0xd5, 0xe5, 0xf5,
-    } | set(range(0x88, 0x90)) | set(range(0xa8, 0xb0))
-    bit_first = {0x10, 0x20, 0x30, 0x72, 0x82, 0x92, 0xa0, 0xa2, 0xb0, 0xb2, 0xc2, 0xd2}
-    accesses = []
-    for address, data in instructions.items():
-        operands = data[1:3] if data[0] == 0x85 else data[1:2] if data[0] in direct_first else ()
-        if data[0] in bit_first:
-            operands = [data[1] & 0xf8] if data[1] >= 0x80 else ()
-        for operand in operands:
-            if operand >= 0x80 and operand not in (0x81, 0x82, 0x83, 0xd0, 0xe0, 0xf0):
-                accesses.append((address, data, operand))
-    expected = (b"\xe5\xc6", b"\xe5\x9e", b"\x88\xc6",
-                b"\xe5\xa8", b"\xe5\xb8", b"\xe5\x9a", b"\xe5\xbe")
-    require(tuple(data for _, data, _ in accesses) == expected,
-            "Clock peripheral read/write instruction contract changed")
-    sites = {(data[0], operand): address for address, data, operand in accesses}
-    # Actual calls, not host substitutes, must include both timing samples and helpers.
-    calls = [int.from_bytes(data[1:], "big") for data in instructions.values() if data[0] == 0x12]
-    for name, count in (("_timebase_read_awake_ticks24", 2), ("_timebase_deadline_after", 1),
-                        ("_timebase_expired", 1)):
-        require(calls.count(symbols[name]) == count, "Clock linked timebase calls changed")
+    decoded, sites = verify_clock_code(image, symbols, debug)
+    require(decoded == instructions, "Clock listing instruction boundaries differ from linked CODE")
     return allocated, sites
 
 
@@ -189,7 +139,7 @@ def vectors():
     yield ("changed command", 0xc9, 0xc9, 1, 10, 3,
            [(0x88, 100, [(0x89, 0x88, 101)], 7),
             (0xc9, 200, [(0xc9, 0xc9, 200)], 0)], 7, {})
-    for ticks, cmd, result in ((211, 0xc9, 3), (199, 0xc9, 6), (0x8000d2, 0xc9, 5), (201, 0x88, 7)):
+    for ticks, cmd, result in ((211, 0xc9, 9), (199, 0xc9, 6), (0x8000d2, 0xc9, 5), (201, 0x88, 7)):
         yield ("rollback failure", 0xc9, 0xc9, 1, 10, 3,
                [(0x88, 100, [(0x88, 0xc9, 110)], 3), (0xc9, 200, [(cmd, 0xc9, ticks)], result)], 3, {})
     yield ("both stopped, 16-bit poll counts", 0xc9, 0xc9, 1, 10, 257,
@@ -202,8 +152,24 @@ def vectors():
     for status, result in ((0x88, 0), (0xc9, 3)):
         phases = [(0x88, 100, [(0x88, status, 100)], result)]
         if result:
-            phases.append((0xc9, 100, [(0xc9, 0xc9, 100)], 0))
+            phases.append((0xc9, 100, [(0xc9, 0xc9, 100)], 9))
         yield ("zero timeout", 0xc9, 0xc9, 1, 0, 1, phases, result, {})
+    for saved, target, delayed in ((0xc9, 0x88, 0x89), (0x88, 0xc9, 0xc9)):
+        for count in (1, 2, 16):
+            polls = [(saved, saved, (0xfffff0 + i) & 0xffffff) for i in range(1, count + 1)]
+            polls += [(saved, delayed, (0xfffff1 + count) & 0xffffff),
+                      (saved, saved, (0xfffff2 + count) & 0xffffff)]
+            yield ("old-match then delayed source then restored", saved, saved, int(target == 0x88), 64, 20,
+                   [(target, 100, [(target, saved, 165)], 3), (saved, 0xfffff0, polls, 0)], 3, {})
+    for polls in ([(0xc9, 0xc9, 210)], [(0xc9, 0xc9, 200)] * 257):
+        yield ("never-departed cancellation is unconfirmed", 0xc9, 0xc9, 1, 10, 257,
+               [(0x88, 100, [(0x88, 0xc9, 111)], 3), (0xc9, 200, polls, 9)], 3, {})
+    yield ("late confirmed source then restored", 0xc9, 0xc9, 1, 10, 1,
+           [(0x88, 100, [(0x88, 0x88, 111)], 3),
+            (0xc9, 200, [(0xc9, 0xc9, 210)], 0)], 3, {})
+    yield ("departure at last poll is not restored", 0xc9, 0xc9, 1, 10, 2,
+           [(0x88, 100, [(0x88, 0xc9, 111)], 3),
+            (0xc9, 200, [(0xc9, 0xc9, 201), (0xc9, 0x89, 202)], 4)], 3, {})
 
 
 def check_execution(simulator, path, symbols, allocated, sites, vector):
@@ -300,7 +266,8 @@ def main():
     symbols = parse_symbols((args.output / "clock_test.map").read_text(encoding="utf-8"))
     debug = (args.output / "clock_test.cdb").read_text(encoding="utf-8")
     memory = (args.output / "clock_test.mem").read_text(encoding="utf-8")
-    # Unlike timebase.rel, clock.rel is linked only into this standalone image.
+    # This link's listing must match; board inspection uses its own IHX/CDB,
+    # not a listing that a later standalone link may overwrite.
     listing = (args.output / "clock.rst").read_text(encoding="utf-8")
     allocated, sites = verify_clock(image, symbols, debug, memory, listing)
     check_rejections(image, symbols, debug, memory, listing)

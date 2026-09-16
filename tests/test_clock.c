@@ -379,7 +379,7 @@ static void failure_tests(void)
     /* Rollback has its own deadline/time errors, never converts failure to OK. */
     for (i = 0; i < 4; i++) {
         uint32_t now = i == 0 ? 211 : i == 1 ? 199 : i == 2 ? 0x8000d2UL : 201;
-        clock_result_t result = i == 0 ? CLOCK_TIMEOUT : i == 1 ? CLOCK_COUNTER_RANGE :
+        clock_result_t result = i == 0 ? CLOCK_ROLLBACK_UNCONFIRMED : i == 1 ? CLOCK_COUNTER_RANGE :
                                 i == 2 ? CLOCK_TIMEBASE_ERROR : CLOCK_COMMAND_CHANGED;
         prepare(0xc9, 0xc9); entry(); request(0x88, 100); poll(0x88, 0xc9, 110);
         request(0xc9, 200); poll(i == 3 ? 0x88 : 0xc9, 0xc9, now);
@@ -391,7 +391,54 @@ static void failure_tests(void)
     run(CLOCK_COMMAND_CHANGED, 1, 1, CLOCK_OK, 1, 0);
     prepare(0xc9, 0xc9); timeout = 0; entry(); request(0x88, 100); poll(0x88, 0xc9, 100);
     request(0xc9, 100); poll(0xc9, 0xc9, 100);
-    run(CLOCK_TIMEOUT, 1, 0, CLOCK_OK, 1, 0);
+    run(CLOCK_TIMEOUT, 1, 0, CLOCK_ROLLBACK_UNCONFIRMED, 1, 0);
+}
+
+static void pending_cancel_tests(void)
+{
+    unsigned fields, direction, old_polls, i;
+    for (fields = 0; fields < 16; fields++) {
+        for (direction = 0; direction < 2; direction++) {
+            uint8_t saved = (uint8_t)(((fields & 8) << 4) | ((fields & 7) << 3) |
+                                      (direction ? 0 : 0x41));
+            uint8_t target = (saved & 0xb8) | (direction ? 0x41 : 0);
+            uint8_t pending = (saved ^ 0x40) | (direction ? 1u : 0u);
+            for (old_polls = 1; old_polls <= 32; old_polls++) {
+                prepare(saved, effective(saved)); timeout = 64; limit = 40; entry();
+                request(target, 100); poll(target, effective(saved), 165);
+                request(saved, 0xfffff0UL);
+                for (i = 1; i <= old_polls; i++)
+                    poll(saved, effective(saved), (0xfffff0UL + i) & TIMEBASE_TICKS_MASK);
+                poll(saved, effective(pending), (0xfffff1UL + old_polls) & TIMEBASE_TICKS_MASK);
+                poll(saved, effective(saved), (0xfffff2UL + old_polls) & TIMEBASE_TICKS_MASK);
+                run(CLOCK_TIMEOUT, 1, 65, CLOCK_OK, old_polls + 2, old_polls + 2);
+            }
+        }
+    }
+    /* A truly canceled request and a still-pending request look identical.
+     * Neither a stopped clock nor repeated old STA matches prove drainage. */
+    for (i = 0; i < 2; i++) {
+        unsigned count;
+        prepare(0xc9, 0xc9); limit = i ? 65535u : 3u; entry();
+        request(0x88, 100); poll(0x88, 0xc9, 111);
+        request(0xc9, 200);
+        for (count = 0; count < limit; count++) poll(0xc9, 0xc9, 200);
+        run(CLOCK_TIMEOUT, 1, 11, CLOCK_ROLLBACK_UNCONFIRMED, limit, 0);
+    }
+    prepare(0xc9, 0xc9); entry();
+    request(0x88, 100); poll(0x88, 0xc9, 111);
+    request(0xc9, 200); poll(0xc9, 0xc9, 201); poll(0xc9, 0xc9, 210);
+    run(CLOCK_TIMEOUT, 1, 11, CLOCK_ROLLBACK_UNCONFIRMED, 2, 10);
+    /* Seeing the pending source at the last poll is not a return to saved. */
+    prepare(0xc9, 0xc9); limit = 2; entry();
+    request(0x88, 100); poll(0x88, 0xc9, 111);
+    request(0xc9, 200); poll(0xc9, 0xc9, 201); poll(0xc9, 0x89, 202);
+    run(CLOCK_TIMEOUT, 1, 11, CLOCK_POLL_LIMIT, 2, 2);
+    /* A late source confirmation still supplies evidence for a later return. */
+    prepare(0xc9, 0xc9); entry();
+    request(0x88, 100); poll(0x88, 0x88, 111);
+    request(0xc9, 200); poll(0xc9, 0xc9, 210);
+    run(CLOCK_TIMEOUT, 1, 11, CLOCK_OK, 1, 10);
 }
 
 int main(void)
@@ -407,6 +454,7 @@ int main(void)
     entry_tests();
     transition_tests();
     failure_tests();
+    pending_cancel_tests();
     puts("host clock: all CMD/STA entry pairs, both sources, clamping, raw-time/poll bounds, rollback PASS");
     return 0;
 }

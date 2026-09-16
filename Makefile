@@ -18,8 +18,9 @@ endif
 ifeq ($(IMAGE),bringup)
 else ifeq ($(IMAGE),debug_fixture)
 else ifeq ($(IMAGE),timebase_fixture)
+else ifeq ($(IMAGE),clock_fixture)
 else
-$(error IMAGE must be bringup, debug_fixture or timebase_fixture)
+$(error IMAGE must be bringup, debug_fixture, timebase_fixture or clock_fixture)
 endif
 
 TARGET := $(BUILD)/$(IMAGE)
@@ -35,6 +36,9 @@ OBJECTS += $(BUILD)/debug_fixture_$(BOARD).rel
 endif
 ifeq ($(IMAGE),timebase_fixture)
 OBJECTS += $(BUILD)/timebase_fixture_state.rel $(BUILD)/timebase.rel
+endif
+ifeq ($(IMAGE),clock_fixture)
+OBJECTS += $(BUILD)/clock_fixture_state.rel $(BUILD)/timebase.rel $(BUILD)/clock.rel
 endif
 
 .PHONY: all test test-timebase test-clock force-link
@@ -60,6 +64,9 @@ $(BUILD)/debug_fixture_$(BOARD).rel: src/debug_pattern.c $(HEADERS) Makefile | $
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 $(BUILD)/timebase_fixture_state.rel: src/timebase_fixture_state.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/clock_fixture_state.rel: src/clock_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 # Relink with the selected board even when an explicitly shared BUILD is reused.
@@ -132,7 +139,10 @@ $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src
 $(BUILD)/host-timebase-failure-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DTIMEBASE_FIXTURE_FAILURE_TEST tests/test_timebase_fixture.c src/timebase_fixture_state.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
-test: all test-timebase test-clock $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD))
+$(BUILD)/host-clock-fixture-tests_$(BOARD): tests/test_clock_fixture.c src/clock_fixture_state.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_clock_fixture.c src/clock_fixture_state.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+test: all test-timebase test-clock $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
 ifeq ($(IMAGE),debug_fixture)
@@ -141,6 +151,9 @@ endif
 ifeq ($(IMAGE),timebase_fixture)
 	$(BUILD)/host-timebase-fixture-tests_$(BOARD)
 	$(BUILD)/host-timebase-failure-tests_$(BOARD)
+endif
+ifeq ($(IMAGE),clock_fixture)
+	$(BUILD)/host-clock-fixture-tests_$(BOARD)
 endif
 	$(PYTHON) -B -m unittest discover -s tools -p 'test_*.py' -v
 	$(PYTHON) -B tests/boot_image.py --board $(BOARD) --image $(IMAGE) --output $(BUILD) --simulator "$(S51)"

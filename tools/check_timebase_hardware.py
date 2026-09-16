@@ -24,7 +24,7 @@ def validate_program(image: DebugImage, program: bytes, cycles: int) -> None:
             "Program differs from the checked timebase image")
 
 
-def wait_checkpoint(debugger: Debugger, expected_pc: int, fault_pc: int) -> int:
+def wait_checkpoint(debugger: Debugger, expected_pc: int, fault_pc: int, label="timebase") -> int:
     # A single guarded operation/deadline covers all status polls and the PC read.
     with debugger._target_operation() as deadline:
         while True:
@@ -33,7 +33,7 @@ def wait_checkpoint(debugger: Debugger, expected_pc: int, fault_pc: int) -> int:
             if status & Status.CPU_HALTED:
                 require(status & Status.HALT_STATUS, "Halt was not caused by a breakpoint")
                 pc = debugger._pc(deadline)
-                require(pc in (expected_pc, fault_pc), "Unexpected timebase breakpoint PC")
+                require(pc in (expected_pc, fault_pc), f"Unexpected {label} breakpoint PC")
                 return pc
 
 
@@ -48,23 +48,28 @@ def inspect_checkpoint(debugger: Debugger, image: DebugImage, pc: int) -> tuple:
     return record, startup, boot, registers
 
 
-def step_nop(debugger: Debugger, registers) -> None:
+def step_nop(debugger: Debugger, registers, label="Timebase") -> None:
     result = debugger.step()
     require(result.accumulator == registers.a and
             debugger.read_registers() == replace(registers, pc=registers.pc + 1),
-            "Timebase NOP changed CPU state or did not advance PC by one")
+            f"{label} NOP changed CPU state or did not advance PC by one")
+
+
+def reset_and_verify_code(debugger: Debugger, program: bytes, label="timebase") -> tuple:
+    adapter = debugger.read_adapter_state()
+    debugger.attach_reset()
+    require(debugger.read_pc() == 0, f"Initial {label} reset PC is not zero")
+    config = debugger.read_debug_config()
+    require(config == 0x26, f"{label.capitalize()} acceptance requires the documented reset debug configuration")
+    for offset in range(0, len(program), 128):
+        expected = program[offset:offset + 128]
+        require(debugger.read_code(offset, len(expected)) == expected, f"Physical {label} CODE mismatch")
+    return adapter, config
 
 
 def exercise(debugger: Debugger, image: DebugImage, program: bytes, cycles: int) -> dict:
     validate_program(image, program, cycles)
-    adapter = debugger.read_adapter_state()
-    debugger.attach_reset()
-    require(debugger.read_pc() == 0, "Initial timebase reset PC is not zero")
-    config = debugger.read_debug_config()
-    require(config == 0x26, "Timebase acceptance requires the documented reset debug configuration")
-    for offset in range(0, len(program), 128):
-        expected = program[offset:offset + 128]
-        require(debugger.read_code(offset, len(expected)) == expected, "Physical timebase CODE mismatch")
+    adapter, config = reset_and_verify_code(debugger, program)
 
     before, ready, fault = (image.symbol(name).address for name in TIMEBASE_CHECKPOINTS)
     for slot in range(4):

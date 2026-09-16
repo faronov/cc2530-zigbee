@@ -25,19 +25,29 @@ There is deliberately no automatic flash target.
 `build/<board>/debug_fixture/` unless `BUILD` is specified.
 `IMAGE=timebase_fixture` selects the separate
 [awake-only timebase board fixture](DEBUGGING.md#awake-only-timebase-board-fixture),
-under `build/<board>/timebase_fixture/`. All three images use the same board
+under `build/<board>/timebase_fixture/`. `IMAGE=clock_fixture` selects the separate
+[init-time clock board fixture](DEBUGGING.md#init-time-clock-board-fixture),
+under `build/<board>/clock_fixture/`. All four images use the same board
 policy, M0 status ABI and memory restrictions. The new timebase fixture does
-not change the existing `bringup` or `debug_fixture` firmware bytes. Image selection does
+not change the existing `bringup` or `debug_fixture` firmware bytes. The clock
+fixture likewise preserves all six older board BINs. Image selection does
 not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
 `build-info.json` always describes the last selected image; use separate
 directories to retain each metadata record.
 
 Shared startup/status has separate LG hardware evidence through the M1
 fixture and the [2026-09-16 compiled-C timebase acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance).
-The last reported installed LG image is now `timebase_fixture`, halted at
-READY `0x016A`; that does not change either standalone `bringup` image's
-unobserved status. Generic hardware remains unobserved and all four old
-board BIN hashes remain unchanged.
+That timebase run left READY `0x016A`. The
+[later LG clock experiment](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure)
+passed normal switching but failed pending-cancellation rollback acceptance.
+The corrected 3,798-byte LG image subsequently passed
+[2026-09-17 (UTC+03) compiled-C clock acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+both timeout/rollback cases and a separate reset/recovery run of 257 sequences
+(771 C calls). The live target is now that corrected clock fixture, halted at
+READY `0x016A` on RC16. Neither standalone `bringup` image nor generic hardware
+was observed. All six older BIN hashes and historical M1/timebase evidence
+remain unchanged. This is not frequency/calibration or physical clock-failure
+acceptance, and result 9 still denotes unconfirmed never-departed cancellation.
 
 ## Execution and board policy
 
@@ -45,6 +55,8 @@ SDCC sets up its initial stack, then calls `_sdcc_external_startup`. This hook
 disables all three interrupt-enable registers before board policy and C data
 initialization. There is no interrupt handler, RF/USART initialization, sensor
 read, EPD/SPI command, sleep entry, crystal switch or network operation.
+The separate clock fixture performs its explicitly documented HF selections
+after this unchanged startup; the default bootstrap does not.
 
 The default board does not change GPIO latches, directions, selections or
 pulls. That is not a guarantee of electrically safe reset levels on an unknown

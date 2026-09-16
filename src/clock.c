@@ -27,7 +27,7 @@ static void observe(clock_diagnostics_t *diagnostics)
 
 static clock_result_t request_and_wait(uint8_t command, uint32_t timeout_ticks,
                                        uint16_t poll_limit, clock_diagnostics_t *diagnostics,
-                                       clock_wait_diagnostics_t *wait)
+                                       clock_wait_diagnostics_t *wait, uint8_t *source_seen)
 {
     uint32_t start, previous, now, deadline;
     bool expired;
@@ -37,12 +37,13 @@ static clock_result_t request_and_wait(uint8_t command, uint32_t timeout_ticks,
     wait->timebase_status = timebase_deadline_after(start, timeout_ticks, &deadline);
     /* Also cancel a pending request when the rollback timebase is unusable. */
     MMIO_WRITE(SOC_CLKCONCMD, command);
-    if (wait->timebase_status != TIMEBASE_OK) {
-        observe(diagnostics);
-        return CLOCK_TIMEBASE_ERROR;
-    }
     while (wait->polls < poll_limit) {
         observe(diagnostics);
+        /* STA.OSC is source evidence, not a pending-request/cancellation flag. */
+        if (((diagnostics->observed_status ^ diagnostics->requested_command) & CLOCK_OSC) == 0)
+            *source_seen = 1;
+        if (wait->timebase_status != TIMEBASE_OK)
+            return CLOCK_TIMEBASE_ERROR;
         now = timebase_read_awake_ticks24();
         wait->polls++;
         wait->elapsed_ticks = (now - start) & TIMEBASE_TICKS_MASK;
@@ -56,7 +57,7 @@ static clock_result_t request_and_wait(uint8_t command, uint32_t timeout_ticks,
             return CLOCK_COUNTER_RANGE;
         if (expired && wait->elapsed_ticks > timeout_ticks)
             return CLOCK_TIMEOUT;
-        if (diagnostics->observed_status == effective_status(command))
+        if (*source_seen && diagnostics->observed_status == effective_status(command))
             return CLOCK_OK;
         if (expired)
             return CLOCK_TIMEOUT;
@@ -68,7 +69,7 @@ static clock_result_t request_and_wait(uint8_t command, uint32_t timeout_ticks,
 clock_result_t clock_select_init(clock_source_t source, uint32_t timeout_ticks,
                                  uint16_t poll_limit, clock_diagnostics_t *diagnostics)
 {
-    uint8_t ien0, ien1, ien2, sleep_command, command;
+    uint8_t ien0, ien1, ien2, sleep_command, command, source_seen;
     clock_result_t result;
 
     if ((source != CLOCK_RC16 && source != CLOCK_XOSC32) ||
@@ -95,10 +96,15 @@ clock_result_t clock_select_init(clock_source_t source, uint32_t timeout_ticks,
     if (command == diagnostics->requested_command)
         return CLOCK_OK;
 
+    source_seen = 0;
     result = request_and_wait(diagnostics->requested_command, timeout_ticks, poll_limit,
-                              diagnostics, &diagnostics->request);
-    if (result != CLOCK_OK)
+                              diagnostics, &diagnostics->request, &source_seen);
+    if (result != CLOCK_OK) {
         diagnostics->rollback_result = request_and_wait(command, timeout_ticks, poll_limit,
-                                                        diagnostics, &diagnostics->rollback);
+                                                        diagnostics, &diagnostics->rollback, &source_seen);
+        if (!source_seen && (diagnostics->rollback_result == CLOCK_TIMEOUT ||
+                             diagnostics->rollback_result == CLOCK_POLL_LIMIT))
+            diagnostics->rollback_result = CLOCK_ROLLBACK_UNCONFIRMED;
+    }
     return result;
 }
