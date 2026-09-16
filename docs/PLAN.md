@@ -146,7 +146,8 @@ Exit:
 ### M3 - Radio and end-device MAC
 
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
-encodes/decodes a bounded DATA/ACK subset, with host, linked-image and
+encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
+their addressing layouts, with host, linked-image and
 alias-aware simulator evidence. It is not linked into board firmware and
 does not establish radio, MAC or networking support. Hardware M1/M2 gates
 are not bypassed.

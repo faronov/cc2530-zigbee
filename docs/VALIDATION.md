@@ -106,6 +106,10 @@ The [standalone legacy MAC codec](MAC.md) is already covered by original
 golden/layout/negative vectors on host and an isolated SDCC/uCsim image,
 plus all 65,536 FCF values and exact-sized buffer cases on the host. This is
 syntax/serialization evidence, not CRC, authentication, radio or MAC operation.
+Five command payload formats and all twelve supported command addressing
+layouts have shared host/SDCC golden and boundary checks. Host-only tests
+also exhaust command fields, association response addresses/statuses and
+command FCF patterns, retaining unchanged-output checks on errors.
 Its test executable is not a board firmware image or CI upload artifact.
 
 | Area | Required cases before the corresponding milestone closes |

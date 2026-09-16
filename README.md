@@ -100,7 +100,9 @@ acceptance remain open.
 
 ## Intended scope
 
-Independent offline work also includes a [bounded legacy DATA/ACK codec](docs/MAC.md).
+Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):
+DATA/ACK plus association request/response, disassociation, data request and
+beacon request payloads/frames.
 It is host-tested, image-checked and simulated in an isolated test executable,
 not linked into board firmware. There is still no radio driver, functioning
 MAC, association or Zigbee join.

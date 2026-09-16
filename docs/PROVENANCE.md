@@ -120,11 +120,24 @@ The revision and licenses were checked before using these references.
 Microchip's transceiver registers/timings are not CC2530 implementation facts.
 
 The engineering scope is the legacy IEEE 802.15.4-2006-compatible DATA/ACK
-wire subset documented in [MAC.md](MAC.md), not complete standard conformance.
+and five-command wire subset documented in [MAC.md](MAC.md), not complete standard conformance.
 No Contiki state, security code or frame-processing implementation was copied.
 Address arrays use explicitly documented wire order, not Contiki's display
 order; PAN compression is explicit rather than automatically selected.
 All vectors, addresses, PAN IDs and payloads are original synthetic values.
+
+The command extension was checked directly against
+[IEEE Std 802.15.4-2006](https://people.ece.ubc.ca/~edc/7860/data/802.15.4-2006.pdf),
+sections 7.2.2.4 and 7.2.3 (printed pp.147-149), sections 7.3.1-4
+(pp.150-154), section 7.3.7 (p.156), and Tables 82-84. These supply the command
+identifiers, fixed payload formats, capability/status/reason fields and
+command-specific addressing/ACK/compression facts. In particular, successful
+association without an allocated short address uses `FFFE`; unsuccessful
+association uses `FFFF`. Frame Pending is zero on transmission and ignored on
+reception. Generated search summaries were not used as authority for those
+facts. Version 0 and strict reserved-field rejection are explicit codec subset
+choices. The manual is linked, not redistributed; no third-party command
+implementation or packet capture is imported.
 
 Contiki's RF code depends on Contiki facilities. An adaptation must replace
 those interfaces deliberately, preserve the original notices and be tested

@@ -8,9 +8,11 @@
 
 #define MAC_FRAME_MAX_BODY 125u
 #define MAC_FRAME_MAX_HEADER 23u
+#define MAC_COMMAND_MAX_PAYLOAD 4u
 
 #define MAC_FRAME_DATA 1u
 #define MAC_FRAME_ACK 2u
+#define MAC_FRAME_COMMAND 3u
 #define MAC_ADDRESS_NONE 0u
 #define MAC_ADDRESS_SHORT 2u
 #define MAC_ADDRESS_EXTENDED 3u
@@ -19,6 +21,25 @@
 #define MAC_FLAG_PENDING 0x10u
 #define MAC_FLAG_ACK_REQUEST 0x20u
 #define MAC_FLAG_PAN_COMPRESSION 0x40u
+
+#define MAC_COMMAND_ASSOCIATION_REQUEST 0x01u
+#define MAC_COMMAND_ASSOCIATION_RESPONSE 0x02u
+#define MAC_COMMAND_DISASSOCIATION 0x03u
+#define MAC_COMMAND_DATA_REQUEST 0x04u
+#define MAC_COMMAND_BEACON_REQUEST 0x07u
+
+#define MAC_CAPABILITY_ALTERNATE_COORDINATOR 0x01u
+#define MAC_CAPABILITY_FFD 0x02u
+#define MAC_CAPABILITY_MAINS_POWER 0x04u
+#define MAC_CAPABILITY_RX_ON_WHEN_IDLE 0x08u
+#define MAC_CAPABILITY_SECURITY 0x40u
+#define MAC_CAPABILITY_ALLOCATE_ADDRESS 0x80u
+
+#define MAC_ASSOCIATION_SUCCESS 0u
+#define MAC_ASSOCIATION_PAN_AT_CAPACITY 1u
+#define MAC_ASSOCIATION_PAN_ACCESS_DENIED 2u
+#define MAC_DISASSOCIATION_COORDINATOR_REQUEST 1u
+#define MAC_DISASSOCIATION_DEVICE_REQUEST 2u
 
 typedef enum {
     MAC_CODEC_OK = 0,
@@ -30,8 +51,18 @@ typedef enum {
     MAC_CODEC_UNSUPPORTED_VERSION,
     MAC_CODEC_UNSUPPORTED_SECURITY,
     MAC_CODEC_UNSUPPORTED_ADDRESSING,
-    MAC_CODEC_INVALID_HEADER
+    MAC_CODEC_INVALID_HEADER,
+    MAC_CODEC_UNSUPPORTED_COMMAND,
+    MAC_CODEC_INVALID_COMMAND
 } mac_codec_result_t;
+
+typedef struct {
+    uint8_t identifier;
+    uint8_t capability;
+    uint16_t short_address;
+    uint8_t status;
+    uint8_t reason;
+} mac_command_t;
 
 typedef struct {
     uint8_t type;
@@ -62,5 +93,13 @@ mac_codec_result_t mac_frame_decode(const uint8_t *body, uint16_t length,
 mac_codec_result_t mac_frame_encode(const mac_header_t *header,
                                     const uint8_t *payload, uint16_t payload_length,
                                     uint8_t *body, uint16_t capacity, uint8_t *length);
+
+/* Command payloads include their identifier. Unused fields decode as zero.
+ * Payload-only success does not validate a frame header or perform a procedure.
+ */
+mac_codec_result_t mac_command_decode(const uint8_t *payload, uint16_t length,
+                                      mac_command_t *result);
+mac_codec_result_t mac_command_encode(const mac_command_t *command,
+                                      uint8_t *payload, uint16_t capacity, uint8_t *length);
 
 #endif
