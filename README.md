@@ -20,7 +20,7 @@ IAR or proprietary TI stack libraries.
 | [Development plan](docs/PLAN.md) | Milestones, dependencies, acceptance gates and risks |
 | [Architecture](docs/ARCHITECTURE.md) | Layers, memory ownership and proposed interfaces |
 | [Bring-up](docs/BRINGUP.md) | Current build commands, board behavior and status ABI |
-| [Debugging](docs/DEBUGGING.md) | CC Debugger capabilities and the missing host tooling |
+| [Debugging](docs/DEBUGGING.md) | M1 fixture, guarded host transport, offline tools and remaining gates |
 | [Validation](docs/VALIDATION.md) | Host, simulator and real-hardware evidence requirements |
 | [Conformance ledger](docs/CONFORMANCE.md) | Required behaviors, specification gates and implementation status |
 | [Sources and licensing](docs/PROVENANCE.md) | Permitted inputs and reference provenance |
@@ -54,6 +54,49 @@ The generic board performs no application-specific pin control. The
 `lg_esl29_rev03` board keeps its known display controls off. A board name is not
 permission to flash an unknown device: preserve and verify recovery backups
 and confirm the hardware first.
+
+## M1 debugger fixture
+
+The first target-side M1 component is a separate, deterministic non-RF image:
+
+```sh
+make BOARD=generic IMAGE=debug_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=debug_fixture all test
+```
+
+Outputs are `build/<board>/debug_fixture/debug_fixture.*` and `build-info.json`.
+It reuses the bootstrap's board/startup policy and status ABI, adding four
+named code locations, nested calls, a 16-byte state block and a known-register
+NOP/RET probe. The [fixture contract](docs/DEBUGGING.md#implemented-target-fixture)
+describes exact expectations and limits.
+
+This component is **host-tested, image-checked and simulated** for both boards,
+not hardware-observed. Its four hardware breakpoint slots and
+register-preserving reads remain unvalidated; M1 is open.
+
+The [partial host transport](docs/DEBUGGING.md#implemented-host-transport)
+provides opt-in adapter-state and debug status/config reads with explicit
+USB bus/address selection. Target reads require confirmation of an existing
+debug session. A separate, destructive `attach-reset` operation can prepare
+the adapter and request initial reset into halt; it is not a non-reset attach.
+Bank reads require a halted CPU.
+HALT/RESUME/STEP additionally require separate explicit CPU-control permission
+and validate target state before/after. An explicit `reset-halt` command has
+its own reset permission and requires an already prepared debug session.
+Initial attach also requires explicit reset permission and its own
+`--confirm-reset-attach` confirmation instead of an existing-session assertion.
+Opening/closing never resets or resumes; there is no flashing or automatic
+retry. This component is
+**host-tested only**, with synthetic USB backends. PyUSB is optional and is
+not needed to build firmware or run the ordinary tests.
+
+The [offline image tool](docs/DEBUGGING.md#offline-image-symbol-and-snapshot-tools)
+performs global symbol lookup, exact CDB source-line lookup, strict status
+decoding and breakpoint-parameter preparation against verified image files
+and hashes, with **no USB access**. Source lookup does not infer the nearest
+line or resolve source-file paths.
+Live PC/memory/register access, breakpoint programming and physical M1
+acceptance remain open.
 
 ## Intended scope
 

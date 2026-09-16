@@ -10,8 +10,8 @@ a coordinator.
 **Implemented at project creation:** a non-networking bootstrap, build/image
 checks, host/simulator tests and CI. The bootstrap has not been validated on
 physical hardware merely because a preceding display prototype worked.
-Everything from M1 onward below is planned unless a linked change and its
-acceptance evidence explicitly say otherwise.
+Everything from M1 onward below is planned except for the explicitly
+implemented components and evidence recorded under each milestone.
 
 The [initial conformance ledger](CONFORMANCE.md) exists at M0. Selection of
 the exact R22-compatible BDB revision is an open, blocking prerequisite for
@@ -76,6 +76,30 @@ Exit:
 - No automatic flashing, radio transmission or display-refresh target exists.
 
 ### M1 - Hardware debugging that we can trust
+
+**Partial implementation:** the [target fixture](DEBUGGING.md#implemented-target-fixture)
+in `examples/debug_fixture.c` and `src/debug_pattern.c` is host-tested,
+image-checked and alias-aware simulated for both boards. It is a separate
+build, not a change to the default M0 image.
+
+The [host transport](DEBUGGING.md#implemented-host-transport) in
+`tools/cc_debugger.py` provides explicit adapter selection, guarded status/config
+and bank reads, and separately authorized HALT/RESUME/STEP with an optional
+PyUSB backend. Separately authorized `reset-halt` is limited to an already
+prepared session. Explicit `attach-reset` prepares the adapter and requests
+initial reset into halt under its own access policy; open/close never resets
+or resumes. These are host-tested
+with synthetic backends, not hardware-observed. The
+[offline tools](DEBUGGING.md#offline-image-symbol-and-snapshot-tools) also
+provide verified-image global symbol and exact CDB source-line lookup, strict
+M0/M1 snapshot decoding and target breakpoint-parameter encoding; they never
+access USB.
+
+Live PC/memory/register access, USB breakpoint programming and all hardware
+exit gates remain open. A non-reset attach is not implemented. The
+[remaining gate table](DEBUGGING.md#remaining-m1-gates-before-m2) separates
+unconfirmed adapter framing from physical acceptance. No physical debugger
+or board was accessed for these components.
 
 Deliver:
 

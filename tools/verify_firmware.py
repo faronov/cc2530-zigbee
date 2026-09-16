@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""Validate the SDCC 4.2 M0 linked artifacts, including absolute XDATA."""
+"""Validate SDCC 4.2 bootstrap/debug-fixture artifacts, including absolute XDATA."""
 
 import argparse
 import hashlib
@@ -12,11 +12,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
+IMAGES = ("bringup", "debug_fixture")
+ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
 STATUS_SIZE = 32
 STATUS_RESERVED = 64
 IRAM_ALIAS = 0x1F00
 CODE_LIMIT = 0x8000
+FIXTURE_SIZE = 16
+PROBE_BYTES = bytes.fromhex("74 a5 75 f0 3c 90 12 34 7f 69 d3 00 22")
 
 
 def require(condition, message):
@@ -63,8 +67,8 @@ def parse_ihex(text):
 def parse_symbols(text):
     symbols = {}
     for match in re.finditer(
-        r"^\s*(?:C:\s*)?([0-9A-Fa-f]{8})\s+([A-Za-z_]\w*)\s*$"
-        r"|^\s*(?:C:\s*)?([0-9A-Fa-f]{8})\s+([A-Za-z_]\w*)\s+\S+\s*$",
+        r"^\s*(?:[CD]:\s*)?([0-9A-Fa-f]{8})\s+([A-Za-z_]\w*)\s*$"
+        r"|^\s*(?:[CD]:\s*)?([0-9A-Fa-f]{8})\s+([A-Za-z_]\w*)\s+\S+\s*$",
         text, re.MULTILINE,
     ):
         address, name = (match[1], match[2]) if match[1] else (match[3], match[4])
@@ -82,12 +86,16 @@ def xdata_ranges(symbols):
     ]
 
 
-def verify_layout(symbols, memory, debug):
+def verify_layout(symbols, memory, debug, image_name="bringup"):
+    require(image_name in IMAGES, "Unknown firmware image")
     require(symbols["_m0_status"] == STATUS_ADDRESS, "Status address/IRAM alias violation")
     require(symbols["__XPAGE"] == 0x93, "SDCC page register must be CC2530 MPAGE")
     sizes = re.findall(r"^S:G\$m0_status\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
     require(sizes and all(int(size) == STATUS_SIZE for size in sizes), "Status debug ABI size mismatch")
-    require("C$bringup.c$" in debug, "Missing source-level debug records")
+    require(f"C${image_name}.c$" in debug, "Missing source-level debug records")
+    if image_name == "debug_fixture":
+        sizes = re.findall(r"^S:G\$debug_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == FIXTURE_SIZE for size in sizes), "Fixture debug ABI size mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -107,6 +115,7 @@ def verify_layout(symbols, memory, debug):
         name, size = match[1], int(match[2])
         if name == "m0_status":
             continue
+        require("_" + name in symbols, f"Missing XDATA symbol {name}")
         start = symbols["_" + name]
         require(set(range(start, start + size)) <= occupied, "Unaccounted absolute XDATA object")
     stack = re.search(
@@ -132,20 +141,23 @@ def verify_layout(symbols, memory, debug):
     }
 
 
-def verify_artifacts(output, board):
-    image = parse_ihex((output / "bringup.ihx").read_text(encoding="ascii"))
-    require(image == parse_ihex((output / "bringup.hex").read_text(encoding="ascii")),
+def verify_artifacts(output, board, image_name="bringup"):
+    require(image_name in IMAGES, "Unknown firmware image")
+    image = parse_ihex((output / f"{image_name}.ihx").read_text(encoding="ascii"))
+    require(image == parse_ihex((output / f"{image_name}.hex").read_text(encoding="ascii")),
             "IHX/HEX content differs")
     require(min(image) == 0 and max(image) < CODE_LIMIT, "Image outside lower unbanked CODE")
     require(image[0] == 0x02, "Missing reset LJMP")
     binary = bytes(image.get(address, 0xFF) for address in range(max(image) + 1))
-    require(binary == (output / "bringup.bin").read_bytes(), "HEX/BIN content differs")
-    symbols = parse_symbols((output / "bringup.map").read_text(encoding="utf-8"))
-    memory = (output / "bringup.mem").read_text(encoding="utf-8")
-    debug = (output / "bringup.cdb").read_text(encoding="utf-8")
-    metrics = verify_layout(symbols, memory, debug)
+    require(binary == (output / f"{image_name}.bin").read_bytes(), "HEX/BIN content differs")
+    symbols = parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8"))
+    memory = (output / f"{image_name}.mem").read_text(encoding="utf-8")
+    debug = (output / f"{image_name}.cdb").read_text(encoding="utf-8")
+    metrics = verify_layout(symbols, memory, debug, image_name)
     for name in ("_main", "_bringup_initialize", "_bringup_tick", "__sdcc_external_startup"):
         require(symbols[name] in image, f"Code symbol {name} is outside image")
+    if image_name == "debug_fixture":
+        verify_fixture_code(image, symbols)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),
             "Linked board identity/policy does not match selected board")
@@ -161,13 +173,26 @@ def verify_artifacts(output, board):
     return metrics, symbols
 
 
+def verify_fixture_code(image, symbols):
+    names = ("_debug_fixture_initialize", "_debug_fixture_cycle", "_debug_fixture_probe",
+             "_debug_fixture_stop") + tuple(f"_debug_fixture_stage{i}" for i in range(4))
+    require(all(name in symbols and symbols[name] in image for name in names),
+            "Missing/out-of-image fixture code symbol")
+    require(len({symbols[name] for name in names}) == len(names), "Fixture code symbols overlap")
+    probe = symbols["_debug_fixture_probe"]
+    require(symbols["_debug_fixture_stop"] == probe + 11, "Fixture stop is not the probe NOP")
+    require(all(image.get(probe + offset) == value for offset, value in enumerate(PROBE_BYTES)),
+            "Fixture register probe opcodes changed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", choices=BOARDS, required=True)
+    parser.add_argument("--image", choices=IMAGES, default="bringup")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", default="sdcc")
     args = parser.parse_args()
-    metrics, _ = verify_artifacts(args.output, args.board)
+    metrics, _ = verify_artifacts(args.output, args.board, args.image)
     compiler = subprocess.run([args.compiler, "--version"], check=True, capture_output=True, text=True).stdout
     require(re.search(r"\b4\.2\.0\b", compiler) is not None, "M0 baseline requires SDCC 4.2.0")
     revision = subprocess.run(
@@ -180,15 +205,16 @@ def main():
     info = {
         "schema": 1,
         "board": args.board,
-        "capability": "non-networking-bootstrap",
+        "image": args.image,
+        "capability": "non-networking-bootstrap" if args.image == "bringup" else "non-networking-debug-fixture",
         "hardware_tested": False,
         "compiler": compiler.splitlines()[0],
         "git_revision": revision.stdout.strip() or None,
         "git_dirty": bool(dirty.stdout),
         "memory": metrics,
         "sha256": {
-            f"bringup.{extension}": hashlib.sha256((args.output / f"bringup.{extension}").read_bytes()).hexdigest()
-            for extension in ("ihx", "hex", "bin", "map", "mem", "cdb")
+            f"{args.image}.{extension}": hashlib.sha256((args.output / f"{args.image}.{extension}").read_bytes()).hexdigest()
+            for extension in ARTIFACT_EXTENSIONS
         },
     }
     (args.output / "build-info.json").write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")

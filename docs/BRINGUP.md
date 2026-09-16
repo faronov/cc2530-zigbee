@@ -20,6 +20,14 @@ revision; it is not presented as a reproducible committed release.
 SDCC's `packihx` and `makebin` must also be on `PATH`. Python >=3.9 is required.
 There is deliberately no automatic flash target.
 
+`IMAGE=bringup` remains the default. `IMAGE=debug_fixture` selects the separate
+[M1 target fixture](DEBUGGING.md#implemented-target-fixture), with outputs in
+`build/<board>/debug_fixture/` unless `BUILD` is specified. Both images use the
+same board policy, M0 status ABI and memory restrictions. Image selection does
+not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
+`build-info.json` always describes the last selected image; use separate
+directories to retain both metadata records.
+
 ## Execution and board policy
 
 SDCC sets up its initial stack, then calls `_sdcc_external_startup`. This hook

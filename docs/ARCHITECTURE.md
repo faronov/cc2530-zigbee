@@ -4,6 +4,29 @@ This is the intended stack architecture. At M0 only board/platform bootstrap,
 status storage and validation infrastructure exist. The layer names below
 are boundaries to implement, not a list of working APIs.
 
+The partial M1 addition is a separate non-RF debugger fixture, not a protocol
+layer. Its deterministic pattern logic is host-testable; its SDCC register
+probe is confined to the target example. It shares existing startup/board
+code rather than introducing a second GPIO policy.
+
+The host-only `tools/cc_debugger.py` keeps USB access behind a narrow backend
+interface. Session policy, exact diagnostic packets, deadlines and failure
+states can be tested without importing PyUSB or enumerating devices. The
+optional backend does not own board GPIO or decide reset/attach policy.
+
+CPU-control permission is separate from permission to read an existing
+debug session; state checks and the complete command exchange share one
+deadline. Reset into halt has a third, separate permission, is limited to an
+already prepared debug session and is never triggered by open/close or an
+error. The separate `RESET_DEBUG_SESSION` access policy permits only explicit
+reset-based initial attach: target operations remain denied until preparation,
+reset and postchecks finish. It does not claim a non-reset attach.
+`tools/cc2530_debug.py` contains target command/status facts, distinct
+from USB framing. `tools/debug_image.py` handles only offline artifacts and
+snapshots, reusing strict image checks and never importing the USB transport.
+Its source lookup exposes exact linked CDB records, including multiple records
+at one address; it does not guess source ranges or read compiler-named files.
+
 ## Layer boundaries
 
 ```text
@@ -51,6 +74,11 @@ Proposed interface responsibilities:
 M0 reserves `0x1E00..0x1E3F` for at most 64 status bytes. Ordinary allocation
 ends below `0x1E00`; unused space above status is not an implicit allocation
 pool. The linker/map checker and alias-aware simulator enforce this.
+
+The M1 fixture retains that exact reservation and M0 status ABI. Its separate
+16-byte `debug_fixture_state` lives in ordinary, linker-accounted XDATA below
+`0x1E00`; its address is looked up in the matching image's map, not hardcoded.
+The existing 512-byte nonaliased-XDATA reservation budget still applies.
 
 Do not clear an XDATA object at `0x1F00`: this can overwrite the very register
 holding its loop index and the active return addresses. A generic 8051

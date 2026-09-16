@@ -127,10 +127,47 @@ class LayoutTests(unittest.TestCase):
             self.verify()
 
     def test_symbols(self):
-        text = "C: 00000100 _main bringup\n     00001E00 _m0_status status\nC: 00000000 l_XSEG\n"
+        text = ("C: 00000100 _main bringup\n     00001E00 _m0_status status\n"
+                "C: 00000000 l_XSEG\nD: 00000010 _ordinary_xdata fixture\n")
         self.assertEqual(parse_symbols(text)["_m0_status"], 0x1E00)
+        self.assertEqual(parse_symbols(text)["_ordinary_xdata"], 0x10)
         with self.assertRaisesRegex(ValueError, "Conflicting"):
             parse_symbols(text + "C: 00000101 _main bringup\n")
+
+    def fixture_layout(self, address=0, size=16):
+        self.symbols["_debug_fixture_state"] = address
+        self.symbols["l_XSEG"] = 20
+        self.debug += f"\nS:G$debug_fixture_state$0_0$0({{{size}}}STfixture:S),F,0,0"
+        self.debug += "\nL:C$debug_fixture.c$6$0_0$0:123"
+        return verify_layout(self.symbols, self.memory, self.debug, "debug_fixture")
+
+    def test_fixture_xdata_accounted_without_expanding_status(self):
+        metrics = self.fixture_layout()
+        self.assertEqual(metrics["ordinary_xdata_bytes"], 20)
+        self.assertEqual(metrics["nonaliased_xdata_used_bytes"], 52)
+        self.assertEqual(metrics["nonaliased_xdata_reserved_bytes"], 84)
+
+    def test_fixture_must_fit_allocator(self):
+        for address in (5, 0x1E20, 0x1F00):
+            with self.subTest(address=address), self.assertRaisesRegex(ValueError, "absolute"):
+                self.fixture_layout(address=address)
+
+    def test_fixture_wrong_abi_size(self):
+        with self.assertRaisesRegex(ValueError, "Fixture debug ABI"):
+            self.fixture_layout(size=15)
+
+    def test_fixture_missing_abi(self):
+        self.debug += "\nL:C$debug_fixture.c$6$0_0$0:123"
+        with self.assertRaisesRegex(ValueError, "Fixture debug ABI"):
+            verify_layout(self.symbols, self.memory, self.debug, "debug_fixture")
+
+    def test_wrong_image_source(self):
+        with self.assertRaisesRegex(ValueError, "source-level"):
+            verify_layout(self.symbols, self.memory, self.debug, "debug_fixture")
+
+    def test_unknown_image(self):
+        with self.assertRaisesRegex(ValueError, "Unknown firmware"):
+            verify_layout(self.symbols, self.memory, self.debug, "unknown")
 
 
 if __name__ == "__main__":

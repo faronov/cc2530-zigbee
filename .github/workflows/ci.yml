@@ -15,13 +15,14 @@ concurrency:
 
 jobs:
   bootstrap:
-    name: Bootstrap (${{ matrix.board }})
+    name: Non-RF fixture (${{ matrix.board }}, ${{ matrix.image }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         board: [generic, lg_esl29_rev03]
+        image: [bringup, debug_fixture]
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -32,7 +33,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install --yes --no-install-recommends \
-            build-essential python3 \
+            build-essential python3 python3-venv \
             sdcc=4.2.0+dfsg-1 sdcc-ucsim=4.2.0+dfsg-1
           sdcc --version
           python3 --version
@@ -43,22 +44,31 @@ jobs:
           python3 -m unittest discover -s tools -p 'test_*.py' -v
           python3 tools/check_repository.py
 
+      - name: Test optional PyUSB resource management without hardware
+        if: matrix.board == 'generic' && matrix.image == 'bringup'
+        run: |
+          python3 -m venv build/usb-tests
+          build/usb-tests/bin/python -m pip install --disable-pip-version-check -r requirements-debug.txt
+          build/usb-tests/bin/python -m unittest discover -s tools -p 'test_m1_*.py' -v
+
       - name: Build, check images and execute tests
         env:
           BOARD: ${{ matrix.board }}
-        run: make BOARD="$BOARD" all test
+          IMAGE: ${{ matrix.image }}
+          BUILD: build/${{ matrix.board }}/${{ matrix.image }}
+        run: make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test
 
-      - name: Upload generated bootstrap artifacts
+      - name: Upload generated non-RF artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cc2530-bootstrap-${{ matrix.board }}-${{ github.sha }}
+          name: cc2530-${{ matrix.image }}-${{ matrix.board }}-${{ github.sha }}
           if-no-files-found: error
           retention-days: 14
           path: |
-            build/${{ matrix.board }}/bringup.hex
-            build/${{ matrix.board }}/bringup.bin
-            build/${{ matrix.board }}/bringup.ihx
-            build/${{ matrix.board }}/bringup.map
-            build/${{ matrix.board }}/bringup.mem
-            build/${{ matrix.board }}/bringup.cdb
-            build/${{ matrix.board }}/build-info.json
+            build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.hex
+            build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.bin
+            build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.ihx
+            build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.map
+            build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.mem
+            build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.cdb
+            build/${{ matrix.board }}/${{ matrix.image }}/build-info.json

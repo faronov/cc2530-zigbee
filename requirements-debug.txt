@@ -1,0 +1,3 @@
+# Optional host USB backend only; firmware builds/tests do not require it.
+# PyUSB is BSD-3-Clause; see docs/PROVENANCE.md.
+pyusb==1.3.1
