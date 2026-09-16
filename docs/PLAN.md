@@ -152,13 +152,21 @@ Do not begin diagnosing a complex stack with an unvalidated debugger.
 [awake-only timebase](ARCHITECTURE.md#awake-only-timebase-first-m2-slice)
 reads the real 24-bit Sleep Timer and provides bounded modular deadlines.
 It is host-tested, image-checked and alias-aware simulated in an isolated
-test executable, not linked into either board image. Existing `bringup` and
+test executable. A subsequent, separate
+[board timebase fixture](DEBUGGING.md#awake-only-timebase-board-fixture)
+now calls the compiled reader/deadline helpers, with bounded polling and
+latched faults. Its explicit manual runner completed
+[LG compiled-C hardware acceptance on 2026-09-16](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance):
+257 verified cycles, elapsed 129..130 raw ticks for requested 128, 37 polls
+per cycle, and preserved CPU/M0 state. Generic hardware and physical timer-fault
+injection remain unobserved. Existing `bringup` and
 `debug_fixture` firmware bytes and M1 evidence are unchanged. A separate
 [debugger-register observation](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
 established raw counter progression and natural rollover on LG, not execution
-of the C driver or calibrated timing. Physical C-driver integration,
-clock selection/calibration, interrupts, compare/wake handling and all other
-M2 services remain unestablished by this slice.
+of the C driver or calibrated timing. The compiled-C run is a separate
+experiment and does not establish natural 24-bit rollover in those cycles.
+Clock selection/calibration, interrupts, compare/wake handling and the other
+M2 platform gates remain open.
 
 Deliver independent interfaces for:
 

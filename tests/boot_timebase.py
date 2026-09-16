@@ -12,6 +12,7 @@ from boot_image import (
 )
 from verify_firmware import (
     CODE_LIMIT, STATUS_ADDRESS, STATUS_RESERVED, parse_ihex, parse_symbols, require, xdata_ranges,
+    TIMEBASE_READER_BYTES,
 )
 
 
@@ -19,14 +20,7 @@ from verify_firmware import (
 # Three MOV A,direct reads (95/96/97), each stored in compiler-owned XDATA
 # 0/1/2; then zero-extension/packing into the DPL/DPH/B/A uint32_t return ABI.
 # Lock every opcode/operand: no hidden call, branch, extra SFR read or MMIO write.
-READER_BYTES = bytes.fromhex(
-    "90 00 00 e5 95 f0 90 00 01 e5 96 f0 90 00 02 e5 97 f0 "
-    "90 00 00 e0 ff 7e 00 7d 00 7c 00 "
-    "90 00 01 e0 f8 79 00 7a 00 8a 03 89 02 88 01 e4 "
-    "42 07 e9 42 06 ea 42 05 eb 42 04 "
-    "90 00 02 e0 f8 79 00 89 03 88 02 e4 f9 "
-    "42 07 e9 42 06 ea 42 05 eb 42 04 8f 82 8e 83 8d f0 ec 22"
-)
+READER_BYTES = TIMEBASE_READER_BYTES
 READ_OFFSETS = (3, 9, 15)
 GUARD_SFRS = {
     0x80: 0x5a, 0x90: 0xa5, 0xa0: 0x69,

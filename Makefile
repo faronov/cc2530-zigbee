@@ -5,7 +5,7 @@ PYTHON ?= python3
 S51 ?= s51
 BOARD ?= generic
 IMAGE ?= bringup
-BUILD ?= build/$(BOARD)$(if $(filter debug_fixture,$(IMAGE)),/debug_fixture)
+BUILD ?= build/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
 
 ifeq ($(BOARD),generic)
 BOARD_NUMBER := 0
@@ -17,8 +17,9 @@ endif
 
 ifeq ($(IMAGE),bringup)
 else ifeq ($(IMAGE),debug_fixture)
+else ifeq ($(IMAGE),timebase_fixture)
 else
-$(error IMAGE must be bringup or debug_fixture)
+$(error IMAGE must be bringup, debug_fixture or timebase_fixture)
 endif
 
 TARGET := $(BUILD)/$(IMAGE)
@@ -31,6 +32,9 @@ OBJECTS := $(BUILD)/startup_$(BOARD).rel $(BUILD)/status_$(BOARD).rel \
            $(BUILD)/board_$(BOARD).rel $(BUILD)/example_$(IMAGE)_$(BOARD).rel
 ifeq ($(IMAGE),debug_fixture)
 OBJECTS += $(BUILD)/debug_fixture_$(BOARD).rel
+endif
+ifeq ($(IMAGE),timebase_fixture)
+OBJECTS += $(BUILD)/timebase_fixture_state.rel $(BUILD)/timebase.rel
 endif
 
 .PHONY: all test test-timebase force-link
@@ -53,6 +57,9 @@ $(BUILD)/example_$(IMAGE)_$(BOARD).rel: examples/$(IMAGE).c $(HEADERS) Makefile 
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 $(BUILD)/debug_fixture_$(BOARD).rel: src/debug_pattern.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/timebase_fixture_state.rel: src/timebase_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 # Relink with the selected board even when an explicitly shared BUILD is reused.
@@ -99,11 +106,21 @@ test-timebase: $(BUILD)/host-timebase-tests $(BUILD)/timebase_test.ihx
 	$(BUILD)/host-timebase-tests
 	$(PYTHON) -B tests/boot_timebase.py --output $(BUILD) --simulator "$(S51)"
 
-test: all test-timebase $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD))
+$(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+$(BUILD)/host-timebase-failure-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DTIMEBASE_FIXTURE_FAILURE_TEST tests/test_timebase_fixture.c src/timebase_fixture_state.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+test: all test-timebase $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
 ifeq ($(IMAGE),debug_fixture)
 	$(BUILD)/host-fixture-tests_$(BOARD)
+endif
+ifeq ($(IMAGE),timebase_fixture)
+	$(BUILD)/host-timebase-fixture-tests_$(BOARD)
+	$(BUILD)/host-timebase-failure-tests_$(BOARD)
 endif
 	$(PYTHON) -B -m unittest discover -s tools -p 'test_*.py' -v
 	$(PYTHON) -B tests/boot_image.py --board $(BOARD) --image $(IMAGE) --output $(BUILD) --simulator "$(S51)"

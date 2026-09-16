@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""Validate SDCC 4.2 bootstrap/debug-fixture artifacts, including absolute XDATA."""
+"""Validate SDCC 4.2 non-RF board artifacts, including absolute XDATA."""
 
 import argparse
 import hashlib
@@ -12,7 +12,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
-IMAGES = ("bringup", "debug_fixture")
+IMAGES = ("bringup", "debug_fixture", "timebase_fixture")
+CAPABILITIES = {
+    "bringup": "non-networking-bootstrap",
+    "debug_fixture": "non-networking-debug-fixture",
+    "timebase_fixture": "non-networking-awake-timebase-fixture",
+}
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
 STATUS_SIZE = 32
@@ -21,6 +26,21 @@ IRAM_ALIAS = 0x1F00
 CODE_LIMIT = 0x8000
 FIXTURE_SIZE = 16
 PROBE_BYTES = bytes.fromhex("74 a5 75 f0 3c 90 12 34 7f 69 d3 00 22")
+TIMEBASE_FIXTURE_SIZE = 32
+TIMEBASE_DELAY = 128
+TIMEBASE_POLL_LIMIT = 1024
+TIMEBASE_CHECKPOINTS = ("_timebase_fixture_before_sample", "_timebase_fixture_ready_stop",
+                       "_timebase_fixture_fault_stop")
+# SDCC 4.2.0 model-large reader at scratch addresses 0/1/2. Only the six
+# MOV DPTR,#scratch operands may relocate in a board image, verified via CDB.
+TIMEBASE_READER_BYTES = bytes.fromhex(
+    "90 00 00 e5 95 f0 90 00 01 e5 96 f0 90 00 02 e5 97 f0 "
+    "90 00 00 e0 ff 7e 00 7d 00 7c 00 "
+    "90 00 01 e0 f8 79 00 7a 00 8a 03 89 02 88 01 e4 "
+    "42 07 e9 42 06 ea 42 05 eb 42 04 "
+    "90 00 02 e0 f8 79 00 89 03 88 02 e4 f9 "
+    "42 07 e9 42 06 ea 42 05 eb 42 04 8f 82 8e 83 8d f0 ec 22"
+)
 
 
 def require(condition, message):
@@ -96,6 +116,10 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     if image_name == "debug_fixture":
         sizes = re.findall(r"^S:G\$debug_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
         require(sizes and all(int(size) == FIXTURE_SIZE for size in sizes), "Fixture debug ABI size mismatch")
+    if image_name == "timebase_fixture":
+        sizes = re.findall(r"^S:G\$timebase_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == TIMEBASE_FIXTURE_SIZE for size in sizes),
+                "Timebase fixture debug ABI size mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -158,6 +182,8 @@ def verify_artifacts(output, board, image_name="bringup"):
         require(symbols[name] in image, f"Code symbol {name} is outside image")
     if image_name == "debug_fixture":
         verify_fixture_code(image, symbols)
+    elif image_name == "timebase_fixture":
+        verify_timebase_fixture_code(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),
             "Linked board identity/policy does not match selected board")
@@ -185,6 +211,47 @@ def verify_fixture_code(image, symbols):
             "Fixture register probe opcodes changed")
 
 
+def verify_timebase_fixture_code(image, symbols, debug):
+    names = TIMEBASE_CHECKPOINTS + (
+        "_main", "_timebase_fixture_initialize", "_timebase_fixture_begin", "_timebase_fixture_poll",
+        "_timebase_read_awake_ticks24", "_timebase_deadline_after", "_timebase_expired",
+    )
+    require(all(name in symbols and symbols[name] in image for name in names),
+            "Missing/out-of-image timebase fixture code symbol")
+    require(len({symbols[name] for name in names}) == len(names), "Timebase fixture code symbols overlap")
+    for name, expected in zip(TIMEBASE_CHECKPOINTS, (b"\x00\x22", b"\x00\x22", b"\x00\x80\xfd")):
+        require(all(image.get(symbols[name] + offset) == value for offset, value in enumerate(expected)),
+                "Timebase checkpoint opcodes changed")
+    require("C$timebase.c$" in debug and "C$timebase_fixture_state.c$" in debug,
+            "Missing timebase component source records")
+    ordinary = {address for start, end in xdata_ranges(symbols) for address in range(start, end)}
+    state = symbols["_timebase_fixture_state"]
+    scratch = []
+    for name in ("low", "middle", "high"):
+        declarations = re.findall(
+            rf"^S:(Ltimebase\.timebase_read_awake_ticks24\${name}\$[^(\n]+)([^\n]*)$",
+            debug, re.MULTILINE,
+        )
+        require(len(set(declarations)) == 1 and declarations[0][1] == "({1}SC:U),F,0,0",
+                "Missing/conflicting reader scratch declaration")
+        addresses = re.findall(rf"^L:{re.escape(declarations[0][0])}:([^\n]*)$", debug, re.MULTILINE)
+        require(len(set(addresses)) == 1 and re.fullmatch(r"[0-9A-Fa-f]+", addresses[0]),
+                "Missing/conflicting reader scratch address")
+        address = int(addresses[0], 16)
+        require(address in ordinary and not state <= address < state + TIMEBASE_FIXTURE_SIZE,
+                "Reader scratch overlaps status/fixture or is not allocated")
+        scratch.append(address)
+    require(len(set(scratch)) == 3, "Reader scratch bytes overlap")
+    expected = bytearray(TIMEBASE_READER_BYTES)
+    for offset, byte in ((0, 0), (6, 1), (12, 2), (18, 0), (29, 1), (56, 2)):
+        expected[offset + 1:offset + 3] = scratch[byte].to_bytes(2, "big")
+    start = symbols["_timebase_read_awake_ticks24"]
+    require(symbols["_timebase_deadline_after"] == start + len(expected), "Timebase reader extent changed")
+    require(all(image.get(start + offset) == value for offset, value in enumerate(expected)),
+            "Relocated timebase reader opcodes/operands changed")
+    require(all(symbols.get(f"_SOC_ST{i}") == 0x95 + i for i in range(3)), "Sleep Timer SFR addresses changed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", choices=BOARDS, required=True)
@@ -206,7 +273,7 @@ def main():
         "schema": 1,
         "board": args.board,
         "image": args.image,
-        "capability": "non-networking-bootstrap" if args.image == "bringup" else "non-networking-debug-fixture",
+        "capability": CAPABILITIES[args.image],
         "hardware_tested": False,
         "compiler": compiler.splitlines()[0],
         "git_revision": revision.stdout.strip() or None,

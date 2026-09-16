@@ -1,8 +1,8 @@
 # M0 bootstrap contract
 
-This is a non-networking C/SDCC execution fixture. **This new image has not
-been flashed or tested on hardware.** The earlier external display prototype
-does not validate this image.
+This is a non-networking C/SDCC execution fixture. **The standalone `bringup`
+images have not been flashed or tested on hardware.** The earlier external
+display prototype does not validate these images.
 
 ## Build and scope
 
@@ -22,11 +22,22 @@ There is deliberately no automatic flash target.
 
 `IMAGE=bringup` remains the default. `IMAGE=debug_fixture` selects the separate
 [M1 target fixture](DEBUGGING.md#implemented-target-fixture), with outputs in
-`build/<board>/debug_fixture/` unless `BUILD` is specified. Both images use the
-same board policy, M0 status ABI and memory restrictions. Image selection does
+`build/<board>/debug_fixture/` unless `BUILD` is specified.
+`IMAGE=timebase_fixture` selects the separate
+[awake-only timebase board fixture](DEBUGGING.md#awake-only-timebase-board-fixture),
+under `build/<board>/timebase_fixture/`. All three images use the same board
+policy, M0 status ABI and memory restrictions. The new timebase fixture does
+not change the existing `bringup` or `debug_fixture` firmware bytes. Image selection does
 not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
 `build-info.json` always describes the last selected image; use separate
-directories to retain both metadata records.
+directories to retain each metadata record.
+
+Shared startup/status has separate LG hardware evidence through the M1
+fixture and the [2026-09-16 compiled-C timebase acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance).
+The last reported installed LG image is now `timebase_fixture`, halted at
+READY `0x016A`; that does not change either standalone `bringup` image's
+unobserved status. Generic hardware remains unobserved and all four old
+board BIN hashes remain unchanged.
 
 ## Execution and board policy
 

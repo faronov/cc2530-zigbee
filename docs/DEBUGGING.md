@@ -425,7 +425,8 @@ source used to build the artifacts. The example line number above refers to
 the current fixture source, not a stable ABI.
 
 `status` decodes exactly 32 bytes of M0 status; `fixture-state` decodes exactly
-16 bytes of M1 state. Either accepts `--hex` or `--snapshot PATH`, never both.
+16 bytes of M1 state. `timebase-state` decodes exactly 32 bytes of the separate
+`timebase_fixture` ABI below. Each accepts `--hex` or `--snapshot PATH`, never both.
 Files are read with a size bound; complete RAM dumps are not accepted. M0
 requires the correct signature/version/size, ready phase, selected board and
 policy, disabled interrupts and zero reserved bytes. Its port fields are
@@ -717,6 +718,217 @@ These automated checks are not physical breakpoint tests. The image is
 lower-32-KiB unbanked CODE; uCsim address stops are not CC2530 comparator slots.
 The separate LG observation below does not extend to the generic board,
 standalone `bringup`, banked CODE or interactive source-level stepping.
+
+## Awake-only timebase board fixture
+
+`IMAGE=timebase_fixture` is a **separate non-RF board image**, intentionally
+added after the isolated timebase foundation. It calls the actual C Sleep
+Timer reader/deadline helpers; it is not `timebase_test.ihx`. That standalone
+test executable remains unflashable and is never a board artifact.
+The new image reuses original startup, board GPIO policy and the exact M0
+status ABI. It neither replaces nor changes any `bringup`/`debug_fixture`
+firmware bytes. Both boards are **host-tested, image-checked and alias-aware
+simulated**. The [2026-09-16 LG acceptance](#2026-09-16-lg-compiled-c-timebase-acceptance)
+additionally establishes hardware execution of the C reader and successful
+deadline cycles on one LG Rev0.3; generic hardware remains unobserved.
+The independent register-only hardware reference in [VALIDATION.md](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
+does not change that distinction.
+
+```sh
+make BOARD=generic IMAGE=timebase_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=timebase_fixture all test
+python3 tools/debug_image.py symbols --output build/lg_esl29_rev03/timebase_fixture --board lg_esl29_rev03 --image timebase_fixture --name _timebase_fixture_state
+python3 tools/debug_image.py breakpoint --output build/lg_esl29_rev03/timebase_fixture --board lg_esl29_rev03 --image timebase_fixture --name _timebase_fixture_ready_stop --slot 1
+```
+
+These commands are offline. Outputs are `build/<board>/timebase_fixture/`
+unless `BUILD` is overridden. CI covers both boards and all three board
+images; its explicit artifact whitelist excludes standalone test executables.
+
+### Timebase state ABI v1
+
+`_timebase_fixture_state` is a 32-byte, byte-oriented object in **ordinary
+linker-accounted XDATA below `0x1E00`**. Resolve its address from matching
+artifacts, never from the M0 reservation, unused SRAM or another build.
+All offsets are decimal; multibyte arrays are explicitly little-endian.
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 4 | Signature `M2TM` (`4D 32 54 4D`) |
+| 4 | 1 | ABI version `1` |
+| 5 | 1 | Size `32` |
+| 6 | 1 | Phase: `1` INITIALIZED, `2` RUNNING, `3` READY, `4` FAULT |
+| 7 | 1 | Reason: `0` none, `1` deadline helper error, `2` expiry helper error, `3` clock range/backward step, `4` poll limit, `5` invalid phase |
+| 8 | 1 | Completed cycles modulo 256; increments only on success |
+| 9 | 1 | Last helper status: `0` OK, `1` INVALID_ARGUMENT, `2` AMBIGUOUS; initialized zero does not claim a helper was called |
+| 10 | 3 | Start raw ticks |
+| 13 | 3 | Last sampled end raw ticks |
+| 16 | 3 | Constructed raw deadline |
+| 19 | 3 | Masked `end - start` raw elapsed ticks |
+| 22 | 2 | Polls in this attempted cycle, `0..1024`; excludes the initial start sample |
+| 24 | 2 | Fixed requested delay `128` raw ticks, not milliseconds |
+| 26 | 2 | Fixed poll budget `1024` |
+| 28 | 2 | Reserved, initialized zero and otherwise untouched |
+| 30 | 2 | Guards `69 96`, initialized once and otherwise untouched |
+
+Initialization clears cycle data and publishes phase 1 after filling the
+record. `timebase_fixture_begin()` accepts INITIALIZED or READY, publishes
+RUNNING, samples once and calls `timebase_deadline_after()`. Each
+`timebase_fixture_poll()` samples once and calls `timebase_expired()`.
+The foreground example polls only while RUNNING. A stopped Sleep Timer, with
+the CPU still executing, reaches FAULT after exactly 1,024 polls rather than
+hanging or advancing heartbeat.
+A valid expiry on the last permitted poll succeeds.
+
+Helper errors are recorded explicitly. Elapsed time and each forward
+observation step must be below `0x800000`; a backward step or out-of-window
+elapsed value faults, even if modular expiry alone would appear successful.
+Exactly-half deadline ambiguity preserves its helper error. A successful
+cycle must have elapsed `>=128` and `<0x800000`. It updates all result bytes,
+completed cycles and M0 heartbeat **before publishing READY last**. No failure
+increments either counter. Further begin/poll calls leave a latched fault
+unchanged; only explicit initialization/reset clears it. The target never
+automatically retries or reinitializes after a fault.
+
+Halt at a matching named checkpoint for a complete record. `timebase-state`
+rejects RUNNING, unknown phases, wrong sizes/guards, inconsistent
+reason/helper combinations, limits and modular results. It can decode a
+FAULT for diagnosis; a decoded fault is not a successful cycle.
+The record cannot detect missed complete counter wraps, every possible reset,
+or memory corruption that happens to form another valid record. It does not
+repair guards or provide an authenticated reset epoch.
+
+All code is foreground-owned. There are no ST0/ST1/ST2 writes, clock switches,
+calibration, compare/IRQ setup, sleep entry/wake handling or peripheral
+services beyond the existing startup/board policy and raw reader.
+The hardware facts remain TI SWRU191F sections 11.1/11.4, pp.129-131; the
+nominal 32-kHz source is not converted into a precise tick period.
+
+### Timebase checkpoints and footprint
+
+| Linked CODE symbol | Exact instructions / boundary |
+| --- | --- |
+| `_timebase_fixture_before_sample` | `NOP; RET`; INITIALIZED before the first sample, previous READY before subsequent cycles |
+| `_timebase_fixture_ready_stop` | `NOP; RET`; complete successful cycle, after all C helpers returned |
+| `_timebase_fixture_fault_stop` | `NOP; SJMP` back to that NOP; complete terminal fault, no calls/retries |
+
+These are distinct naked functions in the target example; ordinary C logic
+lives in `src/timebase_fixture_state.c`. Their addresses and source mappings
+come from the matching image. SP at each checkpoint is `s_SSEG + 1`, inside
+one call from main, after deeper calls have unwound.
+
+| SDCC 4.2.0 timebase fixture | CODE bytes | Ordinary XDATA | M0 used / reserved | IRAM stack reserved |
+| --- | --- | --- | --- | --- |
+| generic | 1807 | 88 bytes | 32 / 64 bytes | 223 bytes |
+| lg_esl29_rev03 | 1847 | 88 bytes | 32 / 64 bytes | 223 bytes |
+
+The 88 ordinary bytes include the 32-byte fixture, current-cycle state and
+compiler scratch/parameters. Total nonaliased XDATA is 120 used / 152 reserved,
+within the unchanged 512-byte reservation budget. IRAM has eight register-bank
+bytes, one DATA byte, three overlay bytes and BIT storage; the stack begins
+at `0x21`. The upper 128-byte simulator guard stays untouched. Reserved stack
+space is not a measured hardware high-water mark. XDATA `0x1F00..0x1FFF`
+remains the IRAM alias, not additional storage.
+
+The image verifier checks the real reader's 88 instruction bytes with only
+its six scratch-address operands relocated from exact CDB XDATA records.
+Unallocated, overlapping or conflicting scratch records fail closed. This
+does not relax the original standalone reader's exact bytes at scratch 0/1/2.
+
+### Manual timebase acceptance runner
+
+**Do not run during offline development or CI.** A separate hardware task
+must establish the exact board/image, safe GPIO/display setup, exclusive
+adapter ownership, verified private recovery material and separately
+authorized programming/readback. Program only the validated board
+`timebase_fixture` image, never the standalone `timebase_test.ihx`.
+This runner itself never programs or injects ROM/RAM.
+
+After that separate preparation and explicit authorization:
+
+```text
+.venv/bin/python tools/check_timebase_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/timebase_fixture --cycles 3 --confirm-timebase-test
+```
+
+Supply the current numeric USB location, not an address retained across
+reconnection. `--output` selects checked local artifacts, not private dumps
+or a log destination. `--cycles` is 1..257, default 3. The confirmation grants
+reset-attach, CPU control, read-only memory inspection and breakpoint
+permissions; it grants **no host RAM writes or flash operations**. There is
+no SFR whitelist expansion or raw Sleep Timer debugger sampling.
+
+The runner validates board/image/compiler/hash metadata and rechecks the
+loaded program hash before loading USB. It reset-attaches, checks PC zero and
+debug configuration `0x26`, then compares **all physical CODE bytes in the
+checked image extent before any resume** using bounded read APIs. It does not
+verify the remainder of flash or factory/NV pages. It clears stale breakpoint
+slots and arms before-sample, ready and fault checkpoints from matching
+symbols. Initial phase/heartbeat are checked at before-sample, then that
+breakpoint is disabled so the C cycle runs without an intentional mid-cycle
+halt.
+
+Each successful cycle requires the complete READY record, successful helper
+status, poll count in `1..1024`, raw elapsed `>=128` and `<0x800000`, matching
+deadline/end/start, cycle/heartbeat progression and unchanged M0 fields.
+Full CPU snapshots must match before/after inspection. A linked NOP must
+advance PC by exactly one with the rest of CPU state preserved before the next
+resume. The final successful run leaves the CPU halted at the READY NOP.
+
+Every existing guarded debugger operation has a 10-second whole-operation
+deadline. Each breakpoint wait shares one such deadline across all status
+polls and the final PC read, not a new timeout per poll. CODE comparisons use
+fixed-size bounded reads without retries. FAULT, unexpected PC/state, malformed
+records, I/O errors and timeout terminate immediately; no later resume,
+reset, reattach or recovery is attempted. Cleanup only releases resources,
+and cleanup errors suppress success JSON. On success the JSON identifies
+the checked image hash, complete cycle observations, startup clock snapshot
+and final halted PC. It does **not** claim calibration, guaranteed natural
+rollover, clock switching, wake/IRQ/compare, RF, AES or flash acceptance.
+
+The dated LG run below is distinct from the independent M1 register-only
+observation. Raw records/identities remain outside Git and CI artifacts.
+
+### 2026-09-16 LG compiled-C timebase acceptance
+
+The operator explicitly authorized programming and acceptance of the new LG
+`timebase_fixture` after rechecking private text-demo recovery copies.
+External **cc-tool 0.26** performed programming with readback verification.
+The manual runner then independently compared **all 1,847 physical CODE bytes**
+against the checked local image **before any resume**. This is actual
+execution of `src/timebase.c` and `src/timebase_fixture_state.c`, not supplied
+register-read instructions or the standalone `timebase_test.ihx`.
+
+| Item | Observed/tested configuration |
+| --- | --- |
+| Board/image | One LG ESL Rev0.3, `lg_esl29_rev03`, SDCC 4.2.0 `timebase_fixture`; 1,847-byte BIN/CODE extent |
+| BIN SHA256 | `cd64743bc5095a37711885236fa65367dc375a57a509b322f6d5678ffdf954ef` |
+| Adapter/host/backend | Same TI CC Debugger and LG setup as the M1 record; macOS 15.7.9, Python 3.11.9, pinned PyUSB 1.3.1 |
+| Initial acceptance | Three cycles passed: elapsed 130/129/129 raw ticks for requested 128, 37 polls each |
+| Fresh full acceptance | 257 cycles passed; every `helper_status=0`, `reason=0`, elapsed 129..130 raw ticks and exactly 37 polls per cycle, below the 1,024-poll limit |
+| Publication/progression | Complete READY records and completed-cycle/M0 heartbeat progression passed, including byte wrap: cycle 256 -> 0, cycle 257 -> 1 |
+| Initialization/inspection | Initial reset PC `0x0000`, before-sample checkpoint, NOP `PC+1`, immutable M0 status and full CPU-register preservation during inspection passed |
+| Clock snapshot | Startup `CLKCONCMD=CLKCONSTA=C9`, unchanged: 32-kHz RC source / 16-MHz RC system source |
+| Final state | `_timebase_fixture_ready_stop`, PC `0x016A` (362), READY, CPU halted; completed-cycle/heartbeat bytes both 1 |
+
+This is **hardware-observed compiled-C awake timebase acceptance on that LG
+board/image**. The 8-bit cycle/heartbeat wrap is not a natural 24-bit Sleep
+Timer rollover claim. These 257 cycles do not establish calibrated timing,
+a precise tick rate, natural counter rollover, physical stopped-clock
+injection, source switching, IRQ/compare/wake, RF, AES or a project flash
+service. Stopped/backward/ambiguous C paths retain **host and simulator**
+coverage only. Generic `timebase_fixture` remains host/image/simulator-only,
+and **M2 #4 remains open** for the other platform gates.
+
+The last reported installed image is now this timebase fixture, halted at
+`0x016A`, not the old M1 fixture. All four pre-existing board BIN hashes remain
+unchanged, including the 626-byte LG M1 hash
+`e3459339d63a63ae9aa71cdc01a4dd18cb6e2b079f86968da507ac57ff133815`.
+The M1 record below remains historical evidence for that earlier image.
+The separate [register-only experiment](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
+retains its own natural-rollover evidence; it is not substituted for this C
+execution. Only this processed operator summary is published, not private
+run JSONs, recovery copies or identities. Generated `hardware_tested=false`
+build metadata still describes automated build evidence, not this physical run.
 
 ## 2026-09-16 LG fixture hardware record
 

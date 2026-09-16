@@ -54,6 +54,8 @@ make BOARD=generic all test
 make BOARD=lg_esl29_rev03 all test
 make BOARD=generic IMAGE=debug_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=debug_fixture all test
+make BOARD=generic IMAGE=timebase_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=timebase_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -126,10 +128,34 @@ alias-aware s51 execution of `timebase_test.ihx`. The host models Sleep Timer
 latching/ticking; s51 receives synthetic prelatched SFR values and executes
 the actual read/return and deadline instructions. Neither measures a physical
 counter or tick rate. Like the codec executable, this is **test-only: never
-flash it or upload it as a board artifact**. It is not a third `IMAGE` option,
-and `src/timebase.c` must not enter either board image's `OBJECTS` in this slice.
+flash it or upload it as a board artifact**. It is not an `IMAGE` option.
+The separate `IMAGE=timebase_fixture` board fixture now links `src/timebase.c`;
+the existing `bringup` and `debug_fixture` images still must not link it.
 Keep foreground read ownership, explicit half-range ambiguity and unchanged
 outputs on errors covered by the [timebase checks](docs/VALIDATION.md#m2-awake-only-timebase-automated-coverage).
+
+The board timebase fixture adds a real-reader host executable and a separate
+failure-injection executable for defensive helper-error paths. Neither expands
+the production MMIO boundary. Its host read hook explicitly validates and
+consumes each three-read log before the next sample, retaining the existing
+32-entry overflow assertions rather than silently discarding unverified reads.
+Focused offline Python coverage is:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_timebase_fixture test_timebase_hardware -v
+```
+
+`tools/check_timebase_hardware.py` is a **manual-only** runner, never a build,
+test or CI action. Its separate authorization grants reset/CPU/breakpoint and
+read permissions, not host RAM writes or flashing. Follow the
+[fixture ABI and manual procedure](docs/DEBUGGING.md#awake-only-timebase-board-fixture).
+Do not describe its mock tests or the synthetic SFR simulator as C-driver
+hardware acceptance; the independent M1 register observation remains separate.
+The [2026-09-16 LG compiled-C record](docs/DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
+now establishes a successful 257-cycle physical run on the verified new
+image, not on generic hardware. Stopped/backward/ambiguous paths remain
+host/simulator-tested, with calibration and the other M2 gates still open.
+This past authorization is not permission to repeat hardware operations.
 
 ## Code conventions
 
@@ -166,7 +192,9 @@ halted at `0x0173` at the end of that run. The record also includes 309 passing
 pinned-dependency host tests (including 18 offline macOS observer tests).
 Keep generic-board and standalone
 `bringup` hardware claims unobserved; shared startup evidence is limited to
-the LG fixture. Bank discrimination is conditional on future banked CODE.
+the LG M1 and timebase fixtures. The latest reported LG state is the new
+timebase image halted at READY `0x016A`, not the historical M1 image.
+Bank discrimination is conditional on future banked CODE.
 Do not turn bounded M1 completion into a universal debugger or M2/RF/network
 claim, or infer current hardware availability from finite acceptance evidence.
 

@@ -15,6 +15,7 @@ from cc2530_debug import breakpoint_parameters, decode_config, decode_status, un
 from verify_firmware import (
     ARTIFACT_EXTENSIONS, BOARDS, CODE_LIMIT, IMAGES, IRAM_ALIAS,
     parse_ihex, parse_symbols, require, verify_artifacts,
+    TIMEBASE_FIXTURE_SIZE, TIMEBASE_DELAY, TIMEBASE_POLL_LIMIT,
 )
 
 
@@ -209,6 +210,50 @@ def decode_fixture(data: bytes) -> dict:
             "checkpoints": list(data[10:14]), "guards": list(data[14:])}
 
 
+def decode_timebase_fixture(data: bytes) -> dict:
+    require(isinstance(data, bytes) and len(data) == TIMEBASE_FIXTURE_SIZE,
+            "Timebase snapshot must contain exactly 32 bytes")
+    require(data[:6] == b"M2TM\x01\x20", "Wrong timebase signature/version/size")
+    require(data[28:] == b"\0\0\x69\x96", "Timebase reserved bytes/guards changed")
+    phase, reason, cycles, helper = data[6:10]
+    result = {"signature": "M2TM", "abi_version": 1, "byte_size": 32,
+              "phase": phase, "reason": reason, "completed_cycles": cycles, "helper_status": helper}
+    for name, offset, size in (("start", 10, 3), ("end", 13, 3), ("deadline", 16, 3),
+                               ("elapsed", 19, 3), ("polls", 22, 2), ("delay", 24, 2),
+                               ("poll_limit", 26, 2)):
+        result[name] = int.from_bytes(data[offset:offset + size], "little")
+    require(result["delay"] == TIMEBASE_DELAY and result["poll_limit"] == TIMEBASE_POLL_LIMIT,
+            "Timebase fixed delay/poll budget mismatch")
+    require(helper in (0, 1, 2) and 0 <= reason <= 5, "Unknown timebase helper status/reason")
+    require(result["polls"] <= TIMEBASE_POLL_LIMIT, "Timebase poll count exceeds budget")
+    if phase == 1:
+        require(data[7:24] == b"\0" * 17, "Initialized timebase record contains cycle data")
+    elif phase in (3, 4):
+        if phase == 3:
+            require(reason == helper == 0 and 1 <= result["polls"] <= TIMEBASE_POLL_LIMIT,
+                    "READY timebase record has failed status/poll count")
+            require(TIMEBASE_DELAY <= result["elapsed"] < 0x800000, "READY elapsed is outside bounded window")
+        else:
+            require(reason != 0 and (helper != 0 if reason in (1, 2) else helper == 0),
+                    "FAULT timebase reason/helper mismatch")
+            if reason == 1:
+                require(result["polls"] == 0 and data[13:24] == b"\0" * 11,
+                        "Deadline fault contains poll results")
+            if reason in (2, 3, 4):
+                require(result["polls"] >= 1, "Timebase poll fault lacks a sample")
+            if reason == 4:
+                require(result["polls"] == TIMEBASE_POLL_LIMIT and result["elapsed"] < TIMEBASE_DELAY,
+                        "Poll-limit fault has inconsistent count/elapsed")
+        if result["polls"] > 0:
+            require(result["deadline"] == (result["start"] + TIMEBASE_DELAY) & 0xffffff,
+                    "Timebase deadline mismatch")
+            require(result["elapsed"] == (result["end"] - result["start"]) & 0xffffff,
+                    "Timebase modular elapsed mismatch")
+    else:
+        raise ValueError("Timebase record is in progress or has an unknown phase; halt at a checkpoint")
+    return result
+
+
 def snapshot_input(args, size: int) -> bytes:
     if args.hex is not None:
         data = bytes.fromhex(args.hex)
@@ -225,7 +270,7 @@ def main(argv=None) -> int:
     for name in ("decode-status", "decode-config"):
         child = commands.add_parser(name)
         child.add_argument("value", type=lambda text: int(text, 0))
-    for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state"):
+    for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state", "timebase-state"):
         child = commands.add_parser(name)
         child.add_argument("--output", type=Path, required=True)
         child.add_argument("--board", choices=BOARDS, required=True)
@@ -239,7 +284,7 @@ def main(argv=None) -> int:
             source.add_argument("--pc", type=lambda text: int(text, 0))
             source.add_argument("--file")
             child.add_argument("--line", type=int)
-        if name in ("status", "fixture-state"):
+        if name in ("status", "fixture-state", "timebase-state"):
             source = child.add_mutually_exclusive_group(required=True)
             source.add_argument("--hex")
             source.add_argument("--snapshot", type=Path)
@@ -263,9 +308,12 @@ def main(argv=None) -> int:
                     pc=args.pc, file=args.file, line=args.line)]
             elif args.command == "status":
                 result["status"] = decode_bootstrap(snapshot_input(args, 32), args.board)
-            else:
+            elif args.command == "fixture-state":
                 require(args.image == "debug_fixture", "M1 state requires a debug_fixture image")
                 result["fixture_state"] = decode_fixture(snapshot_input(args, 16))
+            else:
+                require(args.image == "timebase_fixture", "Timebase state requires a timebase_fixture image")
+                result["timebase_state"] = decode_timebase_fixture(snapshot_input(args, TIMEBASE_FIXTURE_SIZE))
     except (OSError, ValueError, KeyError) as error:
         print(f"debug-image: {error}", file=sys.stderr)
         return 1

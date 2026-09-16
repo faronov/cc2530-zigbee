@@ -108,7 +108,8 @@ Proposed interface responsibilities:
 ## Awake-only timebase (first M2 slice)
 
 `include/timebase.h` / `src/timebase.c` is an independent platform component,
-not linked into `bringup` or `debug_fixture`. It owns no board pins, clock
+not linked into `bringup` or `debug_fixture`. The separate `timebase_fixture`
+board image now links it for explicit C-driver acceptance. It owns no board pins, clock
 selection, interrupt dispatch, compare channel or sleep policy. M2 remains
 open; this is neither an extended monotonic epoch nor calibrated wall time.
 
@@ -153,6 +154,37 @@ See [sources](PROVENANCE.md#m2-timebase-sources) and the separate
 The [independent hardware reference](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
 uses supplied debug instructions on the unchanged M1 fixture; it does not
 execute this C module or establish calibrated timing.
+
+The [board fixture](DEBUGGING.md#awake-only-timebase-board-fixture) separates
+host-testable orchestration in `src/timebase_fixture_state.c` from target-only
+NOP/fault-loop checkpoints in `examples/timebase_fixture.c`. Initialization
+reuses M0 startup/status and the selected board policy. Each foreground cycle
+samples a start, constructs a fixed 128-raw-tick deadline, then performs at
+most 1,024 polls. READY is published only after successful helper status,
+bounded elapsed time, completed-cycle increment and M0 heartbeat update.
+Invalid/ambiguous helper results, backward/out-of-window observations and
+exhaustion publish a latched FAULT, with no implicit retry. Only explicit
+initialization/reset clears it. There is no ISR caller, clock selection,
+Sleep Timer write, host callback or successful substitute in the board image.
+
+The 32-byte fixture ABI uses ordinary linker-accounted XDATA, not unused M0
+status reservation or IRAM alias space. Reader scratch addresses relocate in
+this image; the verifier checks their exact CDB declarations/addresses and
+each corresponding MOV DPTR operand, while preserving the standalone test's
+original 88-byte reader contract. The manual runner uses existing guarded
+debugger APIs with read/reset/CPU/breakpoint permissions only. It verifies all
+physical image CODE before resume and observes matched checkpoint symbols;
+it does not expand the core-SFR whitelist or add a host RAM/flash writer.
+
+The [2026-09-16 LG acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
+executed this C module and fixture logic on the verified 1,847-byte board
+image: 257 successful cycles, elapsed 129..130 raw ticks for requested 128,
+37 polls each, with cycle/heartbeat wrap and CPU/M0 preservation. The last
+reported target is the new timebase fixture halted at READY `0x016A`, not the
+historical M1 image. Generic hardware remains unobserved, and fault paths
+remain host/simulator evidence. This does not add calibration, natural
+24-bit rollover in the C run, clock switching, IRQ/compare/wake or other M2
+services; the earlier register-only experiment remains separate.
 
 ## Memory contract
 

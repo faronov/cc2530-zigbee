@@ -78,7 +78,8 @@ USB timeout/stall handling and recovery at a halted erased-image boundary.
 The [dated record](docs/DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
 identifies the image, adapter, pinned-backend run and limitations.
 The generic board remains hardware-unobserved; neither standalone `bringup`
-image was flashed. Shared startup was exercised physically only through the LG fixture.
+image was flashed. At M1, shared startup was exercised physically only through
+the LG debug fixture; the later timebase acceptance below is separate.
 
 The [host transport](docs/DEBUGGING.md#implemented-host-transport) provides
 explicit USB selection, status/config, PC/bank/register and bounded SFR/XDATA/CODE
@@ -124,8 +125,34 @@ coverage for the C implementation. A separate
 [hardware reference](docs/VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
 observed raw counter progression and a natural rollover through the M1
 debugger, not execution of this C driver or calibrated timing. The isolated
-test executable must never be flashed and is not linked into either board
-image: their firmware bytes and M1 evidence remain unchanged. **M2 remains open.**
+test executable must never be flashed. The module is still excluded from
+`bringup` and `debug_fixture`: their firmware bytes and M1 evidence remain unchanged.
+
+A subsequent, distinct [board timebase fixture](docs/DEBUGGING.md#awake-only-timebase-board-fixture)
+now exercises the compiled C reader/deadline helpers with a 128-raw-tick delay,
+a 1,024-poll limit and latched faults:
+
+```sh
+make BOARD=generic IMAGE=timebase_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=timebase_fixture all test
+```
+
+Outputs are under `build/<board>/timebase_fixture/`. This third board image
+shares the original startup/board policy and M0 ABI. Both boards have **host,
+linked-image and simulator** coverage. On 2026-09-16, the verified 1,847-byte
+LG image also passed [compiled-C hardware acceptance](docs/DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance):
+257 cycles, elapsed 129..130 raw ticks for requested 128, exactly 37 polls
+per cycle, byte-counter wrap and preserved CPU/M0 state. The last reported LG
+image is now this timebase fixture, halted at READY `0x016A`, not the old M1
+image. The manual runner independently verifies all physical CODE before
+resume and never flashes.
+
+Generic hardware and physical timer-fault injection remain unobserved. Stopped,
+backward and ambiguous C paths retain host/simulator coverage; the C run is
+not calibration or a natural 24-bit timer-wrap claim. CI covers both boards
+and all three board images without uploading standalone test executables.
+**M2 #4 remains open** for clock control/calibration, IRQ/compare/wake and the
+other platform gates.
 
 ## Intended scope
 

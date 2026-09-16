@@ -211,6 +211,27 @@ clock command/status, and no clock-source writes occurred during observation.
 Only the [sanitized summary](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
 is published, not raw captures, factory information or device identities.
 
+The later board timebase fixture, byte-oriented state ABI, bounded polling,
+relocation checks and manual acceptance runner are also original BSD-3-Clause
+work. They reuse the existing startup/board policy, C timebase and guarded
+debugger APIs; no implementation, new wire framing, dependency or private
+capture is imported. The 128-tick delay and 1,024-poll budget are synthetic
+fixture choices, not TI timing guarantees. Host fault doubles, counter inputs
+and runner records are original synthetic test data. The runner's offline
+tests do not execute a physical C driver or supersede the independent
+register-only hardware reference.
+
+The [2026-09-16 compiled-C acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
+is a separate operator-reported physical experiment on the new verified
+1,847-byte LG image. External cc-tool 0.26 programming/readback preceded the
+runner's independent full CODE comparison and successful 3-/257-cycle runs
+of the original C driver/fixture. This does not import programmer code or
+establish a project flash service. Only a processed summary is published;
+raw run JSONs and rechecked private text-demo recovery copies remain outside
+Git/CI and were not accessed for this documentation update. The earlier
+register-only reference is preserved separately, and neither experiment
+establishes calibrated timing or changes licensing.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

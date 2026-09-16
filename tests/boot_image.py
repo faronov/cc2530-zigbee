@@ -12,8 +12,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from verify_firmware import BOARDS, IMAGES, require, verify_artifacts, xdata_ranges
-from debug_image import DebugImage, decode_bootstrap, decode_fixture, expected_fixture
+from verify_firmware import BOARDS, IMAGES, TIMEBASE_CHECKPOINTS, require, verify_artifacts, xdata_ranges
+from debug_image import DebugImage, decode_bootstrap, decode_fixture, decode_timebase_fixture, expected_fixture
 
 
 ALIAS = "memory create addressdecoder xram 0x1f00 0x1fff iram_chip 0"
@@ -85,12 +85,22 @@ def check_artifact_rejections(output, board, image_name="bringup"):
             ("bin", lambda data: data + b"\0", "HEX/BIN"),
             ("map", lambda data: data.replace(b"00001E00", b"00001F00"), "alias"),
             ("cdb", lambda data: data.replace(b"{32}ST", b"{64}ST"), "ABI"),
-            ("mem", lambda data: data.replace(b"248 bytes available", b"247 bytes available"), "stack"),
+            ("mem", lambda data: re.sub(rb"(\d+) bytes available",
+                                       lambda match: str(int(match[1]) - 1).encode() + b" bytes available", data),
+             "stack"),
         )
         if image_name == "debug_fixture":
             mutations += (
                 ("cdb", lambda data: data.replace(b"{16}ST", b"{15}ST"), "Fixture debug ABI"),
                 ("map", lambda data: data.replace(b"_debug_fixture_stop ", b"_missing_fixture_stop "), "symbol"),
+            )
+        elif image_name == "timebase_fixture":
+            mutations += (
+                ("map", lambda data: data.replace(b"_timebase_fixture_ready_stop ", b"_missing_timebase_stop "),
+                 "symbol"),
+                ("cdb", lambda data: data.replace(b"S:Ltimebase.timebase_read_awake_ticks24$low$",
+                                                  b"S:Ltimebase.timebase_read_awake_ticks24$missing$"),
+                 "scratch declaration"),
             )
         for extension, mutate, message in mutations:
             path = work / f"{image_name}.{extension}"
@@ -254,6 +264,86 @@ def check_debug_fixture(simulator, output, board, symbols):
           "registers, 257 cycles and alias/XDATA/stack guards PASS (simulation only).")
 
 
+def timer_sfr(ticks):
+    return "set memory sfr 0x95 " + " ".join(f"{byte:#x}" for byte in ticks.to_bytes(3, "little"))
+
+
+def check_timebase_fixture(simulator, output, board, symbols):
+    before, ready, fault = (symbols[name] for name in TIMEBASE_CHECKPOINTS)
+    poll, reader = symbols["_timebase_fixture_poll"], symbols["_timebase_read_awake_ticks24"]
+    state = symbols["_timebase_fixture_state"]
+    path = output / "timebase_fixture.ihx"
+    commands = boot_commands(symbols) + [f"run {symbols['_main']:#x} {before:#x}"] + snapshot_commands(1)
+    for cycle in range(257):
+        start = (0, 0xff, 0xffff, 0xffff80, 0xffffff)[cycle % 5]
+        elapsed = 0x7fffff if cycle == 256 else 128
+        if cycle:
+            commands += [f"run {ready:#x} {before:#x}"]
+        commands += [
+            timer_sfr(start), f"run {before:#x} {poll:#x}",
+            timer_sfr((start + 127) & 0xffffff), f"run {poll:#x} {reader:#x}",
+            f"run {reader:#x} {poll:#x}", timer_sfr((start + elapsed) & 0xffffff),
+            f"run {poll:#x} {ready:#x}", marker(10 + cycle * 2), "state",
+            f"dump /h xram {state:#x} {state + 31:#x}", "dump /h xram 0x1e00 0x1e1f",
+            "dump /h sfr 0x81 0x81", marker(11 + cycle * 2),
+        ]
+    commands += snapshot_commands(600)
+    text = simulate(simulator, commands, path)
+    initial, initial_iram, initial_sfr = snapshot(text, 1)
+    require(initial[0x1e00:0x1e20] == expected_status(board), "Timebase changed M0 startup")
+    require(decode_timebase_fixture(initial[state:state + 32])["phase"] == 1, "Timebase did not initialize")
+    check_guards(initial, initial_iram[128:], initial_sfr, symbols)
+    for cycle in range(257):
+        entry = section(text, 10 + cycle * 2)
+        check_pc(entry, ready)
+        record = decode_timebase_fixture(memory_dump(entry, state, 32))
+        start = (0, 0xff, 0xffff, 0xffff80, 0xffffff)[cycle % 5]
+        require(record["phase"] == 3 and record["start"] == start
+                and record["elapsed"] == (0x7fffff if cycle == 256 else 128) and record["polls"] == 2
+                and record["completed_cycles"] == (cycle + 1) & 255, "Wrong compiled timebase cycle")
+        boot = memory_dump(entry, 0x1e00, 32)
+        decode_bootstrap(boot, board)
+        require(boot[8] == (cycle + 1) & 255 and boot[:8] + boot[9:] ==
+                initial[0x1e00:0x1e08] + initial[0x1e09:0x1e20], "Timebase heartbeat/M0 changed")
+        require(memory_dump(entry, 0x81, 1)[0] == symbols["s_SSEG"] + 1, "Timebase cycle leaked stack")
+    ram, iram, sfr = snapshot(text, 600)
+    check_guards(ram, iram[128:], sfr, symbols)
+    guarded = [address for name, address in symbols.items()
+               if name.startswith("_SOC_") and not name.startswith("_SOC_ST")]
+    require(all(sfr[address - 0x80] == initial_sfr[address - 0x80] for address in guarded),
+            "Timebase changed GPIO/clock/IRQ registers")
+
+    for samples, reason, helper, polls in (((0x100,), 4, 0, 1024), ((0xff,), 3, 0, 1),
+                                           ((0x800100,), 3, 0, 1), ((0x800180,), 2, 2, 1),
+                                           ((0x110, 0x10f), 3, 0, 2)):
+        commands = boot_commands(symbols) + [
+            timer_sfr(0x100), f"run {symbols['_main']:#x} {poll:#x}",
+        ]
+        for sample in samples[:-1]:
+            commands += [timer_sfr(sample), f"run {poll:#x} {reader:#x}", f"run {reader:#x} {poll:#x}"]
+        end = samples[-1]
+        commands += [timer_sfr(end), f"run {poll:#x} {fault:#x}"]
+        commands += snapshot_commands(1) + ["step 64"] + snapshot_commands(5)
+        text = simulate(simulator, commands, path)
+        check_pc(section(text, 1), fault)
+        check_pc(section(text, 5), fault)
+        failed = snapshot(text, 1)
+        require(failed == snapshot(text, 5), "Terminal fault loop changed RAM/CPU state")
+        ram, iram, sfr = failed
+        record = decode_timebase_fixture(ram[state:state + 32])
+        require(record["phase"] == 4 and record["reason"] == reason
+                and record["helper_status"] == helper and record["polls"] == polls
+                and record["completed_cycles"] == 0, "Wrong compiled timebase fault")
+        require(ram[0x1e00:0x1e20] == expected_status(board), "Fault advanced heartbeat/changed M0")
+        require(sfr[1] == symbols["s_SSEG"] + 1, "Fault stack did not unwind")
+        require(sfr[0x15:0x18] == end.to_bytes(3, "little"), "Fixture wrote Sleep Timer SFRs")
+        require(all(sfr[address - 0x80] == initial_sfr[address - 0x80] for address in guarded),
+                "Fault changed GPIO/clock/IRQ registers")
+        check_guards(ram, iram[128:], sfr, symbols)
+    print(f"{board}: timebase fixture, 257 real C cycles, rollover, stopped/backward/ambiguous counter "
+          "faults and alias/XDATA/stack guards PASS (synthetic SFR simulation only).")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", choices=BOARDS, required=True)
@@ -281,14 +371,25 @@ def main():
                         if text.startswith(f"uint8_t {name[1:]}("))
             locations = debug_image.source_lines(file="debug_pattern.c", line=line)
             require(any(location.address == symbols[name] for location in locations), "Stage source mapping mismatch")
+    elif args.image == "timebase_fixture":
+        require(debug_image.symbol("_timebase_fixture_state").size == 32, "Timebase symbol size mismatch")
+        source = source_file.read_text(encoding="ascii").splitlines()
+        for slot, name in enumerate(TIMEBASE_CHECKPOINTS):
+            require(debug_image.symbol(name).kind == "function", "Timebase checkpoint is not a function")
+            require(debug_image.breakpoint(name, slot)["address"] == symbols[name], "Timebase breakpoint mismatch")
+            line = next(index for index, text in enumerate(source, 1) if text.startswith(f"void {name[1:]}("))
+            require(any(location.address == symbols[name] for location in
+                        debug_image.source_lines(file=source_file.name, line=line)), "Timebase source mismatch")
     check_artifact_rejections(args.output, args.board, args.image)
     check_alias(args.simulator)
     with unittest.TestCase().assertRaisesRegex(ValueError, "register bank"):
         check_alias(args.simulator, alias=False)
     if args.image == "bringup":
         check_boot(args.simulator, args.output, args.board, symbols)
-    else:
+    elif args.image == "debug_fixture":
         check_debug_fixture(args.simulator, args.output, args.board, symbols)
+    else:
+        check_timebase_fixture(args.simulator, args.output, args.board, symbols)
 
 
 if __name__ == "__main__":

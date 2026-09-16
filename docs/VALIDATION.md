@@ -28,8 +28,8 @@ The current build must cover:
 The generic simulator does not emulate the RF subsystem, analog behavior,
 physical supply rails or a display. M0 CI is not a silicon test.
 Neither standalone `bringup` image has been flashed. Physical evidence for
-shared startup/status is limited to the LG M1 fixture below, not a generic-board
-or standalone-M0 acceptance claim.
+shared startup/status is limited to the LG M1 and timebase fixtures recorded
+below, not a generic-board or standalone-M0 acceptance claim.
 
 ## M1 fixture automated coverage
 
@@ -188,13 +188,16 @@ interoperability support is implied.
 ## M2 awake-only timebase automated coverage
 
 The [first bounded timebase slice](ARCHITECTURE.md#awake-only-timebase-first-m2-slice)
-has a **host-tested, image-checked and simulated C implementation**, not a
-hardware-executed C driver. The independent register observation below is
-a separate evidence level.
+has **host-tested, image-checked and simulated** standalone coverage.
+The later [LG board-fixture acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
+adds hardware execution of the C implementation, separately from both these
+automated checks and the independent register observation below.
 `make test-timebase` runs it independently; every existing `make ... all test`
 combination also includes it. `timebase_test.ihx` is a standalone component
-test, not a third board image, flashing target or CI upload artifact.
-Neither board image links the module or changes its firmware behavior/bytes.
+test, not a board image, flashing target or CI upload artifact.
+The existing `bringup` and `debug_fixture` images still do not link the module
+or change their firmware behavior/bytes. A later, distinct `timebase_fixture`
+board image is covered separately below; it is not this standalone executable.
 
 `tests/test_timebase.c` supplies original shared host/SDCC vectors for zero
 delay, byte/counter rollover, maximum permitted delay `0x7FFFFF`, exact expiry,
@@ -244,12 +247,88 @@ worst-case hardware stack depth. Ordinary allocation stays below `0x1E00`;
 `0x1F00..0x1FFF` remains the IRAM alias, never a second allocation pool.
 The checker reports the complete test executable's linked resource counts.
 
-M2 remains open. Physical execution of this C driver and platform timing
-still need a dedicated verified board fixture. No precise tick period, calibration,
+M2 remains open. Physical C-driver execution is now established for the
+specific LG fixture below, not generic hardware or all platform timing.
+No precise tick period, calibration,
 PM1/PM2 synchronization, PM3 continuity, interrupts, compare/wake handling,
 radio, AES or flash service is established by this slice. The existing M1
 LG/unbanked hardware record and fixture hash are unchanged and do not supply
 those missing platform measurements.
+
+## M2 timebase board fixture automated coverage
+
+`IMAGE=timebase_fixture` is a separately selected safe non-RF board image,
+not a repurposed `timebase_test.ihx`. Its C reader and deadline helpers run in
+the foreground with a fixed 128-raw-tick delay and independent 1,024-poll limit.
+Both board builds are **host-tested, image-checked and alias-aware simulated**.
+The [dated LG record](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
+adds hardware-executed C-driver acceptance for one LG/image only; generic
+hardware and physical timer-fault injection remain unobserved.
+The [ABI, checkpoints, resource counts and manual procedure](DEBUGGING.md#awake-only-timebase-board-fixture)
+are separate from the existing M1 fixture's hardware record.
+
+Host tests cover initialization/reinitialization, byte/counter wrap, 257
+completed cycles and heartbeat wrap, pending/overshoot/max-half-window results,
+success on the final permitted poll, stopped clocks, backward observations
+(including a backward step still after the initial sample), half-range
+ambiguity, invalid phases and unchanged latched faults. Every real-reader
+triplet is checked before consuming its host log; no overflow assertion is
+removed. Separate host-only link doubles exercise every non-OK helper result,
+including invalid arguments that a genuine zero-extended SFR reader cannot
+normally produce. Production code never links these doubles.
+
+The common image verifier retains all HEX/BIN, CODE, XDATA/status/alias,
+512-byte reservation, MPAGE and IRAM checks. It additionally verifies the
+32-byte state, all three exact checkpoint instruction sequences, relocated
+88-byte reader operands and matching scratch CDB records. Negative cases
+cover each reader/checkpoint byte, missing/conflicting scratch records,
+wrong symbols/SFRs, unallocated/overlapping scratch and ABI/budget corruption.
+The offline decoder checks complete records, fixed bounds, helper/reason
+consistency, modular deadline/elapsed relationships and reserved/guard bytes;
+RUNNING is not accepted as a stable snapshot.
+
+The genuine linked board image executes 257 successful cycles with synthetic
+prelatched SFR inputs, including rollover and maximum valid elapsed time.
+Separate runs exercise the real 1,024-poll fault and backward/half-range
+failure branches. Fault-loop execution must leave RAM and CPU state unchanged.
+M0 status/heartbeat, GPIO/clock/IRQ preservation, real return-stack depths,
+unallocated XDATA and upper IRAM guards remain checked. This does not model
+physical Sleep Timer ticking/latching or prove physical comparator behavior.
+
+The manual runner has synthetic orchestration tests for full CODE verification
+before any resume, 257 cycles/wrap, complete status decoding, CPU preservation,
+FAULT/unexpected-PC/data errors and failure at every composed operation.
+Its real guarded wait is also exercised with a synthetic backend and clock:
+one decreasing deadline, terminal timeout and denied resume without more I/O.
+Authorization, invalid selection/artifacts, minimal permissions and cleanup
+failure are checked without loading a physical USB backend. Success JSON is
+emitted only after cleanup. These tests are not a hardware run.
+
+The operator separately reran both new board-image `all test` configurations
+with pinned Python: all 327 tests and strict simulation passed. The preceding
+all-six-configuration validation and unchanged-four-old-BIN-hash checks still
+stand. These automated results remain distinct from the physical acceptance.
+
+## Compiled-C Sleep Timer hardware acceptance (2026-09-16)
+
+The [canonical LG record](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance)
+identifies the new 1,847-byte image/hash, separately authorized programming
+and independent complete physical CODE comparison before resume. An initial
+three-cycle run and a fresh 257-cycle run passed through the actual C reader
+and fixture logic. The full run returned helper/reason zero throughout,
+elapsed 129..130 raw ticks for requested 128, and exactly 37 polls per cycle.
+Completed-cycle/M0 heartbeat byte wrap, initialization/NOP checkpoints,
+immutable M0 status and CPU-register preservation passed. The last reported
+board state is the new fixture halted at READY PC `0x016A`, with the startup
+clock snapshot still `C9`; the old M1 record is historical, not the live image.
+
+This is **hardware-observed successful awake C-driver execution**, not
+calibration or a natural 24-bit counter-wrap observation in these C cycles.
+Stopped/backward/ambiguous C paths remain host/simulator-only; no source
+switching, IRQ/compare/wake, RF, AES or project flash service is established.
+Generic remains host/image/simulator-only and M2 #4 remains open. The earlier
+register-only experiment below has separate natural-rollover evidence.
+Raw run JSONs remain private; only the processed operator summary is published.
 
 ## Independent Sleep Timer hardware reference (2026-09-16)
 
@@ -359,10 +438,13 @@ seeing measurements.
 ## CI and release boundary
 
 Hosted CI builds/tests without physical devices or repository secrets.
-The CI matrix covers both non-RF images (`bringup`, `debug_fixture`) on both
-boards. Artifacts contain only their generated firmware, symbols and build
+The CI matrix covers three non-RF images (`bringup`, `debug_fixture`,
+`timebase_fixture`) on both boards: six jobs. Artifacts contain only the
+explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.
+The artifact-path whitelist is tested; neither standalone component executable
+nor host test binaries/logs are uploaded.
 
 CI success means the declared automated checks passed. Experimental releases
 must separately list their completed milestones, known limitations, exact
