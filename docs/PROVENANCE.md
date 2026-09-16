@@ -29,7 +29,7 @@ No USB backend, programmer code or additional dependency is imported by it.
 
 ### M1 host transport sources
 
-The original BSD-3-Clause host transport uses **functional wire facts only**
+The original BSD-3-Clause host transport initially used **functional wire facts only**
 from the public `dashesy/cc-tool` revision
 `0d84df329e343e2ea5a960c04a3d4478ee039aa0`. The inspected files declare GNU
 GPL v2. No implementation, instruction macro sequences, fixtures or notices
@@ -55,8 +55,9 @@ parameter bytes) and section 3.4.1 p.57 (commands allowed when debug-locked).
 HALT `44`, RESUME `4C`, STEP_INSTR `5C` and GET_BM `64` are zero-argument,
 one-response-byte target commands; their three low opcode bits are don't-care
 for these commands. The existing `1F` USB shape is reused for this bounded
-class. Actual adapter behavior remains an explicit hardware acceptance gate.
-No two-byte-response or debug-instruction USB framing is inferred or shipped.
+class. The later live-access addition uses the separately observed standalone
+forms described below, not a generalized encoder inferred from this class.
+Hardware observations are limited to the exact LG fixture/adapter record.
 
 The same pinned `cc_unit_driver.cpp`, `reset(bool)`, supplies the reset wire
 facts: vendor OUT request type `40`, request `C9`, value `0`, index `1` for
@@ -79,13 +80,15 @@ identity, `GET_STATE` firmware version or firmware revision. We do not copy
 the reference's automatic configuration changes, debug-config writes,
 normal-execution reset or programmer algorithms. The implementation requires
 exact completion counts and fresh halted/awake status, not the reference's
-broader programmer workflow. These are reviewed functional facts and
-host-tested compositions, not observed behavior of an actual adapter.
-Generalized multi-byte target-command USB framing remains unconfirmed.
+broader programmer workflow. The compositions have synthetic host coverage
+and the separately dated one-board hardware observations below.
+No generalized multi-byte target-command USB grammar is claimed.
 
-The breakpoint codec encodes only the target's documented slot/enable/bank
-and CODE address fields, not adapter bytecode. All vectors are original
-synthetic data. The manual is linked, not redistributed.
+The breakpoint codec itself encodes only the target's documented
+slot/enable/bank and CODE address fields, not adapter bytecode. The live
+transport now wraps those fields in one individually observed USB form and
+restricts it to lower unbanked CODE with bank parameter zero. All committed
+test vectors are original synthetic data. The manual is linked, not redistributed.
 
 Offline symbol lookup reads this project's own SDCC 4.2.0 map/CDB output and
 build hashes. Its supported record subset is checked against genuine linked
@@ -106,6 +109,79 @@ check that explicit release errors are not lost during disposal. The system
 [libusb runtime](https://github.com/libusb/libusb/blob/v1.0.27/COPYING) retains
 its LGPL-2.1 license; it is neither embedded in firmware nor redistributed
 by this repository. Synthetic backend responses contain no real device data.
+
+### M1 live access and manual recovery sources
+
+TI **SWRU191F pp.27-40 and 53-57** supplied primary memory/SFR, PSW/register-bank,
+dual-DPTR/DPS, debug-command, status and breakpoint facts. GET_PC returns two
+bytes; supplied DEBUG_INSTR returns ACC without incrementing PC;
+SET_HW_BRKPNT returns STATUS, not an undefined byte. An already-halted HALT
+has an undefined reply. These target facts alone do not specify USB framing.
+
+The public MIT `florischabert/ccd` revision
+`a7a1e6be6a07bfb93694e693333491984678026c` was reviewed for fixed transfer
+layouts and counts in
+[target.c](https://github.com/florischabert/ccd/blob/a7a1e6be6a07bfb93694e693333491984678026c/src/target.c#L29-L243),
+named constants in
+[target.h](https://github.com/florischabert/ccd/blob/a7a1e6be6a07bfb93694e693333491984678026c/src/target.h#L88-L110),
+and raw endpoint/count handling in
+[usb.c](https://github.com/florischabert/ccd/blob/a7a1e6be6a07bfb93694e693333491984678026c/src/usb.c#L160-L182).
+Its [MIT notice](https://github.com/florischabert/ccd/blob/a7a1e6be6a07bfb93694e693333491984678026c/LICENSE#L1-L19)
+names **Copyright (c) 2013, Floris Chabert. All rights reserved.**
+No implementation, instruction macro sequence or fixture was imported.
+The fixed examples do not document a general adapter grammar or establish
+standalone GET_PC/breakpoint framing.
+
+The standalone forms actually used by our original code were then
+**hardware-observed on the owned, verified non-RF LG fixture**:
+`3F 28` returns two high-byte-first PC bytes; `4F 55` plus one instruction byte,
+`7F 56` plus two, and `AF 57` plus three each return one ACC byte;
+`AF 3F` plus three breakpoint parameters returns one STATUS byte.
+The rejected experiments `2F 28` (one reply byte) and `8F 56 ...` (zero reply
+bytes) are not shipped. These are bounded functional facts, not copied code,
+instruction macros or a claim to reverse-engineer the whole adapter language.
+See the [dated evidence and exact image hash](DEBUGGING.md#2026-09-16-lg-fixture-hardware-record).
+
+The original BSD-3-Clause `tools/erase_boundary_fault.c` observes external
+programmer traffic only. The same pinned GPL `cc-tool` provides its exact
+mass-erase fact:
+[erase()](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/programmer/cc_unit_driver.cpp#L127-L135)
+sends `1C 14`, followed separately by
+[READ_STATUS](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/programmer/cc_unit_driver.cpp#L72-L81)
+OUT `1F 34` / one IN byte. The
+[CC253x completion check](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/programmer/cc_253x_254x.cpp#L248-L255)
+tests only that `CHIP_ERASE_BUSY` is clear. Our opt-in observer additionally
+requires a fresh exact-length reply on the same handle with halted/unlocked
+bits, then exits 99 before programming/normal-reset cleanup. It neither
+initiates flashing nor copies a programmer implementation.
+
+The reviewed external programmer's cleanup is a material safety boundary:
+[normal task return](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/application/cc_base.cpp#L227-L253)
+unconditionally calls
+[unit_close()](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/programmer/cc_programmer.cpp#L256-L258),
+which requests reset into normal execution, regardless of CLI `--reset`.
+A [readback mismatch](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/programmer/cc_unit_driver.cpp#L301-L324)
+can be [printed without propagating failure](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/application/cc_flasher.cpp#L631-L638),
+allowing that reset and exit 0. USB/file exceptions before target close skip
+the call; the [USB destructor](https://github.com/dashesy/cc-tool/blob/0d84df329e343e2ea5a960c04a3d4478ee039aa0/src/usb/usb_device.cpp#L108-L139)
+only closes libusb resources. Our debugger does not adopt this lifecycle.
+Independent physical readback, not exit status alone, is required by the
+[manual recovery procedure](DEBUGGING.md#manual-hardware-acceptance-and-recovery).
+
+The manual fixture runner and the synthetic 8051/USB and native-DYLD tests
+are original BSD-3-Clause work. Native tests compile only an original fake
+USB library/driver, never real libusb or `cc-tool`. The final 257-cycle
+physical acceptance used isolated PyUSB 1.3.1; earlier global-1.2.1 runs are
+not represented as pinned. The user explicitly authorized LG checks/reset/
+flash on 2026-09-16. Flower and private GPL-derived probes were not accessed.
+Private text-demo backups, factory-page captures and recovery/session files
+remain outside Git and CI artifacts. No GPL implementation is imported or
+relicensed. The completed bounded LG/unbanked M1 record distinguishes the
+successful fresh-reconnect fixture run from the later real held-handle
+cable-unplug/NO_DEVICE companion check and the final successful explicit
+new-session recovery after the last replug. That full one-cycle fixture run
+ended halted at `0x0173`.
+This changes evidence status, not licensing or the supported API bounds.
 
 ### Offline MAC codec sources
 

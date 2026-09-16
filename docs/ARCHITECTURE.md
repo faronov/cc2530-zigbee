@@ -4,7 +4,7 @@ This is the intended stack architecture. At M0 only board/platform bootstrap,
 status storage and validation infrastructure exist. The layer names below
 are boundaries to implement, not a list of working APIs.
 
-The partial M1 addition is a separate non-RF debugger fixture, not a protocol
+The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
 probe is confined to the target example. It shares existing startup/board
 code rather than introducing a second GPIO policy.
@@ -21,11 +21,47 @@ already prepared debug session and is never triggered by open/close or an
 error. The separate `RESET_DEBUG_SESSION` access policy permits only explicit
 reset-based initial attach: target operations remain denied until preparation,
 reset and postchecks finish. It does not claim a non-reset attach.
+
+Live PC/bank, register and bounded memory inspection requires a halted,
+awake target. Memory access, memory writes and breakpoint configuration are
+separate permissions, independent of CPU control/reset. Core SFR reads use a
+fixed passive whitelist; XDATA reads are limited to `0x0000..0x1FFF`, CODE to
+the lower unbanked `0x0000..0x7FFF`, and writes to ordinary XDATA
+`0x0000..0x1DFF`. A memory transfer is 1..256 bytes without crossing its bound.
+The public API has no flash/MMIO/status/IRAM-alias writer or banked breakpoint
+interface; breakpoint slots 0..3 use bank parameter zero.
+
+Register snapshots save A before reading PSW, account for accumulator parity,
+and verify restoration. Memory operations save the full snapshot, select
+DPS 0 and use DPTR0, then restore DPL0/DPH0, DPS, A and PSW on normal completion.
+The verification includes both DPTRs, B/SP/MPAGE, the eight active-bank
+registers and PC/FMAP bank. DPTR1 is preserved, not silently replaced by
+whichever pointer DPS originally selected. Failed or late transfers stop
+without a restoration attempt, retry, implicit resume/reset or stall clearing;
+only explicit resource cleanup remains available on the faulted session.
+
 `tools/cc2530_debug.py` contains target command/status facts, distinct
 from USB framing. `tools/debug_image.py` handles only offline artifacts and
 snapshots, reusing strict image checks and never importing the USB transport.
 Its source lookup exposes exact linked CDB records, including multiple records
 at one address; it does not guess source ranges or read compiler-named files.
+
+The manual `tools/check_debug_hardware.py` is outside normal build/test
+execution. It verifies physical fixture CODE before resume and has a narrowly
+authorized DATA/XDATA-alias experiment; that exception does not expand the
+public writer's bounds. The separate macOS `tools/erase_boundary_fault.c`
+observes an external programmer's erase/status traffic and exits before
+programming/normal-reset cleanup at the authorized boundary. It neither
+implements a programmer nor adds implicit recovery to the debugger.
+The [dated LG evidence](DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
+is separate from host/image/simulator evidence. M1 is complete for the bounded
+LG/unbanked baseline: a fresh-reconnect fixture check passed before the final
+held-handle unplug/failure check. After the last replug, PyUSB enumeration and
+a full one-cycle fixture check in an explicitly selected new session also
+passed; that run ended with the fixture halted at `0x0173`.
+Banked CODE remains deferred, and the protocol/platform layer boundaries
+below are unchanged. This finite acceptance does not add universal compatibility
+or sleeping-target, MMIO, full-SFR, flash-writer or GDB support.
 
 ## Layer boundaries
 

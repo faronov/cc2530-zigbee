@@ -13,11 +13,12 @@ It is not ARM SWD. Through a CC Debugger, the hardware supports:
 See TI SWRU191F chapter 3, particularly section 3.3.3 for breakpoints.
 These capabilities do not depend on compiling with IAR.
 
-**This repository has a partial host transport, offline image tools and a
-target fixture, not a validated hardware debugger.** Guarded CPU control is
-host-tested, as are separately authorized reset into halt and reset-based
-initial attach. Live PC/memory/register access, breakpoint programming
-and non-reset attach remain unimplemented.
+**The repository implements guarded live PC/register/memory access, CPU
+control, reset-based attach and unbanked hardware breakpoints. M1 is complete
+for the bounded LG/unbanked baseline, not a universal debugger acceptance.**
+Host/image/simulator coverage and the
+[2026-09-16 one-board LG hardware record](#2026-09-16-lg-fixture-hardware-record)
+are distinct evidence levels. Non-reset attach remains unsupported.
 `cc-tool` is primarily a programmer, and SDCC's `s51`/uCsim checks are
 simulation, not a connection to a physical CC Debugger. A ready GDB/OpenOCD
 source-level setup is not assumed or claimed.
@@ -54,7 +55,7 @@ behavior; the bit alone is not proof of a call-stack overflow.
 ## Implemented host transport
 
 `tools/cc_debugger.py` is an original Python implementation of narrow CC
-Debugger diagnostic and CPU-control exchanges. Its optional PyUSB backend is
+Debugger diagnostic, control and register-preserving access exchanges. Its optional PyUSB backend is
 separate from the firmware toolchain. No operation happens on import,
 construction or `--help`; USB access requires an explicit command and numeric
 bus/address.
@@ -84,6 +85,13 @@ not run two debugger clients against the same adapter.
 | `step` / `step()` | Existing session plus separate CPU-control permission | Before/after status and the resulting accumulator |
 | `reset-halt` / `reset_halt()` | Prepared existing session plus separate target-reset permission | Before/after status and whether the reset request was sent |
 | `attach-reset` / `attach_reset()` | Fresh `RESET_DEBUG_SESSION` policy plus separate target-reset permission | Halted post-status and whether reset was sent; no prior-state claim |
+| `pc` / `read_pc()` | Prepared existing session, awake and halted; no extra permission | 16-bit PC |
+| `registers` / `read_registers()` | Existing session plus memory-access permission, awake and halted | Verified `RegisterSnapshot` |
+| `read-sfr` / `read_sfr(address)` | Same memory-access permission and stopped state | One reviewed core SFR byte |
+| `read-xdata` / `read_xdata(address, length)` | Same memory-access permission and stopped state | 1..256 SRAM bytes within `0x0000..0x1FFF` |
+| `read-code` / `read_code(address, length)` | Same memory-access permission and stopped state | 1..256 lower unbanked CODE bytes within `0x0000..0x7FFF` |
+| `write-xdata` / `write_xdata(address, data)` | Both memory-access and memory-write permissions, awake and halted | `None` after per-byte readback and register verification; only `0x0000..0x1DFF` |
+| `breakpoint` / `set_breakpoint(slot, address, enabled=True)` | Separate breakpoint permission, awake and halted | `BreakpointResult`; slots 0..3, lower unbanked CODE, bank parameter fixed at 0 |
 
 Ordinary target commands require `--confirm-existing-debug-session` on the CLI.
 This is the operator's assertion that an appropriate CC2530 debug session already
@@ -104,7 +112,17 @@ and boolean `reset_sent`, not an invented pre-reset status. The last two
 adapter-state bytes are uninterpreted and are not exposed. A zero target ID
 is reported by `adapter-state`, not invented as a successful target
 connection. Target bytes are returned without interpreting them as success.
-There is no memory dump, serial-number read or payload logging.
+PC returns `{"pc": INTEGER}`. Register JSON contains exactly
+`pc`, `bank`, `a`, `psw`, `b`, `sp`, `dptr0`, `dptr1`, `dps`, `mpage`, `r`;
+`r` is an eight-element JSON array (a tuple in the Python dataclass).
+`bank` is the low three FMAP bank bits, not the PSW-selected register bank.
+SFR JSON is `{"address": INTEGER, "value": INTEGER}`. Memory-read JSON is
+`{"address": INTEGER, "data": "lowercase hexadecimal bytes"}`. Write JSON is
+`{"address": INTEGER, "bytes_written": INTEGER, "readback_verified": true}`.
+Breakpoint JSON has `slot`, `address`, boolean `enabled` and `status_after`
+(the command's STATUS reply, also checked before a separate fresh postcheck).
+There is no automatic dump, serial-number read or payload logging beyond
+the explicitly requested JSON. Keep captured target data out of Git/CI artifacts.
 
 CPU-control methods require `allow_cpu_control=True` in Python, or the CLI's
 additional `--allow-cpu-control` flag. Existing-session and CPU-control
@@ -112,7 +130,7 @@ permission do not grant reset, flash writing, memory access or breakpoint
 programming. The operator must have verified the intended target image
 separately: the flag is an authorization,
 not proof that the bytes on a chip match a local build. **No hardware commands
-are being run during offline development, even with an adapter absent.**
+may be run as part of offline development checks, even with an adapter absent.**
 
 Before HALT/RESUME/STEP and bank reads, a fresh status must indicate an unlocked,
 non-erasing chip, stable oscillator and normal power state. RESUME, STEP and
@@ -132,9 +150,10 @@ have stopped at a hardware breakpoint again; this is returned as an observed
 halted/breakpoint status, not retried or misreported as continuously running.
 A still-halted CPU without the breakpoint cause is an error. STEP's reply is
 **accumulator data**, including values such as `0xFF`, never a status byte.
-STEP then requires a fresh halted post-status. Live PC advancement is not
-checked by this transport yet; the target fixture's simulated NOP `PC+1` check
-is a separate evidence level.
+STEP then requires a fresh halted post-status. `step()` does not infer a PC
+delta from the opcode: use `read_pc()` for the actual address. The manual
+fixture runner compares snapshots around the linked NOP; its observed `PC+1`
+result is recorded separately from the alias-aware simulator check.
 
 GET_BM's upper five reply bits are unspecified here; only its low three bits
 are returned. This is FMAP bank information, not a flat flash address or proof
@@ -142,11 +161,69 @@ of banked-code support. Config reads now check status before/after and reject
 locked or erasing targets. Raw READ_STATUS remains available for diagnosing
 those states; RD_CONFIG is not a permitted command on a locked CC2530.
 
+### Live register and memory access
+
+`allow_memory_access=True` / `--allow-memory-access` authorizes the supplied
+instructions needed for register, SFR, XDATA and CODE inspection.
+`allow_memory_write=True` / `--allow-memory-write` additionally requires
+memory-access permission. `allow_breakpoints=True` / `--allow-breakpoints`
+is independent of both memory and CPU-control permissions. All constructor
+permission values must be exact booleans; none upgrades `ADAPTER_ONLY`.
+These operations require fresh awake, halted, unlocked and non-erasing status
+before and after, and share one lock/deadline across all helper exchanges.
+
+The passive core SFR whitelist is exactly:
+
+| Address | Register |
+| --- | --- |
+| `0x81` | SP |
+| `0x82`, `0x83` | DPL0, DPH0 |
+| `0x84`, `0x85` | DPL1, DPH1 |
+| `0x92`, `0x93` | DPS, MPAGE |
+| `0x9F` | FMAP |
+| `0xD0`, `0xE0`, `0xF0` | PSW, ACC, B |
+
+This is not permission to sweep peripheral SFRs or MMIO. XDATA reads include
+the status reservation and the IRAM alias, but the public writer rejects
+**all addresses at or above `0x1E00`**, including unused status space,
+`0x1F00..0x1FFF`, MMIO and flash. Reads/writes require exact integer
+addresses/lengths, 1..256 bytes and no crossing of the relevant bound.
+Python write data must be immutable `bytes`; successful writes read back each
+byte, not merely accept the USB OUT count. There is no CODE/flash writer.
+
+Snapshots save A with a supplied NOP, read PSW next, and restore A/PSW,
+including the accumulator-dependent parity bit. They capture both DPTRs,
+DPS, B, SP, MPAGE, active-bank R0..R7 and PC/FMAP bank, and verify a second
+snapshot. Memory helpers save that context, select DPS 0 and use DPTR0.
+On normal completion they restore DPL0/DPH0, DPS, A and PSW, then compare the
+full context; DPTR1 and the other untouched registers must also match.
+**Failed, short or late exchanges stop immediately, with no attempted
+restoration or retry.** Register/RAM changes may already have happened:
+`FAULTED` is not a claim that the pre-operation context survived.
+
+Exact command-specific CLI operands:
+
+| Command | Required additional permission(s) | Operands |
+| --- | --- | --- |
+| `pc` | None | None |
+| `registers` | `--allow-memory-access` | None |
+| `read-sfr` | `--allow-memory-access` | `--memory-address ADDRESS` |
+| `read-xdata`, `read-code` | `--allow-memory-access` | `--memory-address ADDRESS --length COUNT` |
+| `write-xdata` | `--allow-memory-access --allow-memory-write` | `--memory-address ADDRESS --data-hex 'HEX BYTES'` |
+| `breakpoint` | `--allow-breakpoints` | `--slot SLOT --code-address ADDRESS`, optionally `--disable` |
+
+All also need `--bus BUS --address ADDRESS --confirm-existing-debug-session`.
+The USB `--address` is not the target memory/CODE address. Target addresses
+accept decimal or `0x` notation; lengths and slots are decimal integers.
+`--data-hex` accepts hexadecimal pairs and whitespace, decoded to immutable
+bytes. Missing, invalid and unrelated operands are rejected before loading
+PyUSB. There is no live `--bank` operand; banked breakpoint use is unsupported.
+
 ### Reset-based initial attach
 
 The Python `Access.RESET_DEBUG_SESSION` policy requires
 `allow_target_reset=True`. Opening only claims the selected adapter; target
-reads, HALT/RESUME/STEP and `reset_halt()` remain denied until an explicit
+reads, memory writes, breakpoint programming, HALT/RESUME/STEP and `reset_halt()` remain denied until an explicit
 `attach_reset()` completes. Repeating initial preparation on a ready session
 is rejected; use an explicit existing-session reset if that is intended.
 
@@ -176,8 +253,9 @@ normal CPU-control permission is still separate. Failure or interruption at
 any stage faults the session and may already have disturbed the target.
 There is no retry, fallback reset, debug-config write or automatic resume.
 Closing after success releases USB resources without issuing a normal-mode
-reset. Hardware timing, actual initial PC and compatibility with a particular
-adapter firmware remain unobserved.
+reset. Initial PC/reset and subsequent fixture initialization were observed
+on the single adapter/board in the dated record; this is not a compatibility
+claim for other firmware, boards, sleeping targets or arbitrary attach timing.
 
 ### Explicit reset into halt
 
@@ -205,8 +283,9 @@ session even if reset has already occurred. Closing only releases USB
 resources; it never undoes a halt or starts the firmware.
 
 `command_sent=true` plus halted status is not independent proof of reset PC,
-memory initialization or matching flash contents. Those need the remaining
-PC/memory transport and physical acceptance checks.
+memory initialization or matching flash contents. The live PC/CODE APIs and
+manual fixture runner make those separate comparisons; the dated hardware
+record identifies the image for which they passed.
 
 ### Lifecycle and failures
 
@@ -267,6 +346,11 @@ current numeric USB location; they may change on reconnection:
 ```text
 .venv/bin/python tools/cc_debugger.py adapter-state --bus BUS --address ADDRESS
 .venv/bin/python tools/cc_debugger.py debug-status --bus BUS --address ADDRESS --confirm-existing-debug-session
+.venv/bin/python tools/cc_debugger.py pc --bus BUS --address ADDRESS --confirm-existing-debug-session
+.venv/bin/python tools/cc_debugger.py registers --bus BUS --address ADDRESS --confirm-existing-debug-session --allow-memory-access
+.venv/bin/python tools/cc_debugger.py read-sfr --bus BUS --address ADDRESS --confirm-existing-debug-session --allow-memory-access --memory-address 0x81
+.venv/bin/python tools/cc_debugger.py read-xdata --bus BUS --address ADDRESS --confirm-existing-debug-session --allow-memory-access --memory-address 0x1E00 --length 32
+.venv/bin/python tools/cc_debugger.py read-code --bus BUS --address ADDRESS --confirm-existing-debug-session --allow-memory-access --memory-address 0 --length 16
 ```
 
 These are manual examples, **not commands invoked by builds or CI**. No udev
@@ -274,14 +358,17 @@ rules, permission changes, automatic driver detachment or USB discovery are
 installed by this repository. Do not use `sudo` as a substitute for a reviewed
 device-access policy or run a debugger operation merely to clear a warning.
 
-Evidence is **host-tested only**: synthetic conversations check exact packets,
+Automated transport evidence is **host-tested**: synthetic conversations check exact packets,
 selection, permission gates, reply lengths, deadlines, failure latching and
 cleanup. Optional tests exercise the actual pinned PyUSB resource manager
 with a synthetic driver, never a real libusb device. They are explicitly
 skipped when PyUSB is absent; CI also runs them with PyUSB installed.
-The public wire facts and licenses are pinned in [PROVENANCE.md](PROVENANCE.md).
-There is no hardware-observed USB/target result, USB firmware compatibility
-claim, or validation of real timeout/disconnect behavior yet.
+The macOS erase-observer test uses a compiled synthetic USB library/driver,
+not real libusb or `cc-tool`, and skips on other platforms or without a host
+compiler. The public wire facts and licenses are pinned in
+[PROVENANCE.md](PROVENANCE.md). Physical results, including real timeout/stall
+and cable-unplug failures, are limited to the
+[dated LG record](#2026-09-16-lg-fixture-hardware-record).
 
 ## Offline image, symbol and snapshot tools
 
@@ -355,22 +442,154 @@ Artifact-command JSON includes the image BIN hash and
 `evidence="offline-image-checked"`. This describes local files, not USB access
 or a hardware observation. No error path prints a success JSON object.
 
-## Remaining M1 gates before M2
+## Manual hardware acceptance and recovery
 
-| Remaining work | Boundary / evidence still needed |
-| --- | --- |
-| USB framing for PC reads, supplied instructions and breakpoint programming | A reviewed multi-byte adapter protocol source or separately authorized, sanitized hardware evidence; the target opcode table alone is insufficient |
-| Register-preserving memory/register reads and writes | Implement the verified transport first, then prove restoration and failure behavior on the fixture |
-| Physical HALT/RESUME/STEP, bank read and four breakpoint slots | Confirm exact board/image and adapter firmware; compare expected state and known NOP PC movement |
-| Physical reset/initial attach | Confirm `C5`/`C8` preparation, reset PC, status, timing and subsequent fixture initialization; host tests alone do not prove any of these |
-| Disconnect/timeout and interrupted-flash recovery | Exercise controlled failures without resuming an unverified image; flashing is not implemented by this tool |
-| Banked breakpoints | A banked fixture plus bank-discrimination evidence when banking is introduced |
+These tools are **manual only**. Confirm the exact board, safe non-RF image,
+electrical setup, independent recovery backups and exclusive adapter ownership.
+A previous authorization or successful record is not permission to repeat a
+destructive test on another device/image. Never run these commands in CI.
 
-The one-command/one-byte-response USB shape is reused only for the documented
-zero-argument target commands. More complex framing is not extrapolated from
-it. Host tests validate our packet/state contracts, not the adapter firmware.
-M1 therefore remains open: do not describe it as hardware-validated or use it
-to bypass the M2 hardware-services gate.
+### Fixture acceptance runner
+
+After separately approved programming and independent readback, the explicit
+manual invocation is:
+
+```text
+.venv/bin/python tools/check_debug_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/debug_fixture --cycles 257 --confirm-fixture-test
+```
+
+Use the current numeric USB location, not an address saved before reconnect.
+`--output` names the matching public build directory, not a dump/output-log
+destination. `--cycles` accepts 1..257 and defaults to 257.
+`--confirm-fixture-test` is a combined explicit authorization for reset,
+CPU control, temporary fixture SRAM/alias writes and all four breakpoint
+slots; the runner internally enables the separate Python permissions. It
+does not accept the transport CLI's individual `--allow-*` flags.
+
+The runner validates local board/image/compiler/hash metadata, reset-attaches,
+requires PC `0x0000` and debug configuration `0x26`, and compares every byte
+of physical fixture CODE with the verified BIN **before its first resume**.
+It does not flash, verify the entire 256-KiB flash tail or read the factory
+page; those are separate programming/readback activities.
+
+It exercises four simultaneous stage breakpoints, known-register snapshots,
+complete M1 state/M0 heartbeat, NOP `PC+1`, resumed real calls, explicit HALT,
+reset and reinitialization. It temporarily writes/restores 16 SRAM bytes at
+`0x1D00`. Its narrowly scoped alias check accesses DATA `0x40` and XDATA
+`0x1F40` bidirectionally and restores the original byte, only for the verified
+interrupt-free fixture with that scratch byte above the bounded call chain.
+This use of private helpers is **not** an expansion of `write_xdata()`:
+the public writer still rejects every address at or above `0x1E00`.
+
+Success JSON is emitted only after cleanup and identifies the image hash,
+adapter, breakpoint hits, cycle count and final halted probe PC. The runner's
+`not_tested_by_this_run` list describes its own scope: it does not perform physical cable
+disconnection, interrupted-flash recovery or banked CODE tests. The separate
+recovery and cable observations below are therefore not claims that this
+runner flashes or automatically disconnects USB. Failures stop without an
+automatic resume, retry or restoration.
+
+### Erased-image-boundary interruption
+
+`tools/erase_boundary_fault.c` is an original BSD-3-Clause macOS DYLD observer
+for an **external** programmer. It does not implement or initiate erase/write.
+Only environment value `CC2530_ERASE_BOUNDARY_FAULT=1` enables it; unset, zero
+or any other value passes transfers through and clears its remembered state.
+It forwards the original transfer parameters/results and watches for:
+
+1. Exact successful bulk OUT `04`, two bytes `1C 14`, on one handle.
+2. A subsequent fresh successful OUT `04`, two bytes `1F 34`, on that handle.
+3. A successful IN `84` with requested and completed length exactly one:
+   `CHIP_ERASE_BUSY=0`, `DEBUG_LOCKED=0`, `CPU_HALTED=1`.
+
+Here "ready" means erase-busy clear; the observer does not independently
+verify CODE, oscillator or power-mode state. The observed status was `0x22`.
+Failed, null-count or partial transfers invalidate the pending status reply.
+At the accepted boundary it writes a diagnostic and calls `_exit(99)`,
+bypassing programmer destructors/normal-reset cleanup and the next programming
+transfer. It is not a general USB grammar, power-cut injector or flash writer.
+
+First exercise the fully offline synthetic-library test on the intended host:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_erase_boundary_fault -q
+```
+
+For a separately approved manual experiment, compile the observer into an
+operator-selected recovery directory **outside the repository**:
+
+```text
+cc -std=c11 -O2 -Wall -Wextra -Werror -Wpedantic -dynamiclib -Wl,-undefined,dynamic_lookup tools/erase_boundary_fault.c -o /ABSOLUTE/PRIVATE/PATH/erase_boundary_fault.dylib
+CC2530_ERASE_BOUNDARY_FAULT=1 DYLD_INSERT_LIBRARIES=/ABSOLUTE/PRIVATE/PATH/erase_boundary_fault.dylib cc-tool --device BUS:ADDRESS --name CC2530 -e -w build/lg_esl29_rev03/debug_fixture/debug_fixture.hex -v r
+```
+
+These are not commands to paste without an approved fixture/recovery plan.
+The synthetic test proves host interposition, not that a particular external
+binary will take the expected path. Require exit 99 and the boundary diagnostic,
+then independently confirm halted status and erased CODE. Missing/mismatched
+evidence is an unsuccessful or ambiguous experiment, not a recovery pass.
+Buffered programmer stdout is not an interruption trigger: an earlier attempt
+stopped only during verification and was rejected as insufficient evidence.
+
+**External `cc-tool` cleanup is unsafe to infer from `--reset` or exit status.**
+At the reviewed revision, any normal task return calls target close and sends
+normal-execution reset (`C9`, index 0), even without `--reset`. A verification
+mismatch can merely print failure, still return exit 0 and take that reset
+path. An exception before target close skips it; USB destruction only closes
+the handle. See the [pinned lifecycle sources](PROVENANCE.md#m1-live-access-and-manual-recovery-sources).
+Neither omitting `--reset` nor accepting `-v r`/exit 0 alone proves safe
+completion or correct flash contents.
+
+After a confirmed interruption, keep the erased/unverified target halted.
+Recovery is a **new explicit complete reprogramming action** using the known
+non-RF fixture and a reviewed external-programmer workflow, not a resumed
+partial write. Remove the fault-injection environment for that action.
+Check programmer readback verification, independently compare full flash with
+the intended image plus erased tail, and confirm that the read-only factory
+page is unchanged. Account explicitly for the external programmer's possible
+normal-execution reset; the ordinary debugger does not issue it. Re-establish
+halted control, independently verify physical CODE, then run fixture acceptance.
+Do not resume unknown application code to see whether recovery "worked".
+
+### USB failure and cable-disconnect procedure
+
+On an error, preserve the diagnostic, deny further target commands on the
+faulted session and close its resources without retrying or restoring registers.
+Endpoint recovery, adapter reset and reattachment are separate operator
+actions; `Debugger.open()`/`close()` never clears stalls. A new handle alone
+does not prove that an ambiguous reply stream or target state is recovered.
+After explicit endpoint recovery, check halted PC/state before any resume.
+
+For a separately authorized cable-disconnect check, use the verified fixture
+and retain a live handle during a bounded, operator-confirmed physical cable
+removal. Require an actual device/transfer failure, `FAULTED`, denied resume and no implicit reset
+or retry. Close, physically reconnect, identify the new USB location and use
+an explicitly approved reattachment/recovery policy. Recheck status, PC and
+physical image before controlled execution, then record the result. A
+confirmation timeout, absent adapter at a later instant, or software USB device
+reset does not establish this full sequence.
+
+## M1 acceptance boundary before M2
+
+**M1 is complete for the bounded LG/unbanked baseline.** It covers four slots,
+stepping, state-preserving registers/memory, real timeout/short-reply/failed-write/
+disconnect paths, safe erased-image interruption and verified recovery,
+alias/reset behavior and offline symbols. It does not establish generic-board
+hardware, a universal debugger or any M2/RF/network service.
+
+The full fresh-reconnect fixture check passed after the first confirmed cable
+reconnection; the final held-handle unplug/failure check passed later.
+After the last replug, PyUSB enumeration and the full one-cycle fixture check
+in an explicitly selected new session also passed, leaving the fixture halted
+at `0x0173` at the end of that run. These finite measured scenarios, detailed
+in the [dated record](#2026-09-16-lg-fixture-hardware-record), establish the
+gates, including successful recovery after the final real unplug.
+
+Bank discrimination is deferred until a banked CODE fixture is introduced,
+not a current unbanked M1 blocker. Mid-word electrical power cuts, flash wear,
+sleeping targets, non-reset attach and interactive source-level stepping are
+not established by this record. The recovery result is specifically the
+halted erased-image boundary, not arbitrary interrupted flash programming.
 
 ## M1 fixture and acceptance
 
@@ -449,7 +668,7 @@ expected record; the fixture does not repair debugger-induced corruption.
 ### Code locations and register probe
 
 `_debug_fixture_stage0` through `_debug_fixture_stage3` are four distinct,
-nested C function entry addresses for later hardware-breakpoint tests. They
+nested C function entry addresses for hardware-breakpoint tests. They
 are not hardware breakpoint-slot numbers. Their addresses can change on each
 link; read the map rather than copying an address from another build.
 
@@ -470,7 +689,7 @@ The probe changes these call-clobbered registers deliberately. There is no
 host substitute pretending to execute it. The image checker verifies its
 exact instruction bytes and the stop-label offset.
 
-For an eventual register-preservation test, stop at the NOP, save the CPU
+For a register-preservation check, stop at the NOP, save the CPU
 registers, perform the debugger's documented non-destructive XDATA read, then
 compare registers before resuming. A single step must move PC to `stop + 1`
 without changing registers or RAM. Resuming at that RET must return to the
@@ -494,11 +713,144 @@ XDATA includes 20 ordinary bytes (state plus compiler parameter storage) and
 32 active M0 status bytes / 64 reserved status bytes. Stack reservation is not
 a measured hardware high-water mark.
 
-**Not established:** physical breakpoint slots, USB error recovery, CC2530
-debug-instruction register preservation, reset/attach behavior, FMAP/banked
-breakpoints or interactive source-level host debugging. The image is lower-32-KiB unbanked
-code. uCsim address stops are not CC2530 hardware breakpoints. M1 remains open,
-and no hardware-observed evidence is claimed.
+These automated checks are not physical breakpoint tests. The image is
+lower-32-KiB unbanked CODE; uCsim address stops are not CC2530 comparator slots.
+The separate LG observation below does not extend to the generic board,
+standalone `bringup`, banked CODE or interactive source-level stepping.
+
+## 2026-09-16 LG fixture hardware record
+
+The operator explicitly authorized checks, reset and flashing on the owned LG
+board on 2026-09-16. This is a sanitized **hardware-observed** record, not a CI
+result or evidence imported from a prior display prototype. Flower and the
+private GPL-derived probe were not accessed. No private dumps, factory data,
+identities, photographs or recovery/session files are published here.
+
+| Item | Observed/tested configuration |
+| --- | --- |
+| Board | One LG ESL Rev0.3, `lg_esl29_rev03`; no generic-board observation |
+| Adapter | TI CC Debugger `0451:16A2`; firmware version `0x05CC`, revision `0x0044`, descriptor `bcdDevice=0x0701` (not a serial number) |
+| Host | macOS 15.7.9, Python 3.11.9 |
+| Backend | Final 257-cycle run: isolated, pinned PyUSB 1.3.1; preliminary successful runs also used global 1.2.1 and are **not** labeled pinned |
+| Related host regression run | 309 passing pinned-dependency tests, including 18 fully offline macOS fault-injector tests; not hardware evidence |
+| Fixture | Original, unchanged, non-RF `debug_fixture`, SDCC 4.2.0; 626-byte BIN/CODE extent |
+| Build record | Public `build-info.json`: revision `8a26b088e69ad15bf23b0374491639b58ae02901`, clean build inputs |
+| BIN SHA256 | `e3459339d63a63ae9aa71cdc01a4dd18cb6e2b079f86968da507ac57ff133815` |
+
+The generated manifest still has `hardware_tested=false`: a build does not
+certify a physical run. This dated record associates the observation with its
+exact BIN hash; it does not change the generated metadata or firmware.
+Neither standalone `bringup` image was flashed. LG shared startup, board
+policy/status and alias behavior were exercised only through this fixture.
+
+Before programming, two independent full 262144-byte backups of the user's
+**text demo, not an OEM image**, and a 2048-byte read-only factory-page capture
+were retained outside Git. External `cc-tool` 0.26 programming with `-v r` was
+followed by an independent full 262144-byte readback matching the 626-byte
+fixture plus an `FF` tail; the factory page was unchanged. Backup/capture
+contents and paths are intentionally absent from this record.
+
+### Observed standalone wire contracts
+
+All bytes are hexadecimal, OUT endpoint `04`, IN endpoint `84`.
+`i` denotes supplied instruction bytes; `control AH AL` are the three target
+breakpoint parameters. These are individually observed forms, not a general
+adapter-bytecode grammar.
+
+| Operation | Complete OUT payload / count | IN payload / count |
+| --- | --- | --- |
+| GET_PC | `3F 28` / 2 bytes | PC high byte, low byte / 2 bytes |
+| DEBUG_INSTR, one supplied byte | `4F 55 i` / 3 bytes | ACC / 1 byte |
+| DEBUG_INSTR, two supplied bytes | `7F 56 i i` / 4 bytes | ACC / 1 byte |
+| DEBUG_INSTR, three supplied bytes | `AF 57 i i i` / 5 bytes | ACC / 1 byte |
+| SET_HW_BRKPNT | `AF 3F control AH AL` / 5 bytes | STATUS / 1 byte |
+
+GET_PC observed reset `0x0000`, reset-vector LJMP destination `0x0006`, and the
+linked NOP moving `0x0173 -> 0x0174`. Supplied DEBUG_INSTR executes without PC
+increment and returns ACC, including high-bit data; its reply is not STATUS.
+The failed hypotheses `2F 28` (one reply byte) and `8F 56 ...` (zero reply
+bytes) are not shipped. Primary TI target facts and the public MIT/GPL
+reference boundaries are recorded in [PROVENANCE.md](PROVENANCE.md#m1-live-access-and-manual-recovery-sources).
+
+### Fixture execution and preservation
+
+All four slots were configured simultaneously at the linked stage entries;
+each hit was checked and that slot then disabled to reach the next stage.
+Addresses below identify this exact image, not stable ABI constants:
+
+| Slot / stage | PC | SP |
+| --- | --- | --- |
+| 0 | `0x021A` | `0x0B` (11) |
+| 1 | `0x01FD` | `0x0D` (13) |
+| 2 | `0x01E1` | `0x0F` (15) |
+| 3 | `0x01CD` | `0x11` (17) |
+
+At stop `0x0173`: A=`0xA5`, B=`0x3C`, DPTR0=`0x1234`, DPS=0,
+active bank 0/R7=`0x69`, carry=1 and SP=`0x09`.
+The final pinned-backend run completed **257 physical cycles**, including
+counter wrap. It checked the complete expected M1 state, M0 heartbeat and
+immutable status, unchanged registers/state around NOP `PC+1`, and successful
+returns into real calls on resume. Explicit HALT, reset PC zero and fixture
+reinitialization also passed.
+
+The 16-byte XDATA scratch at `0x1D00` was written, read back and restored.
+DATA `0x40` / XDATA `0x1F40` were checked bidirectionally and the original
+byte restored; ordinary public writes at/above `0x1E00` remain forbidden.
+A separate physical matrix covered all **eight PSW-register-bank x DPS**
+combinations (four banks, DPS 0/1), with nonzero DPTR1=`0x5678`, through
+XDATA/CODE/SFR reads. The original context was restored.
+
+### Failure and recovery observations
+
+Real USB tests included an empty-IN 10-ms timeout (`-7`), a zero-length reply,
+and an explicitly halted OUT endpoint yielding PIPE (`-9`). Each latched
+`FAULTED`, denied resume and performed no retry. Cleanup followed by **explicit**
+endpoint recovery left the same halted PC. Ordinary API open/close does not
+clear stalls. Software USB device resets preserved PC, but the USB address
+changed later; this is not cable-disconnection evidence.
+
+For the controlled interrupted-flash experiment, the original DYLD observer
+saw external `1C 14`, then fresh `1F 34`/one-byte status `0x22`, and exited 99
+before programming or normal-reset cleanup. While halted, 640 CODE bytes
+(`0x0000..0x027F`) were independently checked as `FF`. A subsequent **explicit
+complete** fixture reprogram/readback and independent CODE verification
+succeeded, followed by the full 257-cycle isolated-PyUSB-1.3.1 pass above.
+This establishes recovery at the **halted erased-image boundary only**:
+not a mid-word electrical power cut, arbitrary power-loss recovery or flash
+wear endurance.
+
+### Physical cable scenarios and last-reported availability
+
+The earlier interactive confirmation timeout/absent-adapter observation was
+not counted as a pass. The measured cable scenarios occurred in this order:
+
+1. **First confirmed cable reconnection:** the adapter was explicitly selected
+   at its new USB address. The entire one-cycle fixture check passed, including
+   physical CODE verification, all four slots, alias checks and reset.
+2. **Final held-handle physical unplug:** after the operator removed the cable
+   with the selected CC Debugger handle open, production `read_pc()` failed at
+   control IN with USBError errno 19 / backend `-4` NO_DEVICE. The session was
+   `FAULTED` and resume was denied without any increase in the bulk-write
+   counter: no retry or resume I/O occurred. Explicit cleanup surfaced
+   release-interface NO_DEVICE instead of swallowing it.
+3. **Final explicit recovery after the last replug:** PyUSB enumerated the
+   adapter again. After explicit selection at its new address, a full one-cycle
+   `check_debug_hardware` run in a new session passed: reset PC `0x0000`, all
+   626 physical CODE bytes matching the fixture with the BIN hash recorded
+   above, all four breakpoint slots and their SPs, alias/RAM restoration, one
+   golden cycle/NOP and reset reinitialization. The last action left the fixture
+   halted at `0x0173`. This successful recovery supersedes the interim absence;
+   no current NO_DEVICE blocker remains. Numeric locations, device identities
+   and private paths are intentionally not published.
+
+**M1 is complete for this bounded LG/unbanked baseline.** The proven
+fresh-reconnect fixture check, subsequent physical-disconnect failure check
+and final explicit new-session recovery establish the finite gates; none is
+inferred from enumeration alone. Generic hardware and banked-code
+discrimination remain outside the record; the latter is required only when
+banked CODE is introduced. Mid-word power cuts and flash wear belong to future
+platform/persistence evidence. There is no universal-debugger, sleeping-target,
+MMIO/full-SFR, flash-writer, GDB, M2 or RF/network claim.
 
 ## Radio debugging without destroying timing
 

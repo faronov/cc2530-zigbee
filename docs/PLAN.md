@@ -10,6 +10,8 @@ a coordinator.
 **Implemented at project creation:** a non-networking bootstrap, build/image
 checks, host/simulator tests and CI. The bootstrap has not been validated on
 physical hardware merely because a preceding display prototype worked.
+The standalone `bringup` images remain unflashed; shared startup was later
+exercised on one LG board through the M1 fixture, as recorded below.
 Everything from M1 onward below is planned except for the explicitly
 implemented components and evidence recorded under each milestone.
 
@@ -77,29 +79,50 @@ Exit:
 
 ### M1 - Hardware debugging that we can trust
 
-**Partial implementation:** the [target fixture](DEBUGGING.md#implemented-target-fixture)
+**Complete for the bounded LG/unbanked baseline.** The [target fixture](DEBUGGING.md#implemented-target-fixture)
 in `examples/debug_fixture.c` and `src/debug_pattern.c` is host-tested,
 image-checked and alias-aware simulated for both boards. It is a separate
 build, not a change to the default M0 image.
 
 The [host transport](DEBUGGING.md#implemented-host-transport) in
-`tools/cc_debugger.py` provides explicit adapter selection, guarded status/config
-and bank reads, and separately authorized HALT/RESUME/STEP with an optional
-PyUSB backend. Separately authorized `reset-halt` is limited to an already
-prepared session. Explicit `attach-reset` prepares the adapter and requests
-initial reset into halt under its own access policy; open/close never resets
-or resumes. These are host-tested
-with synthetic backends, not hardware-observed. The
+`tools/cc_debugger.py` provides explicit adapter selection, guarded status/config,
+PC/bank/register and safe SFR/XDATA/CODE reads, verified ordinary-SRAM writes,
+unbanked breakpoint programming and HALT/RESUME/STEP with an optional PyUSB
+backend. CPU control, reset, memory access, memory writes and breakpoints have
+separate permissions. `reset-halt` requires a prepared session;
+`attach-reset` explicitly prepares/reset-halts under its own access policy.
+Open/close never resets or resumes. Failed/late exchanges fault the session
+without retries or attempted register restoration. The
 [offline tools](DEBUGGING.md#offline-image-symbol-and-snapshot-tools) also
 provide verified-image global symbol and exact CDB source-line lookup, strict
 M0/M1 snapshot decoding and target breakpoint-parameter encoding; they never
 access USB.
 
-Live PC/memory/register access, USB breakpoint programming and all hardware
-exit gates remain open. A non-reset attach is not implemented. The
-[remaining gate table](DEBUGGING.md#remaining-m1-gates-before-m2) separates
-unconfirmed adapter framing from physical acceptance. No physical debugger
-or board was accessed for these components.
+Both fixture builds retain host, image and alias-aware simulator coverage.
+The [2026-09-16 hardware record](DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
+adds one LG Rev0.3, an unchanged 626-byte fixture and a final 257-cycle run
+using isolated PyUSB 1.3.1. It covers all four simultaneous breakpoint slots,
+known registers/NOP stepping, real returns and counter wrap, reset, bounded
+RAM access, IRAM aliasing, all PSW-register-bank/DPS combinations, real USB
+timeout/stall failures and controlled halted erased-image recovery. After the
+first confirmed cable reconnection, explicit selection at the new address and
+a complete one-cycle fixture check passed, including physical CODE verification,
+all four slots, alias checks and reset. The subsequent final held-handle cable
+removal produced NO_DEVICE, faulted the session, denied resume without further
+bulk writes and exposed cleanup failure. After the last replug, PyUSB enumerated
+the adapter and a full one-cycle fixture check in an explicitly selected new
+session also passed, including physical CODE verification and reset
+reinitialization. That final run left the fixture halted at `0x0173`.
+
+The [acceptance boundary](DEBUGGING.md#m1-acceptance-boundary-before-m2)
+distinguishes these passed finite scenarios from universal compatibility.
+No current LG/unbanked M1 gate remains open.
+Generic hardware is unobserved. Bank discrimination is required when banked
+CODE is introduced, not a blocker for the current unbanked image.
+Recovery evidence does not establish a mid-word electrical power cut or flash
+wear tolerance; those belong to future platform/persistence work. Non-reset
+attach, sleeping targets, MMIO/full-SFR access, a flash writer and GDB remain
+unsupported. No M2/RF work is validated by these debugger results.
 
 Deliver:
 

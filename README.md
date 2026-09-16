@@ -6,7 +6,7 @@
 An experimental, open C/SDCC project aiming to implement a small Zigbee end
 device and, subsequently, a sleepy end device on the TI CC2530.
 
-**Current status: bootstrap, offline components/tooling and a development plan.
+**Current status: bootstrap, guarded hardware-debugging tools and offline components.
 This is not yet a working Zigbee stack.** The included firmware does not join a network,
 transmit radio packets, read a sensor or refresh a display. It does not require
 IAR or proprietary TI stack libraries.
@@ -70,33 +70,47 @@ named code locations, nested calls, a 16-byte state block and a known-register
 NOP/RET probe. The [fixture contract](docs/DEBUGGING.md#implemented-target-fixture)
 describes exact expectations and limits.
 
-This component is **host-tested, image-checked and simulated** for both boards,
-not hardware-observed. Its four hardware breakpoint slots and
-register-preserving reads remain unvalidated; M1 is open.
+Both fixture builds are **host-tested, image-checked and alias-aware simulated**.
+On 2026-09-16, the unchanged 626-byte LG fixture was also **hardware-observed**
+on one LG Rev0.3: all four breakpoint slots, 257 physical cycles including wrap,
+register-preserving access, NOP stepping, reset/reinitialization, RAM aliasing,
+USB timeout/stall handling and recovery at a halted erased-image boundary.
+The [dated record](docs/DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
+identifies the image, adapter, pinned-backend run and limitations.
+The generic board remains hardware-unobserved; neither standalone `bringup`
+image was flashed. Shared startup was exercised physically only through the LG fixture.
 
-The [partial host transport](docs/DEBUGGING.md#implemented-host-transport)
-provides opt-in adapter-state and debug status/config reads with explicit
-USB bus/address selection. Target reads require confirmation of an existing
-debug session. A separate, destructive `attach-reset` operation can prepare
-the adapter and request initial reset into halt; it is not a non-reset attach.
-Bank reads require a halted CPU.
-HALT/RESUME/STEP additionally require separate explicit CPU-control permission
-and validate target state before/after. An explicit `reset-halt` command has
-its own reset permission and requires an already prepared debug session.
-Initial attach also requires explicit reset permission and its own
-`--confirm-reset-attach` confirmation instead of an existing-session assertion.
-Opening/closing never resets or resumes; there is no flashing or automatic
-retry. This component is
-**host-tested only**, with synthetic USB backends. PyUSB is optional and is
-not needed to build firmware or run the ordinary tests.
+The [host transport](docs/DEBUGGING.md#implemented-host-transport) provides
+explicit USB selection, status/config, PC/bank/register and bounded SFR/XDATA/CODE
+reads, verified SRAM writes and unbanked hardware breakpoints. PC/register/memory
+inspection requires an awake, halted CPU. CPU control, reset, memory access,
+memory writes and breakpoints have separate permission gates. The public writer
+is limited to XDATA `0x0000..0x1DFF`; it cannot write status, the IRAM alias,
+MMIO or flash. Register restoration is attempted only after successful
+exchanges and is verified; errors fault the session without retries,
+automatic restoration, resume or endpoint recovery.
+
+Destructive `attach-reset` has its own explicit confirmation; `reset-halt`
+requires an already prepared session. Neither is a non-reset attach.
+Opening/closing never resets or resumes. The
+[manual acceptance runner and recovery helper](docs/DEBUGGING.md#manual-hardware-acceptance-and-recovery)
+are not CI/build actions and never authorize hardware access implicitly.
+PyUSB is optional; ordinary tests use synthetic backends and never enumerate USB.
 
 The [offline image tool](docs/DEBUGGING.md#offline-image-symbol-and-snapshot-tools)
 performs global symbol lookup, exact CDB source-line lookup, strict status
 decoding and breakpoint-parameter preparation against verified image files
 and hashes, with **no USB access**. Source lookup does not infer the nearest
 line or resolve source-file paths.
-Live PC/memory/register access, breakpoint programming and physical M1
-acceptance remain open.
+
+**M1 is complete for the bounded LG/unbanked baseline.** A full fixture check
+passed after the first confirmed cable reconnection; the later final held-handle
+unplug test proved fault latching, denied resume and visible cleanup errors.
+After the last replug, PyUSB enumeration and a full one-cycle fixture check in
+an explicitly selected new session also passed. That final run left the
+fixture halted at `0x0173`. Bank discrimination is required when banked CODE
+is introduced, not for this baseline. Completion does not validate generic hardware,
+sleeping/MMIO/full-SFR/flash-writer/GDB support or any M2/RF/network service.
 
 ## Intended scope
 

@@ -27,8 +27,11 @@ The current build must cover:
 
 The generic simulator does not emulate the RF subsystem, analog behavior,
 physical supply rails or a display. M0 CI is not a silicon test.
+Neither standalone `bringup` image has been flashed. Physical evidence for
+shared startup/status is limited to the LG M1 fixture below, not a generic-board
+or standalone-M0 acceptance claim.
 
-## Partial M1 fixture coverage
+## M1 fixture automated coverage
 
 `IMAGE=debug_fixture` adds a separate target image for both boards, covered by
 the same HEX/BIN, memory/alias and board-startup checks as M0. It also checks:
@@ -42,13 +45,14 @@ the same HEX/BIN, memory/alias and board-startup checks as M0. It also checks:
 - 257 linked-image cycles through real returns, without stack leakage,
   writes outside allocated XDATA or changes to immutable M0 status fields.
 
-These are **host-tested, image-checked and simulated** results only. They do
-not test the four physical breakpoint comparators, USB/debug commands or a
-host frontend's register-preserving reads. The
+These automated checks are **host-tested, image-checked and simulated**.
+They do not by themselves test physical breakpoint comparators, USB/debug
+commands or a host frontend's register-preserving reads. The
 [fixture contract](DEBUGGING.md#implemented-target-fixture) provides the ABI,
-golden state and resource accounting. All M1 hardware gates remain open.
+golden state and resource accounting. Separate physical evidence now exists
+for one LG fixture; the generic board remains hardware-unobserved.
 
-## Partial M1 host transport coverage
+## M1 host transport automated coverage
 
 Synthetic backends cover explicit USB selection and claiming, permission
 denial before I/O, exact diagnostic requests, malformed/short replies, partial
@@ -62,8 +66,7 @@ require only the standard library. With the pinned optional PyUSB installed,
 additional tests exercise its real resource manager with a synthetic driver,
 including failed/interrupted claiming and release-error propagation. No test
 calls real USB discovery or opens libusb hardware. CI runs both the
-dependency-free and optional test paths. This is **host-tested** evidence only,
-not USB/CC2530 simulation or
+dependency-free and optional test paths. This resource-manager coverage is **host-tested** evidence only, not
 hardware-observed debugger behavior. It adds no firmware memory consumption.
 
 The CPU-control tests additionally cover separate permissions, locked/erasing,
@@ -85,6 +88,30 @@ and failures at every preparation boundary. Successful attach does not grant
 CPU-control permission or trigger resume on close. This does not prove reset
 timing or initial attach on physical hardware.
 
+`tools/test_m1_access.py` adds an original small 8051/backend model for the
+individually confirmed standalone PC/instruction/breakpoint packets. It checks
+all accumulator values/parity, all four PSW register banks and DPS 0/1,
+both DPTRs, full-context restoration, safe SFR/range bounds, byte-by-byte write
+readback, separate permissions, and one lock/deadline across complete helpers.
+Every exchange boundary is exercised with failures, short replies and partial
+writes; corrupt restoration, stale/late results and denied resume are errors,
+not triggers for recovery or retry. CLI tests check exact JSON, immutable write
+bytes, pre-load permission/operand rejection and no success on cleanup failure.
+These are host tests of original instruction semantics, not linked-image or
+silicon evidence.
+
+`tools/test_erase_boundary_fault.py` compiles the original macOS observer with
+a synthetic USB library and driver in a temporary directory, using strict
+compiler flags. It covers opt-in/pass-through, exact erase/status association,
+handle isolation, status bits, short/failed transfers, stale-reply rejection,
+ABI forwarding and exit-before-cleanup. It never loads real libusb or runs
+`cc-tool`, and explicitly skips outside macOS or without a host compiler.
+This test is distinct from physically interrupting an external programmer.
+The 2026-09-16 full pinned-dependency host suite passed **309 tests**, including
+all **18 offline macOS observer tests** after the invalid-transfer and requested
+IN-length guards were corrected. That host result is not cable or flash
+hardware evidence.
+
 Offline image tests cover board/image/compiler/hash mismatches, supported
 CODE/XDATA/SFR symbol classification, conflicting map/CDB spaces/addresses, missing
 symbols and non-executable breakpoint targets. Synthetic parameter vectors
@@ -99,6 +126,64 @@ rather than guessing a nearby line. Both board/image builds check main's
 source records; the fixture also checks the actual declaration lines and
 linked addresses of all four stage functions. These are offline source
 metadata checks, not source stepping through a hardware debugger.
+
+## M1 hardware evidence and acceptance boundary
+
+The canonical [2026-09-16 LG record](DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
+contains sanitized adapter/host/backend versions, the unchanged 626-byte
+fixture's BIN hash and observed addresses. It separates preliminary global
+PyUSB 1.2.1 runs from the final isolated, pinned PyUSB 1.3.1 **257-cycle physical
+pass**. One LG Rev0.3 was observed; the generic board was not.
+
+That record establishes four simultaneous unbanked comparator slots, nested
+SP values, known registers, full M1/M0 cycle checks and wrap, NOP `PC+1`,
+resumed real calls, explicit HALT and reset/reinitialization. It also records
+scratch SRAM write/readback/restore, bidirectional DATA/XDATA aliasing, all
+eight PSW-register-bank/DPS combinations with nonzero DPTR1, and real USB
+timeout/zero-length/PIPE failures with fault latching and separately authorized
+endpoint recovery. Ordinary API cleanup never clears stalls.
+
+The controlled interrupted-flash recovery result is limited to a **halted
+erased-image boundary**: observed erase/status traffic and exit 99 before
+programming/reset cleanup, independent erased-CODE checking, then explicit
+complete fixture reprogram/readback and the final acceptance pass. It does
+not establish a mid-word electrical power cut or wear tolerance. External
+`cc-tool` can reset normally and exit 0 after a verification mismatch;
+independent actual readback is required, not a successful process status alone.
+
+After the **first confirmed cable reconnection**, the adapter was explicitly
+selected at its new address and the complete one-cycle fixture check passed:
+physical CODE verification, all four slots, alias checks and reset.
+The **subsequent final held-handle cable-unplug check also passed**: production
+`read_pc()` failed at control IN with errno 19 / backend `-4` NO_DEVICE.
+The session was `FAULTED`; resume was denied with an unchanged bulk-write
+count, and cleanup exposed release-interface NO_DEVICE.
+
+After the **last replug**, PyUSB enumerated the adapter again. Explicit
+selection at the new address and a full one-cycle `check_debug_hardware` run
+in a new session passed: reset PC `0x0000`, all 626 physical CODE bytes matching
+the hash-verified fixture, all four slots/SPs, alias/RAM restoration, one golden
+cycle/NOP and reset reinitialization. That final run left the fixture halted
+at `0x0173`, establishing recovery after the final real unplug rather than
+enumeration alone. No numeric location or identity is published.
+
+**M1 is complete for the bounded LG/unbanked baseline.** These finite
+fresh-reconnect, physical-disconnect and explicit new-session recovery
+scenarios establish the gates, not universal compatibility.
+Earlier confirmation timeouts and software USB resets are not substituted
+for the real removal. Generic hardware, bank discrimination and
+sleeping/MMIO/full-SFR/flash-writer/GDB support remain outside this acceptance.
+Bank discrimination becomes a requirement when banked CODE is introduced;
+mid-word power-cut and flash-wear evidence belongs to future
+platform/persistence work.
+
+The [manual runner/procedure](DEBUGGING.md#manual-hardware-acceptance-and-recovery)
+is outside CI, never flashes and verifies physical fixture CODE before resume.
+Its JSON `not_tested_by_this_run` list describes that runner's scope, not
+separate companion checks: it never flashes or automatically disconnects USB.
+Generated `hardware_tested=false` metadata is not rewritten by this documentary
+record. No M2 service, RF, network or
+interoperability support is implied.
 
 ## Future protocol tests
 
