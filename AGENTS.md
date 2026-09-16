@@ -20,3 +20,19 @@ Key constraints:
 
 Run the commands in `CONTRIBUTING.md`. Update directly related docs and state
 whether a result is host-tested, image-checked, simulated or hardware-observed.
+
+## Specialist agents
+
+Repository profiles live in `.github/agents`:
+
+- `zigbee-stack`: bounded MAC/NWK/APS/ZDO/ZCL and security/commissioning work,
+  with specification-revision and conformance checks.
+- `cc2530-platform`: chip services, SDCC/memory ABI, debugger and hardware
+  evidence boundaries.
+
+See [usage and scope](CONTRIBUTING.md#specialist-copilot-agents). Use a specialist
+for a bounded task that benefits from its context, not for every small lookup.
+Supply the objective, owned files, constraints and expected evidence. Do not
+give concurrent agents overlapping edits or treat their conclusions as
+hardware observations. These profiles do not change milestone gates or grant
+permission to access equipment.

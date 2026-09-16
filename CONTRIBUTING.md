@@ -16,6 +16,35 @@ Do not add a success-returning radio, security, persistence or join stub to
 make an example look functional. Add an explicit unsupported boundary only
 when it has a real caller and a tested failure contract.
 
+## Specialist Copilot agents
+
+Two repository-local [Copilot custom agent profiles](https://docs.github.com/en/copilot/reference/custom-agents-configuration)
+are provided; no global installation or fixed model is required.
+
+| Agent | Intended task |
+| --- | --- |
+| [zigbee-stack](.github/agents/zigbee-stack.agent.md) | Protocol codecs/state machines, specification lookup, end-device conformance and security/commissioning boundaries |
+| [cc2530-platform](.github/agents/cc2530-platform.agent.md) | CC2530/SDCC, memory and linker ABI, debugger transport and isolated chip services |
+
+In Copilot CLI opened at this repository, use `/agent` to select a profile,
+or name it in a prompt, for example: "Use zigbee-stack to implement the
+assigned offline MAC codec extension." A new CLI invocation can select it
+with `copilot --agent=cc2530-platform`.
+
+Give a delegated task a bounded objective, file ownership and required
+evidence. Coordinate shared interfaces in the main task; do not run two
+writers over the same files. The profiles allow read/search/edit/execute/web
+tools, omit nested-agent tools, and inherit the configured model. Ordinary CLI
+permissions still apply: profile instructions are not an OS sandbox, and
+shell access does not constitute authorization to operate hardware.
+
+The Zigbee profile consults the external
+[reviewed reference index](docs/PROVENANCE.md#specialist-agent-reference)
+on demand. It does not install that repository's agent/skill or copy its
+catalog here. Reference retrieval needs network access, but firmware builds
+and offline tests do not depend on that repository. Neither profile adds
+working firmware features or changes the project's support claims.
+
 ## Development checks
 
 With SDCC 4.2.0, `s51`, Python 3.9 or newer, GNU Make and a host C compiler on `PATH`:

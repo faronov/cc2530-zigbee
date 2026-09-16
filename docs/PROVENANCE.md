@@ -156,6 +156,32 @@ section 3.6.10.2 pp.392-393; section 4.3.4 pp.416-417.
 Paraphrases in this repository are an engineering aid, not replacement
 specification text.
 
+## Specialist-agent reference
+
+The repository's specialist profiles are original project instructions.
+The user-supplied
+[faronov/zigbee-docs reference](https://github.com/faronov/zigbee-docs/tree/6e575bdc8c1a68880ef7552d6190a0c6bc80b3a6)
+was inspected at immutable revision
+`6e575bdc8c1a68880ef7552d6190a0c6bc80b3a6`, including its agent, skill and source
+metadata. It is an external secondary lookup aid, not a normative source or
+build dependency. No declared license was established for those files, so
+neither its prompts, generated catalog nor scripts are copied into this tree.
+
+Its [source index](https://github.com/faronov/zigbee-docs/blob/6e575bdc8c1a68880ef7552d6190a0c6bc80b3a6/docs/README.md)
+combines ZCL Revision 8 and Matter 1.5, and identifies Core R23
+(`05-3474-23`), not this project's R22 baseline. Its BDB labels are inconsistent:
+the index says 2.1 while
+[bdb.json](https://github.com/faronov/zigbee-docs/blob/6e575bdc8c1a68880ef7552d6190a0c6bc80b3a6/docs/base-device-behavior/bdb.json)
+has `specification.version` 1.0; both name document `13-0402-13`.
+These labels do not resolve the compatible-BDB gate.
+
+Agent lookups must use the reviewed revision, inspect field-level source
+annotations and verify implementation decisions against the applicable
+primary specification. Do not import Matter-only fields into ZCL or treat
+R23 requirements as R22 requirements. Fetch only the relevant remote index
+entry/file; its `docs/` paths refer to that repository, not this checkout.
+Changing the reviewed revision requires rechecking these source constraints.
+
 ## Before importing any code or data
 
 Record its upstream URL and immutable revision, license, original notices,
