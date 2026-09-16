@@ -38,7 +38,10 @@
     X(SOC_APCFG, 0xf2) \
     X(SOC_PERCFG, 0xf1) \
     X(SOC_CLKCONCMD, 0xc6) \
-    X(SOC_CLKCONSTA, 0x9e)
+    X(SOC_CLKCONSTA, 0x9e) \
+    X(SOC_ST0, 0x95) \
+    X(SOC_ST1, 0x96) \
+    X(SOC_ST2, 0x97)
 
 #define SFR_ADDRESS(name, address) name##_ADDRESS = address,
 enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
@@ -48,13 +51,16 @@ enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
 #define DECLARE_SFR(name, address) __sfr __at(address) name;
 /* SDCC's runtime page-register symbol must select MPAGE, not generic 8051 P2. */
 __sfr __at(0x93) _XPAGE;
+#define MMIO_READ(reg) (reg)
 #define MMIO_WRITE(reg, value) do { (reg) = (uint8_t)(value); } while (0)
 /* Compound SFR operations preserve unrelated port latch bits on the 8051. */
 #define MMIO_CLEAR(reg, mask) do { (reg) &= (uint8_t)~(mask); } while (0)
 #define MMIO_SET(reg, mask) do { (reg) |= (uint8_t)(mask); } while (0)
 #else
 #define DECLARE_SFR(name, address) extern volatile uint8_t name;
+uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address);
 void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value);
+#define MMIO_READ(reg) host_mmio_load(&(reg), reg##_ADDRESS)
 #define MMIO_WRITE(reg, value) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)(value))
 #define MMIO_CLEAR(reg, mask) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)((reg) & (uint8_t)~(mask)))
 #define MMIO_SET(reg, mask) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)((reg) | (mask)))

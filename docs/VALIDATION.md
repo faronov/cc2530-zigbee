@@ -185,6 +185,105 @@ Generated `hardware_tested=false` metadata is not rewritten by this documentary
 record. No M2 service, RF, network or
 interoperability support is implied.
 
+## M2 awake-only timebase automated coverage
+
+The [first bounded timebase slice](ARCHITECTURE.md#awake-only-timebase-first-m2-slice)
+has a **host-tested, image-checked and simulated C implementation**, not a
+hardware-executed C driver. The independent register observation below is
+a separate evidence level.
+`make test-timebase` runs it independently; every existing `make ... all test`
+combination also includes it. `timebase_test.ihx` is a standalone component
+test, not a third board image, flashing target or CI upload artifact.
+Neither board image links the module or changes its firmware behavior/bytes.
+
+`tests/test_timebase.c` supplies original shared host/SDCC vectors for zero
+delay, byte/counter rollover, maximum permitted delay `0x7FFFFF`, exact expiry,
+one tick before/after, both sides of half-range, exactly-half ambiguity in both
+directions, invalid upper bits/delays and null pointers. Error checks preserve
+the full 32-bit sentinel or each initial boolean value.
+
+Host-only coverage additionally checks every one of the **16,777,216 counter
+phases** with zero/max-delay construction and expiry, and every modular
+comparison delta at three deadline origins. The MMIO hook models a ticking
+counter whose full value latches only on ST0. It advances between byte reads
+through `0000FF -> 000100`, `00FFFF -> 010000` and `FFFFFF -> 000000`, checks
+all 65,536 low/middle phases at three high-byte values, and exercises stationary
+and larger synthetic tick increments. Every sample must return exactly the
+zero-extended latched value with exactly three reads in `95,96,97` order,
+zero writes and unchanged GPIO/clock/IRQ registers. The pre-existing host
+write log and startup/board write contracts remain intact.
+
+`tests/boot_timebase.py` parses the actual IHX/map/CDB/memory files and locks
+the reviewed SDCC 4.2.0 reader's 88 instruction bytes, including its three
+SFR reads, compiler scratch addresses and return packing. Mutation of every
+opcode/operand is rejected, alongside missing bytes, wrong SFR/stop symbols,
+CODE bounds, status/alias placement, unaccounted storage, reservation budget,
+MPAGE, result ABI and stack violations. This is linked-code inspection, not
+source-text inference or a successful host-clock substitute.
+
+Alias-aware s51 execution runs the bounded deadline/error vectors and 17
+reader samples through actual calls/returns. It supplies **synthetic prelatched
+SFR bytes**, poisons each register after its linked read, checks all four
+returned bytes and immutable result/status/guard regions, and rejects stack
+leakage or changes to guarded SFRs. The simulator's alias is independently
+exercised in both directions, including a failing no-alias control.
+Generic C52/s51 does **not** emulate the physical CC2530 Sleep Timer's ticking,
+latching, clock rate or wake-edge behavior; the host model and linked SFR
+injection are separate forms of synthetic evidence.
+
+With the baseline model-large/code-size flags, `timebase.rel` contains 404
+CODE bytes, 25 ordinary XDATA bytes (including three reader scratch bytes),
+three overlayable DATA bytes and one BIT, excluding shared runtime and tests.
+It has no retained software epoch or heap. The isolated executable accounts
+for its own CODE separately, uses 35 ordinary XDATA bytes plus an 8-byte
+test result at `0x1E00`, and retains the full 64-byte status reservation:
+99 nonaliased XDATA bytes reserved, within the unchanged 512-byte budget.
+Its IRAM stack begins at `0x21`, with 223 bytes reserved; the upper 128-byte
+guard remains untouched in these executions. This is a bound, not a measured
+worst-case hardware stack depth. Ordinary allocation stays below `0x1E00`;
+`0x1F00..0x1FFF` remains the IRAM alias, never a second allocation pool.
+The checker reports the complete test executable's linked resource counts.
+
+M2 remains open. Physical execution of this C driver and platform timing
+still need a dedicated verified board fixture. No precise tick period, calibration,
+PM1/PM2 synchronization, PM3 continuity, interrupts, compare/wake handling,
+radio, AES or flash service is established by this slice. The existing M1
+LG/unbanked hardware record and fixture hash are unchanged and do not supply
+those missing platform measurements.
+
+## Independent Sleep Timer hardware reference (2026-09-16)
+
+This manual observation used the existing LG Rev0.3 M1 fixture, not
+`timebase_test.ihx` and not the new C driver. The fixture remained the verified
+626-byte image with SHA-256
+`e3459339d63a63ae9aa71cdc01a4dd18cb6e2b079f86968da507ac57ff133815`.
+The host used pinned PyUSB 1.3.1 and the same CC Debugger/host setup recorded
+in the M1 evidence.
+
+After explicit reset and physical CODE verification, the fixture ran to its
+known NOP with iteration/heartbeat 2. While the CPU remained halted, original
+supplied debug instructions read ST0, ST1 and ST2 in order, with register
+save/restore and the normal transfer deadlines. The complete known fixture
+record was checked between samples to detect reset or unexpected execution.
+No counter, compare, GPIO or clock-source register was written by sampling.
+
+| Observation | Result |
+| --- | --- |
+| Short progression check | 8,236 raw ticks between samples; host interval bounded by 252.568..292.371 ms |
+| Natural rollover observation | One 24-bit rollover during 555.699 seconds of host observation, across 528 samples |
+| Adjacent samples across rollover | Positive modulo-24-bit delta of 31,736 ticks, strictly below half-range |
+| Context and reset exclusion | CPU registers and complete M1 iteration-2 canary unchanged |
+| Clock identification | Same-epoch M0 startup `CLKCONCMD=CLKCONSTA=C9`: 32-kHz RC source, 16-MHz RC system source |
+
+This establishes **hardware-observed counter progression and natural
+rollover for that debug-controlled register sequence**. The observation did
+not start exactly at counter zero, and host elapsed time includes USB/debug
+overhead: it is not a calibrated counter period, frequency/accuracy claim,
+or execution-time measurement of `timebase_read_awake_ticks24()`.
+It does not prove C-driver integration, interrupt concurrency, clock switching,
+PM wake synchronization or any other M2 service. Raw records remain private;
+the evidence here is a processed summary without unique identities.
+
 ## Future protocol tests
 
 The [standalone legacy MAC codec](MAC.md) is already covered by original

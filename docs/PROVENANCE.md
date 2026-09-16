@@ -183,6 +183,34 @@ new-session recovery after the last replug. That full one-cycle fixture run
 ended halted at `0x0173`.
 This changes evidence status, not licensing or the supported API bounds.
 
+### M2 timebase sources
+
+The awake-only Sleep Timer reader, unsigned modular deadline arithmetic,
+host latch/tick model and isolated linked-image checks are original
+BSD-3-Clause work. No timer implementation, SDK object, peripheral emulator,
+capture or additional dependency was imported.
+
+Primary hardware facts are from TI **SWRU191F sections 11.1 and 11.4,
+pp.129-131**: the 24-bit counter starts immediately after reset, uses the
+current 32-kHz RC/XOSC source, runs except in PM3 and loses its value in PM3.
+ST0 (`0x95`) reads latch all 24 bits; ST1 (`0x96`) and ST2 (`0x97`) read the
+latched upper bytes. Writes set compare, not the counter. PM1/PM2 wake needs
+a positive 32-kHz edge through `SLEEPSTA.CLK32K` before reliable current reads.
+The [awake-only contract](ARCHITECTURE.md#awake-only-timebase-first-m2-slice)
+excludes that wake synchronization and does not choose or calibrate a clock.
+The manual is linked above, not redistributed. Synthetic host latching and
+generic s51 SFR injection do not establish physical CC2530 counter behavior.
+
+The separate authorized hardware reference used original supplied
+`MOV A,direct` instructions to read ST0/ST1/ST2 on the unchanged M1 fixture,
+with CPU-state preservation. No C timebase code was injected or executed.
+The clock-source interpretation uses SWRU191F pp.68-69:
+`CLKCONSTA.OSC32K=1` selects the 32-kHz RC source and `OSC=1` the 16-MHz
+RC system source. The matching fixture startup snapshot was `C9` for both
+clock command/status, and no clock-source writes occurred during observation.
+Only the [sanitized summary](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
+is published, not raw captures, factory information or device identities.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

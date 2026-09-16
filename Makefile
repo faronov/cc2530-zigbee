@@ -33,7 +33,7 @@ ifeq ($(IMAGE),debug_fixture)
 OBJECTS += $(BUILD)/debug_fixture_$(BOARD).rel
 endif
 
-.PHONY: all test force-link
+.PHONY: all test test-timebase force-link
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -83,7 +83,23 @@ $(BUILD)/mac_frame_test.rel: tests/test_mac_frame.c $(HEADERS) Makefile | $(BUIL
 $(BUILD)/mac_frame_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/mac_frame_test.rel force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/mac_frame_test.rel
 
-test: all $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD))
+$(BUILD)/host-timebase-tests: tests/test_timebase.c tests/host_mmio.c tests/host_mmio.h src/timebase.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase.c tests/host_mmio.c src/timebase.c -o $@
+
+$(BUILD)/timebase.rel: src/timebase.c include/timebase.h include/cc2530_mmio.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/timebase_test.rel: tests/test_timebase.c include/timebase.h include/cc2530_mmio.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/timebase_test.ihx: $(BUILD)/timebase.rel $(BUILD)/timebase_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/timebase_test.rel
+
+test-timebase: $(BUILD)/host-timebase-tests $(BUILD)/timebase_test.ihx
+	$(BUILD)/host-timebase-tests
+	$(PYTHON) -B tests/boot_timebase.py --output $(BUILD) --simulator "$(S51)"
+
+test: all test-timebase $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
 ifeq ($(IMAGE),debug_fixture)

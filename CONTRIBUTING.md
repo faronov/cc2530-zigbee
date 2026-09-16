@@ -114,6 +114,23 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The same commands now also run the standalone awake-only timebase. A focused,
+entirely offline check is:
+
+```sh
+make test-timebase
+```
+
+This runs strict host tests, genuine linked-code/layout rejection checks and
+alias-aware s51 execution of `timebase_test.ihx`. The host models Sleep Timer
+latching/ticking; s51 receives synthetic prelatched SFR values and executes
+the actual read/return and deadline instructions. Neither measures a physical
+counter or tick rate. Like the codec executable, this is **test-only: never
+flash it or upload it as a board artifact**. It is not a third `IMAGE` option,
+and `src/timebase.c` must not enter either board image's `OBJECTS` in this slice.
+Keep foreground read ownership, explicit half-range ambiguity and unchanged
+outputs on errors covered by the [timebase checks](docs/VALIDATION.md#m2-awake-only-timebase-automated-coverage).
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

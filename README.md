@@ -112,6 +112,21 @@ fixture halted at `0x0173`. Bank discrimination is required when banked CODE
 is introduced, not for this baseline. Completion does not validate generic hardware,
 sleeping/MMIO/full-SFR/flash-writer/GDB support or any M2/RF/network service.
 
+## First M2 slice: awake-only timebase
+
+The standalone [timebase](docs/ARCHITECTURE.md#awake-only-timebase-first-m2-slice)
+reads the 24-bit Sleep Timer in latched ST0/ST1/ST2 order and implements
+bounded modular deadlines with explicit invalid/ambiguous results. It requires
+one foreground reader and awake operation, with no clock selection,
+millisecond conversion, interrupts, compare or wake handling.
+`make test-timebase` provides **host, linked-image and alias-aware simulator**
+coverage for the C implementation. A separate
+[hardware reference](docs/VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
+observed raw counter progression and a natural rollover through the M1
+debugger, not execution of this C driver or calibrated timing. The isolated
+test executable must never be flashed and is not linked into either board
+image: their firmware bytes and M1 evidence remain unchanged. **M2 remains open.**
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):

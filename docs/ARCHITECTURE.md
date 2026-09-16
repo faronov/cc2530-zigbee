@@ -105,6 +105,55 @@ Proposed interface responsibilities:
 | NV | Validated atomic records and monotonic reservations | Return success after a failed flash operation |
 | Application | Sensor values and display scheduling | Block protocol progress during refresh |
 
+## Awake-only timebase (first M2 slice)
+
+`include/timebase.h` / `src/timebase.c` is an independent platform component,
+not linked into `bringup` or `debug_fixture`. It owns no board pins, clock
+selection, interrupt dispatch, compare channel or sleep policy. M2 remains
+open; this is neither an extended monotonic epoch nor calibrated wall time.
+
+| API | Contract |
+| --- | --- |
+| `uint32_t timebase_read_awake_ticks24(void)` | Read ST0, ST1, ST2 exactly once in separate sequenced MMIO expressions; return the latched 24-bit value zero-extended to 32 bits |
+| `timebase_deadline_after(now, delay, &deadline)` | Return `(now + delay) & 0xFFFFFF` for 24-bit `now` and `delay < 0x800000` |
+| `timebase_expired(now, deadline, &expired)` | For valid 24-bit inputs, masked `now - deadline` below `0x800000` means expired (including equality); above means pending; exactly half-range is ambiguous |
+
+Both arithmetic functions return `timebase_result_t`: `TIMEBASE_OK`,
+`TIMEBASE_INVALID_ARGUMENT` for out-of-range inputs/null output pointers
+(including a delay at or above half-range), or `TIMEBASE_AMBIGUOUS` for an
+exactly-half-range expiry delta. Every error leaves the output unchanged.
+Expiry writes a C99 `bool`; zero delay expires immediately. Inputs are values,
+outputs are caller-owned writable objects; SDCC uses its generic-pointer ABI.
+There is no heap, retained epoch, millisecond conversion or clock-failure stub.
+
+The caller must maintain **true temporal separation strictly below half a
+counter cycle**, in either direction, for every comparison and observe each
+deadline within that window. Raw ticks cannot detect an overdue observation
+outside that window, missed full wraps, reset or PM3 loss of counter state.
+Masking arithmetic does not repair those violations. Discard prior deadlines
+when continuity is lost; do not treat the ambiguity result as pending/success.
+
+One foreground owner must serialize all Sleep Timer reads; neither an ISR nor
+another reader may interleave ST0 reads and overwrite the latch. All helpers
+are foreground-only and not ISR-reentrant under the SDCC model-large ABI.
+No interrupt masking is needed under this ownership contract; the current
+board baseline disables interrupts and never sleeps.
+
+TI SWRU191F sections 11.1/11.4, pp.129-131, specify that ST0 (`0x95`)
+latches the complete counter, while ST1 (`0x96`) and ST2 (`0x97`) return its
+latched middle/high bytes. Writes program compare, so this component never
+writes those SFRs or any GPIO/clock/IRQ register. The counter starts after
+reset, uses the current 32-kHz RC/XOSC source and runs except in PM3, which
+loses its value. PM1/PM2 wake requires a positive 32-kHz edge observed through
+`SLEEPSTA.CLK32K` before current values are reliable. This awake-only API does
+not implement that synchronization, sleep entry/exit, clock switching or a
+precise tick rate. These are caller preconditions, not runtime-detected states.
+See [sources](PROVENANCE.md#m2-timebase-sources) and the separate
+[host/image/simulator evidence](VALIDATION.md#m2-awake-only-timebase-automated-coverage).
+The [independent hardware reference](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
+uses supplied debug instructions on the unchanged M1 fixture; it does not
+execute this C module or establish calibrated timing.
+
 ## Memory contract
 
 | Address space | Meaning |
