@@ -497,7 +497,7 @@ bounds, SFRs, source/field layouts and all common image/memory/alias violations.
 The helper RET is shared with an error path: opcode/tail checks alone never
 replace the live success-return and caller checks.
 
-The offline Python suite now has **345 tests**, retaining the prior 327
+The clock-fixture slice brought the offline Python suite to **345 tests**, retaining the prior 327
 regressions and adding 18 clock record/CLI/runner tests. They cover complete
 normal sequences and wrap, full CODE verification before resume, permissions,
 authorization/artifact gates, deadline/caller checks, breakpoint disable before
@@ -553,6 +553,75 @@ or stopped-clock, power-cut, IRQ/wake/RF/AES/flash or natural 24-bit timer-wrap
 claim follows. Never-observed departure remains uncertainty 9, not confirmed
 cancellation; that path and other injected faults retain host/simulator evidence.
 Generic remains host/image/simulator-only. Full M2 #4 stays open.
+
+## M2 interrupt ownership automated coverage
+
+`make test-irq` checks the isolated
+[EA ownership API](ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice).
+Its evidence is **host-tested, image-checked and simulated only**.
+`irq_test.ihx` is not a board image and must never be flashed or uploaded.
+The existing eight board images and CI matrix are unchanged, and the board
+verifier rejects accidental linkage of either primitive.
+
+Host coverage checks all 65,536 IEN0/other-enable-byte combinations with
+eight-deep LIFO nesting, all 256 token representations against all 256 IEN0
+values, initially enabled/disabled entry and preservation of current lower
+enable bits even if the caller changes them inside a section. Invalid byte
+tokens preserve input guards and every modeled register with zero MMIO log
+entries. All unrelated modeled registers, log addresses, order, counts and
+values are checked without relaxing overflow assertions. Reserved IEN0 bit 6
+is included as synthetic byte fuzzing, not a realizable CC2530 read value.
+
+The linked verifier rejects changes to every primitive instruction, its EA
+operand, DPL byte ABI, explicit naked-function ends, module allocations,
+result/control-byte declarations, ISR vectors and complete compiler-generated
+context-save/restore/RETI sequences. It checks the actual IHX/map/CDB/REL,
+not source-line guesses. Only the exact SDCC vector holes `0x06..0x0A` and
+`0x0C..0x12` are allowed; extra/missing CODE bytes are rejected. Existing
+clock/timebase tests retain their contiguous-CODE and instruction contracts.
+
+The C self-test covers every enable byte and eight bounded token values.
+Thirty leaf instruction-boundary cases execute the actual primitives with
+synthetic pending requests, including invalid restore while EA remains set.
+Additional tests prove pending assertion during EA=0, no delivery after
+inner restore(0), higher-priority preemption versus equal-priority deferral,
+and calls through the same primitives in foreground/low/high handlers.
+Actual RETI resumes the interrupted restore between SETB EA and its return,
+with live DPL preserved. Complete interrupted SFR/IRAM/live-stack context,
+counter/results, subsequent interrupt delivery, nonallocated XDATA and upper
+128-byte stack guards are checked. Pending-flag acknowledgment is performed
+by the C52 CPU model, never by the primitive. A required failing no-alias
+control retains the CC2530 `0x1F00..0x1FFF` IRAM-alias contract.
+
+The leaves use **34 CODE bytes and zero private DATA/XDATA/BIT/overlay
+scratch**, with no explicit stack pushes. The whole isolated executable has
+971 emitted CODE bytes / 983 reserved including twelve vector-padding bytes,
+6 ordinary XDATA plus the 8-byte `IRQT` result at `0x1E00`: 14 used / 70
+reserved nonaliased XDATA, counting the full 64-byte M0 reservation.
+Stack starts at `0x22`, with 222 bytes reserved; ordinary allocation remains
+below `0x1E00` and total reservation below 512. The test's own compiler data,
+bit-register bank and real ISR frames are not private primitive scratch.
+
+The pinned Python suite has **346 tests**, retaining all 345 earlier tests.
+The new rejection test enforces separation from board firmware. Full generic
+clock-fixture `all test` includes the existing 40 linked clock scenarios,
+timebase/codec checks and the new IRQ checks. Eight board rebuilds and
+alias-aware board simulations retain the six earlier hashes listed above,
+plus generic clock fixture (3,758 bytes)
+`13bec2214263cfab52513cb5744fe971a7a254b13e674799410b5d3f7693c462`
+and LG clock fixture (3,798 bytes)
+`77f7142d1e4ef3a662ce8ffd7ce9803d110a80e867b1a55be5540b98d16867ca`.
+No board map contains either new primitive; historical LG evidence is unchanged.
+
+**Separate next hardware gate:** authorize a dedicated non-RF board fixture
+with a documented safe CC2530 source, real vector/priority/pending-clear
+semantics, bounded stimulus and recovery conditions. Independently verify
+all physical CODE before resume, then observe pending assertion while EA=0,
+deferred delivery through nested sections, exact previous-state restoration,
+ABI-preserving ISR/RETI and continued service, with unrelated state preserved.
+That fixture/runner does not exist in this slice. Generic C52 IE/IP/TCON
+injection cannot establish CC2530 delivery, peripheral flag races or timing.
+No hardware operation was performed; M2 #4 and physical IRQ acceptance stay open.
 
 ## Independent Sleep Timer hardware reference (2026-09-16)
 

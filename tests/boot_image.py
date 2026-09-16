@@ -22,7 +22,7 @@ from debug_image import DebugImage, decode_bootstrap, decode_fixture, decode_tim
 ALIAS = "memory create addressdecoder xram 0x1f00 0x1fff iram_chip 0"
 
 
-def verify_component_layout(image, symbols, debug, memory, result_name, sources):
+def verify_component_layout(image, symbols, debug, memory, result_name, sources, *, code_holes=()):
     """Shared strict layout for isolated components with an eight-byte result."""
     require(image and min(image) == 0 and max(image) < CODE_LIMIT,
             "Component test CODE is not lower unbanked")
@@ -60,8 +60,10 @@ def verify_component_layout(image, symbols, debug, memory, result_name, sources)
     flash = re.search(
         r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)", memory,
     )
+    require(set(range(max(image) + 1)) - image.keys() == set(code_holes),
+            "Component has unexpected missing/emitted CODE bytes")
     require(flash is not None and int(flash[1], 16) == 0 and int(flash[2], 16) == max(image)
-            and int(flash[3]) == len(image) and int(flash[4]) == CODE_LIMIT,
+            and int(flash[3]) == len(image) + len(code_holes) and int(flash[4]) == CODE_LIMIT,
             "Component linked flash accounting mismatch")
     return ordinary | set(range(STATUS_ADDRESS, STATUS_ADDRESS + 8))
 

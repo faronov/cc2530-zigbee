@@ -194,6 +194,23 @@ This is not frequency/calibration, physical oscillator-failure/stopped-clock
 or never-departed cancellation confirmation. Prior M1/timebase evidence is
 historical and unchanged; M2 stays open.
 
+## M2 interrupt ownership foundation
+
+The isolated [EA primitives](docs/ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice)
+save the previous global interrupt-enable bit, disable it atomically, and
+restore exactly a caller-owned 0/1 token. Proper LIFO nesting keeps an outer
+section disabled; invalid byte tokens return an explicit error without
+interrupt/peripheral access. Valid-shaped forged or out-of-order tokens
+cannot be detected.
+
+`make test-irq` supplies **host, linked-image and alias-aware simulator**
+coverage, including genuine generic C52 interrupt entry, higher-priority
+nesting and RETI context preservation. These tiny SDCC reentrant leaves are
+not a peripheral dispatcher or physical CC2530 interrupt acceptance.
+All eight board BINs and the eight-job CI matrix remain unchanged; no current
+board image links the primitives. `irq_test.ihx` is **test-only: never flash
+or upload it as board firmware**. M2 #4 and the hardware IRQ gate remain open.
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):

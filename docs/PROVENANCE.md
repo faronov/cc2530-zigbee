@@ -297,6 +297,30 @@ September 16 cancellation failure and from the earlier M1/timebase evidence.
 It does not establish frequency/calibration, physical oscillator failure or
 never-departed cancellation confirmation; generic remains host/image/simulator-only.
 
+### M2 interrupt ownership sources
+
+The EA save-disable/restore leaves, host vectors and isolated interrupt tests
+are original BSD-3-Clause work. Primary functional facts are TI
+**SWRU191F pp.41-46**, interrupt processing and IEN0/IEN1/IEN2 descriptions:
+IEN0 `0xA8` has EA bit 7, reserved read-zero bit 6 and six source enables;
+IEN1 `0xB8` and IEN2 `0x9A` hold independent enables. EA controls acknowledgment,
+not flag assertion; only a higher priority can nest an active ISR and RETI
+finishes processing. The p.45 warning about `XCH A,IEN0` is avoided. The p.41
+R/W0 flag read-modify-write warning and prohibition on using JBC to poll/clear
+hardware flags are not acknowledgment recipes: this slice touches no flags.
+Its JBC operand is only the EA control bit (`0xAF`).
+
+The register ABI, exclusive naked-function extents, zero-scratch module and
+generated ISR push/pop/RETI sequences are checked against this project's
+actual SDCC **4.2.0** linked IHX/map/CDB/module output. No SDK or external
+critical-section/dispatcher implementation was imported. uCsim **s51 0.6.4**
+in generic C52 mode supplies synthetic external-interrupt entry, priorities
+and return. Its IE/IP/TCON/vector meanings are deliberately test-only, not
+CC2530 peripheral mappings, silicon timing or hardware evidence.
+The exact twelve vector-padding holes are accounted separately from emitted
+CODE; no fabricated instruction bytes are inserted to satisfy image checks.
+No new dependency, hardware access, private data or board image is added.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

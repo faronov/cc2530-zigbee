@@ -194,6 +194,8 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require("_irq_save_disable" not in symbols and "_irq_restore" not in symbols and "C$irq.c$" not in debug,
+            "Board image must not link the isolated IRQ primitives")
     require(symbols["_m0_status"] == STATUS_ADDRESS, "Status address/IRAM alias violation")
     require(symbols["__XPAGE"] == 0x93, "SDCC page register must be CC2530 MPAGE")
     sizes = re.findall(r"^S:G\$m0_status\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)

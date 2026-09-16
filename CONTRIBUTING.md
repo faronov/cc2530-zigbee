@@ -212,6 +212,26 @@ test is not physical clock evidence; past acceptance grants no permission to
 repeat hardware work.
 CI now has eight board/image jobs and still uploads only selected board artifacts.
 
+The isolated interrupt-ownership foundation is included in `make ... all test`:
+
+```sh
+make PYTHON=.venv/bin/python test-irq
+```
+
+This checks all host byte-token representations, exact SDCC EA instructions
+and register ABI, and genuine interrupt entry/preemption/RETI using s51's
+**generic C52 CPU model**, not CC2530 peripheral delivery. Preserve the
+instruction-boundary, nested-context, alias/stack and fail-closed layout
+checks. The shared layout checker permits only the IRQ executable's exact
+twelve compiler-reserved vector-padding holes; existing timebase/clock
+executables still require contiguous emitted CODE and their original guards.
+`irq_test.ihx` is **test-only: never flash or upload it**. It is not an `IMAGE`
+option. Keep IRQ objects out of all current board links and retain the exact
+eight-job CI artifact whitelist. Hardware interrupt work needs a separate
+board/source/vector/recovery task; the existing LG clock/timebase acceptance
+is not authorization or evidence for it. See the
+[API ownership contract](docs/ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice).
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

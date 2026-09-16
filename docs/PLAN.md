@@ -188,6 +188,15 @@ only. Frequency/calibration, physical oscillator-failure/stopped-clock,
 interrupts, compare/wake and the other M2 gates remain open. The new clock
 record is separate from the earlier LG timebase evidence; full M2 #4 is open.
 
+The next bounded [interrupt-ownership foundation](ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice)
+adds only reentrant EA save-disable/exact restore, with caller-owned LIFO
+byte tokens and explicit invalid-token rejection. It is host-tested,
+image-checked and alias-aware simulated, including genuine generic C52
+preemption/RETI; CC2530 peripheral delivery remains hardware-unvalidated.
+All eight board BINs remain byte-identical and exclude the primitives.
+There is no new board image, CI-matrix expansion, peripheral dispatcher or
+change to the foreground-only clock/timebase contracts.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.

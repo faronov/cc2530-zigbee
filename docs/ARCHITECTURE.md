@@ -344,6 +344,58 @@ TIMEOUT and terminal FAULT; a separate explicit reset then completed recovery.
 This finite hardware record does not turn old matches into proof of cancellation:
 never-observed departure still requires result 9 or another explicit error.
 
+## Interrupt ownership foundation (isolated M2 slice)
+
+`include/irq.h` / `src/irq.c` provides only two original platform primitives,
+excluded from all eight current board images:
+
+| API | Contract |
+| --- | --- |
+| `irq_state_t irq_save_disable(void)` | Atomically sample/clear EA, returning exactly its previous 0/1 state; no error case or output pointer |
+| `irq_result_t irq_restore(irq_state_t token)` | For byte 0/1, restore exactly that EA state and return `IRQ_OK=0`; for 2..255, return `IRQ_INVALID_TOKEN=1` before interrupt/peripheral access |
+
+`irq_state_t` is `uint8_t`. Wider externally decoded values must be validated
+before narrowing to this API. Restore does not modify the caller's token.
+Each token belongs to its saving context and must be consumed once, in LIFO
+order. The inner token of an already-disabled section is zero, so restoring
+it cannot enable an outer section. There is no token registry or dynamic
+stack: forged valid-shaped, reused or out-of-order tokens are **not detected**.
+No independent EA writer may override an active section.
+
+TI **SWRU191F pp.41-46**, IEN0/IEN1/IEN2 and interrupt-processing descriptions,
+place EA at IEN0 `0xA8` bit 7, bit address `0xAF`. The target uses `JBC EA`
+to sample/clear this control bit, never a hardware pending flag. Restore
+uses only `CLR EA` or `SETB EA` after byte validation. There is no whole-IEN0
+write or the p.45 `XCH A,IEN0` delayed-disable hazard. All other current IEN0
+bits, IEN1/2, priority, pending and peripheral registers are untouched by these
+primitives. EA=0 prevents acknowledgment, not flag assertion, timer progress
+or DMA; handlers and hardware can still change their own state. This is not
+a peripheral lock, acknowledgment service or generalized IRQ framework.
+
+Both target functions are `__reentrant __naked` register-only leaves under the
+checked SDCC 4.2.0 ABI: byte argument/return in DPL, 11-byte save and 23-byte
+restore, no calls, loops, overlay/static scratch or explicit stack pushes.
+Their only normal CPU clobbers are DPL and, for restore, A/PSW parity. Those
+ABI effects (including on invalid return) are distinct from the no-MMIO
+promise for interrupt/peripheral state. B, DPH, DPS, carry and register banks
+are not touched. Ordinary calls still need their two-byte return-address
+frames and an adequate caller/ISR stack.
+
+They may be called from foreground or ABI-correct ISRs that preserve the
+interrupted CPU context, including DPL/A/PSW and any compiler scratch their
+own callees use, and finish with RETI. Enabling EA can admit an interrupt
+**before restore returns**; higher-priority handlers may nest. The linked
+test exercises that exact window and nested calls through the same primitives.
+This does not make arbitrary SDCC callees reentrant. Shared data still needs
+appropriate volatile qualifiers and consistent ownership; existing clock and
+timebase helpers remain foreground-only. Host MMIO is a sequential model,
+not a host-thread atomic implementation.
+
+See [source facts](PROVENANCE.md#m2-interrupt-ownership-sources) and
+[validation and the separate hardware gate](VALIDATION.md#m2-interrupt-ownership-automated-coverage).
+There is no dispatch, flag acknowledgment, priority/source setup, IRQ board
+fixture or hardware acceptance in this slice. M2 #4 remains open.
+
 ## Memory contract
 
 | Address space | Meaning |
