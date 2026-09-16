@@ -219,6 +219,17 @@ There is no implicit retry, reconnect, reset, resume or endpoint recovery.
 A new session object requires a new explicit open; it is not proof that a
 previous interrupted exchange or its pending reply has been recovered.
 
+A nonblocking per-session guard covers opening, closing and each complete
+operation, including access-policy checks and reset/attach preconditions.
+Concurrent or reentrant calls fail as busy before changing state or accessing
+the backend; they are not queued. In particular, a callback or another thread
+cannot close the backend during a read and let that read restore `OPEN`.
+Failure/interruption releases the guard so explicit cleanup remains possible.
+The backend must still have a single owner; sharing it between separate
+`Debugger` objects or calling it directly bypasses this session-level guard.
+Closing remains terminal even when cleanup reports an error; a second close
+does not retry resource release.
+
 Each diagnostic operation has one monotonic deadline across its control,
 bulk-write and bulk-read phases. USB timeouts are positive milliseconds,
 rounded up by at most one millisecond; a response at/after the deadline is

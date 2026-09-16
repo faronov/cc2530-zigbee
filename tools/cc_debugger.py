@@ -9,8 +9,9 @@ from enum import Enum
 import importlib
 import json
 import sys
+import threading
 import time
-from typing import Callable, Protocol
+from typing import Callable, Optional, Protocol
 
 from cc2530_debug import GET_BM, HALT, READ_CONFIG, READ_STATUS, RESUME, STEP_INSTR, Status
 
@@ -134,6 +135,7 @@ class Debugger:
         self._allow_target_reset = allow_target_reset
         self._debug_session_ready = access == Access.EXISTING_DEBUG_SESSION
         self._state = State.NEW
+        self._lock = threading.Lock()
 
     @property
     def state(self) -> State:
@@ -157,27 +159,41 @@ class Debugger:
             raise DebuggerError(f"Session is {self._state.value}, expected {expected.value}; "
                                 "no automatic reconnect or target reset")
 
+    @contextmanager
+    def _exclusive(self):
+        if not self._lock.acquire(blocking=False):
+            raise DebuggerError("Session is busy; concurrent or reentrant access is not permitted")
+        try:
+            yield
+        finally:
+            self._lock.release()
+
     def open(self, address: UsbAddress) -> None:
-        self._require(State.NEW)
-        if not isinstance(address, UsbAddress):
-            raise ValueError("An explicit UsbAddress is required")
-        self._state = State.FAULTED
-        self._backend.open(address, self._timeout_ms)
-        self._state = State.OPEN
+        with self._exclusive():
+            self._require(State.NEW)
+            if not isinstance(address, UsbAddress):
+                raise ValueError("An explicit UsbAddress is required")
+            self._state = State.FAULTED
+            self._backend.open(address, self._timeout_ms)
+            self._state = State.OPEN
 
     def close(self) -> None:
-        if self._state != State.CLOSED:
-            self._state = State.CLOSED
-            self._backend.close()
+        with self._exclusive():
+            if self._state != State.CLOSED:
+                self._state = State.CLOSED
+                self._backend.close()
 
     @contextmanager
-    def _operation(self):
-        self._require(State.OPEN)
-        self._state = State.FAULTED
-        deadline = _Deadline(self._timeout_ms, self._clock)
-        yield deadline
-        deadline.remaining_ms()
-        self._state = State.OPEN
+    def _operation(self, precheck: Optional[Callable[[], None]] = None):
+        with self._exclusive():
+            self._require(State.OPEN)
+            if precheck is not None:
+                precheck()
+            self._state = State.FAULTED
+            deadline = _Deadline(self._timeout_ms, self._clock)
+            yield deadline
+            deadline.remaining_ms()
+            self._state = State.OPEN
 
     @staticmethod
     def _exact(data: bytes, length: int) -> bytes:
@@ -199,15 +215,16 @@ class Debugger:
 
     @contextmanager
     def _target_operation(self, cpu_control=False, target_reset=False):
-        self._require(State.OPEN)
-        if not self._debug_session_ready:
-            raise DebuggerError("Target access requires an explicitly confirmed existing debug session "
-                                "or a completed reset-attach")
-        if cpu_control and not self._allow_cpu_control:
-            raise DebuggerError("CPU control requires separate explicit permission")
-        if target_reset and not self._allow_target_reset:
-            raise DebuggerError("Target reset requires separate explicit permission")
-        with self._operation() as deadline:
+        def check_access():
+            if not self._debug_session_ready:
+                raise DebuggerError("Target access requires an explicitly confirmed existing debug session "
+                                    "or a completed reset-attach")
+            if cpu_control and not self._allow_cpu_control:
+                raise DebuggerError("CPU control requires separate explicit permission")
+            if target_reset and not self._allow_target_reset:
+                raise DebuggerError("Target reset requires separate explicit permission")
+
+        with self._operation(check_access) as deadline:
             if self._adapter_state(deadline).target_id != 0x2530:
                 raise TransportError("Adapter does not report a CC2530 target; no target command sent")
             yield deadline
@@ -307,12 +324,13 @@ class Debugger:
         return CpuControlResult(before, after, True)
 
     def attach_reset(self) -> AttachResult:
-        self._require(State.OPEN)
-        if self._access != Access.RESET_DEBUG_SESSION or self._debug_session_ready:
-            raise DebuggerError("Initial attach requires a fresh explicit reset-attach policy")
-        if not self._allow_target_reset:
-            raise DebuggerError("Reset-attach requires separate target-reset permission")
-        with self._operation() as deadline:
+        def check_access():
+            if self._access != Access.RESET_DEBUG_SESSION or self._debug_session_ready:
+                raise DebuggerError("Initial attach requires a fresh explicit reset-attach policy")
+            if not self._allow_target_reset:
+                raise DebuggerError("Reset-attach requires separate target-reset permission")
+
+        with self._operation(check_access) as deadline:
             if self._adapter_state(deadline).target_id != 0x2530:
                 raise TransportError("Adapter does not report a CC2530 target; no attach command sent")
             revision = self._backend.device_revision()
