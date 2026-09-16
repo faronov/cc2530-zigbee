@@ -29,6 +29,11 @@ at one address; it does not guess source ranges or read compiler-named files.
 
 ## Layer boundaries
 
+The standalone `mac_frame` module currently supplies only offline legacy
+DATA/ACK body encoding/decoding. It has no board/platform dependency or
+network state and is not linked into bootstrap/fixture firmware. Its
+[contract](MAC.md) separates syntax success from CRC/security/peer acceptance.
+
 ```text
 sensor / local display application
               |

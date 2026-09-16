@@ -102,6 +102,12 @@ metadata checks, not source stepping through a hardware debugger.
 
 ## Future protocol tests
 
+The [standalone legacy MAC codec](MAC.md) is already covered by original
+golden/layout/negative vectors on host and an isolated SDCC/uCsim image,
+plus all 65,536 FCF values and exact-sized buffer cases on the host. This is
+syntax/serialization evidence, not CRC, authentication, radio or MAC operation.
+Its test executable is not a board firmware image or CI upload artifact.
+
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |
 | Encoders/parsers | Golden wire bytes, every boundary length, invalid/truncated/reserved fields, explicit byte order |

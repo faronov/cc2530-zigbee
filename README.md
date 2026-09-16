@@ -6,8 +6,8 @@
 An experimental, open C/SDCC project aiming to implement a small Zigbee end
 device and, subsequently, a sleepy end device on the TI CC2530.
 
-**Current status: bootstrap, tooling and development plan only. This is not yet
-a working Zigbee stack.** The included firmware does not join a network,
+**Current status: bootstrap, offline components/tooling and a development plan.
+This is not yet a working Zigbee stack.** The included firmware does not join a network,
 transmit radio packets, read a sensor or refresh a display. It does not require
 IAR or proprietary TI stack libraries.
 
@@ -99,6 +99,11 @@ Live PC/memory/register access, breakpoint programming and physical M1
 acceptance remain open.
 
 ## Intended scope
+
+Independent offline work also includes a [bounded legacy DATA/ACK codec](docs/MAC.md).
+It is host-tested, image-checked and simulated in an isolated test executable,
+not linked into board firmware. There is still no radio driver, functioning
+MAC, association or Zigbee join.
 
 - C99 and SDCC, initially CC2530F256.
 - One logical end-device implementation: receiver-on first, sleeping later.

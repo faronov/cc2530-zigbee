@@ -61,6 +61,12 @@ distinct explicit access policy and must not be substituted for ordinary
 open or an existing-session read. Offline source-location tests must not open
 paths named by CDB data.
 
+The same `make ... all test` commands also run the standalone MAC codec on
+host and in `mac_frame_test.ihx` under alias-aware simulation. That executable
+is test-only: do not flash it, add it to firmware support claims or upload it
+as a board image. Protocol codecs must reject unsupported security/layouts
+explicitly and must not equate syntactic decoding with authenticated input.
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

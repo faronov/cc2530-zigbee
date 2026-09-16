@@ -145,6 +145,12 @@ Exit:
 
 ### M3 - Radio and end-device MAC
 
+**Offline preparatory implementation:** the [legacy body codec](MAC.md)
+encodes/decodes a bounded DATA/ACK subset, with host, linked-image and
+alias-aware simulator evidence. It is not linked into board firmware and
+does not establish radio, MAC or networking support. Hardware M1/M2 gates
+are not bypassed.
+
 Adapt the BSD-licensed Contiki CC2530 RF code selectively, or implement the
 documented registers directly. Do not import Contiki's complete OS/netstack.
 

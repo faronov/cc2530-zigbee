@@ -107,6 +107,25 @@ check that explicit release errors are not lost during disposal. The system
 its LGPL-2.1 license; it is neither embedded in firmware nor redistributed
 by this repository. Synthetic backend responses contain no real device data.
 
+### Offline MAC codec sources
+
+The standalone codec is original BSD-3-Clause code, not an imported Contiki
+module. Generic legacy frame-field facts were cross-checked against
+[Microchip's IEEE 802.15.4-2006 FCF description](https://onlinedocs.microchip.com/oxy/GUID-4B3D771E-5647-4191-AD45-C897B0D23071-en-US-3/GUID-46A20735-4885-446D-9C0A-461B67A126BF.html)
+and the BSD-3-Clause
+[frame802154.h](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/core/net/mac/frame802154.h)
+and
+[frame802154.c](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/core/net/mac/frame802154.c).
+The revision and licenses were checked before using these references.
+Microchip's transceiver registers/timings are not CC2530 implementation facts.
+
+The engineering scope is the legacy IEEE 802.15.4-2006-compatible DATA/ACK
+wire subset documented in [MAC.md](MAC.md), not complete standard conformance.
+No Contiki state, security code or frame-processing implementation was copied.
+Address arrays use explicitly documented wire order, not Contiki's display
+order; PAN compression is explicit rather than automatically selected.
+All vectors, addresses, PAN IDs and payloads are original synthetic values.
+
 Contiki's RF code depends on Contiki facilities. An adaptation must replace
 those interfaces deliberately, preserve the original notices and be tested
 against the CC2530 documentation. It does not supply Zigbee NWK/APS/ZDO.
