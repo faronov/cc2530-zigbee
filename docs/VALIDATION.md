@@ -330,6 +330,110 @@ Generic remains host/image/simulator-only and M2 #4 remains open. The earlier
 register-only experiment below has separate natural-rollover evidence.
 Raw run JSONs remain private; only the processed operator summary is published.
 
+## M2 init-time system clock automated coverage
+
+The [init-time selector](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
+is **host-tested, image-checked and simulated only**. No hardware clock-switch
+acceptance is established by either the earlier raw-register experiment or
+the accepted LG C timebase fixture. M2 #4 remains open. `make test-clock` is
+offline and is included in all six existing board/image checks; it adds no
+fourth board image and no driver object to existing board firmware.
+`clock_test.ihx` is a synthetic standalone executable: **never flash it or
+upload it as a board artifact**. The existing CI whitelist excludes it.
+
+Strict host coverage checks all **65,536 CMD/STA entry pairs**, every enabled
+bit of IEN0/1/2, MODE/reserved-bit rejection, both HF directions across all
+16 LF/TICKSPD combinations, clamping and preservation of other command fields.
+Tests cover genuine no-write/no-timer idempotence, invalid arguments with
+unchanged output/no MMIO, delayed STA, exact/late/zero/max-timeout boundaries,
+byte/24-bit rollover, stopped time, backward-before-start and backward-within-
+window observations, exact ambiguity, and changed command readback.
+Both success and exhaustion at poll boundaries are checked, including **65,535
+polls per attempt** without a 16-bit wrap. Each failure must return its original
+cause, restore exactly once, and separately report confirmed/failed rollback;
+no original-request retry or unbounded loop is permitted.
+
+Every host read is checked against an original script for address, value and
+write count at that exact boundary; the previous read-log entry is validated
+before consumption. The shared 32-entry logs and overflow assertions remain
+intact. Only the expected one/two CLKCONCMD writes may occur; other registers
+and caller diagnostic boundaries remain unchanged. Separate host-only helper
+doubles cover defensive invalid deadline/expiry returns in request and rollback,
+including writing the cancellation even when its own deadline helper fails.
+Those doubles never enter the target executable or any board firmware.
+
+`tests/boot_clock.py` reuses the strict standalone layout checks extracted from
+the timebase checker: real IHX/map/CDB/memory accounting, ordinary XDATA below
+`0x1E00`, the full 64-byte status reservation, 512-byte nonaliased reservation
+budget, MPAGE `0x93`, lower unbanked CODE and at least 128 reserved stack bytes.
+The existing isolated timebase's exact 88-byte reader contract is unchanged.
+The clock executable checks that same reader, real timebase calls, exact
+SFR declarations, all diagnostic field offsets/sizes and matching source records.
+The clock module's linked listing must cover every byte of its actual IHX
+extent without gaps, overlap or unreviewed instruction lengths. Direct/bit SFR
+operands are inspected: six passive read sites and one CLKCONCMD write site,
+not fictional SLEEPSTA stability or SLEEPCMD power-down controls. Negative cases
+reject changed actual bytes, source/layout/status/alias/budget/stack metadata,
+and forbidden writes even when the listing is changed to match the mutated IHX.
+
+Alias-aware s51 executes **30 bounded scenarios** through actual calls/returns,
+including both directions, clamping, entry errors, exact/late deadlines,
+counter rollover/range failures, independent rollback errors, and two stopped-
+counter attempts of 257 polls each. Every expected MMIO event is a linked
+instruction breakpoint with a checked PC and read/write value; unexpected
+events cannot be skipped silently. Complete 19-byte diagnostics, return status,
+the eight-byte result ABI, nonallocated XDATA, upper IRAM and unrelated SFRs
+are checked. Alias behavior is independently tested in both directions with a
+failing no-alias control. SFR values are **synthetic**: generic C52/s51 does not
+model CC2530 analogue oscillator startup, source stability, divider-transition
+timing, automatic calibration, or physical Sleep Timer ticking/latching.
+
+SDCC 4.2.0 model-large/code-size accounting:
+
+| Component | CODE | Ordinary XDATA | IRAM |
+| --- | ---: | ---: | --- |
+| `clock.rel` alone | 1,656 bytes | 40 bytes | 37 DATA bytes; no own BIT/overlay area |
+| Existing `timebase.rel`, separate | 404 bytes | 25 bytes | 3 overlay DATA bytes, 1 BIT |
+| Complete isolated `clock_test.ihx`, including tests/runtime | 3,183 bytes | 150 bytes | Stack starts `0x46`, 186 bytes reserved; upper 128-byte guard untouched |
+
+The test additionally uses eight result bytes at `0x1E00`, retaining the whole
+64-byte reservation: 158 bytes used / 214 reserved nonaliased XDATA. Its linked
+IRAM also accounts for eight bank registers, 37 DATA bytes, five overlay bytes
+and BIT storage; linker area extent is not all live DATA. These are linked
+allocations and simulated guards, not a measured hardware worst-case stack.
+The 19-byte caller-owned target diagnostic object is not persistent driver state.
+No board firmware bytes, M0 status ABI/reservation, board policy or prior
+hardware evidence change in this slice.
+
+On 2026-09-16, all six `make BOARD=... IMAGE=... PYTHON=.venv/bin/python all test`
+configurations passed, including the unchanged **327-test pinned Python suite**
+and existing host/image/alias-aware component checks. Repository/local-link
+and whitespace guardrails passed. None of the six board maps contains
+`_clock_select_init`; exact BIN lengths and SHA-256 values remain:
+
+| Board / image | Bytes | Unchanged SHA-256 |
+| --- | ---: | --- |
+| generic / bringup | 331 | `fccb1cd684dc15038c0cf24837508f5699083f68be400b98df37dc5df206bd7a` |
+| LG / bringup | 371 | `6725a2804ee701962906fe128d69971221340d8aeb3360d4fbe33cceee13693c` |
+| generic / debug_fixture | 586 | `f33e6c66770a825ea81a06d2228ba3b08027b958da07693a8afac2a566b45284` |
+| LG / debug_fixture | 626 | `e3459339d63a63ae9aa71cdc01a4dd18cb6e2b079f86968da507ac57ff133815` |
+| generic / timebase_fixture | 1,807 | `15072f87b5fe06ff56c2e303704aeefb2d6f5c87aff20dd132ea0699d29a478f` |
+| LG / timebase_fixture | 1,847 | `cd64743bc5095a37711885236fa65367dc375a57a509b322f6d5678ffdf954ef` |
+
+**Remaining manual gates:** a separately authorized board integration and safe
+non-RF board fixture are required before physical execution; this isolated
+executable is not that fixture. The parent/operator must establish board and
+recovery conditions, use matching checked artifacts, verify all physical CODE
+before resume, and observe actual calls in both RC16/XOSC32 directions,
+undivided CMD/STA confirmation, unchanged LF/TICKSPD commands and safe board/
+IRQ state. Measured bounded success/failure and rollback evidence must distinguish
+source confirmation from LF calibration completion and tick precision.
+Oscillator-failure injection needs its own safe authorized setup; host/simulator
+timeouts are not that experiment. Do not access hardware, alter the installed
+LG timebase image, reset/flash or run USB/debugger tools through ordinary tests.
+No LF switching, calibration service, wake/IRQ/compare, RF, AES or flash-service
+acceptance follows from this work.
+
 ## Independent Sleep Timer hardware reference (2026-09-16)
 
 This manual observation used the existing LG Rev0.3 M1 fixture, not

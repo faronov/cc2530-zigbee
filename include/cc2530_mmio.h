@@ -39,6 +39,7 @@
     X(SOC_PERCFG, 0xf1) \
     X(SOC_CLKCONCMD, 0xc6) \
     X(SOC_CLKCONSTA, 0x9e) \
+    X(SOC_SLEEPCMD, 0xbe) \
     X(SOC_ST0, 0x95) \
     X(SOC_ST1, 0x96) \
     X(SOC_ST2, 0x97)

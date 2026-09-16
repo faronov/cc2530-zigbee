@@ -232,6 +232,39 @@ Git/CI and were not accessed for this documentation update. The earlier
 register-only reference is preserved separately, and neither experiment
 establishes calibrated timing or changes licensing.
 
+### M2 system clock sources
+
+The bounded init-time HF selector, diagnostic records, host clock scripts and
+isolated SDCC/simulator checks are original BSD-3-Clause work. No TI SDK,
+CC2430/other-part driver, programmer implementation, peripheral emulator or
+new dependency is imported. Tests use original synthetic clock/counter
+observations; no physical clock-switch capture or private file was accessed.
+
+The supplied primary facts were read directly from **TI SWRU191F pp.64,
+66-69**: HF source requests through CLKCONCMD.OSC and confirmation through
+CLKCONSTA.OSC only after stability; undivided debug-compatible CLKSPD `001`
+for RC16 / `000` for XOSC32; TICKSPD/CLKSPD clamping to the selected source;
+source-change alignment with TICKSPD; and automatic RC calibration effects.
+The exact registers are CLKCONCMD `0xC6`, CLKCONSTA `0x9E`, SLEEPCMD `0xBE`
+and SLEEPSTA `0x9D`. CMD/STA fields are OSC32K bit 7, OSC bit 6, TICKSPD bits
+5:3 and CLKSPD bits 2:0.
+
+SLEEPCMD bit 7 is OSC32K_CALDIS, bit 2 is reserved and **must be one**, and
+bits 1:0 are MODE. SLEEPSTA bits 6:5 are reserved, bits 4:3 reset reason,
+and bit 0 CLK32K. CC2430-style `SLEEPCMD.OSC_PD` / `SLEEPSTA.XOSC_STB`
+are **not CC2530 fields** and are not used. No SLEEPCMD write is required or
+implemented for HF selection. IEN register declarations and the disabled-IRQ
+bootstrap policy are reused unchanged.
+
+Selecting XOSC32 calibrates RC16 automatically; enabled LF RC calibration can
+take up to 2 ms and add one Sleep Timer tick. Confirmation of the HF source is
+not LF calibration completion or precision evidence. LF source selection,
+32-kHz XOSC stability, sleeping/wake behavior and calibration services remain
+outside the [selector contract](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice).
+The existing Sleep Timer facts remain separately cited above. The linked
+checker reviews the emitted ordinary 8051 instruction subset, genuine SFR
+operands and calls; synthetic s51 inputs do not model analogue oscillator startup.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

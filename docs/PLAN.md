@@ -165,8 +165,13 @@ injection remain unobserved. Existing `bringup` and
 established raw counter progression and natural rollover on LG, not execution
 of the C driver or calibrated timing. The compiled-C run is a separate
 experiment and does not establish natural 24-bit rollover in those cycles.
-Clock selection/calibration, interrupts, compare/wake handling and the other
-M2 platform gates remain open.
+A further isolated [init-time system clock selector](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
+now requests RC16/XOSC32 with raw-time and independent poll bounds, strict
+entry-state checks, and one bounded verified rollback on failure. It is
+host-tested, image-checked and simulated only; no board image links it and
+all six existing firmware BINs remain unchanged. Physical clock selection,
+calibration, interrupts, compare/wake handling and the other M2 platform
+gates remain open. The prior LG timebase evidence does not validate switching.
 
 Deliver independent interfaces for:
 

@@ -157,6 +157,27 @@ image, not on generic hardware. Stopped/backward/ambiguous paths remain
 host/simulator-tested, with calibration and the other M2 gates still open.
 This past authorization is not permission to repeat hardware operations.
 
+The isolated init-time HF selector is also included in every `make ... all test`.
+Its focused offline command is:
+
+```sh
+make test-clock
+```
+
+This runs strict real-MMIO host models, separate host-only helper-error doubles,
+linked instruction/diagnostic/layout rejection checks and alias-aware s51
+execution. `clock_test.ihx` is **test-only: never flash or upload it**. It is
+not a fourth `IMAGE` and the driver must not enter any existing board `OBJECTS`.
+CI's explicit board-artifact whitelist remains unchanged. The clock script
+validates/consumes every host read-log entry and retains the 32-entry capacity
+and overflow assertions; production code has no test callbacks.
+The simulator supplies synthetic STA/timer values at checked linked access
+sites, not physical oscillator startup or calibration. Preserve the existing
+standalone timebase's exact reader contract when sharing layout checks.
+See the [clock contract](docs/ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
+and [hardware gates](docs/VALIDATION.md#m2-init-time-system-clock-automated-coverage);
+the current LG timebase hardware record grants no clock-switch authorization.
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

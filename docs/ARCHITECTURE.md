@@ -186,6 +186,103 @@ remain host/simulator evidence. This does not add calibration, natural
 24-bit rollover in the C run, clock switching, IRQ/compare/wake or other M2
 services; the earlier register-only experiment remains separate.
 
+## Init-time system clock selector (isolated M2 slice)
+
+`include/clock.h` / `src/clock.c` adds original synchronous
+`clock_select_init(source, timeout_ticks, poll_limit, &diagnostics)`, using
+the real CLKCONCMD/CLKCONSTA and existing timebase. It is **not linked into
+any board image**. Its evidence is host-tested, image-checked and simulated,
+not hardware-observed; the earlier LG timebase acceptance does not validate
+this selector. M2 #4 remains open.
+
+`source` is `CLOCK_RC16` (0) or `CLOCK_XOSC32` (1). The raw timeout must be
+less than `0x800000`, the 16-bit poll limit positive, and the diagnostic
+pointer non-null and writable. Pure argument errors return before MMIO and
+preserve the entire output. For valid arguments, diagnostics are initialized
+and entry state is observed without writes. Required conditions are:
+
+- Awake bootstrap/initialization, no prior unsynchronized sleep/wake or lost
+  Sleep Timer continuity; one foreground owner of CLKCONCMD and ST0 reads.
+- IEN0, IEN1 and IEN2 all zero; SLEEPCMD.MODE zero and its required reserved
+  bit 2 set. No interrupt masking, sleep-command repair or oscillator setup.
+- A known undivided source: CMD.CLKSPD `001` for RC16 or `000` for XOSC32,
+  with actual STA matching all effective fields and no pending clock request.
+
+Current MODE is not evidence of wake history. The caller must guarantee that
+history and exclude concurrent writers/readers throughout both attempts;
+these are not detectable/repairable ownership conditions. SDCC model-large
+helpers and compiler scratch are foreground-only, not ISR-reentrant.
+
+The selector preserves CMD.OSC32K and CMD.TICKSPD, changes only OSC/CLKSPD,
+and never writes SLEEPCMD, ST0-2, GPIO, IRQ or calibration registers.
+RC clamps TICKSPD command `000` to effective STA `001`; entry and confirmation
+accept that documented difference, not arbitrary CMD/STA mismatches.
+An already selected, genuinely stable source succeeds without any write or
+Sleep Timer sample. Otherwise it samples a start, constructs one raw deadline,
+then writes the target CMD exactly once. Each poll reads CMD then actual STA,
+then samples ST0/ST1/ST2. It never infers stability from CMD or SLEEPSTA.
+STA confirmation timestamped exactly at the deadline is accepted; a later
+confirmation fails. Pending at the deadline fails, including a zero timeout.
+Zero timeout can succeed only with same-tick confirmation. The final permitted
+poll can succeed, but an exhausted cap never wraps or reports success.
+
+Every observation must remain within the timebase's true half-range window.
+Exactly-half deadline ambiguity is a helper error; elapsed or successive
+sample deltas at/above half range are rejected as counter range/backward
+movement. Missed full wraps, resets that resemble forward progress, and an
+unexecuting CPU cannot be detected/recovered by this synchronous interface.
+
+| Return | Meaning |
+| --- | --- |
+| `CLOCK_OK` (0) | Stable requested settings confirmed within bounds, or valid idempotent entry |
+| `CLOCK_INVALID_ARGUMENT` (1) | No MMIO; output unchanged |
+| `CLOCK_UNSUPPORTED_STATE` (2) | Unsupported entry IRQ/power/CMD/STA state; no request/write |
+| `CLOCK_TIMEOUT` (3) | Pending at deadline or confirmation observed late |
+| `CLOCK_POLL_LIMIT` (4) | Independent finite poll cap exhausted |
+| `CLOCK_TIMEBASE_ERROR` (5) | Deadline/expiry helper error; raw helper status retained |
+| `CLOCK_COUNTER_RANGE` (6) | Backward/out-of-window elapsed or observation step |
+| `CLOCK_COMMAND_CHANGED` (7) | CMD no longer matches the owned request |
+
+After **any post-request failure**, the driver writes the saved known
+undivided CMD exactly once, even if rollback deadline construction fails.
+Rollback has a fresh start/deadline and the same poll cap, with the same
+confirmation rules. It never retries the original request, resets the chip
+or converts a fallback into success: the return remains the original failure.
+`diagnostics.rollback_result` is `CLOCK_NOT_ATTEMPTED` (8), `CLOCK_OK` for
+confirmed restoration, or its separate failure code. A failed rollback is
+**unconfirmed clock state**, even when its last observed settings look correct;
+the caller must stop clock-dependent initialization and report both failures.
+There is no implicit retry, continued initialization or recovery policy.
+
+Diagnostics contain two `clock_wait_diagnostics_t` records (`request`,
+`rollback`), each with `uint32_t elapsed_ticks`, `uint16_t polls` and
+`uint8_t timebase_status`, plus saved/requested/last-observed CMD, last-observed
+STA and rollback result bytes. Poll counts exclude the start sample. Initialized
+zero elapsed/count/helper status does not mean a helper ran. Final CMD/STA are
+the last complete observation, including on failure, not a fabricated desired
+state. This is a caller-owned C object, not a portable serialized ABI:
+SDCC lays it out in 19 bytes (phase offsets 0/7, command/result offsets 14..18);
+host padding may differ. The isolated test checks all target bytes/field offsets.
+No heap, retained epoch or persistent driver state is added.
+
+With a cap `P`, at most `2*P` polls, `2*(P+1)` Sleep Timer samples and two CMD
+writes occur across request and rollback. Each attempt gets its own raw
+timeout; setup, observation and polling granularity add bounded instruction
+overhead, not a hard calibrated wall-time limit. A stopped Sleep Timer still
+terminates through the poll cap while the CPU executes.
+
+TI **SWRU191F pp.64, 66-69** specifies source selection/confirmation, divider
+clamping and automatic calibration effects. Preserving TICKSPD does **not**
+preserve its effective clamped timer frequency across an HF change.
+Source switching aligns with TICKSPD. Selecting XOSC32 automatically calibrates
+RC16; when LF RC is selected and calibration is enabled, LF RC calibration
+can take up to 2 ms and add one Sleep Timer tick. HF selection confirmation
+does not establish completion/precision of LF calibration. This driver
+implements no calibration procedure, LF source change, wake synchronization,
+timer compare, interrupt dispatch or runtime clock-management service.
+See [source facts](PROVENANCE.md#m2-system-clock-sources) and
+[offline evidence/manual gates](VALIDATION.md#m2-init-time-system-clock-automated-coverage).
+
 ## Memory contract
 
 | Address space | Meaning |

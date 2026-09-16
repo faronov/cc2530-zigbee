@@ -4,14 +4,14 @@
 
 import argparse
 from pathlib import Path
-import re
 import unittest
 
 from boot_image import (
     ALIAS, check_alias, check_pc, section, simulate, snapshot, snapshot_commands,
+    verify_component_layout,
 )
 from verify_firmware import (
-    CODE_LIMIT, STATUS_ADDRESS, STATUS_RESERVED, parse_ihex, parse_symbols, require, xdata_ranges,
+    CODE_LIMIT, STATUS_ADDRESS, STATUS_RESERVED, parse_ihex, parse_symbols, require,
     TIMEBASE_READER_BYTES,
 )
 
@@ -53,50 +53,14 @@ def verify_reader(image, symbols):
 
 
 def verify_image(image, symbols, debug, memory):
-    require(image and min(image) == 0 and max(image) < CODE_LIMIT,
-            "Timebase test CODE is not lower unbanked")
-    require(image[0] == 2, "Timebase test reset vector is not LJMP")
+    allocated = verify_component_layout(image, symbols, debug, memory, "timebase_test_result",
+                                         ("timebase.c", "test_timebase.c"))
     verify_reader(image, symbols)
-    require(symbols.get("_timebase_test_result") == STATUS_ADDRESS, "Timebase result address changed")
-    sizes = re.findall(r"^S:G\$timebase_test_result\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
-    require(sizes and all(int(size) == 8 for size in sizes), "Timebase result debug ABI size changed")
-    require("C$timebase.c$" in debug and "C$test_timebase.c$" in debug, "Missing timebase source records")
-    require(symbols["__XPAGE"] == 0x93, "Timebase test must use CC2530 MPAGE")
-    require(symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0,
-            "Timebase test has unaccounted paged/initialized/absolute XDATA")
-    ordinary = set()
-    for start, end in xdata_ranges(symbols):
-        require(0 <= start <= end <= STATUS_ADDRESS, "Timebase XDATA overlaps status/IRAM alias")
-        require(not ordinary.intersection(range(start, end)), "Overlapping timebase XDATA areas")
-        ordinary.update(range(start, end))
-    require(len(ordinary) + STATUS_RESERVED <= 512, "Timebase exceeds 512-byte XDATA reservation budget")
+    ordinary = {address for address in allocated if address < STATUS_ADDRESS}
     require({0, 1, 2} <= ordinary, "Timebase reader scratch is not allocated")
-    for match in re.finditer(r"^S:G\$([^$]+)\$[^(\n]+\(\{(\d+)\}[^)\n]+\),F,", debug, re.MULTILINE):
-        name, size = match[1], int(match[2])
-        if name == "timebase_test_result":
-            continue
-        require("_" + name in symbols, f"Missing timebase XDATA symbol {name}")
-        start = symbols["_" + name]
-        require(set(range(start, start + size)) <= ordinary, "Unaccounted timebase XDATA object")
     require(set(range(symbols["_timebase_test_ticks"], symbols["_timebase_test_ticks"] + 4)) <= ordinary,
             "Timebase sample output is not allocated")
-    stack = re.search(
-        r"Stack starts at: 0x([0-9a-fA-F]+) \(sp set to 0x([0-9a-fA-F]+)\)"
-        r" with (\d+) bytes available", memory,
-    )
-    require(stack is not None, "Missing timebase IRAM stack accounting")
-    start, sp, size = int(stack[1], 16), int(stack[2], 16), int(stack[3])
-    require(start == symbols["s_SSEG"] == symbols["__start__stack"]
-            and size == symbols["l_SSEG"] and sp + 1 == start
-            and 8 <= start < 128 and size >= 128 and start + size == 256,
-            "Invalid timebase IRAM stack reservation")
-    flash = re.search(
-        r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)", memory,
-    )
-    require(flash is not None and int(flash[1], 16) == 0 and int(flash[2], 16) == max(image)
-            and int(flash[3]) == len(image) and int(flash[4]) == CODE_LIMIT,
-            "Timebase linked flash accounting mismatch")
-    return ordinary | set(range(STATUS_ADDRESS, STATUS_ADDRESS + 8))
+    return allocated
 
 
 def check_snapshot(text, number, pc, symbols, allocated, expected_sfr):

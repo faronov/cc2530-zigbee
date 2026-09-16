@@ -12,11 +12,58 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from verify_firmware import BOARDS, IMAGES, TIMEBASE_CHECKPOINTS, require, verify_artifacts, xdata_ranges
+from verify_firmware import (
+    BOARDS, IMAGES, TIMEBASE_CHECKPOINTS, CODE_LIMIT, STATUS_ADDRESS, STATUS_RESERVED,
+    require, verify_artifacts, xdata_ranges,
+)
 from debug_image import DebugImage, decode_bootstrap, decode_fixture, decode_timebase_fixture, expected_fixture
 
 
 ALIAS = "memory create addressdecoder xram 0x1f00 0x1fff iram_chip 0"
+
+
+def verify_component_layout(image, symbols, debug, memory, result_name, sources):
+    """Shared strict layout for isolated components with an eight-byte result."""
+    require(image and min(image) == 0 and max(image) < CODE_LIMIT,
+            "Component test CODE is not lower unbanked")
+    require(image[0] == 2, "Component test reset vector is not LJMP")
+    require(symbols.get("_" + result_name) == STATUS_ADDRESS, "Component result address changed")
+    sizes = re.findall(rf"^S:G\${re.escape(result_name)}\$[^(\n]+\(\{{(\d+)\}}", debug, re.MULTILINE)
+    require(sizes and all(int(size) == 8 for size in sizes), "Component result debug ABI size changed")
+    require(all(f"C${source}$" in debug for source in sources), "Missing component source records")
+    require(symbols["__XPAGE"] == 0x93, "Component test must use CC2530 MPAGE")
+    require(symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0,
+            "Component test has unaccounted paged/initialized/absolute XDATA")
+    ordinary = set()
+    for start, end in xdata_ranges(symbols):
+        require(0 <= start <= end <= STATUS_ADDRESS, "Component XDATA overlaps status/IRAM alias")
+        require(not ordinary.intersection(range(start, end)), "Overlapping component XDATA areas")
+        ordinary.update(range(start, end))
+    require(len(ordinary) + STATUS_RESERVED <= 512, "Component exceeds 512-byte XDATA reservation budget")
+    for match in re.finditer(r"^S:G\$([^$]+)\$[^(\n]+\(\{(\d+)\}[^)\n]+\),F,", debug, re.MULTILINE):
+        name, size = match[1], int(match[2])
+        if name == result_name:
+            continue
+        require("_" + name in symbols, f"Missing component XDATA symbol {name}")
+        start = symbols["_" + name]
+        require(set(range(start, start + size)) <= ordinary, "Unaccounted component XDATA object")
+    stack = re.search(
+        r"Stack starts at: 0x([0-9a-fA-F]+) \(sp set to 0x([0-9a-fA-F]+)\)"
+        r" with (\d+) bytes available", memory,
+    )
+    require(stack is not None, "Missing component IRAM stack accounting")
+    start, sp, size = int(stack[1], 16), int(stack[2], 16), int(stack[3])
+    require(start == symbols["s_SSEG"] == symbols["__start__stack"]
+            and size == symbols["l_SSEG"] and sp + 1 == start
+            and 8 <= start < 128 and size >= 128 and start + size == 256,
+            "Invalid component IRAM stack reservation")
+    flash = re.search(
+        r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)", memory,
+    )
+    require(flash is not None and int(flash[1], 16) == 0 and int(flash[2], 16) == max(image)
+            and int(flash[3]) == len(image) and int(flash[4]) == CODE_LIMIT,
+            "Component linked flash accounting mismatch")
+    return ordinary | set(range(STATUS_ADDRESS, STATUS_ADDRESS + 8))
 
 
 def marker(number):

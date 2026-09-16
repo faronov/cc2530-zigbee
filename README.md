@@ -151,8 +151,17 @@ Generic hardware and physical timer-fault injection remain unobserved. Stopped,
 backward and ambiguous C paths retain host/simulator coverage; the C run is
 not calibration or a natural 24-bit timer-wrap claim. CI covers both boards
 and all three board images without uploading standalone test executables.
-**M2 #4 remains open** for clock control/calibration, IRQ/compare/wake and the
+**M2 #4 remains open** for physical clock-control acceptance/calibration, IRQ/compare/wake and the
 other platform gates.
+
+The next isolated [init-time system clock selector](docs/ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
+requests RC16/XOSC32 through real CMD/STA registers, with raw-time/poll limits
+and a single bounded rollback that never hides the original failure.
+`make test-clock` provides **host, linked-image and alias-aware simulator**
+coverage only: clock switching is **hardware-unvalidated**. All six board
+BINs remain unchanged; the selector is not linked into them. Its standalone
+`clock_test.ihx` must never be flashed or uploaded as board firmware.
+There is no LF source switching, calibration service or new sleep/IRQ support.
 
 ## Intended scope
 
