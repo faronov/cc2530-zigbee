@@ -524,19 +524,33 @@ were read directly; **SWRZ031, April 2009**, was checked in full.
 | Primary location | Applied fact |
 | --- | --- |
 | SWRU191F 15.1-15.4 p.147 | Key, IV, then start/data for each 128-bit ECB block; correct mode on IV load; full output consumption before another block. Key/IV commands abort active processing. Two DMA channels must be initialized before start generates their trigger. |
-| 15.8-15.10 pp.150-151 | ENC_DW29 requests needed ENCDI input; ENC_UP30 requests ENCDO output. B1/B2/B3 registers; ECB MODE4, encrypt CMD0, key CMD2, IV CMD3; ST is R/W1 H0. RDY bit3 and ENC interrupt describe block encryption/decryption, not key/IV readiness. |
+| 15.8-15.10 pp.150-151 | ENC_DW29 requests needed ENCDI input; ENC_UP30 requests ENCDO output. B1/B2/B3 registers; ECB MODE4, encrypt CMD0, key CMD2, IV CMD3; ST is R/W1 H0. RDY bit3 describes encryption/decryption, not load completion. The block-interrupt wording does not state that loads cannot request ENC interrupts. |
 | 8.1 p.93; 8.2.3/8.2.7 pp.95,97; 8.3-8.5 pp.97-98 | Nine system clocks **per channel**, sequential configuration fetches; old missed-trigger history survives reconfiguration. Fixed SINGLE moves one byte per trigger and completes/disarms after LEN transfers. DMA1 configuration requires a real 32-byte table. Completion sets DMAIRQ even with IRQMASK0. |
 | Tables 8-1/8-2 pp.99-100; 8.8 pp.101-102 | Exact triggers, big-endian descriptors, increments and priority; DMAARM per-channel write-one, DMAIRQ per-channel R/W0, DMAREQ not cleared by disarm. No software request/dummy/abort recovery is adopted. |
 | 2.2.2-2.2.3 pp.27-29; 2.2.5 p.33; Table 2-3 pp.37,39 | AES peripheral SFR aliases are `70B1/70B2`, unlike CPU-internal SFR exceptions. RAM/IRAM alias and arbitration rules; one-clock minimum NOP, with stalls only lengthening the interval. |
 | 2.5.1 pp.41,44,46; 4.4-4.6 pp.66-69 | ENCIE is IEN0.4; block completion sets both ENCIF bits even with CPU interrupts disabled. S0CON bits1:0 **and reserved7:2 are R/W**. Key/IV clear on reset/PM2/PM3, not a software-RAM erasure guarantee. |
 | Table 3-2 p.55; SWRZ031 issue1 p.2 | Independently establish clear DMA_PAUSE before DMA access. Fixed VLEN000/LEN16 is outside the variable-length zero/one erratum; no AES-specific erratum supplies a CPU pacing contract. |
 
-Finite, AES-paced input completion plus MODE/CMD/ST and absence of block/output
-flags establishes load delivery, not a guessed RDY delay. Fresh block flags,
-both finite DMA completions and complete output drain establish the separate
-block boundary before owned acknowledgment/reuse. This is the documented
-DMA-interface interpretation under exclusive reset/completed history; its
-actual peripheral sequencing and repeated-use behavior remain a physical gate.
+The [first physical LG KEY load](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+set both ENCIF bits while only input DMA completed. Re-review of complete
+chapter15 and S0CON p.46 rejected the old inference that KEY/IV flags stay
+clear; SWRZ031 supplies no load-interrupt clarification. The
+[corrected bounded LG runs](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance)
+subsequently observed fresh pair3 and verified-clear ACKs for **both KEY and
+IV** through the unchanged real C gate, alongside finite input completion,
+MODE/CMD/ST and retained output ownership. This is physical evidence for those
+runs, not an explicit load-pair guarantee added to the primary wording.
+The driver still fails boundedly if flags are absent. No guessed RDY delay
+establishes delivery. The parent independently reread SWRU191F pp.46/147/150
+using system Swift/PDFKit before these runs; no project dependency was added.
+Each fresh command's DMA completion is acknowledged/checked before its
+ordinary-R/W S0CON ACK is checked; only then may the next descriptor/start
+proceed. Block completion additionally requires all output drained.
+Short normal operation, both exact negatives and separately reset257-cycle
+recovery now have LG evidence. The recovery accepted514 blocks with all168
+public vector/space/clock combinations independently asserted. Generic remains
+unobserved. Successful reset/recovery does not turn clear flags into proof of
+eligible history, make load-pair wording more explicit or resolve CPU-only pacing.
 No old trigger is discarded merely by rewriting a descriptor or ARM.
 
 The host-only oracle independently implements the field arithmetic, generated
@@ -551,6 +565,30 @@ standard vectors, not keys/captures from a device. No implementation/table,
 SDK/GPL code, production software fallback or project dependency was imported.
 Temporary public PDF parsing used externally installed BSD-3-Clause pypdf
 6.1.1 in the ignored research directory only, not in builds/tests/runtime.
+
+### M2 AES board fixture sources
+
+The original BSD-3-Clause fixture/runner reuse the corrected DMA AES primitive
+and the primary sources above; no peripheral timing or CPU-only pacing contract
+is added. The read-only manual surface observes ENCCS, S0CON, DMA control/config,
+clock/enables and the existing priority/flag set (SWRU191F sections 2.5.1,
+4.4-4.6, 8 and 15). It never reads ENCDO or performs CPU data transfers.
+
+The five primary KATs are followed by sixteen original public cases:
+for `n=0..15`, byte `i=0..15`, key=`(19*n+31*i)&255` and
+input=`((37*n+13*i)&255)^A7`. Expected outputs are generated and independently
+rechecked by the existing host-only mathematical reference. The fixture CODE
+table stores 21 rows of 48 data bytes plus SDCC's string terminator; it is
+comparison data, not an encryption implementation or a returned-result table.
+Host math remains excluded from every board image and CI artifact.
+Generic simulation supplies explicit DMA/AES events, not silicon evidence.
+No SDK/GPL/private implementation, device data or dependency was imported.
+The dated first-failure and corrected-acceptance records contain only
+parent-supplied sanitized facts;
+private raw records and the preserved original image/artifacts were not read
+or imported. The parent corrected runner preflight from a guessed instruction
+prefix to actual linked `90 00 00 E5 95`; actual-image and wrong-prefix
+regressions retain that fix. It did not change the failed firmware bytes.
 
 ### Offline MAC codec sources
 

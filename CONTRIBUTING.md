@@ -64,6 +64,8 @@ make BOARD=generic IMAGE=radio_fifo_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=radio_fifo_fixture all test
 make BOARD=generic IMAGE=dma_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=dma_fixture all test
+make BOARD=generic IMAGE=aes_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=aes_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -335,8 +337,9 @@ requires its own reset, full physical CODE verification and explicit gate22
 before resume/access. Older runners still require26; no automatic hardware
 test or recovery is added. The [dated LG DMA record](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
 now covers normal copies, an accepted-but-unverified timeout and separately
-reset 257-cycle recovery. Generic, other channels/triggers, stuck-DMA recovery
-and AES remain unvalidated; the last LG run ended on DMA READY016A/config22.
+reset 257-cycle recovery. Generic, other DMA channels/triggers and stuck-DMA
+recovery remain outside that RAM-copy acceptance; AES evidence is separate
+below. That DMA run ended on READY016A/config22.
 Focused **synthetic-only** gate/lifecycle checks:
 
 ```sh
@@ -357,8 +360,10 @@ make test-aes
 It runs five public primary KATs against an independent host-only mathematical
 reference, the real C driver with checked 32-entry MMIO logs, complete linked
 CODE/ABI/allocation rejection, and serial alias-aware synthetic AES/DMA cases.
-**Never flash `aes_test.ihx` or upload it as a board artifact.** No new board
-`IMAGE`, dependency, hardware runner or debugger permission is added.
+**Never flash `aes_test.ihx` or upload it as a board artifact.** The isolated
+test is separate from board firmware. The evidence-backed per-command ENC
+correction changes AES and its proofs, not the fourteen pre-AES BINs or other
+platform/debug drivers.
 Preserve the [sequencing/history/lifetime contract](docs/ARCHITECTURE.md#isolated-aes-128-dma-block)
 and [distinct physical gate](docs/VALIDATION.md#m2-isolated-aes-dma-block-coverage);
 neither public KATs nor RAM-copy acceptance establish AES silicon behavior.
@@ -366,7 +371,37 @@ After representative full `all test` runs, cross-board byte-preservation work
 may use existing explicit `host-tests_<board>` / matching fixture-host targets,
 `all`, and `tests/boot_image.py` for the other board/image combinations instead
 of repeating identical standalone mutation corpora. Run s51 serially with the
-unchanged 15-second bound; CI still runs all fourteen full jobs.
+unchanged 15-second bound; CI runs all sixteen full jobs.
+
+The separate AES board fixture adds no dependency or general debugger permission:
+
+```sh
+make BOARD=generic IMAGE=aes_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=aes_fixture all test
+PYTHONPATH=tools .venv/bin/python -B -m unittest test_aes_fixture -q
+```
+
+These commands exercise real compiled orchestration, explicit wire/ABI and
+private-memory rejection, the independent public-corpus oracle, both genuine
+negative contexts and synthetic transport failures. They never access USB.
+`aes-reference` is a locally built host-only executable, not an uploaded artifact.
+The [manual procedure](docs/DEBUGGING.md#aes-dma-board-fixture) is a separate
+parent-owned hardware task after review, with a new full reset and complete
+physical CODE comparison on every invocation. Preserve the parent-corrected
+actual `90 00 00 E5 95` reader prefix and real-image preflight regressions.
+The [first physical KEY failure](docs/DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+is historical root-cause evidence. The unchanged corrected LG image now has
+[short-normal, both exact-negative and full-reset recovery hardware evidence](docs/DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance),
+including fresh KEY/IV flags and verified per-phase ACKs. Recovery passed257
+cycles/514 blocks and independently covered all168 vector/space/clock
+combinations; final LG is READY016A/config22/RC16, completed/heartbeat1,
+fault latch0. Parent serial `all test` passed on both corrected boards with
+415 Python tests/102 compiled fixture scenarios each and the 138-file guard;
+all fourteen older BIN sizes/hashes independently matched published baselines.
+This does not assert a hosted-CI pass.
+Programming may use the checked board HEX or BIN, never a standalone test.
+Do not resume/rekey a failed invocation or inspect private staging. Generic
+remains host/image/synthetic-only; no build or test grants hardware permission.
 
 ## Code conventions
 

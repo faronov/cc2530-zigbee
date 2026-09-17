@@ -37,7 +37,18 @@ and all ten older BINs unchanged. `IMAGE=dma_fixture` selects the
 [channel-0 DMA board fixture](DEBUGGING.md#channel-0-dma-board-fixture)
 under `build/<board>/dma_fixture/`, with
 [bounded LG hardware acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
-and all twelve earlier BINs unchanged. All seven images use the same board
+and all twelve earlier BINs unchanged. `IMAGE=aes_fixture` selects the separate
+[AES/DMA board fixture](DEBUGGING.md#aes-dma-board-fixture), under
+`build/<board>/aes_fixture/`, with all fourteen older BINs unchanged.
+The [first physical KEY failure](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+is historical root-cause evidence. LG now contains the corrected 12,765-byte
+image, which passed [short normal operation, both exact negatives and reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance):
+257 same-reset cycles/514 accepted blocks, covering all168 vector/space/clock
+combinations. Final LG is READY016A/config22/RC16, completed/heartbeat1 and
+fault latch0, not either historical negative FAULT stop.
+Generic remains host/image/synthetic-only. Authorized programming uses checked
+board HEX/BIN; never substitute the standalone `aes_test.ihx`.
+All eight images use the same board
 policy, M0 status ABI and memory restrictions. The new timebase fixture does
 not change the existing `bringup` or `debug_fixture` firmware bytes. The clock
 fixture likewise preserves all six older board BINs; the IRQ fixture preserves
@@ -68,8 +79,8 @@ then 257 real C cycles/ISR services after a separate explicit reset.
 Every acceptance invocation independently verified all physical CODE,
 including FF padding, before runner resume. Hardware return was restore+12
 with DPL=OK (0), with preserved CPU/active-IRAM context and actual RETI.
-The live board is now **IRQ fixture at READY `0x01BB`, EA/T1IE disabled and
-Timer1 stopped**, not the historical clock image. All eight earlier BIN
+That IRQ run ended at **READY `0x01BB`, EA/T1IE disabled and
+Timer1 stopped**. All eight earlier BIN
 hashes and the published EA/timebase drivers remain unchanged. This finite
 result does not establish calibrated time/latency, true one-shot behavior,
 exact overflow counts, higher-priority nesting or other platform services.

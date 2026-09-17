@@ -266,15 +266,15 @@ aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
         for (;;) {
             result = sample(d, 0);
             if (result != AES_OK) goto failed;
+            if ((d->enc_flags & 3u) != 0 && (d->enc_flags & 3u) != 3) {
+                result = AES_STATE_CHANGED; goto failed;
+            }
             if (d->phase != 3) {
-                if (!(d->arm & 2u) || (d->irq & 2u) || d->enc_flags != w.enc_upper) {
+                if (!(d->arm & 2u) || (d->irq & 2u)) {
                     result = AES_STATE_CHANGED; goto failed;
                 }
-                if ((d->input_complete & bit) && !(d->control & 1u)) break;
+                if ((d->input_complete & bit) && !(d->control & 1u) && (d->enc_flags & 3u) == 3) break;
             } else {
-                if ((d->enc_flags & 3u) != 0 && (d->enc_flags & 3u) != 3) {
-                    result = AES_STATE_CHANGED; goto failed;
-                }
                 if (d->input_complete == 7 && d->output_drained && !d->arm && d->irq == 3 &&
                     (d->control & 9u) == 8 && (d->enc_flags & 3u) == 3) break;
             }
@@ -286,21 +286,33 @@ aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
         if (result != AES_OK) goto failed;
         if (d->irq || d->arm != (d->phase == 3 ? 0 : 2) || (d->control & 1u) ||
             (d->phase == 3 && d->control != 0x48) ||
-            d->enc_flags != (uint8_t)(w.enc_upper | (d->phase == 3 ? 3 : 0))) {
+            d->enc_flags != (uint8_t)(w.enc_upper | 3u)) {
             result = AES_STATE_CHANGED; goto failed;
         }
         d->dma_acked |= bit;
+        if (d->phase != 3) {
+            /* Own the completed load's flags, not a future command's flags.
+             * S0CON, including its reserved high bits, is ordinary R/W (p.46).
+             */
+            MMIO_WRITE(SOC_S0CON, w.enc_upper); d->enc_ack_issued++;
+            result = sample(d, 0);
+            if (result != AES_OK) goto failed;
+            if (d->arm != 2 || d->irq || (d->control & 1u) || d->enc_flags != w.enc_upper) {
+                result = AES_STATE_CHANGED; goto failed;
+            }
+            d->enc_acked |= bit;
+        }
     }
     /* S0CON is R/W, including reserved high bits (SWRU191F p.46).
      * Both fresh ENCIF bits are owned; AES is finished and output fully drained.
      */
-    MMIO_WRITE(SOC_S0CON, w.enc_upper); d->enc_ack_issued = 1;
+    MMIO_WRITE(SOC_S0CON, w.enc_upper); d->enc_ack_issued++;
     result = sample(d, 1);
     if (result != AES_OK) goto failed;
     if (d->arm || d->irq || d->control != 0x48 || d->enc_flags != w.enc_upper) {
         result = AES_STATE_CHANGED; goto failed;
     }
-    d->enc_acked = 1;
+    d->enc_acked |= 4u;
     for (i = 0; i < 16; i++) output[i] = aes_output[i];
     d->published = 1; aes_used = 1;
     return AES_OK;

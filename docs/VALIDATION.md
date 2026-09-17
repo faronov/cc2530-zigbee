@@ -891,12 +891,13 @@ not a measured hardware high-water mark. Raw records remain private.
 
 `make test-aes` runs the [single-block contract](ARCHITECTURE.md#isolated-aes-128-dma-block)
 without a board image or hardware access. **Never flash `aes_test.ihx` or
-upload it as board firmware.** The AES code is excluded from every one of
-the fourteen board images; old driver proofs and artifact policy remain intact.
+upload it as board firmware.** The AES code is excluded from the fourteen
+earlier board images; only the separate AES fixture below links it.
+Old driver proofs and artifact policy remain intact.
 
 **Host-tested:** the original mathematical reference independently passes
 FIPS 197 C.1 and all four SP 800-38A F.1.1 AES-128 blocks. The real AES/timebase
-driver model passes **243,355 operations**, including all 16 byte positions
+driver model passes **243,481 operations**, including all 16 byte positions
 with 256 varied public patterns, CODE/XDATA inputs, in-place input/output,
 both clocks, every ordinary-address rejection surface and all generic tags.
 It verifies actual staged bytes, SINGLE/LEN16 descriptors and AES aliases,
@@ -909,15 +910,19 @@ post-return private DMA effects retain the original error and forbid reuse.
 There are 257 varied-key/input reuses in one completed/drained reset epoch,
 a frozen-timer 65,535-poll bound, exact deadline/last-permitted-poll cases,
 delayed ENC status after output drain, and mixed ARM/IRQ observations.
+The corrected model posts fresh KEY/IV ENC pairs as well as block flags:
+per-command missing/partial/delayed/stale flags and ignored/late ACKs cannot
+advance to the next command or publish output. Issued ACK counts and confirmed
+phase masks distinguish an effective late write from a successful C observation.
 
-**Image-checked and simulated:** **152 linked scenarios** execute the actual
+**Image-checked and simulated:** **188 linked scenarios** execute the actual
 SDCC 4.2.0 caller, generic pointer staging, driver and timebase. Every CODE byte
 is mutation-rejected, including constants, runtime and caller; separate
 instruction/CDB/assembler checks pin the complete module, typed arguments,
 29-byte diagnostics, every private allocation and helper exclusion.
 Input arm is `03EC` (`MOV DMAARM,#1`, NOPs `03EF..03F7`, RET `03F8`);
 output arm is `03F9` (`#2`, NOPs `03FC..0404`, RET `0405`).
-Sole callers `11BA` and `1052` respectively prove four separate fetch
+Sole callers `111A` and `0FBF` respectively prove four separate fetch
 intervals across the three input phases and one output arm. Every arm RET
 checks the real descriptors, including the full 32-byte DMA1 table.
 Readiness uses SWRU191F system clocks, not generic s51 cycle timing.
@@ -936,38 +941,193 @@ terminal re-entry paths. Failure never publishes caller output, even when a
 late private drain finishes. Full caller/descriptor/status/peripheral/alias
 guards, stack unwind and upper IRAM `80..FF` remain checked.
 
-The executable has **6,423 CODE bytes**, including **5,290 driver bytes**,
+The executable has **6,387 CODE bytes**, including **5,254 driver bytes**,
 and **320 ordinary XDATA + 8 result / 64 reserved** (384 reserved nonaliased
 bytes, below 512). AES/timebase/private arguments occupy `0000..00CE`;
 descriptors are `0019..0020` and `0021..0040`, four staging arrays
 `0041..0080`. Caller diagnostics are `00CF..00EB` (29 bytes), key `00EC..00FB`,
 input storage `00FC..011B`, guarded output `011C..012D`; actual output is
 `011D..012C`. Caller scalars follow; `__gptrput_PARM_2=013F` is excluded
-separately. IRAM before stack is `00..3E`; stack `3F..FF` reserves 193 bytes,
-with synthetic peak SP **53**. Complete linked CODE SHA-256 is
-`49634cb2d84fe9391de9b394a47e118499434bb1cdca9c374b9a341678ba9cd2`.
+separately. IRAM before stack is `00..40`; stack `41..FF` reserves 191 bytes,
+with synthetic peak SP **54**. Complete linked CODE SHA-256 is
+`cc1af6a5c38853c0a5453aad68ae2b3720d9fd40211096598c1650628fd28b27`.
+Canonical driver SHA-256 is
+`b80e064f5fb405c8a5d2c28722e18b51f25c5d99d90dd8aaec6da4332103befd`.
 
-Both representative DMA-board `all test` runs passed, including **403 Python
-tests**, unchanged DMA **194,819 host / 97 linked**, FIFO **69,895 host /
-99 linked**, and existing clock/IRQ/timebase/MAC coverage. The final AES corpus
-also passed in both board build directories. The other twelve combinations
-passed focused build/image/board-host/alias checks serially; all **fourteen
-published BIN lengths and complete SHA-256 values are byte-identical**.
-The fourteen-job CI matrix, seven-file whitelist and `hardware_tested=false`
-metadata are unchanged. Repository/local-link checks cover 130 files.
+At the original foundation publication, both representative DMA-board `all test`
+runs passed **243,355 AES host / 152 linked and 403 Python tests**, plus the
+unchanged legacy checks. Twelve other combinations passed focused checks;
+all fourteen published BIN lengths/hashes were preserved. That slice retained
+the fourteen-job matrix/seven-file whitelist and passed the 130-file guard.
+These are historical results, not evidence for the corrected load protocol;
+current fixture/regression results are recorded below.
 
-**Remaining physical gate:** a separately scoped, reviewed AES board fixture
-must establish actual key/IV handshakes, fresh DMA/AES completion ordering,
-public KATs and varied repeated blocks on both supported clocks, complete
-output drain before reuse, and bounded failure/retained-buffer behavior.
+**Physical evidence and remaining gate:** the unchanged corrected LG fixture
+passed short normal operation, both exact negatives and separately reset
+257-cycle recovery, as
+[recorded separately](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance).
+The recovery run accepted/published514 blocks and independently covered the
+set of all168 combinations of21 fixture vectors, four CODE/XDATA spaces and
+both clocks, with fresh KEY/IV pairs and per-phase ACK confirmation.
+Both negative calls remained unpublished; generic is not hardware-observed.
 Each manual invocation must genuinely reset, verify every physical CODE byte,
 then use the existing explicitly permitted `26 -> 22` gate before resume or
 DMA-register access; recovery is a separate full-reset invocation, not an
-aborting key/IV load or C-state clear. No physical AES transfer, timing,
-key-erasure/retention experiment or stuck-controller recovery has been run.
+aborting key/IV load or C-state clear. The first physical KEY failure remains
+root-cause history, not the source of later IV/block acceptance.
+No calibrated timing, key-erasure/retention experiment or physical
+stuck-controller recovery is established.
 CPU-only AES sequencing, security/CCM/key management and M2 #4 remain open.
-The last installed LG state remains the accepted 8,890-byte **DMA fixture
-READY016A/config22/RC16**, not this unflashed standalone AES executable.
+LG now contains the **corrected 12,765-byte AES fixture at
+READY016A/config22/RC16**, completed/heartbeat1 after257 cycles and fault latch0.
+The standalone test remains unflashed.
+
+## M2 AES board fixture offline coverage
+
+Both `IMAGE=aes_fixture` layouts use the
+[64-byte ABI, allocation and manual procedure](DEBUGGING.md#aes-fixture-abi-and-linked-proof).
+The target calls the corrected hardware driver and compares actual caller
+output, not a firmware software cipher or returned vector. The independent
+host-only reference checks all five primary KATs and sixteen derived public
+cases; it remains unconditionally excluded from all sixteen board images.
+
+Host C exercises **1,388 steps**, including 257 cycles/514 calls, every one
+of 21 vectors/four CODE-XDATA combinations/both clocks, all 50 caller
+source/output/guard corruptions, every partial input/output position, late
+completion, frozen cap, ignored/changed control, lost flags, ownership errors
+and clock request/rollback failure. All three interrupt masks, including
+ENCIE, are rejected without an AES call. The original 32-entry MMIO logs are
+checked and consumed; no capacity increase or silent overflow/reset is used.
+Terminal steps perform no MMIO, buffer/descriptor reuse or diagnostic replacement.
+Each command has lost/partial ENC-pair and ignored/late-ACK coverage.
+
+Alias-aware s51 executes **102 compiled scenarios**, including the full
+1,029-stage/257-cycle sequence, both genuine timeout contexts, 50 precise
+byte corruptions, per-KEY/IV/block deadline/cap/ambiguous-helper/counter/control/
+request/partial failures, lost input/output flags, per-command lost/partial ENC
+pairs and ignored/late acknowledgments, delayed output drain, preserved clock
+rollback and terminal late delivery.
+The final legal sample succeeds at poll4096; exhaustion at the preceding
+non-final block-ACK sample fails without publication. No impossible
+post-approved-copy failure or C poll-count/return substitution is injected.
+The two genuine negative contexts prove actual stacks/arguments and phase,
+not a source-line PC guess or a shared sample mistaken for a unique final path.
+
+Synthetic DMA reads all **24,672 descriptor-selected input bytes through
+70B1** and writes all **8,224 output bytes from 70B2** during the full run.
+Each descriptor's LEN16/SINGLE/increment/trigger/table shape and every separate
+arm readiness/command/ACK sequence are checked, including **1,542 issued and
+1,542 confirmed ENC ACKs**. Oracle effects are accepted only with matching
+actual downloads; this caught a real SDCC CODE/XDATA
+ternary-tag bug in the fixture caller, fixed with separately typed assignments.
+There is no CODE patch or replacement of the compiled AES function.
+M0/status/alias/peripheral/stack guards remain strict, including upper IRAM
+`80..FF`; measured synthetic peak SP is **7F** for both layouts.
+
+Complete board CODE/constants/caller bytes, the relocation-equivalent
+5,254-byte corrected driver and private/typed map/CDB allocations are
+mutation-rejected. Restricted-runner tests cover full CODE-before-gate-before-
+resume, all live argument/descriptor/saved-frame fields, wrong config/PC/
+stack/CPU/flags, every high-level I/O boundary and every low-level failed/late
+transport exchange, cleanup errors and safe caller-only post-failure reads.
+No test enumerates USB. The [source/retention limits](PROVENANCE.md#m2-aes-board-fixture-sources)
+and [physical gate](DEBUGGING.md#parent-only-aes-acceptance-procedure) remain
+distinct from host/image/synthetic evidence; the bounded corrected LG results
+below do not confer hardware evidence on generic or on untested cases.
+Parent's actual-reader-prefix fix and all six actual-board/mode
+preflights remain checked, including wrong-prefix rejection with a matching hash.
+
+Both agent-run corrected board `all test` runs passed, including the unchanged five-KAT
+reference, **243,481 AES host / 188 isolated linked**, **194,819 DMA host /
+97 linked**, **69,895 FIFO host / 99 linked**, and existing clock/IRQ/timebase/
+MAC checks. The Python suite covers **415 tests** after the final
+unattempted-diagnostic regression. The other fourteen combinations passed
+focused build, board-host, image and alias checks with every complete
+published BIN length/SHA-256 unchanged. Only AES and its directly related
+fixture/proofs change; other platform/debug drivers and their proofs remain
+unchanged. Heavy s51 runs were serial, with the original per-process 15-second
+bound. Repository/local-link checks
+cover 138 files. CI now selects sixteen full jobs with the unchanged seven-file
+whitelist and `hardware_tested=false`; no hosted-CI or hardware result is
+inferred from local validation. The parent independently completed both
+corrected LG/generic serial `all test` runs:415 Python tests,102 compiled
+fixture scenarios per board, all actual-image normal/pre-key/final prevalidation
+paths and unchanged MAC guards. The 138-file repository guard passed.
+The parent also independently matched all fourteen older BIN sizes and complete
+SHA-256 values against published baselines; module and corrected board
+identities are unchanged. These are local results, not a hosted-CI pass.
+
+### 2026-09-17 first AES failure and offline correction
+
+The [canonical sanitized record](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+preserves the original LG 12,783-byte/`97aed900...` image, programming/attempt
+times, parent-only physical CODE verification and exact terminal sample.
+The first runner attempt stopped before USB because of a guessed instruction
+prefix; the parent corrected it without firmware changes. The next attempt
+reached KEY DMA completion with ENCCS4C/S0CON03/ARM02/IRQ01 and returned
+AES_STATE_CHANGED7 after39 raw ticks/five polls. All50 separate caller bytes
+were unchanged; no output was published or owned flags acknowledged.
+
+This disproved the original model's load-flags-clear assumption despite its
+passing KAT/host/linked suites. At that stage the corrected per-command
+completion/ACK contract had only host/image/synthetic evidence, and IV pair3
+was unobserved, not guaranteed by the reviewed block-interrupt wording.
+The old run ended at FAULT016C/config22 with output DMA armed02. Later
+programming and corrected-image observations are separate below.
+
+### 2026-09-17 corrected LG AES bounded hardware evidence
+
+The unchanged 12,765-byte LG image (`0ee3e094...`) and 5,254-byte module
+(`b80e064f...`) passed parent-run normal3, separate pre-key/final negatives
+and separately reset 257-cycle recovery
+after checked board-HEX programming/readback. Each invocation reset, verified
+all physical CODE, and performed the explicit26->22 gate with CPU/FMAP preserved.
+The [canonical record](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance)
+contains full identities, sanitized times, live contexts and exact results.
+
+Normal3 confirmed six blocks,288 input bytes,96 drained/published bytes and18
+issued/confirmed ENC ACKs. It covered vectors0/1/2 on RC16/XOSC32 with spaces0/1;
+RC elapsed112..115 raw ticks, XOSC57, all17 polls. Fresh **KEY and IV** pairs
+and checked-clear acknowledgments are now hardware-observed through the
+unchanged production C gate, not inferred from the earlier KEY failure.
+
+Pre-key used actual RETs0C25->0302, SP7B/all14 frame bytes, cached unexpired
+poll4, and returned exact AES_TIMEOUT8 after87,420 raw ticks/five polls:
+one submitted/completed input phase, no ACK, drain or publication.
+Final used1DCB->0172 before latching final now, SP73/all6 frame bytes, and
+returned AES_TIMEOUT8 after84,326 ticks/17 polls despite complete drain.
+DMA ACK issued3/mask7 and ENC issued3/mask3 distinguish the unconfirmed final
+block ACK. Both calls checked all50 unchanged caller bytes and ended at
+FAULT016C/latch8, without private-payload inspection or implicit cleanup.
+Their prior successful RC block is separate from the failing call's zero
+publication. These are genuine production deadline paths, not stuck-controller
+injections; errors and clear live flags still do not prove quiescence.
+
+The separate full-reset recovery invocation at 14:15:30..14:19:49 returned 0:
+257 same-reset cycles, 1,029 READY stages, 514 accepted/published blocks,
+1,542 KEY/IV/block commands, 24,672 C-confirmed input bytes and 8,224 drained/
+published output bytes (32,896 total DMA bytes). It issued 2,056 individually
+delayed arms. DMA phase ACKs and ENC ACKs each totaled 1,542 issued and 1,542
+confirmed. All 50 caller bytes per block were checked in C and independently
+read back: 25,700 checks. The parent independently asserted the **set of all 168
+vector/space/clock combinations**, including all 21 vectors and all four
+CODE/XDATA combinations on both clocks. Completed/heartbeat wrapped to 1.
+All 514 calls used 17 polls; RC elapsed 112..116 and XOSC 56..58 raw ticks.
+The 259.4136599 host seconds include preflight/reset/CODE/gate/inspection,
+not isolated AES timing or throughput.
+
+Final LG is **READY016A/config22**, wirev2 stage4/clockRC, completed/heartbeat1,
+CMD/STA C9/C9, SLEEPCMD04, all IENs0, ENCCS48/S0CON0, ARM/REQ/IRQ/IRCON0,
+CFG0/1=0045/004D and fault latch0; IP0/1=0, TCON5, other retained flags0.
+The negative FAULT records remain historical. The separate full reset, not
+clear DMA flags alone, established recovery; neither negative published caller
+output, inspected private payload or performed automatic recovery.
+
+Generic has no physical AES result. Native29/wirev2, all fourteen older BIN
+identities, memory/alias guards and the exact seven-file artifact policy remain unchanged;
+generated `hardware_tested=false` is not rewritten by this manual evidence.
+No calibrated timing, CPU-only AES pacing, CCM/authentication, key management/
+erasure, networking or complete M2 acceptance is established.
 
 ## M2 quiescent radio FIFO automated coverage
 
@@ -1202,9 +1362,9 @@ seeing measurements.
 ## CI and release boundary
 
 Hosted CI builds/tests without physical devices or repository secrets.
-The CI matrix covers seven non-RF images (`bringup`, `debug_fixture`,
+The CI matrix covers eight non-RF images (`bringup`, `debug_fixture`,
 `timebase_fixture`, `clock_fixture`, `irq_fixture`, `radio_fifo_fixture`,
-`dma_fixture`) on both boards: fourteen jobs. Artifacts contain only the
+`dma_fixture`, `aes_fixture`) on both boards: sixteen jobs. Artifacts contain only the
 explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.

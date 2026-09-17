@@ -288,9 +288,9 @@ has host/image/synthetic checks for both boards and
 257 separately reset recovery cycles, 514 copies / 6,289 verified bytes across
 RC16/XOSC32 and both RAM routes. A separate real timeout retained an unacknowledged
 completion and terminal FAULT without payload inspection or reuse.
-Only these two images link DMA. Generic remains hardware-unobserved.
-All twelve older BINs remain byte-identical; CI has fourteen jobs with the
-same seven-file whitelist and `hardware_tested=false`. The last LG run ended
+Only these two images link the RAM-copy DMA driver. Generic remains hardware-unobserved.
+All twelve older BINs remain byte-identical; that slice brought CI to fourteen jobs with the
+same seven-file whitelist and `hardware_tested=false`. That DMA run ended
 on the 8,890-byte DMA image at READY `016A`, debug config22, RC16, IRQs disabled
 and no armed channel, pending request or DMA completion flag.
 
@@ -301,12 +301,33 @@ encrypts one 16-byte block through two AES-triggered DMA channels, with private
 staging, a single bounded deadline/poll cap and retained terminal faults.
 `make test-aes` checks public NIST vectors, an independent host-only reference,
 real SDCC CODE/XDATA callers and synthetic descriptor/alias transfers.
-This is **host-tested, image-checked and simulated, not hardware-observed**.
-Never flash `aes_test.ihx`; all fourteen board BINs, CI jobs and the seven-file
-artifact whitelist remain unchanged. There is no AES board image, messaging
-ECB, CCM/authentication, key management or production software fallback.
-The [physical AES gate](docs/VALIDATION.md#m2-isolated-aes-dma-block-coverage)
-and CPU-only sequencing remain open; the last installed LG image is still DMA.
+These automated checks are **host/image/synthetic evidence**, separate from
+the bounded LG hardware observations below.
+Never flash `aes_test.ihx`; all fourteen earlier board BINs and the seven-file
+artifact whitelist remain unchanged. There is no messaging ECB,
+CCM/authentication, key management or production software fallback.
+The [remaining physical AES coverage](docs/VALIDATION.md#m2-isolated-aes-dma-block-coverage)
+and CPU-only sequencing remain open.
+
+The separate [`IMAGE=aes_fixture`](docs/DEBUGGING.md#aes-dma-board-fixture)
+has host/image/synthetic coverage for both boards. Compiled C calls the hardware
+driver for 21 public cases, all CODE/XDATA input combinations, both clocks and
+257 same-reset cycles, with bounded LG hardware acceptance below.
+Guarded manual tooling performs genuine pre-key and late-final timeout
+experiments without inspecting private payload after failure.
+CI now has sixteen full jobs, the same seven artifacts and
+`hardware_tested=false`.
+The [first physical LG KEY load](docs/DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+exposed a completion-flag bug. The unchanged corrected **12,765-byte LG image**
+subsequently passed [short normal operation, both exact negatives and reset recovery](docs/DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance).
+Normal3 accepted six blocks on both clocks, vectors0/1/2, space combinations0/1
+and 18 confirmed ENC ACKs. Fresh KEY **and IV** flags and per-phase ACK checks are now
+hardware-observed; both genuine timeouts preserved caller output.
+Separately reset recovery accepted 514 blocks over 257 cycles, with all 168
+vector/space/clock combinations independently checked and 1,542 confirmed ENC ACKs.
+LG now holds that corrected image at **READY016A/config22/RC16**,
+completed/heartbeat1 and fault latch0. Generic hardware remains unobserved;
+this is not calibrated timing, general DMA/security acceptance or closure of M2 #4.
 
 ## Intended scope
 

@@ -154,6 +154,10 @@ class DebugImage:
             from dma_fixture import verify_fixture
             self.dma_proof = verify_fixture(
                 image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
+        if image_name == "aes_fixture":
+            from aes_fixture import verify_fixture
+            self.aes_proof = verify_fixture(
+                image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
 
     def symbol(self, name: str) -> Symbol:
         require(name in self.symbols, f"No supported linked global/label named {name}")
@@ -397,7 +401,8 @@ def main(argv=None) -> int:
         child.add_argument("value", type=lambda text: int(text, 0))
     for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state", "timebase-state",
                  "clock-state", "clock-checkpoint", "irq-state", "irq-checkpoints",
-                 "radio-fifo-state", "radio-fifo-checkpoints", "dma-state", "dma-checkpoints"):
+                 "radio-fifo-state", "radio-fifo-checkpoints", "dma-state", "dma-checkpoints",
+                 "aes-state", "aes-checkpoints"):
         child = commands.add_parser(name)
         child.add_argument("--output", type=Path, required=True)
         child.add_argument("--board", choices=BOARDS, required=True)
@@ -412,7 +417,7 @@ def main(argv=None) -> int:
             source.add_argument("--file")
             child.add_argument("--line", type=int)
         if name in ("status", "fixture-state", "timebase-state", "clock-state", "irq-state",
-                    "radio-fifo-state", "dma-state"):
+                    "radio-fifo-state", "dma-state", "aes-state"):
             source = child.add_mutually_exclusive_group(required=True)
             source.add_argument("--hex")
             source.add_argument("--snapshot", type=Path)
@@ -459,6 +464,12 @@ def main(argv=None) -> int:
                 result["dma_proof"] = image.dma_proof
                 if args.command == "dma-state":
                     result["dma_state"] = decode(snapshot_input(args, SIZE))
+            elif args.command in ("aes-state", "aes-checkpoints"):
+                from aes_fixture import decode, SIZE
+                require(args.image == "aes_fixture", "AES inspection requires aes_fixture")
+                result["aes_proof"] = image.aes_proof
+                if args.command == "aes-state":
+                    result["aes_state"] = decode(snapshot_input(args, SIZE))
             else:
                 require(args.image == "clock_fixture", "Clock inspection requires a clock_fixture image")
                 result["timeout_checkpoint"] = image.clock_timeout_checkpoint

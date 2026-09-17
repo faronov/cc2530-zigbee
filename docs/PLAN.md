@@ -250,7 +250,7 @@ BINs remain unchanged. The matrix grows to fourteen jobs with the same
 seven-file whitelist and `hardware_tested=false`. The unchanged LG image passed
 [bounded hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance):
 normal operation, a terminal unverified timeout, then 257 cycles after an
-explicit reset, with 514 copies and 6,289 verified bytes. The last LG run
+explicit reset, with 514 copies and 6,289 verified bytes. That DMA run
 ended at DMA READY016A/config22 on RC16, with IRQs off and ARM/REQ/DMAIRQ zero.
 Generic, other channels/triggers and physical stuck-controller recovery
 remain unobserved.
@@ -263,9 +263,30 @@ staging, finite key/IV/block phases and terminal failure ownership. It is not
 a board `IMAGE`, production software fallback, messaging/CCM/security service
 or CPU-transfer implementation. All fourteen existing board BINs and the
 published DMA/timebase/clock/debug implementations remain unchanged.
-Actual AES/DMA handshake, KAT, repeated-drain and failure/recovery behavior on
-silicon still require a separately scoped fixture and hardware acceptance.
-The latest installed LG state remains the accepted DMA fixture, not AES.
+Hardware evidence comes from the separately scoped fixture below, never from
+flashing the standalone test or treating synthetic events as silicon.
+
+The separate `IMAGE=aes_fixture` is available for both boards,
+with compiled orchestration, a 64-byte explicit wire record, relocated driver
+proof and guarded manual pre-key/final timeout procedures. The 21 public
+cases cover every CODE/XDATA combination, both clocks and 257 same-reset cycles.
+The [first physical LG KEY load](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+failed the original flag assumption: input completed and both ENCIF bits set.
+The unchanged corrected per-command completion/ACK protocol and wirev2 now have
+[bounded LG hardware evidence](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance):
+six blocks on both clocks, vectors0/1/2 and spaces0/1, fresh KEY/IV pairs and18
+confirmed ENC ACKs, plus both exact unpublished AES_TIMEOUT8 cases.
+Separate full-reset/full-CODE/gate recovery passed257 same-reset cycles,
+1,029 READY stages and514 accepted/published blocks, with all168 fixture
+vector/space/clock combinations independently asserted and1,542 confirmed
+DMA phase ACKs and ENC ACKs each. LG now contains the corrected 12,765-byte
+image at READY016A/config22/RC16, completed/heartbeat1 and fault latch0.
+Parent serial `all test` passed for both corrected boards; all fourteen older
+BIN sizes/hashes independently match published baselines. No hosted-CI pass
+is claimed here.
+Generic has no physical AES evidence. All fourteen older BINs and non-AES
+platform/debug drivers stay unchanged; CI has sixteen full jobs with the same
+seven-file whitelist and `hardware_tested=false`. M2 #4 remains open.
 
 Deliver independent interfaces for:
 

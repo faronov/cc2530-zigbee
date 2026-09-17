@@ -174,6 +174,12 @@ def check_artifact_rejections(output, board, image_name="bringup"):
                 ("cdb", lambda data: data.replace(b"{116}ST", b"{115}ST"), "ABI"),
                 ("cdb", lambda data: data.replace(b"{80}S:S$fault_latch", b"{79}S:S$fault_latch"), "ABI"),
             )
+        elif image_name == "aes_fixture":
+            mutations += (
+                ("map", lambda data: data.replace(b"_aes_fixture_ready ", b"_missing_aes_ready "), "symbol"),
+                ("cdb", lambda data: data.replace(b"{64}ST", b"{63}ST"), "ABI"),
+                ("cdb", lambda data: data.replace(b"{25}S:S$diagnostic", b"{24}S:S$diagnostic"), "ABI"),
+            )
         for extension, mutate, message in mutations:
             path = work / f"{image_name}.{extension}"
             original = path.read_bytes()
@@ -429,7 +435,7 @@ def main():
     require(debug_image.symbol("_SOC_P0").space == "SFR", "SFR symbol space mismatch")
     require(debug_image.symbol("_board_description").kind == "object", "CODE data misclassified")
     source_file = Path(__file__).resolve().parents[1] / "examples" / f"{args.image}.c"
-    if args.image in ("radio_fifo_fixture", "dma_fixture"):
+    if args.image in ("radio_fifo_fixture", "dma_fixture", "aes_fixture"):
         source_file = Path(__file__).resolve().parents[1] / "src" / f"{args.image}_state.c"
     main_lines = debug_image.source_lines(pc=symbols["_main"])
     require(any(location.file == source_file.name for location in main_lines), "Main source mapping missing")
@@ -473,6 +479,9 @@ def main():
         require(debug_image.symbol("_dma_fixture_state").size == 116, "DMA symbol size mismatch")
         require(debug_image.symbol("_dma_fixture_a").size == debug_image.symbol("_dma_fixture_b").size == 18,
                 "DMA caller buffer size mismatch")
+    elif args.image == "aes_fixture":
+        require(debug_image.symbol("_aes_fixture_state").size == 64 and
+                debug_image.symbol("_aes_fixture_output").size == 18, "AES wire/caller symbol mismatch")
     check_artifact_rejections(args.output, args.board, args.image)
     check_alias(args.simulator)
     with unittest.TestCase().assertRaisesRegex(ValueError, "register bank"):
@@ -492,9 +501,12 @@ def main():
     elif args.image == "radio_fifo_fixture":
         from boot_radio_fifo_fixture import check_radio_fifo_fixture
         check_radio_fifo_fixture(args.simulator, args.output, args.board, symbols)
-    else:
+    elif args.image == "dma_fixture":
         from boot_dma_fixture import check_dma_fixture
         check_dma_fixture(args.simulator, args.output, args.board, symbols)
+    else:
+        from boot_aes_fixture import check_aes_fixture
+        check_aes_fixture(args.simulator, args.output, args.board, symbols)
 
 
 if __name__ == "__main__":

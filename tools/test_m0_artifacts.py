@@ -90,8 +90,8 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
 
-    def test_dma_cannot_enter_the_twelve_original_board_images(self):
-        self.assertEqual(len(IMAGES), 7)
+    def test_dma_cannot_enter_other_board_images(self):
+        self.assertEqual(len(IMAGES), 8)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -102,14 +102,25 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
     def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
-        self.assertEqual(len(IMAGES), 7)
+        self.assertEqual(len(IMAGES), 8)
         for image in IMAGES:
+            if image == "aes_fixture":
+                continue
             for name in ("_aes128_encrypt_block", "_aes_dma0", "_aes_dma1", "_aes_key",
-                         "_aes_output", "_aes_fault", "_aes_reserved_end", "_aes_reference_encrypt"):
+                         "_aes_output", "_aes_fault", "_aes_reserved_end", "_aes_fixture_state"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated AES"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for source in ("aes.c", "aes_reference.c", "test_aes.c"):
+            for source in ("aes.c", "aes_fixture.c", "aes_fixture_state.c"):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated AES"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
+
+    def test_host_only_math_never_enters_any_board_image(self):
+        for image in IMAGES:
+            for name in ("_aes_reference_encrypt", "_aes_reference_check"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "host-only AES"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("aes_reference.c", "test_aes.c", "test_aes_fixture.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "host-only AES"):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
     def test_status_cannot_alias_iram(self):

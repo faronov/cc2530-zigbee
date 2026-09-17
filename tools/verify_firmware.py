@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
 IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
-          "radio_fifo_fixture", "dma_fixture")
+          "radio_fifo_fixture", "dma_fixture", "aes_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -22,6 +22,7 @@ CAPABILITIES = {
     "irq_fixture": "non-networking-timer1-irq-fixture",
     "radio_fifo_fixture": "non-networking-quiescent-radio-fifo-fixture",
     "dma_fixture": "non-networking-software-triggered-dma-fixture",
+    "aes_fixture": "non-networking-aes-dma-block-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -224,9 +225,13 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require(not any(name.startswith(("_aes_", "_aes128_")) for name in symbols) and
-            all(f"C${source}$" not in debug for source in ("aes.c", "aes_reference.c", "test_aes.c")),
-            "Board image must not link isolated AES or its host-only reference")
+    require(not any(name.startswith("_aes_reference_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("aes_reference.c", "test_aes.c", "test_aes_fixture.c")),
+            "Board image must not link the host-only AES reference or standalone test")
+    require(image_name == "aes_fixture" or
+            (not any(name.startswith(("_aes_", "_aes128_")) for name in symbols) and
+             not any(f"C${name}$" in debug for name in ("aes.c", "aes_fixture.c", "aes_fixture_state.c"))),
+            "Board image must not link isolated AES outside aes_fixture")
     require(image_name == "dma_fixture" or
             (not any(name.startswith("_dma_") for name in symbols) and "C$dma.c$" not in debug),
             "Board image must not link the isolated DMA foundation")
@@ -261,6 +266,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     if image_name == "dma_fixture":
         sizes = re.findall(r"^S:G\$dma_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
         require(sizes and all(int(size) == 116 for size in sizes), "DMA fixture debug ABI mismatch")
+    if image_name == "aes_fixture":
+        sizes = re.findall(r"^S:G\$aes_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == 64 for size in sizes), "AES fixture debug ABI mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -335,6 +343,9 @@ def verify_artifacts(output, board, image_name="bringup"):
         verify_fixture(image, symbols, debug)
     elif image_name == "dma_fixture":
         from dma_fixture import verify_fixture
+        verify_fixture(image, symbols, debug)
+    elif image_name == "aes_fixture":
+        from aes_fixture import verify_fixture
         verify_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),

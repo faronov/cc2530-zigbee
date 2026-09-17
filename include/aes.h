@@ -53,7 +53,12 @@ typedef struct {
  *
  * Diagnostics contain only phase/count/status, never secret bytes.
  * phase: 0 entry/staging, 1 key, 2 IV, 3 block, 4 final publication.
- * submitted/input_complete/dma_acked: key=1, IV=2, block=4.
+ * submitted/input_complete/dma_acked/enc_acked: key=1, IV=2, block=4.
+ * ack_issued/enc_ack_issued count writes (0..3), not confirmed completions.
+ * Each phase requires fresh ENCIF[1:0]=3 plus finite DMA completion and
+ * matching control/ownership. Load flags are acknowledged and verified clear
+ * before reconfiguration; RDY is not a key/IV completion indication.
+ * Bounded LG runs observed fresh KEY/IV flags and verified per-phase ACKs.
  * sample_valid: bit0 current full SFR sample, bit1 current timed poll.
  * Other fields may retain an earlier sample; zero is not an unread observation.
  * polls counts post-entry observation attempts, including a shortened failure.

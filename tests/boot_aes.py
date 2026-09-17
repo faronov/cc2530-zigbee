@@ -21,13 +21,13 @@ from verify_firmware import (
 )
 
 
-IMAGE_SIZE = 6423
-IMAGE_HASH = "49634cb2d84fe9391de9b394a47e118499434bb1cdca9c374b9a341678ba9cd2"
-MODULE_SIZE = 5290
-MODULE_HASH = "5763ff71d5a201f15d0f58a5c25a17abf0a9a73ceafdf1eaa3ee578c013787cc"
+IMAGE_SIZE = 6387
+IMAGE_HASH = "cc1af6a5c38853c0a5453aad68ae2b3720d9fd40211096598c1650628fd28b27"
+MODULE_SIZE = 5254
+MODULE_HASH = "b80e064f5fb405c8a5d2c28722e18b51f25c5d99d90dd8aaec6da4332103befd"
 LENGTHS = DMA_LENGTHS | {
     0x7b: 2, 0xbb: 3, 0x49: 1, 0x14: 1, 0x05: 2, 0x2b: 1, 0xd5: 3,
-    0x52: 2, 0x9b: 1, 0x3c: 1, 0x0d: 1, 0x0a: 1, 0x5a: 1, 0x39: 1,
+    0x52: 2, 0x9b: 1, 0x3c: 1, 0x0d: 1, 0x0a: 1, 0x5a: 1, 0x39: 1, 0x5f: 1,
 }
 AES_ALIAS = "memory create addressdecoder xram 0x70b1 0x70b2 sfr_chip 0x31"
 READS = (0xa8, 0xb8, 0x9a, 0xbe, 0xc6, 0x9e, 0xb3, 0x98, 0xd6, 0xd7, 0xd1, 0xc0, 0xd4, 0xd5, 0xd2, 0xd3)
@@ -68,7 +68,7 @@ def verify(image, symbols, debug, memory, listings):
             "Host software reference entered target")
     start = cdb_address(debug, "L:Faes$pointer_location$0$0")
     end = cdb_address(debug, "L:XG$aes128_encrypt_block$0$0") + 1
-    require((start, end) == (0x1f6, 0x16a0) and end - start == MODULE_SIZE and
+    require((start, end) == (0x1f6, 0x167c) and end - start == MODULE_SIZE and
             hashlib.sha256(bytes(image[i] for i in range(start, end))).hexdigest() == MODULE_HASH,
             "AES complete driver changed")
     code = instructions(image, start, end, LENGTHS)
@@ -77,7 +77,7 @@ def verify(image, symbols, debug, memory, listings):
     require(code == listed, "AES listing differs from real linked instructions")
     expected_accesses = (b"\x75\xd6\x01", b"\x75\xd6\x02") + tuple(bytes((0xe5, r)) for r in READS) + (
         b"\xe5\xc6", b"\x8b\xd5", b"\x8c\xd4", b"\x89\xd3", b"\x8b\xd2",
-        b"\x8a\xb3", b"\x75\xd1\x1c", b"\x75\xd1\x1e", b"\xf5\x98",
+        b"\x89\xb3", b"\x75\xd1\x1c", b"\x75\xd1\x1e", b"\xf5\x98", b"\xf5\x98",
     )
     accesses = peripheral_accesses(code)
     require(tuple(raw for _, raw, _ in accesses) == expected_accesses,
@@ -86,10 +86,10 @@ def verify(image, symbols, debug, memory, listings):
             "AES gained direct status/alias/peripheral XDATA access")
     sites = {("r", reg): pc for pc, raw, reg in accesses[2:18]}
     for pc, raw, reg in accesses[19:]:
-        sites["block_ack" if raw == b"\x75\xd1\x1c" else "w", reg] = pc
+        sites["block_ack" if raw == b"\x75\xd1\x1c" else "load_ack" if pc == 0x14d8 else "w", reg] = pc
     sites["clock", 0] = accesses[18][0]
     calls = [(pc, int.from_bytes(raw[1:], "big")) for pc, raw in code.items() if raw[0] == 0x12]
-    for name, bit, address, caller in (("input", 1, 0x3ec, 0x11ba), ("output", 2, 0x3f9, 0x1052)):
+    for name, bit, address, caller in (("input", 1, 0x3ec, 0x111a), ("output", 2, 0x3f9, 0xfbf)):
         require(cdb_address(debug, f"L:Faes$arm_{name}$0$0") == address and
                 cdb_address(debug, f"L:XFaes$arm_{name}$0$0") == address + 13,
                 "AES individual arm function extent changed")
@@ -97,11 +97,11 @@ def verify(image, symbols, debug, memory, listings):
                 [pc for pc, target in calls if target == address] == [caller],
                 "AES one-at-a-time nine-system-clock path/caller changed")
         sites["arm", bit], sites["ready", bit], sites["return", bit] = address, address + 12, caller + 3
-    require([pc for pc, target in calls if target == symbols["__gptrget"]] == [0xe95, 0xeb7],
+    require([pc for pc, target in calls if target == symbols["__gptrget"]] == [0xe26, 0xe48],
             "AES genuine generic key/input staging path changed")
-    require(symbols["__gptrget"] == 0x1807 and symbols["__gptrput"] == 0x17ec and
+    require(symbols["__gptrget"] == 0x17e3 and symbols["__gptrput"] == 0x17c8 and
             symbols["__gptrput_PARM_2"] == 0x13f, "AES generic runtime/helper extent changed")
-    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 320 and symbols["s_SSEG"] == 0x3f,
+    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 320 and symbols["s_SSEG"] == 0x41,
             "AES exact XDATA/IRAM accounting changed")
     for name, address, size in (
         ("dma0", 0x19, 8), ("dma1", 0x21, 32), ("key", 0x41, 16), ("iv", 0x51, 16),
@@ -149,12 +149,12 @@ def verify(image, symbols, debug, memory, listings):
             re.search(r"S:Laes.pointer_location\$p\$[^(\n]+\(\{3\}DG,SC:U", debug) and
             re.search(r"S:Laes.pointer_location\$value\$[^(\n]+\(\{3\}ST", debug),
             "AES byte-return/generic representation changed")
-    for name, address in (("aes128_encrypt_block", 0x926), ("aes_test_cycle", 0x16a0), ("main", 0x1731)):
+    for name, address in (("aes128_encrypt_block", 0x926), ("aes_test_cycle", 0x167c), ("main", 0x170d)):
         require(symbols["_" + name] == cdb_address(debug, f"L:G${name}$0$0") == address, "AES function/caller changed")
-    require(symbols["_aes_test_before"] == 0x16a0 and symbols["_aes_test_done"] == 0x172f and
-            image[0x16a0] == image[0x172f] == 0, "AES genuine caller markers changed")
+    require(symbols["_aes_test_before"] == 0x167c and symbols["_aes_test_done"] == 0x170b and
+            image[0x167c] == image[0x170b] == 0, "AES genuine caller markers changed")
     table = cdb_address(debug, "L:Ftest_aes$aes_test_vectors$0_0$0")
-    require(table == 0x1827 and bytes(image[table+i] for i in range(240)) ==
+    require(table == 0x1803 and bytes(image[table+i] for i in range(240)) ==
             b"".join(bytes.fromhex(text) for kat in KATS for text in kat), "AES compiled public CODE vectors changed")
     for name, address in (("ENCDI", 0xb1), ("ENCDO", 0xb2), ("ENCCS", 0xb3), ("S0CON", 0x98),
                           ("DMAARM", 0xd6), ("DMAREQ", 0xd7), ("DMAIRQ", 0xd1),
@@ -203,17 +203,18 @@ def vectors():
                     timeout=1000, cap=128, per_poll=16, start=0, jump={}, changes={},
                     stall_phase=0, stall_after=17, stall_output=17, lost_irq=0, ignore_write=0,
                     finish_delay=0, hold_start_phase=0, defer_observation=0,
-                    repeat=False, overlap=None, arguments={}, load_rdy=True, stale_rdy=False) | changes
+                    repeat=False, overlap=None, arguments={}, load_rdy=True, stale_rdy=False,
+                    enc_phase=0, enc_value=3, enc_delay=0, ack_late=0) | changes
     for kat in range(5):
         for mode in range(4):
             yield make(f"KAT-{kat}-spaces-{mode}", kat=kat, code_key=bool(mode & 1), code_input=bool(mode & 2))
     yield make("XOSC32-bytewise-rollover", initial={0xc6: 0x88, 0x9e: 0x88},
                per_poll=1, start=0xfffff8, repeat=True, load_rdy=False, stale_rdy=True)
     yield make("maximum-bounded-timeout", timeout=0x7fffff)
-    yield make("last-permitted-poll", cap=16)
+    yield make("last-permitted-poll", cap=18)
     yield make("late-ENC-flags-after-drain", finish_delay=4)
     yield make("mixed-key-ARM-IRQ-snapshot", defer_observation=6)
-    yield make("mixed-output-ARM-IRQ-snapshot", defer_observation=15)
+    yield make("mixed-output-ARM-IRQ-snapshot", defer_observation=17)
     for offset in (0, 1, 15):
         yield make(f"in-place-offset-{offset}", overlap=offset)
     for field, value, result in (
@@ -239,18 +240,25 @@ def vectors():
         yield make(f"lost-fresh-flag-{lost}", lost_irq=lost, timeout=40, result=8, stale_rdy=lost != 8)
     for phase in (1, 2, 3):
         yield make(f"stuck-start-{phase}", hold_start_phase=phase, timeout=40, result=8)
-    for limit in (1, 4, 8, 14, 15):
+    for limit in (1, 4, 8, 14, 15, 16, 17):
         yield make(f"poll-cap-{limit}", cap=limit, result=9)
-    for timeout in (1, 4, 8, 14, 15, 16):
+    for timeout in (1, 4, 8, 14, 15, 16, 17, 18):
         yield make(f"deadline-{timeout}", timeout=timeout, result=8)
     yield make("ambiguous-counter", jump={1: 0x800064}, timeout=100, result=10)
     yield make("backward-counter", jump={2: 0}, result=11)
-    for write in (2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15):
+    for write in (2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17):
         yield make(f"ignored-write-{write}", ignore_write=write, result=7)
-    for obs in (2, 4, 8, 13, 15, 16, 17):
+    for obs in (2, 4, 8, 13, 15, 16, 17, 18, 19):
         for reg, value, result in ((0xd7, 1, 7), (0xd1, 4, 7), (0xd3, 0xdd, 7), (0x98, 0xb4, 7),
                                    (0xb3, 0x80, 7), (0x9a, 1, 4)):
             yield make(f"changed-{obs}-{reg:x}", changes={obs: {reg: value}}, result=result)
+    for phase in (1, 2, 3):
+        for flags in (0, 1, 2):
+            yield make(f"phase-{phase}-ENC-flags-{flags}", enc_phase=phase, enc_value=flags,
+                       result=7 if flags else 8, timeout=40)
+        yield make(f"phase-{phase}-delayed-ENC", enc_phase=phase, enc_delay=4)
+        yield make(f"phase-{phase}-late-ENC-ack", ack_late=phase, result=8)
+        yield make(f"phase-{phase}-stale-ENC-before-command", changes={ {1:5,2:9,3:14}[phase]: {0x98:0xa7}}, result=7)
 
 
 class StopModel(Exception):
@@ -291,7 +299,7 @@ def execution(simulator, path, reference, symbols, allocated, sites, code, v):
     observations = samples = writes = received = sent = phase = 0
     previous, command_control, enc_upper, ircon = v["start"], values[0xb3] & 0xf6, values[0x98], values[0xc0]
     used, encrypted, status_posted = False, False, False
-    finish_delay = v["finish_delay"]
+    finish_delay, enc_delay = v["finish_delay"], v["enc_delay"]
     private_out = bytearray(16)
     descriptor0 = descriptor1 = None
 
@@ -349,7 +357,7 @@ def execution(simulator, path, reference, symbols, allocated, sites, code, v):
         previous = now
 
     def engine(late=False):
-        nonlocal received, sent, encrypted, status_posted, finish_delay
+        nonlocal received, sent, encrypted, status_posted, finish_delay, enc_delay
         budget = 16 if late else v["per_poll"]
         if not phase:
             return
@@ -366,7 +374,13 @@ def execution(simulator, path, reference, symbols, allocated, sites, code, v):
             if received == 16:
                 setreg(0xd6, values[0xd6] & ~1)
                 if not v["lost_irq"] & 1: setreg(0xd1, values[0xd1] | 1)
-        if phase != 3 or received != 16:
+        if received != 16: return
+        if not status_posted and v["enc_phase"] == phase and enc_delay:
+            enc_delay -= 1; return
+        if phase != 3:
+            if not status_posted:
+                status_posted = True
+                if not v["lost_irq"] & 4: setreg(0x98, values[0x98] | (v["enc_value"] if v["enc_phase"] == phase else 3))
             return
         if not encrypted:
             encrypted = True
@@ -376,7 +390,7 @@ def execution(simulator, path, reference, symbols, allocated, sites, code, v):
             else:
                 status_posted = True
                 if not v["lost_irq"] & 8: setreg(0xb3, values[0xb3] | 8)
-                if not v["lost_irq"] & 4: setreg(0x98, values[0x98] | 3)
+                if not v["lost_irq"] & 4: setreg(0x98, values[0x98] | (v["enc_value"] if v["enc_phase"] == phase else 3))
         while budget and sent < 16 and (late or sent != v["stall_output"]):
             cfg = "(sfr[0xd3]*256+sfr[0xd2])"
             source = f"(xram[{cfg}]*256+xram[{cfg}+1])"
@@ -483,15 +497,16 @@ def execution(simulator, path, reference, symbols, allocated, sites, code, v):
                 accepted, _ = write(0xb3, (0x45, 0x47, 0x41)[p-1])
                 command_control = (0x44, 0x46, 0x40)[p-1]
                 if accepted:
-                    phase = p; received = 0
+                    phase = p; received = 0; status_posted = False
                     setreg(0xb3, command_control | (8 if (v["stale_rdy"] if p == 3 else v["load_rdy"]) else 0) |
                            (1 if p == v["hold_start_phase"] else 0))
                 diag["submitted"] |= 1 << (p-1)
                 while True:
                     observe()
+                    if values[0x98] & 3 not in (0, 3): raise StopModel(7)
                     if p != 3:
-                        if not values[0xd6] & 2 or values[0xd1] & 2 or values[0x98] != enc_upper: raise StopModel(7)
-                        if diag["input_complete"] & (1 << (p-1)) and not values[0xb3] & 1: break
+                        if not values[0xd6] & 2 or values[0xd1] & 2: raise StopModel(7)
+                        if diag["input_complete"] & (1 << (p-1)) and not values[0xb3] & 1 and values[0x98] & 3 == 3: break
                     else:
                         if values[0x98] & 3 not in (0, 3): raise StopModel(7)
                         if diag["input_complete"] == 7 and diag["output_drained"] and not values[0xd6] and (
@@ -501,14 +516,20 @@ def execution(simulator, path, reference, symbols, allocated, sites, code, v):
                 diag["ack_issued"] += 1
                 observe()
                 if values[0xd1] or values[0xd6] != (0 if p == 3 else 2) or values[0xb3] & 1 or (
-                        p == 3 and values[0xb3] != 0x48) or values[0x98] != enc_upper | (3 if p == 3 else 0):
+                        p == 3 and values[0xb3] != 0x48) or values[0x98] != enc_upper | 3:
                     raise StopModel(7)
                 diag["dma_acked"] |= 1 << (p-1)
+                if p != 3:
+                    write(0x98, enc_upper, "load_ack"); diag["enc_ack_issued"] += 1
+                    if v["ack_late"] == p: v["jump"][samples] = 65536
+                    observe(); idle(2)
+                    diag["enc_acked"] |= 1 << (p-1)
             diag["phase"] = 4
-            write(0x98, enc_upper); diag["enc_ack_issued"] = 1
+            write(0x98, enc_upper); diag["enc_ack_issued"] += 1
+            if v["ack_late"] == 3: v["jump"][samples] = 65536
             observe(final=True)
             if values[0xd6] or values[0xd1] or values[0xb3] != 0x48 or values[0x98] != enc_upper: raise StopModel(7)
-            diag["enc_acked"] = diag["published"] = 1; used = True
+            diag["enc_acked"] |= 4; diag["published"] = 1; used = True
             result = 0
         except StopModel as stop:
             result = stop.result

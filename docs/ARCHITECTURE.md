@@ -651,9 +651,14 @@ remain separate gates.
 
 [`aes128_encrypt_block(key, input, output, timeout, limit, diagnostics)`](../include/aes.h)
 encrypts **one 16-byte block**, using a private two-channel AES backend, not the
-RAM-copy API or a general DMA framework. It is host-tested, image-checked and
-synthetically simulated only. All fourteen board images exclude it; no AES
-board image, debugger expansion or hardware runner is introduced.
+RAM-copy API or a general DMA framework. Both layouts are host-tested,
+image-checked and synthetically simulated; the corrected LG fixture also has
+[bounded normal/negative/reset-recovery hardware evidence](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance).
+The fourteen earlier board images exclude it;
+only the separate [AES board fixture](DEBUGGING.md#aes-dma-board-fixture)
+links it. The LG recovery run accepted514 blocks over257 same-reset cycles,
+covering all168 fixture vector/space/clock combinations. Generic hardware
+remains unobserved; this is not arbitrary-workload or general DMA acceptance.
 
 The foreground/non-reentrant caller owns AES, all DMA channels, IRQ state,
 clock settings and ST0 reads exclusively. Require awake, stable, undivided
@@ -693,10 +698,18 @@ CPU ENCDI/ENCDO transfer, guessed byte delay, simultaneous-arm shortcut or
 dummy/abort transfer is used.
 
 The [primary handshake](PROVENANCE.md#m2-aes-dma-block-sources) requests each
-needed byte. Fresh finite input completion confirms delivery of all 16
-key/IV bytes; MODE/CMD and cleared ST must agree, with no block/output flags.
-RDY is deliberately ignored for loads: it describes encryption/decryption,
-not load completion. No next start is issued while that load is incomplete.
+needed byte. Each key/IV command requires fresh finite input completion,
+matching MODE/CMD, cleared ST and **both fresh ENCIF bits**, while output
+DMA remains armed without an output completion. RDY is deliberately ignored
+for loads: it describes encryption/decryption, not load completion.
+The first LG KEY load [physically set ENCIF=3](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure),
+disproving the original clear-flags assumption. The primary block-interrupt
+wording does not exclude load interrupts or explicitly guarantee load pairs.
+Subsequent bounded LG runs observed fresh pair3 for **both KEY and IV**, plus
+verified-clear ACKs, through this unchanged C completion gate. That evidence
+does not extend to generic hardware or untested workloads. Missing flags wait
+only within the deadline/cap; partial pairs fail. No next command consumes
+retained flags.
 The same input trigger remains selected between phases. Complete finite
 loads have no further requested input until the next command; complete block
 processing plus all 16 output reads leaves no unread output producer.
@@ -706,10 +719,14 @@ completed history, not recovery from an unknown or failed history.
 Block success requires fresh input **and output** DMA completions, both
 channels disarmed, no pending request, ENCCS=`48` and both fresh ENCIF bits.
 Only then is DMAIRQ acknowledged with `1C`; key/IV use `1E`. These are R/W0
-owned-channel masks. After checked DMA quiescence/acknowledgment, S0CON is
-written once with its saved high six bits and low bits clear: **all S0CON
-bits are ordinary R/W**, not R/W0. Flags, control, configuration, masks and
-clocks are rechecked before publication; unrelated state is never repaired.
+owned-channel masks. Each command's finite DMA completion/acknowledgment and
+still-present ENC pair3 are checked before its S0CON acknowledgment. S0CON
+is written with its saved high six bits and low bits clear: **all S0CON
+bits are ordinary R/W**, not R/W0. A timed post-ACK sample must confirm clear
+flags and the expected control/ownership before the next descriptor/command.
+The block retains a unique final ACK/sample path before publication.
+Unrelated state is never repaired; even a late, effective ACK can leave a
+terminal timeout rather than a confirmed/reusable operation.
 
 One positive raw deadline below `800000` covers staging through the final
 checked publication decision, following fixed entry preflight. Equality is
@@ -729,7 +746,10 @@ phase, command submissions, confirmed input-phase bits, output drain,
 issued/confirmed acknowledgments and publication separately, plus raw status
 and elapsed/poll/helper values. `sample_valid` bit0 identifies a complete
 last SFR observation; bit1 a timed last poll. Unread/stale fields are not
-current observations. There is no partial DMA byte count or secret payload.
+current observations. `enc_ack_issued` counts 0..3 writes; `enc_acked` is a
+KEY1/IV2/block4 confirmed-phase mask, not a count. The native size remains29;
+the fixture's explicit wire ABI is version2. There is no partial DMA byte
+count or secret payload.
 Hardware key/IV persist until reload/reset/PM2/PM3; software copies, compiler
 spills and CPU registers may retain data beyond those events. No secure
 erasure, key management, decryption, messaging ECB, CCM/MIC/authentication,

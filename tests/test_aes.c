@@ -69,12 +69,12 @@ static const uint8_t *override_pointer;
 static unsigned operations, accesses, observations, samples, next_read, next_tick, extra_clock, trace;
 static unsigned phase, received, sent, ready, pending_arm, per_poll, encrypted, input_bytes, output_bytes;
 static unsigned stall_phase, stall_after, stall_output, ignore_write, mutate_observation;
-static unsigned finish_delay, status_posted, hold_start_phase, defer_observation;
+static unsigned finish_delay, status_posted, hold_start_phase, defer_observation, enc_phase, enc_value, enc_delay, ack_late;
 static uint8_t mutate_address, mutate_value, last_address, last_value, lost_irq, load_rdy, stale_ready;
 static uint32_t start, jump, jump_sample, latch;
 static const uint8_t order[] = {0xa8,0xb8,0x9a,0xbe,0xc6,0x9e,0xb3,0x98,0xd6,0xd7,0xd1,0xc0,0xd4,0xd5,0xd2,0xd3};
-static const uint8_t write_order[] = {0xd5,0xd4,0xd3,0xd2,0xd6,0xd6,0xb3,0xd1,0xd6,0xb3,0xd1,0xd6,0xb3,0xd1,0x98};
-static const uint8_t write_values[] = {0,0x20,0,0x28,2,1,0x45,0x1e,1,0x47,0x1e,1,0x41,0x1c,0xa4};
+static const uint8_t write_order[] = {0xd5,0xd4,0xd3,0xd2,0xd6,0xd6,0xb3,0xd1,0x98,0xd6,0xb3,0xd1,0x98,0xd6,0xb3,0xd1,0x98};
+static const uint8_t write_values[] = {0,0x20,0,0x28,2,1,0x45,0x1e,0xa4,1,0x47,0x1e,0xa4,1,0x41,0x1c,0xa4};
 
 static volatile uint8_t *reg(uint8_t address)
 {
@@ -151,7 +151,15 @@ static void engine(void)
             if (!(lost_irq & 1)) SOC_DMAIRQ |= 1;
         }
     }
-    if (phase != 3 || received != 16) return;
+    if (received != 16) return;
+    if (!status_posted && enc_phase == phase && enc_delay) { enc_delay--; return; }
+    if (phase != 3) {
+        if (!status_posted) {
+            status_posted = 1;
+            if (!(lost_irq & 4)) SOC_S0CON |= (uint8_t)(enc_phase == phase ? enc_value : 3);
+        }
+        return;
+    }
     if (!encrypted) {
         aes_reference_encrypt(loaded_key, loaded_input, cipher);
         encrypted = 1;
@@ -161,7 +169,7 @@ static void engine(void)
         else {
             status_posted = 1;
             if (!(lost_irq & 8)) SOC_ENCCS |= 8;
-            if (!(lost_irq & 4)) SOC_S0CON |= 3;
+            if (!(lost_irq & 4)) SOC_S0CON |= (uint8_t)(enc_phase == phase ? enc_value : 3);
         }
     }
     while (budget && sent < 16 && sent != stall_output) {
@@ -225,7 +233,7 @@ static void store(uint8_t address, uint8_t before, uint8_t value)
     assert(write_count == 1 && writes[0].address == address && writes[0].before == before && writes[0].after == value);
     write_count = 0; drain(); accesses++;
     assert(current < sizeof(write_order) && address == write_order[current]);
-    assert(value == (current == 14 ? (before & 0xfc) : write_values[current]));
+    assert(value == (address == 0x98 ? (before & 0xfc) : write_values[current]));
     if (ignore_write && current + 1 == ignore_write) {
         *reg(address) = before;
         if (address == 0xd6) pending_arm = value;
@@ -237,18 +245,21 @@ static void store(uint8_t address, uint8_t before, uint8_t value)
     } else if (address == 0xb3) {
         assert(ready == 3 && SOC_DMAARM == 3 && !SOC_DMAIRQ && !SOC_DMAREQ && !(SOC_S0CON & 3));
         assert((!phase && !received && !sent) || (phase < 3 && received == 16 && !sent));
-        phase++; received = 0;
+        phase++; received = status_posted = 0;
         SOC_ENCCS = (value & 0xf6) | ((phase == 3 ? stale_ready : load_rdy) ? 8 : 0) |
                     (phase == hold_start_phase ? 1 : 0);
     } else if (address == 0xd1) {
-        assert(received == 16 && (phase < 3 || (sent == 16 && encrypted && (SOC_S0CON & 3) == 3)));
+        assert(received == 16 && (SOC_S0CON & 3) == 3 && (phase < 3 || (sent == 16 && encrypted)));
         assert(before == (phase < 3 ? 1 : 3));
         SOC_DMAIRQ = before & value;
         /* Completed producers cannot emit more ENC_DW/UP until the next start. */
         if (phase < 3) ready &= ~1u;
     } else if (address == 0x98) {
-        assert(phase == 3 && sent == 16 && !SOC_DMAARM && !SOC_DMAREQ && !SOC_DMAIRQ && SOC_ENCCS == 0x48);
+        assert(received == 16 && !SOC_DMAREQ && !SOC_DMAIRQ && (SOC_S0CON & 3) == 0);
+        assert(before == (uint8_t)(value | 3u) && SOC_DMAARM == (phase == 3 ? 0 : 2));
+        assert(phase != 3 || (sent == 16 && SOC_ENCCS == 0x48));
         SOC_S0CON = value;
+        if (phase == ack_late) { jump_sample = samples; jump = 65536; }
     }
 }
 
@@ -274,6 +285,7 @@ static void reset_model(void)
     per_poll = 16; stall_phase = 0; stall_after = stall_output = 17;
     ignore_write = mutate_observation = 0; lost_irq = stale_ready = 0; load_rdy = 1;
     finish_delay = hold_start_phase = defer_observation = 0;
+    enc_phase = enc_delay = ack_late = 0; enc_value = 3;
     host_mmio_read_hook = load; host_mmio_write_hook = store;
     host_mmio_xaddress_hook = xaddress; host_mmio_cycles_hook = cycles;
     begin_call();
@@ -301,9 +313,9 @@ static void verify_success(const uint8_t *key, const uint8_t *input, uint8_t *ou
     assert(!memcmp(k, (const void *)aes_key, 16) && !memcmp(in, (const void *)aes_input, 16));
     assert(!memcmp(k, loaded_key, 16) && !memcmp(in, loaded_input, 16));
     assert(d.phase == 4 && d.submitted == 7 && d.input_complete == 7 && d.output_drained == 1 && d.published == 1);
-    assert(d.configured == 3 && d.arms == 4 && d.ack_issued == 3 && d.dma_acked == 7 && d.enc_ack_issued && d.enc_acked);
+    assert(d.configured == 3 && d.arms == 4 && d.ack_issued == 3 && d.dma_acked == 7 && d.enc_ack_issued == 3 && d.enc_acked == 7);
     assert(d.sample_valid == 3 && !d.arm && !d.request && !d.irq && d.control == 0x48 && d.enc_flags == enc_upper);
-    assert(trace == 15 && input_bytes == 48 && output_bytes == 16 && !aes_fault && aes_used);
+    assert(trace == 17 && input_bytes == 48 && output_bytes == 16 && !aes_fault && aes_used);
     assert(SOC_IRCON == 0xbe && !SOC_IEN0 && !SOC_IEN1 && !SOC_IEN2 && !SOC_DMAREQ);
 }
 
@@ -374,7 +386,7 @@ int main(void)
         verify_success(ram + 0x400, ram + 0x500, ram + 0x600);
     }
     reset_model(); finish_delay = 4; verify_success(ram + 0x400, ram + 0x500, ram + 0x600);
-    for (i = 6; i <= 15; i += 9) {
+    for (i = 6; i <= 17; i += 11) {
         reset_model(); defer_observation = i;
         verify_success(ram + 0x400, ram + 0x500, ram + 0x600);
     }
@@ -436,7 +448,7 @@ int main(void)
     reset_model();
     assert(aes128_encrypt_block(ram + 0x400, ram + 0x500, ram + 0x600, 100, 128, NULL) == AES_INVALID_ARGUMENT);
     assert(!accesses && !aes_fault);
-    for (i = 1; i <= 15; i++) {
+    for (i = 1; i <= 17; i++) {
         /* Writes of zero to already-zero CFG high bytes cannot be distinguished
          * from an accepted write; all consequential ignored writes must fail.
          */
@@ -465,12 +477,12 @@ int main(void)
     for (i = 1; i <= 3; i++) {
         reset_model(); hold_start_phase = i; verify_fault(AES_TIMEOUT, 40, 128);
     }
-    for (i = 1; i < 16; i++) { reset_model(); verify_fault(AES_POLL_LIMIT, 100, (uint16_t)i); }
+    for (i = 1; i < 18; i++) { reset_model(); verify_fault(AES_POLL_LIMIT, 100, (uint16_t)i); }
     reset_model();
-    assert(call(ram + 0x400, ram + 0x500, ram + 0x600, 0x7fffff, 16) == AES_OK && d.polls == 16 && d.published);
-    for (i = 1; i <= 16; i++) {
+    assert(call(ram + 0x400, ram + 0x500, ram + 0x600, 0x7fffff, 18) == AES_OK && d.polls == 18 && d.published);
+    for (i = 1; i <= 18; i++) {
         reset_model(); verify_fault(AES_TIMEOUT, i, 128);
-        if (i == 14) assert(d.input_complete == 7 && d.output_drained && d.ack_issued == 2 && d.dma_acked == 3 && SOC_DMAIRQ == 3);
+        if (i == 16) assert(d.input_complete == 7 && d.output_drained && d.ack_issued == 2 && d.dma_acked == 3 && SOC_DMAIRQ == 3);
     }
     reset_model(); stall_phase = 1; stall_after = 0; jump_sample = 1; jump = 0;
     verify_fault(AES_POLL_LIMIT, 0x7fffff, 65535);
@@ -487,11 +499,26 @@ int main(void)
         mutate_observation = 8; mutate_address = address; mutate_value = value;
         verify_fault(address == 0xc0 ? AES_STATE_CHANGED : AES_UNSUPPORTED_STATE, 100, 128);
     }
-    for (i = 2; i <= 17; i++) for (j = 6; j < sizeof(order); j++) {
+    for (i = 2; i <= 19; i++) for (j = 6; j < sizeof(order); j++) {
         reset_model(); mutate_observation = i; mutate_address = order[j];
         mutate_value = order[j] == 0xb3 ? 0x80 : order[j] == 0x98 ? 0xb4 :
             order[j] == 0xd6 || order[j] == 0xd1 ? 4 : order[j] == 0xd7 ? 1 : 0xdd;
         verify_fault(AES_STATE_CHANGED, 100, 128);
+    }
+    for (i = 1; i <= 3; i++) {
+        for (j = 0; j < 3; j++) {
+            reset_model(); enc_phase = i; enc_value = j;
+            verify_fault(j ? AES_STATE_CHANGED : AES_TIMEOUT, 40, 128);
+            assert(d.phase == i && d.enc_acked == (1u << (i-1))-1u);
+        }
+        reset_model(); enc_phase = i; enc_delay = 4;
+        verify_success(ram + 0x400, ram + 0x500, ram + 0x600);
+        reset_model(); ack_late = i; verify_fault(AES_TIMEOUT, 100, 128);
+        assert(d.enc_ack_issued == i && d.enc_acked == (1u << (i-1))-1u);
+        reset_model(); mutate_observation = i == 1 ? 5 : i == 2 ? 9 : 14;
+        mutate_address = 0x98; mutate_value = 0xa7;
+        verify_fault(AES_STATE_CHANGED, 100, 128);
+        assert(d.submitted == (1u << (i-1))-1u);
     }
     for (i = 0; i < 256; i++) {
         reset_model(); SOC_ENCCS = (uint8_t)i;
