@@ -756,6 +756,71 @@ erasure, key management, decryption, messaging ECB, CCM/MIC/authentication,
 RNG or Zigbee security is provided. The CPU-only transfer gap remains open.
 See [offline proof and precise physical gate](VALIDATION.md#m2-isolated-aes-dma-block-coverage).
 
+## Isolated deterministic PRNG
+
+[`prng_seed_explicit(uint16_t seed)` / `prng_next16(uint16_t __xdata *output, uint8_t limit)`](../include/prng.h)
+are an explicitly seeded **deterministic hardware LFSR**, not entropy, a
+cryptographic RNG or a random-byte routing service. The original driver is
+excluded from all sixteen board images; its independent software mathematics
+is test-only, never a production fallback. See the
+[primary register contract](PROVENANCE.md#m2-deterministic-prng-sources).
+
+One foreground, non-reentrant owner must establish active/awake operation,
+stable matching clock CMD/STA at undivided RC16 or XOSC32, IEN0/1/2 zero,
+and exclusive ADC/PRNG/CRC/CSP ownership. ADC must already be quiescent:
+STSEL11, ST0, no queued single conversion or other ADCCON3 activity.
+ST0 cannot prove that history. No concurrent CSP consumption, RF/noise seeding,
+RND/ADC writer, interrupt, sleep/reset or ownership handoff is allowed.
+Clock settings can change only between successfully idle calls, not within a
+call. Observations reject visible violations, but cannot detect every transient
+or past violation. This service configures no clock, ADC, IRQ or radio state.
+
+Seed accepts all uint16 values except the documented fixed points `0000` and
+`8003`. It writes the high byte and then low byte **to RNDL twice**, reads
+RNDL then RNDH separately, and verifies the complete seed without advancing.
+Reset's FFFF does not replace an explicit successful seed. A subsequent
+explicit seed is allowed only after this driver's successful idle history,
+with current hardware state still matching the retained previous state.
+RNDH is never written: that would invoke CRC, not PRNG seeding.
+
+`next16` requires a positive limit1..255. It checks retained state and shared
+control again before issuing **exactly one RCTRL01 command**, then performs at
+most `limit` complete control observations for the documented self-clear.
+Completion may precede the first observation: seeing busy first is not required.
+The final permitted poll may succeed; a still-pending command returns
+`PRNG_POLL_LIMIT`. Reserved RCTRL10/stopped11 are never interpreted as completion.
+Separate low/high reads return the full 16-bit state; a final idle/shared-state
+check and forbidden/unchanged-state rejection precede publication.
+No CPU read advances the LFSR; no undocumented latch or fixed delay is assumed.
+There is no exact-transition software computation in the driver, so arbitrary
+valid-state corruption cannot all be diagnosed.
+
+ADCCON1 is mixed-command state, not a blind read/modify/write target.
+The only command write is37: preserve STSEL11, write ST0 (never start a
+conversion), reserved low bits11 and RCTRL01. EOC is read-only here; its
+write0 has no clearing effect. No ADCH read clears it. Stable EOC0 and EOC1
+are both supported; a change within a call is an error. ADC/clock/IRQ and
+RND control observations have fixed bounded work, not a calibrated time bound.
+
+Output is a complete caller-owned writable two-byte XDATA object, after the
+entire linker-proved private prefix and ending below1E00. Link the driver
+before caller objects; no implicit RAM pool, generic pointer or cast fallback
+is provided. Invalid seed/argument/range/ownership and NOT_SEEDED perform no
+MMIO or retained-state changes. All other errors terminal-latch the original
+result; re-entry performs no MMIO, reseed, command or caller publication.
+Compiler parameter scratch remains private. Every failed call preserves valid
+caller output; successful two-byte CPU publication is fixed but not atomic.
+A late command may still complete after error. No automatic retry, stop,
+restore or clock repair occurs, and clearing C state alone is not recovery.
+Only independently established full reset begins a new fault-free epoch.
+
+The documented polynomial is `x^16+x^15+x^2+1`; each command performs 13
+feedback shifts. Exhaustive original host models establish two fixed points
+and two disjoint cycles of32,767 states. A 16-bit output is **not** a claim
+of a65,535-state period, entropy, distribution quality or security.
+[Offline evidence and the future physical gate](VALIDATION.md#m2-deterministic-prng-coverage)
+remain separate; no PRNG board image or hardware runner is added.
+
 ## Memory contract
 
 | Address space | Meaning |

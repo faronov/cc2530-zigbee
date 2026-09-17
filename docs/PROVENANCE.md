@@ -416,6 +416,36 @@ contains only processed observations from explicitly authorized programming,
 full physical CODE verification and normal/timeout/reset-recovery runs.
 Raw logs, identities and recovery backups remain outside Git and CI.
 
+### M2 deterministic PRNG sources
+
+The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)
+uses functional facts read directly from primary **SWRU191F, April2009 /
+revised April2014**, including the rendered Figure14-1 and shared ADCCON1 table.
+No SDK, private artifact, GPL programmer implementation, other-part PRNG
+implementation or dependency is imported. The source PDF is cited, not
+redistributed. RF/noise-seeding implementation is not adopted.
+
+| Primary section/page | Adopted fact and boundary |
+| --- | --- |
+| 14.1-14.2, Figure14-1 p.144 | Sixteen-bit LFSR with polynomial `x^16+x^15+x^2+1`; left shift toward higher bit indices with old bit15 feedback into next bits15/2/0. PRNG in_bit is zero. One RCTRL01 update performs13 feedback shifts, not one shift or one byte. |
+| 14.2.1-14.3 pp.144-145 | RCTRL00 CSP reads advance; CPU RND reads do not. RCTRL01 automatically returns00 **when complete**, providing the bounded polling predicate. RCTRL10 is reserved,11 stopped/off; neither is treated as success. No fixed completion-latency claim is needed. |
+| 14.2.2-14.3 pp.144-145 | Each RNDL BC write moves old low byte to high, so seed high then low via two RNDL writes. RNDL/RNDH BD read low/high state, resetFF/FF. RNDH writes trigger8-shift CRC and are excluded. Exactly0000 and8003 are documented PRNG lockup seeds. |
+| 12.2.3-12.2.4 p.134; 12.2.10 p.136 | ADCCON1 B4: EOC is R/H0, cleared by ADCH read; ST is R/W1/H0, writing1 with STSEL11 starts conversion. Low reserved bits must be11. STSEL11/ST0 and no ADCCON3 single-conversion activity are external prerequisites; ST0 alone cannot establish ADC quiescence. Write37 does not replay ST1 or clear EOC. |
+| 4.1/Table4-1 pp.61-62; 4.4.2/4.4.4 pp.66-69; 4.6 p.69 | Active operation supports RC16 or XOSC32. This API conservatively requires stable undivided clocks and excludes sleep/retention transitions. No PRNG-specific retention/recovery exception is invented. ADC's XOSC32 sampling restriction in12.2.7 p.135 is not transferred to this digital, non-converting service. |
+| [SWRZ031](https://www.ti.com/lit/pdf/swrz031), April2009, complete errata | The listed DMA variable-length and Timer2 latch issues supply no PRNG exception or missing completion guarantee. |
+
+The original host bit-cell model independently interprets Figure14-1.
+A separate polynomial-reduction model agrees for all65,536 input states;
+complete graph traversal finds two fixed points and two32,767-state cycles.
+Those are derived mathematical results, not a published nontrivial KAT table
+(none was found), entropy assessment or on-chip evidence. The isolated Python
+simulator oracle separately expresses polynomial reduction and supplies only
+synthetic register effects while unchanged compiled C executes.
+Physical bit/byte order, seed/step/repeat behavior and shared-register
+preservation remain [future gates](VALIDATION.md#m2-deterministic-prng-coverage).
+No RF receiver/noise entropy, ADC conversion, random-byte security service
+or production software replacement is provided.
+
 ### M2 AES CPU-transfer prerequisite
 
 The initial independent AES-128 encrypt-block investigation on 2026-09-17 did **not**

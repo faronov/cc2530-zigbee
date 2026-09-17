@@ -403,6 +403,31 @@ Programming may use the checked board HEX or BIN, never a standalone test.
 Do not resume/rekey a failed invocation or inspect private staging. Generic
 remains host/image/synthetic-only; no build or test grants hardware permission.
 
+The isolated deterministic PRNG foundation is included in `make test`:
+
+```sh
+make test-prng
+```
+
+It exercises explicit valid seeds, all65,536 mathematical states, exact
+13-shift/state-period results, finite self-clear observations, shared ADC/CSP
+ownership, unchanged caller output on failure and terminal re-entry. Genuine
+SDCC calls have complete CODE/ABI/private-prefix/SFR-order rejection and
+alias-aware synthetic coverage. **Never flash `prng_test.ihx` or upload it
+as board firmware.** This is deterministic, explicitly seeded, **not entropy
+or a cryptographic RNG**; the test-only mathematical models never link into
+board images. Preserve the [register contract](docs/ARCHITECTURE.md#isolated-deterministic-prng)
+and [separate physical gate](docs/VALIDATION.md#m2-deterministic-prng-coverage).
+
+For this isolated change, run both AES-board `all test` configurations serially,
+then focused build, board-host, image and alias checks for the other fourteen
+images and compare all sixteen full BIN sizes/SHA-256 values with the published
+baseline. Do not run sixteen redundant expensive standalone corpora locally.
+Keep s51's15-second operation timeout and run heavy s51 checks serially.
+CI still runs all sixteen full jobs, with the exact seven-artifact whitelist
+and `hardware_tested=false`; no new hardware runner or permission is introduced.
+Current physical LG remains the accepted corrected AES READY image, not PRNG.
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

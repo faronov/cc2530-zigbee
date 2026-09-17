@@ -1129,6 +1129,87 @@ generated `hardware_tested=false` is not rewritten by this manual evidence.
 No calibrated timing, CPU-only AES pacing, CCM/authentication, key management/
 erasure, networking or complete M2 acceptance is established.
 
+## M2 deterministic PRNG coverage
+
+`make test-prng` runs the isolated
+[explicit-seed/13-shift contract](ARCHITECTURE.md#isolated-deterministic-prng).
+**This is deterministic, not entropy or a cryptographic RNG. Never flash
+`prng_test.ihx` or upload it as a board artifact.** No board IMAGE, hardware
+runner, production software replacement, RF/ADC/DMA/security integration or
+new permission is introduced.
+
+The original strict host corpus executes **204,699 real-driver calls**.
+Independent bit-cell and polynomial models agree on all65,536 states;
+exhaustive traversal proves fixed points0000/8003 and two disjoint cycles
+of32,767 states each. All65,534 valid seeds are loaded and stepped through
+the actual driver. These are derived mathematical facts, not a nontrivial
+public known-answer table, entropy assessment or measured on-chip period.
+Tests cover all16-bit numeric pointer classes, null/zero limits, legal
+host-mapped unaligned/end-of-range caller addresses, guards, all256 ADCCON1 entry values,
+all byte values in IRQ/sleep/clock entry checks, every positive poll cap,
+last-allowed versus one-too-late completion, ignored seed/command writes,
+forbidden/stale results, prior-state changes, observed EOC/ST/reserved/IRQ/
+clock mutations and terminal no-MMIO re-entry after late completion.
+Existing32-entry logs are checked and consumed per entry, not enlarged or
+silently reset. No default MMIO read invents success.
+
+The genuine SDCC4.2.0 executable is **1,282 CODE bytes**, including
+**1,043 driver bytes at0062..0474**. Ordinary XDATA is39 bytes: complete
+driver state/parameter/scratch prefix0000..001D and caller001E..0026.
+The isolated8-byte `PRNG` version1 result occupies1E00..1E07 inside the
+unchanged64-byte status reservation: **103 reserved nonaliased bytes**,
+47 used, below the512-byte budget. There is one BIT temporary and no generic
+pointer runtime helper. Stack starts21/initialSP20,223 bytes reserved;
+observed synthetic high-water is2A and upperIRAM80..FF stays guarded.
+XDATA1F00..1FFF aliases IRAM, never an extra allocation.
+
+| Reviewed actual CODE extent | Bytes | SHA-256 (ascending physical CODE order) |
+| --- | ---: | --- |
+| Complete standalone executable0000..0501 | 1282 | `a7292d43d7e965af5d0565a8abb708cd4ac0df9189ab7523ae9eaa9d2723ca90` |
+| Driver0062..0474 | 1043 | `df20f1945e7993fcfefab707ba75ebec8474a8f949857ef9bed3608679681954` |
+
+The proof rejects a mutation of **every complete executable byte**, actual
+instruction/listing/LCALL/SFR ledger changes, pointer/return/local ABI and
+private-allocation/source/status/stack changes. The genuine caller calls
+seed01D8 and next1602AC; RNDL writes at0248/024A are high then low,
+the sole ADCCON1 command write is0396, and state reads0186/018C are
+low then high. There is no RNDH write, ADC conversion, clock/IRQ/RF/DMA write
+or production software transition. All board verifiers explicitly reject PRNG/model/test
+symbols and sources, with regression coverage for all eight image types.
+
+Serial alias-aware s51 executes **86 scenarios/505 actual driver calls**,
+including257 consecutive updates, both clocks/EOC states, successful explicit
+reuse/reseed, invalid arguments/history/control, ignored writes, stale/forbidden
+results, delayed/stuck completion and late-effect terminal faults. It stops
+at each genuine SFR instruction and verifies exact PC/read/write/order plus
+real C results, caller guards, retained state, unrelated SFRs, all unallocated
+nonaliased XDATA/status and upperIRAM. The original15-second simulator limit
+is unchanged. Only documented PRNG register effects are synthetic; actual
+CODE, helper returns and success/failure paths are never replaced.
+
+Both LG/generic AES-board serial `all test` runs passed with **416 Python
+tests and102 compiled AES-fixture scenarios each**, unchanged MAC guards,
+and the new PRNG counts above. The existing AES corpus remains243,481 host
+operations/188 isolated linked scenarios; its complete6,387-byte executable
+and5,254-byte module are unchanged. All fourteen older board/image combinations
+passed focused build, board-host, linked-image and alias-aware checks without
+rerunning identical standalone corpora. **All sixteen complete BIN sizes and
+SHA-256 values match published c828bf57c12ead33557180a59afcef1d29f3de56.**
+The142-file repository/local-link guard and diff checks passed. CI remains
+sixteen full jobs with exactly seven artifact paths and
+`hardware_tested=false` for every image; no hosted-CI result is claimed here.
+
+**Physical gate remains open.** A separately assigned parent-owned board
+fixture must establish ADC/CSP ownership/history and observe seed high/low
+loading, non-advancing CPU reads, bit/byte order, one13-shift completion,
+repeat sequences, both supported clock conditions and shared-state preservation.
+Do not infer those observations from s51 or from AES acceptance. There is no
+PRNG hardware runner or new debug permission in this foundation; ordinary
+tests never enumerate USB. Current physical LG remains the corrected
+12,765-byte AES image at READY016A/config22/RC16, not a PRNG image.
+RF/noise entropy seeding, ADC conversion, sleep/retention, ISR/CSP coexistence,
+general randomness/security and full M2 #4 remain unimplemented/open.
+
 ## M2 quiescent radio FIFO automated coverage
 
 `make test-radio-fifo` runs strict host C and the isolated

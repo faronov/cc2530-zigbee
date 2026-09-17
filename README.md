@@ -329,6 +329,24 @@ LG now holds that corrected image at **READY016A/config22/RC16**,
 completed/heartbeat1 and fault latch0. Generic hardware remains unobserved;
 this is not calibrated timing, general DMA/security acceptance or closure of M2 #4.
 
+## Isolated deterministic PRNG foundation
+
+[`prng_seed_explicit` / `prng_next16`](docs/ARCHITECTURE.md#isolated-deterministic-prng)
+provide an **explicitly seeded deterministic hardware LFSR, not entropy or a
+cryptographic RNG**. A valid caller seed is loaded high-byte first; one bounded
+command advances 13 feedback shifts and returns the full 16-bit state.
+The two forbidden fixed points are `0000` and `8003`; exhaustive host analysis
+finds two other cycles of 32,767 states, not a 65,535-state period.
+
+`make test-prng` checks the real driver against independent host mathematics
+and an isolated SDCC/alias-aware synthetic executable. **Never flash
+`prng_test.ihx`**. All sixteen board BINs, existing drivers and the CI/artifact
+policy are unchanged. There is no PRNG board image, hardware runner or physical
+PRNG evidence; LG remains at the accepted AES READY state above.
+[ADC/CSP ownership, shared-register semantics and the remaining physical gate](docs/VALIDATION.md#m2-deterministic-prng-coverage)
+are explicit. RF/noise seeding, ADC conversion, sleep and security randomness
+remain unimplemented; M2 #4 stays open.
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):

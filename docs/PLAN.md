@@ -288,6 +288,18 @@ Generic has no physical AES evidence. All fourteen older BINs and non-AES
 platform/debug drivers stay unchanged; CI has sixteen full jobs with the same
 seven-file whitelist and `hardware_tested=false`. M2 #4 remains open.
 
+A further isolated [deterministic PRNG foundation](ARCHITECTURE.md#isolated-deterministic-prng)
+implements explicit valid seed loading and one bounded 13-shift hardware
+command returning the 16-bit LFSR state. This is **not entropy or a
+cryptographic RNG**. The two forbidden fixed points and two 32,767-state cycles
+are exhaustively host-checked; real SDCC calls have linked/alias-aware synthetic
+coverage, not physical PRNG acceptance. Exclusive ADC/PRNG/CSP history and
+stable awake ownership are prerequisites, not inferred from ST=0 alone.
+All sixteen board BINs and existing drivers remain unchanged. There is no new
+board IMAGE, hardware runner, CI job or artifact; LG remains at corrected
+AES READY016A/config22/RC16. Physical seed/bit/step/repeat checks and
+RF/noise entropy seeding remain separate gates. M2 #4 stays open.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.

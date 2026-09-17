@@ -225,6 +225,9 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith("_prng_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("prng.c", "test_prng.c")),
+            "Board image must not link the isolated deterministic PRNG or host model/test")
     require(not any(name.startswith("_aes_reference_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("aes_reference.c", "test_aes.c", "test_aes_fixture.c")),
             "Board image must not link the host-only AES reference or standalone test")

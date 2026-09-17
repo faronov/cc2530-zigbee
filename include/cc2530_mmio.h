@@ -55,6 +55,9 @@
     X(SOC_ENCDO, 0xb2) \
     X(SOC_ENCCS, 0xb3) \
     X(SOC_S0CON, 0x98) \
+    X(SOC_ADCCON1, 0xb4) \
+    X(SOC_RNDL, 0xbc) \
+    X(SOC_RNDH, 0xbd) \
     X(SOC_RFD, 0xd9) \
     X(SOC_RFST, 0xe1) \
     X(SOC_RFERRF, 0xbf)
