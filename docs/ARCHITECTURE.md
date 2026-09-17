@@ -123,10 +123,24 @@ non-readable values are not inspected, and partial responses expose their
 requested/returned counts. It composes the existing frame/value codecs and
 publishes outputs atomically on local success. The caller must already select
 permitted unicast endpoint/profile/cluster context and authenticate as required.
-No dispatcher, runtime registry, getter callback, write/reporting service,
+No endpoint registry, getter callback, write/reporting service,
 device-specific cluster or board linkage is introduced. Its own target image
 tests the handler; full MAC/NWK/APS request/response composition is host-only.
 Complete ZCL/application support remains planned.
+
+`zcl_dispatch` selects Read or Discover handlers for one caller-selected
+cluster side/namespace. Discover scans the bounded, possibly unsorted table
+without mutation or value access and emits ascending ID/type pages with an
+explicit completion bit. The dispatcher builds unsupported-command errors,
+delivers received Default Response metadata without replying, and rejects
+unsupported Write No Response without an output frame or mutation.
+It shares structural table validation and supported-type classification,
+not network state. Local failures preserve outputs; the explicit result kind
+distinguishes a constructed response from a received default notification.
+Transport admission, cluster selection, authentication, matching transaction
+state and actual sends remain outside this module. Its separate target
+image exercises real dispatch/read/discovery; full Discover-then-Read
+MAC/NWK/APS composition is host-only.
 
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the

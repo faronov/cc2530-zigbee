@@ -54,7 +54,7 @@ OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/dma.rel $(BUILD)/dm
 endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
-.PHONY: test-zcl-frame test-zcl-value test-zcl-attributes
+.PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -168,8 +168,8 @@ test-aps-frame: $(BUILD)/host-aps-frame-tests $(BUILD)/aps_frame_test.ihx
 	$(BUILD)/host-aps-frame-tests
 	$(PYTHON) -B tests/boot_aps_frame.py --output $(BUILD) --simulator "$(S51)"
 
-$(BUILD)/host-protocol-frame-tests: tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c -o $@
+$(BUILD)/host-protocol-frame-tests: tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c src/zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c src/zcl_dispatch.c -o $@
 
 $(BUILD)/protocol_frame_test.rel: tests/test_protocol_frame.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -228,6 +228,22 @@ $(BUILD)/zcl_attributes_test.ihx: $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame
 test-zcl-attributes: $(BUILD)/host-zcl-attributes-tests $(BUILD)/zcl_attributes_test.ihx
 	$(BUILD)/host-zcl-attributes-tests
 	$(PYTHON) -B tests/boot_zcl_attributes.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-zcl-dispatch-tests: tests/test_zcl_dispatch.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_dispatch.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+
+$(BUILD)/zcl_dispatch.rel: src/zcl_dispatch.c include/zcl_dispatch.h include/zcl_attributes.h include/zcl_wire.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_dispatch_test.rel: tests/test_zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_dispatch_test.ihx: $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel
+
+test-zcl-dispatch: $(BUILD)/host-zcl-dispatch-tests $(BUILD)/zcl_dispatch_test.ihx
+	$(BUILD)/host-zcl-dispatch-tests
+	$(PYTHON) -B tests/boot_zcl_dispatch.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-timebase-tests: tests/test_timebase.c tests/host_mmio.c tests/host_mmio.h src/timebase.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase.c tests/host_mmio.c src/timebase.c -o $@
@@ -333,7 +349,7 @@ $(BUILD)/host-dma-fixture-tests_$(BOARD): tests/test_dma_fixture.c src/dma_fixtu
 
 test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
 test: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
-test: test-protocol-frame test-zcl-frame test-zcl-value test-zcl-attributes
+test: test-protocol-frame test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 test: all test-timebase test-clock test-irq test-radio-fifo test-dma test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests

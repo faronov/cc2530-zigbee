@@ -68,7 +68,8 @@ typedef enum {
     ZCL_CODEC_INVALID_VALUE,
     ZCL_CODEC_INVALID_TABLE,
     ZCL_CODEC_UNSUPPORTED_COMMAND,
-    ZCL_CODEC_UNSUPPORTED_CONTEXT
+    ZCL_CODEC_UNSUPPORTED_CONTEXT,
+    ZCL_CODEC_UNSUPPORTED_NO_RESPONSE
 } zcl_codec_result_t;
 
 typedef struct {
@@ -120,6 +121,7 @@ zcl_codec_result_t zcl_frame_encode(const zcl_header_t *header,
  * String data excludes its length prefix; string_non_value requires empty data.
  * Character-string octets are preserved without charset/UTF-8 validation.
  */
+uint8_t zcl_value_type_supported(uint8_t type);
 zcl_codec_result_t zcl_value_decode(uint8_t type, const uint8_t *body, uint16_t length,
                                     zcl_value_info_t *result);
 zcl_codec_result_t zcl_value_encode(const zcl_value_t *value, uint8_t *body,

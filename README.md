@@ -318,10 +318,13 @@ headers and 38 wire-value types, including 8..64-bit byte representations
 and short strings. A separate [read-only attribute model and unicast Read
 Attributes handler](docs/ZCL.md#read-only-attributes-and-read-attributes)
 adds bounded lookup, access/space-error records and response construction.
+The [one-cluster unicast dispatcher](docs/ZCL.md#discover-attributes-and-unicast-dispatch)
+adds sorted Discover Attributes pages, routes Read requests, reports received
+Default Responses and builds unsupported-command errors without response loops.
 It adds no registered cluster, writes, reporting or network dispatcher.
 Unreviewed ZCL errata remains a conformance risk, not a development stop.
 APS/ZCL composition and the read handler are target-tested; the complete
-MAC/NWK/APS/ZCL read request/response chain is host-tested.
+MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested.
 This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.

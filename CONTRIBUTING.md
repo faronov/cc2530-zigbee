@@ -180,9 +180,18 @@ the same source/layout, alias, upper-IRAM, unwind and 15-second guards.
 No existing component budget is increased. The host protocol target also
 checks a complete MAC/NWK/APS read request/response; its target chain is
 unchanged. See [scope and evidence](docs/ZCL.md#read-only-attributes-and-read-attributes):
-no board `IMAGE`, artifact upload, registered cluster, dispatcher, writes or
+no board `IMAGE`, artifact upload, registered cluster, network dispatcher, writes or
 reporting is added. Unreviewed ZCL errata remains a documented conformance
 risk rather than a stop on base-text foundation development.
+
+`make test-zcl-dispatch`, also part of the default test suite, exercises
+one-cluster unicast Read/Discover dispatch, unsupported-command errors,
+Default Response reception and the no-response exceptions. Its isolated
+1,024-byte test harness keeps the same strict layout/alias/upper-IRAM/unwind
+and 15-second guards. Host tests cover exact allocations and full-chain
+Discover-then-Read using the returned ID. Neither the new test image nor
+its outputs become board firmware or CI artifacts. See the
+[dispatch contract](docs/ZCL.md#discover-attributes-and-unicast-dispatch).
 
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:

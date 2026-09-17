@@ -1143,10 +1143,11 @@ denial without touching values, ordered status/value records, namespace/side
 guards, malformed-command responses, space errors and explicit prefix counts.
 Golden CODE/XDATA vectors, all data type IDs, unchanged local failures,
 capacity boundaries and a 16-entry table are executed on SDCC in
-`zcl_attributes_test.ihx`: 12,019 CODE bytes and 661 ordinary XDATA bytes,
-725 with the 64-byte status reservation. Only this new harness uses an explicit
+`zcl_attributes_test.ihx`: after shared helper extraction, 12,078 CODE bytes
+and 664 ordinary XDATA bytes, 728 with the 64-byte status reservation.
+This harness uses an explicit
 1,024-byte limit; existing budgets and the 15-second timeout are unchanged.
-The exact reservation threshold passes at 725 and rejects 724 and the
+The exact reservation threshold passes at 728 and rejects 727 and the
 512-byte default, without weakening other layout/alias/stack checks.
 
 Host tests add exact table/value/request/response/result allocations,
@@ -1158,6 +1159,30 @@ The SDCC protocol image remains the previous three-layer chain. These
 synthetic vectors do not implement routing, authentication, counter
 allocation, endpoint registration, writes/reporting or a device profile.
 Unreviewed ZCL errata remains a conformance risk, not a development stop.
+
+The isolated discovery/dispatch image exercises the real dispatcher,
+Read handler and frame/value codecs with CODE/XDATA tables. It uses
+15,039 CODE bytes and 788 ordinary XDATA bytes, 852 including the reserved
+status block, within an explicit 1,024-byte harness budget. The exact layout
+threshold passes at 852 and rejects 851 and the 512-byte default.
+No existing component budget, alias/IRAM/unwind check or 15-second timeout
+is relaxed. The small shared type predicate leaves the value image at
+6,824 CODE and 377 ordinary XDATA, within its original 512-byte reservation.
+
+Shared cases include sorting without table mutation, inclusive starts and
+pagination, zero maximum, `FFFF` termination, unreadable metadata without
+backing-value access, atomic errors, Read dispatch, malformed/extended
+standard and manufacturer payloads, namespace/direction checks and
+no reply to Default Response or unsupported Write No Response.
+Host tests exhaust 16-bit start/manufacturer IDs, maximum/table-size/budget
+matrices, control/command and Default Response command/status pairs, type
+IDs, uint16 lengths/capacities and exact allocations under ASan/UBSan.
+The full host MAC/NWK/APS/ZCL chain discovers an attribute, decodes the
+returned ID and reads it through the dispatcher, with independent complete
+golden responses and both manufacturer layouts. The target protocol image
+is unchanged and remains three-layer; radio/platform code and board images
+are unaffected. This is not network admission, transaction matching or
+full-cluster conformance.
 
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |

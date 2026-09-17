@@ -6,9 +6,11 @@
 #include <stddef.h>
 #include <string.h>
 
-static zcl_codec_result_t validate_set(const zcl_attribute_set_t *set)
+zcl_codec_result_t zcl_attr_set_check(const zcl_attribute_set_t *set)
 {
     uint8_t i, j;
+    if (set == NULL)
+        return ZCL_CODEC_INVALID_ARGUMENT;
     if (set->count > ZCL_ATTRIBUTE_MAX_COUNT || set->side > ZCL_ATTRIBUTE_CLIENT
             || set->manufacturer_specific > 1u || (set->attributes == NULL && set->count != 0u))
         return ZCL_CODEC_INVALID_TABLE;
@@ -39,7 +41,7 @@ zcl_codec_result_t zcl_read_attrs_unicast(const zcl_attribute_set_t *set,
 
     if (set == NULL || request == NULL || response == NULL || info == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
-    status = validate_set(set);
+    status = zcl_attr_set_check(set);
     if (status != ZCL_CODEC_OK)
         return status;
     status = zcl_frame_decode(request, request_length, &frame);

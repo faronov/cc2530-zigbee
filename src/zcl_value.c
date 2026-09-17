@@ -40,6 +40,12 @@ static zcl_codec_result_t value_shape(uint8_t type, uint8_t *width, uint8_t *kin
     return ZCL_CODEC_OK;
 }
 
+uint8_t zcl_value_type_supported(uint8_t type)
+{
+    uint8_t width, kind;
+    return value_shape(type, &width, &kind) == ZCL_CODEC_OK;
+}
+
 static uint8_t non_value_pattern(uint8_t kind, const uint8_t *data, uint8_t width)
 {
     uint8_t i;

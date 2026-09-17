@@ -39,6 +39,9 @@ typedef struct {
     uint8_t returned_count;
 } zcl_read_info_t;
 
+/* Check table structure/selectors/unique IDs, not value types or backing data. */
+zcl_codec_result_t zcl_attr_set_check(const zcl_attribute_set_t *set);
+
 /* One selected cluster-side/namespace, after caller-owned unicast delivery,
  * endpoint/profile/cluster filtering and applicable authentication checks.
  * Capacity is the complete response budget, also limited by ZCL_FRAME_MAX_BODY.

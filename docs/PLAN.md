@@ -400,12 +400,15 @@ now handle global/cluster-specific headers and 38 bounded wire-value types.
 A separate read-only model and unicast Read Attributes handler add bounded
 lookup, read-access checks, protocol status records, explicit partial counts
 and atomic response construction, without registering a cluster.
+A one-cluster unicast dispatcher adds sorted Discover Attributes pages,
+Read selection, unsupported-command responses and explicit no-reply handling
+for received Default Responses and unsupported Write No Response.
 The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
 remains an open follow-up risk, not a stop on base-text development. Review
 applicable corrections before conformance claims. Header/value, APS/ZCL and
-read-handler target checks are host-tested, image-checked and simulated;
-full Read Attributes/ZCL/APS/NWK/MAC composition is host-tested.
-There is no board caller, dispatcher, native
+read/dispatch target checks are host-tested, image-checked and simulated;
+full Discover-then-Read/ZCL/APS/NWK/MAC composition is host-tested.
+There is no board caller, endpoint/transport dispatcher, native
 numeric/charset conversion or advertised cluster. Application/device/profile
 selection and all M4/M5 networking/security gates remain open.
 

@@ -13,7 +13,8 @@ This is preparatory M6 work alongside Core R22/BDB 3.0.1, not a claim that
 R22 universally mandates this ZCL revision. Application/device definitions,
 profile requirements, complete clusters, writes, reporting and persistence
 are not implemented or advertised. A bounded generic read-only attribute
-model and unicast Read Attributes handler are implemented below.
+model, Read/Discover Attributes handlers and one-cluster unicast command
+dispatcher are implemented below.
 No module is linked into board firmware.
 
 ## Frame header
@@ -45,7 +46,7 @@ reserved bits and attempts to inject type bits through `header.flags`.
 Manufacturer codes are retained without checking allocation or recognition.
 Absent codes decode as zero and are ignored on encode. Command IDs retain
 all byte values, including unknown/reserved IDs: this codec identifies the
-header, not a legal command to execute/transmit. A future dispatcher must
+header, not a legal command to execute/transmit. A dispatcher must
 apply the global-command table, cluster-specific rules and manufacturer
 recognition before handling requests. Frame success is not command support.
 
@@ -160,9 +161,10 @@ Only global command `00` is handled. Incoming direction must select the
 configured cluster side; the manufacturer flag and, when present, code must
 match exactly. Other commands and context mismatches return explicit local
 `UNSUPPORTED_COMMAND` / `UNSUPPORTED_CONTEXT` errors without an output frame.
-The surrounding future dispatcher still owns unsupported-command, unknown
-manufacturer/cluster and other reception policy; this is not a complete
-network-facing ZCL endpoint.
+The separate dispatcher below supplies a bounded command-selection and
+unsupported-command policy; the direct Read API retains these local errors.
+Unknown-cluster/delivery policy remains outside both APIs; neither is a
+complete network-facing ZCL endpoint.
 
 A request needs one or more complete little-endian 16-bit IDs. An empty list
 or odd trailing byte generates unicast **Default Response `0B`,
@@ -210,12 +212,100 @@ Outputs must not overlap each other or input storage. Calls remain
 foreground-only and non-reentrant; there is no heap, MMIO, security/NV stub,
 registered device, mandatory-cluster claim or RF operation.
 
+## Discover Attributes and unicast dispatch
+
+`include/zcl_dispatch.h` / `src/zcl_dispatch.c` add
+`zcl_dispatch_unicast(set, request, request_length, response, capacity, info)`.
+The caller selects **one existing cluster side on one unicast endpoint**,
+applies profile/delivery/authentication requirements, and supplies its one
+attribute namespace. This is not an APS/endpoint registry, broadcast handler,
+unknown-cluster service, transaction engine or permission to transmit.
+
+| Incoming command | Bounded result |
+| --- | --- |
+| Global Read Attributes `00`, matching namespace | Existing Read handler, unchanged semantics |
+| Global Discover Attributes `0C`, matching namespace | Sorted ID/type page in Discover Attributes Response `0D` |
+| Global Default Response `0B`, matching namespace | Received command/status notification; **no reply** |
+| Global Write Attributes No Response `05` | Explicit local `ZCL_CODEC_UNSUPPORTED_NO_RESPONSE`; no write and **no reply**, even for errors |
+| Other global or cluster-specific command | Default Response `0B` with original command ID and `UNSUP_COMMAND 81` |
+| Standard/manufacturer namespace or manufacturer-code mismatch | No handler execution; `UNSUP_COMMAND 81`, except the two no-reply cases above |
+
+Direction must match the selected side; a mismatch is local
+`UNSUPPORTED_CONTEXT`, not table reselection. An unrecognized Default
+Response namespace also returns that error without an output frame.
+Cluster-specific IDs `05`/`0B` are not the global no-response commands.
+Unsupported response commands are not silently accepted. Error Default
+Responses are not suppressed by Disable Default Response. All generated
+responses use global type, reverse direction, echo the transaction and
+manufacturer context, set Disable Default Response and zero reserved bits.
+
+Discover requests contain a little-endian start ID and one-byte maximum.
+Fewer than three payload bytes generate `MALFORMED_COMMAND 80`.
+R8 2.3.2 requires ignoring additional octets in standard fixed-format
+commands: Discover and received Default Response ignore trailing bytes
+within the 100-byte frame bound. Manufacturer extensions are not guessed:
+extra bytes in those two manufacturer commands return local
+`UNSUPPORTED_LAYOUT`; reserved manufacturer FCF bits retain the framer's
+existing rejection. Read's variable ID-list contract is unchanged.
+
+Discovery lists every declared attribute, **including non-readable entries**,
+in increasing numeric ID order, starting at the first ID at least the
+requested start. It reads ID/type metadata, never backing value bytes,
+lengths or non-value selectors. Tables may be unsorted; they are not changed.
+The existing 16-entry/unique-ID checks are shared via `zcl_attr_set_check`.
+Emitted types must belong to the existing 38-type subset, checked through
+`zcl_value_type_supported`; an unsupported emitted type is a local error,
+not a skipped record or invented type. Later, unreturned entries are not
+type-validated. A denied Read descriptor may therefore be acceptable to
+Read while requiring a real supported type before discovery can expose it.
+
+The response payload is a one-byte **Discovery Complete** followed by
+three-byte `(ID, type)` records. Page length is bounded by the requested
+maximum, the table and the caller's total response budget (at most 100).
+Complete is `1` only when no eligible attributes remain after the page.
+It remains `0` at a request-count or capacity cutoff. Empty/beyond-end
+discovery is complete; ID `FFFF` terminates without wrapping to zero.
+The base request field does not prohibit maximum `0`: this implementation
+returns an empty page, complete only if no eligible attributes exist.
+For a positive maximum and nonempty eligible set, a budget unable to fit
+one record returns `BUFFER_TOO_SMALL`, avoiding accidental zero progress.
+The caller can request another page starting at the last ID plus one;
+there is no retained cursor, automatic request or fragmentation.
+
+`zcl_dispatch_info_t` makes no-transmission outcomes explicit:
+`kind = ZCL_DISPATCH_RESPONSE` means `response[0..length)` was constructed;
+`kind = ZCL_DISPATCH_DEFAULT_RECEIVED` means only `info` was published,
+`length = 0`, and the entire response buffer is untouched (capacity may be
+zero, but the pointer remains required). The latter is a notification of
+the received `sequence`, `default_command`, `default_raw_status` and
+normalized `default_status`, **not successful transaction matching**.
+Deprecated statuses are mapped as required by R8 Table 2-12:
+`82..84 -> 81`, `8A/C4 -> 00`, `8F -> 7E`,
+`90/91/93/C0/C1 -> 01`. Other status bytes are retained as metadata,
+including unknown/reserved ones, never coerced to success.
+Malformed Default Responses return local errors and never trigger a reply.
+
+For constructed replies, `command_id` is the emitted command, `sequence`
+is echoed, and read/discovery counts retain their respective meanings.
+Discovery's `requested_count` is the request maximum, not a total table size.
+`discovery_complete` is meaningful only for `0D`; default fields are
+meaningful for `0B`. Unused metadata is zeroed. Every local error, including
+unsupported no-response writes and invalid metadata after a valid prefix,
+leaves both outputs unchanged. No successful write/security/NV stubs exist.
+All prior stable-storage, non-overlap and foreground-only contracts apply.
+
+This bounded dispatcher is **not a conforming complete cluster**: R8 2.5
+requires more foundation behavior for attribute-bearing clusters, including
+writes. Device/profile selection, complete command support and errata review
+remain necessary before conformance claims.
+
 ## Offline evidence
 
 ```sh
 make test-zcl-frame
 make test-zcl-value
 make test-zcl-attributes
+make test-zcl-dispatch
 make test-protocol-frame
 ```
 
@@ -259,7 +349,8 @@ it is not claimed as a four-layer target run.
 
 The separate `zcl_attributes_test.ihx` exercises the real model, value codec,
 framer and read handler, with a **1,024-byte test-harness reservation budget**.
-It has 12,019 CODE bytes and 661 ordinary XDATA bytes (725 including the
+After shared table/type helper extraction it has 12,078 CODE bytes and
+664 ordinary XDATA bytes (728 including the
 64-byte status reservation). Existing 512-byte images and the shared
 15-second timeout are unchanged; CODE/source/result, alias, unused-XDATA,
 upper-IRAM and unwind checks remain mandatory. Its eight-byte `ZCA1` result
@@ -279,6 +370,32 @@ feeds actual decoded MAC/NWK/APS requests to the handler and encodes/decodes
 the complete response, with an independent whole-frame golden vector and
 both manufacturer layouts. Its reverse-hop metadata is synthetic, not
 routing, counter allocation or a network transaction implementation.
+
+The separate `zcl_dispatch_test.ihx` links the actual dispatcher, Read handler,
+frame and value codecs: **15,039 CODE, 788 ordinary XDATA, 852 including status
+reservation**, under its explicit 1,024-byte harness budget. It checks the
+same CODE/CDB/alias/unused-XDATA/upper-IRAM/unwind rules and 15-second timeout.
+The eight-byte result is `ZCD1`, version 1, size 8, failure line LE16.
+The original component budgets remain unchanged; the value image now uses
+6,824 CODE and 377 ordinary XDATA bytes, within its 512-byte reservation.
+Discovery uses a bounded next-ID scan to shorten generic-pointer spill
+lifetimes on SDCC; test-only volatile loop temporaries avoid excess permanent
+IRAM spills. No memory/timeout guard was relaxed to make the image fit.
+
+Shared dispatch cases cover CODE/XDATA and unsorted tables, inclusive starts,
+multi-page discovery, `FFFF`, zero maximum, count/capacity cutoffs, empty
+sets, unreadable metadata without value access, unsupported types and atomic
+failures, Read dispatch, malformed/extended requests and no-response rules.
+Host matrices additionally cover every 16-bit start/manufacturer ID, every
+maximum for all 0..16 table sizes and capacities 0..102, all FCF/command pairs,
+all Default Response command/status pairs, every type ID, and uint16
+lengths/budgets. Exact allocations are checked under ASan/UBSan.
+The host protocol chain now performs actual Discover dispatch, decodes the
+returned ID, and uses it in a subsequent Read transaction through
+MAC/NWK/APS/ZCL. Both manufacturer layouts and independent complete golden
+discovery/read response frames are checked. The target protocol image
+remains the three-layer MAC/NWK/APS chain; all new images remain excluded
+from board selections and CI artifacts.
 
 Evidence is **host-tested, image-checked and simulated**, not hardware
 observation, authenticated traffic, working clusters, interview or

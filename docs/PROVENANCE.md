@@ -760,8 +760,12 @@ engineering baseline, not a claim of a universal mandatory pairing.
 | Section 2.4.1, Figures 2-2/3/4, 2-8..2-9 / 60-61 | Three/five-byte headers, FCF bits, manufacturer-code order, direction/default-response metadata and transaction/command fields |
 | Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Test-only Report Attributes ID and identifier/type/value record shape; no reporting handler imported or implemented |
 | Sections 2.5.1-2, Figures 2-5/6/7, 2-11..2-14 / 63-66 | One or more LE16 request IDs; ordered status records; type/value only on success; insufficient-space records, prefix termination and lack of fragmentation |
+| Section 2.3.2, 2-4 / 56; sections 2.5.13-14, Figures 2-26/27/28, 2-29..2-31 / 81-83 | Ignore appended standard-command octets; LE16 inclusive discovery start and byte maximum, ascending ID/type records and completion flag; follow-up at last ID plus one |
+| Section 2.5.6.3, 2-18 / 70; section 2.5.12, 2-28..2-29 / 80-81 | Write Attributes No Response forbids all replies including errors; never reply to Default Response; unsupported-command `81` errors and received command/status notification |
 | Section 2.4.1, 2-8..2-9 / 60-61; section 2.5.12, 2-28..2-29 / 80-81 | Response transaction echo/direction/default-response flag; unicast Default Response command/status and error-response conditions |
 | Section 2.6.3, Table 2-12, 2-55..2-56 / 107-108 | SUCCESS `00`, NOT_AUTHORIZED `7E`, MALFORMED_COMMAND `80`, UNSUPPORTED_ATTRIBUTE `86`, INSUFFICIENT_SPACE `89`; deprecated WRITE_ONLY `8F` must not be transmitted |
+| Section 2.6.3, Table 2-12, 2-55..2-57 / 107-109 | Normalize received deprecated statuses: `82..84 -> 81`, `8A/C4 -> 00`, `8F -> 7E`, `90/91/93/C0/C1 -> 01`; transmit nondeprecated `UNSUP_COMMAND 81` rather than `82/83/84` |
+| Section 2.5, 2-10 / 62 | Attribute-bearing clusters require more foundation commands, including writes; this partial dispatcher does not establish complete cluster conformance |
 | Section 2.6.1.5, 2-44 / 96 | Command ID ranges and manufacturer context, left to future dispatch policy |
 | Sections 2.6.2.1-2, Tables 2-10/11, 2-45..2-48 / 97-100 | Type IDs, widths, non-value patterns and field-dependent full versus non-value ranges |
 | Sections 2.6.2.3-9, 2-48..2-49 / 100-101 | No-data, raw/bitmap/integer widths, Boolean `00/01/FF` and signed non-value patterns |
@@ -775,8 +779,14 @@ The read handler requires complete nonempty identifier pairs; an empty list
 or incomplete last ID uses MALFORMED_COMMAND under the base status definition.
 Its 16-entry table cap, local error API, minimum one-record response budget,
 caller-selected unicast context and private atomic scratch storage are
-explicit implementation bounds, not new standard requirements. No generic
-dispatcher, authenticated network reception or complete device is implied.
+explicit implementation bounds, not new standard requirements. The subsequent
+dispatcher is limited to one caller-selected unicast cluster side; it does not
+imply a network dispatcher, authenticated reception or complete device.
+Discovery's maximum byte has no stated nonzero restriction in the reviewed
+base text: zero requests produce an empty page, with completion derived from
+whether any eligible attribute remains. Positive nonempty discovery requires
+room for a record; page sizes are bounded by maximum and response capacity.
+Manufacturer fixed-format trailing extensions remain explicitly unsupported.
 Original code and vectors were written from these functional facts, not the
 external mixed ZCL/Matter catalog or a vendor stack. No implementation,
 cluster table, key, capture, SDK object or test-plan vector was imported.
