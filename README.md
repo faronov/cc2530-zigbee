@@ -313,6 +313,11 @@ The independent [APS Data codec](docs/APS.md) adds normal-unicast headers,
 endpoint/profile/cluster metadata and opaque payload, with a real offline
 MAC/NWK/APS composition test. APS security, broadcast/group delivery and
 extended headers fail explicitly; ACK request does not implement transactions.
+The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
+headers and 38 wire-value types, including 8..64-bit byte representations
+and short strings. They add no command handlers, attribute model or clusters;
+ZCL errata/application gates remain open. APS/ZCL composition is target-tested,
+while the complete MAC/NWK/APS/ZCL/value chain is host-tested.
 These codecs are host-tested, image-checked and simulated, not linked into
 board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.

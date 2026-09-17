@@ -154,6 +154,25 @@ upper-IRAM guards. Neither changes the existing MAC test image or adds an
 Normal-unicast syntax and ACK-request metadata are not an APS transaction,
 ZDO/ZCL support, authentication or permission to send.
 
+The ZCL Revision 8 wire codecs have focused offline targets:
+
+```sh
+make test-zcl-frame
+make test-zcl-value
+```
+
+Both are included in `make ... all test`, with the unchanged 512-byte
+component reservation and alias/upper-IRAM guards. The frame image also
+executes real APS/ZCL composition. The value image uses four independently
+initialized phases plus an invalid-selector rejection, retaining every
+scenario and the shared 15-second per-run timeout. The
+[test-only phase/result ABI](docs/ZCL.md#offline-evidence) never grants
+hardware access. Neither new executable is a board `IMAGE` or CI artifact.
+The host protocol target additionally checks full MAC/NWK/APS/ZCL/value
+composition; its SDCC image remains the prior three-layer chain.
+Base-text wire evidence is not errata-aware conformance, implemented
+commands/attributes or validated numeric/text application data.
+
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:
 

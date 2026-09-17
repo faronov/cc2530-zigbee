@@ -132,3 +132,10 @@ are unchanged. These are test-harness budgets, not deployed firmware sizes.
 Evidence is **host-tested, image-checked and simulated**, not RF,
 authentication, ACK handling, working ZDO/ZCL, join or interoperability.
 All data is synthetic; see the [primary sources](PROVENANCE.md#offline-r22-aps-data-frame-sources).
+
+The separate [ZCL wire codecs](ZCL.md) now consume an APS payload in offline
+tests. `zcl_frame_test.ihx` executes actual APS/ZCL composition; the host
+protocol test adds the full MAC/NWK/APS/ZCL/value chain. The existing
+`protocol_frame_test.ihx` remains three-layer, with its original memory
+budget. APS itself still treats payload as opaque and gains no dispatcher,
+ZCL handler or board caller.

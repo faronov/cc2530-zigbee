@@ -196,15 +196,124 @@ void main(void)
 }
 #else
 #include <stdio.h>
+#include "zcl_wire.h"
+
+static uint16_t zcl_integration(void)
+{
+    static const uint8_t scalar[] = {0x78, 0x56};
+    static const uint8_t complete_golden[] = {
+        0x61, 0x98, 0x5a, 0x34, 0x12, 0x45, 0x45, 0x67, 0x67,
+        0x08, 0x20, 0x78, 0x56, 0x34, 0x12, 0x1e, 0xa5,
+        0x40, 0x21, 0x78, 0x56, 0x34, 0x12, 0x31, 0xe7,
+        0x18, 0x4d, 0x0a, 0x34, 0x12, 0x21, 0x78, 0x56
+    };
+    zcl_header_t header;
+    zcl_frame_info_t zcl, saved_zcl;
+    zcl_value_t value;
+    zcl_value_info_t item, saved_item;
+    uint8_t value_bytes[101], command[97], zcl_body[102], value_length, zcl_length;
+    uint8_t destination, source, option, manufacturer, variant, zcl_size, zcl_offset, offset;
+
+    headers();
+    memset(&header, 0, sizeof(header));
+    header.sequence = 0x4d;
+    header.command_id = 0x0a;
+    header.manufacturer_code = 0x5678;
+    memset(&value, 0, sizeof(value));
+    for (destination = 2; destination <= 3; destination++) {
+        for (source = 2; source <= 3; source++) {
+            mac.destination_mode = destination;
+            mac.source_mode = source;
+            mac_size = (uint8_t)(9u + (destination == 3 ? 6u : 0u) + (source == 3 ? 6u : 0u));
+            for (option = 0; option < 4; option++) {
+                nwk.flags = (uint16_t)(0x2000u | ((uint16_t)option << 11));
+                nwk_size = (uint8_t)(8u + (option & 1u ? 8u : 0u) + (option & 2u ? 8u : 0u));
+                for (manufacturer = 0; manufacturer < 2; manufacturer++) {
+                    header.flags = manufacturer ? 0x1c : 0x18;
+                    zcl_size = manufacturer ? 5 : 3;
+                    for (variant = 0; variant < 2; variant++) {
+                        value.type = variant ? ZCL_TYPE_OCTET_STRING : ZCL_TYPE_UINT16;
+                        value.data = variant ? application : scalar;
+                        value.data_length = variant ? (uint16_t)(125u - mac_size - nwk_size - 8u - zcl_size - 4u) : 2u;
+                        CHECK(zcl_value_encode(&value, value_bytes, sizeof(value_bytes), &value_length) == ZCL_CODEC_OK);
+                        command[0] = 0x34;
+                        command[1] = 0x12;
+                        command[2] = value.type;
+                        memcpy(command + 3, value_bytes, value_length);
+                        memset(zcl_body, 0xc7, sizeof(zcl_body));
+                        CHECK(zcl_frame_encode(&header, command, (uint16_t)(3u + value_length),
+                                               zcl_body + 1, 100, &zcl_length) == ZCL_CODEC_OK);
+                        CHECK(zcl_body[0] == 0xc7 && filled(zcl_body + zcl_length + 1u,
+                              (uint16_t)(sizeof(zcl_body) - zcl_length - 1u), 0xc7));
+                        CHECK(aps_frame_encode(&aps, zcl_body + 1, zcl_length, apdu, sizeof(apdu), &aps_length) == APS_CODEC_OK);
+                        CHECK(nwk_frame_encode(&nwk, apdu, aps_length, npdu, sizeof(npdu), &nwk_length) == NWK_CODEC_OK);
+                        memset(body, 0xc7, sizeof(body));
+                        CHECK(mac_frame_encode(&mac, npdu, nwk_length, body + 1, 125, &mac_length) == MAC_CODEC_OK);
+                        CHECK(body[0] == 0xc7 && filled(body + mac_length + 1u,
+                              (uint16_t)(sizeof(body) - mac_length - 1u), 0xc7));
+                        if (variant) {
+                            CHECK(mac_length == 125);
+                        } else if (destination == 2 && source == 2 && option == 0 && manufacturer == 0) {
+                            CHECK(mac_length == sizeof(complete_golden));
+                            CHECK(memcmp(body + 1, complete_golden, sizeof(complete_golden)) == 0);
+                        }
+                        CHECK(mac_frame_decode(body + 1, mac_length, &frame) == MAC_CODEC_OK);
+                        CHECK(frame.header.type == MAC_FRAME_DATA && frame.header.sequence == 0x5a);
+                        CHECK(nwk_frame_decode(body + 1u + frame.payload_offset, frame.payload_length, &network) == NWK_CODEC_OK);
+                        CHECK(network.header.type == NWK_FRAME_DATA && network.header.sequence == 0xa5);
+                        offset = (uint8_t)(1u + frame.payload_offset + network.payload_offset);
+                        CHECK(aps_frame_decode(body + offset, network.payload_length, &transport) == APS_CODEC_OK);
+                        CHECK(transport.header.type == APS_FRAME_DATA && transport.header.counter == 0xe7);
+                        zcl_offset = (uint8_t)(offset + transport.payload_offset);
+                        CHECK(zcl_frame_decode(body + zcl_offset, transport.payload_length, &zcl) == ZCL_CODEC_OK);
+                        CHECK(zcl.header.sequence == 0x4d && zcl.header.command_id == 0x0a && zcl.header.flags == header.flags);
+                        CHECK(zcl.header.manufacturer_code == (manufacturer ? 0x5678u : 0u));
+                        offset = (uint8_t)(zcl_offset + zcl.payload_offset);
+                        CHECK(zcl.payload_length == 3u + value_length);
+                        CHECK(body[offset] == 0x34 && body[offset + 1u] == 0x12 && body[offset + 2u] == value.type);
+                        CHECK(zcl_value_decode(body[offset + 2u], body + offset + 3u,
+                                               (uint16_t)(zcl.payload_length - 3u), &item) == ZCL_CODEC_OK);
+                        CHECK(item.encoded_length == value_length && item.data_length == value.data_length);
+                        CHECK(item.non_value_pattern == 0);
+                        CHECK(memcmp(body + offset + 3u + item.data_offset, value.data, item.data_length) == 0);
+                        memcpy(&saved_item, &item, sizeof(item));
+                        body[offset + 2u] = 0xff;
+                        CHECK(zcl_value_decode(body[offset + 2u], body + offset + 3u,
+                                               (uint16_t)(zcl.payload_length - 3u), &item) == ZCL_CODEC_UNSUPPORTED_DATA_TYPE);
+                        CHECK(memcmp(&item, &saved_item, sizeof(item)) == 0);
+                        memcpy(&saved_zcl, &zcl, sizeof(zcl));
+                        body[zcl_offset] = 2;
+                        CHECK(aps_frame_decode(body + 1u + frame.payload_offset + network.payload_offset,
+                                               network.payload_length, &transport) == APS_CODEC_OK);
+                        CHECK(zcl_frame_decode(body + zcl_offset, transport.payload_length, &zcl) == ZCL_CODEC_UNSUPPORTED_FRAME_TYPE);
+                        CHECK(memcmp(&zcl, &saved_zcl, sizeof(zcl)) == 0);
+                    }
+                }
+            }
+        }
+    }
+    value.type = ZCL_TYPE_OCTET_STRING;
+    value.data = application;
+    value.data_length = sizeof(application);
+    CHECK(zcl_value_encode(&value, value_bytes, sizeof(value_bytes), &value_length) == ZCL_CODEC_OK);
+    CHECK(value_length == 101);
+    memset(zcl_body, 0xc7, sizeof(zcl_body));
+    zcl_length = 0xa5;
+    CHECK(zcl_frame_encode(&header, value_bytes, value_length, zcl_body + 1, 100, &zcl_length) == ZCL_CODEC_TOO_LONG);
+    CHECK(zcl_length == 0xa5 && filled(zcl_body, sizeof(zcl_body), 0xc7));
+    return 0;
+}
 
 int main(void)
 {
     uint16_t result = self_test();
+    if (result == 0)
+        result = zcl_integration();
     if (result != 0) {
         fprintf(stderr, "Protocol frame integration failed at line %u\n", (unsigned)result);
         return 1;
     }
-    puts("host MAC/NWK/APS: golden chain, address/ACK/size matrices and layer-specific failures PASS");
+    puts("host MAC/NWK/APS/ZCL: golden chains, typed values, size matrices and layer-specific failures PASS");
     return 0;
 }
 #endif

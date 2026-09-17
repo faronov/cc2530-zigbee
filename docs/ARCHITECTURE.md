@@ -108,6 +108,16 @@ service/security limits and endpoint/transaction policy. A separate simulator
 image composes MAC/NWK/APS without expanding the existing MAC test image.
 No dispatcher, ZDO handler, ZCL attribute model or board caller is introduced.
 
+The separate `zcl_frame` and `zcl_value` modules share the typed
+`zcl_wire.h` API but no runtime state. The [ZCL wire contract](ZCL.md)
+pins Revision 8 and keeps manufacturer/command/attribute policy outside
+header parsing. Standard reserved RX bits are ignored and reported, not
+mistaken for an invalid NWK layout. Value views retain raw wire octets and
+explicit consumed spans, including non-value patterns; they do not convert
+native numbers or validate text. APS/ZCL composition is target-tested
+separately; full MAC/NWK/APS/ZCL/value composition is currently host-only.
+Command handlers, an attribute model and complete ZCL support remain planned.
+
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
 NWK/APS/security services rather than inside codecs or board code.

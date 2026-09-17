@@ -1116,6 +1116,28 @@ The existing MAC image and all its prior scenarios remain unchanged.
 This is host-tested, image-checked and simulated syntax, not a firmware image,
 ACK transaction, endpoint dispatcher, ZDO/ZCL support or hardware observation.
 
+The [ZCL Revision 8 wire codecs](ZCL.md) have separate frame and value
+host/SDCC suites, retaining the 512-byte component reservation and unchanged
+CODE/CDB/alias/upper-IRAM/unwind guards. Header tests cover every FCF value
+and both header layouts, receive normalization versus transmit rejection
+of reserved bits, CODE inputs, lengths, capacities and unchanged errors.
+They execute real APS/ZCL composition on SDCC. Value tests cover all 38
+supported types, every other type ID, Boolean encodings, fixed-width and
+non-value patterns and every short-string length. Four independently
+initialized target phases and an invalid-selector rejection keep all cases
+within the existing 15-second per-run bound.
+
+Host matrices add exhaustive scalar/control/manufacturer fields, every byte
+value at scalar/string/payload positions and uint16 spans/capacities, with
+exact-sized ASan/UBSan allocations. The host protocol test now composes
+actual value/ZCL/APS/NWK/MAC codecs, checking an independent complete golden
+vector, both ZCL header sizes, all existing MAC/NWK address layouts, maximum
+125-byte MAC bodies and per-layer failures. Its SDCC image remains the
+three-layer MAC/NWK/APS chain, not a claimed four-layer target run.
+This is base-text, host/image/simulator evidence only. ZCL errata 19-2019,
+application selection, command/attribute behavior, native numeric/charset
+validation and M4/M5 security/networking gates remain separate and open.
+
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |
 | Encoders/parsers | Golden wire bytes, every boundary length, invalid/truncated/reserved fields, explicit byte order |

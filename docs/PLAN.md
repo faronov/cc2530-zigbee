@@ -395,6 +395,16 @@ security support remains outside the first configuration.
 
 ### M6 - Discovery, ZCL and receiver-on interoperability
 
+**Offline preparatory implementation:** [ZCL Revision 8 wire codecs](ZCL.md)
+now handle global/cluster-specific headers and 38 bounded wire-value types.
+The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
+remains unreviewed and must be resolved before command/attribute behavior or
+conformance claims. Header/value and APS/ZCL target checks are host-tested,
+image-checked and simulated; full value/ZCL/APS/NWK/MAC composition is
+host-tested. There is no board caller, dispatcher, attribute model, native
+numeric/charset conversion or advertised cluster. Application/device/profile
+selection and all M4/M5 networking/security gates remain open.
+
 Deliver:
 
 - Completion of required ZDO discovery clients/servers, retaining the generic

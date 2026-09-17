@@ -577,8 +577,10 @@ Engineering references:
   **16-02828-012**, September 28, 2021. The base revision is selected;
   applicable errata and implementation evidence remain separate
   [gates in the conformance ledger](CONFORMANCE.md).
-- Applicable Zigbee Cluster Library and application-profile requirements for
-  the chosen device, pinned when those layers are implemented.
+- Zigbee Cluster Library **Revision 8**, document **07-5123-08**, release
+  December 2019, for the bounded offline wire work below. Its approved errata
+  **19-2019** and application/device requirements remain unreviewed/unselected
+  gates, not an implied complete ZCL implementation.
 
 BDB 3.1, document 22-65816-030, belongs with R23/PRO 2023. It may inform future
 work but must not be cited as an R22 requirement. The project is not certified.
@@ -727,6 +729,47 @@ with a claim that a real application can send 100-byte ASDUs.
 All code, golden byte vectors and identities are original synthetic work.
 No implementation, capture, key, test-plan vector or SDK object was imported.
 The PDF and temporary reader remain research-only, outside Git/CI artifacts.
+
+### ZCL Revision 8 wire sources
+
+The selected primary source is the
+[official CSA ZCL Revision 8 PDF](https://csa-iot.org/wp-content/uploads/2022/01/07-5123-08-Zigbee-Cluster-Library-1.pdf),
+linked directly from the
+[CSA specification download page](https://csa-iot.org/developer-resource/specifications-download-request/).
+The cover names **Document 07-5123 Revision 8**, release **December 2019**.
+The 2020 copyright and 2022 upload directory are not substitute release dates.
+The 1,213-page PDF has SHA-256
+`ad536e1d95a40ca27532e360b124cd76a1b18d96398c1c19fd32fbf7dcdd1aa0`.
+Document Control on p.4 identifies the Foundation chapter as **14-0126-17**
+and the separate approved errata as **19-2019**.
+
+The errata's exact revision and primary text have not been obtained/reviewed.
+No claim is made that it is empty, unavailable or incorporated into this PDF.
+Wire behavior is checked against the pinned base text only; applicable errata
+review remains a gate before command/attribute implementation or conformance
+claims. Application/device definitions and profile requirements also remain
+separate. Selecting R8 alongside Core R22/BDB 3.0.1 is this project's
+engineering baseline, not a claim of a universal mandatory pairing.
+
+| Primary location (printed / PDF pages) | Functional facts used |
+| --- | --- |
+| Sections 2.3.1-2, 2-3..2-4 / 55-56 | Zero reserved bits on TX; ignore reserved sub-fields for standard RX; manufacturer-defined handling for extensions |
+| Section 2.4.1, Figures 2-2/3/4, 2-8..2-9 / 60-61 | Three/five-byte headers, FCF bits, manufacturer-code order, direction/default-response metadata and transaction/command fields |
+| Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Test-only Report Attributes ID and identifier/type/value record shape; no handler imported or implemented |
+| Section 2.6.1.5, 2-44 / 96 | Command ID ranges and manufacturer context, left to future dispatch policy |
+| Sections 2.6.2.1-2, Tables 2-10/11, 2-45..2-48 / 97-100 | Type IDs, widths, non-value patterns and field-dependent full versus non-value ranges |
+| Sections 2.6.2.3-9, 2-48..2-49 / 100-101 | No-data, raw/bitmap/integer widths, Boolean `00/01/FF` and signed non-value patterns |
+| Sections 2.6.2.13-14, Figures 2-43/44, 2-50..2-51 / 102-103 | Short string byte counts, empty/non-value prefixes, default UTF-8 and descriptor-dependent encoding |
+
+The [wire contract](ZCL.md) distinguishes raw layout from command/attribute
+acceptance, a matching scalar non-value pattern from an actual unavailable
+measurement, and character-string bytes from validated text.
+Unsupported data types are explicit errors, not guessed zero-width values.
+Original code and vectors were written from these functional facts, not the
+external mixed ZCL/Matter catalog or a vendor stack. No implementation,
+cluster table, key, capture, SDK object or test-plan vector was imported.
+The PDF/extractor remain temporary research inputs, outside Git/CI artifacts;
+their original notices and licenses are not replaced by BSD-3-Clause.
 
 ## Specialist-agent reference
 
