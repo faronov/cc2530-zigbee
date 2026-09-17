@@ -555,7 +555,12 @@ CPU control, temporary fixture SRAM/alias writes and all four breakpoint
 slots; the runner internally enables the separate Python permissions. It
 does not accept the transport CLI's individual `--allow-*` flags.
 
-The runner validates local board/image/compiler/hash metadata, reset-attaches,
+The runner validates local board/image/compiler/hash metadata and binds the
+immutable BIN bytes to the checked image's exact extent and SHA-256 before
+loading USB. The same guard runs at `exercise` entry, before any adapter
+observation or reset. Empty, truncated or replaced BINs are rejected even if
+the build directory changes after artifact validation.
+It then reset-attaches,
 requires PC `0x0000` and debug configuration `0x26`, and compares every byte
 of physical fixture CODE with the verified BIN **before its first resume**.
 It does not flash, verify the entire 256-KiB flash tail or read the factory

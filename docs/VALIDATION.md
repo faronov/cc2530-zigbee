@@ -114,7 +114,13 @@ hardware evidence.
 
 Offline image tests cover board/image/compiler/hash mismatches, supported
 CODE/XDATA/SFR symbol classification, conflicting map/CDB spaces/addresses, missing
-symbols and non-executable breakpoint targets. Synthetic parameter vectors
+symbols and non-executable breakpoint targets. The M1 runner's host-only mocks
+also reject an empty, truncated, extended or same-length replaced BIN after
+artifact validation, before USB loading. Direct `exercise` calls reject wrong
+image/extent/type/cycle inputs without any debugger call; valid length/cycle
+endpoints reach a deliberately failing synthetic first observation. These
+checks add no hardware evidence.
+Synthetic parameter vectors
 cover all four breakpoint slots and eight bank-bit values, not real
 comparators. M0/M1 decoders reject invalid ABI/phase/board/guard/checkpoint
 records and oversized snapshots. The alias-aware image test also exercises
