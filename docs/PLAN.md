@@ -279,13 +279,14 @@ confirmed ENC ACKs, plus both exact unpublished AES_TIMEOUT8 cases.
 Separate full-reset/full-CODE/gate recovery passed257 same-reset cycles,
 1,029 READY stages and514 accepted/published blocks, with all168 fixture
 vector/space/clock combinations independently asserted and1,542 confirmed
-DMA phase ACKs and ENC ACKs each. LG now contains the corrected 12,765-byte
-image at READY016A/config22/RC16, completed/heartbeat1 and fault latch0.
+DMA phase ACKs and ENC ACKs each. That AES recovery left the corrected
+12,765-byte image at READY016A/config22/RC16, completed/heartbeat1 and fault
+latch0; this state is historical after the PRNG programming below.
 Parent serial `all test` passed for both corrected boards; all fourteen older
 BIN sizes/hashes independently match published baselines. No hosted-CI pass
 is claimed here.
 Generic has no physical AES evidence. All fourteen older BINs and non-AES
-platform/debug drivers stay unchanged; CI has sixteen full jobs with the same
+platform/debug drivers stayed unchanged; that addition brought CI to sixteen full jobs with the same
 seven-file whitelist and `hardware_tested=false`. M2 #4 remains open.
 
 A further isolated [deterministic PRNG foundation](ARCHITECTURE.md#isolated-deterministic-prng)
@@ -293,12 +294,51 @@ implements explicit valid seed loading and one bounded 13-shift hardware
 command returning the 16-bit LFSR state. This is **not entropy or a
 cryptographic RNG**. The two forbidden fixed points and two 32,767-state cycles
 are exhaustively host-checked; real SDCC calls have linked/alias-aware synthetic
-coverage, not physical PRNG acceptance. Exclusive ADC/PRNG/CSP history and
-stable awake ownership are prerequisites, not inferred from ST=0 alone.
-All sixteen board BINs and existing drivers remain unchanged. There is no new
-board IMAGE, hardware runner, CI job or artifact; LG remains at corrected
-AES READY016A/config22/RC16. Physical seed/bit/step/repeat checks and
-RF/noise entropy seeding remain separate gates. M2 #4 stays open.
+coverage; board-specific hardware evidence is recorded separately below.
+Exclusive ADC/PRNG/CSP history and stable awake ownership are prerequisites,
+not inferred from ST=0 alone.
+That isolated foundation added no board image or hardware runner. The separate
+[PRNG board fixture](DEBUGGING.md#deterministic-prng-board-fixture) now links
+the unchanged service on both boards, with explicit wire ABI, guarded manual
+short/full/stopped modes and eighteen full CI jobs using the same seven
+artifacts. Four full periods cover all65,534 valid states per clock; small
+seed/reseed cases and a real fixture-only RCTRL11 precondition violation
+exercise benign/terminal outcomes without inventing a CPU-hold timeout.
+All sixteen older board BINs and existing drivers remain unchanged.
+The original wirev1 7,224-byte LG PRNG image passed
+[short hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+two seed1234 loads, eight RC16 words, repeated non-advancing readback and
+benign mask15 with preserved guards/tails. Its
+[first long run exposed a fixture flag-policy bug](DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption):
+natural STIF assertion after the C snapshot, not a PRNG failure.
+The wirev2 correction permits only sticky STIF0->1 and tracks ordered C/live
+observations without flag clearing, compare writes or shorter periods.
+The old wirev1 halt is historical; its last32 words were not host-accepted.
+The parent then programmed the unchanged7289-byte wirev2 and passed
+[corrected short hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance):
+eight RC16 words, six raw flag observations and no STIF transition.
+The same installed wirev2 then passed
+[full-stopped hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+131,084 individually checked words, four32,767 periods/all65,534 states per
+clock, real C/live STIF race with2,145 later preserved observations, and
+genuine stopped-probe/re-entry6/6/6 with unchanged caller data.
+The same image then passed
+[separate full-reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance),
+repeating the entire corpus after its own reset/full-CODE proof. A distinct
+`c-snapshot` STIF transition and2,253 later preserved observations ended at
+ENDREADY016A/config26/RC16, fault0 and C/live IRCON80, without executing the
+probe or resuming afterward. **The bounded LG short/stopped/reset-recovery
+hardware gate is complete.** The earlier stopped FAULT is historical;
+recovery was a new reset epoch, not cleared C state or automatic continuation.
+Parent independently completed both original-image `all test` runs (429 Python,
+33 segments/full131,084 synthetic words plus probe/9 faults),150-file guard
+and sixteen older hashes before this physical finding.
+For wirev2, both parent LG/generic `all test` runs completed with exit0,
+434 Python tests each and the full continuation/corpus/STIF/probe/fault
+evidence. Parent MAC alias,150-file repository/local-link and diff checks
+also passed; `hardware_tested=false` was verified.
+Generic/EOC1/physical poll-fault and broader RF/noise entropy, security and
+sleep acceptance remain open. M2 #4 stays open; no hosted-CI pass is claimed.
 
 Deliver independent interfaces for:
 

@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
 IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
-          "radio_fifo_fixture", "dma_fixture", "aes_fixture")
+          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -23,6 +23,7 @@ CAPABILITIES = {
     "radio_fifo_fixture": "non-networking-quiescent-radio-fifo-fixture",
     "dma_fixture": "non-networking-software-triggered-dma-fixture",
     "aes_fixture": "non-networking-aes-dma-block-fixture",
+    "prng_fixture": "non-networking-explicitly-seeded-deterministic-prng-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -225,9 +226,13 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require(not any(name.startswith("_prng_") for name in symbols) and
-            not any(f"C${name}$" in debug for name in ("prng.c", "test_prng.c")),
-            "Board image must not link the isolated deterministic PRNG or host model/test")
+    require(not any(name.startswith("_prng_reference") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("test_prng.c", "test_prng_fixture.c")),
+            "Board image must not link the deterministic PRNG host model/test")
+    require(image_name == "prng_fixture" or
+            (not any(name.startswith("_prng_") for name in symbols) and
+             not any(f"C${name}$" in debug for name in ("prng.c", "prng_fixture.c", "prng_fixture_state.c"))),
+            "Board image must not link the isolated deterministic PRNG outside prng_fixture")
     require(not any(name.startswith("_aes_reference_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("aes_reference.c", "test_aes.c", "test_aes_fixture.c")),
             "Board image must not link the host-only AES reference or standalone test")
@@ -272,6 +277,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     if image_name == "aes_fixture":
         sizes = re.findall(r"^S:G\$aes_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
         require(sizes and all(int(size) == 64 for size in sizes), "AES fixture debug ABI mismatch")
+    if image_name == "prng_fixture":
+        sizes = re.findall(r"^S:G\$prng_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == 88 for size in sizes), "PRNG fixture debug ABI mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -349,6 +357,9 @@ def verify_artifacts(output, board, image_name="bringup"):
         verify_fixture(image, symbols, debug)
     elif image_name == "aes_fixture":
         from aes_fixture import verify_fixture
+        verify_fixture(image, symbols, debug)
+    elif image_name == "prng_fixture":
+        from prng_fixture import verify_fixture
         verify_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),

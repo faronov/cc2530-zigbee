@@ -41,14 +41,55 @@ and all twelve earlier BINs unchanged. `IMAGE=aes_fixture` selects the separate
 [AES/DMA board fixture](DEBUGGING.md#aes-dma-board-fixture), under
 `build/<board>/aes_fixture/`, with all fourteen older BINs unchanged.
 The [first physical KEY failure](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
-is historical root-cause evidence. LG now contains the corrected 12,765-byte
-image, which passed [short normal operation, both exact negatives and reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance):
+is historical root-cause evidence. The corrected 12,765-byte AES
+image passed [short normal operation, both exact negatives and reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance):
 257 same-reset cycles/514 accepted blocks, covering all168 vector/space/clock
-combinations. Final LG is READY016A/config22/RC16, completed/heartbeat1 and
-fault latch0, not either historical negative FAULT stop.
+combinations. That recovery ended at READY016A/config22/RC16,
+completed/heartbeat1 and fault latch0, not either negative FAULT stop;
+the subsequent PRNG programming below makes that AES state historical.
 Generic remains host/image/synthetic-only. Authorized programming uses checked
 board HEX/BIN; never substitute the standalone `aes_test.ihx`.
-All eight images use the same board
+`IMAGE=prng_fixture` selects the separate
+[deterministic explicitly seeded PRNG fixture](DEBUGGING.md#deterministic-prng-board-fixture)
+under `build/<board>/prng_fixture/`. It preserves all sixteen earlier BINs and
+the original PRNG/timebase/clock drivers. Both new layouts have host/image/
+synthetic coverage; the original wirev1 7,224-byte LG image additionally passed
+[short hardware acceptance](DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+two seed1234 loads and eight RC16 words, benign errors, non-advancing
+readback, guards and tails. Its
+[first long run stopped on a fixture flag-policy bug](DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption),
+not a PRNG failure: default compare latched STIF after C's snapshot.
+That old wirev1 halt is historical; its final32-word batch was not host-accepted.
+Corrected wirev2 preserves only sticky STIF0->1,
+with strict ordered C/live history and unchanged layout/driver/corpus.
+No STIF clear, compare write, ISR or reset between period chunks is allowed.
+The unchanged7289-byte LG wirev2 is now installed and passed
+[corrected short hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance):
+eight RC16 words and six raw flag observations without a STIF transition.
+The same image subsequently passed
+[full-stopped hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+the complete131,084-word/both-clock corpus, actual after-C/live STIF race
+and continued preservation, then the genuine RCTRL11 probe with retained
+6/6/6 errors and unchanged caller data.
+After closing the stopped session, the same image passed
+[separate full-reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance):
+its own reset/full-CODE proof, the entire corpus again and a distinct
+`c-snapshot` STIF transition with2,253 later preserved observations.
+The bounded LG short/stopped/reset-recovery gate is complete. **Final LG is
+halted ENDREADY016A/config26/RC16, fault0, C/live IRCON80**, with no probe
+execution or later resume. The stopped FAULT snapshot is historical, not
+current. Generic/EOC1/poll-fault and broader M2 acceptance remain open.
+Further local hardware work is not planned; the Ubuntu24/MacPro6.1 handoff
+is not hardware acceptance or authorization on that host.
+The finite32-word batches cover four32,767-word periods, with actual31-word
+tails, and short seed/reseed checks. Normal full mode stops at ENDREADY;
+separate stopped mode deliberately selects RCTRL11 before a real terminal
+driver rejection. No CPU-hold poll-timeout is claimed.
+Use checked board HEX/BIN only after separate authorization; **never flash
+`prng_test.ihx`**. The runner keeps config26 and never accesses DMA registers.
+This is not entropy, cryptographic RNG, RF/noise seeding, ADC conversion,
+CRC, sleep or broader M2 acceptance.
+All nine images use the same board
 policy, M0 status ABI and memory restrictions. The new timebase fixture does
 not change the existing `bringup` or `debug_fixture` firmware bytes. The clock
 fixture likewise preserves all six older board BINs; the IRQ fixture preserves

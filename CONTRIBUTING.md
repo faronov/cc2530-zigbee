@@ -66,6 +66,8 @@ make BOARD=generic IMAGE=dma_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=dma_fixture all test
 make BOARD=generic IMAGE=aes_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=aes_fixture all test
+make BOARD=generic IMAGE=prng_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=prng_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -371,7 +373,7 @@ After representative full `all test` runs, cross-board byte-preservation work
 may use existing explicit `host-tests_<board>` / matching fixture-host targets,
 `all`, and `tests/boot_image.py` for the other board/image combinations instead
 of repeating identical standalone mutation corpora. Run s51 serially with the
-unchanged 15-second bound; CI runs all sixteen full jobs.
+unchanged 15-second bound; the current CI runs all eighteen full jobs.
 
 The separate AES board fixture adds no dependency or general debugger permission:
 
@@ -394,8 +396,9 @@ is historical root-cause evidence. The unchanged corrected LG image now has
 [short-normal, both exact-negative and full-reset recovery hardware evidence](docs/DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance),
 including fresh KEY/IV flags and verified per-phase ACKs. Recovery passed257
 cycles/514 blocks and independently covered all168 vector/space/clock
-combinations; final LG is READY016A/config22/RC16, completed/heartbeat1,
-fault latch0. Parent serial `all test` passed on both corrected boards with
+combinations; that AES recovery ended at READY016A/config22/RC16,
+completed/heartbeat1, fault latch0, before the later PRNG programming below.
+Parent serial `all test` passed on both corrected boards with
 415 Python tests/102 compiled fixture scenarios each and the 138-file guard;
 all fourteen older BIN sizes/hashes independently matched published baselines.
 This does not assert a hosted-CI pass.
@@ -417,16 +420,81 @@ alias-aware synthetic coverage. **Never flash `prng_test.ihx` or upload it
 as board firmware.** This is deterministic, explicitly seeded, **not entropy
 or a cryptographic RNG**; the test-only mathematical models never link into
 board images. Preserve the [register contract](docs/ARCHITECTURE.md#isolated-deterministic-prng)
-and [separate physical gate](docs/VALIDATION.md#m2-deterministic-prng-coverage).
+and [bounded LG evidence and remaining physical gates](docs/VALIDATION.md#m2-deterministic-prng-coverage).
 
 For this isolated change, run both AES-board `all test` configurations serially,
 then focused build, board-host, image and alias checks for the other fourteen
 images and compare all sixteen full BIN sizes/SHA-256 values with the published
 baseline. Do not run sixteen redundant expensive standalone corpora locally.
 Keep s51's15-second operation timeout and run heavy s51 checks serially.
-CI still runs all sixteen full jobs, with the exact seven-artifact whitelist
-and `hardware_tested=false`; no new hardware runner or permission is introduced.
-Current physical LG remains the accepted corrected AES READY image, not PRNG.
+That foundation kept sixteen full jobs and added no hardware runner.
+The AES READY state at the end of that foundation is now historical;
+the separately programmed PRNG fixture has the bounded evidence below.
+
+The separate PRNG board fixture adds no dependency or general debugger permission:
+
+```sh
+make BOARD=generic IMAGE=prng_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=prng_fixture all test
+PYTHONPATH=tools python3 -B -m unittest test_prng_fixture test_m0_artifacts -q
+```
+
+Run the two new `all test` configurations serially, then focused build,
+board-host, image and alias checks for the sixteen older combinations and
+compare every complete older BIN size/SHA-256 against the published baseline.
+Do not run eighteen redundant local standalone corpora. The full-period s51
+proof uses33 bounded segments with byte-exact genuine checkpoint memory/CPU
+continuation, not altered CODE, driver returns, period counters or reseeding.
+Keep15 seconds per simulator process and run heavy simulations serially.
+CI runs eighteen full jobs with exactly the same seven artifact paths and
+`hardware_tested=false`. No host oracle/standalone test/log is uploaded.
+The [manual short/full/stopped procedure](docs/DEBUGGING.md#parent-only-prng-acceptance-procedure)
+requires separate hardware authorization; it is never part of these checks.
+Holding a CPU cannot synthesize this API's poll-limit error. Recovery is a
+distinct fully reset/full-CODE invocation, not resumption after a failure.
+Wirev2 additionally checks ordered initial/C/live/next-C flag history:
+only IRCON.STIF0->1 is allowed, never1->0; all other flag bits remain exact.
+Do not clear STIF, write ST0/1/2, change compare, enable an ISR or reset between
+period chunks to avoid the default compare event. The result's `flag_history`
+keeps raw C/live values and a bounded transition record, not a timing estimate.
+
+The original wirev1 LG PRNG image passed the
+[dated short hardware case](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+five READY stages, two seed1234 loads and eight checked RC16 words, with
+benign mask15, guards/tails and non-advancing CPU readback. Its
+[first long run stopped on the fixture's STIF policy](docs/DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption),
+not a PRNG error; the last32-word batch was not host-accepted.
+That old wirev1 halt is historical after the parent programmed the unchanged
+7289-byte wirev2 and passed the
+[corrected short case](docs/DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance).
+The same installed wirev2 then passed
+[full-stopped hardware acceptance](docs/DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+the entire131,084-word corpus on both clocks, actual C/live STIF race and
+continued preservation, and genuine RCTRL11 rejection/re-entry without caller
+changes. After closing that session, the parent passed a
+[separate full-reset/full-CODE/full-corpus recovery](docs/DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance)
+on the same image, with a distinct C-observed STIF transition and continued
+preservation. This completes the bounded LG short/stopped/reset-recovery
+hardware gate. The final halt is ENDREADY016A/config26/RC16, fault0,
+C/live IRCON80, with no probe execution or later resume. The stopped FAULT
+snapshot is historical; recovery was not an automatic action or C-state clear.
+Generic/EOC1/physical poll faults and broader M2 acceptance remain open.
+The parent's independent **original-image** two-board `all test` runs completed:
+429 Python tests,33 genuine continuation segments/full131,084 words, probe
+and9 faults per board,150-file guard and all sixteen older identities matched.
+Those passing synthetic tests did not model STIF arrival. No hosted-CI pass is claimed.
+The implementer's corrected wirev2 two-board serial runs subsequently passed434 Python
+tests each, the full word/continuation corpus, actual STIF arrival/race and
+81 flag rejections. All sixteen older focused checks and individual full
+BIN size/SHA-256 comparisons passed; the150-file repository/local-link guard
+remains green. The parent independently reverified the sixteen published BIN
+identities and both v2 images' three-mode prevalidation before programming.
+Both parent LG/generic `all test` runs now completed with exit0 and434 Python
+tests each, matching the full linked corpus and flag-fault evidence above.
+Parent MAC alias,150-file repository/local-link and diff checks passed;
+build metadata still has `hardware_tested=false`.
+See [the separate offline evidence](docs/VALIDATION.md#m2-prng-board-fixture-offline-coverage);
+those results do not establish the pending wider physical gates.
 
 ## Code conventions
 

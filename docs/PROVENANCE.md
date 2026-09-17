@@ -432,6 +432,7 @@ redistributed. RF/noise-seeding implementation is not adopted.
 | 14.2.2-14.3 pp.144-145 | Each RNDL BC write moves old low byte to high, so seed high then low via two RNDL writes. RNDL/RNDH BD read low/high state, resetFF/FF. RNDH writes trigger8-shift CRC and are excluded. Exactly0000 and8003 are documented PRNG lockup seeds. |
 | 12.2.3-12.2.4 p.134; 12.2.10 p.136 | ADCCON1 B4: EOC is R/H0, cleared by ADCH read; ST is R/W1/H0, writing1 with STSEL11 starts conversion. Low reserved bits must be11. STSEL11/ST0 and no ADCCON3 single-conversion activity are external prerequisites; ST0 alone cannot establish ADC quiescence. Write37 does not replay ST1 or clear EOC. |
 | 4.1/Table4-1 pp.61-62; 4.4.2/4.4.4 pp.66-69; 4.6 p.69 | Active operation supports RC16 or XOSC32. This API conservatively requires stable undivided clocks and excludes sleep/retention transitions. No PRNG-specific retention/recovery exception is invented. ADC's XOSC32 sampling restriction in12.2.7 p.135 is not transferred to this digital, non-converting service. |
+| IRCON register p.47; 11.1-11.2 p.129 | STIF is IRCON bit7, R/W. The Sleep Timer starts immediately after reset; the default compare is **FFFFFF**, not zero. Compare asserts the latched flag even with IRQs disabled. The wirev2 fixture permits only0->1 and preserves it; no clear, compare write, ISR, elapsed threshold or event-count interpretation is adopted. |
 | [SWRZ031](https://www.ti.com/lit/pdf/swrz031), April2009, complete errata | The listed DMA variable-length and Timer2 latch issues supply no PRNG exception or missing completion guarantee. |
 
 The original host bit-cell model independently interprets Figure14-1.
@@ -442,9 +443,71 @@ Those are derived mathematical results, not a published nontrivial KAT table
 simulator oracle separately expresses polynomial reduction and supplies only
 synthetic register effects while unchanged compiled C executes.
 Physical bit/byte order, seed/step/repeat behavior and shared-register
-preservation remain [future gates](VALIDATION.md#m2-deterministic-prng-coverage).
+preservation have bounded LG short, full-stopped and separate full-reset
+recovery evidence below, including both clocks and full periods.
+Generic and broader cases remain [open gates](VALIDATION.md#m2-deterministic-prng-coverage).
 No RF receiver/noise entropy, ADC conversion, random-byte security service
 or production software replacement is provided.
+
+The subsequent original BSD-3-Clause [PRNG board fixture](DEBUGGING.md#deterministic-prng-board-fixture)
+reuses those exact facts and unchanged production driver. Its sole additional
+PRNG write is a deliberate **fixture-only** ADCCON1=3F before the planned
+unsupported-state call: SWRU191F14.3 p.145 defines RCTRL11/off, and12.2.10
+p.136 establishes ST0/no ADC start, preserved STSEL11/reserved11 and read-only
+EOC. It is not automatic driver recovery or a physical poll-timeout injection.
+The small CODE prefix constants for seeds1234/1/3 are independently derived
+and checked by original host bit-cell/polynomial models, not imported KATs.
+All bulk sequence mathematics stays host-only and is excluded from board
+artifacts. Repeated CPU readback relies on14.2.1/14.3 pp.144-145, not a
+guessed latch or CSP behavior. The manual runner reuses existing bounded
+reset/CODE/context/breakpoint operations, with a fixed read-only SFR set and
+config26; it adds no DMA gate or generic MMIO capability.
+No private record, SDK/GPL implementation or dependency is imported by this
+fixture. The [2026-09-17 LG short acceptance record](DEBUGGING.md#2026-09-17-lg-prng-short-acceptance)
+uses only parent-supplied sanitized facts: checked board HEX programming,
+own reset/full CODE/CPU-FMAP proof, real benign errors, two seed1234 loads
+and eight RC16 words matching the derived prefix twice. C and host checked
+output, repeated non-advancing CPU reads, guards and tails. This is a narrow
+on-chip observation, not a new primary specification or entropy assessment.
+Raw records, recovery images and adapter identity remain private and are not
+copied into Git/CI. That original wirev1 image subsequently
+[stopped during its first long run](DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption)
+because STIF asserted after C's last snapshot. This is fixture-policy evidence,
+not a PRNG driver/output failure or completed corpus. The parent directly
+reread SWRU191F p.47/129 for the correction above; no SDK/private/GPL source
+or new dependency was used. The isolated PRNG/timebase/clock drivers remain
+unchanged; only original fixture C, wire/runner policy and tests are corrected.
+C and host retain raw observations and reject every other flag-bit change,
+including any observed STIF deassertion. Synthetic C52 TCON.4/.6 rejection
+cases put the simulator's classic timer aliases in external-counter mode
+without input edges; this is not CC2530 timer configuration or target code.
+Complete terminal RAM/IRAM/SFR comparisons remain strict, without exclusions.
+The old7224/aac57938... halt is historical after separately authorized
+programming of the unchanged7289-byte wirev2 and its
+[2026-09-17 corrected short acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance).
+That record uses only parent-supplied sanitized facts: complete old/new CODE
+checks, checked board HEX programming/readback, own-reset short acceptance,
+eight RC16 words and six raw flag observations without a STIF transition.
+Reviewed source/proofs are unchanged; no private record or identity is copied.
+The same unchanged wirev2 then passed
+[full-stopped LG hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+every131,084-word corpus result was host-checked, including four32,767
+periods/all65,534 valid states per clock. The actual C0/live80 STIF race and
+2,145 subsequent preserved observations through XOSC/END/probe confirm this
+bounded policy on LG; they do not count wraps/events or establish frequency.
+The genuine stopped-probe and retained errors preserved caller data, without
+STIF writes, cleanup or automatic recovery. All facts are sanitized parent
+observations, not imported implementation or private records.
+The same image subsequently passed
+[separate full-reset/full-corpus recovery](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance).
+These additional sanitized parent observations establish the complete corpus
+in a new reset epoch and a distinct `c-snapshot` STIF transition, with2,253
+later preserved observations. They do not infer recovery from cleared C state,
+automatic cleanup or simulation. The final LG halt is ENDREADY016A/config26,
+fault0 and C/live IRCON80; the stopped FAULT snapshot is historical.
+The bounded LG gate is complete, without importing private records, artifacts,
+identities or new implementation. Generic/EOC1/poll-fault/entropy/RF/security/
+sleep and broader M2 gates remain open.
 
 ### M2 AES CPU-transfer prerequisite
 

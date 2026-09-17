@@ -761,7 +761,8 @@ See [offline proof and precise physical gate](VALIDATION.md#m2-isolated-aes-dma-
 [`prng_seed_explicit(uint16_t seed)` / `prng_next16(uint16_t __xdata *output, uint8_t limit)`](../include/prng.h)
 are an explicitly seeded **deterministic hardware LFSR**, not entropy, a
 cryptographic RNG or a random-byte routing service. The original driver is
-excluded from all sixteen board images; its independent software mathematics
+excluded from all sixteen earlier board images; only the separate PRNG fixture
+below links it. Its independent software mathematics
 is test-only, never a production fallback. See the
 [primary register contract](PROVENANCE.md#m2-deterministic-prng-sources).
 
@@ -818,8 +819,93 @@ The documented polynomial is `x^16+x^15+x^2+1`; each command performs 13
 feedback shifts. Exhaustive original host models establish two fixed points
 and two disjoint cycles of32,767 states. A 16-bit output is **not** a claim
 of a65,535-state period, entropy, distribution quality or security.
-[Offline evidence and the future physical gate](VALIDATION.md#m2-deterministic-prng-coverage)
-remain separate; no PRNG board image or hardware runner is added.
+[Offline evidence, bounded LG acceptance and remaining physical gates](VALIDATION.md#m2-deterministic-prng-coverage)
+remain separate from the board fixture below.
+
+### Deterministic PRNG board orchestration
+
+The separate [PRNG fixture](DEBUGGING.md#deterministic-prng-board-fixture)
+links original timebase/clock **before** the unchanged1,043-byte PRNG module.
+The complete private prefix0000..0062 includes all three drivers' state and
+parameters. Explicit caller objects follow it; generic runtime scratch is
+separately excluded. The88-byte wire record and68-byte guarded caller buffer
+remain within the374-byte reserved nonaliased budget, without a RAM pool.
+
+The finite C schedule begins with actual NOT_SEEDED, zero-limit,0000 and8003
+rejections, observing unchanged state/control/sentinel. On each clock it
+loads1234, captures four public-prefix words, explicitly reloads1234 and
+repeats, then runs seed1 and seed3 for32,767 consecutive successful calls each.
+There is no reseed inside a period. Each period uses1,023 full32-word batches
+and one real31-word tail. Both clocks total131,084 words,8 seed loads and4,100
+batches; the byte heartbeat wraps to4. ENDREADY follows a verified return to RC16.
+
+C compares each caller word with two separately sequenced, documented
+non-advancing RNDL/RNDH read pairs while idle, checks public prefix constants,
+guards and unfilled tails, and publishes actual valid counts/counters/results.
+Bulk polynomial evaluation and complete-cycle set comparison exist only on
+the host. Neither the wire nor runner invents per-batch poll totals: the
+unchanged API exposes no such diagnostic. The fixed per-call limit is16.
+Clock transitions retain the original bounded diagnostics and failure contract.
+
+Wirev2 changes only flag policy, not byte layout or the PRNG service. C retains
+the previous raw `flags[9]` before taking its next snapshot. All nine other
+flags and IRCON's low seven bits must equal the immutable initial values;
+STIF may remain unchanged or rise0->1, never fall1->0. SWRU191F p.47 and
+11.1-11.2 p.129 establish the hardware-latched compare flag and default
+compareFFFFFF while the Sleep Timer runs from reset, even with IRQs disabled.
+This foreground/reset-history contract never clears IRCON, writes ST0/1/2,
+changes compare or enables interrupts.
+
+The host orders immutable initial flags -> C snapshot -> live reads -> the
+next checkpoint's C snapshot. C0/live1 at one checkpoint is legitimate;
+after observing live1, a later C0 is not. Initial and observed wire bytes
+remain raw, never rewritten to match live state. The same history spans
+INIT, READY, probe and final FAULT. Result `flag_history` records at most one
+observed STIF transition, its C/live source and subsequent preservation count;
+an initially set flag does not prove an observed transition. It is neither
+an event/wrap counter nor calibrated timing.
+
+Normal full acceptance stops at ENDREADY **before** a distinct deliberate
+fault path. A separate `stopped` invocation proves the entire same-reset
+corpus, resumes through fixture-only ADCCON1=3F, and stops at the genuine
+first next16 LCALL with its real arguments and complete frame. This write
+selects documented RCTRL11/off with ST0/STSEL11/reserved11; EOC is read-only.
+Real next16 must return UNSUPPORTED_STATE6 without publishing; two further
+real API entries must retain6 without MMIO. The fixture records the expected
+terminal fault, performs no cleanup/reseed/write and loops at FAULT.
+Separate full-reset acceptance establishes recovery, never cleared software
+state or an error return. Holding the CPU cannot cause an honest PRNG poll timeout.
+
+The original wirev1 LG image has
+[bounded short hardware evidence](DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+real benign rejections, two seed1234 loads and eight RC16 words, with the
+four-word prefix repeating after reseed, two additional non-advancing CPU
+read pairs per word, guards and unfilled tails. This observes only the short
+RC16/seed1234/EOC0 case, not XOSC32, complete periods, all valid states,
+RCTRL11 rejection or recovery. Its
+[long run stopped on the old fixture flag policy](DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption),
+not a PRNG error; its final32 words were not host-accepted. That halt is now
+historical after the parent programmed the unchanged7289-byte wirev2 and
+passed the [corrected short case](DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance).
+It observes the same bounded RC16/seed1234 case, with six raw initial/C/live
+flag observations and no STIF transition, not physical transition handling.
+The same wirev2 subsequently passed
+[full-stopped hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+all131,084 words/four periods/both clocks, the real after-C/live STIF race
+and2,145 subsequent preserved observations through XOSC32, END and probe.
+Raw C0/live80 at observation1969 was retained, not normalized; final C/live
+IRCON80 and all other flags matched. Genuine RCTRL11 rejection and retained
+6/6/6 returns preserved the full caller batch and probe sentinel.
+A [separate full-reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance)
+then passed the entire corpus again on the same image. Its fresh reset epoch
+established new counter/fault/flag history, not a C-state clear or continuation.
+At observation1859, previous IRCON0/raw C80/live80 recorded a distinct
+`c-snapshot` transition;2,253 later observations preserved it through END.
+The final halt is ENDREADY016A/config26/RC16, fault0, probe returns0/0/0,
+C/live IRCON80; no probe execution or resume followed. The stopped FAULT is
+historical. This completes the bounded LG short/stopped/reset-recovery gate;
+generic/EOC1/physical poll-fault and broader M2 gates remain open.
+This is not entropy or timer calibration.
 
 ## Memory contract
 

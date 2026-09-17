@@ -91,7 +91,7 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
 
     def test_dma_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 8)
+        self.assertEqual(len(IMAGES), 9)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -102,7 +102,7 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
     def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
-        self.assertEqual(len(IMAGES), 8)
+        self.assertEqual(len(IMAGES), 9)
         for image in IMAGES:
             if image == "aes_fixture":
                 continue
@@ -125,13 +125,22 @@ class LayoutTests(unittest.TestCase):
 
     def test_deterministic_prng_and_host_model_never_enter_board_images(self):
         for image in IMAGES:
-            for name in ("_prng_seed_explicit", "_prng_next16", "_prng_fault", "_prng_reserved_end", "_prng_reference"):
+            if image == "prng_fixture":
+                continue
+            for name in ("_prng_seed_explicit", "_prng_next16", "_prng_fault", "_prng_reserved_end"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated deterministic PRNG"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for source in ("prng.c", "test_prng.c"):
+            for source in ("prng.c", "prng_fixture.c", "prng_fixture_state.c"):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated deterministic PRNG"):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
+    def test_prng_models_never_enter_any_board_image(self):
+        for image in IMAGES:
+            with self.subTest(image=image), self.assertRaisesRegex(ValueError, "PRNG host model"):
+                verify_layout(self.symbols | {"_prng_reference": 0x100}, self.memory, self.debug, image)
+            for source in ("test_prng.c", "test_prng_fixture.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "PRNG host model"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
     def test_status_cannot_alias_iram(self):
         self.symbols["_m0_status"] = 0x1F00
         with self.assertRaisesRegex(ValueError, "alias"):

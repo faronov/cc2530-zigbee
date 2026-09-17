@@ -315,7 +315,7 @@ driver for 21 public cases, all CODE/XDATA input combinations, both clocks and
 257 same-reset cycles, with bounded LG hardware acceptance below.
 Guarded manual tooling performs genuine pre-key and late-final timeout
 experiments without inspecting private payload after failure.
-CI now has sixteen full jobs, the same seven artifacts and
+That AES addition brought CI to sixteen full jobs, the same seven artifacts and
 `hardware_tested=false`.
 The [first physical LG KEY load](docs/DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
 exposed a completion-flag bug. The unchanged corrected **12,765-byte LG image**
@@ -325,8 +325,9 @@ and 18 confirmed ENC ACKs. Fresh KEY **and IV** flags and per-phase ACK checks a
 hardware-observed; both genuine timeouts preserved caller output.
 Separately reset recovery accepted 514 blocks over 257 cycles, with all 168
 vector/space/clock combinations independently checked and 1,542 confirmed ENC ACKs.
-LG now holds that corrected image at **READY016A/config22/RC16**,
-completed/heartbeat1 and fault latch0. Generic hardware remains unobserved;
+That AES recovery ended at **READY016A/config22/RC16**,
+completed/heartbeat1 and fault latch0; this is historical after the PRNG
+programming below. Generic AES hardware remains unobserved;
 this is not calibrated timing, general DMA/security acceptance or closure of M2 #4.
 
 ## Isolated deterministic PRNG foundation
@@ -340,10 +341,41 @@ finds two other cycles of 32,767 states, not a 65,535-state period.
 
 `make test-prng` checks the real driver against independent host mathematics
 and an isolated SDCC/alias-aware synthetic executable. **Never flash
-`prng_test.ihx`**. All sixteen board BINs, existing drivers and the CI/artifact
-policy are unchanged. There is no PRNG board image, hardware runner or physical
-PRNG evidence; LG remains at the accepted AES READY state above.
-[ADC/CSP ownership, shared-register semantics and the remaining physical gate](docs/VALIDATION.md#m2-deterministic-prng-coverage)
+`prng_test.ihx`**. The separate
+[`IMAGE=prng_fixture`](docs/DEBUGGING.md#deterministic-prng-board-fixture) now
+links the unchanged driver for both boards. Its 32-word batches include real
+31-word final tails: four full 32,767-word periods, both disjoint cycles on
+RC16/XOSC32, plus short seed/reseed cases. The host checks every actual word,
+not just a count/hash. A separately selected genuine stopped-RCTRL probe tests
+terminal rejection; holding the CPU is **not** a PRNG poll-timeout experiment.
+All sixteen older BINs and existing drivers remain unchanged. CI has eighteen
+full jobs with the same seven artifacts and `hardware_tested=false`.
+The original **7,224-byte wirev1 LG PRNG image** passed
+[short hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+two seed1234 loads and eight RC16 words, repeating `8D94 E5AC CBBE 1731`,
+with real benign-error, non-advancing readback, guard and tail checks.
+Its [first long run was interrupted by a fixture flag-policy bug](docs/DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption):
+the default Sleep Timer compare latched STIF after C's snapshot. This was not
+a PRNG driver/output failure; the last32-word batch was not host-accepted.
+Corrected wirev2 permits only sticky STIF0->1, with ordered C/live history;
+all other flag bits remain strict and no flag is cleared.
+The unchanged **7,289-byte wirev2 LG image** then passed
+[corrected short hardware acceptance](docs/DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance):
+eight RC16 words and six raw flag observations, with **no STIF transition**.
+The same image then passed
+[full-stopped hardware acceptance](docs/DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+131,084 individually checked words, four32,767 periods/all65,534 valid states
+per clock, the actual C0/live80 STIF race and2,145 later preserved observations,
+plus the genuine RCTRL11 probe with retained6/6/6 errors and unchanged caller data.
+The same image passed a
+[separate full-reset recovery](docs/DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance):
+the entire corpus again, with a distinct `c-snapshot` STIF transition and
+2,253 later preserved observations, stopping before the probe.
+**The bounded LG short/stopped/reset-recovery hardware gate is complete.**
+The final LG state is halted ENDREADY016A/config26/RC16, fault0 and C/live
+IRCON80; the earlier stopped FAULT is historical. Generic/EOC1/poll-fault and
+broader entropy/RF/security/sleep gates remain open. No hosted-CI result is claimed.
+[ADC/CSP ownership, shared-register semantics and remaining physical gates](docs/VALIDATION.md#m2-deterministic-prng-coverage)
 are explicit. RF/noise seeding, ADC conversion, sleep and security randomness
 remain unimplemented; M2 #4 stays open.
 

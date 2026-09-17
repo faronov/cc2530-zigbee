@@ -18,6 +18,9 @@
 #if defined(AES_FIXTURE_HOST_TEST)
 #include "aes_fixture.h"
 #endif
+#if defined(PRNG_FIXTURE_HOST_TEST)
+#include "prng_fixture.h"
+#endif
 
 #define DEFINE_REGISTER(name, address) volatile uint8_t name;
 CC2530_REGISTER_LIST(DEFINE_REGISTER)
@@ -29,6 +32,9 @@ DMF_REGISTERS(DEFINE_REGISTER)
 #endif
 #if defined(AES_FIXTURE_HOST_TEST)
 AEF_REGISTERS(DEFINE_REGISTER)
+#endif
+#if defined(PRNG_FIXTURE_HOST_TEST)
+PNF_REGISTERS(DEFINE_REGISTER)
 #endif
 #if defined(IRQ_FIXTURE_HOST_TEST)
 IRQ_FIXTURE_REGISTERS(DEFINE_REGISTER)
