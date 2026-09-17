@@ -234,6 +234,12 @@ The latest run ended at FIFO READY `016A`, XOSC32, IRQs disabled and empty FIFOs
 RX flush, received frames, on-air behavior, error-latch recovery and calibrated
 metadata remain open; generic has no physical FIFO evidence. M2 #4 remains open.
 
+The independent AES-128 encrypt-block prerequisite is
+[blocked on CPU transfer sequencing](PROVENANCE.md#m2-aes-cpu-transfer-prerequisite).
+No AES primitive or successful placeholder is added; the documented DMA
+alternative requires separate scope and debugger-policy review. This does
+not close the remaining radio/RX/channel/calibration gates.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.

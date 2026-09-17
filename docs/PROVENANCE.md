@@ -414,6 +414,42 @@ contains only processed observations from explicitly authorized programming,
 full physical CODE verification and normal/timeout/reset-recovery runs.
 Raw logs, identities and recovery backups remain outside Git and CI.
 
+### M2 AES CPU-transfer prerequisite
+
+The independent AES-128 encrypt-block investigation on 2026-09-17 did **not**
+add an API, executable, software fallback or hardware-support claim.
+The CPU-only transfer contract remains unresolved; this is not a finding that
+CPU access is impossible. Sources read directly:
+
+| Primary source | Established facts / limit |
+| --- | --- |
+| SWRU191F sections 15.1-15.5 p.147 | ECB/CBC sequence requires key load, IV load, then a start for each 128-bit block and complete output consumption before the next block. Key/IV loads abort active processing. CPU data access is expressly discussed, although DMA is preferred. |
+| SWRU191F sections 15.8-15.10 pp.150-151 | ENCDI/ENCDO/ENCCS are B1/B2/B3. RDY describes encryption/decryption completion; ST is hardware-cleared. No CPU byte-ready/accepted-count field or key/IV-load completion condition is specified here. |
+| SWRU191F sections 2.5.1-2.5.2 pp.41-46 | ENCIE is IEN0 bit 4; block completion sets both S0CON ENCIF bits 1:0, even with CPU interrupts disabled. S0CON lists R/W flags, not a generic R/W0 acknowledgment recipe. |
+| SWRU191F section 2.2.5 p.33; [SWRS081B](https://www.ti.com/lit/pdf/swrs081), February 2011, pp.20-21 | CPU/DMA arbitration and single-cycle SFR access do not specify AES input/output pacing or an AES backpressure guarantee. |
+| SWRU191F sections 4.4-4.6 pp.66-69; SWRZ031, April 2009 | Clock/status and AES retention boundaries are documented. Neither listed erratum supplies the missing CPU transfer contract. |
+
+The precise missing facts are when CPU key/IV/block writes may begin and
+advance, when key/IV loading is confirmed complete before the next aborting
+command, and whether all 16 ECB output reads can proceed consecutively.
+An old RDY=1 sample, ST readback, a software byte count or inserted delay is
+not a substitute for those guarantees. A synthetic AES oracle/known-answer
+test would not establish them on silicon.
+
+The concrete documented alternative is two DMA channels driven by ENC_DW=29
+and ENC_UP=30 (SWRU191F p.147, section 15.9 p.150 and Table 8-1 p.99), with
+explicit descriptors, completion and ownership handling. This was **not**
+implemented: it would expand scope. It also needs a separately reviewed debug
+boundary: Table 3-2 p.55 prohibits DMA-register access with DMA_PAUSE set;
+the current manual runners require debug configuration 26, which sets that bit.
+The [SWRU214A software examples guide](https://www.ti.com/lit/pdf/swru214),
+October 2009, pp.21-24 describes higher-level security APIs, not the missing
+CPU handshake. Full TI E2E discussions attempted as clarification returned
+HTTP 403; no conclusion is attributed to their inaccessible contents.
+No SDK implementation, other-part AES behavior, dependency, key material or
+private/hardware observation was imported. Proceed only after authoritative
+CPU sequencing clarification or a separately assigned bounded DMA design.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki
