@@ -245,13 +245,26 @@ All eight older BINs are byte-identical. CI now has ten board/image jobs with
 the same exact board-only artifact whitelist. Historical evidence is unchanged,
 past acceptance grants no new hardware authorization, and M2 #4 remains open.
 
+## M2 quiescent radio FIFO foundation
+
+The isolated [FIFO API](docs/ARCHITECTURE.md#quiescent-radio-fifo-foundation)
+verifies explicit RX/TX FIFO clears and bounded TX preloads through real RFST/
+RFD instructions. It requires caller-established quiescence and stable XOSC32,
+does not enable RF, and rejects controller errors without erasing interrupt
+history. Preload accepts 1..125 body bytes, writes the PHY length plus body,
+and verifies each FIFO count/pointer advance; it does not transmit or validate MAC.
+`make test-radio-fifo` provides **host, linked-image and synthetic FIFO/CSP
+simulation** evidence only. `radio_fifo_test.ihx` must never be flashed or
+published as board firmware. All ten board BINs and the CI matrix are unchanged;
+a separate hardware fixture/gate is still required, and M2 #4 remains open.
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):
 DATA/ACK plus association request/response, disassociation, data request and
 beacon request payloads/frames.
 It is host-tested, image-checked and simulated in an isolated test executable,
-not linked into board firmware. There is still no radio driver, functioning
+not linked into board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.
 
 - C99 and SDCC, initially CC2530F256.

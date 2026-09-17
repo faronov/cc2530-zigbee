@@ -717,6 +717,66 @@ no calibrated time/latency, exact overflow count, true one-shot, other IRQ/
 DMA/sleep/RF/AES/flash or new authorization follows. Generic hardware and
 broader M2 #4 gates remain open.
 
+## M2 quiescent radio FIFO automated coverage
+
+`make test-radio-fifo` runs strict host C and the isolated
+`radio_fifo_test.ihx`; the executable is **never a board image or flash input**.
+Both board configurations passed full IRQ-fixture `all test`, retaining
+355 Python regressions and the original clock/timebase/IRQ/MAC checks.
+An additional rejection test brings the Python suite to 356 tests and enforces
+the FIFO driver's exclusion from every current board image.
+There is no new IMAGE, CI job or board-artifact entry.
+
+Host coverage includes **69,895 modeled cases**, every supported body length
+and every invalid uint16 length above 125, all command/status byte pairs,
+enable/control/reserved/error bytes, full/empty FIFOs, exact byte order,
+delayed counts/pointers, independent RX overflow, each controller-error bit,
+partial effects, deadlines/ambiguity/backward time and a stopped-counter
+65,535-poll cap. Read/write logs remain 32 entries: every SFR/XREG read and
+write is validated before consumption, never silently discarded or enlarged.
+There is no host success default for an unmodeled XREG read.
+
+The genuine SDCC 4.2.0 link is **5,154 CODE bytes**, including **3,042 driver
+bytes**, with **325 ordinary XDATA**, an 8-byte test result inside the full
+64-byte M0 reservation (**389 total reserved nonaliased bytes**), stack start
+`40`/initial SP `3F`, and **192 reserved stack bytes**. The diagnostic ABI is
+21 bytes (two-byte XDATA output pointer, three-byte generic body pointer).
+The driver object itself accounts for 78 XDATA bytes, 31 DATA bytes,
+15 overlay bytes and three bit variables; overlays are not extra private RAM.
+There is no persistent epoch, allocation or radio-RAM pool.
+
+**99 linked synthetic scenarios** execute the unchanged reader, FIFO driver
+and CODE/XDATA caller paths. Checks reject every changed driver instruction
+byte, wrong SFR/XREG/strobe operands, linked-listing mismatch, pointer/return/
+diagnostic ABI changes and invalid allocation/stack/alias layouts. Every
+executed MMIO instruction/address/value, all diagnostic bytes, body/input
+preservation, unrelated SFR/config/flag state and radio-RAM guards are checked.
+The `1F00..1FFF` IRAM alias is explicitly installed and tested; upper IRAM and
+unallocated/status-reservation guards stay strict.
+
+s51 C52 has **no CC2530 radio/FIFO/CSP model**. The test explicitly supplies
+synthetic count/pointer/status/time observations around genuine instructions;
+it neither patches ROM nor claims physical RF, silicon FIFO behavior or timing.
+It separately proves a count alone, late effect or requested strobe cannot
+produce success. The mixed-address-space caller uses explicit generic-pointer
+assignments; both CODE and XDATA payload bytes are actually executed/checked.
+
+**Remaining hardware gate:** a separate, explicitly authorized, non-RF board
+fixture must establish known quiescence, select/confirm XOSC32, verify all CODE
+before resume, and observe real empty/clear/preload counts/pointers, preserved
+unrelated state and bounded terminal failures. Do not flash this test executable
+or repurpose the installed IRQ fixture. Error-latch recovery, RX/TX enable,
+synthesizer/ACK operations, DMA, radio interrupts, MAC and networking remain
+outside this slice; earlier LG hardware records do not validate or authorize it.
+Full M2 #4 remains open.
+
+All ten board configurations were rebuilt, host-checked, image-checked and
+alias-aware board-simulated. Their complete BIN lengths and SHA-256 hashes
+remain identical to published `cdbae7686d0f55d724d9ef5f0ad19e65841c18e3`,
+including both IRQ fixtures; no board map contains a FIFO-driver symbol.
+The published timebase, clock and EA source/header files and ten-job CI
+configuration are unchanged. Historical hardware evidence is not rewritten.
+
 ## Independent Sleep Timer hardware reference (2026-09-16)
 
 This manual observation used the existing LG Rev0.3 M1 fixture, not

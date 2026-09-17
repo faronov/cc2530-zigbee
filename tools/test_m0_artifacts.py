@@ -80,6 +80,13 @@ class LayoutTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "isolated IRQ"):
             verify_layout(self.symbols, self.memory, self.debug + "\nC$irq.c$1")
 
+    def test_isolated_radio_fifo_cannot_enter_board_images(self):
+        for name in ("_radio_fifo_clear_init", "_radio_fifo_preload_init"):
+            with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
+                verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug)
+        with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
+            verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1")
+
     def test_status_cannot_alias_iram(self):
         self.symbols["_m0_status"] = 0x1F00
         with self.assertRaisesRegex(ValueError, "alias"):

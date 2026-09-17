@@ -369,6 +369,34 @@ content was read or imported for this update. This bounded LG result does not
 validate generic hardware, calibrated timing, higher-priority nesting or
 other platform services and does not alter licensing or historical records.
 
+### M2 quiescent radio FIFO sources
+
+The FIFO API, host model and linked/simulator checks are original BSD-3-Clause
+work. TI **SWRU191F, revised April 2014**, was read directly for these facts:
+
+| Primary location | Use in this slice |
+| --- | --- |
+| Sections 4.4-4.4.4, pp.66-69; section 23.14.3 p.239 | Stable selected XOSC32 and 32-MHz system clock for correct radio/CSP operation; no CC2533 amplitude-detector bit transferred to CC2530 |
+| Sections 23.1.1/23.1.2, pp.209-213 | Independent masks and R/W0 RFERRF BF error latches; no acknowledgment writes; RF-off while already off can raise STROBEERR |
+| Sections 23.2/23.4, pp.213-215 | RFD D9 writes TX/reads RX; two 128-byte FIFOs at 6000..60FF; reset-unknown address/source-match area 6100..617F excluded |
+| Sections 23.8.3-23.8.10, pp.218-221 | AUTOCRC length/body/FCS bounds, RFD recommendation, persistent TX contents, overflow/underflow and explicit clear |
+| Sections 23.10/23.10.2, pp.232-233 | Direct RAM access does not update FIFO pointers; RX reset pointers/counts/signals; active-RX abort hazard; independent FIFO=0/FIFOP=1 overflow indication |
+| Section 23.11/Table 23-3, pp.234-236 | Do not drive software sequencing from rapidly changing FSM state numbers |
+| Sections 23.14-23.14.9, pp.238-243,253-254 | RFST E1, CSPSTAT 61E1 RUNNING bit 5, immediate ED/EE flushes, undefined/no-op encodings are not substitutes |
+| Section 23.15, pp.259-265 | FRMCTRL0/1 6189/618A, RXENABLE 618B, FSMSTAT0/1 6192/6193, full-byte counts 619B/619C and pointer registers 619D..619F/61A1..61A2 |
+
+The official [SWRZ031 errata](https://www.ti.com/lit/pdf/SWRZ031), April 2009,
+history 2009-04-29, was also read directly. Issues 1/2 concern DMA variable
+length and Timer2 latching, neither used here. No speculative workaround,
+SDK/Contiki/GPL implementation or dependency is imported. The manual's p.209
+RF-interrupt-12 narrative conflicts with Table 2-5 p.42 (RF16/vector83);
+this slice installs no RF ISR and does not use that narrative mapping.
+
+The [evidence](VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage) is
+host/image/synthetic FIFO/CSP only. No physical hardware, private identity/
+address RAM, capture or recovery file was accessed. Public reference downloads
+are temporary research material, not repository or CI artifacts.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

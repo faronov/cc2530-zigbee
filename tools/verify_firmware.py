@@ -221,6 +221,9 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require("_radio_fifo_clear_init" not in symbols and "_radio_fifo_preload_init" not in symbols
+            and "C$radio_fifo.c$" not in debug,
+            "Board image must not link the isolated radio FIFO driver")
     require(image_name == "irq_fixture" or
             ("_irq_save_disable" not in symbols and "_irq_restore" not in symbols and "C$irq.c$" not in debug),
             "Board image must not link the isolated IRQ primitives")

@@ -24,6 +24,9 @@ register_read_t reads[32];
 unsigned read_count;
 host_mmio_read_hook_t host_mmio_read_hook;
 host_mmio_write_hook_t host_mmio_write_hook;
+host_mmio_xread_hook_t host_mmio_xread_hook;
+xregister_read_t xreads[32];
+unsigned xread_count;
 
 void host_mmio_reset(void)
 {
@@ -34,6 +37,20 @@ void host_mmio_reset(void)
     read_count = 0;
     host_mmio_read_hook = NULL;
     host_mmio_write_hook = NULL;
+    host_mmio_xread_hook = NULL;
+    xread_count = 0;
+}
+
+uint8_t host_mmio_xload(uint16_t address)
+{
+    uint8_t value;
+    assert(xread_count < sizeof(xreads) / sizeof(xreads[0]));
+    assert(host_mmio_xread_hook != NULL);
+    value = host_mmio_xread_hook(address);
+    xreads[xread_count].address = address;
+    xreads[xread_count].value = value;
+    xread_count++;
+    return value;
 }
 
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address)

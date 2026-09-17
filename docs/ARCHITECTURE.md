@@ -467,6 +467,83 @@ duration nor raw counts establish exact hardware overflow counts or a true
 one-shot timer. M2 #4 remains open; this dated acceptance grants no new
 hardware authorization.
 
+## Quiescent radio FIFO foundation
+
+`include/radio_fifo.h` / `src/radio_fifo.c` is an isolated, original
+initialization-time service, excluded from all ten board images.
+
+| API | Supported operation |
+| --- | --- |
+| `radio_fifo_clear_init(timeout_ticks, poll_limit, diagnostics)` | Explicitly discard/reset both FIFOs as needed; at most one immediate RX flush ED and one TX flush EE, each verified before proceeding |
+| `radio_fifo_preload_init(body, body_length, timeout_ticks, poll_limit, diagnostics)` | Require reset-empty TX; write PHR=`body_length+2`, then 1..125 body bytes through RFD, verifying count/first/last after every byte |
+
+The body excludes PHR and generated FCS: AUTOCRC requires LEN=3..127 and
+LEN-2 supplied body bytes (SWRU191F pp.219,221). Total FIFO writes are 2..126,
+not 128; no frame parsing, authentication, CRC generation or transmission is
+performed here. TX content persists after transmission, so a different frame
+requires a separate explicit clear, never an implicit replacement.
+
+**Ownership is a precondition, not inferred from idle samples.** One awake
+foreground owner must know that radio, CSP and DMA have no active, scheduled
+or pending work and exclude concurrent writers, ISR calls, Sleep Timer readers,
+clock changes and sleep/wake discontinuities. The API requires IEN0/1/2=0,
+SLEEPCMD.MODE=0 with reserved bit 2 set, stable matching CMD/STA with OSC=0 and
+CLKSPD=0, FRMCTRL0=40 and FRMCTRL1=01. Thus AUTOCRC is enabled, AUTOACK and
+test/loop modes are disabled, and underflow detection is enabled. It does not
+switch clocks or configure those fields. LF/TICKSPD are preserved, not calibrated.
+
+Observations reject nonzero RXENABLE, CSP_RUNNING, CAL_RUNNING, RX_ACTIVE,
+TX_ACTIVE, SFD or PLL lock. Reserved status bits required zero are checked.
+CSP_PC, the reset-unknown fast FSM state number and CCA/SAMPLED_CCA are
+explicitly ignored, not interpreted as ownership or timing evidence.
+No DMA register, CSP program, address/source-match RAM or FIFO RAM is accessed.
+Only RFST ED/EE and RFD writes are emitted; RFD is never read. No RF-off,
+RX/TX/ACK strobe, IRQ/source-mask/flag write, dispatcher or GPIO policy is added.
+
+Clear success requires zero counts, reset FIFO pointers and cleared RX FIFO/
+FIFOP signals. If those postconditions already hold, `EMPTY` is a verified
+idempotent result with no strobe or time sample. Preload requires TX count and
+both TX pointers initially zero; each write must be followed by count/last
+equal to the number written and first still zero. It cannot advance on a
+desired count alone, and it preserves the observed RX count/pointers/signals.
+RFERRF latches, including overflow/underflow, and the independent RX overflow
+indication FIFO=0/FIFOP=1 are rejected. Flush is **not** used as an assumed
+interrupt acknowledgment; this API does not recover pre-existing error history.
+
+| Result | Meaning |
+| --- | --- |
+| `OK=0`, `EMPTY=1` | Verified operation, or already reset-empty clear |
+| `INVALID_ARGUMENT=2` | Null pointer, length outside 1..125, zero/out-of-half-range timeout, or zero cap; no MMIO, output unchanged |
+| `UNSUPPORTED_STATE=3`, `BUSY=4`, `NOT_EMPTY=5` | Rejected configuration/reserved bits, observed activity, or TX needing explicit clear |
+| `CONTROLLER_ERROR=6`, `COUNT_ERROR=7` | Raw RFERRF/RX overflow evidence, or impossible count/pointer progress |
+| `TIMEOUT=8`, `POLL_LIMIT=9` | Whole-operation raw deadline or independent poll cap exhausted |
+| `TIMEBASE_ERROR=10`, `COUNTER_RANGE=11`, `STATE_CHANGED=12` | Helper ambiguity/error, backward/out-of-window time, or changed clock/other FIFO state |
+
+Timeout must be positive and below `800000`; cap is 1..65535. One raw deadline
+covers the entire operation, including all bytes/flushes; equality times out.
+There are at most `poll_limit` polls and one initial time sample. No second
+write is issued after cap exhaustion. CPU execution and true half-range
+observation are required; missed wraps/reset and instruction overhead are not
+calibrated wall-time bounds.
+
+Diagnostics are a caller-owned **21-byte SDCC XDATA object**, not a serialized
+wire ABI; host padding differs. They retain elapsed/polls/helper status, issued
+and confirmed strobe masks, written and verified byte counts, raw errors,
+counts, pointers, FIFO signals and a complete-sample indicator. A late observed
+effect is not counted as verified. Invalid arguments leave the object unchanged;
+other calls initialize it, and a zero helper field alone does not imply a call.
+Input/output objects must be valid and disjoint; body is a generic pointer,
+supporting CODE and ordinary XDATA. The linked caller assigns each address-space
+variant separately before conversion: a mixed CODE/XDATA conditional expression
+can lose its tag under SDCC 4.2.0.
+
+There is no retained driver state or heap. Compiler scratch is foreground-only,
+not ISR-reentrant. A failure may leave cleared or partially loaded FIFOs, or
+unconfirmed effects. Stop initialization and explicitly reestablish ownership/
+recover before reuse; never retry, append, erase error latches, issue RF-off or
+reset implicitly. See [primary facts](PROVENANCE.md#m2-quiescent-radio-fifo-sources)
+and [offline evidence/remaining gate](VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage).
+
 ## Memory contract
 
 | Address space | Meaning |

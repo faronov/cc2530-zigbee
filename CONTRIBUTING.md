@@ -265,6 +265,22 @@ The parent also independently passed both full IRQ configurations with 355
 Python tests and strict checks. Past acceptance grants no new hardware
 authorization, and M2 #4 remains open. Never flash `irq_test.ihx`.
 
+The isolated quiescent radio FIFO has a focused offline target:
+
+```sh
+make test-radio-fifo
+```
+
+It is also included in `make test`, without linking radio code into any of the
+ten board images or expanding CI/artifacts. Keep `radio_fifo_test.ihx` test-only:
+**never flash or upload it as board firmware**. Its XREG hook is host-only,
+requires an explicit model and retains checked 32-entry logs. The linked test
+executes real RFST/RFD and CODE/XDATA pointer paths with synthetic FIFO/CSP
+effects, not physical radio acceptance. Preserve the
+[ownership/error contract](docs/ARCHITECTURE.md#quiescent-radio-fifo-foundation)
+and [separate hardware gate](docs/VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage);
+no automatic USB, RF operation or error-latch recovery belongs in this target.
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

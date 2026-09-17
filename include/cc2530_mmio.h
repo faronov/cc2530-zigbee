@@ -18,7 +18,7 @@
 #error Select SDCC for firmware or CC2530_HOST_TEST for host tests
 #endif
 
-/* Public CC2530 SFR addresses; no radio/USART implementation is included. */
+/* Public CC2530 SFR addresses; declarations do not enable peripherals. */
 #define CC2530_REGISTER_LIST(X) \
     X(SOC_P0, 0x80) \
     X(SOC_P1, 0x90) \
@@ -42,7 +42,10 @@
     X(SOC_SLEEPCMD, 0xbe) \
     X(SOC_ST0, 0x95) \
     X(SOC_ST1, 0x96) \
-    X(SOC_ST2, 0x97)
+    X(SOC_ST2, 0x97) \
+    X(SOC_RFD, 0xd9) \
+    X(SOC_RFST, 0xe1) \
+    X(SOC_RFERRF, 0xbf)
 
 #define SFR_ADDRESS(name, address) name##_ADDRESS = address,
 enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
@@ -53,6 +56,7 @@ enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
 /* SDCC's runtime page-register symbol must select MPAGE, not generic 8051 P2. */
 __sfr __at(0x93) _XPAGE;
 #define MMIO_READ(reg) (reg)
+#define MMIO_XREAD(address) (*(const volatile MCU_XDATA uint8_t *)(address))
 #define MMIO_WRITE(reg, value) do { (reg) = (uint8_t)(value); } while (0)
 /* Compound SFR operations preserve unrelated port latch bits on the 8051. */
 #define MMIO_CLEAR(reg, mask) do { (reg) &= (uint8_t)~(mask); } while (0)
@@ -60,8 +64,10 @@ __sfr __at(0x93) _XPAGE;
 #else
 #define DECLARE_SFR(name, address) extern volatile uint8_t name;
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address);
+uint8_t host_mmio_xload(uint16_t address);
 void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value);
 #define MMIO_READ(reg) host_mmio_load(&(reg), reg##_ADDRESS)
+#define MMIO_XREAD(address) host_mmio_xload(address)
 #define MMIO_WRITE(reg, value) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)(value))
 #define MMIO_CLEAR(reg, mask) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)((reg) & (uint8_t)~(mask)))
 #define MMIO_SET(reg, mask) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)((reg) | (mask)))

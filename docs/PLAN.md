@@ -216,6 +216,15 @@ hardware nesting, other sources, measured/calibrated timing and general
 dispatch remain deferred; clock/timebase ownership is unchanged and M2 #4
 remains open.
 
+The next isolated [quiescent radio FIFO foundation](ARCHITECTURE.md#quiescent-radio-fifo-foundation)
+adds verified FIFO clear and bounded RFD preload, not RF enable or a MAC.
+It requires known awake radio/CSP/DMA ownership and stable XOSC32; all ten
+existing board BINs and the image/CI matrix remain unchanged. Its
+[host/image/synthetic FIFO evidence](VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage)
+does not establish physical FIFO/CSP behavior. A separately authorized non-RF
+fixture is the next hardware gate, not permission to use the standalone test
+image or the currently installed IRQ fixture for this purpose. M2 #4 remains open.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.
