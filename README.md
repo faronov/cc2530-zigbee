@@ -11,6 +11,10 @@ This is not yet a working Zigbee stack.** The included firmware does not join a 
 transmit radio packets, read a sensor or refresh a display. It does not require
 IAR or proprietary TI stack libraries.
 
+The selected specification baseline is **Core R22 + PRO BDB 3.0.1**
+(`16-02828-012`). The first centralized-network ED target is a subset, not
+full BDB support; [errata and implementation gates](docs/CONFORMANCE.md) remain open.
+
 [Русский обзор](README.ru.md)
 
 ## Start here
@@ -383,10 +387,40 @@ remain unimplemented; M2 #4 stays open.
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):
 DATA/ACK plus association request/response, disassociation, data request and
-beacon request payloads/frames.
-It is host-tested, image-checked and simulated in an isolated test executable,
-not linked into board firmware. There is still no on-air radio driver, functioning
+beacon request payloads/frames, plus version-0 Beacons without GTS descriptors
+(pending-address lists and opaque upper-layer payloads, not network discovery).
+The separate [R22 NWK Beacon decoder](docs/NWK.md) parses the 15-byte Zigbee
+metadata within that payload, without accepting a profile, network or parent.
+The independent [NWK Data codec](docs/NWK.md#nwk-data-frame-codec) handles
+bounded unsecured unicast/broadcast frames with optional IEEE addresses;
+security and extended routing layouts fail explicitly.
+The independent [APS Data codec](docs/APS.md) adds normal-unicast headers,
+endpoint/profile/cluster metadata and opaque payload, with a real offline
+MAC/NWK/APS composition test. APS security, broadcast/group delivery and
+extended headers fail explicitly; ACK request does not implement transactions.
+The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
+headers and 38 wire-value types, including 8..64-bit byte representations
+and short strings. A separate [read-only attribute model and unicast Read
+Attributes handler](docs/ZCL.md#read-only-attributes-and-read-attributes)
+adds bounded lookup, access/space-error records and response construction.
+The [one-cluster unicast dispatcher](docs/ZCL.md#discover-attributes-and-unicast-dispatch)
+adds sorted Discover Attributes pages, routes Read requests, reports received
+Default Responses and builds unsupported-command errors without response loops.
+It adds no registered cluster, writes, reporting or network dispatcher.
+Unreviewed ZCL errata remains a conformance risk, not a development stop.
+APS/ZCL composition and the read handler are target-tested; the complete
+MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested and
+also runs in a single SDCC resource image.
+This foundation is host-tested, image-checked and simulated, not linked into
+board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.
+
+`make test-protocol-budget` checks that integrated image and generates a
+[per-subsystem resource ledger](docs/ARCHITECTURE.md#integrated-protocol-resource-budget):
+22,829 CODE bytes and 1,500 ordinary XDATA bytes. Its exercised foreground
+stack peak leaves only five bytes before the existing upper-IRAM guard.
+This is a measured baseline for the implemented protocol subset, **not a
+claim that radio, security/NV, ZDO and the final application already fit**.
 
 - C99 and SDCC, initially CC2530F256.
 - One logical end-device implementation: receiver-on first, sleeping later.

@@ -76,11 +76,82 @@ or sleeping-target, MMIO, full-SFR, flash-writer or GDB support.
 ## Layer boundaries
 
 The standalone `mac_frame` module currently supplies only offline legacy
-DATA/ACK body encoding/decoding and five fixed-format command payloads/frames.
+DATA/ACK body encoding/decoding, five fixed-format command payloads/frames and
+version-0 Beacons without GTS descriptors. Beacon views bound and expose
+pending-address/upper-layer spans without copying or interpreting Zigbee
+discovery data; superframe fields are raw metadata, not a validated schedule.
 Command-specific header validation is still stateless serialization, not a
 procedure or association state machine. The module has no board/platform dependency or
 network state and is not linked into bootstrap/fixture firmware. Its
 [contract](MAC.md) separates syntax success from CRC/security/peer acceptance.
+
+The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
+inside the returned upper-layer Beacon Payload. It has no dependency on MAC
+headers or platform code. The [NWK codec contract](NWK.md) preserves raw
+profile/capacity/depth/update metadata without compatibility or parent
+acceptance. It adds no firmware caller or network state machine.
+
+The independent `nwk_frame` module encodes/decodes only the bounded,
+unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
+IEEE addresses and opaque payload. Unsupported security, multicast and
+source-route layouts fail explicitly. It does not decrement radius, assign
+sequences, validate identities, process APS or decide network membership.
+Its offsets start at the NPDU, not the MAC body. All three codecs are composed
+only in offline tests, including each layer's independent size/error checks.
+
+The independent `aps_frame` module handles only unsecured Data with
+normal-unicast delivery and an eight-byte header. Endpoints, profile/cluster
+IDs, counter and ACK-request are metadata; payload is opaque. Unsupported
+types, broadcast/group delivery, security and extended headers fail explicitly.
+The [APS contract](APS.md) separates the raw 108-byte APDU cap from future
+service/security limits and endpoint/transaction policy. A separate simulator
+image composes MAC/NWK/APS without expanding the existing MAC test image.
+APS introduces no dispatcher, ZDO handler or board caller.
+
+The separate `zcl_frame` and `zcl_value` modules share the typed
+`zcl_wire.h` API but no runtime state. The [ZCL wire contract](ZCL.md)
+pins Revision 8 and keeps manufacturer/command/attribute policy outside
+header parsing. Standard reserved RX bits are ignored and reported, not
+mistaken for an invalid NWK layout. Value views retain raw wire octets and
+explicit consumed spans, including non-value patterns; they do not convert
+native numbers or validate text. APS/ZCL composition is target-tested
+separately; the resource image below also executes full MAC/NWK/APS/ZCL/value
+composition on SDCC.
+The independent `zcl_attributes` module adds a caller-owned, bounded read-only
+model and a unicast Read Attributes response builder. One table selects a
+cluster side and standard/manufacturer namespace; duplicate IDs and reserved
+standard declarations (`5000..EFFF`, `FFFF`) are rejected,
+non-readable values are not inspected, and partial responses expose their
+requested/returned counts. It composes the existing frame/value codecs and
+publishes outputs atomically on local success. The caller must already select
+permitted unicast endpoint/profile/cluster context and authenticate as required.
+No endpoint registry, getter callback, write/reporting service,
+device-specific cluster or board linkage is introduced. Its own target image
+tests the handler; the resource image below also tests full request/response
+composition on SDCC.
+Complete ZCL/application support remains planned.
+
+`zcl_dispatch` selects Read or Discover handlers for one caller-selected
+cluster side/namespace. Discover scans the bounded, possibly unsorted table
+without mutation or value access and emits ascending ID/type pages with an
+explicit completion bit. The dispatcher builds unsupported-command errors,
+delivers received Default Response metadata without replying, and rejects
+unsupported Write No Response without an output frame or mutation.
+It shares structural table validation and supported-type classification,
+not network state. Local failures preserve outputs; the explicit result kind
+distinguishes a constructed response from a received default notification.
+Transport admission, cluster selection, authentication, matching transaction
+state and actual sends remain outside this module. Its separate target
+image exercises real dispatch/read/discovery; full Discover-then-Read
+MAC/NWK/APS composition additionally runs in the integrated resource image.
+
+The planned BDB commissioning policy uses
+[BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
+NWK/APS/security services rather than inside codecs or board code.
+MAC association, received network key, BDB membership flag, Device Announce
+and authenticated application readiness are separate states. In particular,
+BDB announces before TC link-key exchange completes; an announce must not
+unlock application traffic or imply verified persistent key state.
 
 ```text
 sensor / local display application
@@ -941,6 +1012,86 @@ C rules:
 - Any banking support must handle calls, interrupts, constants and debugger
   addresses together. It is not only a linker flag.
 
+## Integrated protocol resource budget
+
+`make test-protocol-budget` links **one** unbanked SDCC image containing
+MAC, NWK Data, APS, ZCL frame/value codecs and Read/Discover dispatch, plus
+a synthetic two-peer caller. It executes Discover, uses the returned ID in
+Read, serializes/decodes both replies and checks independent whole-frame
+golden vectors. Both manufacturer layouts, a maximum 125-byte MAC body,
+space-error responses and unsupported no-response writes are exercised.
+Reserved standard declarations fail atomically for Read/Discover; absent
+received IDs still produce negative Read records with the original ID.
+No board image, radio operation or fabricated successful service is added.
+
+The generated `build/<board>/protocol-resources.json` (or selected `BUILD`)
+contains actual linked totals, per-object contributions/budgets, artifact
+hashes and simulator-observed SP. Run the target successfully before using
+the report; its hashes identify the exact artifacts, not an arbitrary later
+build. It is excluded from the unchanged CI board-artifact whitelist.
+
+These measurements use SDCC 4.2.0 #13081 (Mac OS X x86_64) and match on both
+`generic` and `lg_esl29_rev03`.
+
+| Object / subsystem | CODE bytes | Ordinary XDATA bytes | Persistent IRAM bytes | Overlay IRAM bytes |
+| --- | ---: | ---: | ---: | ---: |
+| MAC, including its command/Beacon code | 7,004 | 207 | 15 | 10 |
+| NWK Data | 2,292 | 96 | 12 | 10 |
+| APS | 1,626 | 69 | 8 | 7 |
+| ZCL frame | 1,173 | 35 | 6 | 15 |
+| ZCL value | 1,710 | 46 | 15 | 0 |
+| ZCL attributes | 2,090 | 148 | 6 | 12 |
+| ZCL dispatch | 2,864 | 135 | 15 | 3 |
+| Synthetic integration caller/constants | 3,370 | 735 | 0 | 0 |
+| Shared runtime / linked remainder | 700 | 29 | Accounted below | Shared |
+| **Linked total** | **22,829** | **1,500** | **77 persistent** | **15 shared, not summed** |
+
+Object CODE includes constants/startup contributions where present, and
+unused functions retained in those linked objects; it is not the isolated
+size of one executed API. XDATA includes parameters and compiler scratch.
+The harness has five independent frame buffers totaling 549 bytes, not a
+production packet pool. It deliberately does not overlap codec input/output
+storage. CRT/libc costs are the linked remainder, not charged repeatedly.
+
+Against the unmodified image rebuilt with this toolchain (22,200 CODE,
+1,499 ordinary XDATA), the declaration check adds 178 CODE bytes and three
+object-overlay bytes, without increasing shared overlay or persistent IRAM.
+Its integration regressions add 451 CODE and one XDATA byte. No budget is
+raised; observed stack usage is unchanged.
+
+The checked limits are **24,576 CODE bytes**, **2,048 XDATA bytes including
+64 reserved status bytes**, per-object budgets in `tools/protocol_resources.py`,
+and stack start no higher than `0x68`. This build consumes 1,564 of that
+XDATA reservation. The 32-KiB window has 9,939 bytes remaining; ordinary
+allocation below `0x1E00` has 6,180 bytes remaining. These are address-space
+remainders, **not guaranteed capacity for the complete Zigbee stack**.
+
+IRAM is the tighter constraint: 77 persistent bytes, 15 shared overlay bytes,
+8 register-bank bytes, one bit-storage byte and one packing-gap byte precede
+the stack at **`0x66`**. Observed peak SP is **`0x7A`**: 21 stack bytes used,
+only **five bytes before the preserved `0x80` upper-IRAM guard**. The
+simulator also verifies final unwind, untouched upper IRAM/unallocated XDATA
+and disabled interrupts. This peak is for the executed foreground vectors,
+not a worst-case call-graph proof or an interrupt-nesting allowance.
+
+The initial combined link failed despite ample flash/XDATA: the seven protocol
+objects alone required **154 persistent IRAM bytes**. MAC/NWK/APS emission was
+separated into leaf helpers so compiler temporaries can use shared OSEG.
+Selected MAC/ZCL pointer copies are top-level `volatile`, keeping their
+storage in large-model XDATA instead of long-lived internal-RAM spills.
+The pointed-to bytes are not volatile; argument representation, wire/API
+semantics, stable-storage preconditions and foreground non-reentrancy remain
+unchanged. SDCC requires matching qualifiers in declarations and definitions.
+This is an IRAM/code/XDATA tradeoff, not a speed optimization or new ABI mode.
+All prior component guards/tests remain; the integrated image gets its own
+explicit budget rather than inflating existing limits.
+
+Not included: radio/platform services and live queues, the separate NWK
+Beacon metadata decoder, stateful MAC/NWK/APS, AES/CCM and durable NV, ZDO,
+commissioning, transaction/binding/reporting state, device clusters, sensor/
+display, sleep, ISR nesting and banked CODE. These still require explicit
+budgets and integration evidence; **complete-stack fit remains unproven**.
+
 ## Scheduling and ownership
 
 Use a cooperative foreground state machine with short, bounded work items.
@@ -965,14 +1116,19 @@ Reserve explicit flash pages outside code, factory/configuration data and lock
 locations before introducing any writer. Define record version, generation,
 length, integrity checks and commit semantics.
 
-Persist network/parent information, required keys and counters, then add
-bindings/reporting settings only when their behavior exists. Corrupt or
-incomplete records are rejected with a visible recovery reason.
+Persist network/parent information, required keys and counters, and
+`bdbNodeIsOnANetwork`, then add bindings/reporting settings only when their
+behavior exists. Corrupt or incomplete records are rejected with a visible
+recovery reason. Keep pending TC exchanges separate from committed verified
+keys; a restart must not accept an interrupted exchange as successful.
 
-After persisted resume, select an immediate keepalive from the saved
-`nwkParentInformation`. Unknown parent information triggers ED Timeout
-renegotiation with bounded recovery; a missing response must not block startup
-forever. Test this separately from a fresh join.
+After persisted resume, BDB 3.0.1 section 7.1 requires a secure NWK rejoin
+attempt for a previously joined ED and Device Announce on success. The
+persisted membership flag alone does not establish current connectivity.
+Retain R22 ED Timeout negotiation after each successful join/rejoin and prompt
+keepalive after recovery using `nwkParentInformation`. Unknown information
+triggers bounded renegotiation/recovery; a missing response must not block
+startup forever. Test this separately from a fresh join.
 
 For outgoing security counters, reserve a durable future range before using
 it. A restart may skip values; it must not reuse transmitted values. Validate

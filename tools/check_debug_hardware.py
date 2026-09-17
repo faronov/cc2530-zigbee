@@ -4,6 +4,7 @@
 
 import argparse
 from dataclasses import asdict, replace
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -11,7 +12,16 @@ import sys
 from cc2530_debug import READ_STATUS, Status
 from cc_debugger import Access, Debugger, DebuggerError, PyUsbBackend, UsbAddress
 from debug_image import DebugImage, decode_bootstrap, decode_fixture, expected_fixture
-from verify_firmware import BOARDS, require
+from verify_firmware import BOARDS, CODE_LIMIT, require
+
+
+def validate_program(image: DebugImage, program: bytes, cycles: int) -> None:
+    require(image.image_name == "debug_fixture", "Acceptance requires the board debug_fixture image")
+    require(type(cycles) is int and 1 <= cycles <= 257, "Fixture cycles must be in 1..257")
+    require(isinstance(program, bytes) and 0 < len(program) <= CODE_LIMIT
+            and len(program) == image.metrics["image_extent_bytes"]
+            and hashlib.sha256(program).hexdigest() == image.sha256,
+            "Program differs from the checked debug image")
 
 
 def wait_breakpoint(debugger: Debugger, expected_pc: int) -> None:
@@ -44,6 +54,7 @@ def check_alias(debugger: Debugger) -> None:
 
 
 def exercise(debugger: Debugger, image: DebugImage, program: bytes, cycles: int) -> dict:
+    validate_program(image, program, cycles)
     adapter = debugger.read_adapter_state()
     debugger.attach_reset()
     require(debugger.read_pc() == 0, "Initial reset PC is not zero")
@@ -157,6 +168,7 @@ def main(argv=None) -> int:
         address = UsbAddress(args.bus, args.address)
         image = DebugImage(args.output, args.board, "debug_fixture")
         program = (args.output / "debug_fixture.bin").read_bytes()
+        validate_program(image, program, args.cycles)
         with Debugger(PyUsbBackend.load(), Access.RESET_DEBUG_SESSION, timeout_ms=10_000,
                       allow_cpu_control=True, allow_target_reset=True,
                       allow_memory_access=True, allow_memory_write=True,

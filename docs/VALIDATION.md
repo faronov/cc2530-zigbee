@@ -114,7 +114,13 @@ hardware evidence.
 
 Offline image tests cover board/image/compiler/hash mismatches, supported
 CODE/XDATA/SFR symbol classification, conflicting map/CDB spaces/addresses, missing
-symbols and non-executable breakpoint targets. Synthetic parameter vectors
+symbols and non-executable breakpoint targets. The M1 runner's host-only mocks
+also reject an empty, truncated, extended or same-length replaced BIN after
+artifact validation, before USB loading. Direct `exercise` calls reject wrong
+image/extent/type/cycle inputs without any debugger call; valid length/cycle
+endpoints reach a deliberately failing synthetic first observation. These
+checks add no hardware evidence.
+Synthetic parameter vectors
 cover all four breakpoint slots and eight bank-bit values, not real
 comparators. M0/M1 decoders reject invalid ABI/phase/board/guard/checkpoint
 records and oversized snapshots. The alias-aware image test also exercises
@@ -1636,7 +1642,167 @@ Five command payload formats and all twelve supported command addressing
 layouts have shared host/SDCC golden and boundary checks. Host-only tests
 also exhaust command fields, association response addresses/statuses and
 command FCF patterns, retaining unchanged-output checks on errors.
+The no-GTS Beacon extension adds shared host/SDCC vectors for both source modes,
+all 36 pending-count combinations, zero/52-byte upper-layer payload boundaries,
+metadata/list truncations and explicit header/payload rejection. Host matrices
+exhaust superframe fields, source PAN/short and pending short addresses,
+GTS/pending/header bytes and all 8,192 Beacon FCF patterns. Exact-sized input,
+payload and output allocations cover the maximum 125-byte body under ASan/UBSan.
+This is host-tested, image-checked and simulated serialization only: raw
+superframe metadata is not a validated schedule or a discovered Zigbee network.
 Its test executable is not a board firmware image or CI upload artifact.
+
+The [R22 NWK Beacon payload decoder](NWK.md) has separate original golden,
+length, reserved/protocol/version and Extended PAN ID boundary cases on
+host and SDCC. Host matrices vary every payload byte through 0..255,
+exercise all uint16 lengths and check exact input/output allocations under
+ASan/UBSan. The standalone image reuses strict component layout/source/ABI,
+512-byte XDATA reservation and alias/stack checks. The MAC test image also
+executes the real two-source-mode, mixed-pending-list pipeline, including a
+MAC-valid but non-Zigbee payload rejected at the NWK boundary. These checks
+are host/image/simulator evidence only; no scanner, parent selection, join,
+radio or authenticated acceptance is implemented.
+
+The independent [NWK Data codec](NWK.md#nwk-data-frame-codec) has shared
+host/SDCC golden, optional-IEEE, unicast/broadcast, truncation, payload/capacity
+and unchanged-error cases. Host tests exhaust unicast/broadcast FCF spaces,
+typed flags, both network addresses, scalar/IEEE/payload byte values and
+uint16 lengths, with exact allocations under ASan/UBSan. Its standalone
+image retains the 512-byte XDATA reservation, CODE/CDB/result ABI, alias and
+upper-IRAM/unwind checks. The full MAC test image composes both real codecs
+for all four MAC address-size and four NWK IEEE layouts at the 125-byte body
+limit, including MAC-too-long and NWK-unsupported failures.
+All existing test scenarios and guards remain enabled; test-only XDATA
+temporaries and object ordering avoid lower-IRAM fragmentation/spills.
+This is host-tested, image-checked and simulated syntax, not RF or security.
+
+The [APS Data codec](APS.md) adds shared host/SDCC original CODE-header/payload
+goldens, every FCF byte, header truncations (including explicit rejection of
+short non-Data types), payload/capacity boundaries and unchanged errors.
+Host matrices exhaust typed control/endpoint/counter fields, all cluster/profile
+identifiers, every value at every maximum-payload position and uint16 lengths/
+capacities. Exact allocations are exercised under ASan/UBSan. Its isolated
+image retains the original 512-byte component reservation limit.
+
+The new `protocol_frame_test.ihx` independently composes real MAC/NWK/APS
+for all four MAC address-size and four NWK IEEE layouts, both APS ACK-request
+values and empty/one-byte/maximum payloads. It checks one complete independent
+golden chain, exact 125-byte MAC bodies, rejection at each outer size boundary,
+truncated APS headers and MAC/NWK-valid but APS-unsupported payloads.
+Its shared strict layout checker uses an explicit 1,024-byte XDATA reservation
+budget for three scratch frames and linked codec storage; all existing callers
+retain the unchanged 512-byte default. CODE/source/result ABI, XDATA ownership,
+IRAM alias, untouched upper IRAM and final stack unwind remain mandatory.
+The existing MAC scenarios and component reservation limits remain intact.
+This is host-tested, image-checked and simulated syntax, not a firmware image,
+ACK transaction, endpoint dispatcher, ZDO/ZCL support or hardware observation.
+
+The [ZCL Revision 8 wire codecs](ZCL.md) have separate frame and value
+host/SDCC suites, retaining the 512-byte component reservation and unchanged
+CODE/CDB/alias/upper-IRAM/unwind guards. Header tests cover every FCF value
+and both header layouts, receive normalization versus transmit rejection
+of reserved bits, CODE inputs, lengths, capacities and unchanged errors.
+They execute real APS/ZCL composition on SDCC. Value tests cover all 38
+supported types, every other type ID, Boolean encodings, fixed-width and
+non-value patterns and every short-string length. Four independently
+initialized target phases and an invalid-selector rejection keep all cases
+within the existing 15-second per-run bound.
+
+Host matrices add exhaustive scalar/control/manufacturer fields, every byte
+value at scalar/string/payload positions and uint16 spans/capacities, with
+exact-sized ASan/UBSan allocations. The host protocol test now composes
+actual value/ZCL/APS/NWK/MAC codecs, checking an independent complete golden
+vector, both ZCL header sizes, all existing MAC/NWK address layouts, maximum
+125-byte MAC bodies and per-layer failures. Its SDCC image remains the
+three-layer MAC/NWK/APS chain, not a claimed four-layer target run.
+This is base-text, host/image/simulator evidence only. ZCL errata 19-2019,
+application selection, complete command/attribute behavior, native numeric/charset
+validation and M4/M5 security/networking gates remain separate and open.
+
+The separate Read Attributes suite adds real bounded table lookup, access
+denial without touching values, ordered status/value records, namespace/side
+guards, malformed-command responses, space errors and explicit prefix counts.
+Golden CODE/XDATA vectors, all data type IDs, unchanged local failures,
+capacity boundaries and a 16-entry table are executed on SDCC in
+`zcl_attributes_test.ihx`: with declaration-range regressions, 13,579 CODE
+bytes and 670 ordinary XDATA bytes, 734 with the 64-byte status reservation.
+This harness uses an explicit
+1,024-byte limit; existing budgets and the 15-second timeout are unchanged.
+The exact reservation threshold passes at 734 and rejects 733 and the
+512-byte default, without weakening other layout/alias/stack checks.
+
+Host tests add exact table/value/request/response/result allocations,
+all 16-bit attribute/manufacturer IDs, command/sequence/control bytes and
+uint16 spans/budgets under ASan/UBSan. Full MAC/NWK/APS request decoding,
+actual read handling and response encoding/decoding are host-tested with
+an independent complete golden response and both manufacturer layouts.
+The SDCC protocol image remains the previous three-layer chain. These
+synthetic vectors do not implement routing, authentication, counter
+allocation, endpoint registration, writes/reporting or a device profile.
+Unreviewed ZCL errata remains a conformance risk, not a development stop.
+
+Shared Read/Discover tests check declaration boundaries
+`4FFF/5000/EFFF/F000/FFFE/FFFF`, including denied/unrequested invalid entries,
+unchanged outputs and negative Read echo of unknown/reserved request IDs.
+Host dispatch additionally tests all 65,536 declaration IDs in each namespace:
+standard reserved ranges reject atomically, manufacturer-specific IDs remain
+valid across the full range.
+
+The isolated discovery/dispatch image exercises the real dispatcher,
+Read handler and frame/value codecs with CODE/XDATA tables. It uses
+16,428 CODE bytes and 800 ordinary XDATA bytes, 864 including the reserved
+status block, within an explicit 1,024-byte harness budget. The exact layout
+threshold passes at 864 and rejects 863 and the 512-byte default.
+No existing component budget, alias/IRAM/unwind check or 15-second timeout
+is relaxed. The small shared type predicate leaves the value image at
+6,824 CODE and 377 ordinary XDATA, within its original 512-byte reservation.
+
+Shared cases include sorting without table mutation, inclusive starts and
+pagination, zero maximum, manufacturer-specific `FFFF` termination,
+unreadable metadata without backing-value access, atomic errors, Read dispatch,
+malformed/extended standard and manufacturer payloads, namespace/direction checks and
+no reply to Default Response or unsupported Write No Response.
+Host tests exhaust 16-bit start/manufacturer IDs, maximum/table-size/budget
+matrices, control/command and Default Response command/status pairs, type
+IDs, uint16 lengths/capacities and exact allocations under ASan/UBSan.
+The full host MAC/NWK/APS/ZCL chain discovers an attribute, decodes the
+returned ID and reads it through the dispatcher, with independent complete
+golden responses and both manufacturer layouts. The target protocol image
+is unchanged and remains three-layer; radio/platform code and board images
+are unaffected. This is not network admission, transaction matching or
+full-cluster conformance.
+
+The additional `protocol_budget_test.ihx` runs **all seven implemented
+protocol modules together**, not only the three-layer target above.
+Ten exchanges cover Discover-then-Read using the returned ID, both ZCL
+manufacturer layouts, independent standard golden response frames, the
+exact 125-byte MAC body, space-error replies and negative Read echo of absent
+`FFFF`. Unsupported Write No Response leaves the reply untouched.
+Two further full-chain requests check atomic Read/Discover rejection of a
+CODE table declaring standard `FFFF`. The shared native harness
+also runs under ASan/UBSan, alongside the existing exhaustive MAC/NWK/APS,
+Read/Discover and host protocol suites after the IRAM-storage refactor.
+
+The image uses 22,829 CODE and 1,500 ordinary XDATA bytes, 1,564 including
+the 64-byte reservation. Its explicit 2,048-byte budget preserves the
+unchanged component layout/source/CODE, alias, untouched-XDATA/upper-IRAM,
+unwind, disabled-interrupt and 15-second guards. The eight-byte result ABI
+is `PBG1`, version 1, size 8, failure line LE16. Stack starts at `0x66`;
+the simulator's maximum-SP evidence is `0x7A`, leaving five bytes before
+the guard, not a worst-case/ISR guarantee.
+These affected Read/dispatch/integrated metrics and guards pass on both
+`generic` and `lg_esl29_rev03` with SDCC 4.2.0 #13081 (Mac OS X x86_64).
+
+`tools/protocol_resources.py` checks relocatable module/ABI/area records,
+per-module budgets, linked shared-runtime remainder and nonadditive overlay/
+bit accounting before the runner writes `protocol-resources.json` with
+artifact hashes. Synthetic unit tests exercise malformed/unknown/absolute
+areas, wrong modules/ABI, missing/extra modules, resource discrepancies,
+each module at its exact limits, whole-image limits at/above the threshold,
+invalid stack peaks and removal of stale output when the checker fails.
+[The ledger and exclusions](ARCHITECTURE.md#integrated-protocol-resource-budget)
+are resource evidence, not on-air or full-stack acceptance. No board
+firmware, radio/platform source or CI artifact whitelist is changed.
 
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |

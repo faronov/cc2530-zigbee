@@ -3,7 +3,7 @@
 `include/mac_frame.h` and `src/mac_frame.c` implement a bounded, standalone
 byte codec. This is preparatory M3 work permitted alongside earlier hardware
 gates, **not a radio driver, functioning MAC, association or Zigbee join**.
-It is not linked into either board firmware image.
+It is not linked into any board firmware image.
 
 ## Supported subset
 
@@ -12,8 +12,10 @@ It is not linked into either board firmware image.
 | DATA | Frame version 0 or 1; both destination and source addresses present; each short (2 bytes) or extended (8 bytes); explicit PAN compression |
 | ACK | Frame version 0, sequence number and optional Frame Pending; no addresses or payload |
 | COMMAND | Frame version 0; the five fixed-format commands and command-specific addressing below |
+| BEACON | Frame version 0; short/extended source only; no GTS descriptors; bounded pending-address list and opaque Beacon Payload |
 
-Beacon frames, other command identifiers, COMMAND version 1, absent-address DATA layouts, reserved address modes,
+Beacons with GTS descriptors, other command identifiers, BEACON/COMMAND version 1,
+absent-address DATA layouts, reserved address modes,
 version 2/3, sequence suppression, information elements and MAC security
 processing are unsupported. This is deliberately narrower than all legal
 IEEE 802.15.4 layouts. Unsupported layouts return an error; they are not
@@ -84,6 +86,47 @@ PAN-coordinator beacon context that this stateless codec cannot verify.
 PAN/peer selection, admission, ACK exchanges, timers, polling, departure,
 security and all association/join state remain unimplemented.
 
+## No-GTS Beacon subset
+
+Unsecured version-0 Beacons carry a source PAN and short/extended source
+address, without destination addressing, PAN compression or an ACK request.
+Frame Pending is accepted and preserved; it indicates pending broadcast work,
+not that a particular device appears in the pending-address list. Source PAN
+`FFFF` and source short addresses `FFFE`/`FFFF` are rejected in this subset.
+Reserved/ignored FCF bits are rejected rather than silently normalized, as in
+the rest of this strict codec; this is not full permissive receiver conformance.
+
+The MAC payload begins with:
+
+| Field | Accepted representation |
+| --- | --- |
+| Superframe Specification | Two little-endian bytes; reserved bit 13 clear |
+| GTS Specification | Descriptor count zero; reserved bits 3..6 clear; GTS Permit bit 7 preserved |
+| Pending Address Specification | Short count in bits 0..2, extended count in bits 4..6; bits 3/7 clear; **at most seven addresses in total** |
+| Pending addresses | All short addresses first, then extended addresses, in wire byte order; short `FFFF` is forbidden |
+| Beacon Payload | Zero through **52** opaque upper-layer bytes |
+
+Nonzero GTS descriptor counts return `MAC_CODEC_UNSUPPORTED_BEACON`; directions
+and descriptor lists are not parsed at guessed offsets. Pending short `FFFE`
+is preserved as raw data: unlike header addressing, this parser does not infer
+allocation/peer ownership from pending-list values.
+
+`superframe_specification` preserves the raw field. Beacon Order is bits 0..3,
+Superframe Order 4..7, Final CAP Slot 8..11, BLE 12, PAN Coordinator 14 and
+Association Permit 15. **BO/SO relationships, CAP duration, GTS-permit policy
+and timing are not validated or acted upon.** In particular, the codec does
+not schedule periodic Beacons or decide that association is safe. This accepts
+both periodic and request-response metadata without implementing either
+procedure. Higher layers must validate the context before using it.
+
+The minimum body length is 11 bytes for a short source or 17 for an extended
+source. An extended-source Beacon with seven extended pending addresses and
+52 upper-layer bytes occupies exactly the 125-byte body limit. The 52-byte
+limit is the selected 2006 `aMaxBeaconPayloadLength`, not whatever unused
+space happens to remain in a shorter frame. This module does not interpret
+upper-layer bytes. The separate [R22 NWK Beacon decoder](NWK.md) can decode
+the returned slice; CRC, RSSI/LQI and network selection remain separate.
+
 ## API and failure contract
 
 `mac_frame_encode()` takes a header, opaque payload, output capacity and
@@ -99,6 +142,19 @@ the command payload and its header before changing any public output.
 After frame decoding, a caller can decode the returned payload span separately
 to obtain the typed command fields.
 
+`mac_beacon_decode()` takes the MAC payload starting at Superframe
+Specification and returns `mac_beacon_info_t`: raw superframe bits, GTS Permit
+as 0/1, the two pending counts, and offsets for short addresses, extended
+addresses and the upper-layer Beacon Payload. Offsets are relative to **that
+input**, not to the whole frame. Pending/address/payload bytes stay in the
+caller's buffer. To locate them after `mac_frame_decode()`, add the frame's
+`payload_offset` to the Beacon-relative offset.
+
+There is no separate typed Beacon encoder: `mac_frame_encode()` consumes the
+raw MAC payload and validates it using the same Beacon rules. Full-frame
+encoding and decoding check the complete supported structure before publishing
+any output; payload-only decoding does not validate an MHR.
+
 All return a `mac_codec_result_t`. `MAC_CODEC_OK` means only that the
 supported body layout was encoded/decoded. It is **not CRC verification,
 authentication, replay protection, peer acceptance or permission to act on
@@ -111,6 +167,11 @@ codes. Unsupported command identifiers return `MAC_CODEC_UNSUPPORTED_COMMAND`;
 reserved/inconsistent command fields or trailing payload bytes within the
 four-byte maximum return `MAC_CODEC_INVALID_COMMAND`. Larger command payloads
 return `MAC_CODEC_TOO_LONG`; incomplete ones return `MAC_CODEC_TRUNCATED`.
+Beacon reserved fields, excessive combined pending counts and broadcast short
+pending addresses return `MAC_CODEC_INVALID_BEACON`. Incomplete metadata/lists
+return `MAC_CODEC_TRUNCATED`; excessive Beacon Payload/content returns
+`MAC_CODEC_TOO_LONG`. Appended bytes within the upper-layer bound are payload,
+not distinguishable FCS or transceiver metadata.
 Callers must check the result before consuming outputs. Every decoder's
 result object and every encoder's output bytes/length are unchanged on failure.
 Error precedence between multiple simultaneous faults is not an ABI.
@@ -140,6 +201,15 @@ The ordinary `make ... all test` commands run:
   reason and status values, all 65,536 response addresses under each of the
   three supported statuses, and all 8,192 command FCF patterns for each of
   the twelve golden frames.
+- Two original complete Beacon vectors, both source modes, all 36 supported
+  short/extended pending-count combinations, zero/52-byte upper-layer payloads,
+  truncation/capacity and unchanged-output failures on both host and SDCC.
+- Host-only Beacon matrices: all 65,536 superframe fields (raw except the
+  reserved bit), source PAN IDs, source short addresses and pending short
+  addresses; all 256 GTS/pending/individual header fields; all 8,192 Beacon
+  FCF patterns, with exactly four accepted canonical addressing/flag layouts.
+- Exact-sized host allocations across maximum-Beacon input, payload and output
+  boundaries, including the 125-byte complete-body limit.
 
 Host-only boundary tests use exact-sized allocations, so sanitizer runs can
 detect accesses beyond declared input/output storage. No heap is used by
@@ -148,7 +218,20 @@ The larger exhaustive/mutation matrices stay host-only to keep test-harness
 compiler spills out of the guarded upper IRAM; all twelve command layouts and
 portable command failure vectors still execute under SDCC. The little-endian
 leaf helpers are C99-inline, avoiding extra call/register-save overhead.
+Selected DATA/Beacon/command loop and temporary state is volatile so the
+large-model test harness keeps it in XDATA instead of growing IRAM
+register-spill storage. The combined image links NWK Data before NWK Beacon
+to fit the larger spill area below bit-addressable RAM rather than fragment
+the lower IRAM. No production volatility, compiler-flag change, guard
+relaxation or skipped portable scenario is introduced.
 The upper-half IRAM guard and exact final stack-pointer check are unchanged.
+The same test executable links the separate NWK Beacon decoder to exercise
+MAC-to-NWK slicing with both source modes and mixed pending lists.
+It also links the [NWK Data codec](NWK.md#nwk-data-frame-codec) and checks all
+four MAC address-size combinations against all four NWK IEEE layouts at the
+exact 125-byte body limit. Larger MHRs reject an unadjusted 116-byte NPDU;
+MAC-valid unsupported security/command payloads fail at the NWK boundary.
+The production codecs remain independent and gain no hardware caller.
 
 `build/<board>/[debug_fixture/]mac_frame_test.ihx` is a **simulator-only test
 executable**, not an `IMAGE` selection or board firmware to flash. It is not
@@ -165,4 +248,5 @@ firmware budget and image checks remain unchanged.
 
 Evidence is **host-tested, image-checked and simulated**. No packet was sent,
 received or observed on hardware. Sources are recorded in
-[PROVENANCE.md](PROVENANCE.md); physical M1/M2/M3 acceptance remains open.
+[PROVENANCE.md](PROVENANCE.md). This does not expand the separately recorded
+M1/M2 hardware evidence or close M3 radio/procedure gates.

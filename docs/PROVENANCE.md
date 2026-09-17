@@ -15,6 +15,12 @@ Its MOV/NOP/RET probe uses ordinary 8051 instructions and synthetic constants,
 not bytes from an OEM image or an external programmer/debugger implementation.
 No USB backend, programmer code or additional dependency is imported by it.
 
+The integrated protocol resource harness, synthetic frames and SDCC resource
+ledger are original BSD-3-Clause work. Leaf serialization and pointer-storage
+changes refactor this repository's existing codecs, not an imported stack.
+Resource facts come from the local SDCC 4.2.0 objects/link output and uCsim
+execution; they are not hardware measurements or new normative wire rules.
+
 ## Reviewed reference candidates
 
 | Reference | Status and permitted use |
@@ -695,8 +701,9 @@ and
 The revision and licenses were checked before using these references.
 Microchip's transceiver registers/timings are not CC2530 implementation facts.
 
-The engineering scope is the legacy IEEE 802.15.4-2006-compatible DATA/ACK
-and five-command wire subset documented in [MAC.md](MAC.md), not complete standard conformance.
+The engineering scope is the legacy IEEE 802.15.4-2006-compatible DATA/ACK,
+five-command and no-GTS Beacon wire subsets documented in [MAC.md](MAC.md),
+not complete standard conformance.
 No Contiki state, security code or frame-processing implementation was copied.
 Address arrays use explicitly documented wire order, not Contiki's display
 order; PAN compression is explicit rather than automatically selected.
@@ -715,6 +722,21 @@ facts. Version 0 and strict reserved-field rejection are explicit codec subset
 choices. The manual is linked, not redistributed; no third-party command
 implementation or packet capture is imported.
 
+The Beacon extension was checked directly against the same IEEE 2006 source:
+section 7.2 (pp.137-138) for byte order and the reserved-bit receiver rule;
+sections 7.2.2.1.1-8 (pp.143-146), Figures 44-51 for source-only MHR,
+superframe/GTS fields, short-before-extended pending lists and the combined
+seven-address bound; Table 85 (p.159) for the 52-byte upper-layer payload
+limit (`127 - 75`). Section 7.5.1.1 (pp.167-168) was read to distinguish raw
+BO/SO metadata from scheduling and the nonbeacon-enabled case. This slice
+does not claim to validate those timing/procedure rules.
+Zero GTS descriptors, strict reserved-field rejection and rejecting source
+PAN `FFFF`/source short `FFFE` are explicit subset choices, not permission to
+relax the standard's broader receiver behavior. The pending-list rule
+specifically excludes short `FFFF`, without inventing a second sentinel rule.
+The implementation and vectors are original. The public PDF and temporary PDF
+reader were used only for offline research and are not repository/CI artifacts.
+
 Contiki's RF code depends on Contiki facilities. An adaptation must replace
 those interfaces deliberately, preserve the original notices and be tested
 against the CC2530 documentation. It does not supply Zigbee NWK/APS/ZDO.
@@ -729,12 +751,15 @@ not automatically compliant with the project's intended R22/BDB behavior.
 Engineering references:
 
 - Zigbee Core R22, document **05-3474-22**.
-- A Zigbee-3.0-era BDB revision compatible with R22. This is an explicit
-  [open gate in the initial conformance ledger](CONFORMANCE.md), to be resolved
-  before M4/M5 security/commissioning implementation, not after interoperability
-  work. Exact procedures and requirements must be recorded.
-- Applicable Zigbee Cluster Library and application-profile requirements for
-  the chosen device, pinned when those layers are implemented.
+- PRO Base Device Behavior Specification **v3.0.1**, document
+  **16-02828-012**, September 28, 2021. The base revision is selected;
+  applicable errata and implementation evidence remain separate
+  [gates in the conformance ledger](CONFORMANCE.md).
+- Zigbee Cluster Library **Revision 8**, document **07-5123-08**, release
+  December 2019, for the bounded offline foundation work below. Its approved errata
+  **19-2019** and application/device requirements remain unreviewed/unselected
+  conformance risks/gates, not a blanket base-text development stop or an
+  implied complete ZCL implementation.
 
 BDB 3.1, document 22-65816-030, belongs with R23/PRO 2023. It may inform future
 work but must not be cited as an R22 requirement. The project is not certified.
@@ -744,6 +769,213 @@ section 2.4.4.4.5 p.188; section 2.5.4.8.1 p.222;
 section 3.6.10.2 pp.392-393; section 4.3.4 pp.416-417.
 Paraphrases in this repository are an engineering aid, not replacement
 specification text.
+
+### BDB 3.0.1 baseline sources
+
+The selected primary source is the
+[official CSA BDB v3.0.1 PDF](https://csa-iot.org/wp-content/uploads/2022/12/16-02828-012-PRO-BDB-v3.0.1-Specification.pdf),
+linked from the
+[CSA specification download page](https://csa-iot.org/developer-resource/specifications-download-request/).
+The title page identifies **16-02828-012, September 28th, 2021**; the revision
+history on p.5 identifies v3.0.1 as derived from 16-02828-011. Neither the
+2022 copyright nor the upload-directory date replaces the document date.
+The reviewed 86-page PDF has SHA-256
+`16471aa230657818da4c8440671efb530d80c71a975fce7af71c507ca7aa17d3`.
+
+[Microchip's reference list](https://onlinedocs.microchip.com/oxy/GUID-1DD68C79-8AC2-497D-A1BB-49D92D3FDAB8-en-US-5/GUID-4EC58238-EB93-489F-B9BC-A237F17AE18E.html)
+explicitly lists BDB v3.0.1 alongside Core R22 1.0, 05-3474-22.
+The [CSA ZUTH page](https://csa-iot.org/certification/tools/zuth/) independently
+names BDB v3.0.1 as a test target. These confirm the version context, not
+this implementation's interoperability or a unique mandatory pairing for
+every R22 product. BDB section 2 [R1] references the Core document family
+05-3474 without pinning a revision; this project explicitly selects R22.
+
+| Primary location (printed/PDF pages) | Facts reviewed |
+| --- | --- |
+| Sections 1.5-6,2, pp.15-17 | Separate v3.0.1 Test Plan 16-02826 and Specification Errata 21-65431 |
+| Sections 5.1,5.3, pp.22-31 | Constants, commissioning capability/status, channel sets and key-exchange attributes |
+| Sections 6.1-10, pp.32-38 | ED security models/keys, required versus optional commissioning, ZDO/application minimums, persistence and role-limited Green Power requirement |
+| Section 7.1, pp.39-40 | Persisted ED initialization with secure NWK rejoin |
+| Sections 8.1-2, pp.41-47 | Already-joined versus unjoined steering, authentication, key exchange, failure and permit-join broadcast |
+| Section 9, pp.69-71 | Factory reset, optional Basic reset and outgoing NWK counter preservation |
+| Sections 10.1-2, pp.72-79 | Install-code CRC/MMO, TC identity/policies and request/verify/confirm sequencing |
+
+The TC exchange was cross-checked against R22 section 2.3.2.3.10/Table 2-32
+p.72 and sections 4.4.7-8 pp.439-446, particularly Confirm-Key.indication
+validation in section 4.4.8.2.3. The retained R22 counter requirement is
+section 4.3.4 p.416. Exact errata/test-plan revisions and contents have **not**
+been reviewed; do not infer that the errata is empty or substitute the older
+BDB 1.0 errata 15-02020 or test specification 14-0439.
+
+The separately inspected
+[BDB 1.0 PDF](https://csa-iot.org/wp-content/uploads/2019/12/docs-13-0402-13-00zi-Base-Device-Behavior-Specification-2-1.pdf)
+identifies **13-0402-13, February 24, 2016**. It is not BDB 3.0/3.0.1 and is
+not the selected baseline. For example, the selected v3.0.1 explicitly makes
+already-joined steering optional and includes the CRC in its install-code
+hash example. Old summaries and section numbers must not replace this text.
+
+This is primary-document review only, not host-tested, image-checked,
+simulated or hardware-observed BDB behavior. No implementation, sample code,
+keys or test-plan vectors were imported. PDFs and extraction tools remain
+temporary research inputs, not Git or CI artifacts; the specifications'
+notices and licensing are not replaced by BSD-3-Clause.
+
+### Offline R22 NWK Beacon payload sources
+
+The original decoder was checked directly against **Zigbee Specification
+Revision 22 1.0**, document **05-3474-22**, April 19, 2017, using this public
+[unaltered-document mirror at a pinned revision](https://github.com/pvginkel/ZigBeeHomeAutomation/blob/fc30145012eacd3a5af170b8ae8e0d4c848c2525/Documents/docs-05-3474-22-0csg-zigbee-specification.pdf).
+The title/revision/date were read from the document, not inferred from a
+search summary or the filename.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+| Section 3.3, p.288 | Least-significant octet first convention |
+| Section 3.5.1, Table 3-57, p.322 | `nwkcProtocolVersion = 2` |
+| Section 3.6.7, Table 3-71, pp.389-390 | Protocol ID 0, profile/capacity/depth fields, advertised Extended PAN ID range `1..FFFFFFFFFFFFFFFE`, symbol-time Tx Offset and `FFFFFF` beaconless default, Update ID |
+| Figure 3-54, p.391 | Exact 120-bit/15-byte field layout, nibble/flag placement and reserved bits |
+
+Nonzero reserved bits are rejected in the documented strict subset.
+Stack-profile values remain raw metadata rather than a supported-profile
+decision; version 2 alone does not establish R22/BDB compatibility. The NIB's
+separate zero/unknown Extended PAN ID is not substituted for the Beacon
+table's valid advertised range. No scheduling, admission, replay/freshness
+or commissioning rules are implemented.
+
+No implementation, vectors, protocol capture or SDK object was imported.
+Test identities and payloads are original synthetic data. The PDF and
+temporary PDF reader are research-only and are not shipped in Git or CI;
+the original document's notices and licenses are not replaced by BSD-3-Clause.
+
+### Offline R22 NWK Data frame sources
+
+The original `nwk_frame` codec uses the same
+[pinned primary R22 PDF](#offline-r22-nwk-beacon-payload-sources), not a vendor
+stack or generated catalog. Its downloaded Git blob was checked as
+`c8123d63e30995e4a66941cbdf2529332480a0ff`.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+| Sections 3.3,3.3.1, Figure 3-5, p.288 | Little-endian octets, fixed header order and optional-address order |
+| Section 3.3.1.1, Figure 3-6, Tables 3-45/46, p.289 | FCF bit positions, Data type, unicast/broadcast field combinations |
+| Sections 3.3.1.1.2-9, Table 3-47, p.290 | Protocol version, route-discovery values, extension/security flags, raw ED Initiator bit |
+| Sections 3.3.1.2-7, p.291 | Network addresses, radius/sequence and optional IEEE fields; no destination IEEE on broadcasts |
+| Sections 3.3.1.8-9,3.3.2.1, pp.291-293 | Excluded multicast/source-route structures and opaque Data payload |
+| Table 3-57, pp.322-323 | Version 2, eight-byte minimum NWK header and 11-byte MAC overhead |
+| Section 3.6.5, Table 3-69, pp.382-383 | Four defined broadcast destinations and reserved `FFF8..FFFA`/`FFFE` |
+
+The [contract](NWK.md#nwk-data-frame-codec) selects unsecured Data with
+8/16/24-byte headers and a 116-byte NPDU bound, using the existing MAC
+125-byte FCS-free body limit and a nine-byte compressed short/short MHR.
+Larger MAC headers impose their own smaller limit. Short source addresses
+in the reserved/broadcast range and noncanonical FCF combinations are rejected;
+IEEE identities, radius, sequence and ED Initiator remain raw metadata.
+No routing, duplicate filtering, APS validation or security procedure is
+inferred from successful serialization.
+
+All vectors and identities are original synthetic data. No implementation,
+capture, key material or SDK object was imported. The PDF and temporary reader
+are research-only and are not shipped in Git or CI.
+
+### Offline R22 APS Data frame sources
+
+The original `aps_frame` codec uses the same
+[pinned primary R22 PDF](#offline-r22-nwk-beacon-payload-sources), document
+05-3474-22, April 19, 2017, with downloaded Git blob
+`c8123d63e30995e4a66941cbdf2529332480a0ff`. No vendor implementation or
+generated catalog was used.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+| Table 2-2, p.21 | Destination endpoint `00..FF`, source endpoint `00..FE`, profile/cluster ID widths and ASDU service-length distinction |
+| Section 2.2.5, Figures 2-2/3, pp.44-45 | Byte order, field order and FCF positions; reserved fields must be rejected |
+| Tables 2-20/21, pp.45-46 | Data/command/ACK/Inter-PAN types, unicast/reserved/broadcast/group delivery; excluded group addressing |
+| Sections 2.2.5.1.1-7, pp.46-47 | ACK-format, security, ACK-request, extended-header flags; endpoints, identifiers and counter |
+| Sections 2.2.5.1.8-9,2.2.5.2.1, Figures 2-4/5/6, pp.47-49 | Excluded extended/fragmentation fields, eight-byte ordinary Data header and opaque payload |
+| Table 2-23, p.51 | Separate service constant `apscMinHeaderOverhead = 0x0C`, not the eight-byte raw header size |
+| Section 2.2.8.4, pp.57-59 | Network membership, endpoint delivery, duplicate/ACK/retry procedures are distinct from syntax |
+| Section 2.3.1.3, p.66 | Endpoint 0/device profile, `FF`/all active endpoints, `F1..FE` restricted to Alliance-approved applications |
+
+The [contract](APS.md) selects only normal-unicast Data, not APS
+broadcast/group delivery, command/ACK/Inter-PAN types or security/extended
+headers. Destination `FF` remains endpoint metadata, not a network broadcast
+mode. No active-endpoint/profile admission, counter allocation, ACK state or
+security procedure is inferred. The 108-byte raw APDU bound follows the
+existing 116-byte NWK codec bound minus its minimum eight-byte header; outer
+options reduce that budget. This does not replace APSDE-DATA service limits
+with a claim that a real application can send 100-byte ASDUs.
+
+All code, golden byte vectors and identities are original synthetic work.
+No implementation, capture, key, test-plan vector or SDK object was imported.
+The PDF and temporary reader remain research-only, outside Git/CI artifacts.
+
+### ZCL Revision 8 wire sources
+
+The selected primary source is the
+[official CSA ZCL Revision 8 PDF](https://csa-iot.org/wp-content/uploads/2022/01/07-5123-08-Zigbee-Cluster-Library-1.pdf),
+linked directly from the
+[CSA specification download page](https://csa-iot.org/developer-resource/specifications-download-request/).
+The cover names **Document 07-5123 Revision 8**, release **December 2019**.
+The 2020 copyright and 2022 upload directory are not substitute release dates.
+The 1,213-page PDF has SHA-256
+`ad536e1d95a40ca27532e360b124cd76a1b18d96398c1c19fd32fbf7dcdd1aa0`.
+Document Control on p.4 identifies the Foundation chapter as **14-0126-17**
+and the separate approved errata as **19-2019**.
+
+The errata's exact revision and primary text have not been obtained/reviewed.
+No claim is made that it is empty, unavailable or incorporated into this PDF.
+Behavior is checked against the pinned base text only. Unreviewed errata is
+an explicit risk permitting continued base-text development, with possible
+later corrections; review remains a gate before conformance claims, not
+before all command/attribute work. Application/device definitions and profile
+requirements also remain separate. Selecting R8 alongside Core R22/BDB 3.0.1 is this project's
+engineering baseline, not a claim of a universal mandatory pairing.
+
+| Primary location (printed / PDF pages) | Functional facts used |
+| --- | --- |
+| Sections 2.3.1-2, 2-3..2-4 / 55-56 | Zero reserved bits on TX; ignore reserved sub-fields for standard RX; manufacturer-defined handling for extensions |
+| Sections 2.3.3,2.3.4.4, 2-4..2-6 / 56-58 | Manufacturer context must not execute unrecognized commands; read/write access categories, separate from application authentication |
+| Section 2.4.1, Figures 2-2/3/4, 2-8..2-9 / 60-61 | Three/five-byte headers, FCF bits, manufacturer-code order, direction/default-response metadata and transaction/command fields |
+| Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Test-only Report Attributes ID and identifier/type/value record shape; no reporting handler imported or implemented |
+| Sections 2.5.1-2, Figures 2-5/6/7, 2-11..2-14 / 63-66 | One or more LE16 request IDs; ordered status records; type/value only on success; insufficient-space records, prefix termination and lack of fragmentation |
+| Section 2.3.2, 2-4 / 56; sections 2.5.13-14, Figures 2-26/27/28, 2-29..2-31 / 81-83 | Ignore appended standard-command octets; LE16 inclusive discovery start and byte maximum, ascending ID/type records and completion flag; follow-up at last ID plus one |
+| Section 2.5.6.3, 2-18 / 70; section 2.5.12, 2-28..2-29 / 80-81 | Write Attributes No Response forbids all replies including errors; never reply to Default Response; unsupported-command `81` errors and received command/status notification |
+| Section 2.4.1, 2-8..2-9 / 60-61; section 2.5.12, 2-28..2-29 / 80-81 | Response transaction echo/direction/default-response flag; unicast Default Response command/status and error-response conditions |
+| Section 2.6.3, Table 2-12, 2-55..2-56 / 107-108 | SUCCESS `00`, NOT_AUTHORIZED `7E`, MALFORMED_COMMAND `80`, UNSUPPORTED_ATTRIBUTE `86`, INSUFFICIENT_SPACE `89`; deprecated WRITE_ONLY `8F` must not be transmitted |
+| Section 2.6.3, Table 2-12, 2-55..2-57 / 107-109 | Normalize received deprecated statuses: `82..84 -> 81`, `8A/C4 -> 00`, `8F -> 7E`, `90/91/93/C0/C1 -> 01`; transmit nondeprecated `UNSUP_COMMAND 81` rather than `82/83/84` |
+| Section 2.5, 2-10 / 62 | Attribute-bearing clusters require more foundation commands, including writes; this partial dispatcher does not establish complete cluster conformance |
+| Section 2.6.1.4, Table 2-8, 2-44 / 96 | Standard attribute declarations `0000..4FFF`, global declarations `F000..FFFE`; `5000..EFFF` and `FFFF` reserved. Manufacturer-specific attributes retain the full 16-bit range in manufacturer context |
+| Section 2.6.1.5, 2-44 / 96 | Command ID ranges and manufacturer context, left to future dispatch policy |
+| Sections 2.6.2.1-2, Tables 2-10/11, 2-45..2-48 / 97-100 | Type IDs, widths, non-value patterns and field-dependent full versus non-value ranges |
+| Sections 2.6.2.3-9, 2-48..2-49 / 100-101 | No-data, raw/bitmap/integer widths, Boolean `00/01/FF` and signed non-value patterns |
+| Sections 2.6.2.13-14, Figures 2-43/44, 2-50..2-51 / 102-103 | Short string byte counts, empty/non-value prefixes, default UTF-8 and descriptor-dependent encoding |
+
+The [wire contract](ZCL.md) distinguishes raw layout from command/attribute
+acceptance, a matching scalar non-value pattern from an actual unavailable
+measurement, and character-string bytes from validated text.
+Unsupported data types are explicit errors, not guessed zero-width values.
+The read handler requires complete nonempty identifier pairs; an empty list
+or incomplete last ID uses MALFORMED_COMMAND under the base status definition.
+Table 2-8 constrains standard declarations, not received unknown identifiers:
+negative Read records still echo absent IDs unchanged with `86`, and generic
+wire fields retain all 16 bits. Reserved standard declarations return local
+`INVALID_TABLE` before Read/Discover publication, including unused or denied
+entries; manufacturer-specific tables are exempt from that numeric restriction.
+Its 16-entry table cap, local error API, minimum one-record response budget,
+caller-selected unicast context and private atomic scratch storage are
+explicit implementation bounds, not new standard requirements. The subsequent
+dispatcher is limited to one caller-selected unicast cluster side; it does not
+imply a network dispatcher, authenticated reception or complete device.
+Discovery's maximum byte has no stated nonzero restriction in the reviewed
+base text: zero requests produce an empty page, with completion derived from
+whether any eligible attribute remains. Positive nonempty discovery requires
+room for a record; page sizes are bounded by maximum and response capacity.
+Manufacturer fixed-format trailing extensions remain explicitly unsupported.
+Original code and vectors were written from these functional facts, not the
+external mixed ZCL/Matter catalog or a vendor stack. No implementation,
+cluster table, key, capture, SDK object or test-plan vector was imported.
+The PDF/extractor remain temporary research inputs, outside Git/CI artifacts;
+their original notices and licenses are not replaced by BSD-3-Clause.
 
 ## Specialist-agent reference
 
@@ -762,7 +994,8 @@ combines ZCL Revision 8 and Matter 1.5, and identifies Core R23
 the index says 2.1 while
 [bdb.json](https://github.com/faronov/zigbee-docs/blob/6e575bdc8c1a68880ef7552d6190a0c6bc80b3a6/docs/base-device-behavior/bdb.json)
 has `specification.version` 1.0; both name document `13-0402-13`.
-These labels do not resolve the compatible-BDB gate.
+The primary PDF confirms that 13-0402-13 is BDB 1.0. Neither secondary label
+identifies the selected BDB 3.0.1 document 16-02828-012.
 
 Agent lookups must use the reviewed revision, inspect field-level source
 annotations and verify implementation decisions against the applicable

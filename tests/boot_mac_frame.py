@@ -29,6 +29,8 @@ def main():
             "Codec simulation does not support paged storage/CRT copies or extra absolute areas")
     stop = symbols["_mac_codec_done"]
     require(image[stop] == 0, "Codec test stop is not a NOP")
+    require(all(symbols.get(name) in image for name in ("_nwk_frame_decode", "_nwk_frame_encode")),
+            "NWK Data integration codec is absent")
     allocations = xdata_ranges(symbols)
     require(all(0 <= start <= end <= STATUS_ADDRESS for start, end in allocations),
             "Codec test allocation overlaps reserved status or the IRAM alias")
