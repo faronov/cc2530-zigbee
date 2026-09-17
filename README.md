@@ -298,7 +298,8 @@ and no armed channel, pending request or DMA completion flag.
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):
 DATA/ACK plus association request/response, disassociation, data request and
-beacon request payloads/frames.
+beacon request payloads/frames, plus version-0 Beacons without GTS descriptors
+(pending-address lists and opaque upper-layer payloads, not network discovery).
 It is host-tested, image-checked and simulated in an isolated test executable,
 not linked into board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.

@@ -12,7 +12,7 @@ M9 audits the ledger; it does not postpone specification decisions until release
 | Zigbee Core R22, document 05-3474-22 | Selected engineering baseline | Used for the requirements below |
 | Exact R22-compatible Zigbee-3.0-era BDB revision and supported procedures | **Open** | Must be pinned before M4/M5 security/commissioning implementation |
 | ZCL/application-profile revision and exact lab/physical device definitions | Open | Must be pinned before M6 attribute/profile implementation |
-| Legacy DATA/ACK and five-command wire subset, IEEE 802.15.4-2006-compatible formats | Selected for the standalone [codec](MAC.md), not full MAC conformance | M3 radio/procedure requirements remain open |
+| Legacy DATA/ACK, five-command and no-GTS Beacon wire subsets, IEEE 802.15.4-2006-compatible formats | Selected for the standalone [codec](MAC.md), not full MAC conformance | M3 radio/procedure requirements remain open |
 | R23 / BDB 3.1 | Not the initial baseline | Separate future scope decision |
 
 Until these decisions and their implementation evidence are complete, the
@@ -26,6 +26,7 @@ Page numbers refer to the printed pages of R22.
 | --- | --- | --- | --- | --- |
 | MAC-WIRE-01 | Bounded legacy DATA v0/v1 with both short/extended addresses, ACK v0, explicit unsupported security/layout errors | [Codec contract and sources](MAC.md) | Standalone codec / host-tested, image-checked, simulated; not in bootstrap | M3 |
 | MAC-WIRE-02 | Unsecured v0 association request/response, disassociation, data request and beacon request payloads and static header rules | IEEE 802.15.4-2006 sections 7.3.1-4, 7.3.7; [contract](MAC.md#fixed-format-commands) | Standalone codec / host-tested, image-checked, simulated; no procedures or RF | M3 |
+| MAC-WIRE-03 | Unsecured v0 short/extended-source Beacons without GTS descriptors; raw superframe fields, at most seven pending addresses, opaque payload up to 52 bytes | IEEE 802.15.4-2006 section 7.2.2.1, Table 85; [contract](MAC.md#no-gts-beacon-subset) | Standalone codec / host-tested, image-checked, simulated; not schedule validation, scanning or Zigbee discovery | M3 |
 | ED-01 | Discovery and child-side join/rejoin/leave | Table 2-152 pp.224-226; section 3.6.1.4.2 | Planned / none | M5 |
 | ED-02 | Node Descriptor request and response | Table 2-44 p.84 | Planned / none | M5-M6 |
 | ED-03 | Required address/power/simple/active/match descriptor responses | Tables 2-44, 2-149 | Planned / none | M6 |

@@ -76,7 +76,10 @@ or sleeping-target, MMIO, full-SFR, flash-writer or GDB support.
 ## Layer boundaries
 
 The standalone `mac_frame` module currently supplies only offline legacy
-DATA/ACK body encoding/decoding and five fixed-format command payloads/frames.
+DATA/ACK body encoding/decoding, five fixed-format command payloads/frames and
+version-0 Beacons without GTS descriptors. Beacon views bound and expose
+pending-address/upper-layer spans without copying or interpreting Zigbee
+discovery data; superframe fields are raw metadata, not a validated schedule.
 Command-specific header validation is still stateless serialization, not a
 procedure or association state machine. The module has no board/platform dependency or
 network state and is not linked into bootstrap/fixture firmware. Its

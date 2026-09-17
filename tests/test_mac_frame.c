@@ -43,6 +43,221 @@ static const MCU_CODE uint8_t command_frame_offsets[] = {17, 21, 15, 9, 7, 7, 23
 static const MCU_CODE uint8_t command_destination_modes[] = {2, 3, 2, 2, 0, 2, 3, 3, 2, 3, 3, 0};
 static const MCU_CODE uint8_t command_source_modes[] = {3, 3, 3, 2, 2, 0, 3, 3, 3, 2, 3, 3};
 
+static const MCU_CODE uint8_t beacon_frames[][38] = {
+    {0x00, 0x80, 0x5a, 0x34, 0x12, 0x78, 0x56, 0xff, 0xcf, 0x00, 0x00},
+    {0x10, 0xc0, 0x5a, 0x34, 0x12, 1, 2, 3, 4, 5, 6, 7, 8,
+     0x23, 0xdf, 0x80, 0x21, 0x78, 0x56,
+     0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+     0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0xa9, 0x55, 0x69}
+};
+
+static void beacon_header(mac_header_t *header, uint8_t mode)
+{
+    memset(header, 0, sizeof(*header));
+    header->type = MAC_FRAME_BEACON;
+    header->source_mode = mode;
+    header->source_pan = 0x1234;
+    header->sequence = 0x5a;
+    memset(header->source, 0x21, sizeof(header->source));
+}
+
+static uint16_t beacon_vectors(void)
+{
+    mac_frame_info_t frame, saved;
+    mac_beacon_info_t beacon;
+    mac_codec_result_t status;
+    uint8_t output[40], length, i;
+    /* Keep harness loop state out of SDCC's scarce IRAM spill slots. */
+    volatile uint8_t vector, size, offset, minimum, boundary;
+
+    memset(&saved, 0xa5, sizeof(saved));
+    for (vector = 0; vector < 2; vector++) {
+        size = vector ? 38 : 11;
+        offset = vector ? 13 : 7;
+        minimum = vector ? 35 : 11;
+        CHECK(mac_frame_decode(beacon_frames[vector], size, &frame) == MAC_CODEC_OK);
+        CHECK(frame.header.type == MAC_FRAME_BEACON && frame.header.version == 0);
+        CHECK(frame.header.source_mode == (vector ? MAC_ADDRESS_EXTENDED : MAC_ADDRESS_SHORT));
+        CHECK(frame.header.source_pan == 0x1234 && frame.header.sequence == 0x5a);
+        CHECK(frame.header.flags == (vector ? MAC_FLAG_PENDING : 0));
+        CHECK(frame.header.destination_mode == MAC_ADDRESS_NONE && frame.header.destination_pan == 0);
+        for (i = 0; i < 8; i++)
+            CHECK(frame.header.destination[i] == 0);
+        CHECK(frame.payload_offset == offset && frame.payload_length == size - offset);
+        CHECK(mac_beacon_decode(beacon_frames[vector] + offset, size - offset, &beacon) == MAC_CODEC_OK);
+        CHECK(beacon.superframe_specification == (vector ? 0xdf23u : 0xcfffu));
+        CHECK(beacon.gts_permit == vector && beacon.short_count == vector);
+        CHECK(beacon.extended_count == 2u * vector && beacon.short_offset == 4);
+        CHECK(beacon.extended_offset == (vector ? 6u : 4u));
+        CHECK(beacon.payload_offset == (vector ? 22u : 4u) && beacon.payload_length == 3u * vector);
+        for (boundary = 0; boundary <= size + 1u; boundary++) {
+            memset(output, 0xc7, sizeof(output));
+            length = 0xa5;
+            status = mac_frame_encode(&frame.header, beacon_frames[vector] + offset, size - offset,
+                                      output + 1, boundary, &length);
+            if (boundary < size) {
+                CHECK(status == MAC_CODEC_BUFFER_TOO_SMALL && length == 0xa5);
+                for (i = 0; i < sizeof(output); i++)
+                    CHECK(output[i] == 0xc7);
+            } else {
+                CHECK(status == MAC_CODEC_OK && length == size);
+                CHECK(memcmp(output + 1, beacon_frames[vector], size) == 0);
+                CHECK(output[0] == 0xc7 && output[size + 1u] == 0xc7);
+            }
+        }
+        for (boundary = 0; boundary <= size; boundary++) {
+            frame = saved;
+            status = mac_frame_decode(beacon_frames[vector], boundary, &frame);
+            if (boundary < minimum) {
+                CHECK(status == MAC_CODEC_TRUNCATED);
+                CHECK(memcmp(&frame, &saved, sizeof(frame)) == 0);
+            } else {
+                CHECK(status == MAC_CODEC_OK && frame.payload_length == boundary - offset);
+                CHECK(mac_beacon_decode(beacon_frames[vector] + offset, boundary - offset, &beacon) == MAC_CODEC_OK);
+                CHECK(beacon.payload_length == boundary - minimum);
+            }
+        }
+    }
+    return 0;
+}
+
+static uint16_t beacon_address_lists(void)
+{
+    mac_header_t header;
+    mac_frame_info_t frame;
+    mac_beacon_info_t beacon, saved;
+    uint8_t payload[113], output[127], length;
+    volatile uint8_t short_count, extended_count, offset, tail, mode, n;
+
+    memset(&saved, 0xa5, sizeof(saved));
+    memset(payload, 0x69, sizeof(payload));
+    payload[0] = 0xff;
+    payload[1] = 0xcf;
+    for (short_count = 0; short_count <= 7; short_count++) {
+        for (extended_count = 0; extended_count <= 7u - short_count; extended_count++) {
+            payload[2] = (short_count & 1u) ? 0x80 : 0;
+            payload[3] = (uint8_t)(short_count | (extended_count << 4));
+            offset = (uint8_t)(4u + 2u * short_count + 8u * extended_count);
+            for (n = 0; n < offset; n++) {
+                beacon = saved;
+                CHECK(mac_beacon_decode(payload, n, &beacon) == MAC_CODEC_TRUNCATED);
+                CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+            }
+            for (tail = 0; tail <= 52; tail += 52) {
+                CHECK(mac_beacon_decode(payload, offset + tail, &beacon) == MAC_CODEC_OK);
+                CHECK(beacon.short_count == short_count && beacon.extended_count == extended_count);
+                CHECK(beacon.extended_offset == 4u + 2u * short_count);
+                CHECK(beacon.payload_offset == offset && beacon.payload_length == tail);
+                for (mode = MAC_ADDRESS_SHORT; mode <= MAC_ADDRESS_EXTENDED; mode++) {
+                    beacon_header(&header, mode);
+                    header.flags = MAC_FLAG_PENDING;
+                    memset(output, 0xc7, sizeof(output));
+                    CHECK(mac_frame_encode(&header, payload, offset + tail, output + 1, 125, &length) == MAC_CODEC_OK);
+                    CHECK(length == offset + tail + (mode == MAC_ADDRESS_SHORT ? 7u : 13u));
+                    CHECK(output[0] == 0xc7 && output[length + 1u] == 0xc7);
+                    CHECK(mac_frame_decode(output + 1, length, &frame) == MAC_CODEC_OK);
+                    CHECK(frame.payload_length == offset + tail && frame.header.flags == MAC_FLAG_PENDING);
+                    CHECK(memcmp(output + 1 + frame.payload_offset, payload, offset + tail) == 0);
+                }
+            }
+            beacon = saved;
+            CHECK(mac_beacon_decode(payload, offset + 53u, &beacon) == MAC_CODEC_TOO_LONG);
+            CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+        }
+    }
+    CHECK(mac_beacon_decode(NULL, 0, &beacon) == MAC_CODEC_INVALID_ARGUMENT);
+    CHECK(mac_beacon_decode(payload, 4, NULL) == MAC_CODEC_INVALID_ARGUMENT);
+    CHECK(mac_beacon_decode(payload, 65535u, &beacon) == MAC_CODEC_TOO_LONG);
+    CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+    return 0;
+}
+
+static uint16_t beacon_rejections(void)
+{
+    mac_header_t header;
+    mac_beacon_info_t beacon, saved;
+    mac_frame_info_t frame, saved_frame;
+    mac_codec_result_t expected;
+    uint8_t input[13], output[13], length, test, i;
+
+    memset(&saved, 0xa5, sizeof(saved));
+    memset(&saved_frame, 0xa5, sizeof(saved_frame));
+    for (test = 0; test < 10; test++) {
+        memcpy(input, beacon_frames[0], 11);
+        input[11] = input[12] = 0xff;
+        expected = MAC_CODEC_INVALID_BEACON;
+        switch (test) {
+        case 0: input[8] |= 0x20; break;
+        case 1: input[9] = 0x08; break;
+        case 2: input[9] = 0x40; break;
+        case 3: input[10] = 0x08; break;
+        case 4: input[10] = 0x80; break;
+        case 5: input[10] = 0x44; break;
+        case 6: input[10] = 1; break;
+        default:
+            input[9] = (uint8_t)(test - 6u);
+            expected = MAC_CODEC_UNSUPPORTED_BEACON;
+            break;
+        }
+        beacon = saved;
+        CHECK(mac_beacon_decode(input + 7, 6, &beacon) == expected);
+        CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+        frame = saved_frame;
+        CHECK(mac_frame_decode(input, sizeof(input), &frame) == expected);
+        CHECK(memcmp(&frame, &saved_frame, sizeof(frame)) == 0);
+        beacon_header(&header, MAC_ADDRESS_SHORT);
+        memset(output, 0xc7, sizeof(output));
+        length = 0xa5;
+        CHECK(mac_frame_encode(&header, input + 7, 6, output, sizeof(output), &length) == expected);
+        CHECK(length == 0xa5);
+        for (i = 0; i < sizeof(output); i++)
+            CHECK(output[i] == 0xc7);
+    }
+    for (test = 0; test < 9; test++) {
+        beacon_header(&header, MAC_ADDRESS_SHORT);
+        expected = MAC_CODEC_INVALID_HEADER;
+        switch (test) {
+        case 0:
+            header.flags = MAC_FLAG_SECURITY;
+            expected = MAC_CODEC_UNSUPPORTED_SECURITY;
+            break;
+        case 1:
+            header.version = 1;
+            expected = MAC_CODEC_UNSUPPORTED_VERSION;
+            break;
+        case 2: header.flags = MAC_FLAG_ACK_REQUEST; break;
+        case 3: header.flags = MAC_FLAG_PAN_COMPRESSION; break;
+        case 4:
+            header.source_mode = 1;
+            expected = MAC_CODEC_UNSUPPORTED_ADDRESSING;
+            break;
+        case 5:
+            header.destination_mode = MAC_ADDRESS_SHORT;
+            expected = MAC_CODEC_UNSUPPORTED_ADDRESSING;
+            break;
+        case 6: header.source[0] = 0xfe; header.source[1] = 0xff; break;
+        case 7: header.source[0] = header.source[1] = 0xff; break;
+        default: header.source_pan = 0xffff; break;
+        }
+        memcpy(input, beacon_frames[0], 11);
+        input[0] = header.flags;
+        input[1] = (uint8_t)((header.source_mode << 6) | (header.version << 4) | (header.destination_mode << 2));
+        input[3] = (uint8_t)header.source_pan;
+        input[4] = (uint8_t)(header.source_pan >> 8);
+        memcpy(input + 5, header.source, 2);
+        frame = saved_frame;
+        CHECK(mac_frame_decode(input, 11, &frame) == expected);
+        CHECK(memcmp(&frame, &saved_frame, sizeof(frame)) == 0);
+        memset(output, 0xc7, sizeof(output));
+        length = 0xa5;
+        CHECK(mac_frame_encode(&header, input + 7, 4, output, sizeof(output), &length) == expected);
+        CHECK(length == 0xa5);
+        for (i = 0; i < sizeof(output); i++)
+            CHECK(output[i] == 0xc7);
+    }
+    return 0;
+}
+
 static void data_header(mac_header_t *header)
 {
     memset(header, 0, sizeof(*header));
@@ -511,7 +726,7 @@ static uint16_t decode_rejections(void)
     body[1] = 0x94;
     CHECK(mac_frame_decode(body, sizeof(golden), &decoded) == MAC_CODEC_UNSUPPORTED_ADDRESSING);
     body[1] = 0x98;
-    body[0] = 0x60;
+    body[0] = 0x64;
     CHECK(mac_frame_decode(body, sizeof(golden), &decoded) == MAC_CODEC_UNSUPPORTED_TYPE);
     body[0] = 0x63;
     CHECK(mac_frame_decode(body, sizeof(golden), &decoded) == MAC_CODEC_UNSUPPORTED_VERSION);
@@ -624,7 +839,16 @@ static uint16_t self_test(void)
     result = command_frame_vectors();
     if (result != 0)
         return result;
-    return command_payload_rejections();
+    result = command_payload_rejections();
+    if (result != 0)
+        return result;
+    result = beacon_vectors();
+    if (result != 0)
+        return result;
+    result = beacon_address_lists();
+    if (result != 0)
+        return result;
+    return beacon_rejections();
 }
 
 #if defined(__SDCC)
@@ -991,6 +1215,218 @@ static uint16_t invalid_header_fields(void)
     return 0;
 }
 
+static uint16_t exhaustive_beacon_fields(void)
+{
+    mac_beacon_info_t beacon, saved;
+    mac_codec_result_t status;
+    uint8_t payload[113];
+    uint32_t value;
+    unsigned size, expected;
+
+    memset(&saved, 0xa5, sizeof(saved));
+    memset(payload, 0x69, sizeof(payload));
+    payload[2] = payload[3] = 0;
+    for (value = 0; value < 65536UL; value++) {
+        payload[0] = (uint8_t)value;
+        payload[1] = (uint8_t)(value >> 8);
+        beacon = saved;
+        status = mac_beacon_decode(payload, 4, &beacon);
+        CHECK((status == MAC_CODEC_OK) == ((value & 0x2000u) == 0));
+        if (status == MAC_CODEC_OK)
+            CHECK(beacon.superframe_specification == value);
+        else
+            CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+    }
+    payload[0] = 0xff;
+    payload[1] = 0xcf;
+    for (value = 0; value < 256; value++) {
+        payload[2] = (uint8_t)value;
+        beacon = saved;
+        status = mac_beacon_decode(payload, 4, &beacon);
+        CHECK(status == ((value & 0x78u) ? MAC_CODEC_INVALID_BEACON :
+                         (value & 7u) ? MAC_CODEC_UNSUPPORTED_BEACON : MAC_CODEC_OK));
+        if (status == MAC_CODEC_OK)
+            CHECK(beacon.gts_permit == value >> 7);
+        else
+            CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+    }
+    payload[2] = 0;
+    for (value = 0; value < 256; value++) {
+        payload[3] = (uint8_t)value;
+        size = 4u + 2u * (value & 7u) + 8u * ((value >> 4) & 7u);
+        expected = !(value & 0x88u) && (value & 7u) + ((value >> 4) & 7u) <= 7;
+        beacon = saved;
+        status = mac_beacon_decode(payload, (uint16_t)size, &beacon);
+        CHECK((status == MAC_CODEC_OK) == expected);
+        if (status != MAC_CODEC_OK)
+            CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+    }
+    payload[3] = 1;
+    for (value = 0; value < 65536UL; value++) {
+        payload[4] = (uint8_t)value;
+        payload[5] = (uint8_t)(value >> 8);
+        beacon = saved;
+        status = mac_beacon_decode(payload, 6, &beacon);
+        CHECK((status == MAC_CODEC_OK) == (value != 0xffffu));
+        if (status != MAC_CODEC_OK)
+            CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+    }
+    return 0;
+}
+
+static uint16_t beacon_header_fields(void)
+{
+    mac_header_t header;
+    mac_frame_info_t frame, saved;
+    mac_codec_result_t status;
+    uint8_t body[17], output[17], length, offset;
+    uint32_t control;
+    unsigned field, value, expected, i, accepted = 0;
+
+    for (field = 0; field < 5; field++) {
+        for (value = 0; value < 256; value++) {
+            beacon_header(&header, MAC_ADDRESS_SHORT);
+            switch (field) {
+            case 0: header.type = (uint8_t)value; expected = value == 0; break;
+            case 1: header.version = (uint8_t)value; expected = value == 0; break;
+            case 2: header.flags = (uint8_t)value; expected = value == 0 || value == MAC_FLAG_PENDING; break;
+            case 3: header.destination_mode = (uint8_t)value; expected = value == 0; break;
+            default: header.source_mode = (uint8_t)value; expected = value == 2 || value == 3; break;
+            }
+            memset(output, 0xc7, sizeof(output));
+            length = 0xa5;
+            status = mac_frame_encode(&header, beacon_frames[0] + 7, 4, output, sizeof(output), &length);
+            CHECK((status == MAC_CODEC_OK) == expected);
+            if (!expected) {
+                CHECK(length == 0xa5);
+                for (i = 0; i < sizeof(output); i++)
+                    CHECK(output[i] == 0xc7);
+            }
+        }
+    }
+    for (field = 0; field < 2; field++) {
+        for (control = 0; control < 65536UL; control++) {
+            beacon_header(&header, MAC_ADDRESS_SHORT);
+            if (field == 0) {
+                header.source[0] = (uint8_t)control;
+                header.source[1] = (uint8_t)(control >> 8);
+                expected = control < 0xfffeu;
+            } else {
+                header.source_pan = (uint16_t)control;
+                expected = control != 0xffffu;
+            }
+            memset(output, 0xc7, sizeof(output));
+            length = 0xa5;
+            status = mac_frame_encode(&header, beacon_frames[0] + 7, 4, output, sizeof(output), &length);
+            CHECK((status == MAC_CODEC_OK) == expected);
+            if (!expected) {
+                CHECK(length == 0xa5);
+                for (i = 0; i < sizeof(output); i++)
+                    CHECK(output[i] == 0xc7);
+            }
+        }
+    }
+    memset(&saved, 0xa5, sizeof(saved));
+    for (control = 0; control < 65536UL; control += 8) {
+        memset(body, 0x21, sizeof(body));
+        body[0] = (uint8_t)control;
+        body[1] = (uint8_t)(control >> 8);
+        offset = (control & 0xc000u) == 0xc000u ? 13 : 7;
+        memcpy(body + offset, beacon_frames[0] + 7, 4);
+        frame = saved;
+        status = mac_frame_decode(body, offset + 4u, &frame);
+        expected = (control & ~0x4010UL) == 0x8000u;
+        CHECK((status == MAC_CODEC_OK) == expected);
+        if (!expected) {
+            CHECK(memcmp(&frame, &saved, sizeof(frame)) == 0);
+        } else {
+            accepted++;
+            CHECK(mac_frame_encode(&frame.header, body + frame.payload_offset, frame.payload_length,
+                                   output, sizeof(output), &length) == MAC_CODEC_OK);
+            CHECK(length == offset + 4u && memcmp(output, body, length) == 0);
+        }
+    }
+    CHECK(accepted == 4);
+    return 0;
+}
+
+static uint16_t exact_beacon_boundaries(void)
+{
+    mac_header_t header;
+    mac_frame_info_t frame, saved_frame;
+    mac_beacon_info_t beacon, saved;
+    mac_codec_result_t status, expected;
+    uint8_t complete[125], payload[113], output[125], *input, *encoded, length;
+    unsigned size, capacity, i;
+
+    beacon_header(&header, MAC_ADDRESS_EXTENDED);
+    memset(payload, 0x69, sizeof(payload));
+    payload[0] = 0xff;
+    payload[1] = 0xcf;
+    payload[2] = 0;
+    payload[3] = 0x70;
+    CHECK(mac_frame_encode(&header, payload, 112, complete, sizeof(complete), &length) == MAC_CODEC_OK);
+    CHECK(length == 125);
+    memset(&saved, 0xa5, sizeof(saved));
+    memset(&saved_frame, 0xa5, sizeof(saved_frame));
+    for (size = 0; size <= 126; size++) {
+        input = malloc(size ? size : 1u);
+        CHECK(input != NULL);
+        memcpy(input, complete, size < 125 ? size : 125);
+        frame = saved_frame;
+        status = mac_frame_decode(input, (uint16_t)size, &frame);
+        free(input);
+        expected = size < 73 ? MAC_CODEC_TRUNCATED : size > 125 ? MAC_CODEC_TOO_LONG : MAC_CODEC_OK;
+        CHECK(status == expected);
+        if (status != MAC_CODEC_OK)
+            CHECK(memcmp(&frame, &saved_frame, sizeof(frame)) == 0);
+    }
+    for (size = 0; size <= 113; size++) {
+        input = malloc(size ? size : 1u);
+        CHECK(input != NULL);
+        memcpy(input, payload, size);
+        beacon = saved;
+        status = mac_beacon_decode(input, (uint16_t)size, &beacon);
+        expected = size < 60 ? MAC_CODEC_TRUNCATED : size > 112 ? MAC_CODEC_TOO_LONG : MAC_CODEC_OK;
+        CHECK(status == expected);
+        if (status != MAC_CODEC_OK)
+            CHECK(memcmp(&beacon, &saved, sizeof(beacon)) == 0);
+        memset(output, 0xc7, sizeof(output));
+        length = 0xa5;
+        CHECK(mac_frame_encode(&header, input, (uint16_t)size, output, sizeof(output), &length) == expected);
+        free(input);
+        if (expected != MAC_CODEC_OK) {
+            CHECK(length == 0xa5);
+            for (i = 0; i < sizeof(output); i++)
+                CHECK(output[i] == 0xc7);
+        } else {
+            CHECK(length == 13 + size);
+            CHECK(memcmp(output, complete, length) == 0);
+        }
+    }
+    for (capacity = 0; capacity <= 126; capacity++) {
+        encoded = malloc(capacity ? capacity : 1u);
+        CHECK(encoded != NULL);
+        memset(encoded, 0xc7, capacity);
+        length = 0xa5;
+        status = mac_frame_encode(&header, payload, 112, encoded, (uint16_t)capacity, &length);
+        if (capacity < 125) {
+            CHECK(status == MAC_CODEC_BUFFER_TOO_SMALL && length == 0xa5);
+            for (i = 0; i < capacity; i++)
+                CHECK(encoded[i] == 0xc7);
+        } else {
+            CHECK(status == MAC_CODEC_OK && length == 125 && memcmp(encoded, complete, 125) == 0);
+            if (capacity == 126)
+                CHECK(encoded[125] == 0xc7);
+        }
+        free(encoded);
+    }
+    length = 0xa5;
+    CHECK(mac_frame_encode(&header, NULL, 0, output, sizeof(output), &length) == MAC_CODEC_TRUNCATED);
+    CHECK(length == 0xa5);
+    return 0;
+}
+
 int main(void)
 {
     uint16_t result = self_test();
@@ -1010,11 +1446,17 @@ int main(void)
         result = exhaustive_command_control_fields();
     if (result == 0)
         result = exact_command_boundaries();
+    if (result == 0)
+        result = exhaustive_beacon_fields();
+    if (result == 0)
+        result = beacon_header_fields();
+    if (result == 0)
+        result = exact_beacon_boundaries();
     if (result != 0) {
         fprintf(stderr, "MAC codec test failed at line %u\n", (unsigned)result);
         return 1;
     }
-    puts("host MAC codec: DATA/ACK, five commands, 12 command layouts, exhaustive fields and exact bounds PASS");
+    puts("host MAC codec: DATA/ACK, five commands, no-GTS Beacons, exhaustive fields and exact bounds PASS");
     return 0;
 }
 #endif

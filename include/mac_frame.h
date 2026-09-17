@@ -9,7 +9,10 @@
 #define MAC_FRAME_MAX_BODY 125u
 #define MAC_FRAME_MAX_HEADER 23u
 #define MAC_COMMAND_MAX_PAYLOAD 4u
+#define MAC_BEACON_MAX_PAYLOAD 52u
+#define MAC_BEACON_MAX_PENDING 7u
 
+#define MAC_FRAME_BEACON 0u
 #define MAC_FRAME_DATA 1u
 #define MAC_FRAME_ACK 2u
 #define MAC_FRAME_COMMAND 3u
@@ -41,6 +44,10 @@
 #define MAC_DISASSOCIATION_COORDINATOR_REQUEST 1u
 #define MAC_DISASSOCIATION_DEVICE_REQUEST 2u
 
+#define MAC_SUPERFRAME_BATTERY_LIFE_EXTENSION 0x1000u
+#define MAC_SUPERFRAME_PAN_COORDINATOR 0x4000u
+#define MAC_SUPERFRAME_ASSOCIATION_PERMIT 0x8000u
+
 typedef enum {
     MAC_CODEC_OK = 0,
     MAC_CODEC_INVALID_ARGUMENT,
@@ -53,7 +60,9 @@ typedef enum {
     MAC_CODEC_UNSUPPORTED_ADDRESSING,
     MAC_CODEC_INVALID_HEADER,
     MAC_CODEC_UNSUPPORTED_COMMAND,
-    MAC_CODEC_INVALID_COMMAND
+    MAC_CODEC_INVALID_COMMAND,
+    MAC_CODEC_UNSUPPORTED_BEACON,
+    MAC_CODEC_INVALID_BEACON
 } mac_codec_result_t;
 
 typedef struct {
@@ -63,6 +72,17 @@ typedef struct {
     uint8_t status;
     uint8_t reason;
 } mac_command_t;
+
+typedef struct {
+    uint16_t superframe_specification;
+    uint8_t gts_permit;
+    uint8_t short_count;
+    uint8_t extended_count;
+    uint8_t short_offset;
+    uint8_t extended_offset;
+    uint8_t payload_offset;
+    uint8_t payload_length;
+} mac_beacon_info_t;
 
 typedef struct {
     uint8_t type;
@@ -101,5 +121,13 @@ mac_codec_result_t mac_command_decode(const uint8_t *payload, uint16_t length,
                                       mac_command_t *result);
 mac_codec_result_t mac_command_encode(const mac_command_t *command,
                                       uint8_t *payload, uint16_t capacity, uint8_t *length);
+
+/* Decode the MAC payload (starting with Superframe Specification), not the MHR.
+ * GTS descriptors are unsupported. Offsets refer to this input; no bytes are
+ * copied for pending addresses or the opaque upper-layer Beacon Payload.
+ * Superframe fields are raw metadata, not a validated schedule.
+ */
+mac_codec_result_t mac_beacon_decode(const uint8_t *payload, uint16_t length,
+                                     mac_beacon_info_t *result);
 
 #endif

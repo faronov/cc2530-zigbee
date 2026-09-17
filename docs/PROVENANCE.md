@@ -523,8 +523,9 @@ and
 The revision and licenses were checked before using these references.
 Microchip's transceiver registers/timings are not CC2530 implementation facts.
 
-The engineering scope is the legacy IEEE 802.15.4-2006-compatible DATA/ACK
-and five-command wire subset documented in [MAC.md](MAC.md), not complete standard conformance.
+The engineering scope is the legacy IEEE 802.15.4-2006-compatible DATA/ACK,
+five-command and no-GTS Beacon wire subsets documented in [MAC.md](MAC.md),
+not complete standard conformance.
 No Contiki state, security code or frame-processing implementation was copied.
 Address arrays use explicitly documented wire order, not Contiki's display
 order; PAN compression is explicit rather than automatically selected.
@@ -542,6 +543,21 @@ reception. Generated search summaries were not used as authority for those
 facts. Version 0 and strict reserved-field rejection are explicit codec subset
 choices. The manual is linked, not redistributed; no third-party command
 implementation or packet capture is imported.
+
+The Beacon extension was checked directly against the same IEEE 2006 source:
+section 7.2 (pp.137-138) for byte order and the reserved-bit receiver rule;
+sections 7.2.2.1.1-8 (pp.143-146), Figures 44-51 for source-only MHR,
+superframe/GTS fields, short-before-extended pending lists and the combined
+seven-address bound; Table 85 (p.159) for the 52-byte upper-layer payload
+limit (`127 - 75`). Section 7.5.1.1 (pp.167-168) was read to distinguish raw
+BO/SO metadata from scheduling and the nonbeacon-enabled case. This slice
+does not claim to validate those timing/procedure rules.
+Zero GTS descriptors, strict reserved-field rejection and rejecting source
+PAN `FFFF`/source short `FFFE` are explicit subset choices, not permission to
+relax the standard's broader receiver behavior. The pending-list rule
+specifically excludes short `FFFF`, without inventing a second sentinel rule.
+The implementation and vectors are original. The public PDF and temporary PDF
+reader were used only for offline research and are not repository/CI artifacts.
 
 Contiki's RF code depends on Contiki facilities. An adaptation must replace
 those interfaces deliberately, preserve the original notices and be tested

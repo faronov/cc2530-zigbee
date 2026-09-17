@@ -1061,6 +1061,14 @@ Five command payload formats and all twelve supported command addressing
 layouts have shared host/SDCC golden and boundary checks. Host-only tests
 also exhaust command fields, association response addresses/statuses and
 command FCF patterns, retaining unchanged-output checks on errors.
+The no-GTS Beacon extension adds shared host/SDCC vectors for both source modes,
+all 36 pending-count combinations, zero/52-byte upper-layer payload boundaries,
+metadata/list truncations and explicit header/payload rejection. Host matrices
+exhaust superframe fields, source PAN/short and pending short addresses,
+GTS/pending/header bytes and all 8,192 Beacon FCF patterns. Exact-sized input,
+payload and output allocations cover the maximum 125-byte body under ASan/UBSan.
+This is host-tested, image-checked and simulated serialization only: raw
+superframe metadata is not a validated schedule or a discovered Zigbee network.
 Its test executable is not a board firmware image or CI upload artifact.
 
 | Area | Required cases before the corresponding milestone closes |
