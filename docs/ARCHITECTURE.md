@@ -85,6 +85,13 @@ procedure or association state machine. The module has no board/platform depende
 network state and is not linked into bootstrap/fixture firmware. Its
 [contract](MAC.md) separates syntax success from CRC/security/peer acceptance.
 
+The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
+inside the returned upper-layer Beacon Payload. It has no dependency on MAC
+headers or platform code. The [NWK codec contract](NWK.md) preserves raw
+profile/capacity/depth/update metadata without compatibility or parent
+acceptance. The two modules are composed only in offline tests; no firmware
+caller or network state machine is added.
+
 ```text
 sensor / local display application
               |

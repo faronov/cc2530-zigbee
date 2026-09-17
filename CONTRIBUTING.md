@@ -124,6 +124,18 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The separate R22 NWK Beacon payload decoder has a focused offline target:
+
+```sh
+make test-nwk-beacon
+```
+
+It is also included in `make ... all test`. Its `nwk_beacon_test.ihx` is a
+strictly checked simulator-only component image, not a board image or CI
+upload. The MAC test image also exercises the real MAC-to-NWK payload slice;
+keep both codecs independent and do not turn raw capacity/profile fields into
+successful network/parent acceptance.
+
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:
 

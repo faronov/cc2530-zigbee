@@ -589,6 +589,33 @@ section 3.6.10.2 pp.392-393; section 4.3.4 pp.416-417.
 Paraphrases in this repository are an engineering aid, not replacement
 specification text.
 
+### Offline R22 NWK Beacon payload sources
+
+The original decoder was checked directly against **Zigbee Specification
+Revision 22 1.0**, document **05-3474-22**, April 19, 2017, using this public
+[unaltered-document mirror at a pinned revision](https://github.com/pvginkel/ZigBeeHomeAutomation/blob/fc30145012eacd3a5af170b8ae8e0d4c848c2525/Documents/docs-05-3474-22-0csg-zigbee-specification.pdf).
+The title/revision/date were read from the document, not inferred from a
+search summary or the filename.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+| Section 3.3, p.288 | Least-significant octet first convention |
+| Section 3.5.1, Table 3-57, p.322 | `nwkcProtocolVersion = 2` |
+| Section 3.6.7, Table 3-71, pp.389-390 | Protocol ID 0, profile/capacity/depth fields, advertised Extended PAN ID range `1..FFFFFFFFFFFFFFFE`, symbol-time Tx Offset and `FFFFFF` beaconless default, Update ID |
+| Figure 3-54, p.391 | Exact 120-bit/15-byte field layout, nibble/flag placement and reserved bits |
+
+Nonzero reserved bits are rejected in the documented strict subset.
+Stack-profile values remain raw metadata rather than a supported-profile
+decision; version 2 alone does not establish R22/BDB compatibility. The NIB's
+separate zero/unknown Extended PAN ID is not substituted for the Beacon
+table's valid advertised range. No scheduling, admission, replay/freshness
+or commissioning rules are implemented.
+
+No implementation, vectors, protocol capture or SDK object was imported.
+Test identities and payloads are original synthetic data. The PDF and
+temporary PDF reader are research-only and are not shipped in Git or CI;
+the original document's notices and licenses are not replaced by BSD-3-Clause.
+
 ## Specialist-agent reference
 
 The repository's specialist profiles are original project instructions.

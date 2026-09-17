@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "mac_frame.h"
+#include "nwk_beacon.h"
 #include "cc2530_mmio.h"
 
 #include <stddef.h>
@@ -59,6 +60,52 @@ static void beacon_header(mac_header_t *header, uint8_t mode)
     header->source_pan = 0x1234;
     header->sequence = 0x5a;
     memset(header->source, 0x21, sizeof(header->source));
+}
+
+static uint16_t nwk_beacon_integration(void)
+{
+    static const MCU_CODE uint8_t nwk_payload[] = {
+        0x00, 0x22, 0xac, 0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe, 0xff, 0xff, 0xff, 0xa5
+    };
+    mac_header_t header;
+    mac_frame_info_t frame;
+    mac_beacon_info_t beacon;
+    nwk_beacon_t network, saved;
+    uint8_t payload[29], body[42], length;
+    volatile uint8_t mode, offset;
+
+    memset(payload, 0x69, sizeof(payload));
+    payload[0] = 0xff;
+    payload[1] = 0xcf;
+    payload[2] = 0;
+    payload[3] = 0x11;
+    memcpy(payload + 14, nwk_payload, sizeof(nwk_payload));
+    for (mode = MAC_ADDRESS_SHORT; mode <= MAC_ADDRESS_EXTENDED; mode++) {
+        beacon_header(&header, mode);
+        CHECK(mac_frame_encode(&header, payload, sizeof(payload), body, sizeof(body), &length) == MAC_CODEC_OK);
+        CHECK(mac_frame_decode(body, length, &frame) == MAC_CODEC_OK);
+        CHECK(frame.header.type == MAC_FRAME_BEACON);
+        CHECK(mac_beacon_decode(body + frame.payload_offset, frame.payload_length, &beacon) == MAC_CODEC_OK);
+        CHECK(beacon.short_count == 1 && beacon.extended_count == 1);
+        CHECK(beacon.payload_offset == 14 && beacon.payload_length == NWK_BEACON_LENGTH);
+        offset = (uint8_t)(frame.payload_offset + beacon.payload_offset);
+        CHECK(offset == (mode == MAC_ADDRESS_SHORT ? 21u : 27u));
+        CHECK(nwk_beacon_decode(body + offset, beacon.payload_length, &network) == NWK_BEACON_OK);
+        CHECK(network.stack_profile == 2 && network.router_capacity == 1 && network.end_device_capacity == 1);
+        CHECK(network.device_depth == 5 && network.update_id == 0xa5);
+        CHECK(network.tx_offset == NWK_BEACON_BEACONLESS_OFFSET);
+        CHECK(memcmp(network.extended_pan_id, nwk_payload + 3, 8) == 0);
+        memset(&network, 0xa5, sizeof(network));
+        memcpy(&saved, &network, sizeof(saved));
+        CHECK(nwk_beacon_decode(body + frame.payload_offset, frame.payload_length, &network) == NWK_BEACON_TOO_LONG);
+        CHECK(memcmp(&network, &saved, sizeof(network)) == 0);
+        body[offset] = 0xff;
+        CHECK(mac_frame_decode(body, length, &frame) == MAC_CODEC_OK);
+        CHECK(mac_beacon_decode(body + frame.payload_offset, frame.payload_length, &beacon) == MAC_CODEC_OK);
+        CHECK(nwk_beacon_decode(body + offset, beacon.payload_length, &network) == NWK_BEACON_UNSUPPORTED_PROTOCOL);
+        CHECK(memcmp(&network, &saved, sizeof(network)) == 0);
+    }
+    return 0;
 }
 
 static uint16_t beacon_vectors(void)
@@ -653,7 +700,8 @@ static uint16_t address_shapes(void)
 {
     mac_header_t header;
     mac_frame_info_t decoded;
-    uint8_t storage[127], payload[102], length, expected, i, version, destination, source, flags;
+    uint8_t storage[127], payload[102], length, expected, i;
+    volatile uint8_t version, destination, source, flags;
 
     memset(payload, 0x6d, sizeof(payload));
     for (version = 0; version < 2; version++) {
@@ -848,7 +896,10 @@ static uint16_t self_test(void)
     result = beacon_address_lists();
     if (result != 0)
         return result;
-    return beacon_rejections();
+    result = beacon_rejections();
+    if (result != 0)
+        return result;
+    return nwk_beacon_integration();
 }
 
 #if defined(__SDCC)

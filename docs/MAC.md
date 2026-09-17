@@ -123,8 +123,9 @@ The minimum body length is 11 bytes for a short source or 17 for an extended
 source. An extended-source Beacon with seven extended pending addresses and
 52 upper-layer bytes occupies exactly the 125-byte body limit. The 52-byte
 limit is the selected 2006 `aMaxBeaconPayloadLength`, not whatever unused
-space happens to remain in a shorter frame. Upper-layer bytes are not decoded
-as Zigbee discovery data; CRC, RSSI/LQI and network selection remain separate.
+space happens to remain in a shorter frame. This module does not interpret
+upper-layer bytes. The separate [R22 NWK Beacon decoder](NWK.md) can decode
+the returned slice; CRC, RSSI/LQI and network selection remain separate.
 
 ## API and failure contract
 
@@ -217,11 +218,14 @@ The larger exhaustive/mutation matrices stay host-only to keep test-harness
 compiler spills out of the guarded upper IRAM; all twelve command layouts and
 portable command failure vectors still execute under SDCC. The little-endian
 leaf helpers are C99-inline, avoiding extra call/register-save overhead.
-The nested Beacon test-loop counters are volatile so the large-model test
+The nested DATA/Beacon test-loop counters are volatile so the large-model test
 harness keeps their state in XDATA instead of growing IRAM register-spill
 storage. No production volatility, guard relaxation or skipped portable
 Beacon scenario is introduced.
 The upper-half IRAM guard and exact final stack-pointer check are unchanged.
+The same test executable now links the separate NWK Beacon decoder only to
+exercise MAC-to-NWK slicing with both source modes and mixed pending lists.
+Neither production codec depends on the other or gains a hardware caller.
 
 `build/<board>/[debug_fixture/]mac_frame_test.ihx` is a **simulator-only test
 executable**, not an `IMAGE` selection or board firmware to flash. It is not

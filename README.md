@@ -300,6 +300,8 @@ Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md)
 DATA/ACK plus association request/response, disassociation, data request and
 beacon request payloads/frames, plus version-0 Beacons without GTS descriptors
 (pending-address lists and opaque upper-layer payloads, not network discovery).
+The separate [R22 NWK Beacon decoder](docs/NWK.md) parses the 15-byte Zigbee
+metadata within that payload, without accepting a profile, network or parent.
 It is host-tested, image-checked and simulated in an isolated test executable,
 not linked into board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.

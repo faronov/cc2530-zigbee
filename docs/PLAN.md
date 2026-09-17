@@ -282,6 +282,11 @@ their addressing layouts, with host, linked-image and
 alias-aware simulator evidence. It also handles version-0 Beacons without GTS
 descriptors, bounded pending-address lists and opaque upper-layer payloads.
 This adds no scan, synchronization, scheduling or Zigbee discovery procedure.
+The separate [R22 NWK Beacon payload decoder](NWK.md) now decodes the exact
+15-byte upper-layer metadata, with independent host/target tests and an
+offline MAC-to-NWK slicing check. Profiles, capacities and identifiers remain
+unauthenticated metadata, not selection/admission decisions. M4/M5 and the
+compatible-BDB gate are unchanged.
 It is not linked into board firmware and
 does not establish radio, MAC or networking support. Hardware M1/M2 gates
 are not bypassed.

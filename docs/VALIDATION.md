@@ -1071,6 +1071,17 @@ This is host-tested, image-checked and simulated serialization only: raw
 superframe metadata is not a validated schedule or a discovered Zigbee network.
 Its test executable is not a board firmware image or CI upload artifact.
 
+The [R22 NWK Beacon payload decoder](NWK.md) has separate original golden,
+length, reserved/protocol/version and Extended PAN ID boundary cases on
+host and SDCC. Host matrices vary every payload byte through 0..255,
+exercise all uint16 lengths and check exact input/output allocations under
+ASan/UBSan. The standalone image reuses strict component layout/source/ABI,
+512-byte XDATA reservation and alias/stack checks. The MAC test image also
+executes the real two-source-mode, mixed-pending-list pipeline, including a
+MAC-valid but non-Zigbee payload rejected at the NWK boundary. These checks
+are host/image/simulator evidence only; no scanner, parent selection, join,
+radio or authenticated acceptance is implemented.
+
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |
 | Encoders/parsers | Golden wire bytes, every boundary length, invalid/truncated/reserved fields, explicit byte order |
