@@ -97,4 +97,5 @@ All existing MAC tests and guards remain enabled.
 Evidence is **host-tested, image-checked and simulated**, not hardware-
 observed, a discovered network or interoperability. Primary references and
 the public-document mirror revision are in [PROVENANCE.md](PROVENANCE.md).
-The compatible-BDB gate remains open in [CONFORMANCE.md](CONFORMANCE.md).
+The selected BDB 3.0.1 base revision and remaining errata/implementation gates
+are recorded in [CONFORMANCE.md](CONFORMANCE.md); decoding does not satisfy them.

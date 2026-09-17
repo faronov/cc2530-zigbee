@@ -573,10 +573,10 @@ not automatically compliant with the project's intended R22/BDB behavior.
 Engineering references:
 
 - Zigbee Core R22, document **05-3474-22**.
-- A Zigbee-3.0-era BDB revision compatible with R22. This is an explicit
-  [open gate in the initial conformance ledger](CONFORMANCE.md), to be resolved
-  before M4/M5 security/commissioning implementation, not after interoperability
-  work. Exact procedures and requirements must be recorded.
+- PRO Base Device Behavior Specification **v3.0.1**, document
+  **16-02828-012**, September 28, 2021. The base revision is selected;
+  applicable errata and implementation evidence remain separate
+  [gates in the conformance ledger](CONFORMANCE.md).
 - Applicable Zigbee Cluster Library and application-profile requirements for
   the chosen device, pinned when those layers are implemented.
 
@@ -588,6 +588,56 @@ section 2.4.4.4.5 p.188; section 2.5.4.8.1 p.222;
 section 3.6.10.2 pp.392-393; section 4.3.4 pp.416-417.
 Paraphrases in this repository are an engineering aid, not replacement
 specification text.
+
+### BDB 3.0.1 baseline sources
+
+The selected primary source is the
+[official CSA BDB v3.0.1 PDF](https://csa-iot.org/wp-content/uploads/2022/12/16-02828-012-PRO-BDB-v3.0.1-Specification.pdf),
+linked from the
+[CSA specification download page](https://csa-iot.org/developer-resource/specifications-download-request/).
+The title page identifies **16-02828-012, September 28th, 2021**; the revision
+history on p.5 identifies v3.0.1 as derived from 16-02828-011. Neither the
+2022 copyright nor the upload-directory date replaces the document date.
+The reviewed 86-page PDF has SHA-256
+`16471aa230657818da4c8440671efb530d80c71a975fce7af71c507ca7aa17d3`.
+
+[Microchip's reference list](https://onlinedocs.microchip.com/oxy/GUID-1DD68C79-8AC2-497D-A1BB-49D92D3FDAB8-en-US-5/GUID-4EC58238-EB93-489F-B9BC-A237F17AE18E.html)
+explicitly lists BDB v3.0.1 alongside Core R22 1.0, 05-3474-22.
+The [CSA ZUTH page](https://csa-iot.org/certification/tools/zuth/) independently
+names BDB v3.0.1 as a test target. These confirm the version context, not
+this implementation's interoperability or a unique mandatory pairing for
+every R22 product. BDB section 2 [R1] references the Core document family
+05-3474 without pinning a revision; this project explicitly selects R22.
+
+| Primary location (printed/PDF pages) | Facts reviewed |
+| --- | --- |
+| Sections 1.5-6,2, pp.15-17 | Separate v3.0.1 Test Plan 16-02826 and Specification Errata 21-65431 |
+| Sections 5.1,5.3, pp.22-31 | Constants, commissioning capability/status, channel sets and key-exchange attributes |
+| Sections 6.1-10, pp.32-38 | ED security models/keys, required versus optional commissioning, ZDO/application minimums, persistence and role-limited Green Power requirement |
+| Section 7.1, pp.39-40 | Persisted ED initialization with secure NWK rejoin |
+| Sections 8.1-2, pp.41-47 | Already-joined versus unjoined steering, authentication, key exchange, failure and permit-join broadcast |
+| Section 9, pp.69-71 | Factory reset, optional Basic reset and outgoing NWK counter preservation |
+| Sections 10.1-2, pp.72-79 | Install-code CRC/MMO, TC identity/policies and request/verify/confirm sequencing |
+
+The TC exchange was cross-checked against R22 section 2.3.2.3.10/Table 2-32
+p.72 and sections 4.4.7-8 pp.439-446, particularly Confirm-Key.indication
+validation in section 4.4.8.2.3. The retained R22 counter requirement is
+section 4.3.4 p.416. Exact errata/test-plan revisions and contents have **not**
+been reviewed; do not infer that the errata is empty or substitute the older
+BDB 1.0 errata 15-02020 or test specification 14-0439.
+
+The separately inspected
+[BDB 1.0 PDF](https://csa-iot.org/wp-content/uploads/2019/12/docs-13-0402-13-00zi-Base-Device-Behavior-Specification-2-1.pdf)
+identifies **13-0402-13, February 24, 2016**. It is not BDB 3.0/3.0.1 and is
+not the selected baseline. For example, the selected v3.0.1 explicitly makes
+already-joined steering optional and includes the CRC in its install-code
+hash example. Old summaries and section numbers must not replace this text.
+
+This is primary-document review only, not host-tested, image-checked,
+simulated or hardware-observed BDB behavior. No implementation, sample code,
+keys or test-plan vectors were imported. PDFs and extraction tools remain
+temporary research inputs, not Git or CI artifacts; the specifications'
+notices and licensing are not replaced by BSD-3-Clause.
 
 ### Offline R22 NWK Beacon payload sources
 
@@ -633,7 +683,8 @@ combines ZCL Revision 8 and Matter 1.5, and identifies Core R23
 the index says 2.1 while
 [bdb.json](https://github.com/faronov/zigbee-docs/blob/6e575bdc8c1a68880ef7552d6190a0c6bc80b3a6/docs/base-device-behavior/bdb.json)
 has `specification.version` 1.0; both name document `13-0402-13`.
-These labels do not resolve the compatible-BDB gate.
+The primary PDF confirms that 13-0402-13 is BDB 1.0. Neither secondary label
+identifies the selected BDB 3.0.1 document 16-02828-012.
 
 Agent lookups must use the reviewed revision, inspect field-level source
 annotations and verify implementation decisions against the applicable

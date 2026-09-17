@@ -18,9 +18,10 @@ and tests. Planned layers are not implemented APIs.
 - Target one end-device role: receiver-on first, sleepy later, in a centralized
   Trust Center network. Do not add routing, child admission, network formation,
   Trust Center server behavior, Touchlink or Matter under this task.
-- Use Core R22, document 05-3474-22, as the selected engineering baseline.
-  The compatible BDB revision and application/ZCL revision remain subject to
-  the explicit gates in the conformance ledger. Do not substitute R23 or BDB 3.1.
+- Use Core R22, document 05-3474-22, with PRO BDB v3.0.1, document 16-02828-012.
+  Applicable BDB errata and application/ZCL selection remain subject to the
+  explicit gates in the conformance ledger. Do not substitute BDB 1.0, R23
+  or BDB 3.1; centralized-only ED operation is not full BDB conformance.
 - Distinguish PHY framing, MAC bodies, MAC association, NWK/APS processing,
   authenticated Zigbee join and application interoperability. Success at one
   boundary is not evidence that the others work.

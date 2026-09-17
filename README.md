@@ -11,6 +11,10 @@ This is not yet a working Zigbee stack.** The included firmware does not join a 
 transmit radio packets, read a sensor or refresh a display. It does not require
 IAR or proprietary TI stack libraries.
 
+The selected specification baseline is **Core R22 + PRO BDB 3.0.1**
+(`16-02828-012`). The first centralized-network ED target is a subset, not
+full BDB support; [errata and implementation gates](docs/CONFORMANCE.md) remain open.
+
 [Русский обзор](README.ru.md)
 
 ## Start here

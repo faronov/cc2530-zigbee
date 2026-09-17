@@ -92,6 +92,14 @@ profile/capacity/depth/update metadata without compatibility or parent
 acceptance. The two modules are composed only in offline tests; no firmware
 caller or network state machine is added.
 
+The planned BDB commissioning policy uses
+[BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
+NWK/APS/security services rather than inside codecs or board code.
+MAC association, received network key, BDB membership flag, Device Announce
+and authenticated application readiness are separate states. In particular,
+BDB announces before TC link-key exchange completes; an announce must not
+unlock application traffic or imply verified persistent key state.
+
 ```text
 sensor / local display application
               |
@@ -715,14 +723,19 @@ Reserve explicit flash pages outside code, factory/configuration data and lock
 locations before introducing any writer. Define record version, generation,
 length, integrity checks and commit semantics.
 
-Persist network/parent information, required keys and counters, then add
-bindings/reporting settings only when their behavior exists. Corrupt or
-incomplete records are rejected with a visible recovery reason.
+Persist network/parent information, required keys and counters, and
+`bdbNodeIsOnANetwork`, then add bindings/reporting settings only when their
+behavior exists. Corrupt or incomplete records are rejected with a visible
+recovery reason. Keep pending TC exchanges separate from committed verified
+keys; a restart must not accept an interrupted exchange as successful.
 
-After persisted resume, select an immediate keepalive from the saved
-`nwkParentInformation`. Unknown parent information triggers ED Timeout
-renegotiation with bounded recovery; a missing response must not block startup
-forever. Test this separately from a fresh join.
+After persisted resume, BDB 3.0.1 section 7.1 requires a secure NWK rejoin
+attempt for a previously joined ED and Device Announce on success. The
+persisted membership flag alone does not establish current connectivity.
+Retain R22 ED Timeout negotiation after each successful join/rejoin and prompt
+keepalive after recovery using `nwkParentInformation`. Unknown information
+triggers bounded renegotiation/recovery; a missing response must not block
+startup forever. Test this separately from a fresh join.
 
 For outgoing security counters, reserve a durable future range before using
 it. A restart may skip values; it must not reuse transmitted values. Validate

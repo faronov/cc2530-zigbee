@@ -15,9 +15,11 @@ exercised on one LG board through the M1 fixture, as recorded below.
 Everything from M1 onward below is planned except for the explicitly
 implemented components and evidence recorded under each milestone.
 
-The [initial conformance ledger](CONFORMANCE.md) exists at M0. Selection of
-the exact R22-compatible BDB revision is an open, blocking prerequisite for
-M4/M5 security/commissioning implementation, not work postponed until release.
+The [initial conformance ledger](CONFORMANCE.md) exists at M0. Core R22 is
+paired with PRO BDB v3.0.1, document 16-02828-012. The base revision and
+bounded ED requirements are recorded; review of applicable BDB errata
+21-65431 remains a blocking prerequisite for M4/M5 security/commissioning
+implementation, not work postponed until release.
 Update the ledger with each protocol change; M9 audits it rather than first
 creating it.
 
@@ -46,8 +48,8 @@ hardware work. Later features must not bypass their security or recovery gates.
 | Language/toolchain | C99, SDCC 4.2.0 baseline | No Rust runtime or IAR object dependency |
 | Hardware | CC2530F256; generic and LG ESL board descriptions | Other CC253x parts need a separate validation record |
 | Role | Receiver-on ED first, SED second | One logical ED role; no forwarding or children |
-| Network | Centralized Trust Center network first | Distributed networks are outside the first supported configuration |
-| Specification | Core R22 and compatible Zigbee-3.0-era BDB | BDB 3.1/R23 is not silently treated as the R22 baseline |
+| Network | Centralized Trust Center network first | Distributed networks are deferred; this is a BDB conformance gap, not an ED role exemption |
+| Specification | Core R22 and PRO BDB v3.0.1, 16-02828-012 | Applicable errata gate remains open; neither BDB 1.0 nor BDB 3.1/R23 substitutes for this baseline |
 | Application | Small reporting sensor, local display later | Only implemented clusters are advertised |
 | Memory | Static pools and explicit bounds | No heap-dependent protocol or frame-sized display buffer |
 | Debugging | CC Debugger plus RAM trace and independent sniffer | An IDE or GDB integration is not assumed to exist |
@@ -285,8 +287,8 @@ This adds no scan, synchronization, scheduling or Zigbee discovery procedure.
 The separate [R22 NWK Beacon payload decoder](NWK.md) now decodes the exact
 15-byte upper-layer metadata, with independent host/target tests and an
 offline MAC-to-NWK slicing check. Profiles, capacities and identifiers remain
-unauthenticated metadata, not selection/admission decisions. M4/M5 and the
-compatible-BDB gate are unchanged.
+unauthenticated metadata, not selection/admission decisions. It does not
+satisfy M4/M5 or the remaining BDB specification/implementation gates.
 It is not linked into board firmware and
 does not establish radio, MAC or networking support. Hardware M1/M2 gates
 are not bypassed.
@@ -314,14 +316,17 @@ Exit:
 
 ### M4 - Security and durable state
 
-Entry gate: pin the compatible BDB revision and security/commissioning
-requirements in the conformance ledger.
+Entry gate: the BDB v3.0.1 base revision and security/commissioning requirements
+are pinned in the conformance ledger. Obtain/review applicable errata
+21-65431 and resolve affected requirements before implementing these procedures.
 
 Deliver:
 
 - Zigbee-specific AES-CCM* nonce/header/MIC handling, using the AES primitive.
 - Network/link-key handling, key identifiers/sequences and replay rejection.
 - Two network-key slots and the applicable Trust Center key procedures.
+- Install-code CRC/AES-MMO derivation and explicit initial/updated TC key
+  state; receiving a key or confirmation frame alone is not verification.
 - Atomic persistence for network identity, parent information, keys,
   bindings/configuration when implemented, and outgoing security counters.
 - Counter-range reservation or another demonstrably monotonic power-loss
@@ -344,14 +349,19 @@ Deliver:
 
 - Required NWK and APS header handling and bounded transaction/ACK state.
 - Centralized-network steering, key transport/verification and join completion.
+  Follow BDB 3.0.1 section 8.2, including its final permit-join broadcast;
+  this does not enable local child admission. Already-joined steering remains
+  optional and is not initially selected.
 - Join-critical endpoint-0 services, including Node Descriptor exchange and
   address/Device Announce handling. Introduce the generic ZDO unsupported-service
   fallback as soon as endpoint 0 is exposed, before omitting any optional handler.
 - Device Announce, address-conflict handling and required address resolution.
 - ED Timeout negotiation, parent information and selected keepalive method.
-- On persisted resume, immediate keepalive chosen from stored
-  `nwkParentInformation`; when unknown, ED Timeout renegotiation with bounded
-  failure/recovery rather than an indefinitely blocked startup.
+- On persisted resume, restore BDB state and attempt secure NWK rejoin as
+  required by BDB section 7.1, then announce on success. Retain ED Timeout
+  negotiation after every successful join/rejoin and prompt keepalive after
+  recovery using `nwkParentInformation`; unknown information or an absent
+  parent needs bounded failure/recovery, not an indefinitely blocked startup.
 - Child-side rejoin, parent loss, explicit leave and persisted restart.
 - NWK Network Update handling, including wrap-aware update identifiers.
 
@@ -365,9 +375,10 @@ Exit:
 - The evidence records coordinator software/adapter versions and firmware
   revision, with private network data kept outside the repository.
 
-M5 is an authenticated lab ED milestone, not a claim that all discovery or
-application-profile requirements have been completed. M6 finishes those
-surfaces and their interoperability evidence.
+M5 is an authenticated lab ED milestone, not full BDB conformance or a claim
+that all discovery/application-profile requirements have been completed.
+M6 finishes those surfaces and their interoperability evidence; distributed
+security support remains outside the first configuration.
 
 ### M6 - Discovery, ZCL and receiver-on interoperability
 
@@ -378,7 +389,11 @@ Deliver:
 - Small source-binding storage and the management behavior it requires.
 - Full `Mgmt_Leave` (`0x0034`), full `Mgmt_Bind` (`0x0033`) when source bindings
   exist, and a tested status-only `NOT_SUPPORTED` response for omitted
-  `Mgmt_Lqi` (`0x0031`).
+  `Mgmt_Lqi` (`0x0031`). Resolve this omitted-service configuration against
+  BDB section 6.6 and the selected BDB test requirements before conformance claims.
+- Pin the application/device class and its BDB finding/binding, Identify,
+  binding/group-capacity and default-reporting requirements. A single endpoint
+  does not by itself make finding/binding optional.
 - A real attribute model with types, access checks and bounded serialization.
 - A clearly identified **lab-only synthetic measurement application**, with
   Basic/Identify and a deterministic test-controlled measurement source.
