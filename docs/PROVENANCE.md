@@ -76,9 +76,11 @@ facts, implemented as a separately authorized operation:
 | `C9` | `0` / `1` | Empty; request reset into debug mode |
 
 `bcdDevice` is the cached USB device revision, not a serial number, factory
-identity, `GET_STATE` firmware version or firmware revision. We do not copy
-the reference's automatic configuration changes, debug-config writes,
-normal-execution reset or programmer algorithms. The implementation requires
+identity, `GET_STATE` firmware version or firmware revision. This M1 preparation
+does not copy the reference's automatic configuration changes,
+normal-execution reset or programmer algorithms. The later
+[DMA-enable gate](#m2-dma-debug-configuration-sources) uses a separately observed
+fixed packet, not a general configuration writer. The implementation requires
 exact completion counts and fresh halted/awake status, not the reference's
 broader programmer workflow. The compositions have synthetic host coverage
 and the separately dated one-board hardware observations below.
@@ -442,6 +444,8 @@ explicit descriptors, completion and ownership handling. This was **not**
 implemented: it would expand scope. It also needs a separately reviewed debug
 boundary: Table 3-2 p.55 prohibits DMA-register access with DMA_PAUSE set;
 the current manual runners require debug configuration 26, which sets that bit.
+The later [bounded debug gate](#m2-dma-debug-configuration-sources) addresses
+that prerequisite only, not the AES CPU transfer contract.
 The [SWRU214A software examples guide](https://www.ti.com/lit/pdf/swru214),
 October 2009, pp.21-24 describes higher-level security APIs, not the missing
 CPU handshake. Full TI E2E discussions attempted as clarification returned
@@ -449,6 +453,45 @@ HTTP 403; no conclusion is attributed to their inaccessible contents.
 No SDK implementation, other-part AES behavior, dependency, key material or
 private/hardware observation was imported. Proceed only after authoritative
 CPU sequencing clarification or a separately assigned bounded DMA design.
+
+### M2 channel-0 DMA sources
+
+The original BSD-3-Clause RAM-copy slice uses functional facts read directly
+from **SWRU191F, April 2009 / revised April 2014**, full chapter 8 pp.92-102,
+and **SWRZ031, April 2009 / history 2009-04-29**. No implementation, SDK,
+other-part workaround, dependency, private data or hardware observation was
+imported. The [API/lifetime contract](ARCHITECTURE.md#isolated-channel-0-dma-copy)
+and [offline evidence](VALIDATION.md#m2-isolated-dma-copy-coverage) are separate
+from the unresolved AES CPU path and future two-channel ENC-triggered work.
+
+| Primary location | Applied fact |
+| --- | --- |
+| SWRU191F 8.1 p.93 | One channel's descriptor fetch takes nine system clocks; early triggers can be lost. ARM is not a ready flag. Prior-trigger missed-event history persists across reconfiguration; DMAREQ is not cleared by disarming. Only reset/exclusive TRIG0 history is supported, without the documented dummy-copy workaround. |
+| 8.2-8.3 pp.95-97; Table 8-2 pp.99-100 | Any XDATA descriptor location, eight big-endian bytes; fixed byte BLOCK/TRIG0, +1/+1 and assured priority (at least every second arbitration try), IRQMASK0. No invented alignment requirement. |
+| Figure 8-1 p.94; 8.4-8.5 p.98; 8.8 pp.101-102 | Completion sets DMAIRQ despite IRQMASK0, which gates IRCON.DMAIF. DMAREQ clears when transfer starts; ARM clears at non-repeated completion. D1 IRQ is R/W0; D4/D5 select channel 0, D2/D3 the separate channels 1-4 table; D6 ARM and D7 REQ use per-channel write-one controls. Channel bit tables, not the figure's inconsistent `85` channel-number prose, define channel 0. |
+| 2.1 p.25; Table 2-3 pp.37,39; 2.2.5 p.33 | NOP is opcode 00, one byte, minimum one CPU/system clock; flash/arbitration stalls only lengthen it. The linked nine-NOP path supplies the documented interval, not generic s51's 12-clock instruction timing. |
+| 2.2 pp.26-33; 2.5 pp.41,44,47; 4.4-4.5 pp.66-69 | Ordinary RAM/IRAM alias separation, IEN1.DMAIE bit0 and IRCON.DMAIF bit0, no RMW acknowledgment of source flags; observed stable undivided clocks. |
+| Table 3-2 p.55 | DMA_PAUSE pauses all transfers and prohibits DMA-register access while set. Debug configuration 26 is unsuitable; future hardware requires separately authorized, verified 22 before first access. Firmware neither infers nor changes debug configuration. |
+| SWRZ031 issue 1 p.2 | Variable-length VLEN001/010 zero/one-length erratum; this slice uses unaffected VLEN000 and positive fixed length. |
+
+### M2 DMA debug configuration sources
+
+The original API uses primary **SWRU191F, revised April 2014**, Table 3-1
+pp.53-54 (WR_CONFIG `00011XXX`, target STATUS result, GET_BM returning
+FMAP.MAP) and Table 3-2 p.55 (DMA_PAUSE and configuration bits).
+The exact **OUT04 `4C 1D 22`, without a paired USB read**, was individually
+observed by the parent using authorized external `cc-tool 0.26 --reset --log`;
+it was not derived from a target opcode or general adapter grammar.
+No programmer implementation was imported. The target STATUS result must not
+be reinterpreted as an unsolicited USB reply for this packet.
+
+The [canonical dated record](DEBUGGING.md#2026-09-17-lg-dma-enable-gate-acceptance)
+separates external observation, explicit replay, three native API cycles,
+late host-return failure, independent read-only effect observation and
+explicit reset/FIFO recovery. Only processed facts are published; external
+traces, errors and JSON remain private. This establishes the bounded
+debug-config gate on that LG setup, not DMA-controller copies, AES,
+physical USB stalls or general adapter compatibility.
 
 ### Offline MAC codec sources
 

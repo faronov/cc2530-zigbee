@@ -81,7 +81,8 @@ class TransportTests(unittest.TestCase):
         for operation in (self.debugger.read_adapter_state, self.debugger.read_debug_status,
                           self.debugger.read_debug_config, self.debugger.read_bank,
                           self.debugger.halt, self.debugger.resume, self.debugger.step,
-                          self.debugger.reset_halt, self.debugger.attach_reset):
+                          self.debugger.reset_halt, self.debugger.attach_reset,
+                          self.debugger.enable_dma_after_reset):
             with self.assertRaisesRegex(DebuggerError, "faulted"):
                 operation()
         self.assertEqual(self.backend.calls, previous)

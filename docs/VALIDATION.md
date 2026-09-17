@@ -717,6 +717,103 @@ no calibrated time/latency, exact overflow count, true one-shot, other IRQ/
 DMA/sleep/RF/AES/flash or new authorization follows. Generic hardware and
 broader M2 #4 gates remain open.
 
+## M2 DMA debug gate coverage
+
+The parent's **271-test M1 regression run passed**, including **23 new tests**
+for the [API-only reset-scoped DMA-enable gate](DEBUGGING.md#guarded-dma-enable-after-reset).
+Synthetic coverage includes both own-reset paths, separate/default boolean
+permissions, eligibility consumption and contradictory passive observations,
+all 256 pre/post configuration/status values, all eight FMAP values and
+change rejection, exact write-only framing with no unsolicited read,
+malformed/short/late transfers and faults at every I/O boundary. Lifecycle
+and reentrant exclusion prevent post-fault I/O, retries, resets or restoration.
+The shared `_write_packet` exact-count/post-write-deadline checks add no
+target I/O to existing exchanges.
+
+The [canonical 2026-09-17 LG record](DEBUGGING.md#2026-09-17-lg-dma-enable-gate-acceptance)
+supplies separate **hardware-observed gate evidence**: three full-CODE-verified
+native cycles, a real accepted write followed by an injected late host return,
+independent read-only observation and explicit reset/FIFO recovery.
+Accepted effect is not API confirmation. Neither DMA registers/transfers nor
+AES were exercised; the negative run was not a physical USB stall or DMA-stuck
+test. Raw records remain private and no new hardware authorization follows.
+
+## M2 isolated DMA copy coverage
+
+`make test-dma` runs the original
+[channel-0 RAM-copy service](ARCHITECTURE.md#isolated-channel-0-dma-copy)
+without linking it into any board image. **Never flash `dma_test.ihx` or upload
+it as board firmware.** AES CPU sequencing remains unresolved; this is not an
+AES API, peripheral-trigger backend, hardware fixture or radio-gate closure.
+
+**Host-tested:** 194,819 cases cover all 16-bit source/destination addresses
+at maximum length, diagnostic ranges, protected descriptor/parameter/helper
+storage, overlap, all lengths 1..16 and all 256 byte patterns, supported and
+unsupported clock fields, precise descriptor/control order, request/arm/IRQ
+changes and owned acknowledgment races. The independent reference copy
+checks the whole synthetic RAM, including untouched tails. Tests consume and
+verify the existing 32-entry MMIO logs rather than expanding or blindly
+resetting them. The model enforces the nine-clock fetch interval and
+demonstrates a lost early request; ARM alone is not readiness.
+
+Timeout at each phase, completed-but-late, pending request, partial/stuck
+transfer, missing fresh completion, ignored configuration/acknowledgment,
+half-range ambiguity, backward time and a frozen-timer 65,535-poll cap retain
+their original errors. Re-entry cannot replace the descriptor, acknowledge
+flags or release buffers. Explicit synthetic transfers after error return
+really change destination bytes using the original buffers. There are 257
+successful same-epoch reuses; test-only reset between independent scenarios
+is not a production reset/recovery API.
+
+**Image-checked and simulated:** 97 scenarios execute genuine SDCC 4.2.0
+instructions with the IRAM/XDATA alias enabled. Every executable byte is
+mutation-rejected, including reset code, helpers and complete callers.
+Separate instruction decoding, CDB/assembler allocation and typed diagnostic
+checks pin actual SFR accesses, arguments, nine-NOP interval and private
+storage. At `028A`, `MOV DMAARM,#1` is followed by NOPs `028D..0295` and RET
+`0296`; the sole call at `0C40` returns through the checked post-arm poll at
+`0C6C` before the request at `0C7C`. The timing basis is
+[SWRU191F's system-clock contract](PROVENANCE.md#m2-channel-0-dma-sources),
+not s51's generic 8051 instruction-clock counts.
+
+The synthetic engine uses the real linked DMA configuration SFRs and actual
+eight descriptor bytes to copy each byte between actual modeled XDATA
+addresses. It supplies fresh ARM/REQ/IRQ effects, including completion before
+disarm, missing completion, post-return effects, late completion and a foreign
+flag arriving at acknowledgment. No CODE patch, C success substitution,
+unallocated RAM pool or physical peripheral model is used. CPU masks, clock,
+GPIO, radio/peripheral memory, source/tails, immutable failure diagnostics,
+descriptor persistence, stack unwind and full status/upper-IRAM guards are
+checked, including a genuine second caller invocation after faults.
+
+The isolated executable is **5,485 CODE bytes**, including **2,867 driver
+bytes**, with **198 ordinary XDATA bytes + 8 result bytes / full 64-byte
+reservation**: 262 reserved nonaliased bytes, below 512. The private DMA/timebase
+prefix occupies `0000..005B`; the separately protected generic-store helper
+scratch is at `00BD`. IRAM before stack is `00..3B`, with 196 stack bytes
+reserved at `3C..FF`; the synthetic high-water SP is `4E`, below the `80` guard.
+
+The twelve existing board configurations retain their complete published
+BIN lengths/hashes and host/image/alias checks. Their verifier rejects DMA
+symbols or source records for every image; matrix and artifact whitelist
+are unchanged. The existing FIFO 69,895 host cases / 99 linked scenarios and
+clock/IRQ/timebase/MAC checks remain intact. The contemporaneous offline
+Python run passed 389 tests, including separately owned debugger work.
+The two FIFO fixture simulations hit their existing 15-second bound during
+the twelve-way parallel check; both passed separately with that bound and
+the fixture code unchanged.
+
+**Remaining hardware gate:** no DMA-controller copy, arbitration timing,
+peripheral transfer, AES or stopped-clock acceptance is claimed. The
+[separate debug-config gate](#m2-dma-debug-gate-coverage) now has bounded LG
+hardware evidence; it does not validate DMA. A future authorized DMA board
+fixture must verify all physical CODE after its own reset, establish clear
+DMA_PAUSE before any DMA-register access (26 is unsuitable), and retain known
+reset/TRIG0 history and persistent buffer ownership. The latest separately
+reset FIFO recovery again ended at READY016A; the earlier 257-cycle record
+remains historical. No automatic reset, abort, resume, hardware access or
+recovery is added; M2 #4 remains open.
+
 ## M2 quiescent radio FIFO automated coverage
 
 `make test-radio-fifo` runs strict host C and the isolated

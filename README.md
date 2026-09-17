@@ -272,6 +272,18 @@ halted at READY `0x016A`, XOSC32 selected, IRQs disabled and both FIFOs empty.
 All ten older BINs and historical evidence remain unchanged; CI has twelve
 board/image jobs with the same artifact whitelist. M2 #4 stays open.
 
+## Isolated DMA prerequisite
+
+The [single-owner channel-0 DMA copy](docs/ARCHITECTURE.md#isolated-channel-0-dma-copy)
+supports bounded 1..16-byte XDATA RAM copies with terminal fault/lifetime
+protection. `make test-dma` supplies **host, linked-image and synthetic DMA
+evidence only**; never flash `dma_test.ihx`. All twelve board BINs and the CI
+artifact whitelist are unchanged. Physical DMA acceptance, peripheral DMA and AES
+remain deferred; the [AES CPU sequencing gap](docs/PROVENANCE.md#m2-aes-cpu-transfer-prerequisite)
+and remaining radio gates are not closed.
+The separate [debug-config gate](docs/DEBUGGING.md#guarded-dma-enable-after-reset)
+has bounded LG hardware evidence; it does not exercise or validate DMA copies.
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):

@@ -15,7 +15,7 @@ from typing import Callable, Optional, Protocol
 
 from cc2530_debug import (
     DEBUG_INSTR, GET_BM, GET_PC, HALT, READ_CONFIG, READ_STATUS, RESUME,
-    SET_HW_BREAKPOINT, STEP_INSTR, Status, breakpoint_parameters, unsigned,
+    SET_HW_BREAKPOINT, STEP_INSTR, WRITE_CONFIG, Status, breakpoint_parameters, unsigned,
 )
 
 
@@ -143,7 +143,7 @@ class Debugger:
                  timeout_ms: int = 1000, clock: Callable[[], int] = time.monotonic_ns,
                  *, allow_cpu_control: bool = False, allow_target_reset: bool = False,
                  allow_memory_access: bool = False, allow_memory_write: bool = False,
-                 allow_breakpoints: bool = False):
+                 allow_breakpoints: bool = False, allow_dma_enable: bool = False):
         bounded_integer(timeout_ms, 60_000, "timeout_ms")
         if not isinstance(access, Access):
             raise ValueError("access must be an Access policy")
@@ -159,13 +159,16 @@ class Debugger:
             raise ValueError("Reset-attach policy requires separate target-reset permission")
         for name, value in (("allow_memory_access", allow_memory_access),
                             ("allow_memory_write", allow_memory_write),
-                            ("allow_breakpoints", allow_breakpoints)):
+                            ("allow_breakpoints", allow_breakpoints),
+                            ("allow_dma_enable", allow_dma_enable)):
             if type(value) is not bool:
                 raise ValueError(f"{name} must be a boolean")
             if value and access == Access.ADAPTER_ONLY:
                 raise ValueError(f"{name} requires an explicit debug-session policy")
         if allow_memory_write and not allow_memory_access:
             raise ValueError("Memory write requires separate memory-access permission")
+        if allow_dma_enable and not allow_target_reset:
+            raise ValueError("DMA enable requires separate target-reset permission")
         self._backend = backend
         self._access = access
         self._timeout_ms = timeout_ms
@@ -175,6 +178,8 @@ class Debugger:
         self._allow_memory_access = allow_memory_access
         self._allow_memory_write = allow_memory_write
         self._allow_breakpoints = allow_breakpoints
+        self._allow_dma_enable = allow_dma_enable
+        self._dma_enable_eligible = False
         self._debug_session_ready = access == Access.EXISTING_DEBUG_SESSION
         self._state = State.NEW
         self._lock = threading.Lock()
@@ -247,8 +252,11 @@ class Debugger:
         data = self._exact(self._backend.control_read(
             0xC0, 0xC0, 0, 0, 8, deadline.remaining_ms()), 8)
         deadline.remaining_ms()
-        return AdapterState(*(int.from_bytes(data[offset:offset + 2], "little")
-                              for offset in (0, 2, 4)))
+        result = AdapterState(*(int.from_bytes(data[offset:offset + 2], "little")
+                                for offset in (0, 2, 4)))
+        if result.target_id != 0x2530:
+            self._dma_enable_eligible = False
+        return result
 
     def read_adapter_state(self) -> AdapterState:
         with self._operation() as deadline:
@@ -257,7 +265,8 @@ class Debugger:
 
     @contextmanager
     def _target_operation(self, cpu_control=False, target_reset=False,
-                          memory_access=False, memory_write=False, breakpoints=False):
+                          memory_access=False, memory_write=False, breakpoints=False,
+                          dma_enable=False):
         def check_access():
             if not self._debug_session_ready:
                 raise DebuggerError("Target access requires an explicitly confirmed existing debug session "
@@ -272,23 +281,35 @@ class Debugger:
                 raise DebuggerError("Memory write requires separate explicit permission")
             if breakpoints and not self._allow_breakpoints:
                 raise DebuggerError("Breakpoints require separate explicit permission")
+            if dma_enable and not self._allow_dma_enable:
+                raise DebuggerError("DMA enable requires separate explicit permission")
+            if dma_enable and not self._dma_enable_eligible:
+                raise DebuggerError("DMA enable requires a fresh reset by this session, before CPU execution")
 
         with self._operation(check_access) as deadline:
             if self._adapter_state(deadline).target_id != 0x2530:
                 raise TransportError("Adapter does not report a CC2530 target; no target command sent")
             yield deadline
 
-    def _exchange(self, packet: bytes, length: int, deadline: _Deadline) -> bytes:
+    def _write_packet(self, packet: bytes, deadline: _Deadline) -> None:
         written = self._backend.bulk_write(ENDPOINT_OUT, packet, deadline.remaining_ms())
         if type(written) is not int or written != len(packet):
             raise TransportError("Incomplete USB command write; exchange must not be retried")
+        deadline.remaining_ms()
+
+    def _exchange(self, packet: bytes, length: int, deadline: _Deadline) -> bytes:
+        self._write_packet(packet, deadline)
         result = self._exact(self._backend.bulk_read(
             ENDPOINT_IN, length, deadline.remaining_ms()), length)
         deadline.remaining_ms()
         return result
 
     def _exchange_byte(self, command: int, deadline: _Deadline) -> int:
-        return self._exchange(bytes([0x1F, command]), 1, deadline)[0]
+        result = self._exchange(bytes([0x1F, command]), 1, deadline)[0]
+        if (command == READ_STATUS and result != 0x22
+                or command == READ_CONFIG and result != 0x26):
+            self._dma_enable_eligible = False
+        return result
 
     def _instruction(self, instruction: bytes, deadline: _Deadline) -> int:
         if not isinstance(instruction, bytes) or not 1 <= len(instruction) <= 3:
@@ -299,7 +320,10 @@ class Debugger:
         return self._exchange(packet, 1, deadline)[0]
 
     def _pc(self, deadline: _Deadline) -> int:
-        return int.from_bytes(self._exchange(bytes((0x3F, GET_PC)), 2, deadline), "big")
+        result = int.from_bytes(self._exchange(bytes((0x3F, GET_PC)), 2, deadline), "big")
+        if result != 0:
+            self._dma_enable_eligible = False
+        return result
 
     @staticmethod
     def _check_status(status: int, *, active=False, halted=False) -> None:
@@ -321,6 +345,28 @@ class Debugger:
             self._check_status(self._exchange_byte(READ_STATUS, deadline))
             result = self._exchange_byte(READ_CONFIG, deadline)
             self._check_status(self._exchange_byte(READ_STATUS, deadline))
+        return result
+
+    def enable_dma_after_reset(self) -> int:
+        """Clear only DMA_PAUSE after this session's reset, before firmware execution."""
+        with self._target_operation(dma_enable=True) as deadline:
+            self._dma_enable_eligible = False
+            if self._exchange_byte(READ_STATUS, deadline) != 0x22:
+                raise TransportError("DMA enable requires the normal halted reset status")
+            if self._pc(deadline) != 0:
+                raise TransportError("DMA enable requires PC at the reset vector")
+            bank = self._exchange_byte(GET_BM, deadline) & 7
+            if self._exchange_byte(READ_CONFIG, deadline) != 0x26:
+                raise TransportError("DMA enable requires the unchanged reset debug configuration")
+            # This individually observed adapter form has no USB reply, unlike target WR_CONFIG.
+            self._write_packet(bytes((0x4C, WRITE_CONFIG, 0x22)), deadline)
+            result = self._exchange_byte(READ_CONFIG, deadline)
+            if result != 0x22:
+                raise TransportError("DMA configuration readback mismatch; no automatic restoration")
+            if self._pc(deadline) != 0 or self._exchange_byte(GET_BM, deadline) & 7 != bank:
+                raise TransportError("PC or FMAP changed during DMA enable; do not resume")
+            if self._exchange_byte(READ_STATUS, deadline) != 0x22:
+                raise TransportError("Target state changed during DMA enable; do not resume")
         return result
 
     def read_bank(self) -> int:
@@ -447,6 +493,7 @@ class Debugger:
             sent = not bool(before & Status.CPU_HALTED)
             after = before
             if sent:
+                self._dma_enable_eligible = False
                 # A breakpoint can win the race: HALT's reply can be undefined.
                 self._exchange_byte(HALT, deadline)
                 after = self._exchange_byte(READ_STATUS, deadline)
@@ -455,6 +502,7 @@ class Debugger:
 
     def resume(self) -> CpuControlResult:
         with self._target_operation(cpu_control=True) as deadline:
+            self._dma_enable_eligible = False
             before = self._exchange_byte(READ_STATUS, deadline)
             self._check_status(before, active=True, halted=True)
             self._check_status(self._exchange_byte(RESUME, deadline), active=True)
@@ -466,6 +514,7 @@ class Debugger:
 
     def step(self) -> StepResult:
         with self._target_operation(cpu_control=True) as deadline:
+            self._dma_enable_eligible = False
             before = self._exchange_byte(READ_STATUS, deadline)
             self._check_status(before, active=True, halted=True)
             accumulator = self._exchange_byte(STEP_INSTR, deadline)
@@ -481,11 +530,13 @@ class Debugger:
         deadline.remaining_ms()
 
     def _reset_into_halt(self, deadline: _Deadline) -> int:
+        self._dma_enable_eligible = False
         self._control_write(0xC9, 0, 1, b"", deadline)
         if self._adapter_state(deadline).target_id != 0x2530:
             raise TransportError("Adapter target changed after reset; no further target command sent")
         after = self._exchange_byte(READ_STATUS, deadline)
         self._check_status(after, active=True, halted=True)
+        self._dma_enable_eligible = after == 0x22
         return after
 
     def reset_halt(self) -> CpuControlResult:

@@ -236,9 +236,15 @@ metadata remain open; generic has no physical FIFO evidence. M2 #4 remains open.
 
 The independent AES-128 encrypt-block prerequisite is
 [blocked on CPU transfer sequencing](PROVENANCE.md#m2-aes-cpu-transfer-prerequisite).
-No AES primitive or successful placeholder is added; the documented DMA
-alternative requires separate scope and debugger-policy review. This does
-not close the remaining radio/RX/channel/calibration gates.
+No AES primitive or successful placeholder is added. A separately assigned
+[channel-0 RAM-copy DMA foundation](ARCHITECTURE.md#isolated-channel-0-dma-copy)
+now advances that dependency with host, linked-image and synthetic execution
+only. It adds no board image, peripheral trigger, AES operation or hardware
+claim; all twelve existing BINs and the matrix/artifact whitelist are preserved.
+The separate [reset-scoped DMA-enable debug gate](DEBUGGING.md#guarded-dma-enable-after-reset)
+now has host and bounded LG hardware evidence, without exercising DMA.
+DMA board/controller acceptance remains a separate open gate.
+This does not close the remaining radio/RX/channel/calibration gates or M2 #4.
 
 Deliver independent interfaces for:
 

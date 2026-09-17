@@ -301,6 +301,35 @@ now covers bounded normal, written-but-unverified timeout and separately reset
 remain unvalidated. Keep that manual evidence separate from automated checks;
 past acceptance grants no permission to repeat hardware operations.
 
+The independent channel-0 RAM-copy DMA has a focused offline target:
+
+```sh
+make test-dma
+```
+
+`make test` includes it without changing the twelve-image matrix or artifact
+whitelist. **Never flash or publish `dma_test.ihx` as board firmware.** Its
+checked host model and alias-aware linked execution are synthetic, not DMA
+silicon or AES evidence. Preserve the pinned nine-system-clock arm path,
+private/helper allocation guards and
+[terminal failure/buffer-lifetime contract](docs/ARCHITECTURE.md#isolated-channel-0-dma-copy).
+Debug DMA_PAUSE must be cleared by a separate authorized hardware workflow
+before any physical DMA-register access. The
+[API-only gate and dated LG evidence](docs/DEBUGGING.md#guarded-dma-enable-after-reset)
+cover only the reset-scoped `26 -> 22` transition, not DMA transfers or AES.
+Future manual DMA fixtures must independently verify the entire physical
+image before enable; existing runners still require `26` and never enable
+DMA automatically. Focused **synthetic-only** gate/lifecycle checks:
+
+```sh
+PYTHONPATH=tools .venv/bin/python -B -m unittest test_m1_dma_config test_m1_lifecycle test_m1_transport -q
+```
+
+These tests exercise the real API only through synthetic backends; they never
+enumerate or access physical USB devices. The recorded late-host-return
+failure is not a physical USB stall or DMA-stuck test, and past acceptance
+grants no new hardware authorization.
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

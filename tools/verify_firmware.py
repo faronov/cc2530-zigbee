@@ -222,6 +222,8 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith("_dma_") for name in symbols) and "C$dma.c$" not in debug,
+            "Board image must not link the isolated DMA foundation")
     require(image_name == "radio_fifo_fixture" or
             (not any(name.startswith("_radio_fifo_") for name in symbols) and "C$radio_fifo" not in debug),
             "Board image must not link the isolated radio FIFO driver")

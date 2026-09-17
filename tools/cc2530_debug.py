@@ -4,6 +4,7 @@
 from enum import IntFlag
 
 
+WRITE_CONFIG = 0x1D
 READ_CONFIG = 0x24
 GET_PC = 0x28
 READ_STATUS = 0x34

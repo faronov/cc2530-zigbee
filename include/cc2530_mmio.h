@@ -43,6 +43,14 @@
     X(SOC_ST0, 0x95) \
     X(SOC_ST1, 0x96) \
     X(SOC_ST2, 0x97) \
+    X(SOC_IRCON, 0xc0) \
+    X(SOC_DMAIRQ, 0xd1) \
+    X(SOC_DMA1CFGL, 0xd2) \
+    X(SOC_DMA1CFGH, 0xd3) \
+    X(SOC_DMA0CFGL, 0xd4) \
+    X(SOC_DMA0CFGH, 0xd5) \
+    X(SOC_DMAARM, 0xd6) \
+    X(SOC_DMAREQ, 0xd7) \
     X(SOC_RFD, 0xd9) \
     X(SOC_RFST, 0xe1) \
     X(SOC_RFERRF, 0xbf)
@@ -57,6 +65,7 @@ enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
 __sfr __at(0x93) _XPAGE;
 #define MMIO_READ(reg) (reg)
 #define MMIO_XREAD(address) (*(const volatile MCU_XDATA uint8_t *)(address))
+#define MMIO_XADDRESS(object) ((uint16_t)(object))
 #define MMIO_WRITE(reg, value) do { (reg) = (uint8_t)(value); } while (0)
 /* Compound SFR operations preserve unrelated port latch bits on the 8051. */
 #define MMIO_CLEAR(reg, mask) do { (reg) &= (uint8_t)~(mask); } while (0)
@@ -65,9 +74,12 @@ __sfr __at(0x93) _XPAGE;
 #define DECLARE_SFR(name, address) extern volatile uint8_t name;
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address);
 uint8_t host_mmio_xload(uint16_t address);
+uint16_t host_mmio_xaddress(const volatile void *object);
+void host_mmio_system_cycles(uint8_t cycles);
 void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value);
 #define MMIO_READ(reg) host_mmio_load(&(reg), reg##_ADDRESS)
 #define MMIO_XREAD(address) host_mmio_xload(address)
+#define MMIO_XADDRESS(object) host_mmio_xaddress(object)
 #define MMIO_WRITE(reg, value) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)(value))
 #define MMIO_CLEAR(reg, mask) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)((reg) & (uint8_t)~(mask)))
 #define MMIO_SET(reg, mask) host_mmio_store(&(reg), reg##_ADDRESS, (uint8_t)((reg) | (mask)))

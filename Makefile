@@ -49,7 +49,7 @@ ifeq ($(IMAGE),radio_fifo_fixture)
 OBJECTS += $(BUILD)/radio_fifo_fixture_state.rel $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/radio_fifo.rel
 endif
 
-.PHONY: all test test-timebase test-clock test-irq test-radio-fifo force-link
+.PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma force-link
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -179,6 +179,22 @@ test-radio-fifo: $(BUILD)/host-radio-fifo-tests $(BUILD)/radio_fifo_test.ihx
 	$(BUILD)/host-radio-fifo-tests
 	$(PYTHON) -B tests/boot_radio_fifo.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/host-dma-tests: tests/test_dma.c tests/host_mmio.c tests/host_mmio.h src/dma.c src/timebase.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_dma.c tests/host_mmio.c src/dma.c src/timebase.c -o $@
+
+$(BUILD)/dma.rel: src/dma.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/dma_test.rel: tests/test_dma.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/dma_test.ihx: $(BUILD)/timebase.rel $(BUILD)/dma.rel $(BUILD)/dma_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/dma.rel $(BUILD)/dma_test.rel
+
+test-dma: $(BUILD)/host-dma-tests $(BUILD)/dma_test.ihx
+	$(BUILD)/host-dma-tests
+	$(PYTHON) -B tests/boot_dma.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
@@ -195,7 +211,7 @@ $(BUILD)/host-radio-fifo-fixture-tests_$(BOARD): tests/test_radio_fifo_fixture.c
 	$(HOST_CC) $(HOST_FLAGS) -DRADIO_FIFO_FIXTURE_HOST_TEST tests/test_radio_fifo_fixture.c src/radio_fifo_fixture_state.c src/radio_fifo.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
 test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
-test: all test-timebase test-clock test-irq test-radio-fifo $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
+test: all test-timebase test-clock test-irq test-radio-fifo test-dma $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
 ifeq ($(IMAGE),radio_fifo_fixture)

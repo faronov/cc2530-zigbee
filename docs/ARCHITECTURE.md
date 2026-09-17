@@ -40,6 +40,16 @@ whichever pointer DPS originally selected. Failed or late transfers stop
 without a restoration attempt, retry, implicit resume/reset or stall clearing;
 only explicit resource cleanup remains available on the faulted session.
 
+The API-only [DMA-enable debug gate](DEBUGGING.md#guarded-dma-enable-after-reset)
+has its own explicit permission, requiring reset permission and one fresh
+own-reset eligibility. It permits only verified `26 -> 22`, with PC0 and
+unchanged FMAP (not FMAP0); full physical CODE verification remains the manual
+caller's responsibility.
+Passive inspection may precede it; execution, contradictory observations or
+an enable attempt consume eligibility. It grants no DMA/MMIO access and adds
+no automatic configuration change to existing runners. Its separate LG
+hardware evidence is not DMA-controller or AES acceptance.
+
 `tools/cc2530_debug.py` contains target command/status facts, distinct
 from USB framing. `tools/debug_image.py` handles only offline artifacts and
 snapshots, reusing strict image checks and never importing the USB transport.
@@ -559,6 +569,74 @@ The [2026-09-17 LG record](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance
 executes those unchanged drivers on silicon, including a real partial-effect
 timeout and separately reset recovery. It does not validate RX flush, on-air
 behavior or error-latch recovery; generic remains host/image/simulator-only.
+
+## Isolated channel-0 DMA copy
+
+[`dma_copy_init(source, destination, length, timeout, limit, diagnostics)`](../include/dma.h)
+is a foreground, non-reentrant **1..16-byte RAM copy**, not a DMA framework or
+an AES/peripheral interface. Source/destination are numeric 16-bit XDATA
+addresses; diagnostics is an XDATA-qualified pointer. The descriptor is eight
+persistent volatile XDATA bytes: big-endian source/destination, `00 LEN 20 51`
+(fixed length, byte BLOCK, TRIG0, +1/+1, IRQMASK0, assured priority).
+
+Before **any DMA-register access**, the caller must establish awake stable
+undivided RC16 or XOSC32, all IEN0/1/2 zero, exclusive DMA ownership and clear
+debug DMA_PAUSE (or no debug session). Firmware cannot read that debug setting.
+The separately [implemented and LG-observed debug gate](DEBUGGING.md#guarded-dma-enable-after-reset)
+can establish `26 -> 22` after an authorized own reset and caller image check;
+it does not itself validate or exercise this DMA service.
+History must be full SoC reset or this service's exclusive TRIG0 history:
+no other armed, in-flight or scheduled channel, ISR/debugger owner, prior
+peripheral-trigger accounting or pending unread completion. Idle snapshots
+cannot prove that history. No dummy transfer, abort or implicit recovery is used.
+
+Buffers must be explicitly allocated, persistent, caller-owned objects, not
+compiler scratch or an implicit free-RAM pool. All ranges must fit below
+`1E00`, be pairwise disjoint including diagnostics, and avoid private storage.
+The linked `dma_reserved_end` fence protects the entire DMA/timebase XDATA
+prefix, including compiler arguments/temporaries; the separate SDCC
+`__gptrput_PARM_2` scratch byte is also excluded. Link timebase before DMA and
+eligible caller objects after that fence. The isolated checker pins and
+accounts these allocations and the actual helper/caller ABI; future image
+integration requires the same proof, not guessed addresses. IRAM/stack cannot
+be reached through the prohibited `1F00..1FFF` alias.
+
+Entry rejects any armed channel, pending request/completion or DMA CPU flag.
+Other-channel configuration and all unrelated flags remain untouched.
+Configuration, arm and software request are issued once. A pinned naked leaf
+executes `MOV DMAARM,#1`, **nine NOPs**, `RET`; each NOP takes at least one
+system clock. ARM readback alone is not readiness. No instruction-delay
+assumption is used outside this documented single-channel fetch interval.
+Fresh completion requires DMAIRQ0=1, DMAARM0=0 and DMAREQ0=0 with preserved
+configuration/clock/masks. The only acknowledgment is `DMAIRQ=1E`, preserving
+even newly arriving foreign flags under R/W0 semantics; IRCON is never written.
+
+One positive raw deadline below `800000` covers preparation through checked
+acknowledgment, with an independent positive 16-bit poll cap. No next action
+is issued when that cap is exhausted. Equality is timeout; late completion
+is not success. CPU progress and true half-range observation remain caller
+requirements; missed wraps/reset and calibrated wall time are not inferred.
+
+The **19-byte SDCC diagnostic object** is not a wire ABI (host padding differs).
+It records elapsed ticks, polls, helper status, issued action bits
+CONFIGURED=1/ARMED=2/REQUESTED=4/ACKNOWLEDGED=8, complete/verified indicators,
+raw DMA flags/configuration/IRCON and sample validity. `complete` can be true
+on a late/error return; `verified` requires timely completion and checked
+acknowledgment. Silicon exposes no partial byte count.
+
+Argument/range/ownership errors leave MMIO and diagnostics unchanged. Every
+other failure latches its **original result**; all later calls return it before
+MMIO or diagnostic/descriptor modification, even if their arguments are invalid.
+After ARM, error return is **not quiescence**: DMA may still change destination
+after C returns. Descriptor and both buffers remain valid, source immutable
+and destination unreused until genuinely established full-reset recovery.
+Only success releases buffers. There is no reset/abort/release API; clearing
+C state alone does not reset DMA history or pending DMAREQ.
+
+See [primary facts](PROVENANCE.md#m2-channel-0-dma-sources) and
+[offline evidence/remaining gate](VALIDATION.md#m2-isolated-dma-copy-coverage).
+All twelve board images exclude this module. AES, peripheral triggers, DMA
+interrupts, board integration and physical DMA acceptance remain separate.
 
 ## Memory contract
 

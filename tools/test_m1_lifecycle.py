@@ -37,7 +37,7 @@ class LifecycleTests(unittest.TestCase):
         return [lambda: debugger.open(UsbAddress(1, 2)), debugger.close] + [
             getattr(debugger, name) for name in (
                 "read_adapter_state", "read_debug_status", "read_debug_config", "read_bank",
-                "halt", "resume", "step", "reset_halt", "attach_reset",
+                "halt", "resume", "step", "reset_halt", "attach_reset", "enable_dma_after_reset",
             )
         ]
 

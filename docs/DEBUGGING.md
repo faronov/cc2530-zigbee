@@ -85,6 +85,7 @@ not run two debugger clients against the same adapter.
 | `step` / `step()` | Existing session plus separate CPU-control permission | Before/after status and the resulting accumulator |
 | `reset-halt` / `reset_halt()` | Prepared existing session plus separate target-reset permission | Before/after status and whether the reset request was sent |
 | `attach-reset` / `attach_reset()` | Fresh `RESET_DEBUG_SESSION` policy plus separate target-reset permission | Halted post-status and whether reset was sent; no prior-state claim |
+| API only: `enable_dma_after_reset()` | Separate DMA-enable and reset permissions; fresh own-reset eligibility | Verified fixed debug-config transition `26 -> 22`; no DMA-register access |
 | `pc` / `read_pc()` | Prepared existing session, awake and halted; no extra permission | 16-bit PC |
 | `registers` / `read_registers()` | Existing session plus memory-access permission, awake and halted | Verified `RegisterSnapshot` |
 | `read-sfr` / `read_sfr(address)` | Same memory-access permission and stopped state | One reviewed core SFR byte |
@@ -156,8 +157,9 @@ fixture runner compares snapshots around the linked NOP; its observed `PC+1`
 result is recorded separately from the alias-aware simulator check.
 
 GET_BM's upper five reply bits are unspecified here; only its low three bits
-are returned. This is FMAP bank information, not a flat flash address or proof
-of banked-code support. Config reads now check status before/after and reject
+are returned. Table 3-1 p.54 identifies these as **FMAP.MAP**, not the bank
+containing the current PC: FMAP=1 at unbanked PC=0 is valid. This is not a flat
+flash address or proof of banked-code support. Config reads check status before/after and reject
 locked or erasing targets. Raw READ_STATUS remains available for diagnosing
 those states; RD_CONFIG is not a permitted command on a locked CC2530.
 
@@ -276,16 +278,100 @@ adapter family and fresh halted/awake status again. It requires an integer
 zero USB completion count, not a truthy/falsy success guess. A CPU already
 halted is still reset when this explicit command is requested.
 
-It does not prepare a new adapter session, change debug configuration, poll
+It does not prepare a new adapter session, issue a debug-configuration write, poll
 until the oscillator stabilizes, retry reset, issue a fallback HALT or send
 index `0` (reset into normal execution). A failed or late postcheck faults the
 session even if reset has already occurred. Closing only releases USB
 resources; it never undoes a halt or starts the firmware.
+Reset itself can restore the reset configuration; the separately observed
+`22 -> 26` recovery below is not a restore-on-close operation.
 
 `command_sent=true` plus halted status is not independent proof of reset PC,
 memory initialization or matching flash contents. The live PC/CODE APIs and
 manual fixture runner make those separate comparisons; the dated hardware
 record identifies the image for which they passed.
+
+### Guarded DMA enable after reset
+
+`Debugger(..., allow_dma_enable=True, allow_target_reset=True).enable_dma_after_reset() -> int`
+is an **API-only prerequisite for reviewed manual DMA fixtures**, not a CLI
+option or arbitrary configuration writer. The explicit boolean DMA permission
+is separate from CPU/memory/reset permissions and requires reset permission.
+Only this session's successful `attach_reset()` or `reset_halt()` with normal
+reset status `22` grants one reset-history eligibility; an existing halted
+session alone never does. Resume/step, a HALT observation of a running CPU,
+contradictory target/status/config/PC observations, or an enable attempt consume
+eligibility. Healthy passive CODE/core inspection may precede enable; a manual
+DMA runner must verify **every physical CODE byte of the intended image before
+enable**. The API does not perform or claim that image verification.
+
+One operation deadline covers target-family checks, status `22`, PC=0,
+saved FMAP.MAP and config `26`, the exact write, explicit config `22` readback,
+and PC/FMAP/status postchecks. FMAP is preserved, **not pinned to zero**.
+Success returns integer `0x22`. The transition clears only DMA_PAUSE bit2,
+preserving SOFT_POWER_MODE and TIMER_SUSPEND. SWRU191F Table 3-2 p.55 prohibits
+DMA-register access while DMA_PAUSE is set, including while the CPU runs in
+debug mode; this is not merely a halt-time suspension.
+
+The only configuration packet is **bulk OUT `04`, three bytes `4C 1D 22`**.
+It has no paired USB read. Target WR_CONFIG is `00011XXX`; `1D` is a documented
+don't-care-low-bit encoding. Table 3-1 p.53 specifies one target input byte
+and one STATUS output byte, but this individually observed adapter form exposes
+no unsolicited USB response. Do not substitute guessed `4F 19` framing or
+`_exchange(..., 1)`, or infer a general USB grammar. Verification uses a
+separate RD_CONFIG.
+
+There is no DMA SFR/MMIO access, CPU resume, implicit reset/retry or
+restore-on-close. Failed or late operations fault the session even if the
+hardware accepted the write; only resource cleanup remains. All existing
+hardware runners still require config `26`; none enables DMA automatically.
+The [DMA copy service](ARCHITECTURE.md#isolated-channel-0-dma-copy) still needs
+separate board integration and controller acceptance.
+
+#### 2026-09-17 LG DMA-enable gate acceptance
+
+These parent-supplied processed observations apply only to the explicitly
+selected LG Rev0.3 / CC Debugger and unchanged **8,979-byte FIFO image**,
+SHA-256 `caa26c090473b2e9008652d2ee67bb90226b493f392582d978a6ad71aaf37497`.
+All times below are **2026-09-17 UTC+03**. Raw external traces, error records
+and JSON remain private, outside Git/CI.
+
+| Separate observation | Result |
+| --- | --- |
+| External wire observation, 05:50:51 | Authorized `cc-tool 0.26 --reset --log` recorded OUT `04`, exactly `4C 1D 22`, with no corresponding USB read before its next command. No flash/erase operation occurred. |
+| Explicit replay, 05:57:15-05:57:25 | Fresh reset/config `26`/PC0 and all 8,979 physical CODE bytes checked first. Replay followed by RD_CONFIG returned `22`; fresh status `22`, PC0 and full CPU/FMAP were preserved. A separate successful explicit reset restored `26`. |
+| Native API, 06:07:54-06:08:23 | Three independently full-CODE-verified own-reset cycles passed API `26 -> 22`, PC0/FMAP1 and full CPU preservation. Each second enable was rejected before any backend I/O. A separate final explicit reset restored `26`. |
+
+An early, overly restrictive bank-zero assertion stopped **before any
+configuration write**. Primary GET_BM facts and read-only FMAP observation
+corrected that precondition: FMAP1 at PC0 is valid, not an execution-bank error.
+Preservation checks were retained.
+
+The **separate negative run, 06:09:34-06:09:45**, started after fresh reset and
+complete CODE verification. The real three-byte write completed, then the
+parent deliberately delayed its **host return by 1,100 ms against a 1,000-ms
+operation deadline**. The API raised `USB operation deadline exceeded`,
+entered FAULTED and returned no config result. The gate operation's
+ten-I/O-boundary trace ended at the write: all five attempted subsequent
+operations were rejected, with **zero target I/O after the late write**,
+no retry, restore or reset.
+After closing, a separately established read-only existing-session observation
+found config `22`, PC0/FMAP1 and the full CPU unchanged. The accepted hardware
+effect was **not API confirmation**. This was an injected host-completion
+delay after a real USB write, not a physical USB timeout/stall or stuck-DMA test.
+
+**Separate recovery, 06:10:14-06:10:26:** the unchanged FIFO runner explicitly
+reset, required default config `26`, verified all 8,979 CODE bytes and passed one
+full compiled FIFO cycle. The **last reported LG state is again FIFO READY
+`016A`, IRQs disabled, XOSC32 selected and both FIFOs empty**, with no hardware
+process remaining. The earlier [257-cycle FIFO record](#2026-09-17-lg-compiled-c-fifo-acceptance)
+remains historical and unchanged.
+
+The gate tests introduced no DMA-register access, DMA transfer, flashing or
+RF activity. Evidence is **hardware-observed only for this debug-config gate**,
+not DMA-controller copies or AES. Those gates remain open; this record grants
+no new hardware authorization. See [source boundaries](PROVENANCE.md#m2-dma-debug-configuration-sources)
+and [host coverage](VALIDATION.md#m2-dma-debug-gate-coverage).
 
 ### Lifecycle and failures
 
@@ -1489,6 +1575,9 @@ behavior, error-latch recovery, physical stopped clocks, DMA, IRQs, sleep,
 AES or flash services. Full M2 #4 stays open. Only processed observations are
 recorded; raw logs, identities and recovery files remain outside Git and CI.
 Past acceptance grants no new hardware authorization.
+
+The later [DMA-enable gate and separately reset one-cycle recovery](#2026-09-17-lg-dma-enable-gate-acceptance)
+are separate observations; they do not replace this 257-cycle acceptance.
 
 ## Awake-only timebase board fixture
 
