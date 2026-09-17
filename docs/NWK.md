@@ -208,3 +208,8 @@ All prior MAC and Beacon scenarios remain enabled.
 Evidence is **host-tested, image-checked and simulated**, never RF,
 authentication, routing or interoperability. See the
 [primary frame sources](PROVENANCE.md#offline-r22-nwk-data-frame-sources).
+
+The separate [APS Data codec](APS.md) now consumes a successfully decoded
+NWK payload in `protocol_frame_test.ihx`. That image composes real MAC/NWK/APS
+codecs with independent length and error checks; neither this NWK module nor
+the existing MAC test image gains an APS service or firmware caller.

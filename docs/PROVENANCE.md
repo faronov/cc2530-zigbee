@@ -696,6 +696,38 @@ All vectors and identities are original synthetic data. No implementation,
 capture, key material or SDK object was imported. The PDF and temporary reader
 are research-only and are not shipped in Git or CI.
 
+### Offline R22 APS Data frame sources
+
+The original `aps_frame` codec uses the same
+[pinned primary R22 PDF](#offline-r22-nwk-beacon-payload-sources), document
+05-3474-22, April 19, 2017, with downloaded Git blob
+`c8123d63e30995e4a66941cbdf2529332480a0ff`. No vendor implementation or
+generated catalog was used.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+| Table 2-2, p.21 | Destination endpoint `00..FF`, source endpoint `00..FE`, profile/cluster ID widths and ASDU service-length distinction |
+| Section 2.2.5, Figures 2-2/3, pp.44-45 | Byte order, field order and FCF positions; reserved fields must be rejected |
+| Tables 2-20/21, pp.45-46 | Data/command/ACK/Inter-PAN types, unicast/reserved/broadcast/group delivery; excluded group addressing |
+| Sections 2.2.5.1.1-7, pp.46-47 | ACK-format, security, ACK-request, extended-header flags; endpoints, identifiers and counter |
+| Sections 2.2.5.1.8-9,2.2.5.2.1, Figures 2-4/5/6, pp.47-49 | Excluded extended/fragmentation fields, eight-byte ordinary Data header and opaque payload |
+| Table 2-23, p.51 | Separate service constant `apscMinHeaderOverhead = 0x0C`, not the eight-byte raw header size |
+| Section 2.2.8.4, pp.57-59 | Network membership, endpoint delivery, duplicate/ACK/retry procedures are distinct from syntax |
+| Section 2.3.1.3, p.66 | Endpoint 0/device profile, `FF`/all active endpoints, `F1..FE` restricted to Alliance-approved applications |
+
+The [contract](APS.md) selects only normal-unicast Data, not APS
+broadcast/group delivery, command/ACK/Inter-PAN types or security/extended
+headers. Destination `FF` remains endpoint metadata, not a network broadcast
+mode. No active-endpoint/profile admission, counter allocation, ACK state or
+security procedure is inferred. The 108-byte raw APDU bound follows the
+existing 116-byte NWK codec bound minus its minimum eight-byte header; outer
+options reduce that budget. This does not replace APSDE-DATA service limits
+with a claim that a real application can send 100-byte ASDUs.
+
+All code, golden byte vectors and identities are original synthetic work.
+No implementation, capture, key, test-plan vector or SDK object was imported.
+The PDF and temporary reader remain research-only, outside Git/CI artifacts.
+
 ## Specialist-agent reference
 
 The repository's specialist profiles are original project instructions.

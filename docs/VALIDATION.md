@@ -1095,6 +1095,27 @@ All existing test scenarios and guards remain enabled; test-only XDATA
 temporaries and object ordering avoid lower-IRAM fragmentation/spills.
 This is host-tested, image-checked and simulated syntax, not RF or security.
 
+The [APS Data codec](APS.md) adds shared host/SDCC original CODE-header/payload
+goldens, every FCF byte, header truncations (including explicit rejection of
+short non-Data types), payload/capacity boundaries and unchanged errors.
+Host matrices exhaust typed control/endpoint/counter fields, all cluster/profile
+identifiers, every value at every maximum-payload position and uint16 lengths/
+capacities. Exact allocations are exercised under ASan/UBSan. Its isolated
+image retains the original 512-byte component reservation limit.
+
+The new `protocol_frame_test.ihx` independently composes real MAC/NWK/APS
+for all four MAC address-size and four NWK IEEE layouts, both APS ACK-request
+values and empty/one-byte/maximum payloads. It checks one complete independent
+golden chain, exact 125-byte MAC bodies, rejection at each outer size boundary,
+truncated APS headers and MAC/NWK-valid but APS-unsupported payloads.
+Its shared strict layout checker uses an explicit 1,024-byte XDATA reservation
+budget for three scratch frames and linked codec storage; all existing callers
+retain the unchanged 512-byte default. CODE/source/result ABI, XDATA ownership,
+IRAM alias, untouched upper IRAM and final stack unwind remain mandatory.
+The existing MAC image and all its prior scenarios remain unchanged.
+This is host-tested, image-checked and simulated syntax, not a firmware image,
+ACK transaction, endpoint dispatcher, ZDO/ZCL support or hardware observation.
+
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |
 | Encoders/parsers | Golden wire bytes, every boundary length, invalid/truncated/reserved fields, explicit byte order |

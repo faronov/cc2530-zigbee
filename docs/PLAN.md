@@ -349,6 +349,15 @@ Do not trade this milestone away to make the first network demo look complete.
 
 ### M5 - Authenticated receiver-on end device
 
+**Offline preparatory implementation:** the independent [APS Data codec](APS.md)
+now serializes a bounded normal-unicast subset with endpoint/profile/cluster
+metadata, counter and ACK-request. Standalone and real MAC/NWK/APS composition
+have host, linked-image and alias-aware simulator evidence. Unsupported APS
+security, broadcast/group delivery and extended headers fail explicitly.
+This implements no transaction/ACK state, endpoint dispatch or board caller
+and does not close any M4/M5 security, commissioning or interoperability gate.
+ZCL revision/device selection and implementation remain separate M6 work.
+
 Deliver:
 
 - Required NWK and APS header handling and bounded transaction/ACK state.

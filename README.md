@@ -309,6 +309,10 @@ metadata within that payload, without accepting a profile, network or parent.
 The independent [NWK Data codec](docs/NWK.md#nwk-data-frame-codec) handles
 bounded unsecured unicast/broadcast frames with optional IEEE addresses;
 security and extended routing layouts fail explicitly.
+The independent [APS Data codec](docs/APS.md) adds normal-unicast headers,
+endpoint/profile/cluster metadata and opaque payload, with a real offline
+MAC/NWK/APS composition test. APS security, broadcast/group delivery and
+extended headers fail explicitly; ACK request does not implement transactions.
 These codecs are host-tested, image-checked and simulated, not linked into
 board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.

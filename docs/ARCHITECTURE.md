@@ -99,6 +99,15 @@ sequences, validate identities, process APS or decide network membership.
 Its offsets start at the NPDU, not the MAC body. All three codecs are composed
 only in offline tests, including each layer's independent size/error checks.
 
+The independent `aps_frame` module handles only unsecured Data with
+normal-unicast delivery and an eight-byte header. Endpoints, profile/cluster
+IDs, counter and ACK-request are metadata; payload is opaque. Unsupported
+types, broadcast/group delivery, security and extended headers fail explicitly.
+The [APS contract](APS.md) separates the raw 108-byte APDU cap from future
+service/security limits and endpoint/transaction policy. A separate simulator
+image composes MAC/NWK/APS without expanding the existing MAC test image.
+No dispatcher, ZDO handler, ZCL attribute model or board caller is introduced.
+
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
 NWK/APS/security services rather than inside codecs or board code.

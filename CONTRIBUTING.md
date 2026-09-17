@@ -138,6 +138,22 @@ MAC-to-Beacon and MAC-to-Data slices, including maximum-body capacity and
 layer-specific failures. Keep the codecs independent; decoded metadata is
 not successful network/parent acceptance or authentication.
 
+The independent R22 APS Data codec and three-layer composition have focused
+offline targets:
+
+```sh
+make test-aps-frame
+make test-protocol-frame
+```
+
+Both are included in `make ... all test`. The standalone APS image retains
+the 512-byte XDATA reservation check; the separate MAC/NWK/APS composition
+image has a 1,024-byte harness budget with the same strict layout, alias and
+upper-IRAM guards. Neither changes the existing MAC test image or adds an
+`IMAGE` option/CI upload. See [APS scope and evidence](docs/APS.md).
+Normal-unicast syntax and ACK-request metadata are not an APS transaction,
+ZDO/ZCL support, authentication or permission to send.
+
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:
 
