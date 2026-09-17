@@ -733,8 +733,8 @@ The corrected LG image additionally passed
 including both timeout/rollback cases and separate reset/recovery.
 Generic remains hardware-unobserved; full M2 #4 stays open.
 The six older board BINs and all historical LG evidence remain unchanged.
-The last reported installed LG image is the corrected 3,798-byte clock fixture
-described by the hashes below, halted at READY `0x016A` on RC16.
+That clock run ended on the corrected 3,798-byte image described below,
+halted at READY `0x016A` on RC16; later fixture records are separate.
 
 ```sh
 make BOARD=generic IMAGE=clock_fixture all test
@@ -1267,10 +1267,10 @@ only**, not a timer-frequency or latency measurement.
 Completed-cycle, ISR-count and M0-heartbeat bytes wrapped; final completed
 and ISR counts were both 1. Immutable M0 and initial clock/sleep/IRQ
 observations, priorities, unrelated IRCON/TIMIF, token results and disable/
-stop conditions all passed. The **current LG board is the IRQ fixture,
-halted at READY `01BB`, EA=0, T1IE=0 and Timer1 stopped**. No hardware process
-remained active. The previous clock image is historical, not the installed
-image. All eight older BIN hashes and published EA/timebase drivers are unchanged.
+stop conditions all passed. That run ended on the **IRQ fixture, halted at
+READY `01BB`, EA=0, T1IE=0 and Timer1 stopped**. No hardware process remained
+active. Later FIFO work is recorded separately below. All eight older BIN
+hashes and published EA/timebase drivers are unchanged.
 
 This establishes the finite real-source pending/nested-mask/delivery,
 ISR/RETI-context, explicit timeout and separately reset repeat/wrap scenarios
@@ -1282,6 +1282,213 @@ Generic IRQ hardware remains unobserved; full **M2 #4 remains open**.
 Generated `hardware_tested=false` metadata describes automated build evidence,
 separately from this dated manual record. Past acceptance grants no new
 hardware authorization; private records remain outside Git and CI artifacts.
+
+## Quiescent radio FIFO board fixture
+
+`IMAGE=radio_fifo_fixture` is a separately selectable, original non-RF board
+fixture. It links the unchanged published clock, timebase and FIFO drivers.
+Both boards are host-tested, image-checked and synthetically simulated.
+The LG image additionally passed the [dated hardware acceptance below](#2026-09-17-lg-compiled-c-fifo-acceptance);
+generic remains hardware-unobserved. Older hardware records remain historical.
+This section grants no hardware authorization. Full M2 #4 remains open.
+
+Fresh M0 startup and the selected board GPIO policy precede one bounded
+`clock_select_init(XOSC32, 1024, 4096)`. Original request/rollback diagnostics
+survive a terminal clock failure. Known reset/foreground ownership, awake
+operation, confirmed CMD/STA `88`, disabled interrupt enables, idle radio/CSP,
+AUTOCRC and no AUTOACK are prerequisites, not conclusions inferred from a
+single matching snapshot. There is no DMA, RX/TX/FS/ACK enable, loopback, CSP
+program, sleep, RF-off cleanup or error-flag acknowledgment.
+
+READY stages are: `0` clock; `1` genuine already-empty clear; `2` three-byte
+XDATA body `13 57 A9` (PHR `05`); `3` explicit TX clear; `4` 125-byte CODE
+body `body[i] = i ^ 69` (PHR `7F`); `5` explicit TX clear and completed/heartbeat
+increment. Stages 1..5 repeat. A 257-cycle run observes **1,286 READY stages**,
+33,410 RFD writes, 514 intended TX clears and byte-counter wrap to one.
+Fresh empty RX produces no ED strobe: EMPTY is not RX-flush/received-frame
+evidence. EE is an explicit normal operation, never failure recovery.
+The driver retains its 1,024-raw-tick whole-operation deadline and independent
+4,096-poll cap, including written versus verified partial effects.
+
+After confirmed preload, C reads only the known accepted bytes at
+`6080..6083` or `6080..60FD`, checks every PHR/body byte and resamples
+counts/pointers. No RFD read, unknown TX tail, RX RAM, source/address RAM
+`6100..617F`, direct RAM writer or debugger MMIO expansion is introduced.
+Read-only RAM inspection does not advance FIFO pointers
+([primary references](PROVENANCE.md#m2-quiescent-radio-fifo-sources)).
+Preloading neither transmits nor generates/verifies FCS or authenticates MAC.
+
+### FIFO fixture byte ABI v1
+
+The 108-byte `M2RF` record is ordinary XDATA, currently at `0000`; all
+multibyte fields are explicitly serialized little-endian, not native structs.
+The immutable 32-byte M0 startup ABI at `1E00` is unchanged; only its heartbeat
+advances at stage 5. The complete 64-byte status reservation remains protected.
+
+| Offset | Field |
+| --- | --- |
+| 0..5 | `M2RF`, version 1, size 108 |
+| 6..11 | Phase, reason, stage, completed byte, original clock result, original FIFO result |
+| 12..16 | Timeout 1024 (3 bytes), poll cap 4096 (2 bytes) |
+| 17..35 | Original 19-byte clock request/rollback diagnostics |
+| 36..56 | Original 21-byte FIFO diagnostics: elapsed/polls/helper, requested/confirmed strobes, written/verified bytes, errors, counts/pointers/signals, sample validity |
+| 57..60 | Checked bytes, mismatch index (`FF` when absent), actual, expected |
+| 61..66 | Current CMD, STA, SLEEPCMD, IEN0/1/2 |
+| 67..80 | FRMCTRL0/1, CSPSTAT, FSMSTAT0, RXENABLE, FSMSTAT1, RX/TX count, RX first/last/packet, TX first/last, RFERRF |
+| 81..89, 90..98 | Initial/current IP0, IP1, RFIRQF0, RFIRQF1, S1CON, TCON, RFIRQM0, RFIRQM1, RFERRM |
+| 99..100 | Radio snapshot validity, initial SLEEPCMD |
+| 101..107 | Five reserved zero bytes, guards `69 96` |
+
+Phases are INIT=1, RUNNING=2, READY=3, FAULT=4. Reasons are NONE=0, ENTRY=1,
+PHASE=2, CLOCK_ERROR=3, FIFO_ERROR=4, INVARIANT=5, BYTES=6. FIFO result `FF`
+means not attempted, not driver success. A result inconsistent with its stage
+is also terminal. On byte mismatch the original driver OK remains recorded.
+No further stage/MMIO operation follows FAULT; recovery is a separate explicit
+reset invocation. Clock failure may leave `radio_valid=0`: zero-filled radio
+fields must not be described as observations.
+
+### FIFO linked checkpoints and footprint
+
+SDCC 4.2.0 emits 8,939 generic / 8,979 LG CODE and BIN bytes, without padding.
+Both use 309 ordinary XDATA bytes: 341 including used M0 status, **373 with
+the full reservation**. Stack starts at `6D`, initial SP `6C`, with 147 reserved
+IRAM bytes. Inlining the stage into foreground `main` removes one return frame;
+the deepest exercised chain stays below the unchanged `80..FF` guard.
+The retained out-of-line compiler copy is included in these figures.
+
+| Point | Generic | LG |
+| --- | --- | --- |
+| BEFORE / READY / terminal FAULT | `0140 / 0142 / 0144` | `0168 / 016A / 016C` |
+| Deadline helper start / final RET | `0DCF / 0E62` | `0DF7 / 0E8A` |
+| FIFO deadline LCALL / return PC | `1E7F / 1E82` | `1EA7 / 1EAA` |
+| First/only RFD write instruction | `204B` | `2073` |
+| Preload return / foreground caller return | `220C / 0C26` | `2234 / 0C4E` |
+
+| Board | Complete BIN SHA-256 |
+| --- | --- |
+| generic | `4f7f2691d6d710ea48b5679a4e657a0660b61ece7ce1ec3d4ed377bc680641ac` |
+| lg_esl29_rev03 | `caa26c090473b2e9008652d2ee67bb90226b493f392582d978a6ad71aaf37497` |
+
+The verifier checks complete board instructions/constants, actual fixture
+MMIO/read-only bounds, typed storage and the original 148-byte deadline helper.
+Only reviewed FIFO relocations are normalized before requiring the unchanged
+published 3,042-byte module fingerprint; the standalone 99-scenario proof
+is retained. At the internal RET, DPL=OK and DPS=0, SP=`74`; the three nested
+return frames, generic XDATA body pointer, body bytes, length=3, timeout/cap,
+diagnostic pointer, start/previous/deadline and helper arguments must agree.
+This is not a guessed next-symbol-minus-one breakpoint.
+
+Offline inspection (no USB) uses:
+
+```sh
+.venv/bin/python tools/debug_image.py radio-fifo-checkpoints --board lg_esl29_rev03 --image radio_fifo_fixture --output build/lg_esl29_rev03/radio_fifo_fixture
+```
+
+`radio-fifo-state` additionally requires `--hex` or `--snapshot` for exactly
+108 bytes. See [automated coverage](VALIDATION.md#m2-quiescent-radio-fifo-board-fixture-coverage)
+for simulator limitations and fault evidence.
+
+### Parent-only FIFO programming and acceptance
+
+Confirm the owned board/revision, safe electrical state, independently verified
+recovery backups, exact artifacts and exclusive expected adapter/physical port.
+Follow the [programmer lifecycle/recovery contract](#manual-hardware-acceptance-and-recovery):
+external programmer cleanup can reset/resume, and exit status alone is not
+independent readback. Separately authorized external programming uses the
+**board** HEX, never `radio_fifo_test.ihx`, for example:
+
+```text
+cc-tool -e -w build/lg_esl29_rev03/radio_fifo_fixture/radio_fifo_fixture.hex -v r
+```
+
+Only after that separately approved programming/readback activity, use the
+current, explicitly selected numeric location in separate manual invocations:
+
+```text
+.venv/bin/python tools/check_radio_fifo_hardware.py --board lg_esl29_rev03 --output build/lg_esl29_rev03/radio_fifo_fixture --bus BUS --address ADDRESS --cycles 3 --confirm-radio-fifo-test
+.venv/bin/python tools/check_radio_fifo_hardware.py --board lg_esl29_rev03 --output build/lg_esl29_rev03/radio_fifo_fixture --bus BUS --address ADDRESS --cycles 1 --induce-timeout --confirm-radio-fifo-test
+.venv/bin/python tools/check_radio_fifo_hardware.py --board lg_esl29_rev03 --output build/lg_esl29_rev03/radio_fifo_fixture --bus BUS --address ADDRESS --cycles 257 --confirm-radio-fifo-test
+```
+
+Each invocation independently validates all matching artifacts, explicitly
+reset-attaches and compares **every physical CODE byte** before any runner
+resume. USB and checkpoint waits are bounded. It checks real C records,
+immutable M0/clock/flag observations, counters, stack and CPU-preserving
+inspection/NOP stepping. No host RAM/flash/MMIO writer is granted; JSON is
+printed only after successful cleanup.
+
+The negative mode first completes stages 0/1, then holds at the fully proved
+operation-deadline RET before any FIFO write. The 0.25-second host hold is
+stimulus only. Success requires actual terminal stage-2 FAULT, reason 4,
+FIFO TIMEOUT=8, one poll, elapsed strictly above 1024 and below half-range,
+**one written but zero verified bytes**, no strobe/append/readback, and zero
+completed cycles. C's driver and post-call count/pointer observations are
+reported: an unconfirmed PHR can already have affected the FIFO. This is not
+a stopped oscillator, calibrated duration or error-latch recovery test.
+The last command is a **new, separately authorized reset/recovery run**, not
+an automatic continuation after failure. Normal completion leaves READY with
+confirmed empty TX/RX, IRQs disabled and XOSC32 selected; timeout completion
+leaves terminal FAULT and possibly one unconfirmed PHR. Do not infer physical
+success, repeat permission or on-air capability from these instructions.
+
+### 2026-09-17 LG compiled-C FIFO acceptance
+
+The unchanged **8,979-byte LG image**, SHA-256
+`caa26c090473b2e9008652d2ee67bb90226b493f392582d978a6ad71aaf37497`,
+passed the existing runner without firmware changes or weakened assertions.
+The setup remained LG Rev0.3 / CC Debugger / macOS 15.7.9 / Python 3.11.9 /
+PyUSB 1.3.1. Private text-demo recovery copies and the factory-page backup were
+rechecked against their saved checksums without modification. Explicit
+programming/readback completed at **05:10:59, 2026-09-17 UTC+03**.
+Every acceptance invocation independently compared **all 8,979 physical CODE
+bytes before any runner resume**.
+
+Three initial normal cycles completed at 05:11:43. A separate induced-timeout
+run completed at 05:12:26. Its verified deadline RET was `0E8A`, with DPL=0,
+DPS=0, SP=`74`, the genuine nested caller frames, XDATA body length 3 and
+computed deadline consistent with the live helper arguments. After the hold,
+the real driver returned **TIMEOUT=8**, fixture reason FIFO_ERROR=4, stage 2,
+at terminal FAULT `016C`: 23,636 raw ticks / one poll, helper 0, **one written
+but zero verified bytes**, no flush, append or payload readback.
+Both driver and post-call observations found TX count/last pointer 1 and first
+pointer 0, with no RF error. The unconfirmed write had a visible FIFO effect;
+it was not relabeled as a verified byte. IRQs remained disabled, CMD/STA `88`.
+
+A **separate explicit reset/recovery invocation** ran from **05:13:07 to
+05:17:19 UTC+03**, completing **257 cycles / 1,286 READY stages**: one initial
+clock stage and 257 occurrences of each FIFO stage below.
+
+| FIFO stage | Result | Raw elapsed ticks | Polls | Written / verified / independently C-readback-checked bytes |
+| --- | --- | --- | --- | --- |
+| Already-empty clear | EMPTY=1 | 0 | 0 | 0 / 0 / 0 |
+| Three-byte XDATA body plus PHR | OK=0 | 12..14 | 4 | 4 / 4 / 4 |
+| Explicit clear after small body | OK=0 | 2..3 | 1 | 0 / 0 / 0 |
+| 125-byte CODE body plus PHR | OK=0 | 439..441 | 126 | 126 / 126 / 126 |
+| Explicit clear after maximum body | OK=0 | 2..3 | 1 | 0 / 0 / 0 |
+
+The run checked **33,410 written, verified and readback-compared bytes** and
+**514 confirmed TX clears**. The small PHR/body was `05 13 57 A9`; the maximum
+PHR was `7F`, followed by the 125-byte CODE pattern `i ^ 69`.
+Each preload's count/last pointer matched its accepted byte count and first
+pointer remained zero. Direct C readback accessed only these known TX bytes
+and did not advance pointers. RX stayed reset-empty: **no ED/RX flush or
+received-frame behavior was exercised**. Clear strobes were only EE.
+
+Completed/M0-heartbeat bytes wrapped to 1. CPU-preserving inspection, stack,
+immutable M0, original clock diagnostics and unrelated flag/priority/mask
+observations passed. The **last reported LG state is the FIFO fixture halted
+at READY `016A`, CMD/STA `88`, all IRQ enables zero and both FIFOs empty**,
+with inactive radio/CSP and AUTOACK disabled. No hardware process remained
+active. The 252.283-second host duration and raw counts are not calibrated
+timing or latency measurements.
+
+All ten older BINs and the published platform drivers remain unchanged.
+Generic has no physical FIFO evidence. This finite record does not validate
+RX flush, received data, FCS generation, authentication/MAC, RF-enable/on-air
+behavior, error-latch recovery, physical stopped clocks, DMA, IRQs, sleep,
+AES or flash services. Full M2 #4 stays open. Only processed observations are
+recorded; raw logs, identities and recovery files remain outside Git and CI.
+Past acceptance grants no new hardware authorization.
 
 ## Awake-only timebase board fixture
 

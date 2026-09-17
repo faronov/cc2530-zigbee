@@ -208,10 +208,10 @@ passed [bounded hardware acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09
 three normal cycles, an independent TIMEOUT/terminal FAULT, then a separately
 reset 257-cycle run with real Timer1 ISR services, counter wraps and preserved
 CPU/IRAM/M0 state. Hardware interrupted the restore leaf at +12 with DPL=OK,
-not the synthetic +9/live-token case. The live LG board is now halted at IRQ
-READY `01BB`, with EA/T1IE disabled and Timer1 stopped; prior clock/M1/timebase
+not the synthetic +9/live-token case. That run ended at IRQ READY `01BB`,
+with EA/T1IE disabled and Timer1 stopped; prior clock/M1/timebase
 records remain historical. Generic hardware remains unobserved.
-Ten board/image jobs retain the exact artifact whitelist. Higher-priority
+That IRQ slice added ten board/image jobs with the exact artifact whitelist. Higher-priority
 hardware nesting, other sources, measured/calibrated timing and general
 dispatch remain deferred; clock/timebase ownership is unchanged and M2 #4
 remains open.
@@ -219,11 +219,20 @@ remains open.
 The next isolated [quiescent radio FIFO foundation](ARCHITECTURE.md#quiescent-radio-fifo-foundation)
 adds verified FIFO clear and bounded RFD preload, not RF enable or a MAC.
 It requires known awake radio/CSP/DMA ownership and stable XOSC32; all ten
-existing board BINs and the image/CI matrix remain unchanged. Its
+existing board BINs were unchanged by that isolated slice. Its
 [host/image/synthetic FIFO evidence](VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage)
-does not establish physical FIFO/CSP behavior. A separately authorized non-RF
-fixture is the next hardware gate, not permission to use the standalone test
-image or the currently installed IRQ fixture for this purpose. M2 #4 remains open.
+does not establish physical FIFO/CSP behavior. The subsequent, separate
+[quiescent FIFO board fixture](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
+and guarded manual runner now implement that offline preparation, including
+real-driver CODE/XDATA payload checks and a proved pre-write deadline hold.
+The twelve-job matrix preserves all ten older BINs and the exact artifact
+whitelist. The unchanged LG image passed
+[separate hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance):
+normal operation, a terminal written-but-unverified timeout, then 257 cycles
+after an explicit reset, with 33,410 checked bytes and 514 TX clears.
+The latest run ended at FIFO READY `016A`, XOSC32, IRQs disabled and empty FIFOs.
+RX flush, received frames, on-air behavior, error-latch recovery and calibrated
+metadata remain open; generic has no physical FIFO evidence. M2 #4 remains open.
 
 Deliver independent interfaces for:
 

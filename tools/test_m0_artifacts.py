@@ -3,7 +3,7 @@
 
 import unittest
 
-from verify_firmware import parse_ihex, parse_symbols, verify_layout
+from verify_firmware import IMAGES, parse_ihex, parse_symbols, verify_layout
 
 
 def record(address=0, kind=0, data=b"\x02\x00\x06"):
@@ -81,11 +81,14 @@ class LayoutTests(unittest.TestCase):
             verify_layout(self.symbols, self.memory, self.debug + "\nC$irq.c$1")
 
     def test_isolated_radio_fifo_cannot_enter_board_images(self):
-        for name in ("_radio_fifo_clear_init", "_radio_fifo_preload_init"):
+        for image in IMAGES:
+            if image == "radio_fifo_fixture":
+                continue
+            for name in ("_radio_fifo_clear_init", "_radio_fifo_preload_init"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
+                    verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug, image)
             with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
-                verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug)
-        with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
-            verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1")
+                verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
 
     def test_status_cannot_alias_iram(self):
         self.symbols["_m0_status"] = 0x1F00

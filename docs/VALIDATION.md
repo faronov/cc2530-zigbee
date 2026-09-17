@@ -708,7 +708,7 @@ hardware-observed by these runs.
 Cycle/ISR/M0-heartbeat bytes wrapped; final completed and ISR counts were
 both 1. Immutable M0/initial observations, priorities, unrelated IRCON/TIMIF,
 tokens and disable/stop
-conditions passed. The current LG board is **IRQ READY `01BB`, EA/T1IE off,
+conditions passed. That IRQ run ended at **READY `01BB`, EA/T1IE off,
 Timer1 stopped**; old clock/M1/timebase records remain historical. All eight
 older BIN hashes and the published EA/timebase drivers are unchanged.
 The full run's 226.77-second duration is host wall time only. See the
@@ -724,8 +724,9 @@ broader M2 #4 gates remain open.
 Both board configurations passed full IRQ-fixture `all test`, retaining
 355 Python regressions and the original clock/timebase/IRQ/MAC checks.
 An additional rejection test brings the Python suite to 356 tests and enforces
-the FIFO driver's exclusion from every current board image.
-There is no new IMAGE, CI job or board-artifact entry.
+the FIFO driver's exclusion from every then-existing board image.
+That isolated foundation added no IMAGE, CI job or board-artifact entry;
+the subsequent board fixture is recorded separately below.
 
 Host coverage includes **69,895 modeled cases**, every supported body length
 and every invalid uint16 length above 125, all command/status byte pairs,
@@ -761,11 +762,12 @@ It separately proves a count alone, late effect or requested strobe cannot
 produce success. The mixed-address-space caller uses explicit generic-pointer
 assignments; both CODE and XDATA payload bytes are actually executed/checked.
 
-**Remaining hardware gate:** a separate, explicitly authorized, non-RF board
-fixture must establish known quiescence, select/confirm XOSC32, verify all CODE
-before resume, and observe real empty/clear/preload counts/pointers, preserved
-unrelated state and bounded terminal failures. Do not flash this test executable
-or repurpose the installed IRQ fixture. Error-latch recovery, RX/TX enable,
+**Separate hardware evidence:** the
+[non-RF board fixture](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
+now establishes bounded LG empty/TX-clear/preload and terminal-timeout behavior
+after explicit programming and full physical CODE verification. This is not
+evidence from the standalone test executable or the old IRQ image.
+Error-latch recovery, RX flush, RX/TX enable,
 synthesizer/ACK operations, DMA, radio interrupts, MAC and networking remain
 outside this slice; earlier LG hardware records do not validate or authorize it.
 Full M2 #4 remains open.
@@ -774,8 +776,71 @@ All ten board configurations were rebuilt, host-checked, image-checked and
 alias-aware board-simulated. Their complete BIN lengths and SHA-256 hashes
 remain identical to published `cdbae7686d0f55d724d9ef5f0ad19e65841c18e3`,
 including both IRQ fixtures; no board map contains a FIFO-driver symbol.
-The published timebase, clock and EA source/header files and ten-job CI
-configuration are unchanged. Historical hardware evidence is not rewritten.
+That foundation left the published timebase, clock and EA source/header files
+and then-ten-job CI configuration unchanged. Historical hardware evidence is
+not rewritten by the subsequent fixture below.
+
+## M2 quiescent radio FIFO board fixture coverage
+
+The separate `radio_fifo_fixture` composes the unchanged published drivers.
+The [ABI/checkpoints/manual procedure](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
+centralize its scope and full hashes. Both new images retain real-driver host,
+genuine linked-image and alias-aware synthetic evidence. The LG image also has
+the separate bounded hardware record below; generic remains hardware-unobserved.
+Older records and images are unchanged, and full M2 #4 remains open.
+
+Host tests execute 257 cycles, both payload address spaces, all 126 maximum
+readback-corruption positions, retained clock request/rollback failure,
+written-but-unverified timeout, controller error, stopped-count poll cap,
+ownership/phase errors and immutable terminal failure. Every read/write log
+entry is validated before consumption; the 32-entry bounds are unchanged.
+The Python suite includes synthetic runner/decoder coverage for byte shapes,
+257-cycle wraps, matching-image/CODE/authorization gates, every normal and
+negative operation-failure boundary, bad live helper/caller/argument contexts,
+misleading hold-only results, CPU/M0 changes and cleanup failure.
+
+Linked checks pin every board instruction/constant byte and reject mutated
+state/pointer/layout/source records. They separately decode fixture MMIO,
+require passive reads at the exact allowed SFR/XREG addresses, retain the
+original clock/timebase contracts and prove relocation-equivalent FIFO code.
+The genuine inlined foreground call chain is checked, including its live
+deadline RET and three nested return frames. An initial non-inlined candidate
+hit IRAM `80..81`; fixture-only inlining removed that frame, without modifying
+the published drivers or weakening the stack guard.
+
+s51's C52 model **does not emulate CC2530 radio/FIFO/CSP or oscillator silicon**.
+Explicit event hooks supply synthetic STA, FIFO counts/pointers and RAM effects
+around actual CLKCONCMD/RFD/RFST instructions. ROM is never patched. Each board
+executes 257 real C cycles with all 33,410 RFD values and 33,410 exact accepted
+TX RAM read addresses checked, plus terminal deadline, controller, maximum-byte,
+poll-cap, flag-change and clock/rollback scenarios. The negative deadline uses
+synthetic elapsed ticks, not a physically stopped clock. All unallocated XDATA,
+unused M0 reservation, upper IRAM and RX/unknown-TX/address-RAM guards remain
+strict; every RFST in normal fixture execution is EE, never ED or an RF enable.
+The original standalone FIFO still covers its separate 99 scenarios and
+69,895 host cases; standalone MAC/timebase/clock/C52-IRQ regressions remain.
+
+All ten older board images are separately rebuilt, host/image/alias-checked
+and required to retain their complete published BIN hashes. FIFO functions
+and CDB source remain forbidden in those images. Only the two new board images
+are added to CI, with the same seven-file artifact whitelist and no hardware
+dependency. RX flush/received data, FCS generation,
+controller recovery, calibrated timing and all on-air/MAC/DMA/IRQ/sleep/AES/
+flash services remain separate gates.
+
+### 2026-09-17 bounded LG FIFO hardware evidence
+
+Both new images additionally passed parent-run `all test`, including 365
+Python regressions. On the unchanged 8,979-byte LG image, all physical CODE
+was verified before each runner resume. Three normal cycles and a separate
+TIMEOUT with one written/unverified byte passed; a separately reset 257-cycle
+run then checked 1,286 READY stages, all 33,410 written/verified/TX-readback
+bytes, 514 explicit TX clears, counter wrap and CPU/M0/clock/flag preservation.
+No RX flush or RF-enable strobe was exercised. The
+[canonical record](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
+contains the hash, actual bounds, partial-effect observations and current
+READY/empty-FIFO state. These finite results are not calibrated timing,
+received-frame, FCS, on-air or general radio recovery evidence.
 
 ## Independent Sleep Timer hardware reference (2026-09-16)
 
@@ -885,8 +950,9 @@ seeing measurements.
 ## CI and release boundary
 
 Hosted CI builds/tests without physical devices or repository secrets.
-The CI matrix covers five non-RF images (`bringup`, `debug_fixture`,
-`timebase_fixture`, `clock_fixture`, `irq_fixture`) on both boards: ten jobs. Artifacts contain only the
+The CI matrix covers six non-RF images (`bringup`, `debug_fixture`,
+`timebase_fixture`, `clock_fixture`, `irq_fixture`, `radio_fifo_fixture`) on both
+boards: twelve jobs. Artifacts contain only the
 explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.

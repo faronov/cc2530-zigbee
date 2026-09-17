@@ -12,13 +12,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
-IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture")
+IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture", "radio_fifo_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
     "timebase_fixture": "non-networking-awake-timebase-fixture",
     "clock_fixture": "non-networking-init-clock-fixture",
     "irq_fixture": "non-networking-timer1-irq-fixture",
+    "radio_fifo_fixture": "non-networking-quiescent-radio-fifo-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -221,8 +222,8 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require("_radio_fifo_clear_init" not in symbols and "_radio_fifo_preload_init" not in symbols
-            and "C$radio_fifo.c$" not in debug,
+    require(image_name == "radio_fifo_fixture" or
+            (not any(name.startswith("_radio_fifo_") for name in symbols) and "C$radio_fifo" not in debug),
             "Board image must not link the isolated radio FIFO driver")
     require(image_name == "irq_fixture" or
             ("_irq_save_disable" not in symbols and "_irq_restore" not in symbols and "C$irq.c$" not in debug),
@@ -246,6 +247,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     if image_name == "irq_fixture":
         sizes = re.findall(r"^S:G\$irq_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
         require(sizes and all(int(size) == IRQ_FIXTURE_SIZE for size in sizes), "IRQ fixture debug ABI mismatch")
+    if image_name == "radio_fifo_fixture":
+        sizes = re.findall(r"^S:G\$radio_fifo_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == 108 for size in sizes), "Radio FIFO fixture debug ABI mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -315,6 +319,9 @@ def verify_artifacts(output, board, image_name="bringup"):
     elif image_name == "irq_fixture":
         from irq_fixture import verify_irq_fixture
         verify_irq_fixture(image, symbols, debug)
+    elif image_name == "radio_fifo_fixture":
+        from radio_fifo_fixture import verify_fixture
+        verify_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),
             "Linked board identity/policy does not match selected board")
@@ -388,7 +395,7 @@ def verify_timebase_reader(image, symbols, debug, state, state_size):
     require(all(symbols.get(f"_SOC_ST{i}") == 0x95 + i for i in range(3)), "Sleep Timer SFR addresses changed")
 
 
-def clock_timeout_checkpoint(image, symbols, debug, instructions, sites):
+def verify_deadline_helper(image, symbols, debug):
     # Entire original 148-byte deadline helper; only CDB-verified RAM and
     # runtime CODE operands relocate. Its final RET is shared: live DPL must be 0.
     expected = bytearray.fromhex(
@@ -428,6 +435,12 @@ def clock_timeout_checkpoint(image, symbols, debug, instructions, sites):
     declarations = re.findall(r"^S:G\$timebase_deadline_after\$[^(\n]+([^\n]*)$", debug, re.MULTILINE)
     require(declarations and all(value == "({2}DF,SC:U),C,0,0" for value in declarations),
             "Deadline return ABI changed")
+    return start, stop, locals_
+
+
+def clock_timeout_checkpoint(image, symbols, debug, instructions, sites):
+    start, stop, locals_ = verify_deadline_helper(image, symbols, debug)
+    ordinary = {a for lo, hi in xdata_ranges(symbols) for a in range(lo, hi)}
     call_bytes = b"\x12" + start.to_bytes(2, "big")
     calls = [address for address, data in instructions.items() if data == call_bytes]
     require(len(calls) == 1, "Deadline helper must have one clock call site")

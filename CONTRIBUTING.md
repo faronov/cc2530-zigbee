@@ -60,6 +60,8 @@ make BOARD=generic IMAGE=clock_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=clock_fixture all test
 make BOARD=generic IMAGE=irq_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=irq_fixture all test
+make BOARD=generic IMAGE=radio_fifo_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=radio_fifo_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -258,7 +260,7 @@ the unchanged LG image passed
 three normal cycles, a separate pre-start TIMEOUT/FAULT, then 257 cycles after
 an explicit reset. Hardware interrupted restore at +12 with DPL=OK (0), not
 the synthetic +9/live-token-1 case; actual ISR/RETI CPU/active-IRAM preservation
-passed. The live LG board is now IRQ READY `01BB`, EA/T1IE off, Timer1 stopped.
+passed. That IRQ run ended at READY `01BB`, EA/T1IE off, Timer1 stopped.
 Generic remains host/image/simulator-only. Higher-priority hardware nesting,
 calibrated timing and other M2 services remain outside that acceptance.
 The parent also independently passed both full IRQ configurations with 355
@@ -272,7 +274,7 @@ make test-radio-fifo
 ```
 
 It is also included in `make test`, without linking radio code into any of the
-ten board images or expanding CI/artifacts. Keep `radio_fifo_test.ihx` test-only:
+ten earlier board images. Keep `radio_fifo_test.ihx` test-only:
 **never flash or upload it as board firmware**. Its XREG hook is host-only,
 requires an explicit model and retains checked 32-entry logs. The linked test
 executes real RFST/RFD and CODE/XDATA pointer paths with synthetic FIFO/CSP
@@ -280,6 +282,24 @@ effects, not physical radio acceptance. Preserve the
 [ownership/error contract](docs/ARCHITECTURE.md#quiescent-radio-fifo-foundation)
 and [separate hardware gate](docs/VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage);
 no automatic USB, RF operation or error-latch recovery belongs in this target.
+
+The separate `IMAGE=radio_fifo_fixture` adds real-driver host orchestration and
+alias-aware synthetic board execution, including all accepted TX RAM reads.
+Only these two new images link the FIFO driver; CI now has twelve board/image
+jobs and the same seven-file artifact whitelist. Focused decoder/runner tests:
+
+```sh
+PYTHONPATH=tools .venv/bin/python -B -m unittest test_radio_fifo_fixture -q
+```
+
+`tools/check_radio_fifo_hardware.py` is **manual-only**. Follow its
+[programming, checkpoint and acceptance procedure](docs/DEBUGGING.md#quiescent-radio-fifo-board-fixture);
+normal, induced timeout and reset/recovery runs need separate explicit
+authorization. The [dated LG FIFO record](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
+now covers bounded normal, written-but-unverified timeout and separately reset
+257-cycle recovery. Generic, RX flush, received frames and on-air operation
+remain unvalidated. Keep that manual evidence separate from automated checks;
+past acceptance grants no permission to repeat hardware operations.
 
 ## Code conventions
 

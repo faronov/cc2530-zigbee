@@ -20,8 +20,9 @@ else ifeq ($(IMAGE),debug_fixture)
 else ifeq ($(IMAGE),timebase_fixture)
 else ifeq ($(IMAGE),clock_fixture)
 else ifeq ($(IMAGE),irq_fixture)
+else ifeq ($(IMAGE),radio_fifo_fixture)
 else
-$(error IMAGE must be bringup, debug_fixture, timebase_fixture, clock_fixture or irq_fixture)
+$(error IMAGE must be bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture or radio_fifo_fixture)
 endif
 
 TARGET := $(BUILD)/$(IMAGE)
@@ -43,6 +44,9 @@ OBJECTS += $(BUILD)/clock_fixture_state.rel $(BUILD)/timebase.rel $(BUILD)/clock
 endif
 ifeq ($(IMAGE),irq_fixture)
 OBJECTS += $(BUILD)/irq_fixture_state.rel $(BUILD)/timebase.rel $(BUILD)/irq.rel
+endif
+ifeq ($(IMAGE),radio_fifo_fixture)
+OBJECTS += $(BUILD)/radio_fifo_fixture_state.rel $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/radio_fifo.rel
 endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo force-link
@@ -74,6 +78,9 @@ $(BUILD)/clock_fixture_state.rel: src/clock_fixture_state.c $(HEADERS) Makefile 
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 $(BUILD)/irq_fixture_state.rel: src/irq_fixture_state.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_fifo_fixture_state.rel: src/radio_fifo_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 # Relink with the selected board even when an explicitly shared BUILD is reused.
@@ -184,9 +191,16 @@ $(BUILD)/host-clock-fixture-tests_$(BOARD): tests/test_clock_fixture.c src/clock
 $(BUILD)/host-irq-fixture-tests_$(BOARD): tests/test_irq_fixture.c src/irq_fixture_state.c src/irq.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DIRQ_FIXTURE_HOST_TEST tests/test_irq_fixture.c src/irq_fixture_state.c src/irq.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
+$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD): tests/test_radio_fifo_fixture.c src/radio_fifo_fixture_state.c src/radio_fifo.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DRADIO_FIFO_FIXTURE_HOST_TEST tests/test_radio_fifo_fixture.c src/radio_fifo_fixture_state.c src/radio_fifo.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
 test: all test-timebase test-clock test-irq test-radio-fifo $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
+ifeq ($(IMAGE),radio_fifo_fixture)
+	$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD)
+endif
 ifeq ($(IMAGE),debug_fixture)
 	$(BUILD)/host-fixture-tests_$(BOARD)
 endif

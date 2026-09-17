@@ -146,6 +146,10 @@ class DebugImage:
         if image_name == "irq_fixture":
             self.irq_proof = verify_irq_fixture(
                 image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
+        if image_name == "radio_fifo_fixture":
+            from radio_fifo_fixture import verify_fixture
+            self.radio_fifo_proof = verify_fixture(
+                image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
 
     def symbol(self, name: str) -> Symbol:
         require(name in self.symbols, f"No supported linked global/label named {name}")
@@ -388,7 +392,8 @@ def main(argv=None) -> int:
         child = commands.add_parser(name)
         child.add_argument("value", type=lambda text: int(text, 0))
     for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state", "timebase-state",
-                 "clock-state", "clock-checkpoint", "irq-state", "irq-checkpoints"):
+                 "clock-state", "clock-checkpoint", "irq-state", "irq-checkpoints",
+                 "radio-fifo-state", "radio-fifo-checkpoints"):
         child = commands.add_parser(name)
         child.add_argument("--output", type=Path, required=True)
         child.add_argument("--board", choices=BOARDS, required=True)
@@ -402,7 +407,7 @@ def main(argv=None) -> int:
             source.add_argument("--pc", type=lambda text: int(text, 0))
             source.add_argument("--file")
             child.add_argument("--line", type=int)
-        if name in ("status", "fixture-state", "timebase-state", "clock-state", "irq-state"):
+        if name in ("status", "fixture-state", "timebase-state", "clock-state", "irq-state", "radio-fifo-state"):
             source = child.add_mutually_exclusive_group(required=True)
             source.add_argument("--hex")
             source.add_argument("--snapshot", type=Path)
@@ -437,6 +442,12 @@ def main(argv=None) -> int:
                 result["irq_proof"] = image.irq_proof
                 if args.command == "irq-state":
                     result["irq_state"] = decode_irq_fixture(snapshot_input(args, 64))
+            elif args.command in ("radio-fifo-state", "radio-fifo-checkpoints"):
+                from radio_fifo_fixture import decode, SIZE
+                require(args.image == "radio_fifo_fixture", "FIFO inspection requires radio_fifo_fixture")
+                result["radio_fifo_proof"] = image.radio_fifo_proof
+                if args.command == "radio-fifo-state":
+                    result["radio_fifo_state"] = decode(snapshot_input(args, SIZE))
             else:
                 require(args.image == "clock_fixture", "Clock inspection requires a clock_fixture image")
                 result["timeout_checkpoint"] = image.clock_timeout_checkpoint

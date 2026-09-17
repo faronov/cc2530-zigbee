@@ -16,6 +16,7 @@ from boot_timebase import GUARD_SFRS, READ_OFFSETS, READER_BYTES
 from verify_firmware import (
     CODE_LIMIT, cdb_address, parse_ihex, parse_symbols, peripheral_accesses, require,
 )
+from radio_fifo_fixture import verify_fifo_relocated
 
 
 XREGS = (0x6189, 0x618a, 0x61e1, 0x6192, 0x618b, 0x6193,
@@ -388,6 +389,8 @@ def main():
     memory = path.with_suffix(".mem").read_text()
     listing = (args.output / "radio_fifo.rst").read_text()
     allocated, sites = verify_image(image, symbols, debug, memory, listing)
+    relocated, _ = verify_fifo_relocated(image, symbols, debug)
+    require(relocated == verify_module(image, symbols, debug)[0], "FIFO relocation proof disagrees with standalone")
     check_rejections(image, symbols, debug, memory, listing)
     check_alias(args.simulator)
     with unittest.TestCase().assertRaisesRegex(ValueError, "register bank"):

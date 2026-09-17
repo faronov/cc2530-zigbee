@@ -470,7 +470,8 @@ hardware authorization.
 ## Quiescent radio FIFO foundation
 
 `include/radio_fifo.h` / `src/radio_fifo.c` is an isolated, original
-initialization-time service, excluded from all ten board images.
+initialization-time service, excluded from all ten earlier board images.
+Only the subsequent, explicitly selected `radio_fifo_fixture` links it.
 
 | API | Supported operation |
 | --- | --- |
@@ -543,6 +544,21 @@ unconfirmed effects. Stop initialization and explicitly reestablish ownership/
 recover before reuse; never retry, append, erase error latches, issue RF-off or
 reset implicitly. See [primary facts](PROVENANCE.md#m2-quiescent-radio-fifo-sources)
 and [offline evidence/remaining gate](VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage).
+
+The [board fixture contract and ABI](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
+compose these unchanged drivers with M0 startup and one bounded XOSC32 selection.
+Its foreground stage is inlined into `main` in `src/radio_fifo_fixture_state.c`
+to remove a return frame from the combined clock/FIFO call chain; target-only
+NOP/RET/fault checkpoints remain in `examples/radio_fifo_fixture.c`.
+SDCC's retained out-of-line copy and all scratch are included in the footprint.
+Host tests call the same stage body without target checkpoints. There are no
+production test callbacks, new public driver APIs or controller recovery.
+The fixture alone reads known accepted TX RAM bytes at `6080..60FD`; this does
+not expand the FIFO driver's interface or debugger memory permissions.
+The [2026-09-17 LG record](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
+executes those unchanged drivers on silicon, including a real partial-effect
+timeout and separately reset recovery. It does not validate RX flush, on-air
+behavior or error-latch recovery; generic remains host/image/simulator-only.
 
 ## Memory contract
 

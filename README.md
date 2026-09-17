@@ -150,7 +150,7 @@ resume and never flashes.
 Generic hardware and physical timer-fault injection remain unobserved. Stopped,
 backward and ambiguous C paths retain host/simulator coverage; the C run is
 not calibration or a natural 24-bit timer-wrap claim. CI covers both boards
-and all five board images without uploading standalone test executables.
+and all six board images without uploading standalone test executables.
 **M2 #4 remains open** for clock measurement/calibration, IRQ/compare/wake and
 the other platform gates.
 
@@ -236,12 +236,12 @@ three initial cycles, a separate pre-start TIMEOUT retained at FAULT, then a
 separately reset 257-cycle run with real ISR services and byte-counter wraps.
 Every normal interrupt returned to `0x0C9D`, **restore+12 with DPL=OK (0)**,
 not the synthetic restore+9/live-token-1 case. Full CPU/active-IRAM context
-and actual RETI restoration passed. The live LG board is now the IRQ fixture,
-halted at READY `0x01BB`, EA/T1IE disabled and Timer1 stopped.
+and actual RETI restoration passed. That run left the IRQ fixture halted at
+READY `0x01BB`, EA/T1IE disabled and Timer1 stopped; later FIFO work is separate.
 Generic remains **host/image/simulator-only**. This does not establish
 calibrated time/latency, hardware one-shot or exact overflow counts,
 higher-priority hardware nesting, other interrupts or platform services.
-All eight older BINs are byte-identical. CI now has ten board/image jobs with
+All eight older BINs are byte-identical. This IRQ slice introduced ten board/image jobs with
 the same exact board-only artifact whitelist. Historical evidence is unchanged,
 past acceptance grants no new hardware authorization, and M2 #4 remains open.
 
@@ -255,8 +255,22 @@ history. Preload accepts 1..125 body bytes, writes the PHY length plus body,
 and verifies each FIFO count/pointer advance; it does not transmit or validate MAC.
 `make test-radio-fifo` provides **host, linked-image and synthetic FIFO/CSP
 simulation** evidence only. `radio_fifo_test.ihx` must never be flashed or
-published as board firmware. All ten board BINs and the CI matrix are unchanged;
-a separate hardware fixture/gate is still required, and M2 #4 remains open.
+published as board firmware.
+
+The separate [`IMAGE=radio_fifo_fixture`](docs/DEBUGGING.md#quiescent-radio-fifo-board-fixture)
+now selects/observes XOSC32, verifies empty FIFO state, preloads small XDATA and
+maximum CODE payloads, checks their accepted TX RAM bytes and explicitly clears
+TX between frames. Its guarded manual runner is not a build/CI action.
+The 8,979-byte LG image also passed
+[bounded hardware acceptance on 2026-09-17 (UTC+03)](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance):
+257 separately reset recovery cycles, 33,410 written/verified/readback-checked
+bytes and 514 explicit TX clears. A separate timeout retained one written but
+unverified byte at terminal FAULT, without implicit recovery. Generic remains
+**host/image/synthetic-simulator-only**. RX flush, received frames, FCS and
+on-air operation are not validated. The latest LG run left the FIFO fixture
+halted at READY `0x016A`, XOSC32 selected, IRQs disabled and both FIFOs empty.
+All ten older BINs and historical evidence remain unchanged; CI has twelve
+board/image jobs with the same artifact whitelist. M2 #4 stays open.
 
 ## Intended scope
 

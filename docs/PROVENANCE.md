@@ -397,6 +397,23 @@ host/image/synthetic FIFO/CSP only. No physical hardware, private identity/
 address RAM, capture or recovery file was accessed. Public reference downloads
 are temporary research material, not repository or CI artifacts.
 
+The subsequent board fixture, byte decoder, manual runner and synthetic tests
+are also original BSD-3-Clause work. SWRU191F sections 23.2/23.4 pp.213-215,
+23.8.3-23.8.10 pp.218-221 and 23.10 p.232 were read directly again for RFD
+writes and read-only TX RAM inspection without pointer advancement. Inspection
+is confined to known synthetic accepted bytes `6080..60FD`, not the unknown
+tail, RX RAM or address/source-match area. Sections 2.5 pp.46-48 and 23.1
+pp.210-211 supply the read-only IP0/IP1 (`A9/B9`), RFIRQF0/1 (`E9/91`),
+S1CON/TCON (`9B/88`) observations; RFIRQM0/1/ERRM are `61A3..61A5`.
+These CC2530 meanings are not generic C52 interrupt semantics.
+SWRZ031 was rechecked; neither listed erratum is exercised. No new dependency,
+external implementation or private data was imported; automated checks never
+access hardware. The separate
+[2026-09-17 LG FIFO record](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
+contains only processed observations from explicitly authorized programming,
+full physical CODE verification and normal/timeout/reset-recovery runs.
+Raw logs, identities and recovery backups remain outside Git and CI.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki
