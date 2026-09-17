@@ -306,8 +306,11 @@ beacon request payloads/frames, plus version-0 Beacons without GTS descriptors
 (pending-address lists and opaque upper-layer payloads, not network discovery).
 The separate [R22 NWK Beacon decoder](docs/NWK.md) parses the 15-byte Zigbee
 metadata within that payload, without accepting a profile, network or parent.
-It is host-tested, image-checked and simulated in an isolated test executable,
-not linked into board firmware. There is still no on-air radio driver, functioning
+The independent [NWK Data codec](docs/NWK.md#nwk-data-frame-codec) handles
+bounded unsecured unicast/broadcast frames with optional IEEE addresses;
+security and extended routing layouts fail explicitly.
+These codecs are host-tested, image-checked and simulated, not linked into
+board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.
 
 - C99 and SDCC, initially CC2530F256.

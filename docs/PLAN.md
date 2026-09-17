@@ -289,7 +289,11 @@ The separate [R22 NWK Beacon payload decoder](NWK.md) now decodes the exact
 offline MAC-to-NWK slicing check. Profiles, capacities and identifiers remain
 unauthenticated metadata, not selection/admission decisions. It does not
 satisfy M4/M5 or the remaining BDB specification/implementation gates.
-It is not linked into board firmware and
+An independent [NWK Data codec](NWK.md#nwk-data-frame-codec) also serializes
+bounded unsecured unicast/broadcast NPDUs and optional IEEE fields, with
+host/target evidence and maximum-body MAC integration. Security and extended
+routing layouts remain explicit errors, not successful substitutes.
+These codecs are not linked into board firmware and
 does not establish radio, MAC or networking support. Hardware M1/M2 gates
 are not bypassed.
 

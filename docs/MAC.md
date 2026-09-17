@@ -218,14 +218,20 @@ The larger exhaustive/mutation matrices stay host-only to keep test-harness
 compiler spills out of the guarded upper IRAM; all twelve command layouts and
 portable command failure vectors still execute under SDCC. The little-endian
 leaf helpers are C99-inline, avoiding extra call/register-save overhead.
-The nested DATA/Beacon test-loop counters are volatile so the large-model test
-harness keeps their state in XDATA instead of growing IRAM register-spill
-storage. No production volatility, guard relaxation or skipped portable
-Beacon scenario is introduced.
+Selected DATA/Beacon/command loop and temporary state is volatile so the
+large-model test harness keeps it in XDATA instead of growing IRAM
+register-spill storage. The combined image links NWK Data before NWK Beacon
+to fit the larger spill area below bit-addressable RAM rather than fragment
+the lower IRAM. No production volatility, compiler-flag change, guard
+relaxation or skipped portable scenario is introduced.
 The upper-half IRAM guard and exact final stack-pointer check are unchanged.
-The same test executable now links the separate NWK Beacon decoder only to
-exercise MAC-to-NWK slicing with both source modes and mixed pending lists.
-Neither production codec depends on the other or gains a hardware caller.
+The same test executable links the separate NWK Beacon decoder to exercise
+MAC-to-NWK slicing with both source modes and mixed pending lists.
+It also links the [NWK Data codec](NWK.md#nwk-data-frame-codec) and checks all
+four MAC address-size combinations against all four NWK IEEE layouts at the
+exact 125-byte body limit. Larger MHRs reject an unadjusted 116-byte NPDU;
+MAC-valid unsupported security/command payloads fail at the NWK boundary.
+The production codecs remain independent and gain no hardware caller.
 
 `build/<board>/[debug_fixture/]mac_frame_test.ihx` is a **simulator-only test
 executable**, not an `IMAGE` selection or board firmware to flash. It is not

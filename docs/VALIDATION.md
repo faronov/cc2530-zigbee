@@ -1082,6 +1082,19 @@ MAC-valid but non-Zigbee payload rejected at the NWK boundary. These checks
 are host/image/simulator evidence only; no scanner, parent selection, join,
 radio or authenticated acceptance is implemented.
 
+The independent [NWK Data codec](NWK.md#nwk-data-frame-codec) has shared
+host/SDCC golden, optional-IEEE, unicast/broadcast, truncation, payload/capacity
+and unchanged-error cases. Host tests exhaust unicast/broadcast FCF spaces,
+typed flags, both network addresses, scalar/IEEE/payload byte values and
+uint16 lengths, with exact allocations under ASan/UBSan. Its standalone
+image retains the 512-byte XDATA reservation, CODE/CDB/result ABI, alias and
+upper-IRAM/unwind checks. The full MAC test image composes both real codecs
+for all four MAC address-size and four NWK IEEE layouts at the 125-byte body
+limit, including MAC-too-long and NWK-unsupported failures.
+All existing test scenarios and guards remain enabled; test-only XDATA
+temporaries and object ordering avoid lower-IRAM fragmentation/spills.
+This is host-tested, image-checked and simulated syntax, not RF or security.
+
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |
 | Encoders/parsers | Golden wire bytes, every boundary length, invalid/truncated/reserved fields, explicit byte order |

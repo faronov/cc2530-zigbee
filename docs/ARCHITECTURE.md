@@ -89,8 +89,15 @@ The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC
 headers or platform code. The [NWK codec contract](NWK.md) preserves raw
 profile/capacity/depth/update metadata without compatibility or parent
-acceptance. The two modules are composed only in offline tests; no firmware
-caller or network state machine is added.
+acceptance. It adds no firmware caller or network state machine.
+
+The independent `nwk_frame` module encodes/decodes only the bounded,
+unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
+IEEE addresses and opaque payload. Unsupported security, multicast and
+source-route layouts fail explicitly. It does not decrement radius, assign
+sequences, validate identities, process APS or decide network membership.
+Its offsets start at the NPDU, not the MAC body. All three codecs are composed
+only in offline tests, including each layer's independent size/error checks.
 
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the

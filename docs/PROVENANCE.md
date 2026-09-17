@@ -666,6 +666,36 @@ Test identities and payloads are original synthetic data. The PDF and
 temporary PDF reader are research-only and are not shipped in Git or CI;
 the original document's notices and licenses are not replaced by BSD-3-Clause.
 
+### Offline R22 NWK Data frame sources
+
+The original `nwk_frame` codec uses the same
+[pinned primary R22 PDF](#offline-r22-nwk-beacon-payload-sources), not a vendor
+stack or generated catalog. Its downloaded Git blob was checked as
+`c8123d63e30995e4a66941cbdf2529332480a0ff`.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+| Sections 3.3,3.3.1, Figure 3-5, p.288 | Little-endian octets, fixed header order and optional-address order |
+| Section 3.3.1.1, Figure 3-6, Tables 3-45/46, p.289 | FCF bit positions, Data type, unicast/broadcast field combinations |
+| Sections 3.3.1.1.2-9, Table 3-47, p.290 | Protocol version, route-discovery values, extension/security flags, raw ED Initiator bit |
+| Sections 3.3.1.2-7, p.291 | Network addresses, radius/sequence and optional IEEE fields; no destination IEEE on broadcasts |
+| Sections 3.3.1.8-9,3.3.2.1, pp.291-293 | Excluded multicast/source-route structures and opaque Data payload |
+| Table 3-57, pp.322-323 | Version 2, eight-byte minimum NWK header and 11-byte MAC overhead |
+| Section 3.6.5, Table 3-69, pp.382-383 | Four defined broadcast destinations and reserved `FFF8..FFFA`/`FFFE` |
+
+The [contract](NWK.md#nwk-data-frame-codec) selects unsecured Data with
+8/16/24-byte headers and a 116-byte NPDU bound, using the existing MAC
+125-byte FCS-free body limit and a nine-byte compressed short/short MHR.
+Larger MAC headers impose their own smaller limit. Short source addresses
+in the reserved/broadcast range and noncanonical FCF combinations are rejected;
+IEEE identities, radius, sequence and ED Initiator remain raw metadata.
+No routing, duplicate filtering, APS validation or security procedure is
+inferred from successful serialization.
+
+All vectors and identities are original synthetic data. No implementation,
+capture, key material or SDK object was imported. The PDF and temporary reader
+are research-only and are not shipped in Git or CI.
+
 ## Specialist-agent reference
 
 The repository's specialist profiles are original project instructions.

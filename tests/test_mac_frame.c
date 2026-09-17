@@ -3,6 +3,7 @@
  */
 #include "mac_frame.h"
 #include "nwk_beacon.h"
+#include "nwk_frame.h"
 #include "cc2530_mmio.h"
 
 #include <stddef.h>
@@ -104,6 +105,86 @@ static uint16_t nwk_beacon_integration(void)
         CHECK(mac_beacon_decode(body + frame.payload_offset, frame.payload_length, &beacon) == MAC_CODEC_OK);
         CHECK(nwk_beacon_decode(body + offset, beacon.payload_length, &network) == NWK_BEACON_UNSUPPORTED_PROTOCOL);
         CHECK(memcmp(&network, &saved, sizeof(network)) == 0);
+    }
+    return 0;
+}
+
+static uint16_t nwk_data_integration(void)
+{
+    static const MCU_CODE uint8_t application[108] = {0xa9, 0x55, 0x69};
+    mac_header_t mac_header;
+    mac_frame_info_t frame;
+    nwk_header_t nwk_header;
+    nwk_frame_info_t network, saved;
+    uint8_t npdu[116], body[125], mac_length, nwk_length;
+    volatile uint8_t destination, source, option, mac_size, nwk_size, i;
+
+    memset(&mac_header, 0, sizeof(mac_header));
+    mac_header.type = MAC_FRAME_DATA;
+    mac_header.version = 1;
+    mac_header.flags = MAC_FLAG_PAN_COMPRESSION | MAC_FLAG_ACK_REQUEST;
+    mac_header.sequence = 0x5a;
+    mac_header.destination_pan = mac_header.source_pan = 0x1234;
+    memset(mac_header.destination, 0x45, 8);
+    memset(mac_header.source, 0x67, 8);
+    memset(&nwk_header, 0, sizeof(nwk_header));
+    nwk_header.version = NWK_FRAME_PROTOCOL_VERSION;
+    nwk_header.destination = 0x5678;
+    nwk_header.source = 0x1234;
+    nwk_header.radius = 0x1e;
+    nwk_header.sequence = 0xa5;
+    memset(nwk_header.destination_ieee, 0x21, 8);
+    memset(nwk_header.source_ieee, 0x31, 8);
+    for (destination = MAC_ADDRESS_SHORT; destination <= MAC_ADDRESS_EXTENDED; destination++) {
+        for (source = MAC_ADDRESS_SHORT; source <= MAC_ADDRESS_EXTENDED; source++) {
+            mac_header.destination_mode = destination;
+            mac_header.source_mode = source;
+            mac_size = (uint8_t)(9u + (destination == MAC_ADDRESS_EXTENDED ? 6u : 0u)
+                                + (source == MAC_ADDRESS_EXTENDED ? 6u : 0u));
+            for (option = 0; option < 4; option++) {
+                nwk_header.flags = (uint16_t)((uint16_t)option << 11);
+                nwk_size = (uint8_t)(8u + (option & 1u ? 8u : 0u) + (option & 2u ? 8u : 0u));
+                CHECK(nwk_frame_encode(&nwk_header, application, (uint16_t)(116u - nwk_size),
+                                       npdu, sizeof(npdu), &nwk_length) == NWK_CODEC_OK);
+                CHECK(nwk_length == 116);
+                if (mac_size > 9u) {
+                    memset(body, 0xc7, sizeof(body));
+                    mac_length = 0xa5;
+                    CHECK(mac_frame_encode(&mac_header, npdu, nwk_length, body, sizeof(body),
+                                           &mac_length) == MAC_CODEC_TOO_LONG);
+                    CHECK(mac_length == 0xa5);
+                    for (i = 0; i < sizeof(body); i++)
+                        CHECK(body[i] == 0xc7);
+                }
+                CHECK(nwk_frame_encode(&nwk_header, application, (uint16_t)(125u - mac_size - nwk_size),
+                                       npdu, sizeof(npdu), &nwk_length) == NWK_CODEC_OK);
+                CHECK(mac_frame_encode(&mac_header, npdu, nwk_length, body, sizeof(body),
+                                       &mac_length) == MAC_CODEC_OK);
+                CHECK(mac_length == 125);
+                CHECK(mac_frame_decode(body, mac_length, &frame) == MAC_CODEC_OK);
+                CHECK(frame.header.type == MAC_FRAME_DATA);
+                CHECK(frame.payload_offset == mac_size && frame.payload_length == nwk_length);
+                CHECK(nwk_frame_decode(body + frame.payload_offset, frame.payload_length,
+                                       &network) == NWK_CODEC_OK);
+                CHECK(network.payload_offset == nwk_size && network.payload_length == 125u - mac_size - nwk_size);
+                CHECK(network.header.destination == 0x5678 && network.header.source == 0x1234);
+                CHECK(network.header.radius == 0x1e && network.header.sequence == 0xa5);
+                CHECK(network.header.flags == nwk_header.flags);
+                CHECK(memcmp(body + mac_size + network.payload_offset, application, network.payload_length) == 0);
+                memcpy(&saved, &network, sizeof(saved));
+                body[mac_size + 1u] |= 2;
+                CHECK(mac_frame_decode(body, mac_length, &frame) == MAC_CODEC_OK);
+                CHECK(nwk_frame_decode(body + frame.payload_offset, frame.payload_length,
+                                       &network) == NWK_CODEC_UNSUPPORTED_SECURITY);
+                CHECK(memcmp(&network, &saved, sizeof(network)) == 0);
+                body[mac_size + 1u] &= (uint8_t)~2u;
+                body[mac_size] |= 1;
+                CHECK(mac_frame_decode(body, mac_length, &frame) == MAC_CODEC_OK);
+                CHECK(nwk_frame_decode(body + frame.payload_offset, frame.payload_length,
+                                       &network) == NWK_CODEC_UNSUPPORTED_TYPE);
+                CHECK(memcmp(&network, &saved, sizeof(network)) == 0);
+            }
+        }
     }
     return 0;
 }
@@ -322,7 +403,8 @@ static void data_header(mac_header_t *header)
     header->source[1] = 0x9a;
 }
 
-static void command_header(mac_header_t *header, uint8_t vector)
+/* Keep shared-image harness temporaries out of SDCC's IRAM spill slots. */
+static void command_header(mac_header_t *volatile header, uint8_t vector)
 {
     uint8_t i;
     data_header(header);
@@ -355,7 +437,9 @@ static uint16_t command_vectors(void)
 {
     mac_command_t decoded, saved;
     mac_codec_result_t status;
-    uint8_t output[6], length, size, vector, boundary, i;
+    uint8_t output[6], length, i;
+    volatile uint8_t size, vector, boundary;
+    volatile uint16_t expected_address;
 
     memset(&saved, 0xa5, sizeof(saved));
     for (vector = 0; vector < sizeof(command_payload_lengths); vector++) {
@@ -365,8 +449,9 @@ static uint16_t command_vectors(void)
         CHECK(decoded.capability == (vector == 0u ? 0x88u : 0u));
         CHECK(decoded.reason == (vector == 5u ? 1u : (vector == 6u ? 2u : 0u)));
         CHECK(decoded.status == (vector == 3u ? 1u : (vector == 4u ? 2u : 0u)));
-        CHECK(decoded.short_address == (vector == 1u ? 0x9abcu : (vector == 2u ? 0xfffeu
-                                      : ((vector == 3u || vector == 4u) ? 0xffffu : 0u))));
+        expected_address = vector == 1u ? 0x9abcu : (vector == 2u ? 0xfffeu
+                           : ((vector == 3u || vector == 4u) ? 0xffffu : 0u));
+        CHECK(decoded.short_address == expected_address);
         for (boundary = 0; boundary <= size + 1u; boundary++) {
             memset(output, 0xc7, sizeof(output));
             length = 0xa5;
@@ -410,7 +495,8 @@ static uint16_t command_frame_vectors(void)
     mac_header_t header;
     mac_frame_info_t decoded, saved;
     mac_codec_result_t status;
-    uint8_t output[27], size, offset, vector, boundary, length, i;
+    uint8_t output[27], length, i;
+    volatile uint8_t size, offset, vector, boundary;
 
     memset(&saved, 0xa5, sizeof(saved));
     for (vector = 0; vector < sizeof(command_frame_lengths); vector++) {
@@ -899,7 +985,10 @@ static uint16_t self_test(void)
     result = beacon_rejections();
     if (result != 0)
         return result;
-    return nwk_beacon_integration();
+    result = nwk_beacon_integration();
+    if (result != 0)
+        return result;
+    return nwk_data_integration();
 }
 
 #if defined(__SDCC)
