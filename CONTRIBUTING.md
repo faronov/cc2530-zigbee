@@ -170,8 +170,19 @@ scenario and the shared 15-second per-run timeout. The
 hardware access. Neither new executable is a board `IMAGE` or CI artifact.
 The host protocol target additionally checks full MAC/NWK/APS/ZCL/value
 composition; its SDCC image remains the prior three-layer chain.
-Base-text wire evidence is not errata-aware conformance, implemented
-commands/attributes or validated numeric/text application data.
+Base-text wire evidence is not errata-aware conformance or validated
+numeric/text application data.
+
+`make test-zcl-attributes`, also part of `make ... all test`, exercises the
+separate generic read-only model and unicast Read Attributes handler.
+Its isolated image uses an explicit 1,024-byte harness reservation, retaining
+the same source/layout, alias, upper-IRAM, unwind and 15-second guards.
+No existing component budget is increased. The host protocol target also
+checks a complete MAC/NWK/APS read request/response; its target chain is
+unchanged. See [scope and evidence](docs/ZCL.md#read-only-attributes-and-read-attributes):
+no board `IMAGE`, artifact upload, registered cluster, dispatcher, writes or
+reporting is added. Unreviewed ZCL errata remains a documented conformance
+risk rather than a stop on base-text foundation development.
 
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:

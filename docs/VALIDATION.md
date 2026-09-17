@@ -1135,8 +1135,29 @@ vector, both ZCL header sizes, all existing MAC/NWK address layouts, maximum
 125-byte MAC bodies and per-layer failures. Its SDCC image remains the
 three-layer MAC/NWK/APS chain, not a claimed four-layer target run.
 This is base-text, host/image/simulator evidence only. ZCL errata 19-2019,
-application selection, command/attribute behavior, native numeric/charset
+application selection, complete command/attribute behavior, native numeric/charset
 validation and M4/M5 security/networking gates remain separate and open.
+
+The separate Read Attributes suite adds real bounded table lookup, access
+denial without touching values, ordered status/value records, namespace/side
+guards, malformed-command responses, space errors and explicit prefix counts.
+Golden CODE/XDATA vectors, all data type IDs, unchanged local failures,
+capacity boundaries and a 16-entry table are executed on SDCC in
+`zcl_attributes_test.ihx`: 12,019 CODE bytes and 661 ordinary XDATA bytes,
+725 with the 64-byte status reservation. Only this new harness uses an explicit
+1,024-byte limit; existing budgets and the 15-second timeout are unchanged.
+The exact reservation threshold passes at 725 and rejects 724 and the
+512-byte default, without weakening other layout/alias/stack checks.
+
+Host tests add exact table/value/request/response/result allocations,
+all 16-bit attribute/manufacturer IDs, command/sequence/control bytes and
+uint16 spans/budgets under ASan/UBSan. Full MAC/NWK/APS request decoding,
+actual read handling and response encoding/decoding are host-tested with
+an independent complete golden response and both manufacturer layouts.
+The SDCC protocol image remains the previous three-layer chain. These
+synthetic vectors do not implement routing, authentication, counter
+allocation, endpoint registration, writes/reporting or a device profile.
+Unreviewed ZCL errata remains a conformance risk, not a development stop.
 
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |

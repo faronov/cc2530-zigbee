@@ -397,11 +397,15 @@ security support remains outside the first configuration.
 
 **Offline preparatory implementation:** [ZCL Revision 8 wire codecs](ZCL.md)
 now handle global/cluster-specific headers and 38 bounded wire-value types.
+A separate read-only model and unicast Read Attributes handler add bounded
+lookup, read-access checks, protocol status records, explicit partial counts
+and atomic response construction, without registering a cluster.
 The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
-remains unreviewed and must be resolved before command/attribute behavior or
-conformance claims. Header/value and APS/ZCL target checks are host-tested,
-image-checked and simulated; full value/ZCL/APS/NWK/MAC composition is
-host-tested. There is no board caller, dispatcher, attribute model, native
+remains an open follow-up risk, not a stop on base-text development. Review
+applicable corrections before conformance claims. Header/value, APS/ZCL and
+read-handler target checks are host-tested, image-checked and simulated;
+full Read Attributes/ZCL/APS/NWK/MAC composition is host-tested.
+There is no board caller, dispatcher, native
 numeric/charset conversion or advertised cluster. Application/device/profile
 selection and all M4/M5 networking/security gates remain open.
 
@@ -417,7 +421,8 @@ Deliver:
 - Pin the application/device class and its BDB finding/binding, Identify,
   binding/group-capacity and default-reporting requirements. A single endpoint
   does not by itself make finding/binding optional.
-- A real attribute model with types, access checks and bounded serialization.
+- Integrate the generic read-only attribute model with the selected device's
+  real types/access/range requirements and transport; writes remain separate.
 - A clearly identified **lab-only synthetic measurement application**, with
   Basic/Identify and a deterministic test-controlled measurement source.
   It must identify itself as synthetic and must not be released as physical

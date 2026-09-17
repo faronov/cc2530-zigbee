@@ -578,9 +578,10 @@ Engineering references:
   applicable errata and implementation evidence remain separate
   [gates in the conformance ledger](CONFORMANCE.md).
 - Zigbee Cluster Library **Revision 8**, document **07-5123-08**, release
-  December 2019, for the bounded offline wire work below. Its approved errata
+  December 2019, for the bounded offline foundation work below. Its approved errata
   **19-2019** and application/device requirements remain unreviewed/unselected
-  gates, not an implied complete ZCL implementation.
+  conformance risks/gates, not a blanket base-text development stop or an
+  implied complete ZCL implementation.
 
 BDB 3.1, document 22-65816-030, belongs with R23/PRO 2023. It may inform future
 work but must not be cited as an R22 requirement. The project is not certified.
@@ -745,17 +746,22 @@ and the separate approved errata as **19-2019**.
 
 The errata's exact revision and primary text have not been obtained/reviewed.
 No claim is made that it is empty, unavailable or incorporated into this PDF.
-Wire behavior is checked against the pinned base text only; applicable errata
-review remains a gate before command/attribute implementation or conformance
-claims. Application/device definitions and profile requirements also remain
-separate. Selecting R8 alongside Core R22/BDB 3.0.1 is this project's
+Behavior is checked against the pinned base text only. Unreviewed errata is
+an explicit risk permitting continued base-text development, with possible
+later corrections; review remains a gate before conformance claims, not
+before all command/attribute work. Application/device definitions and profile
+requirements also remain separate. Selecting R8 alongside Core R22/BDB 3.0.1 is this project's
 engineering baseline, not a claim of a universal mandatory pairing.
 
 | Primary location (printed / PDF pages) | Functional facts used |
 | --- | --- |
 | Sections 2.3.1-2, 2-3..2-4 / 55-56 | Zero reserved bits on TX; ignore reserved sub-fields for standard RX; manufacturer-defined handling for extensions |
+| Sections 2.3.3,2.3.4.4, 2-4..2-6 / 56-58 | Manufacturer context must not execute unrecognized commands; read/write access categories, separate from application authentication |
 | Section 2.4.1, Figures 2-2/3/4, 2-8..2-9 / 60-61 | Three/five-byte headers, FCF bits, manufacturer-code order, direction/default-response metadata and transaction/command fields |
-| Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Test-only Report Attributes ID and identifier/type/value record shape; no handler imported or implemented |
+| Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Test-only Report Attributes ID and identifier/type/value record shape; no reporting handler imported or implemented |
+| Sections 2.5.1-2, Figures 2-5/6/7, 2-11..2-14 / 63-66 | One or more LE16 request IDs; ordered status records; type/value only on success; insufficient-space records, prefix termination and lack of fragmentation |
+| Section 2.4.1, 2-8..2-9 / 60-61; section 2.5.12, 2-28..2-29 / 80-81 | Response transaction echo/direction/default-response flag; unicast Default Response command/status and error-response conditions |
+| Section 2.6.3, Table 2-12, 2-55..2-56 / 107-108 | SUCCESS `00`, NOT_AUTHORIZED `7E`, MALFORMED_COMMAND `80`, UNSUPPORTED_ATTRIBUTE `86`, INSUFFICIENT_SPACE `89`; deprecated WRITE_ONLY `8F` must not be transmitted |
 | Section 2.6.1.5, 2-44 / 96 | Command ID ranges and manufacturer context, left to future dispatch policy |
 | Sections 2.6.2.1-2, Tables 2-10/11, 2-45..2-48 / 97-100 | Type IDs, widths, non-value patterns and field-dependent full versus non-value ranges |
 | Sections 2.6.2.3-9, 2-48..2-49 / 100-101 | No-data, raw/bitmap/integer widths, Boolean `00/01/FF` and signed non-value patterns |
@@ -765,6 +771,12 @@ The [wire contract](ZCL.md) distinguishes raw layout from command/attribute
 acceptance, a matching scalar non-value pattern from an actual unavailable
 measurement, and character-string bytes from validated text.
 Unsupported data types are explicit errors, not guessed zero-width values.
+The read handler requires complete nonempty identifier pairs; an empty list
+or incomplete last ID uses MALFORMED_COMMAND under the base status definition.
+Its 16-entry table cap, local error API, minimum one-record response budget,
+caller-selected unicast context and private atomic scratch storage are
+explicit implementation bounds, not new standard requirements. No generic
+dispatcher, authenticated network reception or complete device is implied.
 Original code and vectors were written from these functional facts, not the
 external mixed ZCL/Matter catalog or a vendor stack. No implementation,
 cluster table, key, capture, SDK object or test-plan vector was imported.

@@ -13,9 +13,9 @@ M9 audits the ledger; it does not postpone specification decisions until release
 | PRO BDB v3.0.1, document 16-02828-012, September 28, 2021 | Selected engineering baseline with Core R22; [primary sources](PROVENANCE.md#bdb-301-baseline-sources) | Bounded ED requirements below; no implementation or certification claim |
 | Applicable BDB v3.0.1 errata, document 21-65431 | **Open: primary text/revision not reviewed** | Review and resolve applicable changes before M4/M5 security/commissioning implementation |
 | BDB v3.0.1 Test Plan, document 16-02826 | Open: primary text/revision not reviewed | Required before claiming BDB conformance; project tests do not substitute for it |
-| ZCL Revision 8, document 07-5123-08, release December 2019; Foundation 14-0126-17 | Selected for bounded offline header/value codecs; [primary source](PROVENANCE.md#zcl-revision-8-wire-sources) | Base-text evidence only, not full or errata-aware ZCL conformance |
-| Approved ZCL R8 errata, document 19-2019 | **Open: primary text/revision not reviewed** | Review applicable corrections before command/attribute implementation or conformance claims |
-| Application-profile revision and exact lab/physical device definitions | Open | Must be pinned before M6 attribute/profile implementation |
+| ZCL Revision 8, document 07-5123-08, release December 2019; Foundation 14-0126-17 | Selected for bounded offline header/value codecs and read-only foundation; [primary source](PROVENANCE.md#zcl-revision-8-wire-sources) | Base-text evidence only, not full or errata-aware ZCL conformance |
+| Approved ZCL R8 errata, document 19-2019 | **Open follow-up risk: primary text/revision not reviewed** | Base-text development may proceed with revision risk recorded; review applicable corrections before conformance claims, not as a blanket development stop |
+| Application-profile revision and exact lab/physical device definitions | Open | Pin before device-specific cluster/profile implementation and advertisement; independent generic foundation work may proceed |
 | Legacy DATA/ACK, five-command and no-GTS Beacon wire subsets, IEEE 802.15.4-2006-compatible formats | Selected for the standalone [codec](MAC.md), not full MAC conformance | M3 radio/procedure requirements remain open |
 | R23 / BDB 3.1 | Not the initial baseline | Separate future scope decision |
 
@@ -55,7 +55,7 @@ The reporting application's binding, reporting and attribute requirements are
 added with its pinned profile/ZCL revision. Synthetic lab values must be
 clearly identified; they are not physical sensor evidence.
 
-## Preparatory ZCL wire evidence
+## Preparatory ZCL foundation evidence
 
 These references use the printed chapter-page numbering of ZCL Revision 8,
 not the R22 page numbers above.
@@ -64,6 +64,7 @@ not the R22 page numbers above.
 | --- | --- | --- | --- | --- |
 | ZCL-WIRE-01 | Global/cluster-specific 3/5-byte headers, raw metadata/payload, standard reserved-bit RX normalization and zero-reserved TX; manufacturer-defined reserved extensions rejected | Sections 2.3.1-2 pp.2-3..2-4;2.4.1 pp.2-8..2-9; [contract](ZCL.md) | Host-tested, image-checked, simulated, including real APS/ZCL composition; no command execution or board linkage | Preparatory M6; errata/application and M4/M5 gates unchanged |
 | ZCL-WIRE-02 | 38 wire-value types: no-data, raw/bitmap/unsigned/signed 8..64, Boolean, enum8/16 and short strings; explicit unsupported types and non-value-pattern metadata | Sections 2.6.2.1-9,2.6.2.13-14 pp.2-45..2-51; [contract](ZCL.md#typed-wire-values) | Host-tested, image-checked, simulated; exact spans and full host protocol composition, not native numeric conversion, UTF-8 or attribute validation | Preparatory M6; same open gates |
+| ZCL-READ-01 | Generic read-only table; selected-side/namespace unicast Read Attributes, ordered status/value records, space errors and explicit prefix counts; malformed-command Default Response | Sections 2.3.4.4 p.2-6;2.4.1 pp.2-8..2-9;2.5.1-2 pp.2-11..2-14;2.5.12 pp.2-28..2-29;2.6.3 Table 2-12 pp.2-55..2-56; [bounded contract](ZCL.md#read-only-attributes-and-read-attributes) | Host-tested, image-checked, simulated; full MAC/NWK/APS read request/response is host-only. No dispatcher, device/cluster advertisement, write/reporting or board linkage | Preparatory M6; errata remains a conformance risk, application selection and M4/M5 gates unchanged |
 
 ## BDB 3.0.1 requirements
 

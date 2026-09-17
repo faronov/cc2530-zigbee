@@ -1,4 +1,4 @@
-# Offline ZCL wire codecs
+# Offline ZCL foundation
 
 `include/zcl_wire.h`, `src/zcl_frame.c` and `src/zcl_value.c` implement
 independent header and wire-value codecs against **ZCL Revision 8**,
@@ -6,11 +6,15 @@ document **07-5123-08**, released December 2019. The exact official PDF and
 foundation chapter revision are pinned in [PROVENANCE.md](PROVENANCE.md#zcl-revision-8-wire-sources).
 Its referenced approved errata **19-2019** has not been obtained/reviewed.
 The selected base text is not an errata-aware conformance claim.
+Unreviewed errata is an open follow-up risk, not a blanket development stop:
+base-text implementation may proceed, with possible later corrections.
 
 This is preparatory M6 work alongside Core R22/BDB 3.0.1, not a claim that
 R22 universally mandates this ZCL revision. Application/device definitions,
-profile requirements, command handlers, attributes, reporting and persistence
-are not implemented or advertised. No module is linked into board firmware.
+profile requirements, complete clusters, writes, reporting and persistence
+are not implemented or advertised. A bounded generic read-only attribute
+model and unicast Read Attributes handler are implemented below.
+No module is linked into board firmware.
 
 ## Frame header
 
@@ -27,7 +31,7 @@ Offsets start at the ZCL frame, not APS/NWK/MAC:
 Bit 3 records server-to-client versus client-to-server direction. Bit 4
 records Disable Default Response; it does not generate or suppress an actual
 response. Immediate response rules, command-specific direction and response
-policy belong to future handlers.
+policy belong to handlers, not the framer.
 
 Reserved control bits **must not inherit the NWK codec's rejection policy**:
 ZCL R8 sections 2.3.1-2 require zero on transmission and ignoring reserved
@@ -124,15 +128,98 @@ views contain offsets, not retained pointers. Native structs are not a wire
 format. CODE/XDATA input pointers use the SDCC generic-pointer ABI. Calls are
 foreground-only and non-reentrant. There is no heap, MMIO or network state.
 
+## Read-only attributes and Read Attributes
+
+`include/zcl_attributes.h` / `src/zcl_attributes.c` add
+`zcl_read_attrs_unicast(set, request, request_length, response, capacity, info)`.
+This is a **response builder for an already selected unicast cluster instance**,
+not a network dispatcher. The caller must first establish permitted unicast
+delivery to one endpoint, profile/cluster selection and any required
+authentication. Broadcast, multicast, all-endpoints delivery, endpoint
+registration and general unsupported-command responses are outside this API.
+No authentication-success flag substitutes for those missing services.
+
+A caller-owned `zcl_attribute_set_t` describes one cluster side and one
+standard/manufacturer namespace, with **0..16** attribute descriptors.
+`side` is `ZCL_ATTRIBUTE_SERVER` (`0`) or `ZCL_ATTRIBUTE_CLIENT` (`1`);
+`manufacturer_specific` and `readable` are exact `0/1` selectors. Attribute
+IDs must be unique within the set. Empty sets may have a null table pointer.
+Duplicate IDs, oversized tables and invalid selectors return
+`ZCL_CODEC_INVALID_TABLE` before lookup, even if the bad entry was not requested.
+Standard and manufacturer namespaces may use separate sets with the same IDs.
+There is no automatic fallback from a manufacturer request to standard data.
+
+Each descriptor supplies an ID, a static read-access gate and a `zcl_value_t`
+using the same 38 wire types. Descriptor/value storage may be in CODE or XDATA.
+The application owns the backing values and must keep them stable throughout
+the call; later calls observe later values. The library does not retain
+pointers, allocate a registry, call getters, write attributes, validate
+cluster-specific ranges or create mandatory global/device attributes.
+
+Only global command `00` is handled. Incoming direction must select the
+configured cluster side; the manufacturer flag and, when present, code must
+match exactly. Other commands and context mismatches return explicit local
+`UNSUPPORTED_COMMAND` / `UNSUPPORTED_CONTEXT` errors without an output frame.
+The surrounding future dispatcher still owns unsupported-command, unknown
+manufacturer/cluster and other reception policy; this is not a complete
+network-facing ZCL endpoint.
+
+A request needs one or more complete little-endian 16-bit IDs. An empty list
+or odd trailing byte generates unicast **Default Response `0B`,
+MALFORMED_COMMAND `80`**, without reading any attribute values. Otherwise,
+Read Attributes Response `01` retains request order, including duplicate
+requested IDs. Each record starts with ID and status:
+
+| Condition | Response record |
+| --- | --- |
+| Readable, supported value fits | `SUCCESS 00`, then type and encoded current value |
+| ID absent from the selected set | `UNSUPPORTED_ATTRIBUTE 86`, no type/value |
+| Entry has `readable = 0` | `NOT_AUTHORIZED 7E`, no type/value; value descriptor/data are not inspected |
+| Valid value record does not fit | `INSUFFICIENT_SPACE 89`, no type/value |
+
+R8 deprecates `WRITE_ONLY 8F` in favor of `NOT_AUTHORIZED`; deprecated status
+values must not be transmitted. The static gate is not an authorization
+engine. An invalid/unsupported **readable value reached during processing**
+is a local codec error, not a fabricated successful or unsupported-attribute
+record. Malformed requests, denied entries and trailing records beyond the
+space cutoff never inspect those values.
+
+`capacity` is the caller's **complete response budget**, capped at 100 bytes,
+not a promise that 100 bytes fit authenticated APS/NWK/MAC transport.
+It must reflect actual lower-layer overhead. Values that do not fit become
+three-byte space-error records; if even the next three-byte record cannot
+fit, processing stops at that request prefix as prescribed by R8
+2.5.1.3 / 2.5.2.2. The caller receives explicit `requested_count` and
+`returned_count`, not a silently complete-looking list. No fragmentation,
+automatic follow-up request or retained continuation exists.
+Budgets unable to fit a header plus one status record return local
+`BUFFER_TOO_SMALL`, rather than a zero-progress Read Attributes response.
+
+Both response kinds copy the transaction sequence/manufacturer context,
+reverse direction, set Disable Default Response and clear standard reserved
+bits. Request Disable Default Response does not suppress the specific read
+response or a malformed-command error response. `info` reports the emitted
+`length`, `command_id` and counts; both counts are zero for a malformed
+request's Default Response. `ZCL_CODEC_OK` means **a response was built**,
+not that all attributes were read or any packet was sent.
+
+Responses are assembled in private bounded storage and published only after
+all reached records succeed locally. Any local error leaves the entire
+response buffer and `info` unchanged, including after earlier valid records.
+Outputs must not overlap each other or input storage. Calls remain
+foreground-only and non-reentrant; there is no heap, MMIO, security/NV stub,
+registered device, mandatory-cluster claim or RF operation.
+
 ## Offline evidence
 
 ```sh
 make test-zcl-frame
 make test-zcl-value
+make test-zcl-attributes
 make test-protocol-frame
 ```
 
-All are included in `make ... all test`. The two new images,
+All are included in `make ... all test`. The frame and value images,
 `zcl_frame_test.ihx` and `zcl_value_test.ihx`, are simulator-only: not board
 `IMAGE` selections, firmware to flash or CI upload artifacts.
 Both retain the existing **512-byte XDATA reservation budget**, strict
@@ -169,6 +256,29 @@ synthetic Report Attributes records solely as wire vectors, not a reporting
 engine or an advertised cluster. The existing `protocol_frame_test.ihx`
 remains a three-layer MAC/NWK/APS image with its unchanged 1,024-byte budget;
 it is not claimed as a four-layer target run.
+
+The separate `zcl_attributes_test.ihx` exercises the real model, value codec,
+framer and read handler, with a **1,024-byte test-harness reservation budget**.
+It has 12,019 CODE bytes and 661 ordinary XDATA bytes (725 including the
+64-byte status reservation). Existing 512-byte images and the shared
+15-second timeout are unchanged; CODE/source/result, alias, unused-XDATA,
+upper-IRAM and unwind checks remain mandatory. Its eight-byte `ZCA1` result
+uses version 1, size 8 and a little-endian failure line. It is not a board
+`IMAGE`, flash target or CI artifact.
+
+Shared read tests cover independent golden records, CODE/XDATA tables and
+values, changed backing values, both namespace/header layouts and directions,
+duplicate request IDs, duplicate table rejection, denied and missing IDs,
+all data type IDs, local failures after a valid prefix, malformed requests,
+No-data and short-string non-values, large valid values, exact space-error
+versus prefix-cutoff behavior and unchanged errors. Host matrices additionally
+cover every 16-bit attribute/manufacturer ID, command/sequence/control byte,
+all 0..16 table sizes with exact allocations, request/capacity boundaries
+and every uint16 length/capacity under ASan/UBSan. The protocol host suite
+feeds actual decoded MAC/NWK/APS requests to the handler and encodes/decodes
+the complete response, with an independent whole-frame golden vector and
+both manufacturer layouts. Its reverse-hop metadata is synthetic, not
+routing, counter allocation or a network transaction implementation.
 
 Evidence is **host-tested, image-checked and simulated**, not hardware
 observation, authenticated traffic, working clusters, interview or

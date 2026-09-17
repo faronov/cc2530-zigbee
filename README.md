@@ -315,10 +315,14 @@ MAC/NWK/APS composition test. APS security, broadcast/group delivery and
 extended headers fail explicitly; ACK request does not implement transactions.
 The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
 headers and 38 wire-value types, including 8..64-bit byte representations
-and short strings. They add no command handlers, attribute model or clusters;
-ZCL errata/application gates remain open. APS/ZCL composition is target-tested,
-while the complete MAC/NWK/APS/ZCL/value chain is host-tested.
-These codecs are host-tested, image-checked and simulated, not linked into
+and short strings. A separate [read-only attribute model and unicast Read
+Attributes handler](docs/ZCL.md#read-only-attributes-and-read-attributes)
+adds bounded lookup, access/space-error records and response construction.
+It adds no registered cluster, writes, reporting or network dispatcher.
+Unreviewed ZCL errata remains a conformance risk, not a development stop.
+APS/ZCL composition and the read handler are target-tested; the complete
+MAC/NWK/APS/ZCL read request/response chain is host-tested.
+This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.
 

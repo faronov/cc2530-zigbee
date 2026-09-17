@@ -106,7 +106,7 @@ types, broadcast/group delivery, security and extended headers fail explicitly.
 The [APS contract](APS.md) separates the raw 108-byte APDU cap from future
 service/security limits and endpoint/transaction policy. A separate simulator
 image composes MAC/NWK/APS without expanding the existing MAC test image.
-No dispatcher, ZDO handler, ZCL attribute model or board caller is introduced.
+APS introduces no dispatcher, ZDO handler or board caller.
 
 The separate `zcl_frame` and `zcl_value` modules share the typed
 `zcl_wire.h` API but no runtime state. The [ZCL wire contract](ZCL.md)
@@ -116,7 +116,17 @@ mistaken for an invalid NWK layout. Value views retain raw wire octets and
 explicit consumed spans, including non-value patterns; they do not convert
 native numbers or validate text. APS/ZCL composition is target-tested
 separately; full MAC/NWK/APS/ZCL/value composition is currently host-only.
-Command handlers, an attribute model and complete ZCL support remain planned.
+The independent `zcl_attributes` module adds a caller-owned, bounded read-only
+model and a unicast Read Attributes response builder. One table selects a
+cluster side and standard/manufacturer namespace; duplicate IDs are rejected,
+non-readable values are not inspected, and partial responses expose their
+requested/returned counts. It composes the existing frame/value codecs and
+publishes outputs atomically on local success. The caller must already select
+permitted unicast endpoint/profile/cluster context and authenticate as required.
+No dispatcher, runtime registry, getter callback, write/reporting service,
+device-specific cluster or board linkage is introduced. Its own target image
+tests the handler; full MAC/NWK/APS request/response composition is host-only.
+Complete ZCL/application support remains planned.
 
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the

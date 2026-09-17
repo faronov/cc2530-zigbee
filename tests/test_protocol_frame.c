@@ -197,6 +197,7 @@ void main(void)
 #else
 #include <stdio.h>
 #include "zcl_wire.h"
+#include "zcl_attributes.h"
 
 static uint16_t zcl_integration(void)
 {
@@ -304,16 +305,93 @@ static uint16_t zcl_integration(void)
     return 0;
 }
 
+static uint16_t read_attributes_integration(void)
+{
+    static const uint8_t scalar[] = {0x78, 0x56};
+    static const zcl_attribute_t attribute[] = {{0x1122, 1, {ZCL_TYPE_UINT16, 0, scalar, 2}}};
+    static const uint8_t reply_golden[] = {
+        0x61, 0x98, 0x5b, 0x34, 0x12, 0x34, 0x12, 0x78, 0x56,
+        0x08, 0x20, 0x34, 0x12, 0x78, 0x56, 0x1e, 0xa6,
+        0x40, 0x31, 0x78, 0x56, 0x34, 0x12, 0x21, 0xe8,
+        0x18, 0x4d, 0x01, 0x22, 0x11, 0, 0x21, 0x78, 0x56
+    };
+    static const uint8_t ids[] = {0x22, 0x11};
+    zcl_attribute_set_t table = {attribute, 1, ZCL_ATTRIBUTE_SERVER, 0, 0x9abc};
+    zcl_header_t header = {ZCL_FRAME_GLOBAL, 0, 0x9abc, 0x4d, ZCL_COMMAND_READ_ATTRIBUTES};
+    zcl_read_info_t result;
+    zcl_frame_info_t zcl;
+    zcl_value_info_t value;
+    uint8_t command[100], reply[100], command_length, manufacturer, offset;
+
+    for (manufacturer = 0; manufacturer < 2; manufacturer++) {
+        headers();
+        mac.destination[0] = 0x78;
+        mac.destination[1] = 0x56;
+        mac.source[0] = 0x34;
+        mac.source[1] = 0x12;
+        nwk.flags = 0;
+        table.manufacturer_specific = manufacturer;
+        header.flags = manufacturer ? 4 : 0;
+        CHECK(zcl_frame_encode(&header, ids, sizeof(ids), command, sizeof(command), &command_length) == ZCL_CODEC_OK);
+        CHECK(aps_frame_encode(&aps, command, command_length, apdu, sizeof(apdu), &aps_length) == APS_CODEC_OK);
+        CHECK(nwk_frame_encode(&nwk, apdu, aps_length, npdu, sizeof(npdu), &nwk_length) == NWK_CODEC_OK);
+        CHECK(mac_frame_encode(&mac, npdu, nwk_length, body, 125, &mac_length) == MAC_CODEC_OK);
+        CHECK(mac_frame_decode(body, mac_length, &frame) == MAC_CODEC_OK);
+        CHECK(nwk_frame_decode(body + frame.payload_offset, frame.payload_length, &network) == NWK_CODEC_OK);
+        offset = (uint8_t)(frame.payload_offset + network.payload_offset);
+        CHECK(aps_frame_decode(body + offset, network.payload_length, &transport) == APS_CODEC_OK);
+        CHECK(network.header.destination == 0x5678 && transport.header.destination_endpoint == 0x21);
+        CHECK(transport.header.profile_id == 0x1234 && transport.header.cluster_id == 0x5678);
+        CHECK(zcl_read_attrs_unicast(&table, body + offset + transport.payload_offset,
+                                     transport.payload_length, reply, sizeof(reply), &result) == ZCL_CODEC_OK);
+        CHECK(result.command_id == 1 && result.requested_count == 1 && result.returned_count == 1);
+
+        /* Synthetic reverse-hop metadata, not routing or counter allocation. */
+        memcpy(mac.destination, frame.header.source, 8);
+        memcpy(mac.source, frame.header.destination, 8);
+        mac.sequence = 0x5b;
+        nwk.destination = network.header.source;
+        nwk.source = network.header.destination;
+        nwk.flags = NWK_FLAG_END_DEVICE_INITIATOR;
+        nwk.sequence = 0xa6;
+        aps.destination_endpoint = transport.header.source_endpoint;
+        aps.source_endpoint = transport.header.destination_endpoint;
+        aps.counter = 0xe8;
+        CHECK(aps_frame_encode(&aps, reply, result.length, apdu, sizeof(apdu), &aps_length) == APS_CODEC_OK);
+        CHECK(nwk_frame_encode(&nwk, apdu, aps_length, npdu, sizeof(npdu), &nwk_length) == NWK_CODEC_OK);
+        CHECK(mac_frame_encode(&mac, npdu, nwk_length, body, 125, &mac_length) == MAC_CODEC_OK);
+        if (!manufacturer)
+            CHECK(mac_length == sizeof(reply_golden) && memcmp(body, reply_golden, sizeof(reply_golden)) == 0);
+        CHECK(mac_frame_decode(body, mac_length, &frame) == MAC_CODEC_OK);
+        CHECK(nwk_frame_decode(body + frame.payload_offset, frame.payload_length, &network) == NWK_CODEC_OK);
+        offset = (uint8_t)(frame.payload_offset + network.payload_offset);
+        CHECK(aps_frame_decode(body + offset, network.payload_length, &transport) == APS_CODEC_OK);
+        CHECK(network.header.destination == 0x1234 && network.header.source == 0x5678);
+        CHECK(transport.header.destination_endpoint == 0x31 && transport.header.source_endpoint == 0x21);
+        offset += transport.payload_offset;
+        CHECK(zcl_frame_decode(body + offset, transport.payload_length, &zcl) == ZCL_CODEC_OK);
+        CHECK(zcl.header.sequence == 0x4d && zcl.header.command_id == 1 && zcl.header.flags == (manufacturer ? 0x1cu : 0x18u));
+        CHECK(zcl.header.manufacturer_code == (manufacturer ? 0x9abcu : 0u) && zcl.payload_length == 6);
+        offset += zcl.payload_offset;
+        CHECK(body[offset] == 0x22 && body[offset + 1u] == 0x11 && body[offset + 2u] == 0 && body[offset + 3u] == 0x21);
+        CHECK(zcl_value_decode(body[offset + 3u], body + offset + 4u, 2, &value) == ZCL_CODEC_OK);
+        CHECK(value.encoded_length == 2 && memcmp(body + offset + 4u, scalar, 2) == 0);
+    }
+    return 0;
+}
+
 int main(void)
 {
     uint16_t result = self_test();
     if (result == 0)
         result = zcl_integration();
+    if (result == 0)
+        result = read_attributes_integration();
     if (result != 0) {
         fprintf(stderr, "Protocol frame integration failed at line %u\n", (unsigned)result);
         return 1;
     }
-    puts("host MAC/NWK/APS/ZCL: golden chains, typed values, size matrices and layer-specific failures PASS");
+    puts("host MAC/NWK/APS/ZCL: golden chains, typed values, Read Attributes round trip and layer failures PASS");
     return 0;
 }
 #endif
