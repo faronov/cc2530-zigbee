@@ -90,8 +90,11 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
 
-    def test_isolated_dma_cannot_enter_any_board_image(self):
+    def test_dma_cannot_enter_the_twelve_original_board_images(self):
+        self.assertEqual(len(IMAGES), 7)
         for image in IMAGES:
+            if image == "dma_fixture":
+                continue
             for name in ("_dma_copy_init", "_dma_descriptor", "_dma_fault", "_dma_reserved_end"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated DMA"):
                     verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug, image)

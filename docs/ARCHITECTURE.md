@@ -635,8 +635,17 @@ C state alone does not reset DMA history or pending DMAREQ.
 
 See [primary facts](PROVENANCE.md#m2-channel-0-dma-sources) and
 [offline evidence/remaining gate](VALIDATION.md#m2-isolated-dma-copy-coverage).
-All twelve board images exclude this module. AES, peripheral triggers, DMA
-interrupts, board integration and physical DMA acceptance remain separate.
+All twelve earlier board images still exclude this module. Only the two
+[DMA board fixtures](DEBUGGING.md#channel-0-dma-board-fixture)
+link it: volatile persistent buffers and diagnostics follow the private
+prefix, with relocated helper/ABI proof and terminal ownership unchanged.
+Their bounded RC16/XOSC32 orchestration and explicit reset/CODE/config22
+manual gate are not production integration. The separate
+[LG hardware record](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
+executes the unchanged driver on both clocks/routes, including a real
+unverified timeout and separately reset recovery. Generic, other channels,
+AES, peripheral triggers, DMA interrupts and stuck-controller recovery
+remain separate gates.
 
 ## Memory contract
 

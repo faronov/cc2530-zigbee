@@ -62,6 +62,8 @@ make BOARD=generic IMAGE=irq_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=irq_fixture all test
 make BOARD=generic IMAGE=radio_fifo_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=radio_fifo_fixture all test
+make BOARD=generic IMAGE=dma_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=dma_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -285,8 +287,8 @@ no automatic USB, RF operation or error-latch recovery belongs in this target.
 
 The separate `IMAGE=radio_fifo_fixture` adds real-driver host orchestration and
 alias-aware synthetic board execution, including all accepted TX RAM reads.
-Only these two new images link the FIFO driver; CI now has twelve board/image
-jobs and the same seven-file artifact whitelist. Focused decoder/runner tests:
+Only these two images link the FIFO driver, with the same seven-file artifact
+whitelist. Focused decoder/runner tests:
 
 ```sh
 PYTHONPATH=tools .venv/bin/python -B -m unittest test_radio_fifo_fixture -q
@@ -307,8 +309,8 @@ The independent channel-0 RAM-copy DMA has a focused offline target:
 make test-dma
 ```
 
-`make test` includes it without changing the twelve-image matrix or artifact
-whitelist. **Never flash or publish `dma_test.ihx` as board firmware.** Its
+`make test` includes this standalone executable separately from board artifacts.
+**Never flash or publish `dma_test.ihx` as board firmware.** Its
 checked host model and alias-aware linked execution are synthetic, not DMA
 silicon or AES evidence. Preserve the pinned nine-system-clock arm path,
 private/helper allocation guards and
@@ -317,9 +319,25 @@ Debug DMA_PAUSE must be cleared by a separate authorized hardware workflow
 before any physical DMA-register access. The
 [API-only gate and dated LG evidence](docs/DEBUGGING.md#guarded-dma-enable-after-reset)
 cover only the reset-scoped `26 -> 22` transition, not DMA transfers or AES.
-Future manual DMA fixtures must independently verify the entire physical
-image before enable; existing runners still require `26` and never enable
-DMA automatically. Focused **synthetic-only** gate/lifecycle checks:
+The separate `IMAGE=dma_fixture` now prepares both boards offline, preserving
+all twelve older BINs and expanding CI to fourteen jobs with the same exact
+seven-file whitelist. Its real-driver host and 42 linked synthetic scenarios
+cover 257 cycles, both clocks/routes, every buffer/guard byte, terminal lifetime
+and the genuine negative RET checkpoint. Run heavy s51 checks serially; do
+not relax the existing 15-second bound.
+
+```sh
+PYTHONPATH=tools .venv/bin/python -B -m unittest test_dma_fixture -q
+```
+
+The [manual DMA procedure](docs/DEBUGGING.md#parent-only-dma-acceptance-procedure)
+requires its own reset, full physical CODE verification and explicit gate22
+before resume/access. Older runners still require26; no automatic hardware
+test or recovery is added. The [dated LG DMA record](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
+now covers normal copies, an accepted-but-unverified timeout and separately
+reset 257-cycle recovery. Generic, other channels/triggers, stuck-DMA recovery
+and AES remain unvalidated; the last LG run ended on DMA READY016A/config22.
+Focused **synthetic-only** gate/lifecycle checks:
 
 ```sh
 PYTHONPATH=tools .venv/bin/python -B -m unittest test_m1_dma_config test_m1_lifecycle test_m1_transport -q

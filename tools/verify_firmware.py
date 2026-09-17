@@ -12,7 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
-IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture", "radio_fifo_fixture")
+IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
+          "radio_fifo_fixture", "dma_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -20,6 +21,7 @@ CAPABILITIES = {
     "clock_fixture": "non-networking-init-clock-fixture",
     "irq_fixture": "non-networking-timer1-irq-fixture",
     "radio_fifo_fixture": "non-networking-quiescent-radio-fifo-fixture",
+    "dma_fixture": "non-networking-software-triggered-dma-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -222,7 +224,8 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require(not any(name.startswith("_dma_") for name in symbols) and "C$dma.c$" not in debug,
+    require(image_name == "dma_fixture" or
+            (not any(name.startswith("_dma_") for name in symbols) and "C$dma.c$" not in debug),
             "Board image must not link the isolated DMA foundation")
     require(image_name == "radio_fifo_fixture" or
             (not any(name.startswith("_radio_fifo_") for name in symbols) and "C$radio_fifo" not in debug),
@@ -252,6 +255,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     if image_name == "radio_fifo_fixture":
         sizes = re.findall(r"^S:G\$radio_fifo_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
         require(sizes and all(int(size) == 108 for size in sizes), "Radio FIFO fixture debug ABI mismatch")
+    if image_name == "dma_fixture":
+        sizes = re.findall(r"^S:G\$dma_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == 116 for size in sizes), "DMA fixture debug ABI mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -323,6 +329,9 @@ def verify_artifacts(output, board, image_name="bringup"):
         verify_irq_fixture(image, symbols, debug)
     elif image_name == "radio_fifo_fixture":
         from radio_fifo_fixture import verify_fixture
+        verify_fixture(image, symbols, debug)
+    elif image_name == "dma_fixture":
+        from dma_fixture import verify_fixture
         verify_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),

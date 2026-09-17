@@ -321,12 +321,12 @@ no unsolicited USB response. Do not substitute guessed `4F 19` framing or
 `_exchange(..., 1)`, or infer a general USB grammar. Verification uses a
 separate RD_CONFIG.
 
-There is no DMA SFR/MMIO access, CPU resume, implicit reset/retry or
+This API performs no DMA SFR/MMIO access, CPU resume, implicit reset/retry or
 restore-on-close. Failed or late operations fault the session even if the
-hardware accepted the write; only resource cleanup remains. All existing
-hardware runners still require config `26`; none enables DMA automatically.
-The [DMA copy service](ARCHITECTURE.md#isolated-channel-0-dma-copy) still needs
-separate board integration and controller acceptance.
+hardware accepted the write; only resource cleanup remains. All
+older hardware runners still require config `26`; none enables DMA automatically.
+Only the separately authorized [DMA fixture runner](#channel-0-dma-board-fixture)
+uses this gate after full CODE verification. Controller acceptance remains open.
 
 #### 2026-09-17 LG DMA-enable gate acceptance
 
@@ -362,9 +362,9 @@ delay after a real USB write, not a physical USB timeout/stall or stuck-DMA test
 
 **Separate recovery, 06:10:14-06:10:26:** the unchanged FIFO runner explicitly
 reset, required default config `26`, verified all 8,979 CODE bytes and passed one
-full compiled FIFO cycle. The **last reported LG state is again FIFO READY
-`016A`, IRQs disabled, XOSC32 selected and both FIFOs empty**, with no hardware
-process remaining. The earlier [257-cycle FIFO record](#2026-09-17-lg-compiled-c-fifo-acceptance)
+full compiled FIFO cycle. That recovery ended at **FIFO READY `016A`, IRQs
+disabled, XOSC32 selected and both FIFOs empty**, with no hardware process
+remaining. The earlier [257-cycle FIFO record](#2026-09-17-lg-compiled-c-fifo-acceptance)
 remains historical and unchanged.
 
 The gate tests introduced no DMA-register access, DMA transfer, flashing or
@@ -1562,7 +1562,7 @@ received-frame behavior was exercised**. Clear strobes were only EE.
 
 Completed/M0-heartbeat bytes wrapped to 1. CPU-preserving inspection, stack,
 immutable M0, original clock diagnostics and unrelated flag/priority/mask
-observations passed. The **last reported LG state is the FIFO fixture halted
+observations passed. That run ended on the **FIFO fixture halted
 at READY `016A`, CMD/STA `88`, all IRQ enables zero and both FIFOs empty**,
 with inactive radio/CSP and AUTOACK disabled. No hardware process remained
 active. The 252.283-second host duration and raw counts are not calibrated
@@ -1578,6 +1578,214 @@ Past acceptance grants no new hardware authorization.
 
 The later [DMA-enable gate and separately reset one-cycle recovery](#2026-09-17-lg-dma-enable-gate-acceptance)
 are separate observations; they do not replace this 257-cycle acceptance.
+
+## Channel-0 DMA board fixture
+
+`IMAGE=dma_fixture` is host-tested, image-checked and synthetically simulated
+on both boards, with separate [bounded LG hardware acceptance below](#2026-09-17-lg-compiled-c-dma-acceptance).
+Generic remains hardware-unobserved.
+It links the published DMA/timebase/clock implementations unchanged; all twelve
+older BINs remain byte-identical and exclude DMA. This is not AES, peripheral
+DMA, interrupt dispatch, an allocator or a production integration. Never
+program the standalone `dma_test.ihx`.
+
+The real compiled-C sequence first selects/observes RC16. Each cycle copies
+`(completed & 15)+1` bytes A-to-B at RC16, selects XOSC32 after DMA_OK, copies
+16 bytes B-to-A, then selects RC16 and increments completed/M0 heartbeat only
+after DMA_OK. Thus 257 cycles give **1,029 READY stages, 514 DMA calls and
+6,289 verified transferred bytes**. There are 515 clock calls but only 514
+command writes: initial RC16 selection is genuinely idempotent. Timeout is
+1,024 raw ticks and the independent poll cap is 4,096; neither is calibrated
+wall time.
+
+Two explicitly allocated, persistent **volatile** buffers contain guard `69`,
+16 data bytes and guard `96`. Source byte `i` is
+`((completed + (31 for RC, 97 for XOSC)) & FF) XOR i` (hex constants).
+Destination starts complemented. C verifies all 36 source/destination/tail/
+guard bytes after acknowledged success; the runner independently reads them
+back at successful copy checkpoints. It never reads payload after DMA error.
+Buffers are refilled only after the preceding successful operation releases
+them. The [terminal ownership contract](ARCHITECTURE.md#isolated-channel-0-dma-copy)
+is unchanged: error is not quiescence, even if later bytes happen to match.
+There is no abort, dummy copy, fault-latch clear, retry or error-time clock
+switch. Original clock request/rollback diagnostics survive clock failure.
+
+### DMA fixture ABI, allocation and linked checkpoints
+
+The `M2DM` v1 record is **116 explicit wire bytes**, not a padded C diagnostic
+structure. Its address comes from matching checked map/CDB symbols, not XDATA0.
+Little-endian scalar arrays are serialized field by field.
+
+| Offset | Fields |
+| --- | --- |
+| 0..9 | `M2DM`, version1, size116, phase (INIT1/RUNNING2/READY3/FAULT4), reason, stage0..4, completed modulo256 |
+| 10..17 | Clock result, DMA result (`FF` not attempted), length, checked count, mismatch buffer/index (`FF` unset), actual/expected byte |
+| 18..26 | Source16, destination16, timeout24, poll cap16; source/destination retain the last copy on clock-only stages |
+| 27..45 | Serialized 19-byte clock request/rollback diagnostics |
+| 46..64 | Serialized DMA elapsed32, polls16, helper status, actions, complete, verified, ARM/REQ/IRQ/IRCON/CFG0L/H/CFG1L/H, sample-valid |
+| 65..80 | CMD/STA/SLEEPCMD, IEN0/1/2, eight controller bytes in the same order, later-snapshot validity, driver fault latch |
+| 81..92 | Persistent descriptor snapshot, initial sleep/IRCON/CFG1L/H |
+| 93..110 | Initial/current IP0, IP1, TCON, S0CON, S1CON, RFIRQF0/1, IRCON2, RFERRF |
+| 111..115 | Guards `69 96`, three reserved zero bytes |
+
+Reasons are entry1, phase2, clock3, DMA4, invariant5, bytes6. Driver actions
+CONFIGURED1/ARMED2/REQUESTED4/ACKNOWLEDGED8, `complete`, `verified`, and both
+sample-valid fields are distinct. Unread/stale bytes are not observations.
+Later controller snapshots are sequential reads, not atomic DMA snapshots;
+completion may occur between reads or after C returns. No partial-byte count
+is invented.
+
+Both layouts allocate descriptor `0045..004C`, DMA fault latch `004D`, private
+fence `dma_reserved_end=0087`, record `0088..00FB`, buffer A `00FC..010D`,
+buffer B `010E..011F`, work union `0120..0132`, and separately excluded
+`__gptrput_PARM_2` scratch `0143`. The entire DMA/timebase/clock prefix is
+protected. A's data `00FD..010C` naturally crosses `00FF->0100` in both
+directions; no padding/pool forced this layout. Other physical boundaries
+are not claimed. Ordinary XDATA is **324 bytes**, **356 used / 388 reserved**
+including status; the full `1E00..1E3F` reservation and `1F00..1FFF` IRAM
+alias are unchanged. Stack reservation is `69..FF` (151 bytes); synthetic
+peak SP is `79`, below the unchanged `80..FF` guard.
+
+| Linked location | Generic | LG |
+| --- | --- | --- |
+| BEFORE / READY / terminal FAULT | `0140 / 0142 / 0144` | `0168 / 016A / 016C` |
+| Arm leaf / RET | `0A8F / 0A9B` | `0AB7 / 0AC3` |
+| Arm call / third-poll call / DMAREQ write | `1445 / 1471 / 1481` | `146D / 1499 / 14A9` |
+| Expiry helper / actual success RET | `0233 / 02DA` | `025B / 0302` |
+| Nested returns: fixture / DMA poll / expiry caller | `20A5 / 1474 / 0E43` | `20CD / 149C / 0E6B` |
+
+The 13-byte leaf is exactly `75 D6 01`, nine `00` NOPs, `22`.
+[SWRU191F 8.1 p.93 and Table 2-3 p.39](PROVENANCE.md#m2-channel-0-dma-sources)
+supply the >=9-system-clock fetch interval; s51 timing is not that proof.
+Only reviewed CODE/private-data/parameter/IRAM/bit/split-pointer relocations
+are normalized: the **2,867-byte DMA module still hashes to
+`d5cc411d99fad73f654803263414deb629f988d95cc21dee9bd0f07ac54d9919`**.
+Complete board CODE/constants/callers, clock/timebase helpers, byte ABIs and
+allocation guards are independently checked and mutation-rejected.
+
+| Board | CODE / BIN bytes | SHA-256 |
+| --- | ---: | --- |
+| generic | 8,850 | `f19112019fc6b3ab22d81ad4b8d4d1a5fd310a36ee38493cfcefa8ab2a8974a0` |
+| lg_esl29_rev03 | 8,890 | `e18db3859aa23c673e9edb5770f65056efea8040986e560c49fcc9c88061094d` |
+
+Offline lookup: `tools/debug_image.py dma-checkpoints` or `dma-state`, with
+`--board`, `--image dma_fixture`, `--output` and, for state, `--hex`/`--snapshot`.
+
+### Parent-only DMA acceptance procedure
+
+After separate authorization, correct board programming and recovery review,
+each invocation explicitly resets into halted PC0/config26, verifies **every
+physical CODE byte**, then calls the published DMA-enable API with separate
+DMA/reset permissions to establish22 **before first firmware resume or DMA
+register access**. PC0 does not mean FMAP0; full CPU/FMAP preservation is
+checked. The runner records requested/confirmed configuration and observed
+STATUS separately. Older runners/helpers still require26. The new runner's
+only extra debug-injected peripheral instructions are the eight read-only
+controller SFR reads above, under config22 and full CPU preservation; generic
+core access is not widened.
+
+```sh
+.venv/bin/python tools/check_dma_hardware.py --board lg_esl29_rev03 \
+  --output build/lg_esl29_rev03/dma_fixture --bus BUS --address ADDRESS \
+  --confirm-dma-test --cycles 257
+```
+
+A **separately authorized negative invocation** uses `--cycles 1 --induce-timeout`.
+On the first XOSC32 copy it stops at the proved arm RET (nine NOPs executed),
+replaces that breakpoint with the genuine 168-byte `timebase_expired` helper's
+RET, and resumes. Before holding, it checks DPL/DPS=0, SP=`75`, all three
+nested returns and seven saved registers, actual live copy/timeout/cap/
+diagnostic arguments, descriptor, ARM1/REQ0/IRQ0 and preserved config/IRCON.
+It verifies actual start/previous/deadline/now/helper-output arguments and
+the cached **unexpired** boolean. Breakpoint I/O is not assumed fast enough:
+already-expired or mismatched context fails closed, without hold or resume.
+
+A bounded 0.25-second host hold changes no helper state. Resuming that real
+RET uses its earlier sample and issues the real request once; the next poll
+must produce **DMA_TIMEOUT8, polls4, actions7, no ACK/verified success** and
+terminal FAULT. Actual elapsed must exceed1,024 and remain below half-range.
+Driver complete may be0/1; later controller observations may be mixed/late.
+This is a host-induced deadline experiment, not a physical stuck-DMA test.
+No payload inspection or reuse follows failure.
+
+After failed/late I/O only close is allowed: no restore/disable-DMA, abort,
+reset, retry or clock cleanup. JSON success is emitted only after successful
+resource cleanup. Recovery requires a **new, explicitly authorized full-reset
+invocation**, never resetting C fields or continuing a halted failed copy.
+Full-CODE-before-runner-resume does not establish that an external programmer
+never executed its own normal-reset cleanup.
+
+[Automated evidence](VALIDATION.md#m2-dma-board-fixture-coverage) is host,
+linked-image and synthetic-only; the manual record below is separate.
+The identical numeric READY address in earlier FIFO images is not proof of
+image identity. Past acceptance grants no new hardware authorization; AES
+and M2 #4 remain open.
+
+### 2026-09-17 LG compiled-C DMA acceptance
+
+The unchanged **8,890-byte LG image**, SHA-256
+`e18db3859aa23c673e9edb5770f65056efea8040986e560c49fcc9c88061094d`,
+passed the existing runner without firmware changes or weakened assertions.
+The setup remained LG Rev0.3 / CC Debugger / macOS 15.7.9 / Python 3.11.9 /
+PyUSB 1.3.1. The two private text-demo recovery copies and factory-page backup
+were checksum-verified without modification. Explicit programming with actual
+readback ran **09:16:47-09:16:55, 2026-09-17 UTC+03**.
+Every acceptance invocation independently verified **all 8,890 physical CODE
+bytes after its own reset**, then established config `26 -> 22` before any
+firmware resume or DMA-register access; full reset CPU/FMAP preservation passed.
+
+Three initial cycles, **09:17:27-09:17:41**, passed six copies and 54 bytes,
+including both clocks/routes, source/destination guards and untouched tails.
+The **separate negative run, 09:18:40-09:18:53**, stopped after the nine-NOP
+arm leaf and at the actual expiry RET `0302`. DPL/DPS=0, SP=`75`, all three
+return frames, live arguments and the persistent `010F -> 00FD`, length16
+descriptor were checked. The raw start/previous/now/deadline values were
+334936 / 334940 / 335038 / 335960: the captured third-poll sample was genuinely
+unexpired, with ARM1/REQ0/IRQ0 before the hold.
+
+After resumption, the real request was issued once and the next poll returned
+**DMA_TIMEOUT=8**, 27,960 raw ticks / four polls / helper0. Actions were7,
+complete1, verified0; both driver and later controller observations found
+ARM0/REQ0/IRQ1, CFG0=`0045`, CFG1=`0000`, IRCON0. The hardware-completed
+request was **not timely verified or acknowledged**. The fixture retained
+fault latch8 and DMA reason4/stage3 at terminal FAULT `016C`, on XOSC32 with
+IRQs disabled. No payload readback, refill, retry, acknowledgment or clock
+cleanup followed failure. This is a host-induced deadline experiment, not
+a physical stuck-DMA test or permission to reuse buffers after error.
+
+A **separate explicit-reset recovery invocation** ran **09:20:00-09:24:03
+UTC+03**, completing 257 cycles and 1,029 READY stages. Its observed bounds:
+
+| Stage | Count | Raw elapsed ticks | Polls | Copy length / C-checked buffer bytes |
+| --- | ---: | --- | ---: | --- |
+| Initial RC16 selection, idempotent | 1 | 0 | 0 | 0 / 0 |
+| RC16 A-to-B copy | 257 | 25..26 | 5 | All lengths 1..16 / 36 each |
+| Select XOSC32 | 257 | 11..13 | 3 | 0 / 0 |
+| XOSC32 B-to-A copy | 257 | 12..13 | 5 | 16 / 36 each |
+| Select RC16, advance cycle/heartbeat | 257 | 2..3 | 1 | 0 / 0 |
+
+The run confirmed **514 copies and 6,289 transferred bytes**. Real C checked
+**18,504 source/destination/tail/guard bytes**, independently read back by the
+runner at successful copy checkpoints. A's `00FD..010C` data crossed
+`00FF -> 0100` as both source and destination; no other physical RAM boundary
+is claimed. Completed/M0-heartbeat bytes wrapped to1. CPU/FMAP preservation,
+immutable M0 and unrelated flag/priority/mask observations passed.
+
+The **last reported LG state is the DMA fixture halted at READY `016A`,
+debug config22, CMD/STA `C9` (RC16), all IRQ enables zero, ARM/REQ/DMAIRQ zero,
+CFG0=`0045`, CFG1=`0000`, IRCON0 and fault latch0**. No hardware process
+remained active. The 242.309-second host duration and raw whole-operation
+counts are not calibrated timing or isolated DMA throughput measurements.
+SP=`75` was physically checked at the negative checkpoint; synthetic peak
+SP=`79` is not a measured hardware high-water mark.
+
+All twelve older BINs and the published platform/debugger implementations
+remain unchanged. Generic DMA hardware, other channels/triggers, variable/
+word/repeated transfers, DMA interrupts, physical stuck/abort recovery, AES,
+RF, flash and sleep/wake remain separate gates; full M2 #4 stays open.
+Only processed observations are published. Raw logs, identities and recovery
+material remain outside Git/CI; automated `hardware_tested=false` metadata
+is not rewritten by this dated manual acceptance.
 
 ## Awake-only timebase board fixture
 

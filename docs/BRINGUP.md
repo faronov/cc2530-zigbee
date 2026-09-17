@@ -33,7 +33,11 @@ under `build/<board>/irq_fixture/`. `IMAGE=radio_fifo_fixture` selects the
 [quiescent FIFO board fixture](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
 under `build/<board>/radio_fifo_fixture/`, with offline checks for both boards,
 separate [bounded LG hardware acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
-and all ten older BINs unchanged. All six images use the same board
+and all ten older BINs unchanged. `IMAGE=dma_fixture` selects the
+[channel-0 DMA board fixture](DEBUGGING.md#channel-0-dma-board-fixture)
+under `build/<board>/dma_fixture/`, with
+[bounded LG hardware acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
+and all twelve earlier BINs unchanged. All seven images use the same board
 policy, M0 status ABI and memory restrictions. The new timebase fixture does
 not change the existing `bringup` or `debug_fixture` firmware bytes. The clock
 fixture likewise preserves all six older board BINs; the IRQ fixture preserves

@@ -493,6 +493,24 @@ traces, errors and JSON remain private. This establishes the bounded
 debug-config gate on that LG setup, not DMA-controller copies, AES,
 physical USB stalls or general adapter compatibility.
 
+### M2 DMA board fixture sources
+
+The original BSD-3-Clause [DMA fixture and guarded runner](DEBUGGING.md#channel-0-dma-board-fixture)
+reuse the published DMA, clock, Sleep Timer and debug-gate implementations
+unchanged. The primary facts are those cited above, including SWRU191F
+chapter8, Table2-3, section2.5's SFR/interrupt map, and Tables3-1/3-2;
+no new adapter framing or hardware timing is inferred. Only the reviewed
+relocation operands of the original 2,867-byte DMA module are normalized;
+its published hash is not replaced. Public patterns, host/backend models,
+wire serializers and alias-aware synthetic events are original work.
+No SDK/GPL implementation, private artifact or dependency was imported.
+[Offline evidence](VALIDATION.md#m2-dma-board-fixture-coverage) remains distinct
+from the separate [2026-09-17 LG compiled-C record](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance):
+authorized programming/readback, full physical CODE verification, normal,
+negative and explicitly reset recovery runs of this original image.
+Only processed observations are published; raw logs, identities and recovery
+material remain private. Earlier debug-gate/FIFO observations remain historical.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

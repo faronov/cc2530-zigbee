@@ -225,12 +225,12 @@ does not establish physical FIFO/CSP behavior. The subsequent, separate
 [quiescent FIFO board fixture](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
 and guarded manual runner now implement that offline preparation, including
 real-driver CODE/XDATA payload checks and a proved pre-write deadline hold.
-The twelve-job matrix preserves all ten older BINs and the exact artifact
+The FIFO addition preserved all ten older BINs and the exact artifact
 whitelist. The unchanged LG image passed
 [separate hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance):
 normal operation, a terminal written-but-unverified timeout, then 257 cycles
 after an explicit reset, with 33,410 checked bytes and 514 TX clears.
-The latest run ended at FIFO READY `016A`, XOSC32, IRQs disabled and empty FIFOs.
+That FIFO run ended at READY `016A`, XOSC32, IRQs disabled and empty FIFOs.
 RX flush, received frames, on-air behavior, error-latch recovery and calibrated
 metadata remain open; generic has no physical FIFO evidence. M2 #4 remains open.
 
@@ -239,11 +239,21 @@ The independent AES-128 encrypt-block prerequisite is
 No AES primitive or successful placeholder is added. A separately assigned
 [channel-0 RAM-copy DMA foundation](ARCHITECTURE.md#isolated-channel-0-dma-copy)
 now advances that dependency with host, linked-image and synthetic execution
-only. It adds no board image, peripheral trigger, AES operation or hardware
-claim; all twelve existing BINs and the matrix/artifact whitelist are preserved.
+only, without a peripheral trigger, AES operation or hardware claim.
 The separate [reset-scoped DMA-enable debug gate](DEBUGGING.md#guarded-dma-enable-after-reset)
 now has host and bounded LG hardware evidence, without exercising DMA.
-DMA board/controller acceptance remains a separate open gate.
+The subsequent [DMA board fixture](DEBUGGING.md#channel-0-dma-board-fixture)
+has offline checks for both boards: 257 compiled RC16/XOSC32 cycles,
+514 bounded copies, exact relocated ABI/nine-NOP/negative-RET proof and a
+guarded manual runner. Only these two images link DMA; all twelve older
+BINs remain unchanged. The matrix grows to fourteen jobs with the same
+seven-file whitelist and `hardware_tested=false`. The unchanged LG image passed
+[bounded hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance):
+normal operation, a terminal unverified timeout, then 257 cycles after an
+explicit reset, with 514 copies and 6,289 verified bytes. The last LG run
+ended at DMA READY016A/config22 on RC16, with IRQs off and ARM/REQ/DMAIRQ zero.
+Generic, other channels/triggers and physical stuck-controller recovery
+remain unobserved.
 This does not close the remaining radio/RX/channel/calibration gates or M2 #4.
 
 Deliver independent interfaces for:

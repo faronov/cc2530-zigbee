@@ -150,7 +150,7 @@ resume and never flashes.
 Generic hardware and physical timer-fault injection remain unobserved. Stopped,
 backward and ambiguous C paths retain host/simulator coverage; the C run is
 not calibration or a natural 24-bit timer-wrap claim. CI covers both boards
-and all six board images without uploading standalone test executables.
+and all seven `IMAGE` variants without uploading standalone test executables.
 **M2 #4 remains open** for clock measurement/calibration, IRQ/compare/wake and
 the other platform gates.
 
@@ -267,22 +267,32 @@ The 8,979-byte LG image also passed
 bytes and 514 explicit TX clears. A separate timeout retained one written but
 unverified byte at terminal FAULT, without implicit recovery. Generic remains
 **host/image/synthetic-simulator-only**. RX flush, received frames, FCS and
-on-air operation are not validated. The latest LG run left the FIFO fixture
+on-air operation are not validated. That FIFO run left its fixture
 halted at READY `0x016A`, XOSC32 selected, IRQs disabled and both FIFOs empty.
-All ten older BINs and historical evidence remain unchanged; CI has twelve
-board/image jobs with the same artifact whitelist. M2 #4 stays open.
+All ten older BINs and historical evidence remain unchanged. M2 #4 stays open.
 
 ## Isolated DMA prerequisite
 
 The [single-owner channel-0 DMA copy](docs/ARCHITECTURE.md#isolated-channel-0-dma-copy)
 supports bounded 1..16-byte XDATA RAM copies with terminal fault/lifetime
 protection. `make test-dma` supplies **host, linked-image and synthetic DMA
-evidence only**; never flash `dma_test.ihx`. All twelve board BINs and the CI
-artifact whitelist are unchanged. Physical DMA acceptance, peripheral DMA and AES
+evidence only**; never flash `dma_test.ihx`. Peripheral DMA and AES
 remain deferred; the [AES CPU sequencing gap](docs/PROVENANCE.md#m2-aes-cpu-transfer-prerequisite)
 and remaining radio gates are not closed.
 The separate [debug-config gate](docs/DEBUGGING.md#guarded-dma-enable-after-reset)
 has bounded LG hardware evidence; it does not exercise or validate DMA copies.
+
+The separate [`IMAGE=dma_fixture`](docs/DEBUGGING.md#channel-0-dma-board-fixture)
+has host/image/synthetic checks for both boards and
+[bounded LG hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance):
+257 separately reset recovery cycles, 514 copies / 6,289 verified bytes across
+RC16/XOSC32 and both RAM routes. A separate real timeout retained an unacknowledged
+completion and terminal FAULT without payload inspection or reuse.
+Only these two images link DMA. Generic remains hardware-unobserved.
+All twelve older BINs remain byte-identical; CI has fourteen jobs with the
+same seven-file whitelist and `hardware_tested=false`. The last LG run ended
+on the 8,890-byte DMA image at READY `016A`, debug config22, RC16, IRQs disabled
+and no armed channel, pending request or DMA completion flag.
 
 ## Intended scope
 

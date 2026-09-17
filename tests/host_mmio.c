@@ -12,11 +12,17 @@
 #if defined(RADIO_FIFO_FIXTURE_HOST_TEST)
 #include "radio_fifo_fixture.h"
 #endif
+#if defined(DMA_FIXTURE_HOST_TEST)
+#include "dma_fixture.h"
+#endif
 
 #define DEFINE_REGISTER(name, address) volatile uint8_t name;
 CC2530_REGISTER_LIST(DEFINE_REGISTER)
 #if defined(RADIO_FIFO_FIXTURE_HOST_TEST)
 RFF_REGISTERS(DEFINE_REGISTER)
+#endif
+#if defined(DMA_FIXTURE_HOST_TEST)
+DMF_REGISTERS(DEFINE_REGISTER)
 #endif
 #if defined(IRQ_FIXTURE_HOST_TEST)
 IRQ_FIXTURE_REGISTERS(DEFINE_REGISTER)

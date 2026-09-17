@@ -168,6 +168,12 @@ def check_artifact_rejections(output, board, image_name="bringup"):
                 ("cdb", lambda data: data.replace(b"{108}ST", b"{107}ST"), "ABI"),
                 ("cdb", lambda data: data.replace(b"{57}S:S$checked", b"{56}S:S$checked"), "ABI"),
             )
+        elif image_name == "dma_fixture":
+            mutations += (
+                ("map", lambda data: data.replace(b"_dma_fixture_ready ", b"_missing_dma_ready "), "symbol"),
+                ("cdb", lambda data: data.replace(b"{116}ST", b"{115}ST"), "ABI"),
+                ("cdb", lambda data: data.replace(b"{80}S:S$fault_latch", b"{79}S:S$fault_latch"), "ABI"),
+            )
         for extension, mutate, message in mutations:
             path = work / f"{image_name}.{extension}"
             original = path.read_bytes()
@@ -423,8 +429,8 @@ def main():
     require(debug_image.symbol("_SOC_P0").space == "SFR", "SFR symbol space mismatch")
     require(debug_image.symbol("_board_description").kind == "object", "CODE data misclassified")
     source_file = Path(__file__).resolve().parents[1] / "examples" / f"{args.image}.c"
-    if args.image == "radio_fifo_fixture":
-        source_file = Path(__file__).resolve().parents[1] / "src" / "radio_fifo_fixture_state.c"
+    if args.image in ("radio_fifo_fixture", "dma_fixture"):
+        source_file = Path(__file__).resolve().parents[1] / "src" / f"{args.image}_state.c"
     main_lines = debug_image.source_lines(pc=symbols["_main"])
     require(any(location.file == source_file.name for location in main_lines), "Main source mapping missing")
     if args.image == "debug_fixture":
@@ -463,6 +469,10 @@ def main():
                 debug_image.symbol("_IRQ_T1STAT").space == "SFR", "EA bit/T1STAT SFR spaces were conflated")
     elif args.image == "radio_fifo_fixture":
         require(debug_image.symbol("_radio_fifo_fixture_state").size == 108, "FIFO symbol size mismatch")
+    elif args.image == "dma_fixture":
+        require(debug_image.symbol("_dma_fixture_state").size == 116, "DMA symbol size mismatch")
+        require(debug_image.symbol("_dma_fixture_a").size == debug_image.symbol("_dma_fixture_b").size == 18,
+                "DMA caller buffer size mismatch")
     check_artifact_rejections(args.output, args.board, args.image)
     check_alias(args.simulator)
     with unittest.TestCase().assertRaisesRegex(ValueError, "register bank"):
@@ -479,9 +489,12 @@ def main():
     elif args.image == "irq_fixture":
         from boot_irq_fixture import check_irq_fixture
         check_irq_fixture(args.simulator, args.output, args.board, symbols)
-    else:
+    elif args.image == "radio_fifo_fixture":
         from boot_radio_fifo_fixture import check_radio_fifo_fixture
         check_radio_fifo_fixture(args.simulator, args.output, args.board, symbols)
+    else:
+        from boot_dma_fixture import check_dma_fixture
+        check_dma_fixture(args.simulator, args.output, args.board, symbols)
 
 
 if __name__ == "__main__":

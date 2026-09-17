@@ -742,7 +742,7 @@ test. Raw records remain private and no new hardware authorization follows.
 
 `make test-dma` runs the original
 [channel-0 RAM-copy service](ARCHITECTURE.md#isolated-channel-0-dma-copy)
-without linking it into any board image. **Never flash `dma_test.ihx` or upload
+as a standalone executable. **Never flash `dma_test.ihx` or upload
 it as board firmware.** AES CPU sequencing remains unresolved; this is not an
 AES API, peripheral-trigger backend, hardware fixture or radio-gate closure.
 
@@ -793,7 +793,7 @@ prefix occupies `0000..005B`; the separately protected generic-store helper
 scratch is at `00BD`. IRAM before stack is `00..3B`, with 196 stack bytes
 reserved at `3C..FF`; the synthetic high-water SP is `4E`, below the `80` guard.
 
-The twelve existing board configurations retain their complete published
+At foundation publication, the twelve existing board configurations retained their complete published
 BIN lengths/hashes and host/image/alias checks. Their verifier rejects DMA
 symbols or source records for every image; matrix and artifact whitelist
 are unchanged. The existing FIFO 69,895 host cases / 99 linked scenarios and
@@ -803,16 +803,89 @@ The two FIFO fixture simulations hit their existing 15-second bound during
 the twelve-way parallel check; both passed separately with that bound and
 the fixture code unchanged.
 
-**Remaining hardware gate:** no DMA-controller copy, arbitration timing,
-peripheral transfer, AES or stopped-clock acceptance is claimed. The
-[separate debug-config gate](#m2-dma-debug-gate-coverage) now has bounded LG
-hardware evidence; it does not validate DMA. A future authorized DMA board
-fixture must verify all physical CODE after its own reset, establish clear
-DMA_PAUSE before any DMA-register access (26 is unsuitable), and retain known
-reset/TRIG0 history and persistent buffer ownership. The latest separately
-reset FIFO recovery again ended at READY016A; the earlier 257-cycle record
-remains historical. No automatic reset, abort, resume, hardware access or
-recovery is added; M2 #4 remains open.
+**Separate hardware evidence:** the subsequent board fixture below, not this
+standalone executable or the debug-config gate alone, establishes bounded LG
+controller copies and a terminal timeout. It verifies all physical CODE after
+its own reset and clears DMA_PAUSE before any DMA-register access, retaining
+known reset/TRIG0 history and persistent buffer ownership. Arbitration timing,
+peripheral transfers, AES and physical stuck-controller recovery remain open.
+Historical FIFO records are unchanged. No automatic reset, abort, resume,
+hardware access or recovery is added; M2 #4 remains open.
+
+## M2 DMA board fixture coverage
+
+Both `IMAGE=dma_fixture` layouts are **host-tested, image-checked and
+synthetically simulated**; the LG image also has the separate hardware record
+below. The [canonical ABI, hashes, memory layout,
+checkpoints and manual procedure](DEBUGGING.md#channel-0-dma-board-fixture)
+remain separate from DMA-controller hardware acceptance. The published DMA,
+clock, timebase and reset-scoped debugger gate implementations are unchanged.
+
+The fixture host model executes the real drivers with checked 32-entry logs
+and an independent copy reference. It covers 257 cycles/514 copies/6,289
+bytes, all lengths/pattern phases, both clocks/routes, all 36 byte/guard
+corruptions, clock timeout/cap and confirmed/unconfirmed rollback, stale or
+changed controller/flag/config/CPU ownership, partial/stuck/late completion,
+and immutable fault/descriptor/diagnostic/buffer lifetime. Explicit synthetic
+completion after C returns does not permit reuse or clear the original fault.
+
+Each linked board executes **42 scenarios**: a 257-cycle normal run and 41
+fault cases, including every actual C buffer-readback position, the real
+post-arm expiry RET hold, partial/stuck/late effects, clock failure and flag
+changes. The model decodes actual DMA configuration/descriptor addresses and
+length, copies exactly each requested byte, and verifies all 6,289 destination
+addresses plus 514 arm/nine-NOP/request/ack sequences and 514 clock writes.
+Simulator event-control variables live outside target address spaces.
+Completion/control/clock changes are explicit synthetic events; no CODE
+patch or C success replacement is used.
+
+Every board CODE byte and every byte of the independently normalized original
+2,867-byte DMA module is mutation-rejected. Exact CDB types/fields, private
+prefix, helper exclusion, caller paths, passive SFR boundary and all three
+live return frames are checked. Status/unallocated/peripheral/alias/upper-IRAM
+guards are unchanged; measured synthetic peak SP is79 on both boards.
+
+Runner tests are original synthetic doubles, not hardware observations. They
+check 257 decoded cycles, whole-CODE-before-enable-before-resume ordering,
+separate authorization, config26/22 distinction, FMAP1 preservation, every
+live context byte, actual controller reads, exact timeout acceptance, no
+fault payload inspection, every runner I/O boundary and cleanup failure.
+The real debugger with a synthetic USB/CPU backend also checks all register
+banks/DPS values, every wrong config byte, and every peripheral-read I/O
+failure/late boundary: no restore, retry or following target I/O after fault.
+
+All fourteen `make BOARD=... IMAGE=... PYTHON=.venv/bin/python all test`
+combinations passed serially, including **402 Python tests** per combination,
+the unchanged standalone DMA **194,819 host / 97 linked** and FIFO
+**69,895 host / 99 linked** cases, and existing clock/IRQ/timebase/MAC checks.
+Complete BIN lengths and SHA-256 values matched all twelve published baselines.
+Repository/local-link checks covered 123 files; whitespace checks passed.
+
+The twelve older images remain DMA-excluded and byte-identical. Only the two
+new images link DMA; the fourteen-job matrix retains the exact seven-file
+artifact whitelist and `hardware_tested=false`. Generic, other channels/triggers,
+physical stuck-DMA/abort recovery, AES, peripheral DMA, RF, calibration and
+M2 #4 remain open.
+
+### 2026-09-17 bounded LG DMA hardware evidence
+
+Parent-run `all test` passed for both new images, including 402 Python tests
+and the unchanged standalone DMA/FIFO/clock/IRQ/timebase/MAC checks.
+The unchanged 8,890-byte LG image passed normal copies and a separate real
+pre-request deadline hold: DMA_TIMEOUT8, 27,960 raw ticks/four polls,
+actions7, complete1 but verified0, with IRQ1 unacknowledged and no payload
+inspection or reuse. This was not a physical stuck-controller injection.
+
+A separately reset 257-cycle run checked **1,029 READY stages, 514 copies,
+6,289 transferred bytes and 18,504 source/destination/tail/guard bytes**,
+with both clocks/routes, all lengths 1..16 and the real `00FF->0100` RAM
+boundary in both directions. CPU/FMAP, M0/counter-wrap and unrelated flags
+were preserved. Final state was DMA READY016A/config22, RC16, IRQs off,
+ARM/REQ/DMAIRQ zero. The
+[canonical record](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
+contains the hash, timeline, raw bounds and retained-error observations.
+Actual negative SP75/return frames were checked; peak SP79 remains synthetic,
+not a measured hardware high-water mark. Raw records remain private.
 
 ## M2 quiescent radio FIFO automated coverage
 
@@ -1047,9 +1120,9 @@ seeing measurements.
 ## CI and release boundary
 
 Hosted CI builds/tests without physical devices or repository secrets.
-The CI matrix covers six non-RF images (`bringup`, `debug_fixture`,
-`timebase_fixture`, `clock_fixture`, `irq_fixture`, `radio_fifo_fixture`) on both
-boards: twelve jobs. Artifacts contain only the
+The CI matrix covers seven non-RF images (`bringup`, `debug_fixture`,
+`timebase_fixture`, `clock_fixture`, `irq_fixture`, `radio_fifo_fixture`,
+`dma_fixture`) on both boards: fourteen jobs. Artifacts contain only the
 explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.
