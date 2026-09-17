@@ -234,9 +234,9 @@ That FIFO run ended at READY `016A`, XOSC32, IRQs disabled and empty FIFOs.
 RX flush, received frames, on-air behavior, error-latch recovery and calibrated
 metadata remain open; generic has no physical FIFO evidence. M2 #4 remains open.
 
-The independent AES-128 encrypt-block prerequisite is
+The CPU-only AES-128 encrypt-block prerequisite remains
 [blocked on CPU transfer sequencing](PROVENANCE.md#m2-aes-cpu-transfer-prerequisite).
-No AES primitive or successful placeholder is added. A separately assigned
+That investigation added no successful placeholder. A separately assigned
 [channel-0 RAM-copy DMA foundation](ARCHITECTURE.md#isolated-channel-0-dma-copy)
 now advances that dependency with host, linked-image and synthetic execution
 only, without a peripheral trigger, AES operation or hardware claim.
@@ -255,6 +255,17 @@ ended at DMA READY016A/config22 on RC16, with IRQs off and ARM/REQ/DMAIRQ zero.
 Generic, other channels/triggers and physical stuck-controller recovery
 remain unobserved.
 This does not close the remaining radio/RX/channel/calibration gates or M2 #4.
+
+A separate [AES-128 DMA encrypt-one-block foundation](ARCHITECTURE.md#isolated-aes-128-dma-block)
+now has host, genuine linked-image and alias-aware synthetic evidence.
+It uses only the documented ENC-triggered two-channel interface with private
+staging, finite key/IV/block phases and terminal failure ownership. It is not
+a board `IMAGE`, production software fallback, messaging/CCM/security service
+or CPU-transfer implementation. All fourteen existing board BINs and the
+published DMA/timebase/clock/debug implementations remain unchanged.
+Actual AES/DMA handshake, KAT, repeated-drain and failure/recovery behavior on
+silicon still require a separately scoped fixture and hardware acceptance.
+The latest installed LG state remains the accepted DMA fixture, not AES.
 
 Deliver independent interfaces for:
 

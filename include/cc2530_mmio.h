@@ -51,6 +51,10 @@
     X(SOC_DMA0CFGH, 0xd5) \
     X(SOC_DMAARM, 0xd6) \
     X(SOC_DMAREQ, 0xd7) \
+    X(SOC_ENCDI, 0xb1) \
+    X(SOC_ENCDO, 0xb2) \
+    X(SOC_ENCCS, 0xb3) \
+    X(SOC_S0CON, 0x98) \
     X(SOC_RFD, 0xd9) \
     X(SOC_RFST, 0xe1) \
     X(SOC_RFERRF, 0xbf)

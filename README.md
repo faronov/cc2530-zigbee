@@ -276,8 +276,8 @@ All ten older BINs and historical evidence remain unchanged. M2 #4 stays open.
 The [single-owner channel-0 DMA copy](docs/ARCHITECTURE.md#isolated-channel-0-dma-copy)
 supports bounded 1..16-byte XDATA RAM copies with terminal fault/lifetime
 protection. `make test-dma` supplies **host, linked-image and synthetic DMA
-evidence only**; never flash `dma_test.ihx`. Peripheral DMA and AES
-remain deferred; the [AES CPU sequencing gap](docs/PROVENANCE.md#m2-aes-cpu-transfer-prerequisite)
+evidence only**; never flash `dma_test.ihx`. This RAM-only slice does not
+validate AES/peripheral DMA; the [AES CPU sequencing gap](docs/PROVENANCE.md#m2-aes-cpu-transfer-prerequisite)
 and remaining radio gates are not closed.
 The separate [debug-config gate](docs/DEBUGGING.md#guarded-dma-enable-after-reset)
 has bounded LG hardware evidence; it does not exercise or validate DMA copies.
@@ -293,6 +293,20 @@ All twelve older BINs remain byte-identical; CI has fourteen jobs with the
 same seven-file whitelist and `hardware_tested=false`. The last LG run ended
 on the 8,890-byte DMA image at READY `016A`, debug config22, RC16, IRQs disabled
 and no armed channel, pending request or DMA completion flag.
+
+## Isolated AES-128 DMA foundation
+
+[`aes128_encrypt_block`](docs/ARCHITECTURE.md#isolated-aes-128-dma-block)
+encrypts one 16-byte block through two AES-triggered DMA channels, with private
+staging, a single bounded deadline/poll cap and retained terminal faults.
+`make test-aes` checks public NIST vectors, an independent host-only reference,
+real SDCC CODE/XDATA callers and synthetic descriptor/alias transfers.
+This is **host-tested, image-checked and simulated, not hardware-observed**.
+Never flash `aes_test.ihx`; all fourteen board BINs, CI jobs and the seven-file
+artifact whitelist remain unchanged. There is no AES board image, messaging
+ECB, CCM/authentication, key management or production software fallback.
+The [physical AES gate](docs/VALIDATION.md#m2-isolated-aes-dma-block-coverage)
+and CPU-only sequencing remain open; the last installed LG image is still DMA.
 
 ## Intended scope
 

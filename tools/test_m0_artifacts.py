@@ -101,6 +101,17 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "isolated DMA"):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
+    def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
+        self.assertEqual(len(IMAGES), 7)
+        for image in IMAGES:
+            for name in ("_aes128_encrypt_block", "_aes_dma0", "_aes_dma1", "_aes_key",
+                         "_aes_output", "_aes_fault", "_aes_reserved_end", "_aes_reference_encrypt"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated AES"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("aes.c", "aes_reference.c", "test_aes.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated AES"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
+
     def test_status_cannot_alias_iram(self):
         self.symbols["_m0_status"] = 0x1F00
         with self.assertRaisesRegex(ValueError, "alias"):

@@ -418,7 +418,7 @@ Raw logs, identities and recovery backups remain outside Git and CI.
 
 ### M2 AES CPU-transfer prerequisite
 
-The independent AES-128 encrypt-block investigation on 2026-09-17 did **not**
+The initial independent AES-128 encrypt-block investigation on 2026-09-17 did **not**
 add an API, executable, software fallback or hardware-support claim.
 The CPU-only transfer contract remains unresolved; this is not a finding that
 CPU access is impossible. Sources read directly:
@@ -440,10 +440,10 @@ test would not establish them on silicon.
 
 The concrete documented alternative is two DMA channels driven by ENC_DW=29
 and ENC_UP=30 (SWRU191F p.147, section 15.9 p.150 and Table 8-1 p.99), with
-explicit descriptors, completion and ownership handling. This was **not**
-implemented: it would expand scope. It also needs a separately reviewed debug
+explicit descriptors, completion and ownership handling. At that prerequisite
+gate it was **not** implemented: it required separate scope. It also needed a reviewed debug
 boundary: Table 3-2 p.55 prohibits DMA-register access with DMA_PAUSE set;
-the current manual runners require debug configuration 26, which sets that bit.
+the manual runners then required debug configuration 26, which sets that bit.
 The later [bounded debug gate](#m2-dma-debug-configuration-sources) addresses
 that prerequisite only, not the AES CPU transfer contract.
 The [SWRU214A software examples guide](https://www.ti.com/lit/pdf/swru214),
@@ -451,8 +451,9 @@ October 2009, pp.21-24 describes higher-level security APIs, not the missing
 CPU handshake. Full TI E2E discussions attempted as clarification returned
 HTTP 403; no conclusion is attributed to their inaccessible contents.
 No SDK implementation, other-part AES behavior, dependency, key material or
-private/hardware observation was imported. Proceed only after authoritative
-CPU sequencing clarification or a separately assigned bounded DMA design.
+private/hardware observation was imported. The separately assigned
+[DMA block foundation](#m2-aes-dma-block-sources) below now implements that
+alternative offline; it does not resolve or implement the CPU-transfer path.
 
 ### M2 channel-0 DMA sources
 
@@ -462,7 +463,8 @@ and **SWRZ031, April 2009 / history 2009-04-29**. No implementation, SDK,
 other-part workaround, dependency, private data or hardware observation was
 imported. The [API/lifetime contract](ARCHITECTURE.md#isolated-channel-0-dma-copy)
 and [offline evidence](VALIDATION.md#m2-isolated-dma-copy-coverage) are separate
-from the unresolved AES CPU path and future two-channel ENC-triggered work.
+from the unresolved AES CPU path and the separately scoped two-channel
+ENC-triggered foundation below.
 
 | Primary location | Applied fact |
 | --- | --- |
@@ -510,6 +512,45 @@ authorized programming/readback, full physical CODE verification, normal,
 negative and explicitly reset recovery runs of this original image.
 Only processed observations are published; raw logs, identities and recovery
 material remain private. Earlier debug-gate/FIFO observations remain historical.
+
+### M2 AES DMA block sources
+
+The original BSD-3-Clause [single-block service](ARCHITECTURE.md#isolated-aes-128-dma-block),
+host mathematical reference, register/descriptor models and isolated linked
+proof use functional facts only. **SWRU191F, revised April 2014**, complete
+chapter 15 and the relevant DMA, memory, bus, IRQ, clock and retention passages
+were read directly; **SWRZ031, April 2009**, was checked in full.
+
+| Primary location | Applied fact |
+| --- | --- |
+| SWRU191F 15.1-15.4 p.147 | Key, IV, then start/data for each 128-bit ECB block; correct mode on IV load; full output consumption before another block. Key/IV commands abort active processing. Two DMA channels must be initialized before start generates their trigger. |
+| 15.8-15.10 pp.150-151 | ENC_DW29 requests needed ENCDI input; ENC_UP30 requests ENCDO output. B1/B2/B3 registers; ECB MODE4, encrypt CMD0, key CMD2, IV CMD3; ST is R/W1 H0. RDY bit3 and ENC interrupt describe block encryption/decryption, not key/IV readiness. |
+| 8.1 p.93; 8.2.3/8.2.7 pp.95,97; 8.3-8.5 pp.97-98 | Nine system clocks **per channel**, sequential configuration fetches; old missed-trigger history survives reconfiguration. Fixed SINGLE moves one byte per trigger and completes/disarms after LEN transfers. DMA1 configuration requires a real 32-byte table. Completion sets DMAIRQ even with IRQMASK0. |
+| Tables 8-1/8-2 pp.99-100; 8.8 pp.101-102 | Exact triggers, big-endian descriptors, increments and priority; DMAARM per-channel write-one, DMAIRQ per-channel R/W0, DMAREQ not cleared by disarm. No software request/dummy/abort recovery is adopted. |
+| 2.2.2-2.2.3 pp.27-29; 2.2.5 p.33; Table 2-3 pp.37,39 | AES peripheral SFR aliases are `70B1/70B2`, unlike CPU-internal SFR exceptions. RAM/IRAM alias and arbitration rules; one-clock minimum NOP, with stalls only lengthening the interval. |
+| 2.5.1 pp.41,44,46; 4.4-4.6 pp.66-69 | ENCIE is IEN0.4; block completion sets both ENCIF bits even with CPU interrupts disabled. S0CON bits1:0 **and reserved7:2 are R/W**. Key/IV clear on reset/PM2/PM3, not a software-RAM erasure guarantee. |
+| Table 3-2 p.55; SWRZ031 issue1 p.2 | Independently establish clear DMA_PAUSE before DMA access. Fixed VLEN000/LEN16 is outside the variable-length zero/one erratum; no AES-specific erratum supplies a CPU pacing contract. |
+
+Finite, AES-paced input completion plus MODE/CMD/ST and absence of block/output
+flags establishes load delivery, not a guessed RDY delay. Fresh block flags,
+both finite DMA completions and complete output drain establish the separate
+block boundary before owned acknowledgment/reuse. This is the documented
+DMA-interface interpretation under exclusive reset/completed history; its
+actual peripheral sequencing and repeated-use behavior remain a physical gate.
+No old trigger is discarded merely by rewriting a descriptor or ARM.
+
+The host-only oracle independently implements the field arithmetic, generated
+S-box, round transformations and AES-128 expansion from
+[FIPS 197, November 26, 2001](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf),
+sections 3.4, 4, 5.1-5.2 (printed pp.8-20). Its Appendix C.1 pp.35-36 vector and
+[NIST SP 800-38A, December 2001](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38a.pdf),
+F.1.1 p.24, supply five public AES-128 KAT blocks. The downloaded FIPS edition
+carries its May 9, 2023 withdrawal/replacement notice; that update makes
+editorial improvements without changing the algorithm. These are public
+standard vectors, not keys/captures from a device. No implementation/table,
+SDK/GPL code, production software fallback or project dependency was imported.
+Temporary public PDF parsing used externally installed BSD-3-Clause pypdf
+6.1.1 in the ignored research directory only, not in builds/tests/runtime.
 
 ### Offline MAC codec sources
 

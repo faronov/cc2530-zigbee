@@ -53,7 +53,7 @@ ifeq ($(IMAGE),dma_fixture)
 OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/dma.rel $(BUILD)/dma_fixture_state.rel
 endif
 
-.PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma force-link
+.PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes force-link
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -202,6 +202,26 @@ test-dma: $(BUILD)/host-dma-tests $(BUILD)/dma_test.ihx
 	$(BUILD)/host-dma-tests
 	$(PYTHON) -B tests/boot_dma.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/aes-reference: tests/aes_reference.c tests/aes_reference.h tests/aes_vectors.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DAES_REFERENCE_MAIN tests/aes_reference.c -o $@
+
+$(BUILD)/host-aes-tests: tests/test_aes.c tests/aes_reference.c tests/aes_reference.h tests/aes_vectors.h tests/host_mmio.c tests/host_mmio.h src/aes.c src/timebase.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_aes.c tests/aes_reference.c tests/host_mmio.c src/aes.c src/timebase.c -o $@
+
+$(BUILD)/aes.rel: src/aes.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/aes_test.rel: tests/test_aes.c tests/aes_vectors.h $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/aes_test.ihx: $(BUILD)/timebase.rel $(BUILD)/aes.rel $(BUILD)/aes_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/aes.rel $(BUILD)/aes_test.rel
+
+test-aes: $(BUILD)/aes-reference $(BUILD)/host-aes-tests $(BUILD)/aes_test.ihx
+	$(BUILD)/aes-reference
+	$(BUILD)/host-aes-tests
+	$(PYTHON) -B tests/boot_aes.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
@@ -222,7 +242,7 @@ $(BUILD)/host-dma-fixture-tests_$(BOARD): tests/test_dma_fixture.c src/dma_fixtu
 
 test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
 test: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
-test: all test-timebase test-clock test-irq test-radio-fifo test-dma $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
+test: all test-timebase test-clock test-irq test-radio-fifo test-dma test-aes $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
 ifeq ($(IMAGE),radio_fifo_fixture)

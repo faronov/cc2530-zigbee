@@ -647,6 +647,95 @@ unverified timeout and separately reset recovery. Generic, other channels,
 AES, peripheral triggers, DMA interrupts and stuck-controller recovery
 remain separate gates.
 
+## Isolated AES-128 DMA block
+
+[`aes128_encrypt_block(key, input, output, timeout, limit, diagnostics)`](../include/aes.h)
+encrypts **one 16-byte block**, using a private two-channel AES backend, not the
+RAM-copy API or a general DMA framework. It is host-tested, image-checked and
+synthetically simulated only. All fourteen board images exclude it; no AES
+board image, debugger expansion or hardware runner is introduced.
+
+The foreground/non-reentrant caller owns AES, all DMA channels, IRQ state,
+clock settings and ST0 reads exclusively. Require awake, stable, undivided
+RC16/XOSC32, IEN0/1/2 zero (including ENCIE), and independently established
+clear debug DMA_PAUSE or no debug session **before any DMA-register access**.
+History must be genuine full reset/C initialization or only this API's
+successfully completed, acknowledged and fully drained operations. Prior
+RAM-copy/peripheral activity is not eligible history. Idle flags, RDY, writing
+DMAARM=0 or clearing C fields cannot erase missed-trigger accounting.
+
+Key/input are generic pointers to complete readable 16-byte objects in
+unbanked CODE below `8000` or ordinary XDATA below `1E00`; other generic spaces
+are rejected. Output and diagnostics are writable XDATA. All XDATA objects
+exclude the entire linked AES/timebase private prefix and generic-store helper
+scratch. Diagnostics are disjoint from every caller buffer; output cannot
+overlap an XDATA key. Input/output overlap is supported: both inputs are
+staged before DMA starts. Caller objects are not retained by DMA, even on
+error. Link timebase before AES, caller objects after `aes_reserved_end`, and
+prove actual map/CDB/assembler allocations; do not assume a free-RAM pool.
+
+Four persistent volatile 16-byte XDATA arrays hold key, zero IV, input and
+output. DMA0 has an eight-byte descriptor; DMA1 has its documented **32-byte
+channels-1..4 table**, with unused records zero and never armed. Both use
+fixed LEN16, byte SINGLE, assured priority and IRQMASK0:
+
+| Phase | ENCCS start | DMA0 source / fixed destination | DMA1 |
+| --- | --- | --- | --- |
+| Key | `45` | Staged key / ENCDI alias `70B1`, ENC_DW29, +1/0 | Armed once before key start |
+| IV | `47` | Zero IV / same input alias and trigger | Remains ready, no output expected |
+| Encrypt | `41` | Staged input / same input alias and trigger | ENCDO alias `70B2` / staged output, ENC_UP30, 0/+1 |
+
+Output channel 1 is armed first, then input channel 0; each separate arm has
+its own **nine-NOP fetch interval**. Input is reconfigured/rearmed only after
+the preceding finite input completion and checked owned acknowledgment.
+All required channels are ready before each AES start. No DMAREQ write,
+CPU ENCDI/ENCDO transfer, guessed byte delay, simultaneous-arm shortcut or
+dummy/abort transfer is used.
+
+The [primary handshake](PROVENANCE.md#m2-aes-dma-block-sources) requests each
+needed byte. Fresh finite input completion confirms delivery of all 16
+key/IV bytes; MODE/CMD and cleared ST must agree, with no block/output flags.
+RDY is deliberately ignored for loads: it describes encryption/decryption,
+not load completion. No next start is issued while that load is incomplete.
+The same input trigger remains selected between phases. Complete finite
+loads have no further requested input until the next command; complete block
+processing plus all 16 output reads leaves no unread output producer.
+These documented boundaries justify descriptor replacement in exclusively
+completed history, not recovery from an unknown or failed history.
+
+Block success requires fresh input **and output** DMA completions, both
+channels disarmed, no pending request, ENCCS=`48` and both fresh ENCIF bits.
+Only then is DMAIRQ acknowledged with `1C`; key/IV use `1E`. These are R/W0
+owned-channel masks. After checked DMA quiescence/acknowledgment, S0CON is
+written once with its saved high six bits and low bits clear: **all S0CON
+bits are ordinary R/W**, not R/W0. Flags, control, configuration, masks and
+clocks are rechecked before publication; unrelated state is never repaired.
+
+One positive raw deadline below `800000` covers staging through the final
+checked publication decision, following fixed entry preflight. Equality is
+timeout; an independent positive 16-bit poll cap also bounds a stopped timer.
+Half-range continuity/CPU progress remain caller requirements. The final
+16-byte CPU copy has no fallible step: failures never change caller output,
+but success is not an atomic 16-byte bus transaction or calibrated deadline.
+Arguments/ranges/alias errors additionally preserve diagnostics and MMIO.
+Every other error latches its original result before return; re-entry performs
+no MMIO, staging/descriptor replacement, acknowledgment or publication.
+There is no retry, abort, reset, rekey or wipe on error. Potentially active
+DMA retains private buffers until separately established full-reset recovery;
+matching bytes or an error return never proves quiescence.
+
+The 29-byte SDCC diagnostic object is not host-struct serialization. It records
+phase, command submissions, confirmed input-phase bits, output drain,
+issued/confirmed acknowledgments and publication separately, plus raw status
+and elapsed/poll/helper values. `sample_valid` bit0 identifies a complete
+last SFR observation; bit1 a timed last poll. Unread/stale fields are not
+current observations. There is no partial DMA byte count or secret payload.
+Hardware key/IV persist until reload/reset/PM2/PM3; software copies, compiler
+spills and CPU registers may retain data beyond those events. No secure
+erasure, key management, decryption, messaging ECB, CCM/MIC/authentication,
+RNG or Zigbee security is provided. The CPU-only transfer gap remains open.
+See [offline proof and precise physical gate](VALIDATION.md#m2-isolated-aes-dma-block-coverage).
+
 ## Memory contract
 
 | Address space | Meaning |

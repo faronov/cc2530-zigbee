@@ -348,6 +348,26 @@ enumerate or access physical USB devices. The recorded late-host-return
 failure is not a physical USB stall or DMA-stuck test, and past acceptance
 grants no new hardware authorization.
 
+The isolated AES-triggered DMA block foundation is included in `make test`:
+
+```sh
+make test-aes
+```
+
+It runs five public primary KATs against an independent host-only mathematical
+reference, the real C driver with checked 32-entry MMIO logs, complete linked
+CODE/ABI/allocation rejection, and serial alias-aware synthetic AES/DMA cases.
+**Never flash `aes_test.ihx` or upload it as a board artifact.** No new board
+`IMAGE`, dependency, hardware runner or debugger permission is added.
+Preserve the [sequencing/history/lifetime contract](docs/ARCHITECTURE.md#isolated-aes-128-dma-block)
+and [distinct physical gate](docs/VALIDATION.md#m2-isolated-aes-dma-block-coverage);
+neither public KATs nor RAM-copy acceptance establish AES silicon behavior.
+After representative full `all test` runs, cross-board byte-preservation work
+may use existing explicit `host-tests_<board>` / matching fixture-host targets,
+`all`, and `tests/boot_image.py` for the other board/image combinations instead
+of repeating identical standalone mutation corpora. Run s51 serially with the
+unchanged 15-second bound; CI still runs all fourteen full jobs.
+
 ## Code conventions
 
 - C99, fixed-width integers and explicit bounds.

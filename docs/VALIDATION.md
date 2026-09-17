@@ -887,6 +887,88 @@ contains the hash, timeline, raw bounds and retained-error observations.
 Actual negative SP75/return frames were checked; peak SP79 remains synthetic,
 not a measured hardware high-water mark. Raw records remain private.
 
+## M2 isolated AES DMA block coverage
+
+`make test-aes` runs the [single-block contract](ARCHITECTURE.md#isolated-aes-128-dma-block)
+without a board image or hardware access. **Never flash `aes_test.ihx` or
+upload it as board firmware.** The AES code is excluded from every one of
+the fourteen board images; old driver proofs and artifact policy remain intact.
+
+**Host-tested:** the original mathematical reference independently passes
+FIPS 197 C.1 and all four SP 800-38A F.1.1 AES-128 blocks. The real AES/timebase
+driver model passes **243,355 operations**, including all 16 byte positions
+with 256 varied public patterns, CODE/XDATA inputs, in-place input/output,
+both clocks, every ordinary-address rejection surface and all generic tags.
+It verifies actual staged bytes, SINGLE/LEN16 descriptors and AES aliases,
+separate nine-clock readiness, all 48 input/16 output transfers, guards and
+fresh completion/acknowledgment. Existing 32-entry logs are checked/consumed,
+not enlarged or discarded. Stale RDY/output/flags, ignored writes, all partial
+input/output positions, missing DMA/AES flags, bounds/caps/counter faults,
+controller/clock/IRQ mutations, all entry control/request/flag values and
+post-return private DMA effects retain the original error and forbid reuse.
+There are 257 varied-key/input reuses in one completed/drained reset epoch,
+a frozen-timer 65,535-poll bound, exact deadline/last-permitted-poll cases,
+delayed ENC status after output drain, and mixed ARM/IRQ observations.
+
+**Image-checked and simulated:** **152 linked scenarios** execute the actual
+SDCC 4.2.0 caller, generic pointer staging, driver and timebase. Every CODE byte
+is mutation-rejected, including constants, runtime and caller; separate
+instruction/CDB/assembler checks pin the complete module, typed arguments,
+29-byte diagnostics, every private allocation and helper exclusion.
+Input arm is `03EC` (`MOV DMAARM,#1`, NOPs `03EF..03F7`, RET `03F8`);
+output arm is `03F9` (`#2`, NOPs `03FC..0404`, RET `0405`).
+Sole callers `11BA` and `1052` respectively prove four separate fetch
+intervals across the three input phases and one output arm. Every arm RET
+checks the real descriptors, including the full 32-byte DMA1 table.
+Readiness uses SWRU191F system clocks, not generic s51 cycle timing.
+
+The synthetic model maps only the two documented AES aliases to their SFRs,
+in addition to the required IRAM alias. Each input byte travels from the
+actual descriptor-selected XDATA address through `70B1`; each output byte
+travels from `70B2` into actual private XDATA. All downloaded bytes are checked
+against the public inputs used by the independent oracle. Explicit synthetic
+AES/control/completion/timer events supply peripheral behavior; no CODE patch,
+C return substitution or vector-lookup encryption is used. Cases include all
+five KATs in four CODE/XDATA combinations, repeated bytewise rollover,
+partial/lost/late/mixed effects, stuck ST and delayed ENC status,
+every consequential ignored write, timed/cap and
+terminal re-entry paths. Failure never publishes caller output, even when a
+late private drain finishes. Full caller/descriptor/status/peripheral/alias
+guards, stack unwind and upper IRAM `80..FF` remain checked.
+
+The executable has **6,423 CODE bytes**, including **5,290 driver bytes**,
+and **320 ordinary XDATA + 8 result / 64 reserved** (384 reserved nonaliased
+bytes, below 512). AES/timebase/private arguments occupy `0000..00CE`;
+descriptors are `0019..0020` and `0021..0040`, four staging arrays
+`0041..0080`. Caller diagnostics are `00CF..00EB` (29 bytes), key `00EC..00FB`,
+input storage `00FC..011B`, guarded output `011C..012D`; actual output is
+`011D..012C`. Caller scalars follow; `__gptrput_PARM_2=013F` is excluded
+separately. IRAM before stack is `00..3E`; stack `3F..FF` reserves 193 bytes,
+with synthetic peak SP **53**. Complete linked CODE SHA-256 is
+`49634cb2d84fe9391de9b394a47e118499434bb1cdca9c374b9a341678ba9cd2`.
+
+Both representative DMA-board `all test` runs passed, including **403 Python
+tests**, unchanged DMA **194,819 host / 97 linked**, FIFO **69,895 host /
+99 linked**, and existing clock/IRQ/timebase/MAC coverage. The final AES corpus
+also passed in both board build directories. The other twelve combinations
+passed focused build/image/board-host/alias checks serially; all **fourteen
+published BIN lengths and complete SHA-256 values are byte-identical**.
+The fourteen-job CI matrix, seven-file whitelist and `hardware_tested=false`
+metadata are unchanged. Repository/local-link checks cover 130 files.
+
+**Remaining physical gate:** a separately scoped, reviewed AES board fixture
+must establish actual key/IV handshakes, fresh DMA/AES completion ordering,
+public KATs and varied repeated blocks on both supported clocks, complete
+output drain before reuse, and bounded failure/retained-buffer behavior.
+Each manual invocation must genuinely reset, verify every physical CODE byte,
+then use the existing explicitly permitted `26 -> 22` gate before resume or
+DMA-register access; recovery is a separate full-reset invocation, not an
+aborting key/IV load or C-state clear. No physical AES transfer, timing,
+key-erasure/retention experiment or stuck-controller recovery has been run.
+CPU-only AES sequencing, security/CCM/key management and M2 #4 remain open.
+The last installed LG state remains the accepted 8,890-byte **DMA fixture
+READY016A/config22/RC16**, not this unflashed standalone AES executable.
+
 ## M2 quiescent radio FIFO automated coverage
 
 `make test-radio-fifo` runs strict host C and the isolated

@@ -224,6 +224,9 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith(("_aes_", "_aes128_")) for name in symbols) and
+            all(f"C${source}$" not in debug for source in ("aes.c", "aes_reference.c", "test_aes.c")),
+            "Board image must not link isolated AES or its host-only reference")
     require(image_name == "dma_fixture" or
             (not any(name.startswith("_dma_") for name in symbols) and "C$dma.c$" not in debug),
             "Board image must not link the isolated DMA foundation")
