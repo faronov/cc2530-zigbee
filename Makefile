@@ -61,7 +61,10 @@ ifeq ($(IMAGE),prng_fixture)
 OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/prng.rel $(BUILD)/prng_fixture_state.rel
 endif
 
-.PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng force-link
+.PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
+.PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
+.PHONY: test-protocol-budget
+PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -120,8 +123,8 @@ $(BUILD)/host-tests_$(BOARD): tests/test_bootstrap.c tests/host_mmio.c tests/hos
 $(BUILD)/host-fixture-tests_$(BOARD): tests/test_debug_fixture.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c src/debug_pattern.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_debug_fixture.c tests/host_mmio.c src/startup.c src/status.c src/debug_pattern.c boards/$(BOARD).c -o $@
 
-$(BUILD)/host-mac-frame-tests: tests/test_mac_frame.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_frame.c src/mac_frame.c -o $@
+$(BUILD)/host-mac-frame-tests: tests/test_mac_frame.c src/mac_frame.c src/nwk_beacon.c src/nwk_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_frame.c src/mac_frame.c src/nwk_beacon.c src/nwk_frame.c -o $@
 
 $(BUILD)/mac_frame.rel: src/mac_frame.c include/mac_frame.h Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -129,8 +132,147 @@ $(BUILD)/mac_frame.rel: src/mac_frame.c include/mac_frame.h Makefile | $(BUILD)
 $(BUILD)/mac_frame_test.rel: tests/test_mac_frame.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
-$(BUILD)/mac_frame_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/mac_frame_test.rel force-link
-	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/mac_frame_test.rel
+# Place the larger NWK spill area before Beacon so it fits below bit-addressable RAM.
+$(BUILD)/mac_frame_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/nwk_frame.rel $(BUILD)/nwk_beacon.rel $(BUILD)/mac_frame_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/nwk_frame.rel $(BUILD)/nwk_beacon.rel $(BUILD)/mac_frame_test.rel
+
+$(BUILD)/host-nwk-beacon-tests: tests/test_nwk_beacon.c src/nwk_beacon.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_nwk_beacon.c src/nwk_beacon.c -o $@
+
+$(BUILD)/nwk_beacon.rel: src/nwk_beacon.c include/nwk_beacon.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/nwk_beacon_test.rel: tests/test_nwk_beacon.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/nwk_beacon_test.ihx: $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_beacon_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_beacon_test.rel
+
+test-nwk-beacon: $(BUILD)/host-nwk-beacon-tests $(BUILD)/nwk_beacon_test.ihx
+	$(BUILD)/host-nwk-beacon-tests
+	$(PYTHON) -B tests/boot_nwk_beacon.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-nwk-frame-tests: tests/test_nwk_frame.c src/nwk_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_nwk_frame.c src/nwk_frame.c -o $@
+
+$(BUILD)/nwk_frame.rel: src/nwk_frame.c include/nwk_frame.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/nwk_frame_test.rel: tests/test_nwk_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/nwk_frame_test.ihx: $(BUILD)/nwk_frame.rel $(BUILD)/nwk_frame_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/nwk_frame.rel $(BUILD)/nwk_frame_test.rel
+
+test-nwk-frame: $(BUILD)/host-nwk-frame-tests $(BUILD)/nwk_frame_test.ihx
+	$(BUILD)/host-nwk-frame-tests
+	$(PYTHON) -B tests/boot_nwk_frame.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-aps-frame-tests: tests/test_aps_frame.c src/aps_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_aps_frame.c src/aps_frame.c -o $@
+
+$(BUILD)/aps_frame.rel: src/aps_frame.c include/aps_frame.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/aps_frame_test.rel: tests/test_aps_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/aps_frame_test.ihx: $(BUILD)/aps_frame.rel $(BUILD)/aps_frame_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/aps_frame.rel $(BUILD)/aps_frame_test.rel
+
+test-aps-frame: $(BUILD)/host-aps-frame-tests $(BUILD)/aps_frame_test.ihx
+	$(BUILD)/host-aps-frame-tests
+	$(PYTHON) -B tests/boot_aps_frame.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-protocol-frame-tests: tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c src/zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c src/zcl_dispatch.c -o $@
+
+$(BUILD)/protocol_frame_test.rel: tests/test_protocol_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/protocol_frame_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/nwk_frame.rel $(BUILD)/aps_frame.rel $(BUILD)/protocol_frame_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/nwk_frame.rel $(BUILD)/aps_frame.rel $(BUILD)/protocol_frame_test.rel
+
+test-protocol-frame: $(BUILD)/host-protocol-frame-tests $(BUILD)/protocol_frame_test.ihx
+	$(BUILD)/host-protocol-frame-tests
+	$(PYTHON) -B tests/boot_protocol_frame.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-protocol-budget-tests: tests/test_protocol_budget.c $(addprefix src/,$(addsuffix .c,$(PROTOCOL_MODULES))) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $< $(addprefix src/,$(addsuffix .c,$(PROTOCOL_MODULES))) -o $@
+
+$(BUILD)/protocol_budget_test.rel: tests/test_protocol_budget.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/protocol_budget_test.ihx: $(addprefix $(BUILD)/,$(addsuffix .rel,$(PROTOCOL_MODULES))) $(BUILD)/protocol_budget_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(addprefix $(BUILD)/,$(addsuffix .rel,$(PROTOCOL_MODULES))) $(BUILD)/protocol_budget_test.rel
+
+test-protocol-budget: $(BUILD)/host-protocol-budget-tests $(BUILD)/protocol_budget_test.ihx
+	$(BUILD)/host-protocol-budget-tests
+	$(PYTHON) -B tests/boot_protocol_budget.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-zcl-frame-tests: tests/test_zcl_frame.c src/zcl_frame.c src/aps_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_frame.c src/zcl_frame.c src/aps_frame.c -o $@
+
+$(BUILD)/zcl_frame.rel: src/zcl_frame.c include/zcl_wire.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_frame_test.rel: tests/test_zcl_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_frame_test.ihx: $(BUILD)/zcl_frame.rel $(BUILD)/aps_frame.rel $(BUILD)/zcl_frame_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_frame.rel $(BUILD)/aps_frame.rel $(BUILD)/zcl_frame_test.rel
+
+test-zcl-frame: $(BUILD)/host-zcl-frame-tests $(BUILD)/zcl_frame_test.ihx
+	$(BUILD)/host-zcl-frame-tests
+	$(PYTHON) -B tests/boot_zcl_frame.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-zcl-value-tests: tests/test_zcl_value.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_value.c src/zcl_value.c -o $@
+
+$(BUILD)/zcl_value.rel: src/zcl_value.c include/zcl_wire.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_value_test.rel: tests/test_zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_value_test.ihx: $(BUILD)/zcl_value.rel $(BUILD)/zcl_value_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_value.rel $(BUILD)/zcl_value_test.rel
+
+test-zcl-value: $(BUILD)/host-zcl-value-tests $(BUILD)/zcl_value_test.ihx
+	$(BUILD)/host-zcl-value-tests
+	$(PYTHON) -B tests/boot_zcl_value.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-zcl-attributes-tests: tests/test_zcl_attributes.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_attributes.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+
+$(BUILD)/zcl_attributes.rel: src/zcl_attributes.c include/zcl_attributes.h include/zcl_wire.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_attributes_test.rel: tests/test_zcl_attributes.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_attributes_test.ihx: $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_attributes_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_attributes_test.rel
+
+test-zcl-attributes: $(BUILD)/host-zcl-attributes-tests $(BUILD)/zcl_attributes_test.ihx
+	$(BUILD)/host-zcl-attributes-tests
+	$(PYTHON) -B tests/boot_zcl_attributes.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-zcl-dispatch-tests: tests/test_zcl_dispatch.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_dispatch.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+
+$(BUILD)/zcl_dispatch.rel: src/zcl_dispatch.c include/zcl_dispatch.h include/zcl_attributes.h include/zcl_wire.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_dispatch_test.rel: tests/test_zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_dispatch_test.ihx: $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel
+
+test-zcl-dispatch: $(BUILD)/host-zcl-dispatch-tests $(BUILD)/zcl_dispatch_test.ihx
+	$(BUILD)/host-zcl-dispatch-tests
+	$(PYTHON) -B tests/boot_zcl_dispatch.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-timebase-tests: tests/test_timebase.c tests/host_mmio.c tests/host_mmio.h src/timebase.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase.c tests/host_mmio.c src/timebase.c -o $@
@@ -280,7 +422,8 @@ test: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOAR
 test: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
 test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
 test: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
-test: all test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
+test: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
+test: all test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests
 ifeq ($(IMAGE),radio_fifo_fixture)

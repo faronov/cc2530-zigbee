@@ -22,7 +22,8 @@ from debug_image import DebugImage, decode_bootstrap, decode_fixture, decode_tim
 ALIAS = "memory create addressdecoder xram 0x1f00 0x1fff iram_chip 0"
 
 
-def verify_component_layout(image, symbols, debug, memory, result_name, sources, *, code_holes=()):
+def verify_component_layout(image, symbols, debug, memory, result_name, sources, *,
+                            code_holes=(), xdata_budget=512):
     """Shared strict layout for isolated components with an eight-byte result."""
     require(image and min(image) == 0 and max(image) < CODE_LIMIT,
             "Component test CODE is not lower unbanked")
@@ -39,7 +40,8 @@ def verify_component_layout(image, symbols, debug, memory, result_name, sources,
         require(0 <= start <= end <= STATUS_ADDRESS, "Component XDATA overlaps status/IRAM alias")
         require(not ordinary.intersection(range(start, end)), "Overlapping component XDATA areas")
         ordinary.update(range(start, end))
-    require(len(ordinary) + STATUS_RESERVED <= 512, "Component exceeds 512-byte XDATA reservation budget")
+    require(len(ordinary) + STATUS_RESERVED <= xdata_budget,
+            f"Component exceeds {xdata_budget}-byte XDATA reservation budget")
     for match in re.finditer(r"^S:G\$([^$]+)\$[^(\n]+\(\{(\d+)\}[^)\n]+\),F,", debug, re.MULTILINE):
         name, size = match[1], int(match[2])
         if name == result_name:

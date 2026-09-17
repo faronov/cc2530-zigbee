@@ -15,9 +15,11 @@ exercised on one LG board through the M1 fixture, as recorded below.
 Everything from M1 onward below is planned except for the explicitly
 implemented components and evidence recorded under each milestone.
 
-The [initial conformance ledger](CONFORMANCE.md) exists at M0. Selection of
-the exact R22-compatible BDB revision is an open, blocking prerequisite for
-M4/M5 security/commissioning implementation, not work postponed until release.
+The [initial conformance ledger](CONFORMANCE.md) exists at M0. Core R22 is
+paired with PRO BDB v3.0.1, document 16-02828-012. The base revision and
+bounded ED requirements are recorded; review of applicable BDB errata
+21-65431 remains a blocking prerequisite for M4/M5 security/commissioning
+implementation, not work postponed until release.
 Update the ledger with each protocol change; M9 audits it rather than first
 creating it.
 
@@ -46,8 +48,8 @@ hardware work. Later features must not bypass their security or recovery gates.
 | Language/toolchain | C99, SDCC 4.2.0 baseline | No Rust runtime or IAR object dependency |
 | Hardware | CC2530F256; generic and LG ESL board descriptions | Other CC253x parts need a separate validation record |
 | Role | Receiver-on ED first, SED second | One logical ED role; no forwarding or children |
-| Network | Centralized Trust Center network first | Distributed networks are outside the first supported configuration |
-| Specification | Core R22 and compatible Zigbee-3.0-era BDB | BDB 3.1/R23 is not silently treated as the R22 baseline |
+| Network | Centralized Trust Center network first | Distributed networks are deferred; this is a BDB conformance gap, not an ED role exemption |
+| Specification | Core R22 and PRO BDB v3.0.1, 16-02828-012 | Applicable errata gate remains open; neither BDB 1.0 nor BDB 3.1/R23 substitutes for this baseline |
 | Application | Small reporting sensor, local display later | Only implemented clusters are advertised |
 | Memory | Static pools and explicit bounds | No heap-dependent protocol or frame-sized display buffer |
 | Debugging | CC Debugger plus RAM trace and independent sniffer | An IDE or GDB integration is not assumed to exist |
@@ -363,7 +365,19 @@ Exit:
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
 their addressing layouts, with host, linked-image and
-alias-aware simulator evidence. It is not linked into board firmware and
+alias-aware simulator evidence. It also handles version-0 Beacons without GTS
+descriptors, bounded pending-address lists and opaque upper-layer payloads.
+This adds no scan, synchronization, scheduling or Zigbee discovery procedure.
+The separate [R22 NWK Beacon payload decoder](NWK.md) now decodes the exact
+15-byte upper-layer metadata, with independent host/target tests and an
+offline MAC-to-NWK slicing check. Profiles, capacities and identifiers remain
+unauthenticated metadata, not selection/admission decisions. It does not
+satisfy M4/M5 or the remaining BDB specification/implementation gates.
+An independent [NWK Data codec](NWK.md#nwk-data-frame-codec) also serializes
+bounded unsecured unicast/broadcast NPDUs and optional IEEE fields, with
+host/target evidence and maximum-body MAC integration. Security and extended
+routing layouts remain explicit errors, not successful substitutes.
+These codecs are not linked into board firmware and
 does not establish radio, MAC or networking support. Hardware M1/M2 gates
 are not bypassed.
 
@@ -390,14 +404,17 @@ Exit:
 
 ### M4 - Security and durable state
 
-Entry gate: pin the compatible BDB revision and security/commissioning
-requirements in the conformance ledger.
+Entry gate: the BDB v3.0.1 base revision and security/commissioning requirements
+are pinned in the conformance ledger. Obtain/review applicable errata
+21-65431 and resolve affected requirements before implementing these procedures.
 
 Deliver:
 
 - Zigbee-specific AES-CCM* nonce/header/MIC handling, using the AES primitive.
 - Network/link-key handling, key identifiers/sequences and replay rejection.
 - Two network-key slots and the applicable Trust Center key procedures.
+- Install-code CRC/AES-MMO derivation and explicit initial/updated TC key
+  state; receiving a key or confirmation frame alone is not verification.
 - Atomic persistence for network identity, parent information, keys,
   bindings/configuration when implemented, and outgoing security counters.
 - Counter-range reservation or another demonstrably monotonic power-loss
@@ -416,18 +433,32 @@ Do not trade this milestone away to make the first network demo look complete.
 
 ### M5 - Authenticated receiver-on end device
 
+**Offline preparatory implementation:** the independent [APS Data codec](APS.md)
+now serializes a bounded normal-unicast subset with endpoint/profile/cluster
+metadata, counter and ACK-request. Standalone and real MAC/NWK/APS composition
+have host, linked-image and alias-aware simulator evidence. Unsupported APS
+security, broadcast/group delivery and extended headers fail explicitly.
+This implements no transaction/ACK state, endpoint dispatch or board caller
+and does not close any M4/M5 security, commissioning or interoperability gate.
+ZCL revision/device selection and implementation remain separate M6 work.
+
 Deliver:
 
 - Required NWK and APS header handling and bounded transaction/ACK state.
 - Centralized-network steering, key transport/verification and join completion.
+  Follow BDB 3.0.1 section 8.2, including its final permit-join broadcast;
+  this does not enable local child admission. Already-joined steering remains
+  optional and is not initially selected.
 - Join-critical endpoint-0 services, including Node Descriptor exchange and
   address/Device Announce handling. Introduce the generic ZDO unsupported-service
   fallback as soon as endpoint 0 is exposed, before omitting any optional handler.
 - Device Announce, address-conflict handling and required address resolution.
 - ED Timeout negotiation, parent information and selected keepalive method.
-- On persisted resume, immediate keepalive chosen from stored
-  `nwkParentInformation`; when unknown, ED Timeout renegotiation with bounded
-  failure/recovery rather than an indefinitely blocked startup.
+- On persisted resume, restore BDB state and attempt secure NWK rejoin as
+  required by BDB section 7.1, then announce on success. Retain ED Timeout
+  negotiation after every successful join/rejoin and prompt keepalive after
+  recovery using `nwkParentInformation`; unknown information or an absent
+  parent needs bounded failure/recovery, not an indefinitely blocked startup.
 - Child-side rejoin, parent loss, explicit leave and persisted restart.
 - NWK Network Update handling, including wrap-aware update identifiers.
 
@@ -441,11 +472,30 @@ Exit:
 - The evidence records coordinator software/adapter versions and firmware
   revision, with private network data kept outside the repository.
 
-M5 is an authenticated lab ED milestone, not a claim that all discovery or
-application-profile requirements have been completed. M6 finishes those
-surfaces and their interoperability evidence.
+M5 is an authenticated lab ED milestone, not full BDB conformance or a claim
+that all discovery/application-profile requirements have been completed.
+M6 finishes those surfaces and their interoperability evidence; distributed
+security support remains outside the first configuration.
 
 ### M6 - Discovery, ZCL and receiver-on interoperability
+
+**Offline preparatory implementation:** [ZCL Revision 8 wire codecs](ZCL.md)
+now handle global/cluster-specific headers and 38 bounded wire-value types.
+A separate read-only model and unicast Read Attributes handler add bounded
+lookup, read-access checks, protocol status records, explicit partial counts
+and atomic response construction, without registering a cluster.
+A one-cluster unicast dispatcher adds sorted Discover Attributes pages,
+Read selection, unsupported-command responses and explicit no-reply handling
+for received Default Responses and unsupported Write No Response.
+The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
+remains an open follow-up risk, not a stop on base-text development. Review
+applicable corrections before conformance claims. Header/value, APS/ZCL and
+read/dispatch target checks are host-tested, image-checked and simulated;
+full Discover-then-Read/ZCL/APS/NWK/MAC composition is host-tested and also
+image-checked/simulated in the integrated resource harness.
+There is no board caller, endpoint/transport dispatcher, native
+numeric/charset conversion or advertised cluster. Application/device/profile
+selection and all M4/M5 networking/security gates remain open.
 
 Deliver:
 
@@ -454,8 +504,13 @@ Deliver:
 - Small source-binding storage and the management behavior it requires.
 - Full `Mgmt_Leave` (`0x0034`), full `Mgmt_Bind` (`0x0033`) when source bindings
   exist, and a tested status-only `NOT_SUPPORTED` response for omitted
-  `Mgmt_Lqi` (`0x0031`).
-- A real attribute model with types, access checks and bounded serialization.
+  `Mgmt_Lqi` (`0x0031`). Resolve this omitted-service configuration against
+  BDB section 6.6 and the selected BDB test requirements before conformance claims.
+- Pin the application/device class and its BDB finding/binding, Identify,
+  binding/group-capacity and default-reporting requirements. A single endpoint
+  does not by itself make finding/binding optional.
+- Integrate the generic read-only attribute model with the selected device's
+  real types/access/range requirements and transport; writes remain separate.
 - A clearly identified **lab-only synthetic measurement application**, with
   Basic/Identify and a deterministic test-controlled measurement source.
   It must identify itself as synthetic and must not be released as physical
@@ -579,6 +634,19 @@ See [PROVENANCE.md](PROVENANCE.md).
 The CC2530 has 256 KiB flash but a banked CODE view, not a flat 256 KiB code
 space. The upper 256 bytes of its 8 KiB SRAM are the XDATA alias of IRAM.
 Prototype display memory figures do not predict final stack size.
+
+**Measured preparatory integration:** `make test-protocol-budget` now links
+and executes the complete implemented MAC/NWK Data/APS/ZCL codec and
+read/discovery chain: **22,829 CODE and 1,500 ordinary XDATA bytes**, plus
+64 reserved status bytes. Per-object and total budgets are enforced; see
+[the resource ledger](ARCHITECTURE.md#integrated-protocol-resource-budget).
+The first combined link failed on IRAM, prompting ABI-compatible spill/
+leaf-emission changes rather than weakened guards. Persistent protocol IRAM
+fell from 154 to 77 bytes; observed SP reaches `0x7A` with stack start `0x66`.
+Only five bytes remain before the current upper-IRAM guard on these vectors.
+This is not enough evidence to budget interrupt nesting or promise complete
+stack fit. Platform/radio queues, security/NV, ZDO and application state are
+still outside this integrated image.
 
 ## 6. Risks and responses
 

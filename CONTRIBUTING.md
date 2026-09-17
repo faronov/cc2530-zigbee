@@ -128,6 +128,89 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The separate R22 NWK codecs have focused offline targets:
+
+```sh
+make test-nwk-beacon
+make test-nwk-frame
+```
+
+Both are included in `make ... all test`. `nwk_beacon_test.ihx` and
+`nwk_frame_test.ihx` are strictly checked simulator-only component images,
+not board images or CI uploads. The MAC test image also exercises the real
+MAC-to-Beacon and MAC-to-Data slices, including maximum-body capacity and
+layer-specific failures. Keep the codecs independent; decoded metadata is
+not successful network/parent acceptance or authentication.
+
+The independent R22 APS Data codec and three-layer composition have focused
+offline targets:
+
+```sh
+make test-aps-frame
+make test-protocol-frame
+```
+
+Both are included in `make ... all test`. The standalone APS image retains
+the 512-byte XDATA reservation check; the separate MAC/NWK/APS composition
+image has a 1,024-byte harness budget with the same strict layout, alias and
+upper-IRAM guards. Neither changes the existing MAC test image or adds an
+`IMAGE` option/CI upload. See [APS scope and evidence](docs/APS.md).
+Normal-unicast syntax and ACK-request metadata are not an APS transaction,
+ZDO/ZCL support, authentication or permission to send.
+
+The ZCL Revision 8 wire codecs have focused offline targets:
+
+```sh
+make test-zcl-frame
+make test-zcl-value
+```
+
+Both are included in `make ... all test`, with the unchanged 512-byte
+component reservation and alias/upper-IRAM guards. The frame image also
+executes real APS/ZCL composition. The value image uses four independently
+initialized phases plus an invalid-selector rejection, retaining every
+scenario and the shared 15-second per-run timeout. The
+[test-only phase/result ABI](docs/ZCL.md#offline-evidence) never grants
+hardware access. Neither new executable is a board `IMAGE` or CI artifact.
+The host protocol target additionally checks full MAC/NWK/APS/ZCL/value
+composition; its SDCC image remains the prior three-layer chain.
+Base-text wire evidence is not errata-aware conformance or validated
+numeric/text application data.
+
+`make test-zcl-attributes`, also part of `make ... all test`, exercises the
+separate generic read-only model and unicast Read Attributes handler.
+Its isolated image uses an explicit 1,024-byte harness reservation, retaining
+the same source/layout, alias, upper-IRAM, unwind and 15-second guards.
+No existing component budget is increased. The host protocol target also
+checks a complete MAC/NWK/APS read request/response; its target chain is
+unchanged. See [scope and evidence](docs/ZCL.md#read-only-attributes-and-read-attributes):
+no board `IMAGE`, artifact upload, registered cluster, network dispatcher, writes or
+reporting is added. Unreviewed ZCL errata remains a documented conformance
+risk rather than a stop on base-text foundation development.
+
+`make test-zcl-dispatch`, also part of the default test suite, exercises
+one-cluster unicast Read/Discover dispatch, unsupported-command errors,
+Default Response reception and the no-response exceptions. Its isolated
+1,024-byte test harness keeps the same strict layout/alias/upper-IRAM/unwind
+and 15-second guards. Host tests cover exact allocations and full-chain
+Discover-then-Read using the returned ID. Neither the new test image nor
+its outputs become board firmware or CI artifacts. See the
+[dispatch contract](docs/ZCL.md#discover-attributes-and-unicast-dispatch).
+
+`make test-protocol-budget`, included in the default test suite, additionally
+links **all seven** MAC/NWK Data/APS/ZCL/Read/Discover modules into one compact
+SDCC harness. It executes complete Discover-then-Read exchanges and bounded
+errors, then writes `build/<board>/protocol-resources.json` (or the chosen
+`BUILD`). The ledger checks per-module/linked CODE, XDATA and IRAM budgets,
+artifact hashes and actual simulator peak SP; see the
+[measured budget and exclusions](docs/ARCHITECTURE.md#integrated-protocol-resource-budget).
+Only this new harness uses a 2,048-byte XDATA reservation; existing budgets,
+alias/upper-IRAM guards and the 15-second timeout stay unchanged. The checker
+removes its old report before validation and writes a new one only on success.
+Always require a successful target run and matching artifact hashes before
+using a report. Neither this image nor the ledger is a board `IMAGE` or CI
+upload. Observed foreground stack headroom is not a worst-case/ISR budget.
+
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:
 
