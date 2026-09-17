@@ -192,10 +192,29 @@ The next bounded [interrupt-ownership foundation](ARCHITECTURE.md#interrupt-owne
 adds only reentrant EA save-disable/exact restore, with caller-owned LIFO
 byte tokens and explicit invalid-token rejection. It is host-tested,
 image-checked and alias-aware simulated, including genuine generic C52
-preemption/RETI; CC2530 peripheral delivery remains hardware-unvalidated.
-All eight board BINs remain byte-identical and exclude the primitives.
-There is no new board image, CI-matrix expansion, peripheral dispatcher or
-change to the foreground-only clock/timebase contracts.
+preemption/RETI. That standalone evidence does not establish CC2530
+peripheral delivery; the separate board acceptance below does so narrowly.
+All eight older board BINs remain byte-identical and exclude the primitives.
+The foundation did not add a board image or peripheral dispatcher.
+
+The subsequent [Timer1 IRQ board fixture](DEBUGGING.md#timer1-irq-board-fixture)
+now links the unchanged primitives separately for both boards. It uses the
+documented CC2530 vector 9, stops the counter while overflow is pending with
+EA=0, checks nested restoration, and masks/acknowledges only its owned source
+before real RETI. The guarded manual runner checks physical CODE and ISR
+context, with a separate bounded pre-start timeout experiment. Both images
+retain host/image/synthetic-entry simulation coverage. The unchanged LG image
+passed [bounded hardware acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three normal cycles, an independent TIMEOUT/terminal FAULT, then a separately
+reset 257-cycle run with real Timer1 ISR services, counter wraps and preserved
+CPU/IRAM/M0 state. Hardware interrupted the restore leaf at +12 with DPL=OK,
+not the synthetic +9/live-token case. The live LG board is now halted at IRQ
+READY `01BB`, with EA/T1IE disabled and Timer1 stopped; prior clock/M1/timebase
+records remain historical. Generic hardware remains unobserved.
+Ten board/image jobs retain the exact artifact whitelist. Higher-priority
+hardware nesting, other sources, measured/calibrated timing and general
+dispatch remain deferred; clock/timebase ownership is unchanged and M2 #4
+remains open.
 
 Deliver independent interfaces for:
 

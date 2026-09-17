@@ -154,7 +154,7 @@ class TimebaseCodeTests(unittest.TestCase):
 
     def test_ci_uploads_only_selected_board_artifacts(self):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text()
-        self.assertIn("image: [bringup, debug_fixture, timebase_fixture, clock_fixture]", workflow)
+        self.assertIn("image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture]", workflow)
         uploads = workflow.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
         expected = {prefix + "${{ matrix.image }}." + suffix for suffix in ("hex", "bin", "ihx", "map", "mem", "cdb")}

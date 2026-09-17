@@ -6,8 +6,16 @@
 #include <assert.h>
 #include <stddef.h>
 
+#if defined(IRQ_FIXTURE_HOST_TEST)
+#include "irq_fixture.h"
+#endif
+
 #define DEFINE_REGISTER(name, address) volatile uint8_t name;
 CC2530_REGISTER_LIST(DEFINE_REGISTER)
+#if defined(IRQ_FIXTURE_HOST_TEST)
+IRQ_FIXTURE_REGISTERS(DEFINE_REGISTER)
+volatile uint8_t IRQ_T1CCTL3, IRQ_T1CCTL4;
+#endif
 #undef DEFINE_REGISTER
 
 register_write_t writes[32];
@@ -15,6 +23,7 @@ unsigned write_count;
 register_read_t reads[32];
 unsigned read_count;
 host_mmio_read_hook_t host_mmio_read_hook;
+host_mmio_write_hook_t host_mmio_write_hook;
 
 void host_mmio_reset(void)
 {
@@ -24,6 +33,7 @@ void host_mmio_reset(void)
     write_count = 0;
     read_count = 0;
     host_mmio_read_hook = NULL;
+    host_mmio_write_hook = NULL;
 }
 
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address)
@@ -50,11 +60,21 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
         assert(!(SOC_P1 & newly_enabled));
         assert(!(SOC_P1SEL & newly_enabled));
     }
-    if (address != SOC_IEN0_ADDRESS && address != SOC_IEN1_ADDRESS && address != SOC_IEN2_ADDRESS)
+    if (address != SOC_IEN0_ADDRESS && address != SOC_IEN1_ADDRESS && address != SOC_IEN2_ADDRESS) {
+#if defined(IRQ_FIXTURE_HOST_TEST)
+        if (address == IRQ_T1CTL_ADDRESS || address == IRQ_T1CNTL_ADDRESS || address == IRQ_T1STAT_ADDRESS) {
+            assert(!(SOC_IEN0 & 0x7f) && !(SOC_IEN1 & 0xfd) && !SOC_IEN2);
+            if (address == IRQ_T1STAT_ADDRESS)
+                assert(value == 0x1f && !SOC_IEN1 && !IRQ_T1CTL);
+        } else
+#endif
         assert(!SOC_IEN0 && !SOC_IEN1 && !SOC_IEN2);
+    }
     writes[write_count].address = address;
     writes[write_count].before = *reg;
     writes[write_count].after = value;
     write_count++;
     *reg = value;
+    if (host_mmio_write_hook != NULL)
+        host_mmio_write_hook(address, writes[write_count - 1].before, value);
 }

@@ -347,7 +347,7 @@ never-observed departure still requires result 9 or another explicit error.
 ## Interrupt ownership foundation (isolated M2 slice)
 
 `include/irq.h` / `src/irq.c` provides only two original platform primitives,
-excluded from all eight current board images:
+excluded from the eight older board images:
 
 | API | Contract |
 | --- | --- |
@@ -393,8 +393,79 @@ not a host-thread atomic implementation.
 
 See [source facts](PROVENANCE.md#m2-interrupt-ownership-sources) and
 [validation and the separate hardware gate](VALIDATION.md#m2-interrupt-ownership-automated-coverage).
-There is no dispatch, flag acknowledgment, priority/source setup, IRQ board
-fixture or hardware acceptance in this slice. M2 #4 remains open.
+The primitives themselves provide no dispatch, flag acknowledgment or priority/
+source setup. A subsequent board fixture and its bounded LG acceptance are
+described below; generic hardware and broader IRQ services remain open with
+M2 #4.
+
+## Timer1 IRQ fixture ownership
+
+`src/irq_fixture_state.c` and `examples/irq_fixture.c` are a separate
+`IMAGE=irq_fixture`, not a general Timer1 driver or a change to `src/irq.c`.
+The fixture requires fresh awake reset, unchanged M0 GPIO policy with all
+startup PxSEL bytes zero, C9/C9 undivided RC16 settings, no other enable/writer,
+inactive Timer1 channels (`T1CCTL0..4=40`), zero counter/source/T1 CPU flag,
+and the reset TIMIF overflow mask set. It observes channels 3/4 through
+read-only XREG `62A3/62A4`, not an implicit ordinary-XDATA allocation.
+No DMA registers are accessed: debug config `26` includes DMA_PAUSE, for which
+SWRU191F p.55 prohibits those accesses. No channel mode/output, routing,
+clock, sleep, priority or TIMIF register is written.
+
+Each cycle checks save/restore with EA initially zero and invalid token FF.
+Explicit fixture policy then enables EA, obtains outer token 1 and inner
+token 0, enables only IEN1.T1IE, clears the counter through T1CNTL and constructs
+a raw deadline. Timer1 is started in free-running DIV=1 mode (`T1CTL=01`).
+Pending overflow/CPU flags are polled with EA=0; the counter is suspended
+(`T1CTL=00`) before the PENDING checkpoint. Inner restore(0) must leave the
+event undelivered. Outer restore(1) permits the real vector-9 ISR.
+
+The 53-byte generated ISR saves A/DPL/DPH/bank-0 R7/PSW, masks IEN1.T1IE,
+captures T1STAT/IRCON, writes **T1STAT=1F**, increments its byte count, restores
+context and executes RETI. IRCON.T1IF is H0 on hardware entry, never written
+by this code. R/W0 acknowledgment preserves other channel flags, including
+newly asserted flags; if they reassert the CPU flag, the source is already
+masked and foreground reports FAULT rather than an interrupt storm.
+Other pending/priority fields are observed and preserved; unexpected changes
+fault without clearing them. Timer1 is not hardware one-shot: the claim is
+at most one service per arm, not exactly one physical counter overflow.
+
+Each foreground wait has its own **1,024 raw tick / 4,096 poll** limits.
+Confirmation must precede the deadline; equality times out. Range/backward
+and helper errors are explicit. The delivery wait begins after restore's
+return, excluding debugger inspection of its interrupted continuation and
+ISR/RETI. This is safe only with the stopped timer, source-masking ISR, no
+other enabled source and finite verified ISR body; it is not a wall-time
+bound for arbitrary handlers. Existing foreground-only timebase ownership
+is preserved: the ISR calls no helper or Sleep Timer reader.
+
+Success clears EA under explicit fixture policy after both tokens have been
+consumed, advances the cycle/M0 heartbeat and reaches READY. The next cycle
+independently rearms the timer. Faults retain their original reason, disable
+EA/T1IE and stop an owned timer, abandon outstanding tokens and latch FAULT;
+they never restore an enabled token as cleanup or retry. Entry rejection
+does not repair an unowned timer. Only separate explicit initialization/reset
+clears faults. The [64-byte ABI, proof and manual boundaries](DEBUGGING.md#timer1-irq-board-fixture)
+separate sampled register fields from actual ISR context.
+
+The unchanged LG image passed
+[compiled-C Timer1/IRQ acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three initial normal cycles, a separate pre-start timeout retaining FAULT,
+then 257 independently armed cycles after an explicit reset. Pending waits
+were 133..134 raw ticks / 29 polls in the full run; delivery was 1..2 ticks /
+1 poll. Counter `0B3A` stayed frozen at PENDING/INNER/READY. Each interrupt
+returned to `0C9D`, restore+12 at RET with **DPL already OK=0**; the nested
+caller frame, full CPU/active-IRAM context and actual RETI two-byte pop passed.
+This is hardware evidence for the interrupted in-leaf result, not the
+synthetic +9/live-token-1 case or higher-priority nesting. Byte counters/M0
+heartbeat wrapped, and immutable observations and unrelated state passed.
+The target now holds IRQ READY `01BB`, EA/T1IE off and Timer1 stopped.
+No firmware or runner change or weakened assertion was needed.
+
+Generic hardware, higher-priority hardware nesting, calibrated peripheral
+timing and other IRQ services remain unvalidated. Neither the host run
+duration nor raw counts establish exact hardware overflow counts or a true
+one-shot timer. M2 #4 remains open; this dated acceptance grants no new
+hardware authorization.
 
 ## Memory contract
 

@@ -58,6 +58,8 @@ make BOARD=generic IMAGE=timebase_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=timebase_fixture all test
 make BOARD=generic IMAGE=clock_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=clock_fixture all test
+make BOARD=generic IMAGE=irq_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=irq_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -210,7 +212,8 @@ hardware, frequency/calibration, physical oscillator/stopped-clock or power-cut
 faults, or other M2 services. A host sleep, synthetic SFR input or green runner
 test is not physical clock evidence; past acceptance grants no permission to
 repeat hardware work.
-CI now has eight board/image jobs and still uploads only selected board artifacts.
+The clock slice had eight board/image jobs; the IRQ board slice below extends
+this to ten while still uploading only selected board artifacts.
 
 The isolated interrupt-ownership foundation is included in `make ... all test`:
 
@@ -226,11 +229,41 @@ checks. The shared layout checker permits only the IRQ executable's exact
 twelve compiler-reserved vector-padding holes; existing timebase/clock
 executables still require contiguous emitted CODE and their original guards.
 `irq_test.ihx` is **test-only: never flash or upload it**. It is not an `IMAGE`
-option. Keep IRQ objects out of all current board links and retain the exact
-eight-job CI artifact whitelist. Hardware interrupt work needs a separate
+option. Keep IRQ objects out of the eight older board links and retain the exact
+board-artifact whitelist. Hardware interrupt work needs a separate
 board/source/vector/recovery task; the existing LG clock/timebase acceptance
 is not authorization or evidence for it. See the
 [API ownership contract](docs/ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice).
+
+The separate `IMAGE=irq_fixture` links those unchanged primitives and one
+fixture-owned CC2530 Timer1 ISR. Its `all test` includes the strict host model,
+real linked vector/context/ABI proof, six synthetic fault cases and 257
+synthetic-entry cycles. The host-only `IRQ_FIXTURE_HOST_TEST` policy permits
+only the three owned timer-write registers with checked IRQ state; default
+host guards and all 32-entry log assertions are unchanged. Every new log
+entry is verified before consumption. There are no firmware test callbacks.
+
+```sh
+PYTHONPATH=tools .venv/bin/python -B -m unittest test_irq_fixture -q
+```
+
+The board simulator explicitly models missing CC2530 entry/H0/RW0 behavior;
+it does not relabel C52 Timer1 as CC2530. Keep the separate `test-irq` native
+C52 interrupt regression. `tools/check_irq_hardware.py` is **manual-only**,
+requires explicit reset/CPU/read/breakpoint authorization and verifies every
+physical CODE byte before runner resume. It has no RAM/code/SFR writer.
+Follow the [IRQ manual procedure](docs/DEBUGGING.md#timer1-irq-board-fixture);
+the unchanged LG image passed
+[bounded compiled-C hardware acceptance on 2026-09-17 (UTC+03)](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three normal cycles, a separate pre-start TIMEOUT/FAULT, then 257 cycles after
+an explicit reset. Hardware interrupted restore at +12 with DPL=OK (0), not
+the synthetic +9/live-token-1 case; actual ISR/RETI CPU/active-IRAM preservation
+passed. The live LG board is now IRQ READY `01BB`, EA/T1IE off, Timer1 stopped.
+Generic remains host/image/simulator-only. Higher-priority hardware nesting,
+calibrated timing and other M2 services remain outside that acceptance.
+The parent also independently passed both full IRQ configurations with 355
+Python tests and strict checks. Past acceptance grants no new hardware
+authorization, and M2 #4 remains open. Never flash `irq_test.ihx`.
 
 ## Code conventions
 
@@ -267,9 +300,7 @@ halted at `0x0173` at the end of that run. The record also includes 309 passing
 pinned-dependency host tests (including 18 offline macOS observer tests).
 Keep generic-board and standalone
 `bringup` hardware claims unobserved; shared startup evidence is limited to
-the LG M1, timebase and clock fixtures. The latest reported LG state is the
-corrected clock image halted at READY `0x016A` on RC16, not the historical
-M1 or timebase image.
+the separately dated LG fixture records in [DEBUGGING.md](docs/DEBUGGING.md).
 Bank discrimination is conditional on future banked CODE.
 Do not turn bounded M1 completion into a universal debugger or M2/RF/network
 claim, or infer current hardware availability from finite acceptance evidence.

@@ -380,9 +380,11 @@ hashes from `build-info.json`. This detects stale or mixed build files; it is
 Do not inspect a build directory concurrently with relinking it.
 
 The reader supports linked SDCC 4.2.0 global functions, CODE labels/data,
-XDATA objects and byte SFR symbols used by these images. It combines map
+XDATA objects, byte SFR symbols and explicitly typed SBIT symbols used by these images. It combines map
 addresses with CDB space/type/size and global address records, rejecting
-conflicting records.
+conflicting records. SBIT addresses are bit addresses, not byte-SFR addresses;
+in the IRQ image, EA bit AF and T1STAT byte SFR AF are different objects.
+This does not expand the hardware SFR-read whitelist.
 Function CDB type sizes are not misrepresented as function byte lengths.
 Unknown symbols, unsupported spaces, locals, optimized-out variables, source
 ranges and banked images are not guessed. Some linker/runtime symbols have no
@@ -1006,8 +1008,9 @@ Every recovery call returned `CLOCK_OK=0` with rollback
 `CLOCK_NOT_ATTEMPTED=8`. The runner checked completed-step/M0-heartbeat byte
 wraps, immutable M0 startup status, preserved LF/TICKSPD command fields,
 unchanged SLEEPCMD/IRQs and CPU-register preservation during inspection.
-The final target is **the corrected clock fixture, halted at READY `0x016A`
-on RC16**. All six older board BIN hashes and historical M1/timebase evidence
+That run ended with **the corrected clock fixture halted at READY `0x016A`
+on RC16**; the later IRQ acceptance below changed the installed image.
+All six older board BIN hashes and historical M1/timebase evidence
 remain unchanged.
 
 This is **hardware-observed execution of the compiled C clock selector and
@@ -1031,6 +1034,254 @@ identities, raw captures/logs and recovery files remain private. Generated
 `hardware_tested=false` metadata continues to describe automated build evidence,
 separately from this dated manual acceptance. No new hardware authorization
 follows from this historical record.
+
+## Timer1 IRQ board fixture
+
+`IMAGE=irq_fixture` is a separate original non-RF image, built for `generic`
+and `lg_esl29_rev03`. Both have host/image/simulator coverage; the unchanged
+LG image additionally passed [dated compiled-C hardware acceptance](#2026-09-17-lg-compiled-c-irq-acceptance).
+Generic hardware remains unobserved. It intentionally
+links the published EA primitives and an actual CC2530 Timer1 ISR, not the
+standalone generic-C52 `irq_test.ihx`, which must never be flashed.
+The eight older BINs and all historical LG M1/timebase/clock evidence remain
+unchanged. The subsequent parent-owned hardware run installed the IRQ image
+and left the live LG board halted at READY `01BB`, EA/T1IE off and Timer1 stopped.
+
+The [ownership contract](ARCHITECTURE.md#timer1-irq-fixture-ownership) requires
+fresh awake reset, C9/C9, inactive channels, GPIO-selected pins and exclusive
+ownership of EA/Timer1. Timer1 runs DIV=1/free-running until overflow is
+observed with EA=0, then is stopped before PENDING. Restoring the inner token
+must leave the event pending; restoring the outer token permits interrupt 9
+at CODE `004B`. The ISR masks T1IE before acknowledging only OVFIF and returns
+with RETI. There is no public timer/dispatcher API, pin output, DMA, sleep,
+LF switching or calibration service.
+
+### IRQ state ABI v1
+
+The 64-byte `irq_fixture_state` is ordinary XDATA (currently `0000` on both
+boards); resolve it from matching artifacts. All multibyte arrays are
+little-endian. M0 remains its separate immutable startup record except for
+the existing heartbeat byte.
+
+| Offset | Size | Meaning |
+| --- | ---: | --- |
+| 0 | 4 | ASCII `M2IQ` |
+| 4 / 5 | 1 each | Version 1 / byte size 64 |
+| 6 / 7 / 8 | 1 each | Phase / original fault reason / stage |
+| 9 / 10 / 11 | 1 each | Completed cycles / ISR count / count before arm |
+| 12..19 | 8 | Disabled token/result, outer token, inner token/result, outer result, invalid-FF result, timebase status |
+| 20 / 23 | 3 / 2 | Timeout 1,024 raw ticks / poll cap 4,096 |
+| 25 / 27 | 2 / 3 | Pending-wait polls / elapsed raw ticks |
+| 30 / 32 | 2 / 3 | Delivery-wait polls / elapsed raw ticks |
+| 35 / 36 | 1 each | ISR-observed T1STAT / IRCON before source acknowledgment |
+| 37..43 | 7 | Initial CMD, STA, SLEEPCMD, IP0, IP1, TIMIF, unrelated IRCON bits |
+| 44..55 | 12 | Sampled IEN0/1/2, T1CTL, T1STAT, IRCON, IP0/1, TIMIF, CMD, STA, SLEEPCMD |
+| 56 | 2 | T1CNTL-first latched counter snapshot |
+| 58 / 62 | 4 / 2 | Zero reserved bytes / guards `69 96` |
+
+Phases are INITIALIZED=1, RUNNING=2, READY=3, FAULT=4. Stages are IDLE=0,
+WAIT_PENDING=1, PENDING=2, INNER=3, DELIVERY=4, DONE=5. Reasons are NONE=0,
+ENTRY=1, BAD_PHASE=2, TOKEN=3, TIMEBASE=4, COUNTER_RANGE=5, TIMEOUT=6,
+POLL_LIMIT=7, EARLY_IRQ=8, SOURCE=9, INVARIANT=10. The original reason is
+latched; cleanup does not turn failure into success.
+Outer result FF means not yet returned, not a primitive error code.
+Other result fields are meaningful only after their stage executes.
+The register group at 44 is a C observation, **not a live SFR read**: at ISR
+entry/RETI it still contains the earlier INNER snapshot. The ISR-specific
+fields and subsequent READY snapshot supply acknowledgment evidence.
+
+`tools/debug_image.py irq-state` decodes a complete `--hex`/`--snapshot`
+record, while `irq-checkpoints` reports the checked CODE/ABI proof. Both
+require matching `--board`, `--image irq_fixture` and `--output`, and are
+entirely offline.
+
+### IRQ checkpoints and footprint
+
+| Label / point | generic | LG |
+| --- | --- | --- |
+| `_irq_fixture_before_stop` | `018B` | `01B3` |
+| `_irq_fixture_armed_stop` | `018D` | `01B5` |
+| `_irq_fixture_pending_stop` | `018F` | `01B7` |
+| `_irq_fixture_inner_stop` | `0191` | `01B9` |
+| `_irq_fixture_ready_stop` | `0193` | `01BB` |
+| `_irq_fixture_fault_stop` | `0195` | `01BD` |
+| Actual Timer1 ISR / final RETI | `045A` / `048E` | `0482` / `04B6` |
+| `irq_restore` entry | `0C69` | `0C91` |
+| Outer restore LCALL / continuation | `07EC` / `07EF` | `0814` / `0817` |
+| Actual timer start / source acknowledgment | `0726` / `0476` | `074E` / `049E` |
+
+These addresses belong only to the checked builds below, not a stable API.
+The five ordinary stops are exact NOP/RET leaves; FAULT is NOP/SJMP-to-self.
+The verifier checks explicit function extents, main's call sequence, all
+34 primitive bytes, all 53 ISR bytes and the actual `004B` LJMP. The ISR
+push/pop template preserves A, DPL, DPH, bank-0 R7 and PSW and has no calls,
+overlay scratch or timebase access. Its source write is literal `75 AF 1F`,
+never a flag read/modify/write.
+
+The outer-call proof verifies loading the actual byte token from state+14
+into DPL, the real LCALL and result store at state+17. Accepted interrupt
+return PCs are instruction boundaries at restore+9 (live DPL=1), restore+12
+(DPL=OK), or the checked caller continuation through its result store.
+If hardware enters after the leaf returned, the runner records
+`interrupted_restore=false`, not invented live-argument evidence. Any return
+outside that proved window is an error and requires separate investigation.
+An interrupted leaf must retain its actual caller return address beneath
+the hardware frame. Full CPU/active-IRAM snapshots must match at ISR entry
+and just before RETI; stepping RETI must restore the recorded PC and pop
+exactly two bytes.
+
+The LG hardware runs below observed **restore+12, PC `0C9D`, DPL=OK (0)**
+in every normal cycle. This is still inside the leaf, at RET after setting
+the result, so `interrupted_restore=true`. Restore+9/live-token-1 remains
+synthetic evidence, not an observed hardware window in these runs.
+
+The armed stop is after a real pending-wait deadline and before the verified
+timer-start write. The checker resolves typed four-byte start/deadline
+storage (currently XDATA `0040`/`0048`) and checks the entire 107-byte
+deadline-setup function with verified storage/call relocations; the runner additionally checks the
+actual stored 24-bit `(start + 1024) & FFFFFF` relation. Delivery gets a
+fresh deadline **after** restore's checked continuation, so ISR inspection
+does not manufacture a delivery timeout.
+
+| Board | Emitted CODE | BIN extent, including 63 vector-padding bytes | BIN SHA-256 |
+| --- | ---: | ---: | --- |
+| generic | 3,166 | 3,229 | `1bf7bc5c0c405a671b9065f279b4d2bcd89c04c3bcb71ce6e7e1c53382c76f3d` |
+| LG | 3,206 | 3,269 | `b9bc83d7254944621f25d312f118ca6a044e808017f85bb6453f28c15cdb0ae1` |
+
+Both use 121 ordinary XDATA bytes, 153 used / 185 reserved nonaliased bytes
+including M0, stack start `21` (initial SP `20`) and 223 reserved stack bytes.
+Foreground stop SP is `22`; interrupting the restore leaf gives ISR-entry
+SP `26`, before its five context pushes. Upper-128 IRAM, ordinary allocation
+below `1E00`, full status reservation and `1F00..1FFF` alias guards remain.
+The exact nine unused-vector padding intervals account for 63 reserved,
+unemitted CODE bytes; no linked instruction is fabricated to fill them.
+BIN padding is FF and is included in physical CODE verification.
+
+### Parent-only IRQ programming and acceptance
+
+**Not a build/CI action; do not run during offline work.**
+
+1. Build the selected board with `make BOARD=lg_esl29_rev03 IMAGE=irq_fixture PYTHON=.venv/bin/python all test`; retain matching BIN/IHX/HEX/map/mem/CDB/metadata and verify the hash above.
+2. Separately authorize the exact board, exclusive adapter, safe supply and recovery material. Program only that board BIN with the established external programmer/readback procedure, never `irq_test.ihx`. Follow the [programmer lifecycle and recovery boundary](#manual-hardware-acceptance-and-recovery): external `cc-tool` may reset on normal return even without `--reset`; exit status alone is not readback evidence. This runner is not a flasher or a replacement for that authorization.
+3. With the current numeric USB location, run a short normal acceptance, the separate negative experiment if authorized, then a separately reset wrap-covering normal recovery run:
+
+```text
+.venv/bin/python tools/check_irq_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/irq_fixture --cycles 3 --confirm-irq-test
+.venv/bin/python tools/check_irq_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/irq_fixture --cycles 1 --induce-timeout --confirm-irq-test
+.venv/bin/python tools/check_irq_hardware.py --bus BUS --address ADDRESS --board lg_esl29_rev03 --output build/lg_esl29_rev03/irq_fixture --cycles 257 --confirm-irq-test
+```
+
+Replace BUS/ADDRESS explicitly; there is no automatic selection or fallback.
+Each invocation reset-attaches, requires PC=0/config=26, and verifies **every
+physical CODE byte in the BIN extent before any runner resume**. Normal cycles
+are 2..257, default 3. Pending/inner checkpoints prove the timer is stopped,
+EA remains zero and no ISR has run. The runner reuses four breakpoint slots
+for ISR entry/RETI, checks context and actual return, then verifies READY,
+frozen counter, acknowledgment, cycle/heartbeat progression and immutable M0/
+initial IRQ observations. Inspection and NOP stepping preserve CPU state.
+
+Default debug config 26 suspends Timer1 while halted or debug-instructed;
+STEP supplies approximately execution ticks (SWRU191F p.55). No config change
+is made. A halted interval is **not timer progress or calibrated time**.
+The negative mode holds the armed, still-stopped CPU for 0.25 host seconds
+under one guarded deadline. It accepts only actual TIMEOUT=6, one pending
+poll, raw elapsed strictly above 1,024 and below half range, zero ISR count,
+disabled EA/T1IE and stopped timer at terminal FAULT. Pending/READY safety
+breakpoints reject normal progress without running additional cycles.
+Host sleep alone, another fault or a poll-cap result is not success.
+Recovery is a separate explicit invocation/reset, never an automatic retry.
+
+Each USB operation/checkpoint wait is bounded by one 10-second operation
+deadline. Errors, unexpected PCs/frames, malformed records and cleanup errors
+suppress success JSON, with no implicit resume/reset/reattach. No generic
+SFR whitelist, host RAM/code writer or flash API is added.
+Raw run records stay private; publish only a processed scope-specific result.
+The bounded LG hardware record below is separate from these requirements;
+it does not authorize another run. Higher-priority hardware nesting,
+other sources, calibrated latency, an exact count of hardware overflows,
+physical clock faults, DMA/wake/RF/AES/flash services remain outside this gate.
+
+### 2026-09-17 LG compiled-C IRQ acceptance
+
+The parent/operator reports that the **unchanged LG IRQ fixture and runner
+passed without weakened assertions or a source fix**. The image is
+**3,269 BIN bytes: 3,206 emitted CODE plus 63 FF padding bytes**, SHA-256
+`b9bc83d7254944621f25d312f118ca6a044e808017f85bb6453f28c15cdb0ae1`.
+The setup was the same owned LG Rev0.3 / CC Debugger / macOS 15.7.9 /
+Python 3.11.9 / PyUSB 1.3.1 as the historical M1/timebase/clock records.
+The parent independently passed both LG and generic IRQ `all test` with
+355 Python tests and strict source/vector/ISR/alias/fault checks.
+
+All times below are **2026-09-17, UTC+03**. Before programming, the parent
+verified equal private recovery copies against their recorded checksums and
+a valid factory-page backup; none was changed. The expected physical adapter
+port was selected exclusively. Explicit external `cc-tool -e/-w/-v r`
+erase/write/readback completed successfully at **02:55:33**.
+**Each acceptance invocation independently read and compared all 3,269
+physical CODE bytes, including FF padding, before any runner resume.**
+These are operator-supplied processed facts; no private backup, identity,
+capture or run log was accessed or imported for this documentation update.
+
+An initial separate **three-cycle normal run completed at 02:55:58**.
+Each pending wait was 134 raw ticks / 29 polls; delivery was 1..2 raw ticks /
+1 poll. Every cycle used actual Timer1 vector `004B`, ISR `0482` and final
+RETI `04B6`, with `isr_source=20` and `isr_cpu=00`, observing the CPU H0 clear.
+
+The hardware interrupt return PC was **`0C9D` in every cycle: `irq_restore`
+entry `0C91` +12, at RET after DPL=OK (0) had been set**. The runner verified
+the nested caller frame and live DPL=0, compared complete CPU and active-IRAM
+context at ISR entry versus just before RETI, then stepped actual RETI,
+which popped exactly two bytes and resumed `0C9D`. This is hardware proof
+of an **interrupted in-leaf result 0**, not restore+9 with live token 1,
+synthetic C52 delivery or higher-priority hardware nesting.
+
+A separate **`--cycles 1 --induce-timeout` run completed at 02:56:43**:
+
+| Observed field | Result |
+| --- | --- |
+| Terminal PC / phase / original reason / stage | `01BD` / FAULT=4 / TIMEOUT=6 / WAIT_PENDING=1 |
+| Completed cycles / ISR count | 0 / 0 |
+| Pending elapsed / polls / helper status | 14,718 raw ticks / 1 / 0 |
+| IEN0 (including EA) / IEN1 (including T1IE) / T1CTL | 0 / 0 / 0 |
+| T1STAT source / IRCON CPU flags | 0 / 0 |
+
+Elapsed exceeded 1,024 and remained below half range. This was the verified
+pre-start deadline-hold stimulus followed by the real C failure and terminal
+cleanup, not a stopped physical oscillator, calibration or successful normal
+cycle. There was **no implicit recovery**.
+
+A **separate explicit reset and normal `--cycles 257` run** started at
+**02:57:19** and completed at **03:01:06**, passing **257 actual C cycles and
+Timer1 ISR services**. The reported **226.77 seconds is host wall duration
+only**, not a timer-frequency or latency measurement.
+
+| Full-run observation | Result in all 257 cycles |
+| --- | --- |
+| Pending wait | 133..134 raw ticks, exactly 29 polls |
+| Delivery wait | 1..2 raw ticks, exactly 1 poll |
+| ISR source / CPU flags | `20` / `00` |
+| Frozen Timer1 counter at PENDING / INNER / READY | 2,874 (`0B3A`) at all three checkpoints |
+| Interrupt return PC / in-leaf result | `0C9D` = restore+12 / DPL=OK (0) |
+| Context and return | `interrupted_restore=true`; full CPU/active-IRAM/stack preservation; actual RETI stepped each time |
+
+Completed-cycle, ISR-count and M0-heartbeat bytes wrapped; final completed
+and ISR counts were both 1. Immutable M0 and initial clock/sleep/IRQ
+observations, priorities, unrelated IRCON/TIMIF, token results and disable/
+stop conditions all passed. The **current LG board is the IRQ fixture,
+halted at READY `01BB`, EA=0, T1IE=0 and Timer1 stopped**. No hardware process
+remained active. The previous clock image is historical, not the installed
+image. All eight older BIN hashes and published EA/timebase drivers are unchanged.
+
+This establishes the finite real-source pending/nested-mask/delivery,
+ISR/RETI-context, explicit timeout and separately reset repeat/wrap scenarios
+on this LG image. It does **not** establish calibrated time/latency, exact
+hardware overflow counts, true hardware one-shot behavior, higher-priority
+hardware nesting, other IRQs, DMA, sleep/wake, RF, AES or flash services.
+Other injected flag-race/stall/range faults remain host/simulator evidence.
+Generic IRQ hardware remains unobserved; full **M2 #4 remains open**.
+Generated `hardware_tested=false` metadata describes automated build evidence,
+separately from this dated manual record. Past acceptance grants no new
+hardware authorization; private records remain outside Git and CI artifacts.
 
 ## Awake-only timebase board fixture
 

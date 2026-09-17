@@ -18,12 +18,14 @@ typedef struct {
 } register_read_t;
 
 typedef uint8_t (*host_mmio_read_hook_t)(uint8_t address, uint8_t value);
+typedef void (*host_mmio_write_hook_t)(uint8_t address, uint8_t before, uint8_t value);
 
 extern register_write_t writes[32];
 extern unsigned write_count;
 extern register_read_t reads[32];
 extern unsigned read_count;
 extern host_mmio_read_hook_t host_mmio_read_hook;
+extern host_mmio_write_hook_t host_mmio_write_hook;
 void host_mmio_reset(void);
 
 #endif

@@ -18,6 +18,7 @@ from verify_firmware import (
     TIMEBASE_FIXTURE_SIZE, TIMEBASE_DELAY, TIMEBASE_POLL_LIMIT,
     CLOCK_FIXTURE_SIZE, CLOCK_TIMEOUT, CLOCK_POLL_LIMIT, verify_clock_fixture_code,
 )
+from irq_fixture import decode_irq_fixture, verify_irq_fixture
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,8 @@ def linked_symbols(map_text: str, debug_text: str, image: dict) -> dict:
         elif space in ("D", "F", "I"):
             symbol = Symbol(name, addresses[name], {"D": "CODE", "F": "XDATA", "I": "SFR"}[space],
                             "object", size)
+        elif space == "J" and data_type == "SX:U":
+            symbol = Symbol(name, addresses[name], "SBIT", "object", size)
         else:
             raise ValueError(f"Unsupported CDB address space for linked global {name}")
         require(name not in declarations or declarations[name] == symbol,
@@ -139,6 +142,9 @@ class DebugImage:
         self.source_locations = linked_source_locations(debug_text, image)
         if image_name == "clock_fixture":
             self.clock_timeout_checkpoint = verify_clock_fixture_code(
+                image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
+        if image_name == "irq_fixture":
+            self.irq_proof = verify_irq_fixture(
                 image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
 
     def symbol(self, name: str) -> Symbol:
@@ -382,7 +388,7 @@ def main(argv=None) -> int:
         child = commands.add_parser(name)
         child.add_argument("value", type=lambda text: int(text, 0))
     for name in ("symbols", "breakpoint", "source-lines", "status", "fixture-state", "timebase-state",
-                 "clock-state", "clock-checkpoint"):
+                 "clock-state", "clock-checkpoint", "irq-state", "irq-checkpoints"):
         child = commands.add_parser(name)
         child.add_argument("--output", type=Path, required=True)
         child.add_argument("--board", choices=BOARDS, required=True)
@@ -396,7 +402,7 @@ def main(argv=None) -> int:
             source.add_argument("--pc", type=lambda text: int(text, 0))
             source.add_argument("--file")
             child.add_argument("--line", type=int)
-        if name in ("status", "fixture-state", "timebase-state", "clock-state"):
+        if name in ("status", "fixture-state", "timebase-state", "clock-state", "irq-state"):
             source = child.add_mutually_exclusive_group(required=True)
             source.add_argument("--hex")
             source.add_argument("--snapshot", type=Path)
@@ -426,6 +432,11 @@ def main(argv=None) -> int:
             elif args.command == "timebase-state":
                 require(args.image == "timebase_fixture", "Timebase state requires a timebase_fixture image")
                 result["timebase_state"] = decode_timebase_fixture(snapshot_input(args, TIMEBASE_FIXTURE_SIZE))
+            elif args.command in ("irq-state", "irq-checkpoints"):
+                require(args.image == "irq_fixture", "IRQ inspection requires an irq_fixture image")
+                result["irq_proof"] = image.irq_proof
+                if args.command == "irq-state":
+                    result["irq_state"] = decode_irq_fixture(snapshot_input(args, 64))
             else:
                 require(args.image == "clock_fixture", "Clock inspection requires a clock_fixture image")
                 result["timeout_checkpoint"] = image.clock_timeout_checkpoint

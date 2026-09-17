@@ -27,11 +27,15 @@ There is deliberately no automatic flash target.
 [awake-only timebase board fixture](DEBUGGING.md#awake-only-timebase-board-fixture),
 under `build/<board>/timebase_fixture/`. `IMAGE=clock_fixture` selects the separate
 [init-time clock board fixture](DEBUGGING.md#init-time-clock-board-fixture),
-under `build/<board>/clock_fixture/`. All four images use the same board
+under `build/<board>/clock_fixture/`. `IMAGE=irq_fixture` selects the separate
+[Timer1 IRQ board fixture](DEBUGGING.md#timer1-irq-board-fixture),
+under `build/<board>/irq_fixture/`. All five images use the same board
 policy, M0 status ABI and memory restrictions. The new timebase fixture does
 not change the existing `bringup` or `debug_fixture` firmware bytes. The clock
-fixture likewise preserves all six older board BINs. Image selection does
-not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
+fixture likewise preserves all six older board BINs; the IRQ fixture preserves
+all eight older BINs. The IRQ fixture has separate bounded LG hardware
+acceptance below; generic remains host/image/simulator-only. Image selection
+does not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
 `build-info.json` always describes the last selected image; use separate
 directories to retain each metadata record.
 
@@ -43,20 +47,38 @@ passed normal switching but failed pending-cancellation rollback acceptance.
 The corrected 3,798-byte LG image subsequently passed
 [2026-09-17 (UTC+03) compiled-C clock acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
 both timeout/rollback cases and a separate reset/recovery run of 257 sequences
-(771 C calls). The live target is now that corrected clock fixture, halted at
-READY `0x016A` on RC16. Neither standalone `bringup` image nor generic hardware
-was observed. All six older BIN hashes and historical M1/timebase evidence
+(771 C calls). That clock run ended halted at READY `0x016A` on RC16.
+Neither standalone `bringup` image nor generic hardware was observed.
+All six older BIN hashes and historical M1/timebase evidence
 remain unchanged. This is not frequency/calibration or physical clock-failure
 acceptance, and result 9 still denotes unconfirmed never-departed cancellation.
+
+The unchanged 3,269-byte LG IRQ image subsequently passed
+[compiled-C Timer1/IRQ acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three initial normal cycles, an independent pre-start TIMEOUT at FAULT,
+then 257 real C cycles/ISR services after a separate explicit reset.
+Every acceptance invocation independently verified all physical CODE,
+including FF padding, before runner resume. Hardware return was restore+12
+with DPL=OK (0), with preserved CPU/active-IRAM context and actual RETI.
+The live board is now **IRQ fixture at READY `0x01BB`, EA/T1IE disabled and
+Timer1 stopped**, not the historical clock image. All eight earlier BIN
+hashes and the published EA/timebase drivers remain unchanged. This finite
+result does not establish calibrated time/latency, true one-shot behavior,
+exact overflow counts, higher-priority nesting or other platform services.
+M2 #4 remains open.
 
 ## Execution and board policy
 
 SDCC sets up its initial stack, then calls `_sdcc_external_startup`. This hook
 disables all three interrupt-enable registers before board policy and C data
-initialization. There is no interrupt handler, RF/USART initialization, sensor
+initialization. The bootstrap has no interrupt handler, RF/USART initialization, sensor
 read, EPD/SPI command, sleep entry, crystal switch or network operation.
 The separate clock fixture performs its explicitly documented HF selections
 after this unchanged startup; the default bootstrap does not.
+The separate IRQ fixture subsequently enables only its owned Timer1 source
+and global EA in bounded stages, with a stopped counter before delivery.
+It leaves GPIO selection/routing unchanged and does not change the startup
+interrupt/clock evidence stored in M0.
 
 The default board does not change GPIO latches, directions, selections or
 pulls. That is not a guarantee of electrically safe reset levels on an unknown

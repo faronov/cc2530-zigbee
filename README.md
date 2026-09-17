@@ -150,7 +150,7 @@ resume and never flashes.
 Generic hardware and physical timer-fault injection remain unobserved. Stopped,
 backward and ambiguous C paths retain host/simulator coverage; the C run is
 not calibration or a natural 24-bit timer-wrap claim. CI covers both boards
-and all four board images without uploading standalone test executables.
+and all five board images without uploading standalone test executables.
 **M2 #4 remains open** for clock measurement/calibration, IRQ/compare/wake and
 the other platform gates.
 
@@ -188,8 +188,9 @@ only after 64 raw ticks / 15 polls, and the separate late-source timeout test
 also passed. Both preserved the original TIMEOUT and terminal FAULT. A
 separate explicit reset/recovery run then passed 257 full sequences
 (771 actual C calls), including counter/heartbeat wraps and CPU/M0/clock-field
-invariants. The live LG board is now the corrected clock fixture, halted at
-READY `0x016A` on RC16. Generic remains **host/image/simulator-only**.
+invariants. That clock run left the LG fixture halted at READY `0x016A` on
+RC16; the subsequent IRQ acceptance below changed the installed image.
+Generic remains **host/image/simulator-only**.
 This is not frequency/calibration, physical oscillator-failure/stopped-clock
 or never-departed cancellation confirmation. Prior M1/timebase evidence is
 historical and unchanged; M2 stays open.
@@ -207,9 +208,42 @@ cannot be detected.
 coverage, including genuine generic C52 interrupt entry, higher-priority
 nesting and RETI context preservation. These tiny SDCC reentrant leaves are
 not a peripheral dispatcher or physical CC2530 interrupt acceptance.
-All eight board BINs and the eight-job CI matrix remain unchanged; no current
-board image links the primitives. `irq_test.ihx` is **test-only: never flash
-or upload it as board firmware**. M2 #4 and the hardware IRQ gate remain open.
+The foundation preserved all eight older board BINs; the separate IRQ fixture
+below now links the primitives intentionally. `irq_test.ihx` is **test-only: never flash
+or upload it as board firmware**. Its synthetic coverage is separate from the
+bounded LG Timer1 hardware acceptance below; M2 #4 remains open.
+
+## M2 Timer1 IRQ board fixture
+
+`IMAGE=irq_fixture` is a separate non-RF board image for both boards:
+
+```sh
+make BOARD=generic IMAGE=irq_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=irq_fixture all test
+```
+
+It exercises the real EA primitives, an initially disabled section, nested
+outer/inner ownership, Timer1 overflow pending while EA=0, and one ISR/RETI
+per successful arm. The counter is stopped before reenabling EA; the ISR
+masks its source before acknowledging overflow. No pins are routed to the
+timer, and no general timer/dispatcher service is added.
+The [manual runner and exact ABI](docs/DEBUGGING.md#timer1-irq-board-fixture)
+verify all physical CODE before runner resume and inspect actual ISR context.
+Normal repeated cycles and a separate pre-start timeout mode require explicit
+hardware authorization. The unchanged 3,269-byte LG image passed
+[compiled-C Timer1/IRQ acceptance on 2026-09-17 (UTC+03)](docs/DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three initial cycles, a separate pre-start TIMEOUT retained at FAULT, then a
+separately reset 257-cycle run with real ISR services and byte-counter wraps.
+Every normal interrupt returned to `0x0C9D`, **restore+12 with DPL=OK (0)**,
+not the synthetic restore+9/live-token-1 case. Full CPU/active-IRAM context
+and actual RETI restoration passed. The live LG board is now the IRQ fixture,
+halted at READY `0x01BB`, EA/T1IE disabled and Timer1 stopped.
+Generic remains **host/image/simulator-only**. This does not establish
+calibrated time/latency, hardware one-shot or exact overflow counts,
+higher-priority hardware nesting, other interrupts or platform services.
+All eight older BINs are byte-identical. CI now has ten board/image jobs with
+the same exact board-only artifact whitelist. Historical evidence is unchanged,
+past acceptance grants no new hardware authorization, and M2 #4 remains open.
 
 ## Intended scope
 

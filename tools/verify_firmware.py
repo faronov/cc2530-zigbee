@@ -12,12 +12,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
-IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture")
+IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
     "timebase_fixture": "non-networking-awake-timebase-fixture",
     "clock_fixture": "non-networking-init-clock-fixture",
+    "irq_fixture": "non-networking-timer1-irq-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -36,6 +37,12 @@ CLOCK_FIXTURE_SIZE = 56
 CLOCK_TIMEOUT = 1024
 CLOCK_POLL_LIMIT = 4096
 CLOCK_CHECKPOINTS = ("_clock_fixture_before_call", "_clock_fixture_ready_stop", "_clock_fixture_fault_stop")
+IRQ_SAVE_BYTES = bytes.fromhex("10 af 04 75 82 00 22 75 82 01 22")
+IRQ_RESTORE_BYTES = bytes.fromhex("e5 82 60 09 14 70 0c d2 af 75 82 00 22 c2 af 75 82 00 22 75 82 01 22")
+IRQ_FIXTURE_SIZE = 64
+IRQ_CHECKPOINTS = tuple("_irq_fixture_" + name + "_stop"
+                        for name in ("before", "armed", "pending", "inner", "ready", "fault"))
+IRQ_VECTOR_HOLES = tuple(address for vector in range(3, 0x4b, 8) for address in range(vector + 1, vector + 8))
 # SDCC 4.2.0 model-large reader at scratch addresses 0/1/2. Only the six
 # MOV DPTR,#scratch operands may relocate in a board image, verified via CDB.
 TIMEBASE_READER_BYTES = bytes.fromhex(
@@ -78,6 +85,21 @@ def cdb_local(debug, prefix, declaration):
     return cdb_address(debug, "L:" + records[0][0])
 
 
+def verify_irq_primitives(image, symbols, debug):
+    require(symbols.get("_irq_ea") == 0xaf and symbols.get("_SOC_IEN0") == 0xa8
+            and cdb_address(debug, "L:G$irq_ea$0_0$0") == 0xaf
+            and "S:G$irq_ea$0_0$0({1}SX:U),J,0,0" in debug, "EA bit address/type mismatch")
+    for name, code in (("irq_save_disable", IRQ_SAVE_BYTES), ("irq_restore", IRQ_RESTORE_BYTES)):
+        start = symbols["_" + name]
+        require(cdb_address(debug, f"L:G${name}$0$0") == start
+                and cdb_address(debug, f"L:XG${name}$0$0") == start + len(code),
+                "Naked IRQ explicit function extent mismatch")
+        require(all(image.get(start + offset) == byte for offset, byte in enumerate(code)),
+                "IRQ primitive instruction/ABI mismatch")
+        require(f"F:G${name}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0" in debug,
+                "IRQ naked byte-return ABI mismatch")
+
+
 def verify_clock_diagnostics(debug, modules=("clock",)):
     for module in modules:
         for suffix, fields in (
@@ -94,20 +116,7 @@ def verify_clock_diagnostics(debug, modules=("clock",)):
                         "Clock diagnostic field layout changed")
 
 
-def verify_clock_code(image, symbols, debug):
-    start = cdb_address(debug, "L:Fclock$effective_status$0$0")
-    end = cdb_address(debug, "L:XG$clock_select_init$0$0") + 1
-    require(symbols["_timebase_expired"] < start < symbols["_clock_select_init"] < end <= CODE_LIMIT,
-            "Clock module extent changed")
-    instructions = {}
-    address = start
-    while address < end:
-        size = CLOCK_INSTRUCTION_LENGTHS.get(image.get(address))
-        require(size is not None and address + size <= end
-                and all(address + i in image for i in range(size)), "Unreviewed clock instruction/length")
-        instructions[address] = bytes(image[address + i] for i in range(size))
-        address += size
-    require(image[end - 1] == 0x22, "Clock module does not end in RET")
+def peripheral_accesses(instructions):
     direct_first = {
         0x05, 0x15, 0x25, 0x35, 0x42, 0x43, 0x45, 0x52, 0x53, 0x55,
         0x62, 0x63, 0x65, 0x75, 0x86, 0x87, 0x95, 0xa6, 0xa7, 0xb5,
@@ -122,6 +131,24 @@ def verify_clock_code(image, symbols, debug):
         for operand in operands:
             if operand >= 0x80 and operand not in (0x81, 0x82, 0x83, 0xd0, 0xe0, 0xf0):
                 accesses.append((address, data, operand))
+    return accesses
+
+
+def verify_clock_code(image, symbols, debug):
+    start = cdb_address(debug, "L:Fclock$effective_status$0$0")
+    end = cdb_address(debug, "L:XG$clock_select_init$0$0") + 1
+    require(symbols["_timebase_expired"] < start < symbols["_clock_select_init"] < end <= CODE_LIMIT,
+            "Clock module extent changed")
+    instructions = {}
+    address = start
+    while address < end:
+        size = CLOCK_INSTRUCTION_LENGTHS.get(image.get(address))
+        require(size is not None and address + size <= end
+                and all(address + i in image for i in range(size)), "Unreviewed clock instruction/length")
+        instructions[address] = bytes(image[address + i] for i in range(size))
+        address += size
+    require(image[end - 1] == 0x22, "Clock module does not end in RET")
+    accesses = peripheral_accesses(instructions)
     expected = (b"\xe5\xc6", b"\xe5\x9e", b"\x88\xc6",
                 b"\xe5\xa8", b"\xe5\xb8", b"\xe5\x9a", b"\xe5\xbe")
     require(tuple(data for _, data, _ in accesses) == expected,
@@ -194,7 +221,8 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require("_irq_save_disable" not in symbols and "_irq_restore" not in symbols and "C$irq.c$" not in debug,
+    require(image_name == "irq_fixture" or
+            ("_irq_save_disable" not in symbols and "_irq_restore" not in symbols and "C$irq.c$" not in debug),
             "Board image must not link the isolated IRQ primitives")
     require(symbols["_m0_status"] == STATUS_ADDRESS, "Status address/IRAM alias violation")
     require(symbols["__XPAGE"] == 0x93, "SDCC page register must be CC2530 MPAGE")
@@ -212,6 +240,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
         sizes = re.findall(r"^S:G\$clock_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
         require(sizes and all(int(size) == CLOCK_FIXTURE_SIZE for size in sizes),
                 "Clock fixture debug ABI size mismatch")
+    if image_name == "irq_fixture":
+        sizes = re.findall(r"^S:G\$irq_fixture_state\$[^(\n]+\(\{(\d+)\}", debug, re.MULTILINE)
+        require(sizes and all(int(size) == IRQ_FIXTURE_SIZE for size in sizes), "IRQ fixture debug ABI mismatch")
     require(STATUS_ADDRESS + STATUS_RESERVED <= IRAM_ALIAS, "Status reservation reaches IRAM alias")
     require(symbols["l_XABS"] == 0, "New absolute XDATA area needs explicit accounting")
     ranges = xdata_ranges(symbols)
@@ -278,6 +309,9 @@ def verify_artifacts(output, board, image_name="bringup"):
         verify_timebase_fixture_code(image, symbols, debug)
     elif image_name == "clock_fixture":
         verify_clock_fixture_code(image, symbols, debug)
+    elif image_name == "irq_fixture":
+        from irq_fixture import verify_irq_fixture
+        verify_irq_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),
             "Linked board identity/policy does not match selected board")
@@ -285,8 +319,10 @@ def verify_artifacts(output, board, image_name="bringup"):
         r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)",
         memory,
     )
+    holes = IRQ_VECTOR_HOLES if image_name == "irq_fixture" else ()
+    require(set(range(max(image) + 1)) - image.keys() == set(holes), "Unexpected board CODE holes")
     require(flash is not None and int(flash[1], 16) == 0
-            and int(flash[2], 16) == max(image) and int(flash[3]) == len(image)
+            and int(flash[2], 16) == max(image) and int(flash[3]) == len(image) + len(holes)
             and int(flash[4]) == CODE_LIMIT, "Linked flash accounting mismatch")
     metrics["code_bytes"] = len(image)
     metrics["image_extent_bytes"] = len(binary)

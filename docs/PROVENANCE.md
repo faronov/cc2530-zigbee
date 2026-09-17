@@ -321,6 +321,54 @@ The exact twelve vector-padding holes are accounted separately from emitted
 CODE; no fabricated instruction bytes are inserted to satisfy image checks.
 No new dependency, hardware access, private data or board image is added.
 
+### M2 Timer1 IRQ fixture sources
+
+The new fixture, byte decoder, linked checks, synthetic source/entry models
+and manual runner are original BSD-3-Clause work. The EA implementation is
+unchanged. TI **SWRU191F, revised April 2014**, was read directly for:
+
+| Primary location | Facts used |
+| --- | --- |
+| Sections 2.5.1/2.5.2, Table 2-5 and Figure 2-4, pp.41-45 | CC2530 interrupt 9/vector `004B`, IEN1.T1IE bit 1, masking/flag assertion and RETI; no generic 8051 Timer1 mapping |
+| IRCON p.47; priority section 2.5.3 and Tables 2-6/2-7 p.48 | T1IF bit 1 is H0 on entry; reserved bit 6 must not be written 1; T1 belongs to IPG1; priority registers remain unchanged |
+| Section 7.3 p.79 | PxSEL selects GPIO versus peripheral routing; reset GPIO selection prevents counter-clear output initialization from driving timer pins |
+| Sections 9.1-9.3 p.104 | Free-running terminal count, DIV clock, T1CNTL-first high-byte latch, low-register write clears the whole counter, MODE=00 suspends at current count |
+| Sections 9.10-9.12 pp.113-119 | Source flags assert independently of masks; masked sources set CPU flag; clearing one source can reassert CPU flag from another enabled flag; OVFIF is R/W0, inactive channel reset value 40 |
+| TIMIF p.127 | T1 overflow mask is bit 6, reset 1; other bits are Timer3/4 R/W0 flags, so this fixture never writes TIMIF |
+| Section 3.3.1, Table 3-2 p.55 | Reset config 26: TIMER_SUSPEND freezes timers while halted/debug-instructed; STEP provides approximately execution ticks; DMA_PAUSE prohibits DMA-register access |
+
+The official [CC2530 errata SWRZ031](https://www.ti.com/lit/pdf/SWRZ031),
+April 2009 / document history 2009-04-29, was also read directly. Its issues
+1 and 2 concern DMA variable transfer length and Timer2 read latching
+(pp.2-3), not this non-DMA Timer1 use. No Timer2 workaround is transferred
+speculatively to Timer1.
+
+The board simulator explicitly supplies timer/source values, H0 and R/W0
+effects and a hardware-style stack/vector entry because C52 lacks this
+CC2530 peripheral/controller mapping. It executes unchanged linked
+instructions, including the real vector and ISR/RETI, without ROM patches.
+It is not a silicon emulator or hardware evidence. The separate native C52
+preemption regression is retained. No TI SDK, external implementation,
+dependency or private capture is imported, and automated checks add no
+hardware access; source documents are cited, not redistributed in firmware
+artifacts.
+
+The operator-supplied
+[2026-09-17 (UTC+03) compiled-C LG IRQ acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance)
+records the unchanged 3,269-byte image
+`b9bc83d7254944621f25d312f118ca6a044e808017f85bb6453f28c15cdb0ae1`,
+authorized external erase/write/readback and independent complete physical
+CODE verification before runner resume in each invocation. Three normal
+cycles, an independent pre-start TIMEOUT/FAULT and a separately reset
+257-cycle run passed without firmware/runner changes or weakened assertions.
+Actual return PC `0C9D` was restore+12 with DPL=OK (0), with full CPU/active-IRAM
+preservation and real RETI, not the synthetic +9/live-token-1 case.
+The parent verified unchanged private recovery material; only these supplied
+processed facts are recorded. No private file, capture, identity or backup
+content was read or imported for this update. This bounded LG result does not
+validate generic hardware, calibrated timing, higher-priority nesting or
+other platform services and does not alter licensing or historical records.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki

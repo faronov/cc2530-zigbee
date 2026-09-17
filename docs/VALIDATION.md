@@ -28,8 +28,8 @@ The current build must cover:
 The generic simulator does not emulate the RF subsystem, analog behavior,
 physical supply rails or a display. M0 CI is not a silicon test.
 Neither standalone `bringup` image has been flashed. Physical evidence for
-shared startup/status is limited to the LG M1 and timebase fixtures recorded
-below, not a generic-board or standalone-M0 acceptance claim.
+shared startup/status is limited to the LG M1, timebase, clock and IRQ
+fixtures recorded below, not a generic-board or standalone-M0 acceptance claim.
 
 ## M1 fixture automated coverage
 
@@ -560,8 +560,9 @@ Generic remains host/image/simulator-only. Full M2 #4 stays open.
 [EA ownership API](ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice).
 Its evidence is **host-tested, image-checked and simulated only**.
 `irq_test.ihx` is not a board image and must never be flashed or uploaded.
-The existing eight board images and CI matrix are unchanged, and the board
-verifier rejects accidental linkage of either primitive.
+The foundation preserved the eight older board images and their CI matrix;
+the board verifier rejects linkage of either primitive into those images.
+The subsequent IRQ board fixture is a separate scope below.
 
 Host coverage checks all 65,536 IEN0/other-enable-byte combinations with
 eight-deep LIFO nesting, all 256 token representations against all 256 IEN0
@@ -602,7 +603,7 @@ Stack starts at `0x22`, with 222 bytes reserved; ordinary allocation remains
 below `0x1E00` and total reservation below 512. The test's own compiler data,
 bit-register bank and real ISR frames are not private primitive scratch.
 
-The pinned Python suite has **346 tests**, retaining all 345 earlier tests.
+The foundation brought the pinned Python suite to **346 tests**, retaining all 345 earlier tests.
 The new rejection test enforces separation from board firmware. Full generic
 clock-fixture `all test` includes the existing 40 linked clock scenarios,
 timebase/codec checks and the new IRQ checks. Eight board rebuilds and
@@ -613,15 +614,108 @@ and LG clock fixture (3,798 bytes)
 `77f7142d1e4ef3a662ce8ffd7ce9803d110a80e867b1a55be5540b98d16867ca`.
 No board map contains either new primitive; historical LG evidence is unchanged.
 
-**Separate next hardware gate:** authorize a dedicated non-RF board fixture
+**Hardware gate defined by the foundation:** authorize a dedicated non-RF board fixture
 with a documented safe CC2530 source, real vector/priority/pending-clear
 semantics, bounded stimulus and recovery conditions. Independently verify
 all physical CODE before resume, then observe pending assertion while EA=0,
 deferred delivery through nested sections, exact previous-state restoration,
 ABI-preserving ISR/RETI and continued service, with unrelated state preserved.
-That fixture/runner does not exist in this slice. Generic C52 IE/IP/TCON
+That fixture/runner was not part of the foundation; the next slice below
+implements it, with subsequent bounded LG acceptance recorded separately.
+Generic C52 IE/IP/TCON
 injection cannot establish CC2530 delivery, peripheral flag races or timing.
-No hardware operation was performed; M2 #4 and physical IRQ acceptance stay open.
+No hardware operation was performed by those automated checks; M2 #4 remains open.
+
+## M2 Timer1 IRQ board fixture automated coverage
+
+Both `IMAGE=irq_fixture` configurations passed full `all test` with pinned
+Python: **355 tests**, retaining all 346 prior regressions, plus host C,
+linked-image and alias-aware checks. The 34-byte EA leaves and separate
+native C52 interrupt/preemption tests are unchanged. All eight older images
+were rebuilt, image-checked and simulated; their complete BIN lengths and
+SHA-256 values above remain identical. The new
+[footprints, hashes and manual proof](DEBUGGING.md#irq-checkpoints-and-footprint)
+do not replace any historical LG hardware record.
+
+Host tests run 257 successful cycles through the real primitives and C ISR
+body, verify every read/write log before consumption, model H0/R/W0,
+all 31 newly asserted channel-flag combinations at acknowledgment, stopped
+time/caps, late/backward/ambiguous samples, lost delivery, entry/phase rejection,
+terminal faults and byte/counter wraps. Counter reads model latching/ticking
+through 00FF/0100 and FFFF/0000. The fixed FF invalid-token experiment is
+separate from pending delivery; exhaustive byte-token semantics stay in the
+foundation tests.
+
+The linked checker rejects primitive/vector/ISR/RETI/checkpoint/caller,
+SFR/read-order/RW0, field-layout and storage changes. It checks all peripheral
+instruction operands and both read-only inactive-channel XREGs, accounts
+exactly 63 compiler vector-padding holes, and preserves ordinary allocation,
+full M0 reservation, alias and stack guards. No synthetic bytes are inserted
+into the board image. EA bit address AF and T1STAT SFR address AF are distinct
+`SBIT`/`SFR` symbol spaces, never interchangeable memory access.
+
+s51 executes 257 real-C cycles and six terminal-fault cases per board.
+Because C52 has no CC2530 Timer1 controller, the test explicitly supplies
+counter/source values, constructs the hardware-style return frame and enters
+the actual `004B` vector, then applies documented H0/RW0 effects around
+genuine instructions. It checks ISR CPU/IRAM/live-stack preservation, real
+RETI/foreground continuation, frozen counter, complete records/M0 heartbeat,
+and nonallocated XDATA/upper-stack guards. This is **synthetic entry/source
+modeling**, not native CC2530 interrupt delivery or priority-controller
+emulation. Generic C52 priority/RETI in-service behavior remains separately
+covered by `test-irq`.
+
+The runner tests cover authorization/artifacts before backend loading, every
+composed operation boundary in normal/timeout modes, all CODE before resume,
+257-cycle wrap, bad context/frame/acknowledgment/RETI, malformed records,
+immutable startup observations and cleanup failure. A missed induced timeout
+stops at unexpected normal progress instead of running further cycles.
+Success JSON follows cleanup only. No test enumerates physical USB.
+
+The separate [dated LG acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance)
+now establishes bounded real Timer1 flags/vector, acknowledgment, restored EA
+and ISR/RETI context on the unchanged LG image. Generic remains
+host/image/simulator-only. Neither these automated tests nor that record claim
+one-shot hardware, an exact count of timer overflows, calibrated latency,
+physical stopped-clock faults, higher-priority hardware nesting, other
+peripheral dispatch, DMA, wake, RF, AES or flash services. M2 #4 remains open.
+
+### 2026-09-17 bounded LG Timer1 IRQ hardware evidence
+
+The parent independently passed both IRQ `all test` configurations with
+355 Python tests and strict linked/source/vector/ISR/alias/fault checks,
+then supplied physical acceptance on **2026-09-17, UTC+03**, without changing
+firmware, runner or assertions. Every invocation independently checked all
+3,269 CODE bytes, including FF padding, against LG SHA-256
+`b9bc83d7254944621f25d312f118ca6a044e808017f85bb6453f28c15cdb0ae1`
+before any runner resume.
+
+Three initial normal cycles passed. The separate deadline-hold negative run
+retained FAULT `01BD`, phase 4/reason 6/stage 1, zero completed/ISR count,
+14,718 raw pending ticks / 1 poll / helper 0, with IEN0/IEN1/T1CTL and
+source/CPU flags all zero. That is a real returned timeout and terminal
+cleanup, not physical oscillator-stop injection; recovery was not implicit.
+
+The separately reset full run passed **257 actual C cycles/Timer1 services**:
+133..134 pending raw ticks / exactly 29 polls, 1..2 delivery ticks / 1 poll,
+ISR source `20` and CPU flags `00`. Counter `0B3A` was frozen at PENDING,
+INNER and READY. All hardware return PCs were **`0C9D`, restore+12 at RET
+with DPL already OK=0**, and `interrupted_restore=true`; full CPU/active-IRAM/
+stack preservation and an actual RETI two-byte pop/resume passed each time.
+The synthetic +9/live-token-1 case and higher-priority nesting were not
+hardware-observed by these runs.
+
+Cycle/ISR/M0-heartbeat bytes wrapped; final completed and ISR counts were
+both 1. Immutable M0/initial observations, priorities, unrelated IRCON/TIMIF,
+tokens and disable/stop
+conditions passed. The current LG board is **IRQ READY `01BB`, EA/T1IE off,
+Timer1 stopped**; old clock/M1/timebase records remain historical. All eight
+older BIN hashes and the published EA/timebase drivers are unchanged.
+The full run's 226.77-second duration is host wall time only. See the
+[canonical timeline and scope](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance);
+no calibrated time/latency, exact overflow count, true one-shot, other IRQ/
+DMA/sleep/RF/AES/flash or new authorization follows. Generic hardware and
+broader M2 #4 gates remain open.
 
 ## Independent Sleep Timer hardware reference (2026-09-16)
 
@@ -731,8 +825,8 @@ seeing measurements.
 ## CI and release boundary
 
 Hosted CI builds/tests without physical devices or repository secrets.
-The CI matrix covers four non-RF images (`bringup`, `debug_fixture`,
-`timebase_fixture`, `clock_fixture`) on both boards: eight jobs. Artifacts contain only the
+The CI matrix covers five non-RF images (`bringup`, `debug_fixture`,
+`timebase_fixture`, `clock_fixture`, `irq_fixture`) on both boards: ten jobs. Artifacts contain only the
 explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.

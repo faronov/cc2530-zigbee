@@ -10,11 +10,12 @@ import unittest
 from boot_image import (
     ALIAS, check_alias, check_pc, section, simulate, snapshot, snapshot_commands, verify_component_layout,
 )
-from verify_firmware import CODE_LIMIT, cdb_address, parse_ihex, parse_symbols, require
+from verify_firmware import (
+    CODE_LIMIT, cdb_address, parse_ihex, parse_symbols, require, verify_irq_primitives,
+    IRQ_SAVE_BYTES as SAVE, IRQ_RESTORE_BYTES as RESTORE,
+)
 
 
-SAVE = bytes.fromhex("10 af 04 75 82 00 22 75 82 01 22")
-RESTORE = bytes.fromhex("e5 82 60 09 14 70 0c d2 af 75 82 00 22 c2 af 75 82 00 22 75 82 01 22")
 OBJECTS = ("mode", "token", "return", "low_count", "high_count", "error")
 CHECKPOINTS = ("before", "done", "disabled", "before_outer")
 
@@ -24,18 +25,7 @@ def verify_image(image, symbols, debug, memory, module):
         image, symbols, debug, memory, "irq_test_result", ("irq.c", "test_irq.c"),
         code_holes=(*range(6, 11), *range(12, 19)),
     )
-    require(symbols.get("_irq_ea") == 0xaf and symbols.get("_SOC_IEN0") == 0xa8
-            and cdb_address(debug, "L:G$irq_ea$0_0$0") == 0xaf
-            and "S:G$irq_ea$0_0$0({1}SX:U),J,0,0" in debug, "EA bit address/type mismatch")
-    for name, code in (("irq_save_disable", SAVE), ("irq_restore", RESTORE)):
-        start = symbols["_" + name]
-        require(cdb_address(debug, f"L:G${name}$0$0") == start
-                and cdb_address(debug, f"L:XG${name}$0$0") == start + len(code),
-                "Naked IRQ explicit function extent mismatch")
-        require(all(image.get(start + offset) == byte for offset, byte in enumerate(code)),
-                "IRQ primitive instruction/ABI mismatch")
-        require(f"F:G${name}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0" in debug,
-                "IRQ naked byte-return ABI mismatch")
+    verify_irq_primitives(image, symbols, debug)
     require(symbols["_irq_restore"] == symbols["_irq_save_disable"] + len(SAVE)
             and cdb_address(debug, "L:Ftest_irq$self_test$0$0") == symbols["_irq_restore"] + len(RESTORE),
             "IRQ leaves contain unexpected code")

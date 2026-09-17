@@ -157,6 +157,11 @@ def check_artifact_rejections(output, board, image_name="bringup"):
                 ("cdb", lambda data: data.replace(b"{56}ST", b"{55}ST"), "ABI"),
                 ("cdb", lambda data: data.replace(b"L:XG$timebase_deadline_after$", b"L:XG$missing$"), "CDB"),
             )
+        elif image_name == "irq_fixture":
+            mutations += (
+                ("map", lambda data: data.replace(b"_irq_fixture_ready_stop ", b"_missing_irq_stop "), "symbol"),
+                ("cdb", lambda data: data.replace(b"{64}ST", b"{63}ST"), "ABI"),
+            )
         for extension, mutate, message in mutations:
             path = work / f"{image_name}.{extension}"
             original = path.read_bytes()
@@ -444,6 +449,10 @@ def main():
             line = next(index for index, text in enumerate(source, 1) if text.startswith(f"void {name[1:]}("))
             require(any(location.address == symbols[name] for location in
                         debug_image.source_lines(file=source_file.name, line=line)), "Clock source mismatch")
+    elif args.image == "irq_fixture":
+        require(debug_image.symbol("_irq_fixture_state").size == 64, "IRQ symbol size mismatch")
+        require(debug_image.symbol("_irq_ea").space == "SBIT" and
+                debug_image.symbol("_IRQ_T1STAT").space == "SFR", "EA bit/T1STAT SFR spaces were conflated")
     check_artifact_rejections(args.output, args.board, args.image)
     check_alias(args.simulator)
     with unittest.TestCase().assertRaisesRegex(ValueError, "register bank"):
@@ -454,9 +463,12 @@ def main():
         check_debug_fixture(args.simulator, args.output, args.board, symbols)
     elif args.image == "timebase_fixture":
         check_timebase_fixture(args.simulator, args.output, args.board, symbols)
-    else:
+    elif args.image == "clock_fixture":
         from boot_clock_fixture import check_clock_fixture
         check_clock_fixture(args.simulator, args.output, args.board, symbols)
+    else:
+        from boot_irq_fixture import check_irq_fixture
+        check_irq_fixture(args.simulator, args.output, args.board, symbols)
 
 
 if __name__ == "__main__":
