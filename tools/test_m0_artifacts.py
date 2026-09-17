@@ -3,7 +3,7 @@
 
 import unittest
 
-from verify_firmware import parse_ihex, parse_symbols, verify_layout
+from verify_firmware import IMAGES, parse_ihex, parse_symbols, verify_layout
 
 
 def record(address=0, kind=0, data=b"\x02\x00\x06"):
@@ -73,6 +73,74 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(self.verify()["nonaliased_xdata_used_bytes"], 32)
         self.assertEqual(self.verify()["nonaliased_xdata_reserved_bytes"], 64)
 
+    def test_isolated_irq_cannot_enter_board_images(self):
+        for name in ("_irq_save_disable", "_irq_restore"):
+            with self.assertRaisesRegex(ValueError, "isolated IRQ"):
+                verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug)
+        with self.assertRaisesRegex(ValueError, "isolated IRQ"):
+            verify_layout(self.symbols, self.memory, self.debug + "\nC$irq.c$1")
+
+    def test_isolated_radio_fifo_cannot_enter_board_images(self):
+        for image in IMAGES:
+            if image == "radio_fifo_fixture":
+                continue
+            for name in ("_radio_fifo_clear_init", "_radio_fifo_preload_init"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
+                    verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug, image)
+            with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
+                verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
+
+    def test_dma_cannot_enter_other_board_images(self):
+        self.assertEqual(len(IMAGES), 9)
+        for image in IMAGES:
+            if image == "dma_fixture":
+                continue
+            for name in ("_dma_copy_init", "_dma_descriptor", "_dma_fault", "_dma_reserved_end"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated DMA"):
+                    verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug, image)
+            with self.assertRaisesRegex(ValueError, "isolated DMA"):
+                verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
+
+    def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
+        self.assertEqual(len(IMAGES), 9)
+        for image in IMAGES:
+            if image == "aes_fixture":
+                continue
+            for name in ("_aes128_encrypt_block", "_aes_dma0", "_aes_dma1", "_aes_key",
+                         "_aes_output", "_aes_fault", "_aes_reserved_end", "_aes_fixture_state"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated AES"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("aes.c", "aes_fixture.c", "aes_fixture_state.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated AES"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
+
+    def test_host_only_math_never_enters_any_board_image(self):
+        for image in IMAGES:
+            for name in ("_aes_reference_encrypt", "_aes_reference_check"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "host-only AES"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("aes_reference.c", "test_aes.c", "test_aes_fixture.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "host-only AES"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
+
+    def test_deterministic_prng_and_host_model_never_enter_board_images(self):
+        for image in IMAGES:
+            if image == "prng_fixture":
+                continue
+            for name in ("_prng_seed_explicit", "_prng_next16", "_prng_fault", "_prng_reserved_end"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated deterministic PRNG"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("prng.c", "prng_fixture.c", "prng_fixture_state.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated deterministic PRNG"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
+
+    def test_prng_models_never_enter_any_board_image(self):
+        for image in IMAGES:
+            with self.subTest(image=image), self.assertRaisesRegex(ValueError, "PRNG host model"):
+                verify_layout(self.symbols | {"_prng_reference": 0x100}, self.memory, self.debug, image)
+            for source in ("test_prng.c", "test_prng_fixture.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "PRNG host model"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
     def test_status_cannot_alias_iram(self):
         self.symbols["_m0_status"] = 0x1F00
         with self.assertRaisesRegex(ValueError, "alias"):

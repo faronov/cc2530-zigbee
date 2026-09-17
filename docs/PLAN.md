@@ -10,12 +10,16 @@ a coordinator.
 **Implemented at project creation:** a non-networking bootstrap, build/image
 checks, host/simulator tests and CI. The bootstrap has not been validated on
 physical hardware merely because a preceding display prototype worked.
+The standalone `bringup` images remain unflashed; shared startup was later
+exercised on one LG board through the M1 fixture, as recorded below.
 Everything from M1 onward below is planned except for the explicitly
 implemented components and evidence recorded under each milestone.
 
-The [initial conformance ledger](CONFORMANCE.md) exists at M0. Selection of
-the exact R22-compatible BDB revision is an open, blocking prerequisite for
-M4/M5 security/commissioning implementation, not work postponed until release.
+The [initial conformance ledger](CONFORMANCE.md) exists at M0. Core R22 is
+paired with PRO BDB v3.0.1, document 16-02828-012. The base revision and
+bounded ED requirements are recorded; review of applicable BDB errata
+21-65431 remains a blocking prerequisite for M4/M5 security/commissioning
+implementation, not work postponed until release.
 Update the ledger with each protocol change; M9 audits it rather than first
 creating it.
 
@@ -44,8 +48,8 @@ hardware work. Later features must not bypass their security or recovery gates.
 | Language/toolchain | C99, SDCC 4.2.0 baseline | No Rust runtime or IAR object dependency |
 | Hardware | CC2530F256; generic and LG ESL board descriptions | Other CC253x parts need a separate validation record |
 | Role | Receiver-on ED first, SED second | One logical ED role; no forwarding or children |
-| Network | Centralized Trust Center network first | Distributed networks are outside the first supported configuration |
-| Specification | Core R22 and compatible Zigbee-3.0-era BDB | BDB 3.1/R23 is not silently treated as the R22 baseline |
+| Network | Centralized Trust Center network first | Distributed networks are deferred; this is a BDB conformance gap, not an ED role exemption |
+| Specification | Core R22 and PRO BDB v3.0.1, 16-02828-012 | Applicable errata gate remains open; neither BDB 1.0 nor BDB 3.1/R23 substitutes for this baseline |
 | Application | Small reporting sensor, local display later | Only implemented clusters are advertised |
 | Memory | Static pools and explicit bounds | No heap-dependent protocol or frame-sized display buffer |
 | Debugging | CC Debugger plus RAM trace and independent sniffer | An IDE or GDB integration is not assumed to exist |
@@ -77,29 +81,50 @@ Exit:
 
 ### M1 - Hardware debugging that we can trust
 
-**Partial implementation:** the [target fixture](DEBUGGING.md#implemented-target-fixture)
+**Complete for the bounded LG/unbanked baseline.** The [target fixture](DEBUGGING.md#implemented-target-fixture)
 in `examples/debug_fixture.c` and `src/debug_pattern.c` is host-tested,
 image-checked and alias-aware simulated for both boards. It is a separate
 build, not a change to the default M0 image.
 
 The [host transport](DEBUGGING.md#implemented-host-transport) in
-`tools/cc_debugger.py` provides explicit adapter selection, guarded status/config
-and bank reads, and separately authorized HALT/RESUME/STEP with an optional
-PyUSB backend. Separately authorized `reset-halt` is limited to an already
-prepared session. Explicit `attach-reset` prepares the adapter and requests
-initial reset into halt under its own access policy; open/close never resets
-or resumes. These are host-tested
-with synthetic backends, not hardware-observed. The
+`tools/cc_debugger.py` provides explicit adapter selection, guarded status/config,
+PC/bank/register and safe SFR/XDATA/CODE reads, verified ordinary-SRAM writes,
+unbanked breakpoint programming and HALT/RESUME/STEP with an optional PyUSB
+backend. CPU control, reset, memory access, memory writes and breakpoints have
+separate permissions. `reset-halt` requires a prepared session;
+`attach-reset` explicitly prepares/reset-halts under its own access policy.
+Open/close never resets or resumes. Failed/late exchanges fault the session
+without retries or attempted register restoration. The
 [offline tools](DEBUGGING.md#offline-image-symbol-and-snapshot-tools) also
 provide verified-image global symbol and exact CDB source-line lookup, strict
 M0/M1 snapshot decoding and target breakpoint-parameter encoding; they never
 access USB.
 
-Live PC/memory/register access, USB breakpoint programming and all hardware
-exit gates remain open. A non-reset attach is not implemented. The
-[remaining gate table](DEBUGGING.md#remaining-m1-gates-before-m2) separates
-unconfirmed adapter framing from physical acceptance. No physical debugger
-or board was accessed for these components.
+Both fixture builds retain host, image and alias-aware simulator coverage.
+The [2026-09-16 hardware record](DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
+adds one LG Rev0.3, an unchanged 626-byte fixture and a final 257-cycle run
+using isolated PyUSB 1.3.1. It covers all four simultaneous breakpoint slots,
+known registers/NOP stepping, real returns and counter wrap, reset, bounded
+RAM access, IRAM aliasing, all PSW-register-bank/DPS combinations, real USB
+timeout/stall failures and controlled halted erased-image recovery. After the
+first confirmed cable reconnection, explicit selection at the new address and
+a complete one-cycle fixture check passed, including physical CODE verification,
+all four slots, alias checks and reset. The subsequent final held-handle cable
+removal produced NO_DEVICE, faulted the session, denied resume without further
+bulk writes and exposed cleanup failure. After the last replug, PyUSB enumerated
+the adapter and a full one-cycle fixture check in an explicitly selected new
+session also passed, including physical CODE verification and reset
+reinitialization. That final run left the fixture halted at `0x0173`.
+
+The [acceptance boundary](DEBUGGING.md#m1-acceptance-boundary-before-m2)
+distinguishes these passed finite scenarios from universal compatibility.
+No current LG/unbanked M1 gate remains open.
+Generic hardware is unobserved. Bank discrimination is required when banked
+CODE is introduced, not a blocker for the current unbanked image.
+Recovery evidence does not establish a mid-word electrical power cut or flash
+wear tolerance; those belong to future platform/persistence work. Non-reset
+attach, sleeping targets, MMIO/full-SFR access, a flash writer and GDB remain
+unsupported. No M2/RF work is validated by these debugger results.
 
 Deliver:
 
@@ -125,6 +150,198 @@ Do not begin diagnosing a complex stack with an unvalidated debugger.
 
 ### M2 - Minimal CC2530 platform services
 
+**First bounded implementation; M2 remains open (#4).** The standalone
+[awake-only timebase](ARCHITECTURE.md#awake-only-timebase-first-m2-slice)
+reads the real 24-bit Sleep Timer and provides bounded modular deadlines.
+It is host-tested, image-checked and alias-aware simulated in an isolated
+test executable. A subsequent, separate
+[board timebase fixture](DEBUGGING.md#awake-only-timebase-board-fixture)
+now calls the compiled reader/deadline helpers, with bounded polling and
+latched faults. Its explicit manual runner completed
+[LG compiled-C hardware acceptance on 2026-09-16](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance):
+257 verified cycles, elapsed 129..130 raw ticks for requested 128, 37 polls
+per cycle, and preserved CPU/M0 state. Generic hardware and physical timer-fault
+injection remain unobserved. Existing `bringup` and
+`debug_fixture` firmware bytes and M1 evidence are unchanged. A separate
+[debugger-register observation](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16)
+established raw counter progression and natural rollover on LG, not execution
+of the C driver or calibrated timing. The compiled-C run is a separate
+experiment and does not establish natural 24-bit rollover in those cycles.
+A further isolated [init-time system clock selector](ARCHITECTURE.md#init-time-system-clock-selector-isolated-m2-slice)
+now requests RC16/XOSC32 with raw-time and independent poll bounds, strict
+entry-state checks, and one bounded restoration attempt on failure. A subsequent separate
+[clock board fixture](DEBUGGING.md#init-time-clock-board-fixture) now executes
+RC16 idempotence, XOSC32 and RC16, with serialized original/rollback results
+and terminal faults. Its manual runner includes a strictly verified pre-request
+deadline-RET halt experiment, without code/RAM injection. The
+[first LG clock experiment](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure)
+passed a normal sequence but **failed rollback acceptance**: old STA briefly
+matched after cancellation, then the still-pending XOSC change appeared.
+The root fix requires observed requested-source departure followed by return,
+or reports bounded `CLOCK_ROLLBACK_UNCONFIRMED=9`. The corrected LG image passed
+[bounded compiled-C clock acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+the unchanged pending-cancel test confirmed return after 64 raw ticks /
+15 polls, the separate verified late-source timeout test passed, and an
+explicit reset/recovery run completed 257 full sequences / 771 C calls.
+Both timeout cases retained the original error and terminal FAULT; recovery
+was a separate run, not implicit continuation. All six older BINs are unchanged.
+Generic and never-departed cancellation remain host/image/simulator evidence
+only. Frequency/calibration, physical oscillator-failure/stopped-clock,
+interrupts, compare/wake and the other M2 gates remain open. The new clock
+record is separate from the earlier LG timebase evidence; full M2 #4 is open.
+
+The next bounded [interrupt-ownership foundation](ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice)
+adds only reentrant EA save-disable/exact restore, with caller-owned LIFO
+byte tokens and explicit invalid-token rejection. It is host-tested,
+image-checked and alias-aware simulated, including genuine generic C52
+preemption/RETI. That standalone evidence does not establish CC2530
+peripheral delivery; the separate board acceptance below does so narrowly.
+All eight older board BINs remain byte-identical and exclude the primitives.
+The foundation did not add a board image or peripheral dispatcher.
+
+The subsequent [Timer1 IRQ board fixture](DEBUGGING.md#timer1-irq-board-fixture)
+now links the unchanged primitives separately for both boards. It uses the
+documented CC2530 vector 9, stops the counter while overflow is pending with
+EA=0, checks nested restoration, and masks/acknowledges only its owned source
+before real RETI. The guarded manual runner checks physical CODE and ISR
+context, with a separate bounded pre-start timeout experiment. Both images
+retain host/image/synthetic-entry simulation coverage. The unchanged LG image
+passed [bounded hardware acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three normal cycles, an independent TIMEOUT/terminal FAULT, then a separately
+reset 257-cycle run with real Timer1 ISR services, counter wraps and preserved
+CPU/IRAM/M0 state. Hardware interrupted the restore leaf at +12 with DPL=OK,
+not the synthetic +9/live-token case. That run ended at IRQ READY `01BB`,
+with EA/T1IE disabled and Timer1 stopped; prior clock/M1/timebase
+records remain historical. Generic hardware remains unobserved.
+That IRQ slice added ten board/image jobs with the exact artifact whitelist. Higher-priority
+hardware nesting, other sources, measured/calibrated timing and general
+dispatch remain deferred; clock/timebase ownership is unchanged and M2 #4
+remains open.
+
+The next isolated [quiescent radio FIFO foundation](ARCHITECTURE.md#quiescent-radio-fifo-foundation)
+adds verified FIFO clear and bounded RFD preload, not RF enable or a MAC.
+It requires known awake radio/CSP/DMA ownership and stable XOSC32; all ten
+existing board BINs were unchanged by that isolated slice. Its
+[host/image/synthetic FIFO evidence](VALIDATION.md#m2-quiescent-radio-fifo-automated-coverage)
+does not establish physical FIFO/CSP behavior. The subsequent, separate
+[quiescent FIFO board fixture](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
+and guarded manual runner now implement that offline preparation, including
+real-driver CODE/XDATA payload checks and a proved pre-write deadline hold.
+The FIFO addition preserved all ten older BINs and the exact artifact
+whitelist. The unchanged LG image passed
+[separate hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance):
+normal operation, a terminal written-but-unverified timeout, then 257 cycles
+after an explicit reset, with 33,410 checked bytes and 514 TX clears.
+That FIFO run ended at READY `016A`, XOSC32, IRQs disabled and empty FIFOs.
+RX flush, received frames, on-air behavior, error-latch recovery and calibrated
+metadata remain open; generic has no physical FIFO evidence. M2 #4 remains open.
+
+The CPU-only AES-128 encrypt-block prerequisite remains
+[blocked on CPU transfer sequencing](PROVENANCE.md#m2-aes-cpu-transfer-prerequisite).
+That investigation added no successful placeholder. A separately assigned
+[channel-0 RAM-copy DMA foundation](ARCHITECTURE.md#isolated-channel-0-dma-copy)
+now advances that dependency with host, linked-image and synthetic execution
+only, without a peripheral trigger, AES operation or hardware claim.
+The separate [reset-scoped DMA-enable debug gate](DEBUGGING.md#guarded-dma-enable-after-reset)
+now has host and bounded LG hardware evidence, without exercising DMA.
+The subsequent [DMA board fixture](DEBUGGING.md#channel-0-dma-board-fixture)
+has offline checks for both boards: 257 compiled RC16/XOSC32 cycles,
+514 bounded copies, exact relocated ABI/nine-NOP/negative-RET proof and a
+guarded manual runner. Only these two images link DMA; all twelve older
+BINs remain unchanged. The matrix grows to fourteen jobs with the same
+seven-file whitelist and `hardware_tested=false`. The unchanged LG image passed
+[bounded hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance):
+normal operation, a terminal unverified timeout, then 257 cycles after an
+explicit reset, with 514 copies and 6,289 verified bytes. That DMA run
+ended at DMA READY016A/config22 on RC16, with IRQs off and ARM/REQ/DMAIRQ zero.
+Generic, other channels/triggers and physical stuck-controller recovery
+remain unobserved.
+This does not close the remaining radio/RX/channel/calibration gates or M2 #4.
+
+A separate [AES-128 DMA encrypt-one-block foundation](ARCHITECTURE.md#isolated-aes-128-dma-block)
+now has host, genuine linked-image and alias-aware synthetic evidence.
+It uses only the documented ENC-triggered two-channel interface with private
+staging, finite key/IV/block phases and terminal failure ownership. It is not
+a board `IMAGE`, production software fallback, messaging/CCM/security service
+or CPU-transfer implementation. All fourteen existing board BINs and the
+published DMA/timebase/clock/debug implementations remain unchanged.
+Hardware evidence comes from the separately scoped fixture below, never from
+flashing the standalone test or treating synthetic events as silicon.
+
+The separate `IMAGE=aes_fixture` is available for both boards,
+with compiled orchestration, a 64-byte explicit wire record, relocated driver
+proof and guarded manual pre-key/final timeout procedures. The 21 public
+cases cover every CODE/XDATA combination, both clocks and 257 same-reset cycles.
+The [first physical LG KEY load](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+failed the original flag assumption: input completed and both ENCIF bits set.
+The unchanged corrected per-command completion/ACK protocol and wirev2 now have
+[bounded LG hardware evidence](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance):
+six blocks on both clocks, vectors0/1/2 and spaces0/1, fresh KEY/IV pairs and18
+confirmed ENC ACKs, plus both exact unpublished AES_TIMEOUT8 cases.
+Separate full-reset/full-CODE/gate recovery passed257 same-reset cycles,
+1,029 READY stages and514 accepted/published blocks, with all168 fixture
+vector/space/clock combinations independently asserted and1,542 confirmed
+DMA phase ACKs and ENC ACKs each. That AES recovery left the corrected
+12,765-byte image at READY016A/config22/RC16, completed/heartbeat1 and fault
+latch0; this state is historical after the PRNG programming below.
+Parent serial `all test` passed for both corrected boards; all fourteen older
+BIN sizes/hashes independently match published baselines. No hosted-CI pass
+is claimed here.
+Generic has no physical AES evidence. All fourteen older BINs and non-AES
+platform/debug drivers stayed unchanged; that addition brought CI to sixteen full jobs with the same
+seven-file whitelist and `hardware_tested=false`. M2 #4 remains open.
+
+A further isolated [deterministic PRNG foundation](ARCHITECTURE.md#isolated-deterministic-prng)
+implements explicit valid seed loading and one bounded 13-shift hardware
+command returning the 16-bit LFSR state. This is **not entropy or a
+cryptographic RNG**. The two forbidden fixed points and two 32,767-state cycles
+are exhaustively host-checked; real SDCC calls have linked/alias-aware synthetic
+coverage; board-specific hardware evidence is recorded separately below.
+Exclusive ADC/PRNG/CSP history and stable awake ownership are prerequisites,
+not inferred from ST=0 alone.
+That isolated foundation added no board image or hardware runner. The separate
+[PRNG board fixture](DEBUGGING.md#deterministic-prng-board-fixture) now links
+the unchanged service on both boards, with explicit wire ABI, guarded manual
+short/full/stopped modes and eighteen full CI jobs using the same seven
+artifacts. Four full periods cover all65,534 valid states per clock; small
+seed/reseed cases and a real fixture-only RCTRL11 precondition violation
+exercise benign/terminal outcomes without inventing a CPU-hold timeout.
+All sixteen older board BINs and existing drivers remain unchanged.
+The original wirev1 7,224-byte LG PRNG image passed
+[short hardware acceptance on 2026-09-17](DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+two seed1234 loads, eight RC16 words, repeated non-advancing readback and
+benign mask15 with preserved guards/tails. Its
+[first long run exposed a fixture flag-policy bug](DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption):
+natural STIF assertion after the C snapshot, not a PRNG failure.
+The wirev2 correction permits only sticky STIF0->1 and tracks ordered C/live
+observations without flag clearing, compare writes or shorter periods.
+The old wirev1 halt is historical; its last32 words were not host-accepted.
+The parent then programmed the unchanged7289-byte wirev2 and passed
+[corrected short hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance):
+eight RC16 words, six raw flag observations and no STIF transition.
+The same installed wirev2 then passed
+[full-stopped hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+131,084 individually checked words, four32,767 periods/all65,534 states per
+clock, real C/live STIF race with2,145 later preserved observations, and
+genuine stopped-probe/re-entry6/6/6 with unchanged caller data.
+The same image then passed
+[separate full-reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance),
+repeating the entire corpus after its own reset/full-CODE proof. A distinct
+`c-snapshot` STIF transition and2,253 later preserved observations ended at
+ENDREADY016A/config26/RC16, fault0 and C/live IRCON80, without executing the
+probe or resuming afterward. **The bounded LG short/stopped/reset-recovery
+hardware gate is complete.** The earlier stopped FAULT is historical;
+recovery was a new reset epoch, not cleared C state or automatic continuation.
+Parent independently completed both original-image `all test` runs (429 Python,
+33 segments/full131,084 synthetic words plus probe/9 faults),150-file guard
+and sixteen older hashes before this physical finding.
+For wirev2, both parent LG/generic `all test` runs completed with exit0,
+434 Python tests each and the full continuation/corpus/STIF/probe/fault
+evidence. Parent MAC alias,150-file repository/local-link and diff checks
+also passed; `hardware_tested=false` was verified.
+Generic/EOC1/physical poll-fault and broader RF/noise entropy, security and
+sleep acceptance remain open. M2 #4 stays open; no hosted-CI pass is claimed.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.
@@ -144,6 +361,25 @@ Exit:
 - No required platform primitive is represented by a successful no-op.
 
 ### M3 - Radio and end-device MAC
+
+**Offline preparatory implementation:** the [legacy body codec](MAC.md)
+encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
+their addressing layouts, with host, linked-image and
+alias-aware simulator evidence. It also handles version-0 Beacons without GTS
+descriptors, bounded pending-address lists and opaque upper-layer payloads.
+This adds no scan, synchronization, scheduling or Zigbee discovery procedure.
+The separate [R22 NWK Beacon payload decoder](NWK.md) now decodes the exact
+15-byte upper-layer metadata, with independent host/target tests and an
+offline MAC-to-NWK slicing check. Profiles, capacities and identifiers remain
+unauthenticated metadata, not selection/admission decisions. It does not
+satisfy M4/M5 or the remaining BDB specification/implementation gates.
+An independent [NWK Data codec](NWK.md#nwk-data-frame-codec) also serializes
+bounded unsecured unicast/broadcast NPDUs and optional IEEE fields, with
+host/target evidence and maximum-body MAC integration. Security and extended
+routing layouts remain explicit errors, not successful substitutes.
+These codecs are not linked into board firmware and
+does not establish radio, MAC or networking support. Hardware M1/M2 gates
+are not bypassed.
 
 Adapt the BSD-licensed Contiki CC2530 RF code selectively, or implement the
 documented registers directly. Do not import Contiki's complete OS/netstack.
@@ -168,14 +404,17 @@ Exit:
 
 ### M4 - Security and durable state
 
-Entry gate: pin the compatible BDB revision and security/commissioning
-requirements in the conformance ledger.
+Entry gate: the BDB v3.0.1 base revision and security/commissioning requirements
+are pinned in the conformance ledger. Obtain/review applicable errata
+21-65431 and resolve affected requirements before implementing these procedures.
 
 Deliver:
 
 - Zigbee-specific AES-CCM* nonce/header/MIC handling, using the AES primitive.
 - Network/link-key handling, key identifiers/sequences and replay rejection.
 - Two network-key slots and the applicable Trust Center key procedures.
+- Install-code CRC/AES-MMO derivation and explicit initial/updated TC key
+  state; receiving a key or confirmation frame alone is not verification.
 - Atomic persistence for network identity, parent information, keys,
   bindings/configuration when implemented, and outgoing security counters.
 - Counter-range reservation or another demonstrably monotonic power-loss
@@ -194,18 +433,32 @@ Do not trade this milestone away to make the first network demo look complete.
 
 ### M5 - Authenticated receiver-on end device
 
+**Offline preparatory implementation:** the independent [APS Data codec](APS.md)
+now serializes a bounded normal-unicast subset with endpoint/profile/cluster
+metadata, counter and ACK-request. Standalone and real MAC/NWK/APS composition
+have host, linked-image and alias-aware simulator evidence. Unsupported APS
+security, broadcast/group delivery and extended headers fail explicitly.
+This implements no transaction/ACK state, endpoint dispatch or board caller
+and does not close any M4/M5 security, commissioning or interoperability gate.
+ZCL revision/device selection and implementation remain separate M6 work.
+
 Deliver:
 
 - Required NWK and APS header handling and bounded transaction/ACK state.
 - Centralized-network steering, key transport/verification and join completion.
+  Follow BDB 3.0.1 section 8.2, including its final permit-join broadcast;
+  this does not enable local child admission. Already-joined steering remains
+  optional and is not initially selected.
 - Join-critical endpoint-0 services, including Node Descriptor exchange and
   address/Device Announce handling. Introduce the generic ZDO unsupported-service
   fallback as soon as endpoint 0 is exposed, before omitting any optional handler.
 - Device Announce, address-conflict handling and required address resolution.
 - ED Timeout negotiation, parent information and selected keepalive method.
-- On persisted resume, immediate keepalive chosen from stored
-  `nwkParentInformation`; when unknown, ED Timeout renegotiation with bounded
-  failure/recovery rather than an indefinitely blocked startup.
+- On persisted resume, restore BDB state and attempt secure NWK rejoin as
+  required by BDB section 7.1, then announce on success. Retain ED Timeout
+  negotiation after every successful join/rejoin and prompt keepalive after
+  recovery using `nwkParentInformation`; unknown information or an absent
+  parent needs bounded failure/recovery, not an indefinitely blocked startup.
 - Child-side rejoin, parent loss, explicit leave and persisted restart.
 - NWK Network Update handling, including wrap-aware update identifiers.
 
@@ -219,11 +472,30 @@ Exit:
 - The evidence records coordinator software/adapter versions and firmware
   revision, with private network data kept outside the repository.
 
-M5 is an authenticated lab ED milestone, not a claim that all discovery or
-application-profile requirements have been completed. M6 finishes those
-surfaces and their interoperability evidence.
+M5 is an authenticated lab ED milestone, not full BDB conformance or a claim
+that all discovery/application-profile requirements have been completed.
+M6 finishes those surfaces and their interoperability evidence; distributed
+security support remains outside the first configuration.
 
 ### M6 - Discovery, ZCL and receiver-on interoperability
+
+**Offline preparatory implementation:** [ZCL Revision 8 wire codecs](ZCL.md)
+now handle global/cluster-specific headers and 38 bounded wire-value types.
+A separate read-only model and unicast Read Attributes handler add bounded
+lookup, read-access checks, protocol status records, explicit partial counts
+and atomic response construction, without registering a cluster.
+A one-cluster unicast dispatcher adds sorted Discover Attributes pages,
+Read selection, unsupported-command responses and explicit no-reply handling
+for received Default Responses and unsupported Write No Response.
+The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
+remains an open follow-up risk, not a stop on base-text development. Review
+applicable corrections before conformance claims. Header/value, APS/ZCL and
+read/dispatch target checks are host-tested, image-checked and simulated;
+full Discover-then-Read/ZCL/APS/NWK/MAC composition is host-tested and also
+image-checked/simulated in the integrated resource harness.
+There is no board caller, endpoint/transport dispatcher, native
+numeric/charset conversion or advertised cluster. Application/device/profile
+selection and all M4/M5 networking/security gates remain open.
 
 Deliver:
 
@@ -232,8 +504,13 @@ Deliver:
 - Small source-binding storage and the management behavior it requires.
 - Full `Mgmt_Leave` (`0x0034`), full `Mgmt_Bind` (`0x0033`) when source bindings
   exist, and a tested status-only `NOT_SUPPORTED` response for omitted
-  `Mgmt_Lqi` (`0x0031`).
-- A real attribute model with types, access checks and bounded serialization.
+  `Mgmt_Lqi` (`0x0031`). Resolve this omitted-service configuration against
+  BDB section 6.6 and the selected BDB test requirements before conformance claims.
+- Pin the application/device class and its BDB finding/binding, Identify,
+  binding/group-capacity and default-reporting requirements. A single endpoint
+  does not by itself make finding/binding optional.
+- Integrate the generic read-only attribute model with the selected device's
+  real types/access/range requirements and transport; writes remain separate.
 - A clearly identified **lab-only synthetic measurement application**, with
   Basic/Identify and a deterministic test-controlled measurement source.
   It must identify itself as synthetic and must not be released as physical
@@ -357,6 +634,19 @@ See [PROVENANCE.md](PROVENANCE.md).
 The CC2530 has 256 KiB flash but a banked CODE view, not a flat 256 KiB code
 space. The upper 256 bytes of its 8 KiB SRAM are the XDATA alias of IRAM.
 Prototype display memory figures do not predict final stack size.
+
+**Measured preparatory integration:** `make test-protocol-budget` now links
+and executes the complete implemented MAC/NWK Data/APS/ZCL codec and
+read/discovery chain: **22,829 CODE and 1,500 ordinary XDATA bytes**, plus
+64 reserved status bytes. Per-object and total budgets are enforced; see
+[the resource ledger](ARCHITECTURE.md#integrated-protocol-resource-budget).
+The first combined link failed on IRAM, prompting ABI-compatible spill/
+leaf-emission changes rather than weakened guards. Persistent protocol IRAM
+fell from 154 to 77 bytes; observed SP reaches `0x7A` with stack start `0x66`.
+Only five bytes remain before the current upper-IRAM guard on these vectors.
+This is not enough evidence to budget interrupt nesting or promise complete
+stack fit. Platform/radio queues, security/NV, ZDO and application state are
+still outside this integrated image.
 
 ## 6. Risks and responses
 

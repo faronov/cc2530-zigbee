@@ -1,8 +1,8 @@
 # M0 bootstrap contract
 
-This is a non-networking C/SDCC execution fixture. **This new image has not
-been flashed or tested on hardware.** The earlier external display prototype
-does not validate this image.
+This is a non-networking C/SDCC execution fixture. **The standalone `bringup`
+images have not been flashed or tested on hardware.** The earlier external
+display prototype does not validate these images.
 
 ## Build and scope
 
@@ -22,18 +22,123 @@ There is deliberately no automatic flash target.
 
 `IMAGE=bringup` remains the default. `IMAGE=debug_fixture` selects the separate
 [M1 target fixture](DEBUGGING.md#implemented-target-fixture), with outputs in
-`build/<board>/debug_fixture/` unless `BUILD` is specified. Both images use the
-same board policy, M0 status ABI and memory restrictions. Image selection does
-not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
+`build/<board>/debug_fixture/` unless `BUILD` is specified.
+`IMAGE=timebase_fixture` selects the separate
+[awake-only timebase board fixture](DEBUGGING.md#awake-only-timebase-board-fixture),
+under `build/<board>/timebase_fixture/`. `IMAGE=clock_fixture` selects the separate
+[init-time clock board fixture](DEBUGGING.md#init-time-clock-board-fixture),
+under `build/<board>/clock_fixture/`. `IMAGE=irq_fixture` selects the separate
+[Timer1 IRQ board fixture](DEBUGGING.md#timer1-irq-board-fixture),
+under `build/<board>/irq_fixture/`. `IMAGE=radio_fifo_fixture` selects the
+[quiescent FIFO board fixture](DEBUGGING.md#quiescent-radio-fifo-board-fixture)
+under `build/<board>/radio_fifo_fixture/`, with offline checks for both boards,
+separate [bounded LG hardware acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-fifo-acceptance)
+and all ten older BINs unchanged. `IMAGE=dma_fixture` selects the
+[channel-0 DMA board fixture](DEBUGGING.md#channel-0-dma-board-fixture)
+under `build/<board>/dma_fixture/`, with
+[bounded LG hardware acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-dma-acceptance)
+and all twelve earlier BINs unchanged. `IMAGE=aes_fixture` selects the separate
+[AES/DMA board fixture](DEBUGGING.md#aes-dma-board-fixture), under
+`build/<board>/aes_fixture/`, with all fourteen older BINs unchanged.
+The [first physical KEY failure](DEBUGGING.md#2026-09-17-first-lg-aes-key-load-failure)
+is historical root-cause evidence. The corrected 12,765-byte AES
+image passed [short normal operation, both exact negatives and reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-aes-bounded-acceptance):
+257 same-reset cycles/514 accepted blocks, covering all168 vector/space/clock
+combinations. That recovery ended at READY016A/config22/RC16,
+completed/heartbeat1 and fault latch0, not either negative FAULT stop;
+the subsequent PRNG programming below makes that AES state historical.
+Generic remains host/image/synthetic-only. Authorized programming uses checked
+board HEX/BIN; never substitute the standalone `aes_test.ihx`.
+`IMAGE=prng_fixture` selects the separate
+[deterministic explicitly seeded PRNG fixture](DEBUGGING.md#deterministic-prng-board-fixture)
+under `build/<board>/prng_fixture/`. It preserves all sixteen earlier BINs and
+the original PRNG/timebase/clock drivers. Both new layouts have host/image/
+synthetic coverage; the original wirev1 7,224-byte LG image additionally passed
+[short hardware acceptance](DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
+two seed1234 loads and eight RC16 words, benign errors, non-advancing
+readback, guards and tails. Its
+[first long run stopped on a fixture flag-policy bug](DEBUGGING.md#2026-09-17-lg-prng-long-run-flag-policy-interruption),
+not a PRNG failure: default compare latched STIF after C's snapshot.
+That old wirev1 halt is historical; its final32-word batch was not host-accepted.
+Corrected wirev2 preserves only sticky STIF0->1,
+with strict ordered C/live history and unchanged layout/driver/corpus.
+No STIF clear, compare write, ISR or reset between period chunks is allowed.
+The unchanged7289-byte LG wirev2 is now installed and passed
+[corrected short hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-short-acceptance):
+eight RC16 words and six raw flag observations without a STIF transition.
+The same image subsequently passed
+[full-stopped hardware acceptance](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-stopped-acceptance):
+the complete131,084-word/both-clock corpus, actual after-C/live STIF race
+and continued preservation, then the genuine RCTRL11 probe with retained
+6/6/6 errors and unchanged caller data.
+After closing the stopped session, the same image passed
+[separate full-reset recovery](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance):
+its own reset/full-CODE proof, the entire corpus again and a distinct
+`c-snapshot` STIF transition with2,253 later preserved observations.
+The bounded LG short/stopped/reset-recovery gate is complete. **Final LG is
+halted ENDREADY016A/config26/RC16, fault0, C/live IRCON80**, with no probe
+execution or later resume. The stopped FAULT snapshot is historical, not
+current. Generic/EOC1/poll-fault and broader M2 acceptance remain open.
+Further local hardware work is not planned; the Ubuntu24/MacPro6.1 handoff
+is not hardware acceptance or authorization on that host.
+The finite32-word batches cover four32,767-word periods, with actual31-word
+tails, and short seed/reseed checks. Normal full mode stops at ENDREADY;
+separate stopped mode deliberately selects RCTRL11 before a real terminal
+driver rejection. No CPU-hold poll-timeout is claimed.
+Use checked board HEX/BIN only after separate authorization; **never flash
+`prng_test.ihx`**. The runner keeps config26 and never accesses DMA registers.
+This is not entropy, cryptographic RNG, RF/noise seeding, ADC conversion,
+CRC, sleep or broader M2 acceptance.
+All nine images use the same board
+policy, M0 status ABI and memory restrictions. The new timebase fixture does
+not change the existing `bringup` or `debug_fixture` firmware bytes. The clock
+fixture likewise preserves all six older board BINs; the IRQ fixture preserves
+all eight older BINs. The IRQ fixture has separate bounded LG hardware
+acceptance below; generic remains host/image/simulator-only. Image selection
+does not enable any USB, flashing or RF operation. When reusing a custom `BUILD`,
 `build-info.json` always describes the last selected image; use separate
-directories to retain both metadata records.
+directories to retain each metadata record.
+
+Shared startup/status has separate LG hardware evidence through the M1
+fixture and the [2026-09-16 compiled-C timebase acceptance](DEBUGGING.md#2026-09-16-lg-compiled-c-timebase-acceptance).
+That timebase run left READY `0x016A`. The
+[later LG clock experiment](DEBUGGING.md#2026-09-16-lg-clock-cancellation-failure)
+passed normal switching but failed pending-cancellation rollback acceptance.
+The corrected 3,798-byte LG image subsequently passed
+[2026-09-17 (UTC+03) compiled-C clock acceptance](DEBUGGING.md#2026-09-17-lg-compiled-c-clock-acceptance):
+both timeout/rollback cases and a separate reset/recovery run of 257 sequences
+(771 C calls). That clock run ended halted at READY `0x016A` on RC16.
+Neither standalone `bringup` image nor generic hardware was observed.
+All six older BIN hashes and historical M1/timebase evidence
+remain unchanged. This is not frequency/calibration or physical clock-failure
+acceptance, and result 9 still denotes unconfirmed never-departed cancellation.
+
+The unchanged 3,269-byte LG IRQ image subsequently passed
+[compiled-C Timer1/IRQ acceptance on 2026-09-17 (UTC+03)](DEBUGGING.md#2026-09-17-lg-compiled-c-irq-acceptance):
+three initial normal cycles, an independent pre-start TIMEOUT at FAULT,
+then 257 real C cycles/ISR services after a separate explicit reset.
+Every acceptance invocation independently verified all physical CODE,
+including FF padding, before runner resume. Hardware return was restore+12
+with DPL=OK (0), with preserved CPU/active-IRAM context and actual RETI.
+That IRQ run ended at **READY `0x01BB`, EA/T1IE disabled and
+Timer1 stopped**. All eight earlier BIN
+hashes and the published EA/timebase drivers remain unchanged. This finite
+result does not establish calibrated time/latency, true one-shot behavior,
+exact overflow counts, higher-priority nesting or other platform services.
+M2 #4 remains open.
 
 ## Execution and board policy
 
 SDCC sets up its initial stack, then calls `_sdcc_external_startup`. This hook
 disables all three interrupt-enable registers before board policy and C data
-initialization. There is no interrupt handler, RF/USART initialization, sensor
+initialization. The bootstrap has no interrupt handler, RF/USART initialization, sensor
 read, EPD/SPI command, sleep entry, crystal switch or network operation.
+The separate clock fixture performs its explicitly documented HF selections
+after this unchanged startup; the default bootstrap does not.
+The separate IRQ fixture subsequently enables only its owned Timer1 source
+and global EA in bounded stages, with a stopped counter before delivery.
+It leaves GPIO selection/routing unchanged and does not change the startup
+interrupt/clock evidence stored in M0.
 
 The default board does not change GPIO latches, directions, selections or
 pulls. That is not a guarantee of electrically safe reset levels on an unknown
