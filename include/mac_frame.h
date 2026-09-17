@@ -107,20 +107,22 @@ typedef struct {
 /* Bodies exclude the PHY length, FCS and radio metadata. OK is not authentication.
  * Outputs are unchanged on error. Input/output objects must not overlap.
  * Use in the foreground; the SDCC implementation is not ISR-reentrant.
+ * Volatile pointer copies reduce SDCC IRAM spills, not alter pointed-to
+ * bytes; caller storage/lifetime requirements are unchanged.
  */
-mac_codec_result_t mac_frame_decode(const uint8_t *body, uint16_t length,
-                                    mac_frame_info_t *result);
-mac_codec_result_t mac_frame_encode(const mac_header_t *header,
-                                    const uint8_t *payload, uint16_t payload_length,
-                                    uint8_t *body, uint16_t capacity, uint8_t *length);
+mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
+                                    mac_frame_info_t * volatile result);
+mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
+                                    const uint8_t * volatile payload, uint16_t payload_length,
+                                    uint8_t * volatile body, uint16_t capacity, uint8_t * volatile length);
 
 /* Command payloads include their identifier. Unused fields decode as zero.
  * Payload-only success does not validate a frame header or perform a procedure.
  */
 mac_codec_result_t mac_command_decode(const uint8_t *payload, uint16_t length,
                                       mac_command_t *result);
-mac_codec_result_t mac_command_encode(const mac_command_t *command,
-                                      uint8_t *payload, uint16_t capacity, uint8_t *length);
+mac_codec_result_t mac_command_encode(const mac_command_t * volatile command,
+                                      uint8_t * volatile payload, uint16_t capacity, uint8_t * volatile length);
 
 /* Decode the MAC payload (starting with Superframe Specification), not the MHR.
  * GTS descriptors are unsupported. Offsets refer to this input; no bytes are

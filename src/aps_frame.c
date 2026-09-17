@@ -70,12 +70,26 @@ aps_codec_result_t aps_frame_decode(const uint8_t *body, uint16_t length,
     return APS_CODEC_OK;
 }
 
+/* Keep emission a leaf so SDCC can overlay its temporary IRAM. */
+static void emit_frame(const aps_header_t *header, const uint8_t *payload, uint8_t payload_length,
+                        uint8_t *body)
+{
+    uint8_t i;
+    body[0] = (uint8_t)(header->type | (header->delivery_mode << 2) | header->flags);
+    body[1] = header->destination_endpoint;
+    write_le16(body + 2, header->cluster_id);
+    write_le16(body + 4, header->profile_id);
+    body[6] = header->source_endpoint;
+    body[7] = header->counter;
+    for (i = 0; i < payload_length; i++)
+        body[APS_FRAME_HEADER_SIZE + i] = payload[i];
+}
+
 aps_codec_result_t aps_frame_encode(const aps_header_t *header,
                                     const uint8_t *payload, uint16_t payload_length,
                                     uint8_t *body, uint16_t capacity, uint8_t *length)
 {
     aps_codec_result_t status;
-    uint8_t i, position;
 
     if (header == NULL || body == NULL || length == NULL
             || (payload == NULL && payload_length != 0u))
@@ -87,15 +101,7 @@ aps_codec_result_t aps_frame_encode(const aps_header_t *header,
         return APS_CODEC_TOO_LONG;
     if (capacity < APS_FRAME_HEADER_SIZE + payload_length)
         return APS_CODEC_BUFFER_TOO_SMALL;
-    body[0] = (uint8_t)(header->type | (header->delivery_mode << 2) | header->flags);
-    body[1] = header->destination_endpoint;
-    write_le16(body + 2, header->cluster_id);
-    write_le16(body + 4, header->profile_id);
-    body[6] = header->source_endpoint;
-    body[7] = header->counter;
-    position = APS_FRAME_HEADER_SIZE;
-    for (i = 0; i < payload_length; i++)
-        body[position++] = payload[i];
-    *length = position;
+    emit_frame(header, payload, (uint8_t)payload_length, body);
+    *length = (uint8_t)(APS_FRAME_HEADER_SIZE + payload_length);
     return APS_CODEC_OK;
 }

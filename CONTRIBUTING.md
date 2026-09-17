@@ -193,6 +193,20 @@ Discover-then-Read using the returned ID. Neither the new test image nor
 its outputs become board firmware or CI artifacts. See the
 [dispatch contract](docs/ZCL.md#discover-attributes-and-unicast-dispatch).
 
+`make test-protocol-budget`, included in the default test suite, additionally
+links **all seven** MAC/NWK Data/APS/ZCL/Read/Discover modules into one compact
+SDCC harness. It executes complete Discover-then-Read exchanges and bounded
+errors, then writes `build/<board>/protocol-resources.json` (or the chosen
+`BUILD`). The ledger checks per-module/linked CODE, XDATA and IRAM budgets,
+artifact hashes and actual simulator peak SP; see the
+[measured budget and exclusions](docs/ARCHITECTURE.md#integrated-protocol-resource-budget).
+Only this new harness uses a 2,048-byte XDATA reservation; existing budgets,
+alias/upper-IRAM guards and the 15-second timeout stay unchanged. The checker
+removes its old report before validation and writes a new one only on success.
+Always require a successful target run and matching artifact hashes before
+using a report. Neither this image nor the ledger is a board `IMAGE` or CI
+upload. Observed foreground stack headroom is not a worst-case/ISR budget.
+
 The same commands now also run the standalone awake-only timebase. A focused,
 entirely offline check is:
 

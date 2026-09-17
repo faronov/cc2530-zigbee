@@ -37,10 +37,11 @@ typedef struct {
  * OK requires inspecting kind: DEFAULT_RECEIVED publishes only info (length=0).
  * Other local errors leave both outputs unchanged. Outputs must not overlap
  * each other or stable, truthful input storage. Foreground-only/non-reentrant.
+ * Volatile pointer copies constrain SDCC IRAM spilling, not pointed-to data.
  */
-zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t *set,
-                                       const uint8_t *request, uint16_t request_length,
-                                       uint8_t *response, uint16_t capacity,
-                                       zcl_dispatch_info_t *info);
+zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set,
+                                       const uint8_t * volatile request, uint16_t request_length,
+                                       uint8_t * volatile response, uint16_t capacity,
+                                       zcl_dispatch_info_t * volatile info);
 
 #endif

@@ -126,8 +126,8 @@ FCS-free MAC body boundary, layer-specific overflow, all truncated APS header
 lengths, and MAC/NWK-valid payloads rejected by APS without output changes.
 Its three scratch frames and linked codec storage have an explicit
 1,024-byte XDATA reservation budget; the same strict layout/alias/stack checks
-apply. Existing standalone limits and the original MAC test image/scenarios
-are unchanged. These are test-harness budgets, not deployed firmware sizes.
+apply. Existing standalone limits and original MAC test scenarios are
+unchanged. These are test-harness budgets, not deployed firmware sizes.
 
 Evidence is **host-tested, image-checked and simulated**, not RF,
 authentication, ACK handling, working ZDO/ZCL, join or interoperability.
@@ -139,3 +139,9 @@ protocol test adds the full MAC/NWK/APS/ZCL/value chain. The existing
 `protocol_frame_test.ihx` remains three-layer, with its original memory
 budget. APS itself still treats payload as opaque and gains no dispatcher,
 ZCL handler or board caller.
+
+The additional `protocol_budget_test.ihx` now also executes the full
+MAC/NWK/APS/ZCL Discover-then-Read chain in one SDCC image, with
+[per-subsystem resource accounting](ARCHITECTURE.md#integrated-protocol-resource-budget).
+Validated serialization moves into leaf helpers to reduce persistent IRAM
+spills; APS wire/error behavior and its existing component budget are unchanged.

@@ -24,17 +24,17 @@ zcl_codec_result_t zcl_attr_set_check(const zcl_attribute_set_t *set)
     return ZCL_CODEC_OK;
 }
 
-zcl_codec_result_t zcl_read_attrs_unicast(const zcl_attribute_set_t *set,
-                                          const uint8_t *request, uint16_t request_length,
-                                          uint8_t *response, uint16_t capacity,
-                                          zcl_read_info_t *info)
+zcl_codec_result_t zcl_read_attrs_unicast(const zcl_attribute_set_t * volatile set,
+                                          const uint8_t * volatile request, uint16_t request_length,
+                                          uint8_t * volatile response, uint16_t capacity,
+                                          zcl_read_info_t * volatile info)
 {
     zcl_frame_info_t frame;
     zcl_header_t reply;
     zcl_read_info_t candidate;
     zcl_codec_result_t status;
-    const zcl_attribute_t *attribute;
-    const uint8_t *ids;
+    const zcl_attribute_t * volatile attribute;
+    const uint8_t * volatile ids;
     uint8_t payload[ZCL_FRAME_MAX_BODY - ZCL_FRAME_MIN_HEADER];
     uint16_t id;
     uint8_t budget, header_size, used, remaining, index, position, encoded, wire_status;

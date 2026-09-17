@@ -115,7 +115,8 @@ header parsing. Standard reserved RX bits are ignored and reported, not
 mistaken for an invalid NWK layout. Value views retain raw wire octets and
 explicit consumed spans, including non-value patterns; they do not convert
 native numbers or validate text. APS/ZCL composition is target-tested
-separately; full MAC/NWK/APS/ZCL/value composition is currently host-only.
+separately; the resource image below also executes full MAC/NWK/APS/ZCL/value
+composition on SDCC.
 The independent `zcl_attributes` module adds a caller-owned, bounded read-only
 model and a unicast Read Attributes response builder. One table selects a
 cluster side and standard/manufacturer namespace; duplicate IDs are rejected,
@@ -125,7 +126,8 @@ publishes outputs atomically on local success. The caller must already select
 permitted unicast endpoint/profile/cluster context and authenticate as required.
 No endpoint registry, getter callback, write/reporting service,
 device-specific cluster or board linkage is introduced. Its own target image
-tests the handler; full MAC/NWK/APS request/response composition is host-only.
+tests the handler; the resource image below also tests full request/response
+composition on SDCC.
 Complete ZCL/application support remains planned.
 
 `zcl_dispatch` selects Read or Discover handlers for one caller-selected
@@ -140,7 +142,7 @@ distinguishes a constructed response from a received default notification.
 Transport admission, cluster selection, authentication, matching transaction
 state and actual sends remain outside this module. Its separate target
 image exercises real dispatch/read/discovery; full Discover-then-Read
-MAC/NWK/APS composition is host-only.
+MAC/NWK/APS composition additionally runs in the integrated resource image.
 
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
@@ -748,6 +750,75 @@ C rules:
   as part of the ABI, not as interchangeable desktop-C implementation details.
 - Any banking support must handle calls, interrupts, constants and debugger
   addresses together. It is not only a linker flag.
+
+## Integrated protocol resource budget
+
+`make test-protocol-budget` links **one** unbanked SDCC image containing
+MAC, NWK Data, APS, ZCL frame/value codecs and Read/Discover dispatch, plus
+a synthetic two-peer caller. It executes Discover, uses the returned ID in
+Read, serializes/decodes both replies and checks independent whole-frame
+golden vectors. Both manufacturer layouts, a maximum 125-byte MAC body,
+space-error responses and unsupported no-response writes are exercised.
+No board image, radio operation or fabricated successful service is added.
+
+The generated `build/<board>/protocol-resources.json` (or selected `BUILD`)
+contains actual linked totals, per-object contributions/budgets, artifact
+hashes and simulator-observed SP. Run the target successfully before using
+the report; its hashes identify the exact artifacts, not an arbitrary later
+build. It is excluded from the unchanged CI board-artifact whitelist.
+
+| Object / subsystem | CODE bytes | Ordinary XDATA bytes | Persistent IRAM bytes | Overlay IRAM bytes |
+| --- | ---: | ---: | ---: | ---: |
+| MAC, including its command/Beacon code | 7,009 | 207 | 15 | 10 |
+| NWK Data | 2,294 | 96 | 12 | 10 |
+| APS | 1,626 | 69 | 8 | 7 |
+| ZCL frame | 1,173 | 35 | 6 | 15 |
+| ZCL value | 1,710 | 46 | 15 | 0 |
+| ZCL attributes | 1,908 | 148 | 6 | 9 |
+| ZCL dispatch | 2,864 | 135 | 15 | 3 |
+| Synthetic integration caller/constants | 2,919 | 734 | 0 | 0 |
+| Shared runtime / linked remainder | 700 | 29 | Accounted below | Shared |
+| **Linked total** | **22,203** | **1,499** | **77 persistent** | **15 shared, not summed** |
+
+Object CODE includes constants/startup contributions where present, and
+unused functions retained in those linked objects; it is not the isolated
+size of one executed API. XDATA includes parameters and compiler scratch.
+The harness has five independent frame buffers totaling 549 bytes, not a
+production packet pool. It deliberately does not overlap codec input/output
+storage. CRT/libc costs are the linked remainder, not charged repeatedly.
+
+The checked limits are **24,576 CODE bytes**, **2,048 XDATA bytes including
+64 reserved status bytes**, per-object budgets in `tools/protocol_resources.py`,
+and stack start no higher than `0x68`. This build consumes 1,563 of that
+XDATA reservation. The 32-KiB window has 10,565 bytes remaining; ordinary
+allocation below `0x1E00` has 6,181 bytes remaining. These are address-space
+remainders, **not guaranteed capacity for the complete Zigbee stack**.
+
+IRAM is the tighter constraint: 77 persistent bytes, 15 shared overlay bytes,
+8 register-bank bytes, one bit-storage byte and one packing-gap byte precede
+the stack at **`0x66`**. Observed peak SP is **`0x7A`**: 21 stack bytes used,
+only **five bytes before the preserved `0x80` upper-IRAM guard**. The
+simulator also verifies final unwind, untouched upper IRAM/unallocated XDATA
+and disabled interrupts. This peak is for the executed foreground vectors,
+not a worst-case call-graph proof or an interrupt-nesting allowance.
+
+The initial combined link failed despite ample flash/XDATA: the seven protocol
+objects alone required **154 persistent IRAM bytes**. MAC/NWK/APS emission was
+separated into leaf helpers so compiler temporaries can use shared OSEG.
+Selected MAC/ZCL pointer copies are top-level `volatile`, keeping their
+storage in large-model XDATA instead of long-lived internal-RAM spills.
+The pointed-to bytes are not volatile; argument representation, wire/API
+semantics, stable-storage preconditions and foreground non-reentrancy remain
+unchanged. SDCC requires matching qualifiers in declarations and definitions.
+This is an IRAM/code/XDATA tradeoff, not a speed optimization or new ABI mode.
+All prior component guards/tests remain; the integrated image gets its own
+explicit budget rather than inflating existing limits.
+
+Not included: radio/platform services and live queues, the separate NWK
+Beacon metadata decoder, stateful MAC/NWK/APS, AES/CCM and durable NV, ZDO,
+commissioning, transaction/binding/reporting state, device clusters, sensor/
+display, sleep, ISR nesting and banked CODE. These still require explicit
+budgets and integration evidence; **complete-stack fit remains unproven**.
 
 ## Scheduling and ownership
 

@@ -1112,7 +1112,7 @@ Its shared strict layout checker uses an explicit 1,024-byte XDATA reservation
 budget for three scratch frames and linked codec storage; all existing callers
 retain the unchanged 512-byte default. CODE/source/result ABI, XDATA ownership,
 IRAM alias, untouched upper IRAM and final stack unwind remain mandatory.
-The existing MAC image and all its prior scenarios remain unchanged.
+The existing MAC scenarios and component reservation limits remain intact.
 This is host-tested, image-checked and simulated syntax, not a firmware image,
 ACK transaction, endpoint dispatcher, ZDO/ZCL support or hardware observation.
 
@@ -1143,11 +1143,11 @@ denial without touching values, ordered status/value records, namespace/side
 guards, malformed-command responses, space errors and explicit prefix counts.
 Golden CODE/XDATA vectors, all data type IDs, unchanged local failures,
 capacity boundaries and a 16-entry table are executed on SDCC in
-`zcl_attributes_test.ihx`: after shared helper extraction, 12,078 CODE bytes
-and 664 ordinary XDATA bytes, 728 with the 64-byte status reservation.
+`zcl_attributes_test.ihx`: after integrated-image IRAM refactoring, 12,173 CODE
+bytes and 667 ordinary XDATA bytes, 731 with the 64-byte status reservation.
 This harness uses an explicit
 1,024-byte limit; existing budgets and the 15-second timeout are unchanged.
-The exact reservation threshold passes at 728 and rejects 727 and the
+The exact reservation threshold passes at 731 and rejects 730 and the
 512-byte default, without weakening other layout/alias/stack checks.
 
 Host tests add exact table/value/request/response/result allocations,
@@ -1162,9 +1162,9 @@ Unreviewed ZCL errata remains a conformance risk, not a development stop.
 
 The isolated discovery/dispatch image exercises the real dispatcher,
 Read handler and frame/value codecs with CODE/XDATA tables. It uses
-15,039 CODE bytes and 788 ordinary XDATA bytes, 852 including the reserved
+15,379 CODE bytes and 797 ordinary XDATA bytes, 861 including the reserved
 status block, within an explicit 1,024-byte harness budget. The exact layout
-threshold passes at 852 and rejects 851 and the 512-byte default.
+threshold passes at 861 and rejects 860 and the 512-byte default.
 No existing component budget, alias/IRAM/unwind check or 15-second timeout
 is relaxed. The small shared type predicate leaves the value image at
 6,824 CODE and 377 ordinary XDATA, within its original 512-byte reservation.
@@ -1183,6 +1183,34 @@ golden responses and both manufacturer layouts. The target protocol image
 is unchanged and remains three-layer; radio/platform code and board images
 are unaffected. This is not network admission, transaction matching or
 full-cluster conformance.
+
+The additional `protocol_budget_test.ihx` runs **all seven implemented
+protocol modules together**, not only the three-layer target above.
+Eight exchanges cover Discover-then-Read using the returned ID, both ZCL
+manufacturer layouts, independent standard golden response frames, the
+exact 125-byte MAC body and space-error replies. A final unsupported
+Write No Response leaves the reply untouched. The shared native harness
+also runs under ASan/UBSan, alongside the existing exhaustive MAC/NWK/APS,
+Read/Discover and host protocol suites after the IRAM-storage refactor.
+
+The image uses 22,203 CODE and 1,499 ordinary XDATA bytes, 1,563 including
+the 64-byte reservation. Its explicit 2,048-byte budget preserves the
+unchanged component layout/source/CODE, alias, untouched-XDATA/upper-IRAM,
+unwind, disabled-interrupt and 15-second guards. The eight-byte result ABI
+is `PBG1`, version 1, size 8, failure line LE16. Stack starts at `0x66`;
+the simulator's maximum-SP evidence is `0x7A`, leaving five bytes before
+the guard, not a worst-case/ISR guarantee.
+
+`tools/protocol_resources.py` checks relocatable module/ABI/area records,
+per-module budgets, linked shared-runtime remainder and nonadditive overlay/
+bit accounting before the runner writes `protocol-resources.json` with
+artifact hashes. Synthetic unit tests exercise malformed/unknown/absolute
+areas, wrong modules/ABI, missing/extra modules, resource discrepancies,
+each module at its exact limits, whole-image limits at/above the threshold,
+invalid stack peaks and removal of stale output when the checker fails.
+[The ledger and exclusions](ARCHITECTURE.md#integrated-protocol-resource-budget)
+are resource evidence, not on-air or full-stack acceptance. No board
+firmware, radio/platform source or CI artifact whitelist is changed.
 
 | Area | Required cases before the corresponding milestone closes |
 | --- | --- |

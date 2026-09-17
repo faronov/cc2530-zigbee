@@ -15,6 +15,12 @@ Its MOV/NOP/RET probe uses ordinary 8051 instructions and synthetic constants,
 not bytes from an OEM image or an external programmer/debugger implementation.
 No USB backend, programmer code or additional dependency is imported by it.
 
+The integrated protocol resource harness, synthetic frames and SDCC resource
+ledger are original BSD-3-Clause work. Leaf serialization and pointer-storage
+changes refactor this repository's existing codecs, not an imported stack.
+Resource facts come from the local SDCC 4.2.0 objects/link output and uCsim
+execution; they are not hardware measurements or new normative wire rules.
+
 ## Reviewed reference candidates
 
 | Reference | Status and permitted use |

@@ -407,7 +407,8 @@ The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
 remains an open follow-up risk, not a stop on base-text development. Review
 applicable corrections before conformance claims. Header/value, APS/ZCL and
 read/dispatch target checks are host-tested, image-checked and simulated;
-full Discover-then-Read/ZCL/APS/NWK/MAC composition is host-tested.
+full Discover-then-Read/ZCL/APS/NWK/MAC composition is host-tested and also
+image-checked/simulated in the integrated resource harness.
 There is no board caller, endpoint/transport dispatcher, native
 numeric/charset conversion or advertised cluster. Application/device/profile
 selection and all M4/M5 networking/security gates remain open.
@@ -549,6 +550,19 @@ See [PROVENANCE.md](PROVENANCE.md).
 The CC2530 has 256 KiB flash but a banked CODE view, not a flat 256 KiB code
 space. The upper 256 bytes of its 8 KiB SRAM are the XDATA alias of IRAM.
 Prototype display memory figures do not predict final stack size.
+
+**Measured preparatory integration:** `make test-protocol-budget` now links
+and executes the complete implemented MAC/NWK Data/APS/ZCL codec and
+read/discovery chain: **22,203 CODE and 1,499 ordinary XDATA bytes**, plus
+64 reserved status bytes. Per-object and total budgets are enforced; see
+[the resource ledger](ARCHITECTURE.md#integrated-protocol-resource-budget).
+The first combined link failed on IRAM, prompting ABI-compatible spill/
+leaf-emission changes rather than weakened guards. Persistent protocol IRAM
+fell from 154 to 77 bytes; observed SP reaches `0x7A` with stack start `0x66`.
+Only five bytes remain before the current upper-IRAM guard on these vectors.
+This is not enough evidence to budget interrupt nesting or promise complete
+stack fit. Platform/radio queues, security/NV, ZDO and application state are
+still outside this integrated image.
 
 ## 6. Risks and responses
 

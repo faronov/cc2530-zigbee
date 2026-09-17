@@ -50,10 +50,11 @@ zcl_codec_result_t zcl_attr_set_check(const zcl_attribute_set_t *set);
  * Inputs must remain stable and accessible for the whole foreground-only,
  * non-reentrant call. Outputs must not overlap each other or any input storage.
  * A non-readable entry's value is never inspected; no write API is provided.
+ * Volatile pointer copies constrain SDCC IRAM spilling, not pointed-to data.
  */
-zcl_codec_result_t zcl_read_attrs_unicast(const zcl_attribute_set_t *set,
-                                          const uint8_t *request, uint16_t request_length,
-                                          uint8_t *response, uint16_t capacity,
-                                          zcl_read_info_t *info);
+zcl_codec_result_t zcl_read_attrs_unicast(const zcl_attribute_set_t * volatile set,
+                                          const uint8_t * volatile request, uint16_t request_length,
+                                          uint8_t * volatile response, uint16_t capacity,
+                                          zcl_read_info_t * volatile info);
 
 #endif

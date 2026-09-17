@@ -33,13 +33,13 @@ static const zcl_attribute_t *next_attribute(const zcl_attribute_set_t *set, uin
     return chosen;
 }
 
-static zcl_codec_result_t discover(const zcl_attribute_set_t *set, const uint8_t *request,
-                                    zcl_header_t *reply, uint8_t *response, uint16_t capacity,
-                                    zcl_dispatch_info_t *info)
+static zcl_codec_result_t discover(const zcl_attribute_set_t * volatile set, const uint8_t * volatile request,
+                                    zcl_header_t * volatile reply, uint8_t * volatile response, uint16_t capacity,
+                                    zcl_dispatch_info_t * volatile info)
 {
     uint8_t payload[1u + 3u * ZCL_ATTRIBUTE_MAX_COUNT];
-    const zcl_attribute_t *attribute;
-    uint8_t *out = payload + 1;
+    const zcl_attribute_t * volatile attribute;
+    uint8_t * volatile out = payload + 1;
     uint16_t start;
     uint8_t budget, header_size, limit, count = 0;
     zcl_codec_result_t status;
@@ -85,17 +85,17 @@ static zcl_codec_result_t discover(const zcl_attribute_set_t *set, const uint8_t
     return ZCL_CODEC_OK;
 }
 
-zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t *set,
-                                       const uint8_t *request, uint16_t request_length,
-                                       uint8_t *response, uint16_t capacity,
-                                       zcl_dispatch_info_t *info)
+zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set,
+                                       const uint8_t * volatile request, uint16_t request_length,
+                                       uint8_t * volatile response, uint16_t capacity,
+                                       zcl_dispatch_info_t * volatile info)
 {
     zcl_frame_info_t frame;
     zcl_header_t reply;
     zcl_read_info_t read;
     zcl_dispatch_info_t candidate;
     zcl_codec_result_t status;
-    const uint8_t *payload;
+    const uint8_t * volatile payload;
     uint8_t error[2], context_matches;
 
     if (set == NULL || request == NULL || response == NULL || info == NULL)

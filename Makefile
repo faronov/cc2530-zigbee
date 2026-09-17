@@ -55,6 +55,8 @@ endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
+.PHONY: test-protocol-budget
+PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -180,6 +182,19 @@ $(BUILD)/protocol_frame_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/nwk_frame.rel 
 test-protocol-frame: $(BUILD)/host-protocol-frame-tests $(BUILD)/protocol_frame_test.ihx
 	$(BUILD)/host-protocol-frame-tests
 	$(PYTHON) -B tests/boot_protocol_frame.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-protocol-budget-tests: tests/test_protocol_budget.c $(addprefix src/,$(addsuffix .c,$(PROTOCOL_MODULES))) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $< $(addprefix src/,$(addsuffix .c,$(PROTOCOL_MODULES))) -o $@
+
+$(BUILD)/protocol_budget_test.rel: tests/test_protocol_budget.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/protocol_budget_test.ihx: $(addprefix $(BUILD)/,$(addsuffix .rel,$(PROTOCOL_MODULES))) $(BUILD)/protocol_budget_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(addprefix $(BUILD)/,$(addsuffix .rel,$(PROTOCOL_MODULES))) $(BUILD)/protocol_budget_test.rel
+
+test-protocol-budget: $(BUILD)/host-protocol-budget-tests $(BUILD)/protocol_budget_test.ihx
+	$(BUILD)/host-protocol-budget-tests
+	$(PYTHON) -B tests/boot_protocol_budget.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-zcl-frame-tests: tests/test_zcl_frame.c src/zcl_frame.c src/aps_frame.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_frame.c src/zcl_frame.c src/aps_frame.c -o $@
@@ -349,7 +364,7 @@ $(BUILD)/host-dma-fixture-tests_$(BOARD): tests/test_dma_fixture.c src/dma_fixtu
 
 test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
 test: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
-test: test-protocol-frame test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
+test: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 test: all test-timebase test-clock test-irq test-radio-fifo test-dma test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
 	$(BUILD)/host-mac-frame-tests

@@ -88,12 +88,35 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     return NWK_CODEC_OK;
 }
 
+/* Keep emission a leaf so SDCC can overlay its temporary IRAM. */
+static void emit_frame(const nwk_header_t *header, const uint8_t *payload, uint8_t payload_length,
+                        uint8_t *body)
+{
+    uint8_t position = NWK_FRAME_MIN_HEADER, i;
+    body[0] = (uint8_t)(header->type | (header->version << 2) | (header->discover_route << 6));
+    body[1] = (uint8_t)(header->flags >> 8);
+    write_le16(body + 2, header->destination);
+    write_le16(body + 4, header->source);
+    body[6] = header->radius;
+    body[7] = header->sequence;
+    if (header->flags & NWK_FLAG_DESTINATION_IEEE) {
+        for (i = 0; i < 8; i++)
+            body[position++] = header->destination_ieee[i];
+    }
+    if (header->flags & NWK_FLAG_SOURCE_IEEE) {
+        for (i = 0; i < 8; i++)
+            body[position++] = header->source_ieee[i];
+    }
+    for (i = 0; i < payload_length; i++)
+        body[position++] = payload[i];
+}
+
 nwk_codec_result_t nwk_frame_encode(const nwk_header_t *header,
                                     const uint8_t *payload, uint16_t payload_length,
                                     uint8_t *body, uint16_t capacity, uint8_t *length)
 {
     nwk_codec_result_t status;
-    uint8_t size, position, i;
+    uint8_t size;
 
     if (header == NULL || body == NULL || length == NULL
             || (payload == NULL && payload_length != 0u))
@@ -105,23 +128,7 @@ nwk_codec_result_t nwk_frame_encode(const nwk_header_t *header,
         return NWK_CODEC_TOO_LONG;
     if (capacity < size + payload_length)
         return NWK_CODEC_BUFFER_TOO_SMALL;
-    body[0] = (uint8_t)(header->type | (header->version << 2) | (header->discover_route << 6));
-    body[1] = (uint8_t)(header->flags >> 8);
-    write_le16(body + 2, header->destination);
-    write_le16(body + 4, header->source);
-    body[6] = header->radius;
-    body[7] = header->sequence;
-    position = NWK_FRAME_MIN_HEADER;
-    if (header->flags & NWK_FLAG_DESTINATION_IEEE) {
-        for (i = 0; i < 8; i++)
-            body[position++] = header->destination_ieee[i];
-    }
-    if (header->flags & NWK_FLAG_SOURCE_IEEE) {
-        for (i = 0; i < 8; i++)
-            body[position++] = header->source_ieee[i];
-    }
-    for (i = 0; i < payload_length; i++)
-        body[position++] = payload[i];
-    *length = position;
+    emit_frame(header, payload, (uint8_t)payload_length, body);
+    *length = (uint8_t)(size + payload_length);
     return NWK_CODEC_OK;
 }

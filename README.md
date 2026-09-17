@@ -324,10 +324,18 @@ Default Responses and builds unsupported-command errors without response loops.
 It adds no registered cluster, writes, reporting or network dispatcher.
 Unreviewed ZCL errata remains a conformance risk, not a development stop.
 APS/ZCL composition and the read handler are target-tested; the complete
-MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested.
+MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested and
+also runs in a single SDCC resource image.
 This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. There is still no on-air radio driver, functioning
 MAC, association or Zigbee join.
+
+`make test-protocol-budget` checks that integrated image and generates a
+[per-subsystem resource ledger](docs/ARCHITECTURE.md#integrated-protocol-resource-budget):
+22,203 CODE bytes and 1,499 ordinary XDATA bytes. Its exercised foreground
+stack peak leaves only five bytes before the existing upper-IRAM guard.
+This is a measured baseline for the implemented protocol subset, **not a
+claim that radio, security/NV, ZDO and the final application already fit**.
 
 - C99 and SDCC, initially CC2530F256.
 - One logical end-device implementation: receiver-on first, sleeping later.

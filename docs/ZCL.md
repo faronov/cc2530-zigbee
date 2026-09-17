@@ -349,8 +349,8 @@ it is not claimed as a four-layer target run.
 
 The separate `zcl_attributes_test.ihx` exercises the real model, value codec,
 framer and read handler, with a **1,024-byte test-harness reservation budget**.
-After shared table/type helper extraction it has 12,078 CODE bytes and
-664 ordinary XDATA bytes (728 including the
+After the integrated-image IRAM refactor it has 12,173 CODE bytes and
+667 ordinary XDATA bytes (731 including the
 64-byte status reservation). Existing 512-byte images and the shared
 15-second timeout are unchanged; CODE/source/result, alias, unused-XDATA,
 upper-IRAM and unwind checks remain mandatory. Its eight-byte `ZCA1` result
@@ -372,7 +372,7 @@ both manufacturer layouts. Its reverse-hop metadata is synthetic, not
 routing, counter allocation or a network transaction implementation.
 
 The separate `zcl_dispatch_test.ihx` links the actual dispatcher, Read handler,
-frame and value codecs: **15,039 CODE, 788 ordinary XDATA, 852 including status
+frame and value codecs: **15,379 CODE, 797 ordinary XDATA, 861 including status
 reservation**, under its explicit 1,024-byte harness budget. It checks the
 same CODE/CDB/alias/unused-XDATA/upper-IRAM/unwind rules and 15-second timeout.
 The eight-byte result is `ZCD1`, version 1, size 8, failure line LE16.
@@ -396,6 +396,18 @@ MAC/NWK/APS/ZCL. Both manufacturer layouts and independent complete golden
 discovery/read response frames are checked. The target protocol image
 remains the three-layer MAC/NWK/APS chain; all new images remain excluded
 from board selections and CI artifacts.
+
+`protocol_budget_test.ihx` is a new, separate **full-chain SDCC image**:
+MAC/NWK Data/APS/ZCL/value/Read/Discover are linked and executed together.
+It checks Discover-then-Read for both manufacturer layouts, independent
+standard whole-frame golden responses, maximum-size string success,
+space errors and unchanged no-response output. Its generated
+[resource ledger](ARCHITECTURE.md#integrated-protocol-resource-budget)
+records 22,203 CODE, 1,499 ordinary XDATA, stack start `0x66` and observed
+peak SP `0x7A`. Its own 2,048-byte reservation does not change prior image
+limits. The five-byte observed upper-IRAM headroom is not an ISR or
+complete-stack guarantee. Leaf emitters and selected volatile pointer
+copies reduce persistent IRAM spills without changing codec semantics.
 
 Evidence is **host-tested, image-checked and simulated**, not hardware
 observation, authenticated traffic, working clusters, interview or
