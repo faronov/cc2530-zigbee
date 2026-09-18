@@ -354,7 +354,8 @@ RC16/XOSC32, plus short seed/reseed cases. The host checks every actual word,
 not just a count/hash. A separately selected genuine stopped-RCTRL probe tests
 terminal rejection; holding the CPU is **not** a PRNG poll-timeout experiment.
 That PRNG addition preserved all sixteen older BINs and existing drivers.
-The later passive RX addition below brings CI to twenty full jobs with the
+The passive RX addition brought CI to twenty jobs; the offline flash fixture
+below brings it to twenty-two, with the
 same seven artifacts and `hardware_tested=false`.
 The original **7,224-byte wirev1 LG PRNG image** passed
 [short hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
@@ -445,9 +446,30 @@ result with the real reader. Programming requires a fresh verified erase
 in the current runtime epoch and permits only one attempt per word, even
 for allFF data; reset does not make erased-looking words safe to reuse.
 `make test-flash-write` is **host-tested, image-checked and simulated only**.
-There is still no flash board fixture, hardware write/erase acceptance,
-durable NV journal or security-counter persistence. Never flash the
+There is still no hardware write/erase acceptance, durable NV journal or
+security-counter persistence. Never flash the
 standalone `flash_write_test.ihx`.
+
+### Boot-disarmed flash board fixture — offline only
+
+`IMAGE=flash_fixture` is now a separately selected **non-RF**, boot-disarmed
+fixture using the real services above. Two distinct mailbox packets, each
+within256 foreground polls, select one reserved page; success performs one
+erase and two verified word programs, with explicit UNKNOWN/USED history
+checks and terminal END/FAULT. Default boot/resume/reset cannot erase.
+There is no automatic hardware runner or fault retry.
+
+```sh
+make BOARD=generic IMAGE=flash_fixture test-flash-fixture
+make BOARD=lg_esl29_rev03 IMAGE=flash_fixture test-flash-fixture
+```
+
+Both variants are **host-tested, image-checked and simulated only** (4168/4208
+CODE bytes,500 XDATA reserved, unchanged512-byte budget).
+[Scratch/recovery, byte ABI and debugger visibility blockers](docs/FLASH_FIXTURE.md)
+are explicit. Physical execution remains blocked pending new board/scratch/
+backup/destructive-scope authorization and independent full excluded-region
+verification. No backups, devices or identities were accessed; #8 stays open.
 
 ## Intended scope
 

@@ -7,7 +7,7 @@ BOARD ?= generic
 IMAGE ?= bringup
 BUILD ?= build/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
 LOCAL_BUILD ?= build/local
-BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture
+BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture flash_fixture
 
 ifeq ($(BOARD),generic)
 BOARD_NUMBER := 0
@@ -27,8 +27,9 @@ else ifeq ($(IMAGE),dma_fixture)
 else ifeq ($(IMAGE),aes_fixture)
 else ifeq ($(IMAGE),prng_fixture)
 else ifeq ($(IMAGE),radio_rx_fixture)
+else ifeq ($(IMAGE),flash_fixture)
 else
-$(error IMAGE must be bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture or radio_rx_fixture)
+$(error IMAGE must be one of $(BOARD_IMAGES))
 endif
 
 TARGET := $(BUILD)/$(IMAGE)
@@ -65,6 +66,10 @@ OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/prng.rel $(BUILD)/p
 endif
 ifeq ($(IMAGE),radio_rx_fixture)
 OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/radio_rx.rel $(BUILD)/radio_rx_fixture_state.rel
+endif
+ifeq ($(IMAGE),flash_fixture)
+# The entire hardware-service/compiler prefix must precede every caller object.
+OBJECTS := $(BUILD)/flash_exec.rel $(BUILD)/flash.rel $(BUILD)/flash_write.rel $(OBJECTS) $(BUILD)/flash_fixture_state.rel
 endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
@@ -118,11 +123,20 @@ $(BUILD)/prng_fixture_state.rel: src/prng_fixture_state.c $(HEADERS) Makefile | 
 $(BUILD)/radio_rx_fixture_state.rel: src/radio_rx_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
+$(BUILD)/flash_fixture_state.rel: src/flash_fixture_state.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
 # Relink with the selected board even when an explicitly shared BUILD is reused.
 $(TARGET).ihx: $(OBJECTS) force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(OBJECTS)
 ifeq ($(IMAGE),radio_rx_fixture)
 	cp $(BUILD)/radio_rx.rst $(TARGET).radio_rx.rst
+endif
+ifeq ($(IMAGE),flash_fixture)
+	cp $(BUILD)/flash_exec.rst $(TARGET).exec.rst
+	cp $(BUILD)/flash.rst $(TARGET).reader.rst
+	cp $(BUILD)/flash_write.rst $(TARGET).service.rst
+	cp $(BUILD)/flash_fixture_state.rst $(TARGET).state.rst
 endif
 
 $(TARGET).hex: $(TARGET).ihx
@@ -433,6 +447,7 @@ $(BUILD)/flash_test.rel: tests/test_flash.c $(HEADERS) Makefile | $(BUILD)
 
 $(BUILD)/flash_test.ihx: $(BUILD)/flash.rel $(BUILD)/flash_test.rel force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/flash.rel $(BUILD)/flash_test.rel
+	cp $(BUILD)/flash.rst $(BUILD)/flash_test.reader.rst
 
 $(BUILD)/host-flash-tests: tests/test_flash.c src/flash.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_flash.c src/flash.c tests/host_mmio.c -o $@
@@ -449,6 +464,7 @@ $(BUILD)/flash_exec_test.rel: tests/test_flash_exec.c $(HEADERS) Makefile | $(BU
 
 $(BUILD)/flash_exec_test.ihx: $(BUILD)/flash_exec.rel $(BUILD)/flash_exec_test.rel force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/flash_exec.rel $(BUILD)/flash_exec_test.rel
+	cp $(BUILD)/flash_exec.rst $(BUILD)/flash_exec_test.exec.rst
 
 $(BUILD)/host-flash-exec-tests: tests/test_flash_exec.c tests/host_flash_engine.c src/flash_exec.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_flash_exec.c tests/host_flash_engine.c src/flash_exec.c tests/host_mmio.c -o $@
@@ -475,6 +491,13 @@ $(BUILD)/host-flash-write-tests: tests/test_flash_write.c tests/host_flash_engin
 test-flash-write: $(BUILD)/host-flash-write-tests $(BUILD)/flash_write_test.ihx
 	$(BUILD)/host-flash-write-tests
 	$(PYTHON) -B tests/boot_flash_write.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-flash-fixture-tests_$(BOARD): tests/test_flash_fixture.c tests/test_flash_write.c tests/host_flash_engine.c src/flash_fixture_state.c src/flash_exec.c src/flash.c src/flash_write.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_flash_fixture.c tests/host_flash_engine.c src/flash_fixture_state.c src/flash_exec.c src/flash.c src/flash_write.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+.PHONY: test-flash-fixture
+test-flash-fixture: test-board
+	@test "$(IMAGE)" = flash_fixture
 
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
@@ -529,6 +552,7 @@ test-local:
 		done; \
 	done
 
+test-board: $(if $(filter flash_fixture,$(IMAGE)),$(BUILD)/host-flash-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_rx_fixture,$(IMAGE)),$(BUILD)/host-radio-rx-fixture-tests_$(BOARD))
 test-board: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOARD) $(BUILD)/aes-reference)
 test-board: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
@@ -536,6 +560,9 @@ test-board: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-
 test-board: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
 test-board: all $(BUILD)/host-tests_$(BOARD) $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
 	$(BUILD)/host-tests_$(BOARD)
+ifeq ($(IMAGE),flash_fixture)
+	$(BUILD)/host-flash-fixture-tests_$(BOARD)
+endif
 ifeq ($(IMAGE),radio_fifo_fixture)
 	$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD)
 endif

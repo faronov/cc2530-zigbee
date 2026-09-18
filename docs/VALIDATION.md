@@ -17,11 +17,13 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
-`make test-local` preserves all twenty board/image checks while running
+`make test-local` now covers all twenty-two board/image checks while running
 the Python tool suite once and each standalone component corpus once per
 board definition instead of once per image. It uses isolated component and
 board-image directories and serial, fail-fast submakes. The existing full
-`make ... all test` and twenty-job CI coverage remain available.
+`make ... all test` and twenty-two-job CI coverage remain available.
+The measurements below predate the flash fixture and retain their original
+twenty-image scope; they are not timings for the expanded matrix.
 Dry-run regressions account for every component, board/image, fixture host
 test and tool-suite invocation; synthetic submake failures prove that later
 suites are not run after a failure. The AES board test declares its host
@@ -77,8 +79,8 @@ Its 37 linked cases verify the exact emitted SFR accesses and read-only
 peripheral loads, typed ABI and entire private allocation prefix. Every CODE
 byte mutation is rejected; source/page bounds, actual MOVX addresses with
 XBANK7, successful restoration, late errors/nonpublication, faulted re-entry,
-unallocated XDATA and alias/stack guards are exercised. Board-image checks
-reject both the reader and its test harness from every existing `IMAGE`.
+unallocated XDATA and alias/stack guards are exercised. Board-image checks reject the test harness from every `IMAGE` and permit
+the real services only in the separately selected `flash_fixture`.
 
 This is **host-tested, image-checked and simulated** evidence, not hardware
 flash-read, erase/program, endurance, electrical interruption or persistent
@@ -178,6 +180,59 @@ discarded. The38 linked sequences completed in20.466 seconds locally.
 This is **host-tested, image-checked and simulated**, not hardware-observed
 flash behavior, lifetime wear or a durable/atomic NV record. Hardware #8
 still requires separate destructive-operation authorization and recovery.
+
+## Boot-disarmed flash fixture coverage
+
+The separately selected `flash_fixture` is checked for both board definitions,
+using the [same published image/layout contract](FLASH_FIXTURE.md#image-abi-and-allocation).
+Focused commands, not the unrelated full board/component matrix:
+
+```sh
+make BOARD=generic IMAGE=flash_fixture test-flash-fixture
+make BOARD=lg_esl29_rev03 IMAGE=flash_fixture test-flash-fixture
+make BOARD=generic BUILD=build/flash-components-generic test-flash test-flash-exec test-flash-write
+make BOARD=lg_esl29_rev03 BUILD=build/flash-components-lg test-flash test-flash-exec test-flash-write
+PYTHONPATH=tools python3 -B -m unittest test_flash_fixture test_m0_artifacts test_local_checks test_timebase_fixture test_m1_access test_m1_image -q
+```
+
+Each fixture's653 native cases exercise both complete sequences,255/256
+admission boundaries, every one-bit packet corruption in both phases, all256
+page bytes, premature/replayed/scope-changing packets, reset with unchanged
+flash contents, frozen terminal calls, ignored/aborted/stuck commands,
+missing/partial program effects, erase residue and explicit history failure.
+They reuse the original native controller/window/assembly model, never a
+production stub. Existing board startup and strict native warnings remain.
+
+Each board's32 linked scenarios execute genuine SDCC C and the actual
+123 copied instructions. They prove default/reset disarming, full256-poll
+timeouts, acceptance after255 polls, malformed packet paths with breakpoints
+on **all** service IO sites, terminal no-retry, both selected pages and exact
+one-erase/two-program command/address/data traces. Each accepted erase traces
+all2,048 actual MOVX verification addresses; program/preflight traces remain
+strict. Transcript sections are indexed once, not quadratically rescanned.
+RAM entry checks physical C-copy bytes,65,535 poll input, consumed history,
+genuine common-C return frame, FCTL/FADDR and ordered FWDATA operands.
+Idle-before-RET is required; RAM exhaustion leaves PENDING/COMMAND/RAM_STOP,
+XMAP and unchanged CPU/RAM even after synthetic late idle.
+
+Whole-CODE mutations, symbols/typed ABI/field offsets/private compiler layout
+and saved relocated listings are rejected. Services are byte-identical to #7;
+their181 executor/38 writer linked sequences retain the independent finite
+poll/ABI/alias proofs. Per-image snapshots now also protect the standalone
+reader/executor listings; a genuine serial shared-directory relink regression
+proves later component links cannot overwrite fixture evidence.
+Full ordinary/unallocated/status XDATA, upper IRAM, neighboring page boundaries,
+information/peripheral windows and M0 heartbeat are checked. Both fixture
+images reserve500 XDATA bytes within512 and have peak SP`36`.
+Every s51 process retains the15-second deadline.
+
+This is **host-tested, image-checked and simulated only**. Synthetic status,
+XMAP and flash-window effects are not physical flash physics,20-us timing,
+endurance, power interruption, preservation of real excluded regions or
+recovery. Both hardware gates and #8 remain open; no device/private data access
+was performed. CI has22 board jobs and the unchanged seven-path board-artifact
+whitelist, with `hardware_tested=false`. Standalone executables, snapshots,
+private recovery files and captures are not uploaded as board artifacts.
 
 ## M0 coverage
 

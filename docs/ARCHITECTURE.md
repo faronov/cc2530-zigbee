@@ -1230,9 +1230,9 @@ instruction table a general worst-case timing guarantee. Physical XMAP,
 the separate #8 hardware gate, not simulator evidence.
 
 `make test-flash-exec` is host-tested, exact-image-checked and alias-aware
-simulated. **Never flash `flash_exec_test.ihx`.** Current board images exclude
-the flash modules and their harnesses; this adds no board fixture, automatic
-device access or completed M2 milestone.
+simulated. **Never flash `flash_exec_test.ihx`.** Board images exclude
+the flash harnesses; only the separately selected fixture below links services.
+The component adds no automatic device access or completed M2 milestone.
 
 ## Verified reserved-page erase and program
 
@@ -1286,6 +1286,35 @@ exact-image and alias-aware simulator evidence. **Never flash
 `flash_write_test.ihx`.** The simulated peripheral supplies flash effects;
 this is not physical program/erase,20-us timing, wear, power-cut recovery,
 a durable NV record or authorization for the separately gated #8 fixture.
+
+## Boot-disarmed flash board fixture
+
+The separate `IMAGE=flash_fixture` composes the unchanged executor/reader/writer
+with original foreground orchestration and the existing board startup.
+The [full contract](FLASH_FIXTURE.md) fixes the8-byte mailbox, two distinct
+ARM/RUN packets,256-poll admission windows, one selected relative page and a
+five-step history/erase/program sequence. It boots DISARMED, clears stale
+commands on reset, terminates on success/fault, and never retries or resets
+history. Invalid/default/expired admission performs no service MMIO.
+All GPIO remains board policy; no RF, clock switch, ISR or DMA is added.
+
+The entire404-byte service/compiler prefix and emitted service instructions
+are identical to the standalone #7 composition. The32-byte fixture/caller
+addition gives436 ordinary XDATA plus64 reserved:500 of its separately
+accounted512-byte budget. Existing component budgets and unbanked/alias
+bounds do not change. IRAM stack is reserved at`21..FF` with simulated
+peak`36`; DATA/BIT/typed XDATA ABI and all relocated listing snapshots are
+checked. No generic pointers, hidden pool or copied flash algorithm.
+
+Generic/LG images are4168/4208 CODE bytes with host/image/simulator evidence
+only. RAM_STOP keeps the genuine command frame and public PENDING state;
+it is not a fixture FAULT return. The current debugger cannot read mapped
+CODE or address its breakpoints, and its DEBUG_INSTR-based ordinary-memory
+inspection has no physical validation for busy-flash/XMAP states.
+See the [visibility and recovery blockers](FLASH_FIXTURE.md#debugger-visibility-precise-unresolved-blockers).
+Private full-flash/information backup and full excluded-region verification
+must precede destruction under new explicit authority. No hardware gate,
+NV durability or recovery result is implied; #8 remains open.
 
 ## Persistence design
 

@@ -57,7 +57,7 @@ git diff --check
 
 `test-local` runs the complete Python tool suite once, all standalone
 host/image/simulator component corpora once **for each board definition**,
-and the board-specific host/image/simulator checks for all twenty board/image
+and the board-specific host/image/simulator checks for all twenty-two board/image
 combinations. Components have no `IMAGE`-dependent inputs. This removes
 duplicate runs, not cases: every component still runs with both
 `CC2530_BOARD` definitions, and every board fixture retains its own checks.
@@ -67,7 +67,7 @@ the 15-second per-simulator deadline; extra CPU cores do not justify
 concurrent links into a shared directory or relaxed timeouts.
 
 The existing `make BOARD=... IMAGE=... all test` command remains a full
-single-configuration check and is unchanged in the twenty-job CI matrix.
+single-configuration check and is unchanged in the twenty-two-job CI matrix.
 For focused iteration, the explicit parts are:
 
 ```sh
@@ -192,6 +192,26 @@ model is shared with the executor corpus and never enters SDCC firmware.
 **Never flash or upload `flash_write_test.ihx`.** #8 is a separate fixture
 and explicit physical-acceptance gate; these tests access no device.
 
+The separate [boot-disarmed flash fixture](docs/FLASH_FIXTURE.md) has focused
+offline checks:
+
+```sh
+make BOARD=generic IMAGE=flash_fixture test-flash-fixture
+make BOARD=lg_esl29_rev03 IMAGE=flash_fixture test-flash-fixture
+PYTHONPATH=tools python3 -B -m unittest test_flash_fixture test_m0_artifacts test_local_checks test_timebase_fixture test_m1_access test_m1_image -q
+```
+
+Run heavy s51 checks serially, with the existing15-second per-process deadline.
+The fixture links real services before callers, retains whole CODE/ABI/private
+prefix proofs and per-linked-image relocated listing snapshots, and measures
+500 XDATA bytes including reservation within its own512-byte budget. Do not
+enlarge component budgets or convert IRAM alias/gaps to storage. The exact
+one-page sequence is terminal, without retry. CI's22 board jobs retain exactly
+seven upload paths and `hardware_tested=false`; no standalone flash executable
+or private recovery material is a board artifact. Physical arming/running is
+blocked on new board/scratch/backup/destructive-scope authority and resolution
+of the documented inspection/recovery gates. There is no hardware runner.
+
 The independent passive RX foundation has `make test-radio-rx`, also included
 in `make ... all test`. Its [contract and synthetic evidence](docs/RADIO_RX.md)
 do not grant hardware access. `radio_rx_test.ihx` is never a board image,
@@ -216,7 +236,7 @@ invoke its [manual runner](docs/DEBUGGING.md#parent-only-passive-rx-acceptance)
 from tests/CI. It requires a separately authorized board/recovery task and a
 new mode0600 capture in a user-owned0700 directory outside the repository.
 No raw bodies, addresses, identities or frame hashes belong in stdout/CI.
-CI has20 jobs and exactly the existing seven upload paths, with
+CI now has22 jobs (including the flash fixture) and exactly the existing seven upload paths, with
 `hardware_tested=false`; the new1024-byte reservation budget applies only to
 this board fixture, not the component or older512-budget tests.
 Shared host-MMIO write hooks must consume, not bypass or enlarge, the bounded

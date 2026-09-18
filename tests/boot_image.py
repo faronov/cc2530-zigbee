@@ -530,6 +530,9 @@ def main():
     elif args.image == "radio_rx_fixture":
         from boot_radio_rx_fixture import check_radio_rx_fixture
         check_radio_rx_fixture(args.simulator, args.output, args.board, symbols)
+    elif args.image == "flash_fixture":
+        from boot_flash_fixture import check_flash_fixture
+        check_flash_fixture(args.simulator, args.output, args.board, symbols)
     else:
         from boot_prng_fixture import check_prng_fixture
         check_prng_fixture(args.simulator, args.output, args.board, symbols)

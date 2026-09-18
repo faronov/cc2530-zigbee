@@ -365,7 +365,7 @@ continuous queues and MAC/networking remain unsupported; M2 #4 stays open.
 The [reserved flash read foundation](ARCHITECTURE.md#reserved-flash-read-foundation)
 now reserves physical pages125/126 and provides bounded, staged reads with
 strict chip, mapping, controller and output-ownership checks. It is isolated
-from all board images and has host, exact-image and alias-aware synthetic
+from all board images except the separately selected flash fixture and has host, exact-image and alias-aware synthetic
 evidence only. Page127 and the information page are excluded.
 The subsequent [internal RAM executor](ARCHITECTURE.md#internal-ram-flash-command-executor)
 implements command/address/data writes from a copied, verified 123-byte RAM
@@ -377,8 +377,16 @@ now composes these services for actual erase/program commands, complete
 readback, verified-erase-only epochs and one attempt per word. History is
 unknown after reset, regardless of allFF contents; runtime faults retain
 their causes and active-controller exhaustion stays in RAM. This isolated
-composition has host/image/simulator evidence and no board-image integration.
-Physical acceptance and durable records remain separate tasks; M2 is not complete.
+composition has host/image/simulator evidence. The subsequent
+[boot-disarmed non-RF board fixture](FLASH_FIXTURE.md) now implements #8's
+offline preparation, linking the unchanged services for both board definitions.
+ARM/RUN are separate bounded mailbox transitions; default boot/reset/resume
+performs no command. One selected page receives one erase and two verified
+programs with explicit history checks and terminal outcomes, without retry.
+Private backup/full excluded-region verification and destructive scope require
+new authorization. Physical mapped-RAM debugger visibility, flash timing/effects
+and reset/interruption recovery remain blocked/unobserved; neither board has
+flash-fixture hardware evidence. #8 and M2 stay open; durable NV remains separate.
 
 Deliver independent interfaces for:
 

@@ -2593,6 +2593,33 @@ banked CODE is introduced. Mid-word power cuts and flash wear belong to future
 platform/persistence evidence. There is no universal-debugger, sleeping-target,
 MMIO/full-SFR, flash-writer, GDB, M2 or RF/network claim.
 
+## Boot-disarmed flash board fixture
+
+`IMAGE=flash_fixture` is a separately selected non-RF candidate for #8,
+**offline-tested only on both board definitions**. The complete
+[fixture/recovery contract](FLASH_FIXTURE.md) documents the boot-disarmed
+ARM/RUN handshake, finite poll budgets, exact step/diagnostic ABI and hashes,
+private full256-KiB/information backups and independent verification of all
+excluded code/lock/config/information bytes **before destruction**.
+No automatic destructive runner is supplied. Component test executables
+remain forbidden as hardware input. Earlier LG/RX authority and evidence
+do not carry over to flash; no flash-fixture physical record exists.
+
+The [precise visibility blockers](FLASH_FIXTURE.md#debugger-visibility-precise-unresolved-blockers)
+must not be worked around: mapped CODE/breakpoints exceed the debugger's
+unbanked range; MEMCTR/FCTL are not in its permitted observation set, and
+the ordinary XDATA/register-preserving DEBUG_INSTR path has not been validated
+with XMAP/possibly busy flash. There is no explicit XMAP rejection in that
+path, so API availability is not a safety proof. Successful common-C WAIT/END
+and admission faults are distinct from mapping/service faults or RAM_STOP.
+GET_PC/status alone do not establish safe return, contents or recovery.
+No automatic reset/resume/reattach or protection relaxation is added.
+
+Both flash-fixture physical gates remain open. A later task must identify
+board/image, scratch page, verified private recovery material, destructive
+scope and interruption/reset conditions, then record sanitized physical
+observations separately from host, linked-image and simulator evidence.
+
 ## Radio debugging without destroying timing
 
 CPU halts and debug configuration affect timers and sleep. A breakpoint in an

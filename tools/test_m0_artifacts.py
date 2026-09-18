@@ -106,6 +106,8 @@ class LayoutTests(unittest.TestCase):
 
     def test_isolated_flash_services_cannot_enter_board_images(self):
         for image in IMAGES:
+            if image == "flash_fixture":
+                continue
             for name in ("_flash_nv_read", "_flash_fault", "_flash_reserved_end", "_flash_test_result",
                          "_flash_exec_command", "_flash_exec_ram", "_flash_exec_test_result",
                          "_flash_nv_erase", "_flash_nv_program", "_flash_write_status"):
@@ -146,7 +148,7 @@ class LayoutTests(unittest.TestCase):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
     def test_dma_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 10)
+        self.assertEqual(len(IMAGES), 11)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -157,7 +159,7 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
     def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
-        self.assertEqual(len(IMAGES), 10)
+        self.assertEqual(len(IMAGES), 11)
         for image in IMAGES:
             if image == "aes_fixture":
                 continue

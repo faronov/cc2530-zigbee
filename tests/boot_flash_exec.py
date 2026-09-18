@@ -360,7 +360,7 @@ def main():
     image = parse_ihex(path.read_text())
     symbols = parse_symbols(path.with_suffix(".map").read_text())
     debug, memory = (path.with_suffix("."+ext).read_text() for ext in ("cdb", "mem"))
-    listing = (args.output/"flash_exec.rst").read_text()
+    listing = (args.output/"flash_exec_test.exec.rst").read_text()
     allocated = verify(image, symbols, debug, memory, listing)
     rejections(image, symbols, debug, memory, listing)
     check_alias(args.simulator)

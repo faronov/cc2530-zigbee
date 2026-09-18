@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
 IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
-          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture")
+          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture", "flash_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -26,6 +26,7 @@ CAPABILITIES = {
     "aes_fixture": "non-networking-aes-dma-block-fixture",
     "prng_fixture": "non-networking-explicitly-seeded-deterministic-prng-fixture",
     "radio_rx_fixture": "non-networking-bounded-passive-radio-rx-fixture",
+    "flash_fixture": "non-rf-boot-disarmed-destructive-flash-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -245,11 +246,17 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require(not any(name.startswith("_flash_") for name in symbols) and
+    require(not any(name.startswith(("_flash_test", "_flash_exec_test", "_flash_write_test",
+                                    "_flash_exec_host", "_host_flash")) for name in symbols) and
             not any(f"C${name}$" in debug for name in
-                    ("flash.c", "test_flash.c", "flash_exec.c", "test_flash_exec.c",
-                     "flash_write.c", "test_flash_write.c", "host_flash_engine.c")),
-            "Board image must not link the isolated flash services/tests")
+                    ("test_flash.c", "test_flash_exec.c", "test_flash_write.c",
+                     "test_flash_fixture.c", "host_flash_engine.c")),
+            "Board image must not link the isolated flash tests/models")
+    require(image_name == "flash_fixture" or
+            (not any(name.startswith("_flash_") for name in symbols) and
+             not any(f"C${name}$" in debug for name in
+                     ("flash.c", "flash_exec.c", "flash_write.c", "flash_fixture.c", "flash_fixture_state.c"))),
+            "Board image must not link the isolated flash services outside flash_fixture")
     require(not any(name.startswith("_radio_rx_test") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("test_radio_rx.c", "test_radio_rx_fixture.c")),
             "Board image must not link the isolated passive RX test")
@@ -321,6 +328,7 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     for start, end in ranges:
         require(not occupied.intersection(range(start, end)), "Overlapping XDATA allocator areas")
         occupied.update(range(start, end))
+    # Flash fixture measured500 including status reservation; no increase needed.
     budget = 1024 if image_name == "radio_rx_fixture" else 512
     require(len(occupied) + STATUS_RESERVED <= budget, f"M0 exceeds {budget}-byte XDATA budget")
 
@@ -396,6 +404,9 @@ def verify_artifacts(output, board, image_name="bringup"):
         verify_fixture(image, symbols, debug)
     elif image_name == "radio_rx_fixture":
         from radio_rx_fixture import verify_fixture
+        verify_fixture(image, symbols, debug)
+    elif image_name == "flash_fixture":
+        from flash_fixture import verify_fixture
         verify_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),

@@ -924,6 +924,36 @@ synthetic controller/XMAP/window transitions. Neither proves flash physics,
 endurance, data retention or electrical interruption. No factory record,
 private recovery dump or external binary is used as input or output.
 
+### M2 boot-disarmed flash fixture sources
+
+The original BSD-3-Clause board fixture, packet codec, strict decoder, image
+proof and synthetic tests reuse the published flash services and native model.
+They import no IAR sample, SDK code/object, GPL programmer implementation,
+dependency, board asset or private recovery material.
+The hardware contract is unchanged: **SWRU191F, revised April2014**,
+sections6.1/6.2.2/6.3 (pp.73-77: pages, word limits, FCTL/FADDR/FWDATA),
+memory mapping p.34 (MEMCTR.XBANK/XMAP), and Tables3-1/3-2 pp.53-55
+(target debug commands/configuration; DMA_PAUSE prohibition). The previous
+SWRZ031 April2009 review lists DMA variable-length/Timer2 issues, neither
+of which supplies flash/debug recovery or timing acceptance for this fixture.
+No CC253x/CC254x behavior or new USB packet is inferred.
+
+The two public packet tokens,256-poll bounds, one selected page, terminal
+sequence and private-preservation checklist are project policy, not TI
+authentication or a vendor recovery algorithm. The
+[debugger blockers](FLASH_FIXTURE.md#debugger-visibility-precise-unresolved-blockers)
+come from inspection of the actual public transport: lower32KiB CODE/breakpoint
+bounds, safe-SFR whitelist and DEBUG_INSTR-based register-preserving access.
+SWRU191F is not adapter USB framing documentation; these changes add no
+transport operations. Existing external-programmer/no-run-guard references
+retain their separate provenance and limited scope.
+
+Both board definitions have only [offline evidence](VALIDATION.md#boot-disarmed-flash-fixture-coverage).
+No physical board, backup, capture or identity was accessed. No observed-board
+entry or completed #8 gate is invented; the future private backup/full
+excluded-region verification and reset/interrupted-command recovery
+procedures remain explicitly blocked on new authority and hardware evidence.
+
 ## Normative target
 
 Engineering references:
