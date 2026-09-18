@@ -66,6 +66,59 @@ CRC_OK is required but is neither authentication nor MAC syntax validation.
 No network membership, security admission or transmission permission follows
 from either result.
 
+## Channel, reset and metadata interpretation
+
+This is the supported **bounded contract**, not calibrated PHY acceptance.
+Primary references below are [TI SWRU191F](https://www.ti.com/lit/ug/swru191f/swru191f.pdf),
+April2009/revised April2014, and the CC2530-specific
+[SWRS081B data sheet](https://www.ti.com/lit/ds/swrs081b/swrs081b.pdf),
+April2009/revised February2011; no other CC253x part's offset is substituted.
+
+- **Channel selection:** SWRU191F section23.5 p.215 and FREQCTRL p.261
+  specify nominal `2394 + FREQ[6:0]` MHz. The API restricts this to channels
+  11..26, nominal2405..2480MHz in5-MHz steps, using the formula above.
+  Channel15 therefore selects FREQ`1F`, nominal2425MHz; that is not a measured
+  carrier frequency. Register changes take effect at the next recalibration.
+  Each call configures while idle and then issues E3, rather than retuning an
+  active reception. Only channel15 on the recorded LG image has physical
+  evidence; other channels have argument/configuration tests, not RF acceptance.
+- **Reset versus calibration:** section23.9.1 pp.222-223 describes SRXON's
+  transition to RX calibration and soft disable's completion of the current
+  reception. The service uses this hardware calibration path and Table23-6's
+  recommended settings, then checks PLL lock and RSSI validity. These are
+  readiness checks, not board frequency/RSSI calibration. `receive_init` does
+  not perform a full reset. E3, soft-off and ED FIFO flush do not establish
+  the required reset/exclusive-history precondition or cancel unknown scheduled
+  work. Only completed OK/BAD_CRC calls permit normal reuse; a latched fault
+  requires separately established full-reset recovery, not another strobe or
+  a cleared C latch. No in-place radio reset/recovery API is implemented.
+- **RSSI:** section23.9.7/Figure23-15 p.230 specifies that the appended value
+  measures the first eight symbols **after SFD**, not the entire frame or a
+  contemporaneous host sample. Sections23.10.3-4 pp.233-234 and RSSI/RSSISTAT
+  p.264 define signed two's-complement, logarithmic1-dB steps. The API preserves
+  the byte in `uint8_t`; interpret values128..255 as value minus256 for a signed
+  raw reading, not as positive power. Startup RSSI_VALID is a readiness flag,
+  not a precision estimate. SWRS081B p.9 gives RSSI/CCA characteristics under
+  stated TI EM reference-design conditions; neither its nominal offset nor
+  the manual's conversion example is a calibration of either repository board.
+  No offset, dBm conversion, uncertainty bound or energy-scan result is supplied
+  by this API or established by the recorded run.
+- **Correlation and CRC:** the same footer carries CRC_OK in bit7 and unsigned
+  correlation in bits6:0, averaged over those first eight post-SFD symbols.
+  Section23.10.4 p.234 explicitly says hardware does not directly supply IEEE
+  LQI; conversion needs an empirically justified mapping based on packet-error
+  measurements. No such mapping, PER calibration or LQI0..255 API exists here.
+  Merely doubling/clamping correlation or combining it with raw RSSI does not
+  establish LQI. CRC_OK remains hardware FCS status, not signal calibration,
+  independent on-air FCS verification, valid MAC syntax or authentication.
+
+Tests of every raw-byte value establish preservation/decoding, not physical
+accuracy or a new footer validity filter. The
+[CC2530 errata SWRZ031](https://www.ti.com/lit/er/swrz031/swrz031.pdf),
+April2009, issues1/2 concern DMA variable length and Timer2 read latching.
+This polling RX uses neither; those errata provide no missing metadata
+calibration or broader hardware-acceptance evidence.
+
 ## Failure and diagnostic ABI
 
 Invalid argument/range/ownership results preserve both output objects and
@@ -312,8 +365,9 @@ behavior. Alias, unallocated RAM, upper-IRAM and stack-unwind checks remain.
 `debug_image.py radio-rx-state` decodes the96-byte snapshot;
 `radio-rx-checkpoints` verifies artifacts and reports linked proof.
 The separate [manual runner](DEBUGGING.md#parent-only-passive-rx-acceptance)
-is never invoked by a build/test/import/CI. CI has20 jobs with exactly the
-existing seven artifact paths; `hardware_tested=false` remains unchanged.
+is never invoked by a build/test/import/CI. The RX addition brought CI to20
+jobs; the [current matrix](../.github/workflows/ci.yml) retains the seven
+board-artifact paths and `hardware_tested=false`.
 No host executable, synthetic vector, capture or standalone image is uploaded.
 
 ## Physical evidence and remaining gates

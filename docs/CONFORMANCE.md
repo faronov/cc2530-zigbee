@@ -22,6 +22,42 @@ M9 audits the ledger; it does not postpone specification decisions until release
 Until these decisions and their implementation evidence are complete, the
 project must not claim full Zigbee 3.0 conformance or certification.
 
+## M2 platform acceptance boundary
+
+Offline #9 audit against [M2 deliverables/exit gates](PLAN.md#m2---minimal-cc2530-platform-services)
+and [issue #4](https://github.com/faronov/cc2530-zigbee/issues/4), following the
+offline flash fixture in `4a01970`. This is a platform evidence ledger, **not
+new hardware observation or protocol conformance**. All rows retain separate
+host, genuine linked-image and alias-aware synthetic checks. Physical results
+refer only to the dated parent-observed LG records, never generic hardware.
+
+| Contract | Existing evidence / accepted limit | Remaining boundary |
+| --- | --- | --- |
+| [Timebase/clock](ARCHITECTURE.md#awake-only-timebase-first-m2-slice) | Awake raw24-bit modular deadlines; bounded RC16/XOSC32 selection/rollback. [Compiled-C timer](VALIDATION.md#compiled-c-sleep-timer-hardware-acceptance-2026-09-16), [separate natural rollover](VALIDATION.md#independent-sleep-timer-hardware-reference-2026-09-16) and [clock cases](VALIDATION.md#2026-09-17-bounded-lg-clock-hardware-evidence) observed on LG | No calibrated wall time/frequency, multi-wrap epoch, physical stopped-clock/oscillator-failure or PM wake continuity |
+| [IRQ ownership](ARCHITECTURE.md#interrupt-ownership-foundation-isolated-m2-slice) | Reentrant EA token leaves and [real Timer1 ISR/RETI](VALIDATION.md#2026-09-17-bounded-lg-timer1-irq-hardware-evidence) | Not a general dispatcher/peripheral lock; other sources and higher-priority physical nesting unobserved |
+| [Quiescent FIFO](ARCHITECTURE.md#quiescent-radio-fifo-foundation) | Bounded flush/preload; [LG TXFIFO readback and terminal partial-effect timeout](VALIDATION.md#2026-09-17-bounded-lg-fifo-hardware-evidence) | FIFO acceptance is not transmission, radio reset, RF-error recovery or continuous RX |
+| [DMA](ARCHITECTURE.md#isolated-channel-0-dma-copy) | Channel0/TRIG0,1..16-byte RAM copy; [LG copies/timeout/separate reset](VALIDATION.md#2026-09-17-bounded-lg-dma-hardware-evidence) | Exclusive reset/TRIG0 history and clear debug DMA_PAUSE required; no general channel/trigger framework or fault-time buffer release |
+| [AES](ARCHITECTURE.md#isolated-aes-128-dma-block) | One encrypt block via private DMA backend; [LG public vectors, negatives and reset recovery](VALIDATION.md#2026-09-17-corrected-lg-aes-bounded-hardware-evidence) | Not CCM*, authentication, key management/erasure or CPU-only transfer acceptance |
+| [PRNG](ARCHITECTURE.md#isolated-deterministic-prng) | Explicitly seeded deterministic LFSR; [LG full-period/stopped/reset records](DEBUGGING.md#2026-09-17-corrected-lg-prng-full-reset-recovery-acceptance) | No entropy or security RNG; #10 remains separate, including source/health/security policy |
+| [Passive RX](RADIO_RX.md#channel-reset-and-metadata-interpretation) | API channels11..26, reset-exclusive polling, raw signed RSSI/seven-bit correlation; [LG channel15 only](RADIO_RX.md#physical-evidence-and-remaining-gates) | Other-channel RF, calibrated frequency/timing/RSSI/LQI, independent FCS and controller-fault recovery remain unobserved; no TX/ACK/ISR/MAC claim |
+| [Flash](ARCHITECTURE.md#verified-reserved-page-erase-and-program) | #6/#7 real RAM executor, bounds/history/readback and retained fail-stop have offline evidence; [#8 fixture](FLASH_FIXTURE.md) is boot-disarmed and offline-only for both boards | Physical program/erase, full excluded-region preservation, mapped-RAM inspection and reset/interruption recovery remain open |
+| [Board/memory ownership](ARCHITECTURE.md#memory-contract) | Board startup owns GPIO; code/NV/lock partitions, status reservation, IRAM alias and ISR ownership are documented and checked | Sleep remains disabled. No generic-board physical evidence or arbitrary cross-service ownership handoff is established |
+
+These are isolated, ownership-constrained foundations, not an integrated
+concurrent platform runtime. Full-reset/exclusive-history requirements cannot
+be satisfied merely by composing APIs or observing idle registers.
+The bounded LG AES/vector and raw timer/rollover exit evidence exists, but
+issue #4's calibrated timing/radio-metadata and physical-flash items remain
+open. The plan's broader reset/dispatch/calibrated-metadata deliverables need
+implementation/evidence or an explicit accepted scope decision, not silent
+substitution of FIFO flush, EA ownership or raw samples.
+
+#9's offline audit/interpretation does not complete its dependent #8 or its
+hardware/scoping acceptance item, and cannot close #4. Further physical work
+requires separate board/image/operation/recovery authorization. Sleep,
+generic-board support and cryptographic entropy must not be inferred from the
+historical LG baseline; durable NV/security remain later, separate gates.
+
 ## Core ED requirements
 
 Page numbers refer to the printed pages of R22.
