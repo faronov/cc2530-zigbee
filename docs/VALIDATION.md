@@ -284,6 +284,31 @@ All board images reject the new module and standalone harness. The
 [future physical procedure](RADIO_TX.md#separately-authorized-future-rf-procedure)
 remains separately authorized and is never run by Make/CI.
 
+## Generic NV record composition coverage
+
+`make test-nv-record` tests the real flash reader/writer/RAM engine plus the
+[two-page snapshot policy](NV_RECORDS.md). The 69,623 counted native checks
+include all lengths, every byte of both pages as corruption, complete
+independent CRC/format comparison, every command boundary before/after
+completion, prefix-bit tears, recovery permission, generation conflicts and
+exhaustion, full runtime erase-budget exhaustion and late publication faults.
+
+The 61 genuine linked sequences trace 17,149 flash API calls and 829 copied
+RAM commands. They prove exact page/chunk/source/word arguments, attempt
+consumption before command, actual FCTL/FADDR/FWDATA and genuine idle return.
+Every completed command position in a maximum-length update is followed
+by actual C startup and selection from preserved synthetic flash. Four
+retained RAM-stop phases remain PENDING even after a later idle stimulus.
+
+Both board definitions produce identical 7,046-byte CODE and pass native/
+layout checks. The existing flash modules remain byte-identical to their
+published proofs. Total XDATA is 797 ordinary +64 reserved within a separate
+1-KiB budget, with observed SP `57`. All CODE/ABI/private-prefix/listing,
+alias/upper-IRAM, unallocated/status and excluded-region guards remain strict.
+No board image links the module or uploads its standalone executable.
+These are not physical power-loss, lifetime-endurance, authentication,
+counter-reservation or complete-stack-fit results.
+
 ## M0 coverage
 
 The current build must cover:

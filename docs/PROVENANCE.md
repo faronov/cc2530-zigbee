@@ -989,6 +989,22 @@ the four genuine NOPs, typed ABI, private prefix and per-link listings.
 The separately documented future fixture/capture procedure grants no device,
 channel, power or recovery authority. Both boards remain offline-only for TX.
 
+### Generic two-page NV record sources
+
+The [snapshot journal](NV_RECORDS.md) and its format, selection, commit-last
+and test policies are original BSD-3-Clause work. They compose the existing
+SWRU191F-backed flash services without changing their instructions, geometry,
+runtime history or fail-stop contract. No vendor journal, filesystem, SDK
+implementation or private NV image is imported.
+
+CRC32 is implemented directly using the reflected `EDB88320` polynomial and
+all-one initial/final XOR. Native test division uses the non-reflected
+`04C11DB7` form with explicit bit reversal; linked expected records additionally
+use standard-library `zlib.crc32`. CRC agreement is not authentication.
+Synthetic cuts and torn-cell patterns are original test inputs, not physical
+cell characterizations. Runtime erase-attempt accounting does not recover
+unknown lifetime wear or establish security-counter safety.
+
 ## Normative target
 
 Engineering references:

@@ -192,6 +192,16 @@ model is shared with the executor corpus and never enters SDCC firmware.
 **Never flash or upload `flash_write_test.ihx`.** #8 is a separate fixture
 and explicit physical-acceptance gate; these tests access no device.
 
+The separate [generic two-page snapshot journal](docs/NV_RECORDS.md) has
+`make BUILD=build/nv-record-check test-nv-record`, also in `test-common`.
+Keep the byte-identical published flash backend and four per-link listing
+snapshots, fresh erase before each replacement, commit-last word, explicit
+degraded recovery and nonwrapping generations. Its combined 1-KiB XDATA
+reservation does not raise any earlier budget. Native cuts/torn-cell models
+and genuine linked reset/RAM execution are not electrical power-loss or
+security-counter proof. The runtime erase budget is not lifetime endurance.
+**Never flash or upload `nv_record_test.ihx`; no board image may link it.**
+
 The separate [boot-disarmed flash fixture](docs/FLASH_FIXTURE.md) has focused
 offline checks:
 

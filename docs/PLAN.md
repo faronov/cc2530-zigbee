@@ -469,6 +469,15 @@ Exit:
 
 ### M4 - Security and durable state
 
+Independent generic preparation now includes the
+[two-page snapshot journal](NV_RECORDS.md): bounded versioned records,
+nonwrapping generations, full-page CRC, commit-last replacement, explicit
+degraded recovery and runtime erase-attempt limits over the real flash
+services. Host/image/simulator checks include command cuts, torn patterns
+and genuine reset/retained-RAM paths. No physical durability, lifetime-wear,
+security-counter, key or membership acceptance is implied. This generic
+foundation does not waive the security/commissioning entry gate below.
+
 Entry gate: the BDB v3.0.1 base revision and security/commissioning requirements
 are pinned in the conformance ledger. Obtain/review applicable errata
 21-65431 and resolve affected requirements before implementing these procedures.

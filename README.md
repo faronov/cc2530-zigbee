@@ -470,9 +470,19 @@ result with the real reader. Programming requires a fresh verified erase
 in the current runtime epoch and permits only one attempt per word, even
 for allFF data; reset does not make erased-looking words safe to reuse.
 `make test-flash-write` is **host-tested, image-checked and simulated only**.
-There is still no hardware write/erase acceptance, durable NV journal or
-security-counter persistence. Never flash the
+There is still no hardware write/erase acceptance or security-counter
+persistence. The separate generic journal below has offline evidence only.
+Never flash the
 standalone `flash_write_test.ihx`.
+
+The [generic two-page snapshot journal](docs/NV_RECORDS.md) now stores one
+1..128-byte opaque record using a version, nonwrapping generation, full-page
+CRC and a separate commit-last word. Replacement erases only the inactive
+page through the real flash services; damaged-page fallback requires visible,
+explicit recovery. `make test-nv-record` is **host-tested, image-checked and
+simulated**, including command cuts/reset recovery, not physical durability.
+Its bounded runtime erase accounting does not establish lifetime wear.
+It is not a security-counter/key/membership service or a board image.
 
 ### Boot-disarmed flash board fixture — offline only
 

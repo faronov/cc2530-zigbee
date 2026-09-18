@@ -1350,6 +1350,23 @@ NV durability or recovery result is implied; #8 remains open.
 
 ## Persistence design
 
+The isolated [generic snapshot journal](NV_RECORDS.md) now implements one
+1..128-byte opaque record across the two reserved pages. It composes the real
+reader/writer/RAM engine, always erases the inactive page before replacement,
+programs a separate commit word last and preserves the selected old record.
+Unknown versions, conflicting/nonadjacent generations and corrupt-only
+storage never silently initialize; degraded selection requires explicit
+permission before replacing its damaged page. Generations do not wrap.
+
+The existing flash instructions are byte-identical. The composition uses
+7,046 CODE bytes, 797 ordinary XDATA +64 reserved within a separate 1-KiB
+budget, and a private/compiler fence through `0294`. Observed SP is `57`;
+IRAM alias and upper-IRAM guards remain intact. Host/model cuts and actual
+linked reset/commit/RAM execution are not electrical power-failure evidence.
+The 32-attempt/page runtime erase budget is volatile; lifetime wear remains
+unknown, not inferred from committed generations or blank contents.
+No board image, security-counter/key schema or authenticated resume is added.
+
 Reserve explicit flash pages outside code, factory/configuration data and lock
 locations before introducing any writer. Define record version, generation,
 length, integrity checks and commit semantics.

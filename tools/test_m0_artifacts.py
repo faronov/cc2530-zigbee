@@ -118,6 +118,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_nv_record_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_nv_record_load", "_nv_record_replace", "_nv_record_fault", "_nv_record_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "NV record"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("nv_record.c", "test_nv_record.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "NV record"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_radio_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_radio_tx_send_init", "_radio_tx_cca_init", "_radio_tx_fault", "_radio_tx_test_result"):
