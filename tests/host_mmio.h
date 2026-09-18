@@ -20,6 +20,7 @@ typedef struct {
 typedef uint8_t (*host_mmio_read_hook_t)(uint8_t address, uint8_t value);
 typedef void (*host_mmio_write_hook_t)(uint8_t address, uint8_t before, uint8_t value);
 typedef uint8_t (*host_mmio_xread_hook_t)(uint16_t address);
+typedef void (*host_mmio_xwrite_hook_t)(uint16_t address, uint8_t value);
 typedef uint16_t (*host_mmio_xaddress_hook_t)(const volatile void *object);
 typedef void (*host_mmio_cycles_hook_t)(uint8_t cycles);
 typedef struct {
@@ -34,10 +35,13 @@ extern unsigned read_count;
 extern host_mmio_read_hook_t host_mmio_read_hook;
 extern host_mmio_write_hook_t host_mmio_write_hook;
 extern host_mmio_xread_hook_t host_mmio_xread_hook;
+extern host_mmio_xwrite_hook_t host_mmio_xwrite_hook;
 extern host_mmio_xaddress_hook_t host_mmio_xaddress_hook;
 extern host_mmio_cycles_hook_t host_mmio_cycles_hook;
 extern xregister_read_t xreads[32];
 extern unsigned xread_count;
+extern xregister_read_t xwrites[32];
+extern unsigned xwrite_count;
 void host_mmio_reset(void);
 
 #endif

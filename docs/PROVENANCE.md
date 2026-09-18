@@ -422,6 +422,26 @@ contains only processed observations from explicitly authorized programming,
 full physical CODE verification and normal/timeout/reset-recovery runs.
 Raw logs, identities and recovery backups remain outside Git and CI.
 
+### M2 passive RX sources
+
+The [isolated passive RX service](RADIO_RX.md), host model and linked
+instruction checks are original BSD-3-Clause code. No Contiki/TI SDK driver,
+external firmware, capture or programmer implementation was imported.
+Functional facts were read directly from **SWRU191F, revised April2014**:
+pp.209-211 (RF flags), p.215 (channel formula), pp.221-224 (receive control),
+pp.229-235 (appended CRC/RSSI/correlation, FIFO/overflow and raw metadata),
+pp.251-254 (immediate E3/ED strobes), pp.256-268 (recommended settings,
+filter/source controls, RXMASKCLR, counts and pointers).
+TXFILTCFG is `61FA`; RXP1_PTR is eight bits rather than the seven-bit
+RXFIRST_PTR/RXLAST_PTR. Filtering/source matching disabled is configuration,
+not a reason to silently clear or misinterpret raw interrupt flags.
+
+[SWRZ031](https://www.ti.com/lit/pdf/swrz031), April2009, was rechecked.
+Its DMA variable-length and Timer2 latch errata do not establish RX behavior
+or waive a hardware gate; this service uses neither operation.
+Primary PDFs remain external. Synthetic events explicitly supply peripheral
+effects absent from s51; they are not captures or hardware observations.
+
 ### M2 deterministic PRNG sources
 
 The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)

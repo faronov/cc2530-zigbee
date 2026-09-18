@@ -342,6 +342,12 @@ also passed; `hardware_tested=false` was verified.
 Generic/EOC1/physical poll-fault and broader RF/noise entropy, security and
 sleep acceptance remain open. M2 #4 stays open; no hosted-CI pass is claimed.
 
+The [isolated passive RX foundation](RADIO_RX.md) now has host, linked-image
+and alias-aware synthetic evidence for channel configuration, one-frame
+CRC/footer reception and checked soft-stop/flush. It has no board caller or
+physical RX acceptance yet. Transmission, automatic ACK, calibrated metadata,
+continuous queues and MAC/networking remain unsupported; M2 #4 stays open.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.

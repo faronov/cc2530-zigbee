@@ -49,10 +49,13 @@ unsigned read_count;
 host_mmio_read_hook_t host_mmio_read_hook;
 host_mmio_write_hook_t host_mmio_write_hook;
 host_mmio_xread_hook_t host_mmio_xread_hook;
+host_mmio_xwrite_hook_t host_mmio_xwrite_hook;
 host_mmio_xaddress_hook_t host_mmio_xaddress_hook;
 host_mmio_cycles_hook_t host_mmio_cycles_hook;
 xregister_read_t xreads[32];
 unsigned xread_count;
+xregister_read_t xwrites[32];
+unsigned xwrite_count;
 
 void host_mmio_reset(void)
 {
@@ -64,9 +67,22 @@ void host_mmio_reset(void)
     host_mmio_read_hook = NULL;
     host_mmio_write_hook = NULL;
     host_mmio_xread_hook = NULL;
+    host_mmio_xwrite_hook = NULL;
     host_mmio_xaddress_hook = NULL;
     host_mmio_cycles_hook = NULL;
     xread_count = 0;
+    xwrite_count = 0;
+}
+
+void host_mmio_xstore(uint16_t address, uint8_t value)
+{
+    assert(xwrite_count < sizeof(xwrites) / sizeof(xwrites[0]));
+    assert(host_mmio_xwrite_hook != NULL);
+    assert(!SOC_IEN0 && !SOC_IEN1 && !SOC_IEN2);
+    xwrites[xwrite_count].address = address;
+    xwrites[xwrite_count].value = value;
+    xwrite_count++;
+    host_mmio_xwrite_hook(address, value);
 }
 
 uint8_t host_mmio_xload(uint16_t address)

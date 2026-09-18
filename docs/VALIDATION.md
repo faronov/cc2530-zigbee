@@ -1474,6 +1474,19 @@ broader M2 #4 remain open. Parent offline434/memory/all sixteen older-image
 evidence and the18-job/seven-artifact/`hardware_tested=false` policy are
 unchanged; no hosted-CI pass is claimed.
 
+## M2 isolated passive RX automated coverage
+
+`make test-radio-rx` exercises the real RX/timebase C sources on host and in
+a strictly pinned, simulator-only SDCC image. The
+[contract, detailed cases and resource accounting](RADIO_RX.md#offline-evidence)
+record 150,593 host cases and 27 linked synthetic traces, including every
+actual MMIO event, destructive RFD reads, CODE/ABI mutation rejection,
+XDATA/IRAM alias, unallocated-memory and upper-stack guards.
+The existing 512-byte component budget and 15-second process timeout remain.
+This supplies no silicon RX, calibrated timing/metadata, physical FCS or
+on-air evidence. There is no RX board `IMAGE`, automatic RF test or new CI
+artifact; all earlier hardware records retain their original scope.
+
 ## M2 quiescent radio FIFO automated coverage
 
 `make test-radio-fifo` runs strict host C and the isolated

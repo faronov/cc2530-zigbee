@@ -641,6 +641,18 @@ executes those unchanged drivers on silicon, including a real partial-effect
 timeout and separately reset recovery. It does not validate RX flush, on-air
 behavior or error-latch recovery; generic remains host/image/simulator-only.
 
+## Isolated passive radio reception
+
+The original [`radio_rx` service](RADIO_RX.md) is a separate foreground
+RX-only operation, not an expansion of the quiescent FIFO API or board GPIO.
+It requires known reset/exclusive ownership, performs fixed passive channel
+configuration, receives one CRC-checked body through RFD, then verifies
+soft-stop/flush before publication. Metadata remains raw; failures retain
+their original cause and may leave RX active until a separate full reset.
+The contract includes both persistent XDATA objects, the private prefix and
+generic-store scratch exclusion. No current board image links the service.
+Its strict host/linked/synthetic checks are not physical radio evidence.
+
 ## Isolated channel-0 DMA copy
 
 [`dma_copy_init(source, destination, length, timeout, limit, diagnostics)`](../include/dma.h)

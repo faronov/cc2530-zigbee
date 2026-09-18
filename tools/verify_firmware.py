@@ -226,6 +226,9 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith("_radio_rx_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("radio_rx.c", "test_radio_rx.c")),
+            "Board image must not link the isolated passive RX driver/test")
     require(not any(name.startswith("_prng_reference") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("test_prng.c", "test_prng_fixture.c")),
             "Board image must not link the deterministic PRNG host model/test")

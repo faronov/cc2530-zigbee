@@ -90,6 +90,16 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
 
+    def test_passive_rx_never_enters_existing_board_images(self):
+        for image in IMAGES:
+            for name in ("_radio_rx_receive_init", "_radio_rx_fault", "_radio_rx_reserved_end",
+                         "_radio_rx_test_frame", "_radio_rx_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated passive RX"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("radio_rx.c", "test_radio_rx.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated passive RX"):
+                    verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
+
     def test_dma_cannot_enter_other_board_images(self):
         self.assertEqual(len(IMAGES), 9)
         for image in IMAGES:

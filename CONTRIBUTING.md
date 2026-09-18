@@ -128,6 +128,15 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The independent passive RX foundation has `make test-radio-rx`, also included
+in `make ... all test`. Its [contract and synthetic evidence](docs/RADIO_RX.md)
+do not grant hardware access. `radio_rx_test.ihx` is never a board image,
+flash input or CI upload. Keep the complete linked-code/MMIO proof, original
+512-byte reservation, alias/upper-IRAM guards and 15-second simulator timeout.
+Shared host-MMIO write hooks must consume, not bypass or enlarge, the bounded
+logs. Physical RX needs a separately checked board fixture and explicit
+manual acceptance.
+
 The separate R22 NWK codecs have focused offline targets:
 
 ```sh

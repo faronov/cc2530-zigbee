@@ -383,6 +383,16 @@ broader entropy/RF/security/sleep gates remain open. No hosted-CI result is clai
 are explicit. RF/noise seeding, ADC conversion, sleep and security randomness
 remain unimplemented; M2 #4 stays open.
 
+## Isolated passive RX foundation
+
+The [bounded passive receiver](docs/RADIO_RX.md) configures channels 11..26,
+receives one CRC-checked body with raw RSSI/correlation, and verifies soft
+shutdown/flush without TX, automatic ACK, DMA or interrupt enable.
+`make test-radio-rx` is **host-tested, image-checked and synthetically
+simulated only**. No board firmware calls it yet; its test executable must
+never be flashed. Physical reception and comparison with an independent
+sniffer remain a separate gate.
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):
@@ -412,7 +422,7 @@ APS/ZCL composition and the read handler are target-tested; the complete
 MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested and
 also runs in a single SDCC resource image.
 This foundation is host-tested, image-checked and simulated, not linked into
-board firmware. There is still no on-air radio driver, functioning
+board firmware. There is still no hardware-validated receiver, transmit driver, functioning
 MAC, association or Zigbee join.
 
 `make test-protocol-budget` checks that integrated image and generates a
