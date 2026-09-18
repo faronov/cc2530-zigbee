@@ -107,10 +107,12 @@ class LayoutTests(unittest.TestCase):
     def test_isolated_flash_services_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_flash_nv_read", "_flash_fault", "_flash_reserved_end", "_flash_test_result",
-                         "_flash_exec_command", "_flash_exec_ram", "_flash_exec_test_result"):
+                         "_flash_exec_command", "_flash_exec_ram", "_flash_exec_test_result",
+                         "_flash_nv_erase", "_flash_nv_program", "_flash_write_status"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for source in ("flash.c", "test_flash.c", "flash_exec.c", "test_flash_exec.c"):
+            for source in ("flash.c", "test_flash.c", "flash_exec.c", "test_flash_exec.c",
+                           "flash_write.c", "test_flash_write.c", "host_flash_engine.c"):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 

@@ -18,7 +18,7 @@ typedef enum {
 
 /* Internal command engine, not a durable/public NV writer. IDLE means the
  * accepted command ended with idle controller status, not verified flash data.
- * The future caller must enforce erase/program history, write limits and
+ * The caller must enforce erase/program history, write limits and
  * readback before reporting an NV operation successful.
  *
  * page is 0/1; offset is a byte offset, zero for erase or four-byte aligned

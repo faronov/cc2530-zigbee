@@ -176,11 +176,21 @@ The separate [internal RAM command executor](docs/ARCHITECTURE.md#internal-ram-f
 has `make BUILD=build/flash-exec-dev test-flash-exec`, also in `test-common`.
 It executes real copied instructions with synthetic controller/XMAP events
 and retains a RAM-only fail-stop when active-controller polling exhausts.
-Controller-idle is not verified NV success; public history/readback policy
-and hardware acceptance are separate tasks. Preserve the exact linked
+Controller-idle is not verified NV success; the separate writer adds policy
+and readback, while hardware acceptance remains gated. Preserve the exact linked
 extent/return ABI, copy-readback and alias/private-prefix proofs.
 **Never flash `flash_exec_test.ihx` or upload it as a board artifact.**
 No ordinary build/test target may invoke this engine on a physical device.
+
+The [public reserved-page writer](docs/ARCHITECTURE.md#verified-reserved-page-erase-and-program)
+has `make BUILD=build/flash-write-dev test-flash-write`, also in `test-common`.
+It links the real executor, reader and policy in that order, below the
+unchanged512-byte reservation budget. Keep one-attempt-per-word history,
+unknown-after-reset handling and full erase/program readback. Source inputs
+must follow the entire combined private/compiler prefix. The native engine
+model is shared with the executor corpus and never enters SDCC firmware.
+**Never flash or upload `flash_write_test.ihx`.** #8 is a separate fixture
+and explicit physical-acceptance gate; these tests access no device.
 
 The independent passive RX foundation has `make test-radio-rx`, also included
 in `make ... all test`. Its [contract and synthetic evidence](docs/RADIO_RX.md)

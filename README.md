@@ -430,15 +430,24 @@ mapping and buffer checks. It restores the original bank before publication
 and retains failures without publishing partial data. Lock/configuration and
 information pages are excluded. Evidence is **host-tested, image-checked and
 simulated only**; `make test-flash` never accesses a device.
-There is no public erase/program API, durable NV record or flash board image.
+This reader has no write entry points; it is unchanged by the writer below.
 Never flash the isolated `flash_test.ihx`.
 
 The separate [internal RAM command executor](docs/ARCHITECTURE.md#internal-ram-flash-command-executor)
 now has host, exact-image and alias-aware simulator evidence
 (`make test-flash-exec`). It executes copied instructions, returning only
 after controller quiescence or retaining a RAM-only fail-stop. Controller-idle
-is not verified flash contents; write-history/readback policy and hardware
-acceptance remain open. Never flash its standalone `flash_exec_test.ihx`.
+is not verified flash contents. Never flash its standalone `flash_exec_test.ihx`.
+
+The [public reserved-page writer](docs/ARCHITECTURE.md#verified-reserved-page-erase-and-program)
+now issues erase/program commands through that engine and verifies the
+result with the real reader. Programming requires a fresh verified erase
+in the current runtime epoch and permits only one attempt per word, even
+for allFF data; reset does not make erased-looking words safe to reuse.
+`make test-flash-write` is **host-tested, image-checked and simulated only**.
+There is still no flash board fixture, hardware write/erase acceptance,
+durable NV journal or security-counter persistence. Never flash the
+standalone `flash_write_test.ihx`.
 
 ## Intended scope
 

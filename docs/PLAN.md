@@ -371,9 +371,14 @@ The subsequent [internal RAM executor](ARCHITECTURE.md#internal-ram-flash-comman
 implements command/address/data writes from a copied, verified 123-byte RAM
 path, with a genuine idle-before-return ABI and retained RAM-only fail-stop.
 It has host, exact-image and alias-aware synthetic evidence, not hardware
-observations. Controller-idle is not verified flash content. Public
-erase/program, write-history/readback policy, physical acceptance and
-persistent records remain separate tasks; M2 is not complete.
+observations. Controller-idle is not verified flash content.
+The [public reserved-page writer](ARCHITECTURE.md#verified-reserved-page-erase-and-program)
+now composes these services for actual erase/program commands, complete
+readback, verified-erase-only epochs and one attempt per word. History is
+unknown after reset, regardless of allFF contents; runtime faults retain
+their causes and active-controller exhaustion stays in RAM. This isolated
+composition has host/image/simulator evidence and no board-image integration.
+Physical acceptance and durable records remain separate tasks; M2 is not complete.
 
 Deliver independent interfaces for:
 

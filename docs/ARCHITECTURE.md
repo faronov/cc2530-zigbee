@@ -1171,11 +1171,10 @@ can stall instruction fetch; a bounded byte count is not a hardware timeout
 or busy-flash recovery guarantee.
 
 The separate `flash_test.ihx` is host-tested, image-checked and alias-aware
-simulated, never a board image. No public erase/program API or successful NV
-stub exists. The internal executor below prepares the RAM-critical dependency,
-not the public writer. Interrupted-word history and write-count limits cannot
-be inferred from an erased-looking readback. Hardware acceptance and durable
-records remain separate future gates.
+simulated, never a board image. This reader is unchanged by the separate
+executor and write-policy layers below. Interrupted-word history and
+write-count limits cannot be inferred from an erased-looking readback.
+Hardware acceptance and durable records remain separate gates.
 
 ## Internal RAM flash command executor
 
@@ -1189,8 +1188,8 @@ writes the information-page window or accepts page127.
 
 This is **not a public erase/program or persistence API**. `FLASH_EXEC_IDLE`
 means command acceptance and subsequent idle controller status, not verified
-flash contents, erase history or a durable record. A future caller must
-enforce write-count/interrupted-word history and perform actual readback;
+flash contents, erase history or a durable record. The public writer below
+enforces write-count/interrupted-word history and performs actual readback;
 even an idle controller may have timed out without programming the word.
 
 The foreground contract requires normal SDCC bank0/DPS0 ABI, common unbanked
@@ -1231,9 +1230,62 @@ instruction table a general worst-case timing guarantee. Physical XMAP,
 the separate #8 hardware gate, not simulator evidence.
 
 `make test-flash-exec` is host-tested, exact-image-checked and alias-aware
-simulated. **Never flash `flash_exec_test.ihx`.** All board images exclude
-both flash modules and their harnesses; this adds no board fixture, automatic
+simulated. **Never flash `flash_exec_test.ihx`.** Current board images exclude
+the flash modules and their harnesses; this adds no board fixture, automatic
 device access or completed M2 milestone.
+
+## Verified reserved-page erase and program
+
+`include/flash_write.h` and `src/flash_write.c` compose the unchanged reader
+and RAM executor. `flash_nv_erase(page, poll_limit)` issues an actual page
+erase and verifies all2,048 bytes as `FF` in32-byte reader chunks.
+`flash_nv_program(page, offset, word, poll_limit)` stages four bytes,
+checks the target word is blank, issues an actual program command and reads
+back all four bytes. Pages are partition-relative0/1, program offsets are
+four-byte aligned, and caller input must be beyond the entire linked private
+prefix and below the status/IRAM-alias reservation. No partial publication,
+automatic retry or successful placeholder is used.
+
+The strict history policy is deliberately narrower than silicon's limits:
+
+- Reset starts with unknown history on both pages, even if readback is allFF.
+- Only an accepted, non-aborted erase and complete page verification establish
+  a new page epoch. Erase invalidates that page's previous epoch before the
+  command; only successful verification clears its bitmap.
+- Each512-word page has a64-byte attempted-word bitmap. The bit is consumed
+  **before** entering the executor, including allFF data, rejected commands
+  and attempts that never return. Repeated programming of that word is
+  rejected without MMIO; healthy erasure of one page does not reset the other.
+- One attempt per word implies at most512 program attempts per page and at
+  most one zero-programming attempt per bit: below TI's8/1,024/two limits.
+  This is not lifetime erase-cycle/wear accounting or a persistent journal.
+
+Ownership spans the entire epoch, not just a function call: direct executor,
+debugger, DMA or other out-of-band writes are forbidden. The service cannot
+infer an invisible previous attempt from unchanged allFF contents. There is
+no history import, fault-clear or software-reset-history API. After an error,
+separately authorized full-reset recovery starts unknown again; it does not
+make existing words writable without another verified erase.
+
+Benign argument/range/ownership/history/used-word errors return explicitly
+without MMIO or replacing the last admitted operation's diagnostic. Other
+failures retain their public reason and underlying reader/executor result;
+all later write/erase calls perform no MMIO. The eight-byte
+`flash_write_diagnostic()` record contains result, operation, relative page,
+little-endian byte offset, phase, executor result and reader result.
+An active-controller RAM fail-stop leaves public result
+`FLASH_WRITE_PENDING=10`/COMMAND and executor result field `FF` (no return),
+with the executor's separate RAM diagnostic containing RAM_STOP. No caller
+can mistake this for verified completion.
+
+The standalone composition links **executor, reader, writer, caller** in that
+order. It uses417 ordinary XDATA bytes plus64 reserved (481, below512), with
+the complete private prefix through `0193`; observed peak SP is `36`.
+Its3,345-byte linked image and actual copied RAM commands have host,
+exact-image and alias-aware simulator evidence. **Never flash
+`flash_write_test.ihx`.** The simulated peripheral supplies flash effects;
+this is not physical program/erase,20-us timing, wear, power-cut recovery,
+a durable NV record or authorization for the separately gated #8 fixture.
 
 ## Persistence design
 

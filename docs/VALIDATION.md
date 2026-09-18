@@ -131,6 +131,54 @@ The emulator supplies status transitions, not a physical bank mux or flash
 write/erase effects. No verified NV operation, write-history policy, wear,
 power-cut recovery, board fixture or completed M2 gate is claimed.
 
+## Reserved-page writer coverage
+
+`make test-flash-write` checks the genuine C policy, existing reader and RAM
+executor together. The native controller/window model exercises145,481 calls:
+all1,024 word slots, repeated and allFF attempts, all128 history bytes,
+separate page epochs, startup with erased-looking but unknown history,
+full16-bit invalid offset/caller-boundary domains, every byte of each page
+as an erase-verification mismatch, partial/missing program effects,
+ignored/aborted/stuck commands and retained pre/post-read failures.
+No synthetic model result substitutes for the real C policy or reader.
+
+The exact3,345-byte image has SHA-256
+`278d332847ba181a345c261f5fc0451ef17a3f2705ba578741c7a772c6af711a`.
+Both board definitions produce identical bytes. It uses417 ordinary XDATA
+plus64 reserved, with peak SP `36`. The entire404-byte service/compiler
+prefix is below caller input and the512-byte reservation budget is unchanged.
+Every CODE mutation, ABI/allocation mutation and relocated-listing mismatch
+is rejected. The link snapshots all three component listings separately,
+so later standalone/fixture links cannot silently substitute a different
+relocation. The policy module has no direct peripheral access or runtime
+helper fallback; its actual calls enter the reader and executor.
+
+The38 linked sequences cover all128 bitmap-byte positions and all eight
+bit positions, the final word of both pages, used/allFF words, per-page erase
+isolation and genuine startup reinitialization with unchanged flash-window
+contents. One sequence traces every actual MOVX source address across the
+whole2-KiB erased page and subsequent programmed words. Before RAM command
+entry, the emitted code must already have invalidated erase history or
+consumed the word-attempt bit. Actual FCTL/FADDR/FWDATA writes, staged inputs,
+common-C return frame and idle-before-RET are checked again in the composed
+call chain, rather than replacing the executor with a success callback.
+
+Partial/missing effects must fail verification; ignored erasure of an
+already-allFF page must not establish history. Faulted re-entry reaches no
+MMIO. Stuck program and erase preserve PENDING/COMMAND, history changes,
+XMAP and the RAM fail-stop even after a later synthetic idle event.
+Unallocated/status XDATA, upper IRAM, information-page and neighboring flash
+guards remain intact. Native model extraction also preserves all131,815
+executor checks; the reader's1,020-byte/37-case and executor's1,451-byte/
+181-case standalone checks remain unchanged.
+
+The full MOVX transcript is indexed once before its existing strict section
+checks; no bytes, cases,15-second per-process bound or diagnostics are
+discarded. The38 linked sequences completed in20.466 seconds locally.
+This is **host-tested, image-checked and simulated**, not hardware-observed
+flash behavior, lifetime wear or a durable/atomic NV record. Hardware #8
+still requires separate destructive-operation authorization and recovery.
+
 ## M0 coverage
 
 The current build must cover:

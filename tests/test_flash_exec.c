@@ -48,8 +48,6 @@ void main(void)
 
 extern uint8_t flash_exec_work[9], flash_exec_reserved_end;
 extern volatile uint8_t flash_exec_ram[FLASH_EXEC_RAM_SIZE];
-/* Copy/guard stand-in only. The linked test executes the actual RAM opcodes. */
-const uint8_t flash_exec_host_template[FLASH_EXEC_RAM_SIZE] = {0x69, 0x96, 0xa5, 0x5a};
 static uint8_t word[4] = {0x12, 0x34, 0x56, 0x78}, staged[4], addresses[2];
 static uint8_t controller, mode, accepting, active, saved_bank, chip, info0, info1, ignore_address, ignore_mapping;
 static uint16_t buffer_address, ram_address;
@@ -134,27 +132,8 @@ static uint16_t address(const volatile void *object)
     return buffer_address;
 }
 
-void flash_exec_host_enter(void)
+void host_flash_engine_stop(void)
 {
-    uint16_t limit = (uint16_t)flash_exec_work[5] | ((uint16_t)flash_exec_work[6] << 8);
-    uint8_t control, accepted, i;
-    assert(SOC_MEMCTR == (saved_bank | 8) && flash_exec_work[7] == 255);
-    for (i = 0; i < FLASH_EXEC_RAM_SIZE; i++) assert(flash_exec_ram[i] == flash_exec_host_template[i]);
-    MMIO_XWRITE(0x6270, flash_exec_work[0]);
-    accepted = MMIO_XREAD(0x6270) == (flash_exec_work[0] | 0x80);
-    if (accepted && (flash_exec_work[0] & 2))
-        for (i = 0; i < 4; i++) MMIO_XWRITE(0x6273, flash_exec_work[1+i]);
-    do {
-        control = MMIO_XREAD(0x6270);
-        if (!(control & 0x83)) {
-            flash_exec_work[7] = (control & 0x20) ? FLASH_EXEC_ABORT :
-                (!accepted || control != (flash_exec_work[0] & 12)) ? FLASH_EXEC_CONTROLLER_STATE : FLASH_EXEC_IDLE;
-            flash_exec_work[8] = control;
-            return;
-        }
-    } while (--limit);
-    flash_exec_work[7] = FLASH_EXEC_RAM_STOP;
-    flash_exec_work[8] = control;
     stopped++;
     longjmp(terminal, 1);
 }

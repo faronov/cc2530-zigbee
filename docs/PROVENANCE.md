@@ -906,6 +906,24 @@ Neither model establishes physical flash contents, wear, transfer timing,
 electrical interruption or hardware recovery. No external binary, private
 device data or manual example is a test vector.
 
+### M2 reserved-page write policy sources
+
+The public writer and its composition tests are original BSD-3-Clause code.
+They reuse the reader and RAM executor, not a vendor/library flash routine.
+SWRU191F sections6.1/6.2, p.73 establish 2-KiB erase pages, four-byte words,
+erase-to-one and programming-zero semantics. Section6.2.2, p.74 limits a zero
+bit to two writes, a word to eight writes and a page to1,024 writes per erase.
+The project's stricter policy uses one attempted write per word and requires
+a new actual verified erase after loss of volatile history; unchanged allFF
+readback is not evidence of an unattempted word.
+
+The native backing array models erase-to-FF, bitwise-AND programming,
+ignored/aborted/stuck commands and intentionally missing/partial effects.
+The linked test instead executes all three genuine modules with explicit
+synthetic controller/XMAP/window transitions. Neither proves flash physics,
+endurance, data retention or electrical interruption. No factory record,
+private recovery dump or external binary is used as input or output.
+
 ## Normative target
 
 Engineering references:
