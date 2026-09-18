@@ -1140,6 +1140,44 @@ Display work is scheduled in short slices. Sending a command/row is distinct
 from waiting for the controller; BUSY waits become scheduled deadlines rather
 than long CPU loops. Errors always lead to a defined power/control state.
 
+## Reserved flash read foundation
+
+`include/flash.h` and `src/flash.c` add an isolated, read-only first M2 slice.
+The CC2530F256 partition is fixed before introducing a writer:
+
+| Region | Physical main-flash range | Policy |
+| --- | --- | --- |
+| Current unbanked CODE | `00000..07FFF` | Existing linker/image bound, unchanged |
+| Reserved NV page 125 | `3E800..3EFFF` | Read via relative page index 0 |
+| Reserved NV page 126 | `3F000..3F7FF` | Read via relative page index 1 |
+| Entire lock/config page 127 | `3F800..3FFFF` | Never exposed |
+| Separate information page | XDATA `7800..7FFF` | Never exposed |
+
+`flash_nv_read(page, offset, output, length)` copies 1..32 bytes within one
+reserved page. It verifies CC2530/256-KiB-flash/8-KiB-SRAM identity, idle flash
+status, IRQ/DMA exclusion and stable awake undivided clock ownership, selects
+XBANK7 (`E800..F7FF`), stages the bytes privately, then restores and verifies
+the original mapping before publishing. XMAP is rejected, never enabled;
+FMAP, FCTL, FADDR and FWDATA are never written. All cache modes are preserved.
+The chip-information reserved upper bits are not assumed zero.
+
+Invalid arguments/ranges/private-prefix overlap have no MMIO or fault-latch
+effect. Other failures leave caller output unchanged and retain the first
+fault; no retry, fault clearing or post-fault mapping restoration is attempted.
+Later calls perform no MMIO. Exclusive foreground ownership, unbanked
+execution, no concurrent output observer and no other flash writer are
+preconditions, not consequences of these observations. A concurrent writer
+can stall instruction fetch; a bounded byte count is not a hardware timeout
+or busy-flash recovery guarantee.
+
+The separate `flash_test.ihx` is host-tested, image-checked and alias-aware
+simulated, never a board image. No erase/program API or successful NV stub
+exists. A future writer must execute its critical path from RAM and must not
+return into flash while BUSY, or restore XMAP while still executing mapped
+RAM. Interrupted-word history and write-count limits cannot be inferred from
+an erased-looking readback. Hardware acceptance and durable records remain
+separate future gates.
+
 ## Persistence design
 
 Reserve explicit flash pages outside code, factory/configuration data and lock

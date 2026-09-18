@@ -422,6 +422,17 @@ must not go to stdout or CI. Generic hardware, calibrated metadata, independent
 on-air FCS verification and broader RF fault recovery remain unobserved.
 This is not continuous/lossless reception or MAC/security/network support.
 
+## Isolated reserved flash reader
+
+The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
+reads 1..32 bytes from reserved pages125/126 after strict chip, controller,
+mapping and buffer checks. It restores the original bank before publication
+and retains failures without publishing partial data. Lock/configuration and
+information pages are excluded. Evidence is **host-tested, image-checked and
+simulated only**; `make test-flash` never accesses a device.
+There is no erase/program API, durable NV record or flash board image.
+Never flash the isolated `flash_test.ihx`.
+
 ## Intended scope
 
 Independent offline work also includes a [bounded legacy MAC codec](docs/MAC.md):

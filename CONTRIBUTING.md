@@ -158,6 +158,20 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The isolated [reserved flash reader](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
+has a focused offline target:
+
+```sh
+make BUILD=build/flash-dev test-flash
+```
+
+It runs the new host corpus and exact linked-image/alias-aware simulator
+checks, without repeating unrelated suites. `test-common` includes it for
+both board definitions. `flash_test.ihx` is never flashed or uploaded; no
+erase/program operation, flash writer, persistence record or board `IMAGE`
+is introduced. Keep the 512-byte reservation budget and the entire private
+prefix protected from caller output buffers.
+
 The independent passive RX foundation has `make test-radio-rx`, also included
 in `make ... all test`. Its [contract and synthetic evidence](docs/RADIO_RX.md)
 do not grant hardware access. `radio_rx_test.ihx` is never a board image,

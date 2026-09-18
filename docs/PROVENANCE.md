@@ -870,6 +870,22 @@ simulator configuration. The presence of both words in one repository is not
 proof of a tested native CC2530/SDCC port. Its old protocol implementation is
 not automatically compliant with the project's intended R22/BDB behavior.
 
+### M2 reserved flash reader sources
+
+The flash reader and its host/linked test models are original BSD-3-Clause
+code. Primary functional facts come from TI **SWRU191F**: pp.27-28 distinguish
+physical flash, the read-only XBANK window, information page and lock page;
+p.34 defines MEMCTR.XBANK/XMAP and FMAP; p.59 defines CHIPID/CHIPINFO0/1;
+pp.73-77 define 2-KiB pages, 4-byte programming words, controller status,
+flash-fetch stalls and program/erase restrictions.
+
+Pages125/126 are this project's partition choice, not a vendor NV layout.
+The read-only implementation does not copy the manual's IAR erase example
+or any SDK/programmer routine. No private flash content, identity or external
+binary is used as a test vector. The simulator's patterned XDATA window is
+synthetic and does not emulate flash physics or prove the hardware bank mux.
+No write/erase or recovery claim follows from these tests.
+
 ## Normative target
 
 Engineering references:

@@ -362,6 +362,14 @@ fault recovery remain unobserved. This finite RX slice does not complete M2/M3.
 Transmission, automatic ACK, calibrated metadata,
 continuous queues and MAC/networking remain unsupported; M2 #4 stays open.
 
+The [reserved flash read foundation](ARCHITECTURE.md#reserved-flash-read-foundation)
+now reserves physical pages125/126 and provides bounded, staged reads with
+strict chip, mapping, controller and output-ownership checks. It is isolated
+from all board images and has host, exact-image and alias-aware synthetic
+evidence only. Page127 and the information page are excluded. Erase/program,
+the RAM executor, interrupted-write recovery and persistent records are not
+implemented; this is progress toward the flash gate, not M2 completion.
+
 Deliver independent interfaces for:
 
 - Clocks, wrap-safe monotonic time, short deadlines and interrupt dispatch.

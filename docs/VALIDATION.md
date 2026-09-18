@@ -62,6 +62,29 @@ upper-IRAM, stack, poll-limit or retained-fault check is relaxed. These changes
 provide **host-tested, image-checked and simulated** evidence only; they
 perform no USB/RF operation or new hardware acceptance.
 
+## Reserved flash reader coverage
+
+`make test-flash` exercises only the new reader. The host corpus checks
+130,880 calls: both reserved pages and every in-page start, all chip-ID/
+information/controller bytes, all XBANK/cache combinations on both clocks,
+the full 16-bit caller-address/range domain, ignored mapping writes and
+faults at every controller observation. Output guards/tails and retained
+faults are checked without enlarging the bounded host-MMIO logs.
+
+The 1,020-byte SDCC image uses 93 bytes of ordinary XDATA plus the unchanged
+64-byte status reservation; observed peak SP is `18`, below upper IRAM.
+Its 37 linked cases verify the exact emitted SFR accesses and read-only
+peripheral loads, typed ABI and entire private allocation prefix. Every CODE
+byte mutation is rejected; source/page bounds, actual MOVX addresses with
+XBANK7, successful restoration, late errors/nonpublication, faulted re-entry,
+unallocated XDATA and alias/stack guards are exercised. Board-image checks
+reject both the reader and its test harness from every existing `IMAGE`.
+
+This is **host-tested, image-checked and simulated** evidence, not hardware
+flash-read, erase/program, endurance, electrical interruption or persistent
+record evidence. Synthetic BUSY rejection does not prove a real CPU can
+execute from flash while its controller is busy.
+
 ## M0 coverage
 
 The current build must cover:
