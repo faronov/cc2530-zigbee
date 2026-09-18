@@ -1479,13 +1479,109 @@ unchanged; no hosted-CI pass is claimed.
 `make test-radio-rx` exercises the real RX/timebase C sources on host and in
 a strictly pinned, simulator-only SDCC image. The
 [contract, detailed cases and resource accounting](RADIO_RX.md#offline-evidence)
-record 150,593 host cases and 27 linked synthetic traces, including every
+record 151,177 host cases and33 linked synthetic traces, including every
 actual MMIO event, destructive RFD reads, CODE/ABI mutation rejection,
 XDATA/IRAM alias, unallocated-memory and upper-stack guards.
 The existing 512-byte component budget and 15-second process timeout remain.
 This supplies no silicon RX, calibrated timing/metadata, physical FCS or
-on-air evidence. There is no RX board `IMAGE`, automatic RF test or new CI
-artifact; all earlier hardware records retain their original scope.
+on-air evidence. The later RX board fixture below is separate from this
+component test; all earlier hardware records retain their original scope.
+
+## Bounded passive RX board fixture offline coverage
+
+The [fixture contract and exact artifacts](RADIO_RX.md#bounded-passive-rx-board-fixture)
+separate RF-capable `radio_rx_fixture` from the older non-RF images.
+Focused checks execute real startup, clock and RX on both boards:
+1,006 strict host checkpoints,67 complete linked checkpoint traces, complete
+CODE-byte mutation rejection, independent MMIO/instruction/CDB/listing/ABI
+analysis and full65535-poll failure in33 genuine continuation segments.
+The shared host trace is not an independent RF oracle. Min/max frame/footer,
+BAD_CRC nonpublication/reuse, clock/controller/count/readback/entry failures,
+timeout, STIF growth/deassertion,16-attempt END and terminal retention are
+covered without successful service stubs or ROM patches.
+
+The upper128 IRAM bytes remain `C7`, unallocated XDATA remains `A5`, aliasing
+and stack unwind remain checked. Every s51 process keeps the original15-second
+limit and heavy simulator jobs run serially. Only the new fixture has a1024
+reservation budget; the standalone foundation and all older512-budget
+negative tests remain unchanged. Its observed MMIO-stop peak SP71 is not a
+worst-case stack proof. Full physical RX timing, calibration and radio behavior
+are not modeled by C52.
+
+The decoder/runner tests use synthetic backends and temporary private paths.
+They reject malformed state/frame/ABI/artifacts, bad arguments before USB,
+unsafe capture locations/permissions, overwrites/symlinks and every synthetic
+transport boundary; failed cleanup cannot print successful JSON.
+The host suite also runs under ASan/UBSan. All18 older complete BIN sizes and
+SHA256 values were independently compared after rebuilding/image checks;
+none changed. The FSCAL1 correction adds25 CODE bytes to each RX image;
+allocated RAM, C/wire ABI, exactly-once RFD sites and all other MMIO rules are
+preserved. The new complete hashes and independently inspected mask/compare
+sites are [recorded with the ABI](RADIO_RX.md#wire-v1-and-linked-abi).
+No repeated full20-job local matrix or hosted-CI pass is claimed.
+
+No physical target or USB device is used by these checks. The
+[manual gate](DEBUGGING.md#parent-only-passive-rx-acceptance) requires separate
+authorization, verified recovery conditions, reset/full physical CODE
+comparison and private comparison with an independent channel15 sniffer.
+The separate [bounded LG record](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance)
+now covers reception/body agreement and pre-RF-timeout reset recovery.
+Independent on-air FCS, calibrated timing/metadata, generic hardware and
+broader controller-fault recovery remain open.
+
+### FSCAL1 correction and parent-observed failure
+
+The [dated processed hardware record](DEBUGGING.md#2026-09-18-lg-rx-fscal1-failure-and-probe)
+is a **failure/probe**, not a successful RX observation. The parent identified
+old-image table index8/FSCAL1 readback `30` at the exact compiled full-byte
+comparison. A subsequent parent-owned separate full reset-halt and complete
+CODE comparison of that frozen old image ended at PC0000/status22/config26,
+without application resume. This is not corrected-image RX acceptance.
+Only FSCAL1 reserved bits7:2 are now excluded from comparison,
+as required by SWRU191F p.267; the whole-byte write stays00.
+
+Core host tests add584 cases: all64 upper-bit patterns at configuration and
+after E3 with successful-call reuse; all3 nonzero low values across64 upper
+patterns rejected both before E3 and after calibration; and all72 bit flips
+of the other nine settings rejected. Both fixture host tests also exercise
+all256 FSCAL1 upper/low combinations through real startup, clock and RX.
+Six new core traces and18 fixture checkpoints include confirmed00 before E3,
+postcal30/FC acceptance in the synthetic model, terminal31/32/33 rejection
+without RFD reads/publication, and pre-E3 low-bit rejection. Independent
+trace predicates constrain those values/results in addition to replay.
+The full65,535-poll board fault also observes synthetic post-E3 FSCAL1=30.
+Independent instruction mutations reject changes to the index8 condition,
+mask03, maskFF, private-IRAM ANL target or comparison, without relying only
+on the whole-image hash. All former scenarios, bounded logs, fault/BAD_CRC
+semantics, memory guards and15-second process limits remain.
+The focused correction run passed the core and both board host/image/serial
+simulator targets, core/both-board ASan+UBSan builds,120 relevant Python
+tests, repository/local-link checks and `git diff --check`. All18 older
+images were rebuilt/image-checked against the authorized complete-BIN
+baseline. No hardware was accessed by these automated checks.
+
+### 2026-09-18 bounded LG RX hardware evidence
+
+The parent independently passed126 focused Python checks, both1,006-checkpoint
+host fixtures and both complete image proofs before programming. Full optional
+environment tooling discovery subsequently passed462 tests,18 explicit skips.
+These are host/image checks, separate from the physical observations below.
+
+The exact9,160-byte LG image and complete readback, private reference method,
+deadline stimulus and limitations are in the
+[dated hardware record](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance).
+One initial CRC_OK body matched the reference. A checked deadline-RET hold
+then produced actual TIMEOUT10 after105,828 raw ticks/one poll, zero
+configuration writes/RF actions, unchanged output and retained terminal FAULT.
+A separate reset/CODE-verified16-attempt recovery published14 bodies, each
+matching exactly one concurrent reference record. Attempts4/16 were BAD_CRC,
+preserved the full `A5` output and did not latch a fault; later success after
+attempt4 proves bounded reuse. The next step and terminal loop retained
+END016F/attempt16/completed14, RX disabled and empty FIFOs.
+
+This does not turn the C52 model into radio evidence, validate generic hardware,
+prove independent FCS or calibrated metadata, or close M2/M3. No raw packet,
+identity, payload digest, dump or capture was added to repository/CI artifacts.
 
 ## M2 quiescent radio FIFO automated coverage
 
@@ -1597,6 +1693,53 @@ are added to CI, with the same seven-file artifact whitelist and no hardware
 dependency. RX flush/received data, FCS generation,
 controller recovery, calibrated timing and all on-air/MAC/DMA/IRQ/sleep/AES/
 flash services remain separate gates.
+
+### FIFO simulator guard regression after RX declarations
+
+The passive-RX foundation `e4590f6` added common `_SOC_RFIRQF0/1`
+declarations at `E9/91`, aliasing the FIFO fixture's existing `_RFF_` names.
+Neither FIFO BIN changed. The simulator's symbol-derived `_SOC_` guard now
+included these bytes, exposing an incorrect expectation in its existing
+negative `flags` scenario: the harness itself deliberately injects
+`RFIRQF0 AA -> AB`, but the final guard still required the original `AA`.
+Both actual board images reproduced exactly this one guarded SFR delta:
+`AA` at BEFORE, `AA` at clock READY, `AB` at FAULT. The real C caller
+correctly retained invariant reason5 and FIFO result255 (not attempted).
+
+The corrected harness keeps both flag registers guarded. Only the `flags`
+scenario expects the exact injected `AB`; before/after-injection snapshots
+require unchanged PC, ordinary RAM, all IRAM and every other SFR. `AB` must
+remain at terminal FAULT. Missing injection, clearing it, any other RFIRQF0
+value, a change in another guarded bit, or using the exception in another
+scenario fails. Host-only rejection checks cover all eight bits of every
+guarded byte in all seven scenarios and all alternate RFIRQF0 values.
+Unexpected changes now report the scenario, address, expected byte and actual
+byte. This is explicit synthetic input accounting, not a sticky-flag mask,
+flag acknowledgment or relaxation of CPU ownership.
+
+The complete normal scenario also exceeded the unchanged **15-second
+per-simulator-process** deadline on the local host. It now executes in
+11 serial segments, at most128 genuine READY observations each. All
+1,286 observations and257 real C cycles, including counter wrap, remain.
+Only the first segment executes startup; the next ten restore its actual
+ordinary/status RAM, IRAM, all128 SFR bytes, PC and512-byte synthetic radio
+region at READY. A snapshot taken before continued execution must match every
+byte and PC exactly; no caller argument, counter, return value or ROM byte is
+fabricated.
+C52 timers must be stopped. Its reset-zero SBUF (`99`) is not rewritten,
+because doing so starts a fictitious C52 UART transfer; that byte is still
+compared with all the others. Verified restoration-console echoes are
+separated from actual instruction/event output, so they cannot count as RFD
+writes or RFST strobes. Rejection tests mutate every restored memory/radio
+byte and reject incomplete snapshots, nonzero SBUF and running C52 timers.
+
+Focused offline runs passed all seven original scenarios for **both boards**,
+with all33,410 RFD bytes,33,410 read addresses and514 EE strobes checked per
+normal run, original terminal-fault retention, and unchanged alias,
+unallocated-XDATA, upper-IRAM `C7` and SP-unwind guards. The published generic
+8,939-byte and LG8,979-byte BINs and their complete hashes remain unchanged.
+This correction changes only the simulator harness and related documentation;
+there is no firmware/memory/ABI or new hardware evidence.
 
 ### 2026-09-17 bounded LG FIFO hardware evidence
 
@@ -1882,7 +2025,8 @@ seeing measurements.
 Hosted CI builds/tests without physical devices or repository secrets.
 The CI matrix covers nine non-RF images (`bringup`, `debug_fixture`,
 `timebase_fixture`, `clock_fixture`, `irq_fixture`, `radio_fifo_fixture`,
-`dma_fixture`, `aes_fixture`, `prng_fixture`) on both boards: eighteen jobs. Artifacts contain only the
+`dma_fixture`, `aes_fixture`, `prng_fixture`) plus the RF-capable passive-only
+`radio_rx_fixture` on both boards: twenty offline jobs. Artifacts contain only the
 explicitly selected board image's generated firmware, symbols and build
 metadata. Pull requests must not use privileged `pull_request_target` execution
 to build untrusted source.

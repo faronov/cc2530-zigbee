@@ -646,6 +646,68 @@ normal-execution reset; the ordinary debugger does not issue it. Re-establish
 halted control, independently verify physical CODE, then run fixture acceptance.
 Do not resume unknown application code to see whether recovery "worked".
 
+### Linux external-programmer no-run guard
+
+`tools/cc_tool_no_run_guard.c` is an original BSD-3-Clause, Linux ELF
+**per-process `LD_PRELOAD` fail-stop guard**, not a programmer or a successful
+transfer substitute. It addresses the reviewed external `cc-tool` cleanup
+hazard above, including read-only tasks and verification mismatches. Loading
+the guard announces `cc-tool-no-run-guard: active` on stderr. Once loaded,
+there is **no environment disable switch**.
+
+The guard interposes `libusb_control_transfer` with this exact boundary:
+
+- For request `C9` with the direction bit indicating OUT, only
+  `bmRequestType=40`, `wValue=0`, `wIndex=1`, `data=NULL`, `wLength=0`
+  is forwarded. This is the reviewed reset-into-debug shape, not permission
+  to request it during offline work.
+- Every other OUT `C9`, including normal-run reset `40/C9/0/0/NULL/0`,
+  is blocked **before calling libusb**. The guard emits a blocked diagnostic,
+  calls `fflush(NULL)` and then `_exit(86)`, bypassing normal process cleanup.
+  It neither reports a successful transfer nor substitutes a debug reset.
+- A missing downstream symbol or notice/output-flush failure causes
+  `_exit(87)`, not success. Forwarded operations retain their original
+  arguments and return values/errors, including unrelated IN `C9` requests.
+
+**Exit86 proves neither programming success nor a halted target.** It only
+identifies this process's intercepted request when accompanied by the expected
+guard diagnostics. Exit87, absent/mismatched diagnostics or other outcomes
+require investigation, not retry or an assumption of safety. Independently
+compare physical readback and confirm halted state before accepting a guarded
+operation. The guard does **not** intercept DEBUG RESUME/STEP bulk commands
+or prevent an external programmer from executing its RAM helper. It therefore
+does not prove that the CPU never executed code, that no earlier programming
+error occurred, or that an unverified application cannot run through another
+path. Full reset and full physical fixture CODE verification before the
+runner's first resume remain mandatory.
+
+First run the host-only synthetic test:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_cc_tool_no_run_guard -q
+```
+
+It compiles the guard and original fake USB library/driver in a temporary
+directory, never opens real USB and never invokes the installed programmer.
+There is no Makefile programming target, CI hardware hook or firmware/debugger
+permission change. Any manually compiled guard/library and programmer logs
+belong in a selected private location outside the repository; the guard must
+be selected per process, not installed as a global preload. A constructor
+notice alone is not proof that the intended external binary binds its calls
+to the guard. Binary, loader and linkage changes require renewed checking;
+no portable, static-binary or alternative-backend interception is claimed.
+
+**2026-09-18 evidence boundary:** the parent reported six strict synthetic
+tests passing, plus actual installed `/usr/bin/cc-tool` ELF symbol binding
+checked with `LD_BIND_NOW`/`LD_DEBUG` and `--help` only, **without USB**.
+The installed Ubuntu package is `0.27-1build5`, although its banner says
+`0.26`; the binary/source identifiers and reviewed lifecycle are recorded in
+[provenance](PROVENANCE.md#linux-external-programmer-no-run-guard-sources).
+This is host/linkage evidence, not a guarded target experiment, successful
+baseline backup, flash/readback, halted-state confirmation or RX acceptance.
+The separately planned guarded private backup remains a separately authorized
+hardware task; this record establishes none of its results.
+
 ### USB failure and cable-disconnect procedure
 
 On an error, preserve the diagnostic, deny further target commands on the
@@ -3072,3 +3134,205 @@ remain open. Both parent434-Python/offline corpora,33 genuine continuations,
 memory/alias proofs,150-file guard and all sixteen older BIN identities
 remain as confirmed above. No code/test/build change or hosted-CI pass follows;
 the eighteen-job/seven-artifact policy and `hardware_tested=false` are unchanged.
+
+## Bounded passive RX board fixture
+
+The separately implemented passive RX board fixture is RF-capable; it is not
+covered by earlier non-RF fixture hardware evidence. See the
+[bounded contract](RADIO_RX.md#bounded-passive-rx-board-fixture) for exact
+hashes, allocation and checkpoint addresses.
+
+### Parent-only passive RX acceptance
+
+**Bounded LG acceptance is recorded separately
+[below](#2026-09-18-lg-bounded-passive-rx-acceptance).** The earlier-image
+[failure/probe](#2026-09-18-lg-rx-fscal1-failure-and-probe) is not successful reception.
+This procedure is not
+authorization to use hardware during offline development. The parent must
+separately establish owned CC2530F256 board/revision/image, safe supply/pin
+policy, private verified recovery backups, exclusive adapter access and the
+authorized operations. External programming remains separate; never flash
+`radio_rx_test.ihx`. Programmer cleanup can reset/resume even after a failed
+verification: use the separately checked
+[Linux external-programmer gate](#linux-external-programmer-no-run-guard)
+where applicable, and independently verify complete physical readback and
+halted state. Guard exit86 is not success or halt evidence and does not block
+RESUME/STEP or programmer RAM-helper execution. Retain the existing lifecycle
+safeguards and the runner's own full-reset/full-CODE-before-resume checks.
+
+Only after separately authorized programming, the manual invocation shape is:
+
+```text
+python3 tools/check_radio_rx_hardware.py --board lg_esl29_rev03 --output build/lg_esl29_rev03/radio_rx_fixture --bus BUS --address ADDRESS --attempts 16 --capture /PRIVATE-0700-DIRECTORY/new-rx-records --confirm-passive-rx-test
+```
+
+Use numeric current bus/address, never automatic device selection.
+All arguments and `DebugImage` artifacts are checked before USB loading.
+The capture must be an explicitly selected **new** absolute file outside the
+repository, in a user-owned0700 directory, created0600 with no overwrite or
+symlink traversal. No raw bodies/payloads/addresses or frame hashes are printed
+to stdout; only sanitized aggregate status appears after successful cleanup.
+The private per-checkpoint records contain full wire state and the persistent
+frame, including failure sentinels, for parent-owned comparison with a private
+concurrent independent sniffer capture. Do not upload them to Git/CI.
+
+The runner reuses `reset_and_verify_code`, `step_nop` and `wait_checkpoint`.
+It requires reset config26, compares every physical CODE byte before resume
+and grants only existing reset/CPU/read/breakpoint permissions. **No debug
+DMA22 gate, RAM/MMIO/flash writer or new USB packet is added.** It reads only
+ordinary caller SRAM/M0 plus the existing full CPU context, checks diagnostic
+serialization, frame/tail/nonpublication, heartbeat, immutable M0 and C-observed
+flag history, and verifies register preservation. Each transport/checkpoint
+wait is bounded. It stops halted at READY after1..16 attempts, or terminal
+FAULT, with no retry, automatic reset, reattach or continuation after fault.
+The firmware's next step after16 READY would enter terminal END without RX.
+
+There is no RF cleanup guarantee: a timeout/failure may leave RX **active
+while halted**. Do not resume the failed invocation. A full reset and complete
+CODE verification are required in a **separately authorized recovery run**.
+Compare channel15 successful FCS-free bodies/raw RSSI/correlation privately
+with the independent sniffer; raw RSSI is not dBm and correlation is not LQI.
+Report BAD_CRC, losses/backlog discard, timeouts and recovery honestly.
+CRC does not establish MAC syntax, authentication, membership or network
+acceptance. The dated LG observations cover only their stated finite cases;
+generic simulation does not establish physical FCS/timing or broader recovery.
+
+### 2026-09-18 LG RX FSCAL1 failure and probe
+
+**Parent-observed failure and diagnosis, not RX success.** The offline
+implementer performed no target/USB operation. The parent reported a private
+256-KiB flash backup and2,048-byte factory backup, guarded programming of the
+LG Rev0.3 **9,135-byte** image with SHA256
+`1c459ba79eff3c6283ccecf882b0573b1f2eb979490c08d11b57e88be066e82e`,
+independent full-flash comparison including the erased `FF` tail and unchanged
+factory region, then full reset and physical CODE verification before execution.
+Backup contents, identities and captures remain private and are not imported.
+
+The first RX attempt, with a concurrent independent Nordic channel15 capture,
+ended in terminal **STATE_CHANGED7**, not publication. RX diagnostics were
+phase2, polls21, elapsed90 **raw ticks**, writes10, verified10, actions1
+(E3 issued), sample_valid0 and bytes_read0. The full output object remained
+`A5`. There is no frame, FCS, calibrated timing or sniffer-agreement result.
+
+In a **separate genuine full-reset/CODE-verified diagnostic epoch**, the parent
+used only existing CPU/breakpoint/SRAM-read methods, preserving full CPU
+context. No host MMIO access exception or writer was introduced. The exact
+old-image comparison at `0BF2` was:
+
+```text
+B5 4E 02 80 06 75 82 07 02 0D B0
+```
+
+The breakpoint at its failure return `0BF7` showed saved bank0 R1=`08`,
+A(expected)=`00`, and IRAM `4E` (read through the `1F4E` alias)=`30`.
+Table index8 is **FSCAL1 `61AE`**. Diagnostics still showed phase2,
+writes/verified10, actions1 and no consumed bytes; the frame remained `A5`.
+The parent let the original failure path finish at FAULT `016C`, with
+result=latch7. This identifies the full-byte FSCAL1 comparison as the failing
+predicate rather than inferring it from a generic error code.
+
+**SWRU191F, revised April2014, p.267 FSCAL1** marks bits7:2 reserved R/W0
+(reset `001010`), not R0; VCO_CURR bits1:0 are R/W. Sections23.15.1/Table23-6
+and23.15.2/Table23-7 retain the recommended whole-byte write `00` and
+distinguish W0 from R0. FSCAL2 is the separate capacitor calibration result.
+The corrected observer therefore masks only FSCAL1 readback with `03`;
+nonzero low bits and every other ownership/configuration/error predicate
+remain failures. The [current hashes/sites](RADIO_RX.md#wire-v1-and-linked-abi)
+are different; do not reuse this historical probe address against them.
+
+FAULT `016C` was the diagnostic epoch's historical endpoint, not the final
+reported state. A halt alone did not establish RF-off after E3.
+
+The parent subsequently performed a **separate genuine full reset-halt** using
+the previously frozen9,135-byte image/hash above, and compared every physical
+CODE byte again. The final reported state for that old-image recovery was **PC `0000`, status `22`,
+configuration `26`, with no application resume after reset**. The private
+post-failure-reset manifest was retained, not imported. This records
+reset-to-halt and CODE verification on the old image, not successful RX or
+corrected-image acceptance.
+
+The Nordic capture was stopped and its native port released; channel15
+readback was verified. The subsequently authorized corrected-image experiment
+is a separate record below, not a reinterpretation of this failure.
+
+### 2026-09-18 LG bounded passive RX acceptance
+
+**Hardware-observed on the owned LG Rev0.3, channel15 only.** The parent
+performed these manual operations; no delegated implementer, build or automated
+test accessed equipment.
+The corrected `radio_rx_fixture` was9,160 bytes, SHA256:
+
+```text
+0e31578a708d9c8d4556caec33f062fd82baf7498ebef1af3b708f868ab6c8d2
+```
+
+The seven checked artifacts were frozen privately before programming.
+The reviewed system programmer plus Linux no-run guard completed erase,
+write and readback verification, then intercepted normal-run cleanup.
+Independent debugger reads compared every CODE byte while halted. A separate
+complete262,144-byte read matched the image plus erased `FF` tail; the2,048-byte
+factory page matched the private pre-programming backup. A genuine reset and
+another complete CODE comparison left PC0000/status22/config26 without
+application execution. Guard exit86 alone was not accepted as evidence.
+
+The independent reference was the Nordic nRF52840 DK running official sniffer
+firmware0.8.0, using the separately
+[pinned external host tool](PROVENANCE.md#m2-passive-rx-sources), whose package
+metadata reports0.0.0. Actual channel15 was read back before/after each capture.
+Its process
+was alive and receiving packets before LG execution. Captures were new0600
+files in an owned0700 directory outside Git; processes were stopped cleanly,
+the sniffer put to sleep and the serial port released afterward.
+Private parsing checked PCAP2.4/DLT283, complete/nontruncated record lengths,
+ordered timestamps, TAP header/TLV layout and channel15. The tool strips
+the two FCS octets, so comparison was byte-for-byte **FCS-free body equality**,
+not independent FCS validation or authentication. No payload or payload hash
+is published.
+
+| Separate experiment | Observed result |
+| --- | --- |
+| First corrected-image receive | One CRC_OK Data body,69 bytes, matching exactly one of215 reference records;639 raw ticks/126 polls |
+| Pre-configuration timeout | Real TIMEOUT10/latch10,105,828 raw ticks/one poll, phase1/sample-valid1; zero writes, actions or consumed bytes, entire frame still `A5` |
+| Explicit reset recovery |16 attempts,14 CRC_OK publications and two BAD_CRC returns; each published body matched exactly one of321 concurrent reference records |
+| Same-epoch attempt cap | Next step reached END016F with attempt16/completed14/heartbeat14, no17th receive; a further terminal-loop execution retained the complete state |
+
+The timeout stimulus used **only** existing reset/CPU/breakpoint/SRAM-read
+permissions, not code, RAM or MMIO injection. The checked148-byte
+`timebase_deadline_after` helper starts at01CA and returns at025D; the sole RX
+call is12FF, with stacked return1302. After the real clock READY, the parent
+stopped at that RET and verified DPL0/DPS0, the actual stack return, allocated
+arguments and work object, computed65536-tick deadline, untouched output and
+zero configuration/RF actions. A3-second host hold was bounded by the existing
+transport operation deadline and preserved CPU context. Resuming the genuine
+RET produced the terminal failure above. One NOP/loop execution retained the
+original result/latch/state. This tests a **pre-RF** timeout, not a busy-radio
+timeout, calibrated duration, stopped timer or controller-error recovery.
+The following16-attempt run used its own full reset/full-CODE verification;
+no failure clear, implicit retry or continuation from FAULT was used.
+
+In the recovery run, BAD_CRC occurred at attempts4 and16. Both had CRC_OK clear,
+preserved every output byte as `A5`, and left the fault latch zero. Successes
+after attempt4 establish reuse after clean stop/flush without an intervening
+reset. The14 successful bodies were10..66 bytes, with raw frame-type bits
+indicating eight Data and six Command frames, not full MAC/protocol acceptance.
+The reference contained134 Data,147 ACK and40 Command records. Across all16
+attempts, elapsed observations were527..28,173 raw ticks and104..5,855 polls;
+reported backlog discard was zero. This does not measure losslessness across
+RX-off/READY gaps. Successful raw signed RSSI was -21..7 and correlation86..108;
+neither is calibrated dBm/IEEE LQI or equated with the Nordic metadata.
+
+**Final physical state:** halted at END `016F`, phase5/stage2,
+attempt16/completed14/heartbeat14, fault latch0. The last result was BAD_CRC15;
+its frame stayed `A5`. The cap preserved that frame and the previous diagnostics,
+with RXENABLE0, RX/TX counts0 and empty pointers, clock command/status88,
+IRQs disabled and checkpoint SP62. A subsequent terminal-loop pass changed
+neither state, frame, heartbeat nor full CPU context. The reference was stopped
+and its port released. Earlier FAULT/READY endpoints remain historical.
+
+This completes the bounded channel15 LG reception/body-agreement,
+BAD_CRC/reuse, pre-RF timeout/reset-recovery and attempt-cap observations.
+Generic hardware, other channels, independent on-air FCS, calibrated timing/
+metadata, overflow/stopped-clock/poll-cap recovery, continuous queues, TX/ACK,
+MAC/security/networking and the remaining M2/M3 gates are not established.
+All18 older board BINs are unchanged; CI remains offline with20 jobs,
+the seven-artifact whitelist and `hardware_tested=false`.

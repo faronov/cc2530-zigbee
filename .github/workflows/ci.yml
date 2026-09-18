@@ -15,14 +15,14 @@ concurrency:
 
 jobs:
   bootstrap:
-    name: Non-RF fixture (${{ matrix.board }}, ${{ matrix.image }})
+    name: Offline board fixture (${{ matrix.board }}, ${{ matrix.image }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         board: [generic, lg_esl29_rev03]
-        image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture]
+        image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,7 +58,7 @@ jobs:
           BUILD: build/${{ matrix.board }}/${{ matrix.image }}
         run: make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test
 
-      - name: Upload generated non-RF artifacts
+      - name: Upload generated board artifacts (never hardware-tested by CI)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cc2530-${{ matrix.image }}-${{ matrix.board }}-${{ github.sha }}

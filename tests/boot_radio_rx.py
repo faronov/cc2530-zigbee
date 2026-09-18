@@ -17,12 +17,13 @@ from boot_image import (
 from boot_timebase import GUARD_SFRS, READ_OFFSETS, READER_BYTES
 from prng_fixture import PRNG_LENGTHS
 from radio_fifo_fixture import instructions
+from radio_rx_fixture import verify_fscal1_readback
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, peripheral_accesses, require
 
 
-IMAGE_SIZE = 5189
-IMAGE_SHA256 = "c54317264d21e9a515cf601d728476a40fb9a01166903929cffa034d1a37634c"
-LENGTHS = PRNG_LENGTHS | {0x1c: 1, 0x23: 1, 0x2b: 1, 0x3c: 1, 0xa4: 1}
+IMAGE_SIZE = 5214
+IMAGE_SHA256 = "a69606bca743a8e660d824d920211dfdf9b3467f175f251e117c5c01539dd41e"
+LENGTHS = PRNG_LENGTHS | {0x1c: 1, 0x23: 1, 0x2b: 1, 0x3c: 1, 0x52: 2, 0xa4: 1}
 FIELDS = (
     "elapsed_ticks", "polls", "timebase_status", "phase", "writes", "verified", "actions", "sample_valid",
     "rx_enable", "fsm0", "signals", "rx_count", "tx_count", "rx_first", "rx_last", "rx_packet",
@@ -52,7 +53,7 @@ def verify_image(image, symbols, debug, memory, listing):
     verify_code(image)
     start = cdb_address(debug, "L:Fradio_rx$ordinary$0$0")
     end = cdb_address(debug, "L:XG$radio_rx_receive_init$0$0") + 1
-    require((start, end) == (0x1f6, 0x1364), "RX module extent changed")
+    require((start, end) == (0x1f6, 0x137d), "RX module extent changed")
     code = instructions(image, start, end, LENGTHS)
     listed = {int(m[1], 16): bytes.fromhex(m[2]) for m in re.finditer(
         r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listing, re.MULTILINE)}
@@ -85,15 +86,16 @@ def verify_image(image, symbols, debug, memory, listing):
             sites[pc + 3] = ("r", address, ("sfr", 0xe0))
     require(tuple(static_reads) == XREADS, "RX XREG/identity/RAM whitelist changed")
     # These are the sole table-indexed MMIO instructions, not ordinary MOVX scratch.
-    require(code.get(0x3a1) == b"\xe0" and code.get(0xbf2) == b"\xf0",
+    require(code.get(0x3a1) == b"\xe0" and code.get(0xc0b) == b"\xf0",
             "RX reviewed dynamic MMIO sites changed")
     sites[0x3a1] = ("r", None, ("sfr", 0xe0))
-    sites[0xbf2] = ("w", None, ("xram", None))
+    sites[0xc0b] = ("w", None, ("xram", None))
     for name, expected in (("settings", b"".join(a.to_bytes(2, "little") for a in SETTINGS)),
                            ("values", VALUES)):
         address = cdb_address(debug, f"L:Fradio_rx${name}$0_0$0")
         require(bytes(image[a] for a in range(address, address + len(expected))) == expected,
                 "RX passive configuration table changed")
+    verify_fscal1_readback(code, 0x3a1, 0x21, cdb_address(debug, "L:Fradio_rx$values$0_0$0"))
     reader = symbols["_timebase_read_awake_ticks24"]
     require(bytes(image[reader + i] for i in range(len(READER_BYTES))) == READER_BYTES,
             "RX real timebase reader changed")
@@ -123,7 +125,7 @@ def verify_image(image, symbols, debug, memory, listing):
     require(symbols["_radio_rx_fault"] == 0x19 and symbols["_radio_rx_reserved_end"] == 0xce
             and symbols["__gptrput_PARM_2"] == 0x176 and symbols["s_SSEG"] == 0x34,
             "RX private ownership/helper/stack layout changed")
-    for name, address in (("before", 0x1364), ("done", 0x13b5)):
+    for name, address in (("before", 0x137d), ("done", 0x13ce)):
         require(symbols["_radio_rx_test_" + name] == address and image[address] == 0,
                 "RX checkpoint is not the reviewed NOP")
     require(symbols["_radio_rx_test_cycle"] == symbols["_radio_rx_test_before"], "RX cycle ABI changed")
@@ -132,6 +134,8 @@ def verify_image(image, symbols, debug, memory, listing):
 
 def check_rejections(image, symbols, debug, memory, listing):
     case = unittest.TestCase()
+    code = instructions(image, 0x1f6, 0x137d, LENGTHS)
+    check_fscal1_rejections(code, 0x3a1, 0x21, cdb_address(debug, "L:Fradio_rx$values$0_0$0"))
     for address in image:
         changed = dict(image)
         changed[address] ^= 1
@@ -158,7 +162,51 @@ def check_rejections(image, symbols, debug, memory, listing):
             verify_image(im, symbols, debug, mem, lst)
 
 
+def check_fscal1_rejections(code, read, scratch, values):
+    end = verify_fscal1_readback(code, read, scratch, values)
+    case = unittest.TestCase()
+    # Bypass the image hash deliberately to exercise the independent mask
+    # analysis itself, including the index, both masks and the comparison.
+    for pc, data in code.items():
+        if not read <= pc < end:
+            continue
+        for i in range(len(data)):
+            changed = bytearray(data); changed[i] ^= 1
+            with case.assertRaisesRegex(ValueError, "FSCAL1"):
+                verify_fscal1_readback(code | {pc: bytes(changed)}, read, scratch, values)
+
+
+def check_fscal1_trace(v, result):
+    """Independent expected FSCAL1 events/results within shared-model replay."""
+    if not v["name"].startswith("FSCAL1 "):
+        return
+    events = v["events"]
+    require(v["initial"]["25006"] == 0x2b, "FSCAL1 trace lost reset VCO_CURR/reserved history")
+    require([e for e in events if e[:2] == ["w", 0x61ae]] == [["w", 0x61ae, 0]],
+            "FSCAL1 must still be written exactly once as 00")
+    strobes = [(i, e[2]) for i, e in enumerate(events) if e[:2] == ["w", 0xe1]]
+    if v["name"] == "FSCAL1 configuration low bits":
+        require(not strobes and result == 7 and
+                [e[2] for e in events if e[:2] == ["r", 0x61ae]] == [0x31],
+                "FSCAL1 configuration low-bit failure was waived")
+        return
+    require(strobes and strobes[0][1] == 0xe3, "Missing genuine E3 in FSCAL1 trace")
+    on = strobes[0][0]
+    before = [e[2] for e in events[:on] if e[:2] == ["r", 0x61ae]]
+    after = [e[2] for e in events[on:] if e[:2] == ["r", 0x61ae]]
+    require(before == [0]*3 and after, "FSCAL1 write/entry readback history changed")
+    if v["name"] == "FSCAL1 postcal low bits":
+        require(len(after) == 1 and after[0] in (0x31, 0x32, 0x33) and result == 7 and
+                strobes == [(on, 0xe3)] and not any(e[:2] == ["r", 0xd9] for e in events),
+                "FSCAL1 postcal low-bit failure published/read/continued")
+    else:
+        expected = {"FSCAL1 postcal 30": 0x30, "FSCAL1 postcal FC": 0xfc}[v["name"]]
+        require(set(after) == {expected} and result == 0 and [n for _, n in strobes] == [0xe3, 0xed],
+                "FSCAL1 reserved bits blocked the genuine receive/stop/flush")
+
+
 def execution(simulator, path, symbols, allocated, sites, v):
+    check_fscal1_trace(v, v["result"])
     before, done = (symbols["_radio_rx_test_" + name] for name in ("before", "done"))
     current = GUARD_SFRS | {int(a): n for a, n in v["initial"].items()}
     commands = [ALIAS, "fill xram 0 0x1eff 0xa5", "fill xram 0x6000 0x63ff 0x69",
@@ -268,7 +316,7 @@ def main():
     result = subprocess.run([str(args.output / "host-radio-rx-tests"), "--vectors"],
                             capture_output=True, text=True, timeout=15, check=True)
     vectors = [json.loads(line) for line in result.stdout.splitlines()]
-    require(len(vectors) == 27, "RX host trace scenarios changed")
+    require(len(vectors) == 33, "RX host trace scenarios changed")
     peak = max(execution(args.simulator, path, symbols, allocated, sites, v) for v in vectors)
     print(f"Passive RX: {len(image)} CODE, {len(allocated) - 8} ordinary XDATA +64 reserved; "
           f"stack start {symbols['s_SSEG']:02X}, observed MMIO peak {peak:02X}. "

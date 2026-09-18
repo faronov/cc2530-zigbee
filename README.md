@@ -6,7 +6,8 @@
 An experimental, open C/SDCC project aiming to implement a small Zigbee end
 device and, subsequently, a sleepy end device on the TI CC2530.
 
-**Current status: bootstrap, guarded hardware-debugging tools and offline components.
+**Current status: bootstrap, guarded hardware-debugging tools, bounded passive RX
+and offline protocol components.
 This is not yet a working Zigbee stack.** The included firmware does not join a network,
 transmit radio packets, read a sensor or refresh a display. It does not require
 IAR or proprietary TI stack libraries.
@@ -352,8 +353,9 @@ links the unchanged driver for both boards. Its 32-word batches include real
 RC16/XOSC32, plus short seed/reseed cases. The host checks every actual word,
 not just a count/hash. A separately selected genuine stopped-RCTRL probe tests
 terminal rejection; holding the CPU is **not** a PRNG poll-timeout experiment.
-All sixteen older BINs and existing drivers remain unchanged. CI has eighteen
-full jobs with the same seven artifacts and `hardware_tested=false`.
+That PRNG addition preserved all sixteen older BINs and existing drivers.
+The later passive RX addition below brings CI to twenty full jobs with the
+same seven artifacts and `hardware_tested=false`.
 The original **7,224-byte wirev1 LG PRNG image** passed
 [short hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
 two seed1234 loads and eight RC16 words, repeating `8D94 E5AC CBBE 1731`,
@@ -383,15 +385,42 @@ broader entropy/RF/security/sleep gates remain open. No hosted-CI result is clai
 are explicit. RF/noise seeding, ADC conversion, sleep and security randomness
 remain unimplemented; M2 #4 stays open.
 
-## Isolated passive RX foundation
+## Bounded passive RX
 
 The [bounded passive receiver](docs/RADIO_RX.md) configures channels 11..26,
 receives one CRC-checked body with raw RSSI/correlation, and verifies soft
 shutdown/flush without TX, automatic ACK, DMA or interrupt enable.
 `make test-radio-rx` is **host-tested, image-checked and synthetically
-simulated only**. No board firmware calls it yet; its test executable must
-never be flashed. Physical reception and comparison with an independent
-sniffer remain a separate gate.
+simulated only**; its standalone test executable must never be flashed.
+The separate `IMAGE=radio_rx_fixture` now links the actual startup, board,
+clock and RX services for both boards. It selects channel15 and permits
+at most16 bounded attempts, with READY checkpoints and terminal END/FAULT.
+Unlike the nine older non-RF images, this image **can enable RF reception**.
+Only successful publication increments heartbeat; BAD_CRC publishes nothing.
+A fault may leave RX active and requires separately authorized full-reset
+recovery, not resume/retry. A
+[parent-observed LG failure/probe](docs/DEBUGGING.md#2026-09-18-lg-rx-fscal1-failure-and-probe)
+identified an FSCAL1 reserved-bit guard error. The corrected image passed
+[bounded LG hardware acceptance on 2026-09-18](docs/DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance):
+one initial reception, a retained pre-RF timeout, then a separately reset
+16-attempt run. All14 published bodies in that run matched the concurrent
+Nordic capture; two BAD_CRC attempts published nothing. The16-attempt cap
+reached retained END with RX disabled and empty FIFOs.
+
+```sh
+make BOARD=generic IMAGE=radio_rx_fixture test-radio-rx-fixture
+make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-radio-rx-fixture
+```
+
+Run those simulator jobs serially. Full hashes,96-byte wire ABI,128-byte
+caller frame, scoped memory budget and limitations are in
+[RADIO_RX.md](docs/RADIO_RX.md#bounded-passive-rx-board-fixture).
+The [manual runner](docs/DEBUGGING.md#parent-only-passive-rx-acceptance) is
+separately authorized, never automatic, verifies physical CODE before execution
+and requires a new private capture outside the repository. Raw frames/identities
+must not go to stdout or CI. Generic hardware, calibrated metadata, independent
+on-air FCS verification and broader RF fault recovery remain unobserved.
+This is not continuous/lossless reception or MAC/security/network support.
 
 ## Intended scope
 
@@ -422,8 +451,8 @@ APS/ZCL composition and the read handler are target-tested; the complete
 MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested and
 also runs in a single SDCC resource image.
 This foundation is host-tested, image-checked and simulated, not linked into
-board firmware. There is still no hardware-validated receiver, transmit driver, functioning
-MAC, association or Zigbee join.
+board firmware. The separate passive receiver does not provide a transmit
+driver, functioning MAC, association or Zigbee join.
 
 `make test-protocol-budget` checks that integrated image and generates a
 [per-subsystem resource ledger](docs/ARCHITECTURE.md#integrated-protocol-resource-budget):

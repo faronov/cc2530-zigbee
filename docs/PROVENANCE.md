@@ -191,6 +191,56 @@ new-session recovery after the last replug. That full one-cycle fixture run
 ended halted at `0x0173`.
 This changes evidence status, not licensing or the supported API bounds.
 
+### Linux external-programmer no-run guard sources
+
+`tools/cc_tool_no_run_guard.c` and `tools/test_cc_tool_no_run_guard.py` are
+original BSD-3-Clause work. The guard uses Linux ELF `LD_PRELOAD`,
+`dlsym(RTLD_NEXT, ...)` and the `libusb_control_transfer` calling convention
+to reject a narrow class of control requests before submission. It copies
+no GPL programmer implementation, flash algorithm, RAM executor or USB
+bytecode encoder. The existing reviewed adapter reset facts are functional
+reference facts; **SWRU191F is not an adapter USB protocol specification**.
+
+The parent supplied this separately reviewed external-tool identity on
+2026-09-18; the external source archives, unpacked tool and inspection logs
+remain session-private and are not imported or CI artifacts:
+
+| Item | Reviewed identifier |
+| --- | --- |
+| Installed Ubuntu package | `cc-tool 0.27-1build5`; executable banner `0.26` |
+| Installed `/usr/bin/cc-tool` SHA256 | `815c42664a30e5efd88d2c62a71fff00e2afa4ec4a3217243749f5f3f55fb1c4` |
+| Upstream v0.27 source revision | `51fd9dffc206d132614f30402b50cd712fa9a60c` |
+| Official Ubuntu original source archive SHA256 | `1d26be4446c68413a02bf3156e6434d7fe9ce76aa0a169464ca5d7b2a731610d` |
+| Debian patch series in the reviewed source | Empty |
+
+The installed binary matched the parent's privately unpacked binary.
+At that unpatched revision, `src/application/cc_base.cpp` `execute()` calls
+`unit_close()` on normal return; `src/programmer/cc_programmer.cpp`
+`unit_close()` always calls `reset(false)`. This includes a read-only task.
+`src/application/cc_flasher.cpp` `task_verify()` can merely print a mismatch
+and return normally, reaching that cleanup reset. The guard is original
+interposition around these functional lifecycle facts, not an adaptation of
+those GPL implementations. Package version, banner and content identity must
+not be conflated.
+
+The [exact guard boundary](DEBUGGING.md#linux-external-programmer-no-run-guard)
+forwards only the reviewed OUT reset-into-debug shape
+`40/C9/value0/index1/NULL/length0` among OUT `C9` requests, rejects the rest
+before libusb with flush and exit86, and reports helper/log failures with
+exit87. Unrelated operations/errors remain unchanged. No environment disable
+switch, reset substitution or successful-service stub exists.
+It does not block DEBUG RESUME/STEP or the external programmer's RAM helper.
+Exit86 is neither programming success nor halted-state proof.
+
+Six strict synthetic tests compile only the original fake USB library/driver
+and guard; normal discovery includes them without build integration or USB.
+The parent also verified the installed ELF's actual binding using
+`LD_BIND_NOW`/`LD_DEBUG` with `--help` only, without USB. That parent-reported
+host/linkage evidence does not establish guarded target behavior or hardware
+acceptance. Independent physical readback/halt confirmation and separately
+authorized recovery conditions remain required. No private backup, device
+identity, capture, external source archive or programmer binary is published.
+
 ### M2 timebase sources
 
 The awake-only Sleep Timer reader, unsigned modular deadline arithmetic,
@@ -422,6 +472,16 @@ contains only processed observations from explicitly authorized programming,
 full physical CODE verification and normal/timeout/reset-recovery runs.
 Raw logs, identities and recovery backups remain outside Git and CI.
 
+The subsequent [FIFO simulator guard correction](VALIDATION.md#fifo-simulator-guard-regression-after-rx-declarations)
+is also original repository-only test code. It accounts for the harness's
+explicit `RFIRQF0 AA -> AB` input after the common RX declarations exposed the
+existing `E9/91` aliases; the register references remain SWRU191F sections2.5
+and23.1 cited above. Bounded CPU/RAM continuation uses the repository-local
+restore pattern, not an imported simulator or firmware implementation.
+C52 SBUF-write effects are emulator bookkeeping, not CC2530 peripheral
+evidence. No firmware bytes, hardware acceptance record, external code or
+private data were changed or imported by this correction.
+
 ### M2 passive RX sources
 
 The [isolated passive RX service](RADIO_RX.md), host model and linked
@@ -441,6 +501,50 @@ Its DMA variable-length and Timer2 latch errata do not establish RX behavior
 or waive a hardware gate; this service uses neither operation.
 Primary PDFs remain external. Synthetic events explicitly supply peripheral
 effects absent from s51; they are not captures or hardware observations.
+
+The subsequent bounded board fixture, decoder, private-file manual runner and
+tests are also original BSD-3-Clause work, reusing only this repository's
+startup, clock, RX, debugger and host-model code. Hardware facts retain the
+same **SWRU191F (April2014)** references above; CPU snapshots additionally use
+the SFR/interrupt descriptions in section2.5 pp.46-48 and Sleep Timer
+sections11.1-11.2 p.129: STIF may latch with IRQs disabled and is never cleared
+by the fixture. **SWRZ031 (April2009)** adds no applicable DMA/Timer2 operation
+to this no-DMA slice. No USB framing, debugger MMIO writer, external driver,
+programmer implementation, dependency or private data is imported.
+The C52 UART suppression on continuation is solely a simulator bookkeeping
+fact, verified against uCsim4.2.0 behavior; it is not a CC2530 hardware claim.
+
+The [2026-09-18 parent-observed LG failure/probe](DEBUGGING.md#2026-09-18-lg-rx-fscal1-failure-and-probe)
+identified FSCAL1 `61AE` readback `30` against the previous full-byte `00`
+expectation. **SWRU191F (April2014) p.267**, read directly again for this
+correction, defines reserved bits7:2 as R/W0 with reset `001010`, and
+VCO_CURR bits1:0 as R/W. **Section23.15.1/Table23-6** still recommends writing
+FSCAL1 `00`; **section23.15.2/Table23-7** distinguishes W0 from read-as-zero R0.
+The adjacent FSCAL2 table describes a separate capacitor-calibration result,
+not the FSCAL1 observation. Only the documented stable low bits are compared;
+there is no new calibration algorithm or workaround imported from another
+part. The newly emitted opcode52 is the two-byte `ANL direct,A` from the
+same manual's **Table2-3 p.37**; actual output targets private bank0 AR0,
+and the proof rejects other instances/operands. The existing SWRZ031 DMA/Timer2
+issues do not alter this register-table
+contract. Processed failure/probe facts were supplied by the parent; no
+private backup, payload, capture, identity or external implementation was
+opened or copied by the offline implementer. Corrected-image automated checks
+remain host/image/synthetic evidence. The separate
+[2026-09-18 bounded LG acceptance](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance)
+records parent-performed guarded programming, complete flash/factory readback,
+compiled-C reception, a real deadline hold, reset recovery and terminal cap.
+Independent reference capture used official Nordic sniffer firmware0.8.0
+on the nRF52840 DK, channel15. The externally installed host tool came from
+[upstream revision e459feba9730f85b22a78d3559c67c4df6bf876a](https://github.com/nordicsemi/nRF-Sniffer-for-802.15.4/tree/e459feba9730f85b22a78d3559c67c4df6bf876a);
+its distribution metadata reports version0.0.0, not the firmware's version.
+Its parser strips the two FCS octets;
+private comparison checked complete FCS-free bodies, not independent CRC or
+authentication. The original standard-library comparison checked PCAP2.4,
+DLT283, complete record lengths and TAP channel/metadata structure.
+Only processed counts/statuses and this project's public image hash are
+recorded here. No capture, frame, address, payload hash, factory identity,
+external sniffer implementation or programmer binary is imported or uploaded.
 
 ### M2 deterministic PRNG sources
 

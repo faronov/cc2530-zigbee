@@ -24,8 +24,9 @@ else ifeq ($(IMAGE),radio_fifo_fixture)
 else ifeq ($(IMAGE),dma_fixture)
 else ifeq ($(IMAGE),aes_fixture)
 else ifeq ($(IMAGE),prng_fixture)
+else ifeq ($(IMAGE),radio_rx_fixture)
 else
-$(error IMAGE must be bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture or prng_fixture)
+$(error IMAGE must be bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture or radio_rx_fixture)
 endif
 
 TARGET := $(BUILD)/$(IMAGE)
@@ -59,6 +60,9 @@ OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/aes.rel $(BUILD)/ae
 endif
 ifeq ($(IMAGE),prng_fixture)
 OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/prng.rel $(BUILD)/prng_fixture_state.rel
+endif
+ifeq ($(IMAGE),radio_rx_fixture)
+OBJECTS += $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/radio_rx.rel $(BUILD)/radio_rx_fixture_state.rel
 endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
@@ -106,6 +110,9 @@ $(BUILD)/aes_fixture_state.rel: src/aes_fixture_state.c $(HEADERS) Makefile | $(
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 $(BUILD)/prng_fixture_state.rel: src/prng_fixture_state.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_rx_fixture_state.rel: src/radio_rx_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 # Relink with the selected board even when an explicitly shared BUILD is reused.
@@ -435,6 +442,15 @@ $(BUILD)/host-aes-fixture-tests_$(BOARD): tests/test_aes_fixture.c tests/aes_ref
 $(BUILD)/host-prng-fixture-tests_$(BOARD): tests/test_prng_fixture.c src/prng_fixture_state.c src/prng.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DPRNG_FIXTURE_HOST_TEST tests/test_prng_fixture.c src/prng_fixture_state.c src/prng.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
+$(BUILD)/host-radio-rx-fixture-tests_$(BOARD): tests/test_radio_rx_fixture.c tests/test_radio_rx.c src/radio_rx_fixture_state.c src/radio_rx.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_rx_fixture.c src/radio_rx_fixture_state.c src/radio_rx.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+.PHONY: test-radio-rx-fixture
+test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
+	$(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
+	$(PYTHON) -B tests/boot_image.py --board $(BOARD) --image radio_rx_fixture --output $(BUILD) --simulator "$(S51)"
+
+test: $(if $(filter radio_rx_fixture,$(IMAGE)),$(BUILD)/host-radio-rx-fixture-tests_$(BOARD))
 test: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOARD))
 test: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
 test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
@@ -454,6 +470,9 @@ ifeq ($(IMAGE),aes_fixture)
 endif
 ifeq ($(IMAGE),prng_fixture)
 	$(BUILD)/host-prng-fixture-tests_$(BOARD)
+endif
+ifeq ($(IMAGE),radio_rx_fixture)
+	$(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 endif
 ifeq ($(IMAGE),debug_fixture)
 	$(BUILD)/host-fixture-tests_$(BOARD)

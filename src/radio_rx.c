@@ -55,9 +55,15 @@ static radio_rx_result_t observe(radio_rx_diagnostics_t MCU_XDATA *d,
         MMIO_XREAD(0x61a8) != 0x85 || MMIO_XREAD(0x61a9) != 0x14 ||
         MMIO_XREAD(0x61b8) != 0x75 || MMIO_XREAD(0x61b9) != 8)
         return RADIO_RX_UNSUPPORTED_STATE;
-    for (i = 0; i < d->writes; i++)
-        if (MMIO_XREAD(settings[i]) != (i == 9 ? w->frequency : values[i]))
+    for (i = 0; i < d->writes; i++) {
+        /* SWRU191F (April 2014), p.267 FSCAL1: only VCO_CURR[1:0]
+         * is stable configuration. Reserved [7:2] is R/W0, not read-as-zero;
+         * hardware can change it after E3. Still write the recommended 00.
+         */
+        if ((MMIO_XREAD(settings[i]) & (uint8_t)(i == 8 ? 0x03u : 0xffu)) !=
+            (i == 9 ? w->frequency : values[i]))
             return RADIO_RX_STATE_CHANGED;
+    }
     d->rx_enable = MMIO_XREAD(0x618b);
     d->fsm0 = MMIO_XREAD(0x6192);
     d->signals = MMIO_XREAD(0x6193);

@@ -2,9 +2,15 @@
 
 `include/radio_rx.h` / `src/radio_rx.c` implements one bounded foreground
 receive operation, separately from the quiescent FIFO service and board GPIO.
-It is **host-tested, image-checked and alias-aware simulated only**.
-No board image calls it yet. `radio_rx_test.ihx` is an isolated synthetic
-executable: **NEVER flash it or publish it as board firmware**.
+The corrected implementation is **host-tested, image-checked and alias-aware
+simulated**, with separate
+[bounded LG hardware acceptance](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance).
+A
+[parent-observed failure/probe on the previous LG image](DEBUGGING.md#2026-09-18-lg-rx-fscal1-failure-and-probe)
+identified the FSCAL1 guard correction below; it was not successful reception.
+The separate `IMAGE=radio_rx_fixture` now calls it on both boards, as described
+below. `radio_rx_test.ihx` remains an isolated synthetic executable:
+**NEVER flash it or publish it as board firmware**.
 
 ## Contract
 
@@ -28,6 +34,16 @@ threshold 127, the default 192-us RX-to-RX interval, TI's AGCCTRL1,
 TXFILTCFG and FSCAL1 recommendations, and
 `FREQCTRL = 11 + 5 * (channel - 11)`. Both sides of every configuration write
 must still observe an idle/reset-empty radio.
+
+FSCAL1 (`61AE`) is still written as the whole byte `00`, per **SWRU191F,
+revised April2014, section23.15.1/Table23-6**. Its p.267 register table
+defines VCO_CURR bits1:0 as R/W and reserved bits7:2 as **R/W0**, reset
+`001010`, not R0. Section23.15.2/Table23-7 distinguishes write-zero-only from
+read-as-zero. Readback therefore checks `(FSCAL1 & 03) == 00`, during
+configuration and every later observation. All other nine settings remain
+full-byte comparisons. Nonzero low bits still latch STATE_CHANGED without
+publication. This is not FSCAL2 (`61AF`), the separate capacitor-calibration
+result, and adds no retry, acknowledgment, cleanup or calibration algorithm.
 
 `RFST=E3` enables/calibrates reception. The service waits for RXENABLE80,
 PLL lock, RSSI validity and then a complete-frame FIFOP indication.
@@ -94,14 +110,19 @@ make test-radio-rx
 ```
 
 The target is also included in ordinary `make ... all test`. The same C
-driver and real timebase run in **150,593 strict host cases**, including
+driver and real timebase run in **151,177 strict host cases**, including
 all channels, all legal lengths, every RSSI/correlation byte, CRC rejection,
 backlog discard, unchanged tails, both object-address sweeps, readback and
 entry-state failures, exact limits/deadlines, rollover, helper ambiguity,
 delayed phases and retained-fault/BAD_CRC reuse. The host model consumes the
 shared 32-entry logs; every write must match the passive-only whitelist.
+The FSCAL1 additions cover all64 reserved-bit patterns at configuration,
+after E3 and with genuine successful-call reuse. All three nonzero low-bit
+values across all64 upper-bit patterns fail both configuration readback and
+post-E3 observation, with unchanged output and retained fault. Each bit of
+the other nine configuration bytes is also corrupted and rejected.
 
-**27 linked scenarios** replay deterministic host-model peripheral events
+**33 linked scenarios** replay deterministic host-model peripheral events
 through the actual SDCC instructions, not a replacement service or patched
 CODE. Native assertions independently constrain publication, FIFO order and
 permitted writes; replay additionally checks instruction order, every actual
@@ -109,13 +130,24 @@ MOVX address/value, explicitly serialized diagnostics, output/tails,
 retained faults, unrelated peripheral state and memory guards.
 This is a shared synthetic model, not an independent silicon model.
 
-The complete 5,189-byte linked image, including runtime, caller and CODE
+The complete 5,214-byte linked image, including runtime, caller and CODE
 configuration tables, is pinned; every CODE byte is mutation-tested.
 SFR operations, the two single-read RFD sites, fixed and table-indexed XREG
 sites, CDB layouts, pointer ABI, listing and ownership are checked separately.
 SDCC 4.2.0 duplicated a destructive RFD read for a draft chained assignment;
 the final source uses a single destination and the linked check rejects an
 extra read even when host behavior would appear correct.
+The FSCAL1 instruction check separately verifies index8/mask03, maskFF for
+other indices, bank0 `ANL AR0,A` (opcode52, not an SFR access), expected
+CODE/frequency values and the full comparison. Its bytes are mutation-tested
+independently of the whole-image hash. Explicit traces require confirmed
+FSCAL1 `00` before E3, then readback `30` or `FC` and successful synthetic
+stop/drain/flush, while `31/32/33` cause terminal nonpublication. These expected
+values/results are checked separately from shared host-trace replay.
+
+The corrected standalone image SHA256 is
+`a69606bca743a8e660d824d920211dfdf9b3467f175f251e117c5c01539dd41e`.
+The correction adds25 CODE bytes and no allocated RAM or C/wire ABI changes.
 
 The isolated image uses 375 ordinary XDATA bytes plus the existing 64-byte
 status reservation, within the unchanged 512-byte component budget.
@@ -125,17 +157,178 @@ unallocated XDATA and final unwind are checked. The result at `1E00` is the
 eight-byte synthetic ABI `RXO1 01 08 00 00`.
 Each simulator process retains the existing **15-second** timeout.
 
-The generic and LG full offline suites passed. All 18 existing board images
+Before this correction, the generic and LG full offline suites passed.
+Focused correction checks are described here; no repeated full matrix or
+new hosted-CI pass is claimed. All 18 older board images
 were rebuilt and image-checked with unchanged complete BIN sizes/SHA256.
-The board verifier explicitly rejects the RX driver and standalone harness
-in those images, including source-record and symbol injection tests.
+The board verifier explicitly rejects the RX driver in those older images
+and the standalone harness in **every** board image, including source-record
+and symbol injection tests.
 
-## Remaining physical gate
+## Bounded passive RX board fixture
 
-A separately integrated, checked board fixture and explicitly authorized
-programming/recovery procedure are still required. Physical CODE must be
-verified before execution. Channel-15 reception must then be compared with
-an independent sniffer using private captures, with errors and any separate
-full-reset recovery reported honestly. No LG RX, calibration, FCS or on-air
-acceptance is established by these offline results. Existing board firmware,
-debugger permissions, CI artifact whitelist and M2/M3 exit gates are unchanged.
+`IMAGE=radio_rx_fixture` uses the actual startup, board policy, clock selector
+and real passive driver. It is **RF-capable RX-only**, unlike the nine
+older non-RF images. The corrected LG image has the bounded physical evidence
+below; generic remains host/image/simulator-only. The earlier LG failure/probe
+is recorded separately, not relabeled as success.
+No successful service substitute or physical peripheral model is
+linked. The LG display remains off under the existing board policy.
+
+After bootstrap the BEFORE checkpoint exposes INIT. The next step calls
+`clock_select_init(XOSC32,1024,4096,...)` and requires confirmed `88/88`,
+awake state and IRQ ownership before CLOCK READY. Each subsequent step
+fills the persistent frame object with `A5`, increments attempt and calls
+`radio_rx_receive_init(15,65536,65535,...)`. There are at most **16 attempts**,
+each separated by READY. `OK`, with intact CPU ownership, increments completed
+and M0 heartbeat; `BAD_CRC` leaves the full frame `A5` and permits the next
+attempt. The step after the sixteenth READY enters terminal END without RX.
+These are raw ticks/polls, not calibrated seconds or a continuous receiver.
+
+Every other driver result is terminal FAULT with the original result/latch
+retained. No fixture cleanup, RF-off, retry, flag clear, reset or continuation
+follows a failure. The clock selector retains its existing bounded rollback
+contract on clock failure; that is not RX recovery. A timeout can leave RX
+**active even while the CPU is halted**. Recovery requires a separately
+authorized full-reset/full-CODE-verified invocation.
+
+### Wire v1 and linked ABI
+
+All multi-byte wire fields are little-endian. Native C diagnostics are
+explicitly serialized, never copied using host structure padding.
+
+| Offset | Size | Meaning |
+| --- | --- | --- |
+| 0 | 6 | `M2RX`, version1, size96 |
+| 6 | 3 | phase, reason, stage |
+| 9 | 5 | attempt, completed, RX result, fault latch, clock result |
+| 14 | 8 | channel15, maximum16, timeout32=65536, limit16=65535 |
+| 22 | 19 | existing clock diagnostic wire layout |
+| 41 | 31 | RX diagnostics in the layout above |
+| 72 | 7 | CMD, STA, SLEEP, IEN0/1/2, initial SLEEP |
+| 79 | 7 | initial IP0, IP1, TCON, S0CON, S1CON, IRCON2, IRCON |
+| 86 | 7 | current flags in that order |
+| 93 | 3 | guards `69 96 C7` |
+
+Phases: INIT1/RUNNING2/READY3/FAULT4/END5; the decoder rejects RUNNING.
+Stages: CLOCK0/RX1/END2. Reasons: none0/entry1/phase2/clock3/RX4/invariant5.
+RX result255 means unattempted; clock result8 means unattempted. C snapshots
+are sequential, not atomic. Only IRCON.STIF `0->1` growth is accepted across
+snapshots; `1->0` and other CPU flag/control changes are rejected. RFIRQF0/1
+belong to the driver's raw diagnostic rules, not a byte-identical flag rule.
+
+| Allocation | Address / bytes (both boards) |
+| --- | --- |
+| Ordinary XDATA | `0000..0219`, 538 |
+| Driver fault / private-prefix last byte | `0045` / `00FA` |
+| `radio_rx_fixture_state` | `00FB`, 96 |
+| `radio_rx_fixture_frame` | `015B`, 128 (length/RSSI/correlation/body125) |
+| `radio_rx_fixture_diagnostics` | `01DB`, 31 |
+| `radio_rx_fixture_clock` | `01FA`, 19 |
+| Generic-store scratch | `0219`, excluded from caller objects |
+| M0 used / reservation | `1E00`, 32 / 64 |
+| IRAM stack start / reserved | `61` / 159 (SP initial `60`) |
+| Observed MMIO-stop peak / checkpoint SP | `71` / `62` |
+
+The actual `.mem` occupancy below stack is8 register-bank bytes,66 DATA bytes,
+one bit-storage byte (five bits used),19 overlay bytes and3 unused bytes.
+Do not sum overlapping linker DSEG declarations as additional physical RAM.
+
+Timebase, clock and RX objects are linked **before** the caller objects.
+Total nonaliased reservation is602 bytes. Only this fixture gets an enforced
+1024-byte budget; every older image and standalone RX retains512. CODE stays
+below `8000`; XDATA stays below `1E00`. `1F00..1FFF` remains an IRAM alias,
+not additional storage. The entire upper IRAM `80..FF` stays `C7` in simulation;
+the observed peak is not a worst-case stack proof.
+
+| Board | CODE/BIN | BEFORE / READY / FAULT / END |
+| --- | --- | --- |
+| generic | 9120 | `0140 / 0142 / 0144 / 0147` |
+| lg_esl29_rev03 | 9160 | `0168 / 016A / 016C / 016F` |
+
+Complete BIN SHA256:
+
+```text
+generic         473758bc8bf8e9bf1b503117e254a907ac23918a34bf006bbb62c4e3da63a9e7
+lg_esl29_rev03   0e31578a708d9c8d4556caec33f062fd82baf7498ebef1af3b708f868ab6c8d2
+```
+
+SDCC emits both an unused out-of-line step and the live inlined main copy.
+The live copy avoids an extra return frame. Every complete CODE byte is
+pinned and mutation-tested; independent instruction/MMIO/CDB/listing checks
+cover the real calls, CODE tables, two destructive RFD read sites, fixed and
+indexed MMIO addresses, XDATA pointer ABI and caller/helper exclusion.
+
+Reviewed instruction sites in the corrected images (hex CODE addresses):
+
+| Site | Standalone test | Generic fixture | LG fixture |
+| --- | --- | --- | --- |
+| Indexed configuration MOVX read | `03A1` | `0BA9` | `0BD1` |
+| Index8 mask selection / ANL AR0,A | `03A4 / 03C5` | `0BAC / 0BCD` | `0BD4 / 0BF5` |
+| Table comparison / STATE_CHANGED return | `03DB / 03E0` | `0BE3 / 0BE8` | `0C0B / 0C10` |
+| Indexed configuration MOVX write | `0C0B` | `1413` | `143B` |
+| E3 / ED | `0D07 / 120E` | `150F / 1A16` | `1537 / 1A3E` |
+| Single PHR RFD read / body-loop RFD read | `0F46 / 1098` | `174E / 18A0` | `1776 / 18C8` |
+
+The old physical probe at `0BF7` belongs only to the previous LG hash.
+It is not the failure-return site in this corrected image.
+
+### Focused offline checks
+
+Run the two simulator jobs **serially**:
+
+```sh
+make BOARD=generic IMAGE=radio_rx_fixture test-radio-rx-fixture
+make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-radio-rx-fixture
+PYTHONPATH=tools python3 -B -m unittest test_radio_rx_fixture test_m0_artifacts test_timebase_fixture -q
+```
+
+Host tests run real bootstrap/clock/RX, reusing the original strict synthetic
+RX backend without changing its32-entry log bounds.
+Both boards pass1,006 host checkpoints and67 linked checkpoint traces.
+Coverage includes min/max bodies and raw footer/tails, BAD_CRC/reuse,
+16-attempt/END bound, exact timeout and full65535 stopped-counter cap,
+entry/readback/controller/overflow errors, clock failure, CPU flag rejection
+and retained terminal state. Linked scenarios replay that **shared host
+model**, not an independent RF oracle, through actual board instructions
+with explicit peripheral effects and no ROM/driver-return patch.
+Both board host models also exhaust all64 FSCAL1 upper-bit patterns with all
+four low-bit values, and retain each failure without publication.
+The long full-cap case uses33 segments of genuine CPU/RAM continuation, never
+changed poll arguments/counters, including synthetic FSCAL1 `30` after E3.
+Each s51 process retains15 seconds.
+The C52-only SBUF at99 stays at its verified zero reset byte during restore:
+writing it would start a fictitious UART transfer. Every restored SFR byte,
+including99, is compared before continuation. This is not CC2530 UART/RF
+behavior. Alias, unallocated RAM, upper-IRAM and stack-unwind checks remain.
+
+`tools/radio_rx_fixture.py` is read-only and returns no raw body.
+`debug_image.py radio-rx-state` decodes the96-byte snapshot;
+`radio-rx-checkpoints` verifies artifacts and reports linked proof.
+The separate [manual runner](DEBUGGING.md#parent-only-passive-rx-acceptance)
+is never invoked by a build/test/import/CI. CI has20 jobs with exactly the
+existing seven artifact paths; `hardware_tested=false` remains unchanged.
+No host executable, synthetic vector, capture or standalone image is uploaded.
+
+## Physical evidence and remaining gates
+
+The [2026-09-18 LG record](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance)
+uses the exact9,160-byte board image above, with full physical readback before
+execution. One initial69-byte body matched the concurrent Nordic capture.
+A separate pre-configuration deadline hold produced retained TIMEOUT10,
+without configuration/RF actions or publication. Explicit reset/CODE-verified
+recovery then completed16 attempts:14 CRC_OK bodies each matched one reference
+record, while attempts4/16 returned BAD_CRC with the entire output still `A5`.
+Subsequent success after attempt4 establishes bounded BAD_CRC reuse, not an
+automatic reset. The next step reached retained END016F without a17th receive;
+RX was disabled, both FIFOs empty and heartbeat14.
+
+These are finite channel15 observations on one LG board. The reference tool
+strips FCS; body equality is not independent on-air CRC verification.
+Generic hardware, other channels, calibrated timing/RSSI/LQI, controller
+overflow recovery and stopped-clock/poll-cap behavior remain unobserved on
+silicon. No lossless/continuous reception, MAC syntax/security/network
+acceptance, TX, autoACK, RF ISR or DMA is established. Physical CODE checking,
+private captures, explicit recovery and the M2/M3 gates remain required.
+No hardware is accessed by tests/CI; their artifacts remain
+`hardware_tested=false` with the same seven-file whitelist.

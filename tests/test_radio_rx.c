@@ -58,6 +58,7 @@ static uint16_t out_address, diag_address;
 static uint32_t ticks, latched, tick_step;
 static unsigned last_address, last_value, reads_total, writes_total, cases;
 static unsigned mode, phase_samples, cal_delay, arrival_delay, stop_delay, flush_delay;
+static uint8_t fscal1_after_write, fscal1_after_cal;
 static unsigned expected_length, wire_length, rd, config_writes, on_writes, stop_writes, flush_writes;
 static unsigned silent_channel, ignored_config, forced_read_count;
 static unsigned inject_sample, samples, inject_address, inject_value;
@@ -102,6 +103,8 @@ static void advance(void)
 {
     phase_samples++;
     if (mode == 1 && phase_samples > cal_delay) {
+        /* Explicit synthetic calibration input, not an RF/calibration model. */
+        if (XR(0x6192) & 0x40) XR(0x61ae) = fscal1_after_cal;
         XR(0x6192) = 0; XR(0x6193) |= 5; XR(0x6199) = 1;
         if (!silent_channel && !XR(0x619b) && phase_samples > cal_delay + arrival_delay) {
             memcpy(fifo, wire, wire_length); rd = 0;
@@ -193,7 +196,8 @@ static void xstore(uint16_t address, uint8_t value)
         unsigned i = config_writes++;
         assert(mode == 0 && i < 10 && address == config_addresses[i]);
         assert(value == (i == 9 ? 11 + 5 * (command - 11) : config_values[i]));
-        if (ignored_config != i + 1) XR(address) = value;
+        if (ignored_config != i + 1)
+            XR(address) = address == 0x61ae ? fscal1_after_write | value : value;
     }
 }
 
@@ -217,6 +221,7 @@ static void reset(unsigned length, uint8_t rssi, uint8_t crc_correlation, unsign
     out_address = 0x400; diag_address = 0x500;
     ticks = 0; tick_step = 1; latched = 0;
     mode = phase_samples = cal_delay = arrival_delay = stop_delay = flush_delay = 0;
+    fscal1_after_write = 0; fscal1_after_cal = 0x30;
     reads_total = writes_total = config_writes = on_writes = stop_writes = flush_writes = rd = 0;
     silent_channel = ignored_config = forced_read_count = inject_sample = samples = 0;
     command = 15; expected_length = length; wire_length = length + 1 + extra;
@@ -341,6 +346,16 @@ static void emit_vectors(void)
     emit("late controller fault", 10000, 1000, RADIO_RX_CONTROLLER_ERROR);
     reset(5, 0, 128, 0); SOC_RFIRQF1 = 1;
     emit("TXACKDONE is never allowed", 10000, 1000, RADIO_RX_STATE_CHANGED);
+    reset(5, 0, 128, 0);
+    emit("FSCAL1 postcal 30", 10000, 1000, RADIO_RX_OK);
+    reset(5, 0, 128, 0); fscal1_after_cal = 0xfc;
+    emit("FSCAL1 postcal FC", 10000, 1000, RADIO_RX_OK);
+    for (i = 1; i <= 3; i++) {
+        reset(5, 0, 128, 0); fscal1_after_cal = (uint8_t)(0x30u | i);
+        emit("FSCAL1 postcal low bits", 10000, 1000, RADIO_RX_STATE_CHANGED);
+    }
+    reset(5, 0, 128, 0); inject_sample = 19; inject_address = 0x61ae; inject_value = 0x31;
+    emit("FSCAL1 configuration low bits", 10000, 1000, RADIO_RX_STATE_CHANGED);
 }
 
 int main(int argc, char **argv)
@@ -407,6 +422,39 @@ int main(int argc, char **argv)
         reset(5, 0, 128, 0); ignored_config = i;
         if (i == 1 || i == 6) continue;
         assert(run(10000, 1000) == RADIO_RX_STATE_CHANGED && !on_writes);
+    }
+    for (value = 0; value < 256; value += 4) {
+        reset(5, 0, 128, 0); XR(0x61ae) = (uint8_t)(value | 3u);
+        fscal1_after_write = (uint8_t)value;
+        fscal1_after_cal = (uint8_t)value;
+        assert(run(10000, 1000) == RADIO_RX_OK && XR(0x61ae) == value);
+        /* Actual successful service history, then reuse with another upper
+         * bit pattern. No reset, argument/counter patch or fault clearing.
+         */
+        config_writes = on_writes = stop_writes = flush_writes = 0;
+        fscal1_after_cal = (uint8_t)(value ^ 0xfcu);
+        assert(run(10000, 1000) == RADIO_RX_OK && XR(0x61ae) == fscal1_after_cal);
+        for (i = 1; i <= 3; i++) {
+            reset(5, 0, 128, 0);
+            inject_sample = 19; inject_address = 0x61ae; inject_value = value | i;
+            assert(run(10000, 1000) == RADIO_RX_STATE_CHANGED && !on_writes && !rd &&
+                   diag.value.phase == 1 && diag.value.writes == 9 && diag.value.verified == 8 &&
+                   !diag.value.actions && !diag.value.sample_valid);
+            reset(5, 0, 128, 0); fscal1_after_cal = (uint8_t)(value | i);
+            assert(run(10000, 1000) == RADIO_RX_STATE_CHANGED && on_writes == 1 &&
+                   !stop_writes && !flush_writes && !rd && diag.value.phase == 2 &&
+                   diag.value.writes == 10 && diag.value.verified == 10 &&
+                   diag.value.actions == 1 && !diag.value.sample_valid && diag.value.polls == 21);
+        }
+    }
+    /* Masking FSCAL1 must not weaken any bit of the other nine settings. */
+    for (i = 0; i < 10; i++) for (value = 0; value < 8; value++) {
+        if (i == 8) continue;
+        reset(5, 0, 128, 0);
+        inject_sample = 22; inject_address = config_addresses[i];
+        inject_value = (i == 9 ? 31 : config_values[i]) ^ (1u << value);
+        assert(run(10000, 1000) == (i == 0 ? RADIO_RX_UNSUPPORTED_STATE : RADIO_RX_STATE_CHANGED));
+        assert(on_writes == 1 && !stop_writes && !flush_writes && !rd);
     }
     for (i = 0; i < need; i++) {
         reset(5, 0, 128, 0);

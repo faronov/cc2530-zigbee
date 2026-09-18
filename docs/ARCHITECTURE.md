@@ -650,8 +650,21 @@ configuration, receives one CRC-checked body through RFD, then verifies
 soft-stop/flush before publication. Metadata remains raw; failures retain
 their original cause and may leave RX active until a separate full reset.
 The contract includes both persistent XDATA objects, the private prefix and
-generic-store scratch exclusion. No current board image links the service.
+generic-store scratch exclusion. Only the separate `radio_rx_fixture` board
+image links it, after the real clock selector and before its persistent caller
+objects. The [fixture contract](RADIO_RX.md#bounded-passive-rx-board-fixture)
+caps channel15 reception at16 attempts with terminal END/FAULT and no recovery.
 Its strict host/linked/synthetic checks are not physical radio evidence.
+FSCAL1 remains a whole-byte00 write, but only documented stable VCO_CURR
+bits1:0 are verified; reserved R/W0 bits7:2 are not read-as-zero. The other
+nine settings remain fully compared. The
+[parent-observed prior-image failure](DEBUGGING.md#2026-09-18-lg-rx-fscal1-failure-and-probe)
+is distinct from the corrected image's
+[bounded LG hardware acceptance](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance).
+The latter covers channel15 body agreement with an independent sniffer,
+BAD_CRC nonpublication/reuse, a pre-RF timeout with separate reset recovery
+and the16-attempt terminal cap. Generic and broader RF fault recovery remain
+unobserved; neither result introduces transmission, continuous queues or MAC.
 
 ## Isolated channel-0 DMA copy
 
@@ -1007,6 +1020,11 @@ The M1 fixture retains that exact reservation and M0 status ABI. Its separate
 16-byte `debug_fixture_state` lives in ordinary, linker-accounted XDATA below
 `0x1E00`; its address is looked up in the matching image's map, not hardcoded.
 The existing 512-byte nonaliased-XDATA reservation budget still applies.
+
+The RF-capable `radio_rx_fixture` alone has a1024-byte nonaliased reservation
+budget (538 ordinary+64 status reserved used). Its96-byte wire state and128-byte
+frame remain ordinary allocated XDATA. No component or older board budget is
+expanded; the standalone RX foundation still fits512.
 
 Do not clear an XDATA object at `0x1F00`: this can overwrite the very register
 holding its loop index and the active return addresses. A generic 8051

@@ -68,6 +68,8 @@ make BOARD=generic IMAGE=aes_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=aes_fixture all test
 make BOARD=generic IMAGE=prng_fixture all test
 make BOARD=lg_esl29_rev03 IMAGE=prng_fixture all test
+make BOARD=generic IMAGE=radio_rx_fixture all test
+make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture all test
 python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/check_repository.py
 git diff --check
@@ -99,6 +101,24 @@ PYTHONPATH=tools python3 -B -m unittest test_m1_access test_erase_boundary_fault
 driver and the DYLD interposer in a temporary directory with strict compiler
 flags. It never links real libusb or runs `cc-tool`; it clearly skips on other
 platforms or without a host compiler. The full discovery command includes it.
+
+The original Linux external-programmer no-run guard has a separate focused
+offline test:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_cc_tool_no_run_guard -q
+```
+
+Its six strict synthetic tests compile the guard and an original fake USB
+library/driver in a temporary directory. They exercise blocked reset shapes,
+exact forwarding/errors, an unguarded negative control, missing backend and
+output-flush failure; they never invoke the installed `cc-tool` or open real
+USB. Normal test discovery already includes them, with explicit platform/
+compiler skips where unsupported. No Makefile/CI hardware integration is
+needed. The parent's separate installed-ELF binding check used `--help` only
+and supplies no target or RF evidence. See the
+[exact limits](docs/DEBUGGING.md#linux-external-programmer-no-run-guard) and
+[source identities](docs/PROVENANCE.md#linux-external-programmer-no-run-guard-sources).
 
 On Ubuntu, creating this environment may require `python3-venv`. Actual
 device access is a separate manual activity described in
@@ -133,6 +153,28 @@ in `make ... all test`. Its [contract and synthetic evidence](docs/RADIO_RX.md)
 do not grant hardware access. `radio_rx_test.ihx` is never a board image,
 flash input or CI upload. Keep the complete linked-code/MMIO proof, original
 512-byte reservation, alias/upper-IRAM guards and 15-second simulator timeout.
+
+For the separate RX board integration, use focused checks rather than twenty
+redundant local standalone corpora:
+
+```sh
+make BOARD=generic IMAGE=radio_rx_fixture test-radio-rx-fixture
+make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-radio-rx-fixture
+PYTHONPATH=tools python3 -B -m unittest test_radio_rx_fixture test_m0_artifacts test_timebase_fixture test_m1_access -q
+```
+
+Run heavy s51 jobs **serially**, preserving15 seconds per process and exact
+CPU/RAM continuations for the full poll-cap test. Rebuild/image-check the18
+older board BINs and compare their complete sizes/hashes to the baseline;
+the parent performs broader final regressions/publication separately.
+The fixture is **RF-capable passive RX**, not another non-RF image. Never
+invoke its [manual runner](docs/DEBUGGING.md#parent-only-passive-rx-acceptance)
+from tests/CI. It requires a separately authorized board/recovery task and a
+new mode0600 capture in a user-owned0700 directory outside the repository.
+No raw bodies, addresses, identities or frame hashes belong in stdout/CI.
+CI has20 jobs and exactly the existing seven upload paths, with
+`hardware_tested=false`; the new1024-byte reservation budget applies only to
+this board fixture, not the component or older512-budget tests.
 Shared host-MMIO write hooks must consume, not bypass or enlarge, the bounded
 logs. Physical RX needs a separately checked board fixture and explicit
 manual acceptance.
@@ -613,6 +655,21 @@ checking the local fixture artifacts; it compares physical CODE before resume.
 programmer, not a flashing target or ordinary debugger cleanup path. Follow the
 [manual procedure and dated evidence](docs/DEBUGGING.md#manual-hardware-acceptance-and-recovery),
 not an exit code alone. Neither tool belongs in CI or automatic hardware hooks.
+
+`tools/cc_tool_no_run_guard.c` is a Linux-only per-process `LD_PRELOAD`
+fail-stop guard for the separately reviewed external programmer, not a
+programmer or general execution blocker. Once loaded it has no environment
+disable switch. It permits the exact OUT reset-into-debug shape
+`40/C9/value0/index1/NULL/length0`, blocks all other OUT `C9` before libusb,
+flushes output and exits86; helper/log failures exit87. It does not fabricate
+a successful transfer or substitute a reset. **Exit86 is not programming
+success or halted-state proof**; independent readback/halt confirmation is
+required. DEBUG RESUME/STEP and programmer RAM-helper execution are not
+blocked. Actual guarded backup/programming is separately authorized hardware
+work, never an ordinary development check. Keep compiled preloads, logs,
+external GPL tools/source and private backups outside the repository and
+generated CI artifacts; neither these host tests nor ELF binding inspection
+close a hardware acceptance gate.
 
 The [2026-09-16 LG record](docs/DEBUGGING.md#2026-09-16-lg-fixture-hardware-record)
 establishes bounded LG/unbanked M1 completion: a full fixture check after the

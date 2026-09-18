@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""Execute linked non-RF fixtures with the CC2530 XDATA/IRAM alias modeled."""
+"""Execute linked board fixtures with synthetic peripherals and CC2530 IRAM alias."""
 
 import argparse
 import re
@@ -187,6 +187,12 @@ def check_artifact_rejections(output, board, image_name="bringup"):
                 ("map", lambda data: data.replace(b"_prng_fixture_ready ", b"_missing_prng_ready "), "symbol"),
                 ("cdb", lambda data: data.replace(b"{88}ST", b"{87}ST"), "ABI"),
                 ("cdb", lambda data: data.replace(b"{25}S:S$seed_calls", b"{24}S:S$seed_calls"), "ABI"),
+            )
+        elif image_name == "radio_rx_fixture":
+            mutations += (
+                ("map", lambda data: data.replace(b"_radio_rx_fixture_ready ", b"_missing_rx_ready "), "symbol"),
+                ("cdb", lambda data: data.replace(b"{96}ST", b"{95}ST"), "ABI"),
+                ("cdb", lambda data: data.replace(b"{41}S:S$diagnostic", b"{40}S:S$diagnostic"), "ABI"),
             )
         for extension, mutate, message in mutations:
             path = work / f"{image_name}.{extension}"
@@ -443,7 +449,7 @@ def main():
     require(debug_image.symbol("_SOC_P0").space == "SFR", "SFR symbol space mismatch")
     require(debug_image.symbol("_board_description").kind == "object", "CODE data misclassified")
     source_file = Path(__file__).resolve().parents[1] / "examples" / f"{args.image}.c"
-    if args.image in ("radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture"):
+    if args.image in ("radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture"):
         source_file = Path(__file__).resolve().parents[1] / "src" / f"{args.image}_state.c"
     main_lines = debug_image.source_lines(pc=symbols["_main"])
     require(any(location.file == source_file.name for location in main_lines), "Main source mapping missing")
@@ -519,6 +525,9 @@ def main():
     elif args.image == "aes_fixture":
         from boot_aes_fixture import check_aes_fixture
         check_aes_fixture(args.simulator, args.output, args.board, symbols)
+    elif args.image == "radio_rx_fixture":
+        from boot_radio_rx_fixture import check_radio_rx_fixture
+        check_radio_rx_fixture(args.simulator, args.output, args.board, symbols)
     else:
         from boot_prng_fixture import check_prng_fixture
         check_prng_fixture(args.simulator, args.output, args.board, symbols)

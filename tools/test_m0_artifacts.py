@@ -92,16 +92,18 @@ class LayoutTests(unittest.TestCase):
 
     def test_passive_rx_never_enters_existing_board_images(self):
         for image in IMAGES:
+            if image == "radio_rx_fixture":
+                continue
             for name in ("_radio_rx_receive_init", "_radio_rx_fault", "_radio_rx_reserved_end",
                          "_radio_rx_test_frame", "_radio_rx_test_result"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated passive RX"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for source in ("radio_rx.c", "test_radio_rx.c"):
+            for source in ("radio_rx.c", "test_radio_rx.c", "radio_rx_fixture.c", "radio_rx_fixture_state.c"):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated passive RX"):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
     def test_dma_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 9)
+        self.assertEqual(len(IMAGES), 10)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -112,7 +114,7 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
     def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
-        self.assertEqual(len(IMAGES), 9)
+        self.assertEqual(len(IMAGES), 10)
         for image in IMAGES:
             if image == "aes_fixture":
                 continue

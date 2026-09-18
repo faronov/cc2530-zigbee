@@ -57,8 +57,11 @@ typedef struct {
  * helper scratch. Link timebase, this module, then caller-owned objects.
  *
  * Configures fixed promiscuous RX with AUTOACK=0, AUTOCRC=1, no source matching
- * and FIFOP threshold127. E3 enables/calibrates RX. After a complete frame is
- * observed, RXMASKCLR80 requests soft shutdown, allowing reception to finish.
+ * and FIFOP threshold127. FSCAL1 is written 00; readback checks only its
+ * stable VCO_CURR[1:0], not reserved R/W0 upper bits (SWRU191F p.267).
+ * All other configuration bytes are checked in full. E3 enables/calibrates RX.
+ * After a complete frame is observed, RXMASKCLR80 requests soft shutdown,
+ * allowing reception to finish.
  * Only after verified idle are length/body/RSSI/correlation read through RFD.
  * A verified ED flush discards any additional queued bytes; this is NOT
  * lossless continuous reception. No TX/ACK strobe or TXFIFO write exists.

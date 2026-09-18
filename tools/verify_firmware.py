@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""Validate SDCC 4.2 non-RF board artifacts, including absolute XDATA."""
+"""Validate SDCC 4.2 board artifacts, including passive RX and absolute XDATA."""
 
 import argparse
 import hashlib
@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
 IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
-          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture")
+          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -24,6 +24,7 @@ CAPABILITIES = {
     "dma_fixture": "non-networking-software-triggered-dma-fixture",
     "aes_fixture": "non-networking-aes-dma-block-fixture",
     "prng_fixture": "non-networking-explicitly-seeded-deterministic-prng-fixture",
+    "radio_rx_fixture": "non-networking-bounded-passive-radio-rx-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -226,9 +227,14 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
-    require(not any(name.startswith("_radio_rx_") for name in symbols) and
-            not any(f"C${name}$" in debug for name in ("radio_rx.c", "test_radio_rx.c")),
-            "Board image must not link the isolated passive RX driver/test")
+    require(not any(name.startswith("_radio_rx_test") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("test_radio_rx.c", "test_radio_rx_fixture.c")),
+            "Board image must not link the isolated passive RX test")
+    require(image_name == "radio_rx_fixture" or
+            (not any(name.startswith("_radio_rx_") for name in symbols) and
+             not any(f"C${name}$" in debug for name in
+                     ("radio_rx.c", "radio_rx_fixture.c", "radio_rx_fixture_state.c"))),
+            "Board image must not link the isolated passive RX outside radio_rx_fixture")
     require(not any(name.startswith("_prng_reference") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("test_prng.c", "test_prng_fixture.c")),
             "Board image must not link the deterministic PRNG host model/test")
@@ -292,7 +298,8 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     for start, end in ranges:
         require(not occupied.intersection(range(start, end)), "Overlapping XDATA allocator areas")
         occupied.update(range(start, end))
-    require(len(occupied) + STATUS_RESERVED <= 512, "M0 exceeds 512-byte XDATA budget")
+    budget = 1024 if image_name == "radio_rx_fixture" else 512
+    require(len(occupied) + STATUS_RESERVED <= budget, f"M0 exceeds {budget}-byte XDATA budget")
 
     # SDCC .mem omits __at objects. Account for the status separately, and
     # reject additional global XDATA objects not covered by allocator areas.
@@ -363,6 +370,9 @@ def verify_artifacts(output, board, image_name="bringup"):
         verify_fixture(image, symbols, debug)
     elif image_name == "prng_fixture":
         from prng_fixture import verify_fixture
+        verify_fixture(image, symbols, debug)
+    elif image_name == "radio_rx_fixture":
+        from radio_rx_fixture import verify_fixture
         verify_fixture(image, symbols, debug)
     address = symbols["_board_description"]
     require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),

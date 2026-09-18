@@ -344,8 +344,22 @@ sleep acceptance remain open. M2 #4 stays open; no hosted-CI pass is claimed.
 
 The [isolated passive RX foundation](RADIO_RX.md) now has host, linked-image
 and alias-aware synthetic evidence for channel configuration, one-frame
-CRC/footer reception and checked soft-stop/flush. It has no board caller or
-physical RX acceptance yet. Transmission, automatic ACK, calibrated metadata,
+CRC/footer reception and checked soft-stop/flush. The subsequent
+[bounded board fixture](RADIO_RX.md#bounded-passive-rx-board-fixture) now links
+real startup/board/clock/RX for both boards with a fixed16-attempt cap and
+separately authorized private-capture runner. The older18 BINs are preserved
+and CI now covers20 offline
+board jobs with the same seven artifacts; no fixture result closes M2/M3.
+The [2026-09-18 parent-observed failure/probe](DEBUGGING.md#2026-09-18-lg-rx-fscal1-failure-and-probe)
+identified an FSCAL1 reserved-bit guard error. Its narrow low-bit-readback
+correction passed [bounded LG acceptance](DEBUGGING.md#2026-09-18-lg-bounded-passive-rx-acceptance):
+one initial frame, a retained pre-configuration TIMEOUT, then an explicitly
+reset16-attempt run with14 published bodies matching a concurrent Nordic
+capture and two nonpublishing BAD_CRC results. Reuse after BAD_CRC and the
+terminal16-attempt cap were observed; final END016F had RX off/empty FIFOs.
+Generic, independent on-air FCS, calibrated timing/metadata and broader RF
+fault recovery remain unobserved. This finite RX slice does not complete M2/M3.
+Transmission, automatic ACK, calibrated metadata,
 continuous queues and MAC/networking remain unsupported; M2 #4 stays open.
 
 Deliver independent interfaces for:
