@@ -15,7 +15,7 @@ from verify_firmware import BOARDS, IMAGES, ROOT
 
 @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
 class LocalChecksTests(unittest.TestCase):
-    def dry_run(self, *targets, **variables):
+    def dry_run(self, *targets, include_build=False, **variables):
         with tempfile.TemporaryDirectory(prefix="cc2530-make-test-") as directory:
             environment = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")}
             result = subprocess.run(
@@ -26,7 +26,8 @@ class LocalChecksTests(unittest.TestCase):
             )
             self.assertEqual(list(Path(directory).iterdir()), [])
             return [shlex.split(line) for line in result.stdout.splitlines()
-                    if line.startswith(("python3 ", directory + "/"))]
+                    if line.startswith(("python3 ", directory + "/")) or
+                    include_build and line.startswith(("cc ", "sdcc "))]
 
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
@@ -76,6 +77,17 @@ class LocalChecksTests(unittest.TestCase):
         self.assertEqual(images, Counter({(b, i): 1 for b in BOARDS for i in IMAGES}))
         self.assertEqual(components, Counter({(b, c): 1 for b in BOARDS for c in expected_components}))
         self.assertEqual(len(outputs), len(BOARDS)*len(IMAGES))
+
+    def test_aes_board_builds_its_own_runtime_reference_without_components(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-board", include_build=True, BOARD=board, IMAGE="aes_fixture")
+            reference = [args for args in commands if "-DAES_REFERENCE_MAIN" in args]
+            self.assertEqual(len(reference), 1)
+            self.assertEqual(Path(reference[0][-1]).name, "aes-reference")
+            simulation = next(args for args in commands if "tests/boot_image.py" in args)
+            self.assertEqual(Path(reference[0][-1]).parent, Path(simulation[simulation.index("--output")+1]))
+            self.assertLess(commands.index(reference[0]), commands.index(simulation))
+            self.assertFalse(any("tests/boot_aes.py" in args or "tests/test_aes.c" in args for args in commands))
 
     def test_local_stops_at_first_failure_without_later_suites(self):
         with tempfile.TemporaryDirectory(prefix="cc2530-make-failure-") as directory:

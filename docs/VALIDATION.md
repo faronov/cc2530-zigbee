@@ -24,7 +24,11 @@ board-image directories and serial, fail-fast submakes. The existing full
 `make ... all test` and twenty-job CI coverage remain available.
 Dry-run regressions account for every component, board/image, fixture host
 test and tool-suite invocation; synthetic submake failures prove that later
-suites are not run after a failure.
+suites are not run after a failure. The AES board test declares its host
+reference executable directly: it must not depend on a preceding standalone
+AES run to populate its directory. The first aggregate run exposed this
+previously implicit dependency; a separate regression checks both boards'
+standalone `test-board` command ordering and reference path.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
@@ -35,10 +39,11 @@ The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 | Complete Python discovery | 270.69 s | 118.45 s | Wall time with `cProfile` on both runs; 460/469 tests, 19 explicit skips each |
 | All 188 linked AES scenarios and image rejections | 85.71 s | 58.99 s | Serial wall time without a profiler, identical linked image |
 
-The final Python run includes twelve added regression tests; the earlier
-profiled run preceded the three Make orchestration tests. Profiling overhead
-is significant; the profiled tool-suite times are not normal invocation
-latency, nor is any row a measured speedup of the entire twenty-image matrix.
+The unprofiled Python measurement includes twelve added regression tests;
+the earlier profiled run preceded the three Make orchestration tests. The
+subsequent AES dependency regression is additional. Profiling overhead is
+significant; the profiled tool-suite times are not normal invocation latency,
+nor is any row a measured speedup of the entire twenty-image matrix.
 
 The savings do not come from shortened PRNG cycles, sampled CODE mutations
 or skipped I/O-failure boundaries. A one-entry cache holds only immutable
