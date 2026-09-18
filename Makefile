@@ -75,7 +75,7 @@ endif
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 .PHONY: test-protocol-budget
-.PHONY: test-radio-rx test-flash test-flash-exec test-flash-write
+.PHONY: test-radio-rx test-radio-queue test-flash test-flash-exec test-flash-write
 .PHONY: test-common test-tools test-board test-local
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
@@ -499,6 +499,24 @@ $(BUILD)/host-flash-fixture-tests_$(BOARD): tests/test_flash_fixture.c tests/tes
 test-flash-fixture: test-board
 	@test "$(IMAGE)" = flash_fixture
 
+$(BUILD)/radio_queue.rel: src/radio_queue.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_queue_test.rel: tests/test_radio_queue.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_queue_test.ihx: $(BUILD)/timebase.rel $(BUILD)/radio_rx.rel $(BUILD)/irq.rel $(BUILD)/radio_queue.rel $(BUILD)/radio_queue_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/radio_rx.rel $(BUILD)/irq.rel $(BUILD)/radio_queue.rel $(BUILD)/radio_queue_test.rel
+	cp $(BUILD)/radio_rx.rst $(BUILD)/radio_queue_test.radio_rx.rst
+	cp $(BUILD)/radio_queue.rst $(BUILD)/radio_queue_test.radio_queue.rst
+
+$(BUILD)/host-radio-queue-tests: tests/test_radio_queue.c src/radio_queue.c src/radio_rx.c src/timebase.c src/irq.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_queue.c src/radio_queue.c src/radio_rx.c src/timebase.c src/irq.c tests/host_mmio.c -o $@
+
+test-radio-queue: $(BUILD)/host-radio-queue-tests $(BUILD)/host-radio-rx-tests $(BUILD)/radio_queue_test.ihx
+	$(BUILD)/host-radio-queue-tests
+	$(PYTHON) -B tests/boot_radio_queue.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
@@ -533,7 +551,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx
+test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-queue
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
 	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"

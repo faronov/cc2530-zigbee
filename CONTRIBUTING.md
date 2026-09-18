@@ -218,6 +218,16 @@ do not grant hardware access. `radio_rx_test.ihx` is never a board image,
 flash input or CI upload. Keep the complete linked-code/MMIO proof, original
 512-byte reservation, alias/upper-IRAM guards and 15-second simulator timeout.
 
+The separate [radio ownership queues](docs/RADIO_QUEUE.md) have
+`make BUILD=build/radio-queue-dev test-radio-queue`. This composes the actual
+RX/timebase/IRQ services with copied pools and a reentrant hint producer;
+it does not enable a radio ISR or implement transmission. Preserve its
+explicit 1-KiB composed XDATA/8-KiB CODE budgets without increasing earlier
+component limits, and keep generic-pointer/compiler scratch out of the ISR
+call graph. The native RX model's `--queue-vectors` mode supplies successive
+real-driver traces without a peripheral reset. No vectors or
+`radio_queue_test.ihx` belong in board artifacts or physical experiments.
+
 For the separate RX board integration, use focused checks rather than twenty
 redundant local standalone corpora:
 

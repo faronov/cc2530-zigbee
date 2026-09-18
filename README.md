@@ -423,6 +423,14 @@ must not go to stdout or CI. Generic hardware, calibrated metadata, independent
 on-air FCS verification and broader RF fault recovery remain unobserved.
 This is not continuous/lossless reception or MAC/security/network support.
 
+The separate [bounded radio queues](docs/RADIO_QUEUE.md) now provide two RX
+copies, one pending TX candidate and four ISR-safe request cookies. One
+foreground service calls the actual passive receiver; full queues reject
+new work and preserve owned buffers. TX dequeue is only a memory operation,
+not transmission. `make test-radio-queue` has host, exact-image and
+alias-aware/generic-C52 preemption evidence, **not CC2530 IRQ/RF acceptance**.
+It is not linked into board images; never flash its standalone test.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

@@ -234,6 +234,32 @@ was performed. CI has22 board jobs and the unchanged seven-path board-artifact
 whitelist, with `hardware_tested=false`. Standalone executables, snapshots,
 private recovery files and captures are not uploaded as board artifacts.
 
+## Bounded radio queue composition coverage
+
+`make test-radio-queue` covers the [queue and IRQ ownership contract](RADIO_QUEUE.md)
+with 69,108 counted native memory/IRQ operations plus real-RX composition.
+The 7,189-byte SDCC image uses 818 ordinary XDATA +64 reserved, within its new
+integrated 1-KiB budget; observed SP is `50`, below the preserved upper-IRAM
+guard. Existing component/protocol budgets remain unchanged.
+
+The actual linked receiver/queue corpus performs 24 composed operations and
+11,031 MMIO events, 676 additional memory-only operations and 181 genuine
+generic C52 preemption cases. It checks all request/packet capacities,
+cursor wrap, saturation, preserved output tails, copy ownership,
+disconnected-consumer pressure, BAD_CRC reuse and retained driver failures.
+The producer's only calls are the verified reentrant IRQ leaves; it has no
+static compiler scratch or packet/radio/timebase access. Snapshots retain
+their pre-ISR capture even when restore admits an interrupt before return.
+
+The whole image, complete compiler-private metadata and matching relocated
+listings are pinned; negative CODE/ABI/allocation cases, real RFD/timebase/
+FSCAL1 rules, full memory accounting, alias and CPU context/unwind remain
+strict. Five stateful vectors come from the existing native receiver model,
+not a successful stub for `radio_rx_receive_init`. No CC2530 IRQ delivery,
+physical RF, TX/ACK, networking, continuous-lossless reception or complete
+stack fit is established. `radio_queue_test.ihx` is never a board image,
+flash input or CI artifact.
+
 ## M0 coverage
 
 The current build must cover:

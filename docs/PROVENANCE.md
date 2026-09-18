@@ -954,6 +954,22 @@ entry or completed #8 gate is invented; the future private backup/full
 excluded-region verification and reset/interrupted-command recovery
 procedures remain explicitly blocked on new authority and hardware evidence.
 
+### Bounded radio ownership queues
+
+The queue implementation and its tests are original BSD-3-Clause code.
+Pool counts of two RX slots, one TX slot and four request cookies,
+copy-based ownership and reject-new
+overflow are project choices, not a claimed vendor MAC algorithm. IRQ
+protection reuses the existing SWRU191F-backed EA token leaves; reception
+reuses the unchanged passive RX and timebase code and their primary facts.
+No ISR calls a foreground helper, packet codec or Sleep Timer reader.
+
+Stateful synthetic MMIO vectors are emitted by the existing native RX model,
+with real successful/BAD_CRC reuse rather than resetting hardware state
+between calls. The linked image executes the actual receiver. Generic C52
+external-interrupt preemption/RETI is an ABI test, not a CC2530 RF-IRQ or
+timing observation. No SDK code, captured packet or device identity is used.
+
 ## Normative target
 
 Engineering references:

@@ -408,6 +408,15 @@ Exit:
 
 ### M3 - Radio and end-device MAC
 
+The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
+copies, one TX candidate and a four-cookie ISR/foreground request ring.
+One foreground service invokes the real bounded passive receiver; full
+queues preserve existing ownership, BAD_CRC publishes nothing and other
+driver errors retain their cause. Reentrant ISR storage, real generic C52
+preemption, complete linked MMIO and combined memory budgets are checked
+offline. These are software queues, not TX, ACK, a radio ISR, continuous
+reception, association or M3 hardware acceptance.
+
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
 their addressing layouts, with host, linked-image and

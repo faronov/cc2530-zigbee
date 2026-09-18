@@ -1124,6 +1124,15 @@ budgets and integration evidence; **complete-stack fit remains unproven**.
 
 ## Scheduling and ownership
 
+The isolated [bounded radio queue composition](RADIO_QUEUE.md) now supplies
+two copied RX slots, one copied TX candidate and four IRQ-safe request
+cookies, with explicit full/empty/cancel/retained-fault behavior. It calls the
+real passive receiver for at most one event per foreground service. The
+receiver still requires all interrupt enables zero; the cookie producer is
+not RF delivery or a peripheral dispatcher. Its separate 1-KiB XDATA/8-KiB
+CODE budget does not alter the protocol-resource image or prove full-stack
+fit. No TX/ACK, continuous reception, board image or hardware claim follows.
+
 Use a cooperative foreground state machine with short, bounded work items.
 Interrupt handlers capture minimal state and enqueue work; they must not call
 non-reentrant foreground helpers or run ZCL/display processing.

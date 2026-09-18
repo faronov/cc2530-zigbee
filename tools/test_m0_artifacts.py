@@ -118,6 +118,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_radio_queue_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_radio_queue_request_rx", "_radio_queue_service", "_radio_queue_rx", "_radio_queue_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "radio queue"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("radio_queue.c", "test_radio_queue.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "radio queue"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_irq_cannot_enter_board_images(self):
         for name in ("_irq_save_disable", "_irq_restore"):
             with self.assertRaisesRegex(ValueError, "isolated IRQ"):

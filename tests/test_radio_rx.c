@@ -358,6 +358,28 @@ static void emit_vectors(void)
     emit("FSCAL1 configuration low bits", 10000, 1000, RADIO_RX_STATE_CHANGED);
 }
 
+static void emit_queue_vectors(void)
+{
+    unsigned step, i, length;
+    static const char *names[] = {"queue minimum", "queue maximum", "queue bad CRC", "queue reuse", "queue fault"};
+    reset(3, 0x81, 0xe9, 0);
+    for (step = 0; step < 5; step++) {
+        assert(mode == 0);
+        length = step == 0 ? 3 : step == 1 ? 127 : 5;
+        expected_length = length; wire_length = length + 1;
+        wire[0] = (uint8_t)length;
+        for (i = 1; i < length - 1; i++) wire[i] = (uint8_t)(i ^ (0x69u + step));
+        wire[length-1] = 0x81; wire[length] = step == 2 ? 0x69 : 0xe9;
+        config_writes = on_writes = stop_writes = flush_writes = 0;
+        memset(&frame.value, 0xa5, sizeof(frame.value)); saved_frame = frame.value;
+        if (step == 4) {
+            inject_sample = samples + 24; inject_address = 0xbf; inject_value = 4;
+        }
+        emit(names[step], 10000, 1000,
+             step == 2 ? RADIO_RX_BAD_CRC : step == 4 ? RADIO_RX_CONTROLLER_ERROR : RADIO_RX_OK);
+    }
+}
+
 int main(int argc, char **argv)
 {
     unsigned length, value, i, need;
@@ -365,6 +387,7 @@ int main(int argc, char **argv)
         0x624a, 0x61e1, 0x6189, 0x61a3, 0x61a4, 0x61a5, 0x61a8, 0x61a9, 0x61b8, 0x61b9
     };
     if (argc == 2 && !strcmp(argv[1], "--vectors")) { emit_vectors(); return 0; }
+    if (argc == 2 && !strcmp(argv[1], "--queue-vectors")) { emit_queue_vectors(); return 0; }
     assert(argc == 1);
     assert(sizeof(radio_rx_frame_t) == 128);
     reset(5, 0xa5, 0xe9, 0);
