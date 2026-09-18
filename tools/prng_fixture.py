@@ -6,7 +6,7 @@ import re
 from dma_fixture import LENGTHS, layout_fields, verify_expiry
 from radio_fifo_fixture import instructions
 from verify_firmware import (
-    cdb_address, cdb_local, peripheral_accesses, require, verify_clock_code,
+    cdb_address, cdb_local, code_bytes, peripheral_accesses, require, verify_clock_code,
     verify_deadline_helper, verify_timebase_reader,
 )
 
@@ -78,8 +78,7 @@ def verify_fixture(image, symbols, debug):
     before, ready, fault = (symbols[n] for n in CHECKPOINTS)
     require(before in HASHES, "Unknown PRNG board layout")
     size, digest = HASHES[before]
-    require(set(image) == set(range(size)) and
-            hashlib.sha256(bytes(image[a] for a in range(size))).hexdigest() == digest,
+    require(hashlib.sha256(code_bytes(image, size)).hexdigest() == digest,
             "PRNG complete board CODE/constants/caller changed")
     require((ready,fault) == (before+2,before+4) and
             bytes(image[a] for a in range(before,before+7)) == b"\0\x22\0\x22\0\x80\xfd",
@@ -165,11 +164,11 @@ def decode(data, *, running=False):
             all(r[n] <= 8 or r[n] == 255 for n in ("result","seed_result")) and
             r["mismatch"] in (*range(32),254,255), "PRNG wire bounds/phase/result invalid")
     if r["phase"] in (1,3):
-        require(r["reason"] == r["fault_latch"] == r["actual"] == r["expected"] == 0 and r["mismatch"] == 255 and
+        if not (r["reason"] == r["fault_latch"] == r["actual"] == r["expected"] == 0 and r["mismatch"] == 255 and
                 r["initial_adc"] in (0x33,0xb3) and r["adc"] == r["initial_adc"] and
                 r["command"] == r["status"] == (0xc9 if r["run"] < 3 or r["stage"] == 5 else 0x88) and
-                r["sleep"] == r["initial_sleep"] and r["sleep"] & 7 == 4 and r["enables"] == [0]*3,
-                "PRNG successful state/ownership invalid: "+repr(r))
+                r["sleep"] == r["initial_sleep"] and r["sleep"] & 7 == 4 and r["enables"] == [0]*3):
+            raise ValueError("PRNG successful state/ownership invalid: "+repr(r))
         check_flags(r["initial_flags"],r["flags"])
     if r["phase"] == 1:
         require(r["stage"] == r["run"] == r["total"] == r["seed_calls"] == r["count"] == r["benign"] == 0 and
@@ -193,9 +192,9 @@ def decode(data, *, running=False):
 
 def check_flags(previous,current):
     """SWRU191F p.47/129: only sticky IRCON.STIF may assert; never deassert."""
-    require(len(previous) == len(current) == 10 and tuple(previous[:9]) == tuple(current[:9]) and
-            current[9] in (previous[9],previous[9]|0x80),
-            f"PRNG flags changed outside sticky STIF0->1: {list(previous)} -> {list(current)}")
+    if not (len(previous) == len(current) == 10 and tuple(previous[:9]) == tuple(current[:9]) and
+            current[9] in (previous[9],previous[9]|0x80)):
+        raise ValueError(f"PRNG flags changed outside sticky STIF0->1: {list(previous)} -> {list(current)}")
 
 
 class FlagHistory:

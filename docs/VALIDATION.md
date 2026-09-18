@@ -15,6 +15,48 @@ Use these terms consistently in documentation and pull requests:
 None of these silently implies the next level. A screenshot is not a network
 test, and an interview is not proof of reliable SED behavior.
 
+## Local validation performance
+
+`make test-local` preserves all twenty board/image checks while running
+the Python tool suite once and each standalone component corpus once per
+board definition instead of once per image. It uses isolated component and
+board-image directories and serial, fail-fast submakes. The existing full
+`make ... all test` and twenty-job CI coverage remain available.
+Dry-run regressions account for every component, board/image, fixture host
+test and tool-suite invocation; synthetic submake failures prove that later
+suites are not run after a failure.
+
+The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
+`3c3e133` baseline with the optimized checkers:
+
+| Corpus | Before | After | Measurement |
+| --- | ---: | ---: | --- |
+| Complete Python discovery | 205.63 s | 79.58 s | `unittest` elapsed time without a profiler; 460/472 tests, 19 explicit skips each |
+| Complete Python discovery | 270.69 s | 118.45 s | Wall time with `cProfile` on both runs; 460/469 tests, 19 explicit skips each |
+| All 188 linked AES scenarios and image rejections | 85.71 s | 58.99 s | Serial wall time without a profiler, identical linked image |
+
+The final Python run includes twelve added regression tests; the earlier
+profiled run preceded the three Make orchestration tests. Profiling overhead
+is significant; the profiled tool-suite times are not normal invocation
+latency, nor is any row a measured speedup of the entire twenty-image matrix.
+
+The savings do not come from shortened PRNG cycles, sampled CODE mutations
+or skipped I/O-failure boundaries. A one-entry cache holds only immutable
+**synthetic test-backend** register bytes; the real runner still reads and
+validates every observation. Fake wire-byte updates are compared against the
+decoded reference for all 4,112 records, and changed/invalid inputs cannot
+reuse a cached result. Diagnostic strings are formatted only on failure.
+Exact CODE serialization caches only expected address tuples, never input
+images or validation results, and accepts reordered mappings while rejecting
+holes, extra bytes and all original byte mutations. Accepted images still
+receive the complete independent layout, ABI and MMIO proofs.
+
+Simulator output remains complete, with command-error, nonzero-exit and
+partial-output/timeout regression coverage. No 15-second deadline, alias,
+upper-IRAM, stack, poll-limit or retained-fault check is relaxed. These changes
+provide **host-tested, image-checked and simulated** evidence only; they
+perform no USB/RF operation or new hardware acceptance.
+
 ## M0 coverage
 
 The current build must cover:

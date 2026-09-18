@@ -17,7 +17,7 @@ from boot_dma import LENGTHS as DMA_LENGTHS
 from boot_timebase import GUARD_SFRS, READER_BYTES, READ_OFFSETS
 from radio_fifo_fixture import instructions
 from verify_firmware import (
-    cdb_address, parse_ihex, parse_symbols, peripheral_accesses, require, verify_deadline_helper,
+    cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require, verify_deadline_helper,
 )
 
 
@@ -59,8 +59,7 @@ KATS = (
 def verify(image, symbols, debug, memory, listings):
     # Cheap full-CODE rejection first; then independently prove the accepted
     # image's allocation, typed caller, actual instructions and physical MMIO.
-    require(set(image) == set(range(IMAGE_SIZE)), "AES complete CODE extent changed")
-    require(hashlib.sha256(bytes(image[i] for i in range(IMAGE_SIZE))).hexdigest() == IMAGE_HASH,
+    require(hashlib.sha256(code_bytes(image, IMAGE_SIZE)).hexdigest() == IMAGE_HASH,
             "AES complete executable/caller/constants/runtime changed")
     allocated = verify_component_layout(image, symbols, debug, memory, "aes_test_result",
                                          ("timebase.c", "aes.c", "test_aes.c"))

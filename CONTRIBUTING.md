@@ -50,30 +50,40 @@ working firmware features or changes the project's support claims.
 With SDCC 4.2.0, `s51`, Python 3.9 or newer, GNU Make and a host C compiler on `PATH`:
 
 ```sh
-make BOARD=generic all test
-make BOARD=lg_esl29_rev03 all test
-make BOARD=generic IMAGE=debug_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=debug_fixture all test
-make BOARD=generic IMAGE=timebase_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=timebase_fixture all test
-make BOARD=generic IMAGE=clock_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=clock_fixture all test
-make BOARD=generic IMAGE=irq_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=irq_fixture all test
-make BOARD=generic IMAGE=radio_fifo_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=radio_fifo_fixture all test
-make BOARD=generic IMAGE=dma_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=dma_fixture all test
-make BOARD=generic IMAGE=aes_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=aes_fixture all test
-make BOARD=generic IMAGE=prng_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=prng_fixture all test
-make BOARD=generic IMAGE=radio_rx_fixture all test
-make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture all test
-python3 -m unittest discover -s tools -p 'test_*.py' -v
+make test-local
 python3 tools/check_repository.py
 git diff --check
 ```
+
+`test-local` runs the complete Python tool suite once, all standalone
+host/image/simulator component corpora once **for each board definition**,
+and the board-specific host/image/simulator checks for all twenty board/image
+combinations. Components have no `IMAGE`-dependent inputs. This removes
+duplicate runs, not cases: every component still runs with both
+`CC2530_BOARD` definitions, and every board fixture retains its own checks.
+Separate directories under `build/local/` prevent cross-image relocated
+listing collisions. Submakes use `-j1`, stop at the first failure, and retain
+the 15-second per-simulator deadline; extra CPU cores do not justify
+concurrent links into a shared directory or relaxed timeouts.
+
+The existing `make BOARD=... IMAGE=... all test` command remains a full
+single-configuration check and is unchanged in the twenty-job CI matrix.
+For focused iteration, the explicit parts are:
+
+```sh
+make test-tools
+make BOARD=generic test-common
+make BOARD=generic IMAGE=radio_rx_fixture test-board
+make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board
+```
+
+`test-common` covers standalone components, not a board fixture;
+`test-board` builds and checks the selected board image, not the standalone
+components or Python suite. Neither is a replacement for `test-local` when
+the full local matrix is required. Run focused targets serially; do not
+run simultaneous Make invocations using the same `BUILD`.
+See [performance evidence](docs/VALIDATION.md#local-validation-performance)
+for measured improvements and preserved coverage.
 
 The build writes to `build/`. Generated firmware, captures and logs must not
 be committed. Do not add a dependency solely to avoid a small standard-library

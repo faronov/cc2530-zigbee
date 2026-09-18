@@ -6,7 +6,7 @@ import re
 from prng_fixture import PRNG_LENGTHS
 from radio_fifo_fixture import instructions
 from verify_firmware import (
-    CLOCK_INSTRUCTION_LENGTHS, cdb_address, peripheral_accesses, require,
+    CLOCK_INSTRUCTION_LENGTHS, cdb_address, code_bytes, peripheral_accesses, require,
     verify_clock_code, verify_clock_diagnostics, verify_deadline_helper,
     verify_timebase_reader, xdata_ranges,
 )
@@ -47,8 +47,7 @@ FLAGS = (0xa9, 0xb9, 0x88, 0x98, 0x9b, 0xe8, 0xc0)
 def verify_code(image, before):
     require(before in HASHES, "RX fixture unknown board checkpoint")
     size, digest = HASHES[before]
-    require(set(image) == set(range(size)), "RX fixture CODE extent changed")
-    require(hashlib.sha256(bytes(image[i] for i in range(size))).hexdigest() == digest,
+    require(hashlib.sha256(code_bytes(image, size)).hexdigest() == digest,
             "RX fixture exact linked instructions/constants changed")
 
 

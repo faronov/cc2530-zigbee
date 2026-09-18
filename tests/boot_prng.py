@@ -13,7 +13,7 @@ from boot_image import (
     snapshot_commands, verify_component_layout,
 )
 from boot_timebase import GUARD_SFRS
-from verify_firmware import cdb_address, cdb_local, parse_ihex, parse_symbols, peripheral_accesses, require
+from verify_firmware import cdb_address, cdb_local, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 
 IMAGE_SIZE = 1282
@@ -49,8 +49,7 @@ def reference(state):
 
 
 def verify(image, symbols, debug, memory, listing):
-    require(set(image) == set(range(IMAGE_SIZE)) and
-            hashlib.sha256(bytes(image[i] for i in range(IMAGE_SIZE))).hexdigest() == IMAGE_HASH,
+    require(hashlib.sha256(code_bytes(image, IMAGE_SIZE)).hexdigest() == IMAGE_HASH,
             "PRNG complete executable/caller changed")
     allocated = verify_component_layout(image, symbols, debug, memory, "prng_test_result", ("prng.c", "test_prng.c"))
     require((cdb_address(debug, "L:Fprng$valid_state$0$0"), cdb_address(debug, "L:XG$prng_next16$0$0")+1) == (START, END) and

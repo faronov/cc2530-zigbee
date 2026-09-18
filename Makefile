@@ -6,6 +6,8 @@ S51 ?= s51
 BOARD ?= generic
 IMAGE ?= bringup
 BUILD ?= build/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
+LOCAL_BUILD ?= build/local
+BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture
 
 ifeq ($(BOARD),generic)
 BOARD_NUMBER := 0
@@ -69,6 +71,7 @@ endif
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 .PHONY: test-protocol-budget
 .PHONY: test-radio-rx
+.PHONY: test-common test-tools test-board test-local
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
@@ -454,15 +457,34 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 	$(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 	$(PYTHON) -B tests/boot_image.py --board $(BOARD) --image radio_rx_fixture --output $(BUILD) --simulator "$(S51)"
 
-test: $(if $(filter radio_rx_fixture,$(IMAGE)),$(BUILD)/host-radio-rx-fixture-tests_$(BOARD))
-test: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOARD))
-test: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
-test: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
-test: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
-test: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx
-test: all test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-tests_$(BOARD) $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
-	$(BUILD)/host-tests_$(BOARD)
+# Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
+# but do not repeat the same corpus for every board fixture in test-local.
+test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx
+test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
+	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"
+
+test-tools:
+	$(PYTHON) -B -m unittest discover -s tools -p 'test_*.py' -v
+
+test: test-common test-tools test-board
+
+test-local:
+	+$(MAKE) --no-print-directory -j1 test-tools
+	+set -e; for board in generic lg_esl29_rev03; do \
+		$(MAKE) --no-print-directory -j1 BOARD=$$board IMAGE=bringup BUILD="$(LOCAL_BUILD)/$$board/components" test-common; \
+		for image in $(BOARD_IMAGES); do \
+			$(MAKE) --no-print-directory -j1 BOARD=$$board IMAGE=$$image BUILD="$(LOCAL_BUILD)/$$board/$$image" test-board; \
+		done; \
+	done
+
+test-board: $(if $(filter radio_rx_fixture,$(IMAGE)),$(BUILD)/host-radio-rx-fixture-tests_$(BOARD))
+test-board: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOARD))
+test-board: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
+test-board: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
+test-board: $(if $(filter dma_fixture,$(IMAGE)),$(BUILD)/host-dma-fixture-tests_$(BOARD))
+test-board: all $(BUILD)/host-tests_$(BOARD) $(if $(filter debug_fixture,$(IMAGE)),$(BUILD)/host-fixture-tests_$(BOARD)) $(if $(filter timebase_fixture,$(IMAGE)),$(BUILD)/host-timebase-fixture-tests_$(BOARD) $(BUILD)/host-timebase-failure-tests_$(BOARD)) $(if $(filter clock_fixture,$(IMAGE)),$(BUILD)/host-clock-fixture-tests_$(BOARD)) $(if $(filter irq_fixture,$(IMAGE)),$(BUILD)/host-irq-fixture-tests_$(BOARD))
+	$(BUILD)/host-tests_$(BOARD)
 ifeq ($(IMAGE),radio_fifo_fixture)
 	$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD)
 endif
@@ -491,6 +513,4 @@ endif
 ifeq ($(IMAGE),irq_fixture)
 	$(BUILD)/host-irq-fixture-tests_$(BOARD)
 endif
-	$(PYTHON) -B -m unittest discover -s tools -p 'test_*.py' -v
 	$(PYTHON) -B tests/boot_image.py --board $(BOARD) --image $(IMAGE) --output $(BUILD) --simulator "$(S51)"
-	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"

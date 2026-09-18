@@ -3,7 +3,7 @@
 
 import unittest
 
-from verify_firmware import IMAGES, parse_ihex, parse_symbols, verify_layout
+from verify_firmware import CODE_LIMIT, IMAGES, code_bytes, parse_ihex, parse_symbols, verify_layout
 
 
 def record(address=0, kind=0, data=b"\x02\x00\x06"):
@@ -17,6 +17,11 @@ EOF = record(kind=1, data=b"")
 class HexTests(unittest.TestCase):
     def test_data(self):
         self.assertEqual(parse_ihex(record() + "\n" + EOF), {0: 2, 1: 0, 2: 6})
+
+    def test_record_order_does_not_change_image(self):
+        image = parse_ihex(record(address=3, data=b"\xaa\xbb") + "\n" + record() + "\n" + EOF)
+        self.assertEqual(list(image), list(range(5)))
+        self.assertEqual(code_bytes(image, 5), b"\x02\0\x06\xaa\xbb")
 
     def test_extended_addresses(self):
         for kind, expected in ((2, 0x20), (4, 0x20000)):
@@ -52,6 +57,32 @@ class HexTests(unittest.TestCase):
         for text in ("hello", ":", ":zz", record(kind=3), record(kind=4, data=b"x"), EOF):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 parse_ihex(text)
+
+
+class CodeBytesTests(unittest.TestCase):
+    def test_order_and_every_mutation_are_observed_without_caching_input(self):
+        for size in (1, 257, CODE_LIMIT):
+            expected = bytes(i & 255 for i in range(size))
+            image = dict(enumerate(expected))
+            self.assertEqual(code_bytes(image, size), expected)
+            self.assertEqual(code_bytes(dict(reversed(list(image.items()))), size), expected)
+        image = dict(enumerate(bytes(range(256))))
+        for address in image:
+            image[address] ^= 1
+            actual = code_bytes(image, 256)
+            self.assertEqual(actual, bytes(i ^ int(i == address) for i in range(256)))
+            image[address] ^= 1
+        self.assertEqual(code_bytes(image, 256), bytes(range(256)))
+
+    def test_missing_extra_shifted_and_invalid_data_fail(self):
+        for image, size in (({}, 1), ({0: 1}, 2), ({0: 1, 1: 2}, 1),
+                            ({0: 1, 2: 2}, 2), ({-1: 1, 0: 2}, 2), ({1: 1}, 1),
+                            ({0: 256}, 1), ({0: -1}, 1)):
+            with self.subTest(image=image, size=size), self.assertRaises(ValueError):
+                code_bytes(image, size)
+        for size in (0, -1, CODE_LIMIT+1, True, 1.0):
+            with self.subTest(size=size), self.assertRaises(ValueError):
+                code_bytes({0: 1}, size)
 
 
 class LayoutTests(unittest.TestCase):

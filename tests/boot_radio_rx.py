@@ -18,7 +18,7 @@ from boot_timebase import GUARD_SFRS, READ_OFFSETS, READER_BYTES
 from prng_fixture import PRNG_LENGTHS
 from radio_fifo_fixture import instructions
 from radio_rx_fixture import verify_driver_listing, verify_fscal1_readback
-from verify_firmware import cdb_address, parse_ihex, parse_symbols, peripheral_accesses, require
+from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 
 IMAGE_SIZE = 5214
@@ -42,8 +42,7 @@ OBJECTS = (("frame", 0xcf, 128), ("diagnostics", 0x14f, 31), ("channel", 0x16e, 
 
 
 def verify_code(image):
-    require(set(image) == set(range(IMAGE_SIZE)), "RX exact CODE extent changed")
-    require(hashlib.sha256(bytes(image[i] for i in range(IMAGE_SIZE))).hexdigest() == IMAGE_SHA256,
+    require(hashlib.sha256(code_bytes(image, IMAGE_SIZE)).hexdigest() == IMAGE_SHA256,
             "RX exact linked instructions/constants/runtime changed")
 
 

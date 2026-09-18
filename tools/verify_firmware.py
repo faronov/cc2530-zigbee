@@ -3,6 +3,7 @@
 """Validate SDCC 4.2 board artifacts, including passive RX and absolute XDATA."""
 
 import argparse
+from functools import lru_cache
 import hashlib
 import json
 import re
@@ -64,6 +65,23 @@ TIMEBASE_READER_BYTES = bytes.fromhex(
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+@lru_cache(maxsize=32)
+def _code_addresses(size):
+    return tuple(range(size))
+
+
+def code_bytes(image, size):
+    """Serialize a complete zero-based CODE image; cache only expected addresses."""
+    require(type(size) is int and 0 < size <= CODE_LIMIT, "Invalid CODE extent")
+    require(len(image) == size, "CODE extent changed")
+    expected = _code_addresses(size)
+    addresses = tuple(image)
+    if addresses == expected:
+        return bytes(image.values())
+    require(tuple(sorted(addresses)) == expected, "CODE extent changed")
+    return bytes(map(image.__getitem__, expected))
 
 
 # Reviewed SDCC 4.2.0 clock-module subset, shared with the standalone checker.
@@ -200,7 +218,7 @@ def parse_ihex(text):
         else:
             raise ValueError(f"Unsupported M0 HEX record type {kind}")
     require(ended and image, "HEX needs data and EOF")
-    return image
+    return dict(sorted(image.items()))
 
 
 def parse_symbols(text):

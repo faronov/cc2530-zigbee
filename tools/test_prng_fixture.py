@@ -85,6 +85,14 @@ def records():
     return tuple(out)
 
 
+@lru_cache(maxsize=1)
+def synthetic_registers(raw):
+    # Only immutable fake wire bytes are cached, never a real inspection or result.
+    r=decode(raw,running=True)
+    return bytes((r["adc"],r["command"],r["status"],r["sleep"],
+                  *r["enables"],*r["flags"]))+r["hardware"].to_bytes(2,"little")
+
+
 class PrngDebugger(FixtureDebugger):
     def __init__(self):
         super().__init__()
@@ -122,16 +130,17 @@ class PrngDebugger(FixtureDebugger):
 
     def record(self):
         raw,buffer=records()[self.cursor]
-        r=decode(raw)
+        raw=bytearray(raw)
         if self.initial_stif:
-            r["initial_flags"][9] |= 0x80; r["flags"][9] |= 0x80
+            raw[49] |= 0x80; raw[59] |= 0x80
         if self.stif_c_from is not None and self.observation() >= self.stif_c_from and (
                 self.stif_c_until is None or self.observation() < self.stif_c_until):
-            r["flags"][9] |= 0x80
+            raw[59] |= 0x80
         if self.pc in (PROBE,FAULT):
-            r.update(phase=2,stage=6)
-            if self.pc == FAULT: r.update(phase=4,reason=7,probe=[6]*3,fault_latch=6,adc=0x3f)
-        raw=encode(r)
+            raw[6]=2; raw[8]=6
+            if self.pc == FAULT:
+                raw[6]=4; raw[7]=7; raw[62:66]=bytes([6]*4); raw[31]=0x3f
+        raw=bytes(raw)
         if self.corrupt_record and self.cursor: raw=self.corrupt_record(raw)
         return raw,buffer
 
@@ -169,10 +178,9 @@ class PrngDebugger(FixtureDebugger):
     def _instruction(self,command,deadline):
         self.event("instruction",command)
         assert command[0]==0xe5 and command[1] in READS
-        r=decode(self.record()[0],running=True)
-        values=bytes((0x3f if self.pc == PROBE else r["adc"],r["command"],r["status"],r["sleep"],
-                     *r["enables"],*r["flags"]))+r["hardware"].to_bytes(2,"little")
+        values=synthetic_registers(self.record()[0])
         value=values[READS.index(command[1])]
+        if self.pc == PROBE and command[1] == 0xb4: value=0x3f
         if command[1] == 0xc0 and self.stif_live_from is not None and self.observation() >= self.stif_live_from:
             value |= 0x80
         return value^self.bad_sfr_bit if command[1] == self.bad_sfr else value
@@ -185,6 +193,36 @@ class PrngTests(unittest.TestCase):
         out,err=StringIO(),StringIO()
         with redirect_stdout(out),redirect_stderr(err): result=runner.main(self.args+extra)
         return result,out.getvalue(),err.getvalue()
+
+    def test_fake_byte_updates_match_decoded_reference_for_entire_corpus(self):
+        d=PrngDebugger()
+        for cursor,(raw,buffer) in enumerate(records()):
+            d.cursor=cursor; d.pc=BEFORE if cursor == 0 else READY
+            self.assertEqual(d.record(),(raw,buffer))
+            r=decode(raw)
+            for initial in (False,True):
+                d.initial_stif=initial; d.stif_c_from=cursor
+                expected=decode(raw); expected["flags"][9] |= 0x80
+                if initial: expected["initial_flags"][9] |= 0x80
+                self.assertEqual(d.record(),(encode(expected),buffer))
+            d.initial_stif=False; d.stif_c_from=None
+            for pc in (PROBE,FAULT):
+                d.pc=pc
+                expected=dict(r,phase=2,stage=6)
+                if pc == FAULT: expected.update(phase=4,reason=7,probe=[6]*3,fault_latch=6,adc=0x3f)
+                self.assertEqual(d.record(),(encode(expected),buffer))
+
+    def test_synthetic_register_cache_observes_changed_and_invalid_bytes(self):
+        raw=records()[0][0]; original=synthetic_registers(raw)
+        changed=bytearray(raw); changed[59] |= 0x80
+        self.assertEqual(synthetic_registers(bytes(changed)),original[:16]+bytes([original[16]|0x80])+original[17:])
+        changed[0]=0
+        with self.assertRaises(ValueError): synthetic_registers(bytes(changed))
+        self.assertEqual(synthetic_registers(raw),original)
+        d=PrngDebugger()
+        d.corrupt_record=lambda data:data[:31]+b"\0"+data[32:]
+        d.cursor=1; d.pc=READY
+        with self.assertRaises(ValueError): d._instruction(b"\xe5\xb4",d.deadline)
 
     def test_independent_full_word_and_first_repeat_corpus(self):
         for i in range(65536): self.assertEqual(transition(i),advance(i))

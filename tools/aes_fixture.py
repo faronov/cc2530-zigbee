@@ -8,7 +8,7 @@ import subprocess
 from dma_fixture import DIRECT, LENGTHS as DMA_LENGTHS, layout_fields
 from radio_fifo_fixture import instructions
 from verify_firmware import (
-    cdb_address, cdb_local, peripheral_accesses, require, verify_clock_code,
+    cdb_address, cdb_local, code_bytes, peripheral_accesses, require, verify_clock_code,
     verify_deadline_helper, verify_timebase_reader, xdata_ranges,
 )
 
@@ -137,7 +137,7 @@ def verify_fixture(image, symbols, debug):
     before, ready, fault = (symbols[n] for n in CHECKPOINTS)
     require(before in HASHES, "Unknown AES fixture checkpoint layout")
     size, digest = HASHES[before]
-    require(set(image) == set(range(size)) and hashlib.sha256(bytes(image[i] for i in range(size))).hexdigest() == digest,
+    require(hashlib.sha256(code_bytes(image, size)).hexdigest() == digest,
             "AES complete board CODE/constants/caller changed")
     require((ready, fault) == (before+2, before+4) and bytes(image[a] for a in range(before, before+7)) == b"\0\x22\0\x22\0\x80\xfd",
             "AES actual marker instructions changed")

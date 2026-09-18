@@ -15,7 +15,7 @@ from boot_image import (
 from boot_timebase import GUARD_SFRS, READER_BYTES, READ_OFFSETS
 from radio_fifo_fixture import FIFO_LENGTHS, instructions
 from verify_firmware import (
-    CLOCK_INSTRUCTION_LENGTHS, cdb_address, parse_ihex, parse_symbols,
+    CLOCK_INSTRUCTION_LENGTHS, cdb_address, code_bytes, parse_ihex, parse_symbols,
     peripheral_accesses, require, verify_deadline_helper,
 )
 
@@ -34,6 +34,8 @@ SIZES = (4, 2) + (1,) * 13
 
 
 def verify(image, symbols, debug, memory, listings):
+    require(hashlib.sha256(code_bytes(image, 5485)).hexdigest() == IMAGE_HASH,
+            "DMA complete executable/caller/runtime bytes changed")
     allocated = verify_component_layout(image, symbols, debug, memory, "dma_test_result",
                                          ("timebase.c", "dma.c", "test_dma.c"))
     start = cdb_address(debug, "L:Fdma$ordinary$0$0")
@@ -41,8 +43,6 @@ def verify(image, symbols, debug, memory, listings):
     data = bytes(image.get(a, 0xff) for a in range(start, end))
     require(len(data) == MODULE_SIZE and hashlib.sha256(data).hexdigest() == MODULE_HASH,
             "DMA linked instructions/relocations changed")
-    require(hashlib.sha256(bytes(image[a] for a in range(max(image) + 1))).hexdigest() == IMAGE_HASH,
-            "DMA complete executable/caller/runtime bytes changed")
     code = instructions(image, start, end, LENGTHS)
     listed = {int(m[1], 16): bytes.fromhex(m[2]) for m in re.finditer(
         r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listings["dma"], re.MULTILINE)}

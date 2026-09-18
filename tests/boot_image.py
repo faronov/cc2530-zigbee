@@ -106,7 +106,9 @@ def simulate(simulator, commands, image=None):
             argv, input=f'exec "{script}"\n', capture_output=True, text=True,
             timeout=15, check=True,
         )
-    require(not re.search(r"Unknown command|No such command|Syntax error|Error:", result.stdout, re.IGNORECASE),
+    # Literal searches avoid a case-insensitive regex scan over large transcripts.
+    folded = result.stdout.lower()
+    require(not any(error in folded for error in ("unknown command", "no such command", "syntax error", "error:")),
             "Simulator rejected a command")
     return result.stdout
 
