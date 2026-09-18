@@ -886,6 +886,26 @@ binary is used as a test vector. The simulator's patterned XDATA window is
 synthetic and does not emulate flash physics or prove the hardware bank mux.
 No write/erase or recovery claim follows from these tests.
 
+### M2 RAM flash executor sources
+
+The internal executor, naked SDCC template/trampoline, C wrapper and test
+models are original BSD-3-Clause code, not the manual's IAR example or an
+imported SDK/programmer algorithm. Functional facts are from **SWRU191F**:
+pp.25,33-34 define the shared CODE/XDATA bus, CPU/DMA arbitration and XMAP;
+pp.34-36 describe bank0/DPS and stack/return state; pp.73-77 specify the
+four-byte write, 20-us data window, FCTL flags, FADDR and FWDATA.
+Pages125/126 and the retained RAM fail-stop policy are project choices.
+
+Table2-3, pp.37-39, supplies the instruction-cycle values used for the
+42-clock staged command/data path. Its p.37 warning explicitly describes
+best-case memory access, so that count is not a measured or general
+worst-case wall-clock bound. No generic uCsim timing is presented as
+CC2530 timing. The model supplies controller events and XMAP address
+decoders; the simulator executes the actual C-copied instructions.
+Neither model establishes physical flash contents, wear, transfer timing,
+electrical interruption or hardware recovery. No external binary, private
+device data or manual example is a test vector.
+
 ## Normative target
 
 Engineering references:

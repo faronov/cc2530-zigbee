@@ -172,6 +172,16 @@ erase/program operation, flash writer, persistence record or board `IMAGE`
 is introduced. Keep the 512-byte reservation budget and the entire private
 prefix protected from caller output buffers.
 
+The separate [internal RAM command executor](docs/ARCHITECTURE.md#internal-ram-flash-command-executor)
+has `make BUILD=build/flash-exec-dev test-flash-exec`, also in `test-common`.
+It executes real copied instructions with synthetic controller/XMAP events
+and retains a RAM-only fail-stop when active-controller polling exhausts.
+Controller-idle is not verified NV success; public history/readback policy
+and hardware acceptance are separate tasks. Preserve the exact linked
+extent/return ABI, copy-readback and alias/private-prefix proofs.
+**Never flash `flash_exec_test.ihx` or upload it as a board artifact.**
+No ordinary build/test target may invoke this engine on a physical device.
+
 The independent passive RX foundation has `make test-radio-rx`, also included
 in `make ... all test`. Its [contract and synthetic evidence](docs/RADIO_RX.md)
 do not grant hardware access. `radio_rx_test.ihx` is never a board image,

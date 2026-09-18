@@ -1171,12 +1171,69 @@ can stall instruction fetch; a bounded byte count is not a hardware timeout
 or busy-flash recovery guarantee.
 
 The separate `flash_test.ihx` is host-tested, image-checked and alias-aware
-simulated, never a board image. No erase/program API or successful NV stub
-exists. A future writer must execute its critical path from RAM and must not
-return into flash while BUSY, or restore XMAP while still executing mapped
-RAM. Interrupted-word history and write-count limits cannot be inferred from
-an erased-looking readback. Hardware acceptance and durable records remain
-separate future gates.
+simulated, never a board image. No public erase/program API or successful NV
+stub exists. The internal executor below prepares the RAM-critical dependency,
+not the public writer. Interrupted-word history and write-count limits cannot
+be inferred from an erased-looking readback. Hardware acceptance and durable
+records remain separate future gates.
+
+## Internal RAM flash command executor
+
+`include/flash_exec.h` and `src/flash_exec.c` implement the isolated M2 #6
+dependency. `flash_exec_command(operation, page, offset, word, poll_limit)`
+accepts ERASE=1 or PROGRAM=2, relative page0/1, and a byte offset: zero for
+erase, or four-byte aligned within the 2-KiB page for program. It sets the
+actual FADDR word address within `FA00..FDFF`; the command path writes FCTL
+and, for an accepted program command, four staged bytes to FWDATA. It never
+writes the information-page window or accepts page127.
+
+This is **not a public erase/program or persistence API**. `FLASH_EXEC_IDLE`
+means command acceptance and subsequent idle controller status, not verified
+flash contents, erase history or a durable record. A future caller must
+enforce write-count/interrupted-word history and perform actual readback;
+even an idle controller may have timed out without programming the word.
+
+The foreground contract requires normal SDCC bank0/DPS0 ABI, common unbanked
+callers, CC2530F256 identity, stable awake undivided RC16/XOSC32, IRQs disabled,
+DMA unarmed/unrequested, and exclusive controller/mapping/clock ownership.
+The program source is four ordinary XDATA bytes after the entire linked
+executor/compiler private prefix. Invalid parameters/ownership do no MMIO
+and do not latch a fault. Other failures retain their original result, with
+no retry, implicit cleanup or subsequent-call MMIO.
+
+Before issuing a command, C copies and physically reads back the volatile
+123-byte RAM code buffer, stages word/limit inputs, and verifies FADDR and
+MEMCTR.XMAP. The naked entry tail-jumps into mapped RAM using the genuine
+common-C return frame. All critical branches are relative, with no CODE
+loads, helper calls or interrupts. `RET` is reached only after BUSY, WRITE
+and ERASE are all clear. Only a successful idle return restores the original
+MEMCTR from common CODE; FMAP and cache mode are preserved.
+
+`poll_limit` permits 1..65,535 completed FCTL polling reads, separate from
+the initial acceptance read and preflight observations; it is not elapsed
+time. If any active-controller bit remains at exhaustion, RAM stores
+`FLASH_EXEC_RAM_STOP=7` and the last FCTL byte, then stays in a RAM-only
+self-loop even if the controller later becomes idle. XMAP and the genuine
+caller frame remain intact. Recovery requires a separately authorized reset,
+not a fabricated safe timeout return to possibly busy flash. The nine-byte
+private `flash_exec_work` contains command, four word bytes, little-endian
+limit, result at byte7 and last RAM-observed FCTL at byte8.
+
+The exact standalone image has 1,451 CODE bytes, 168 ordinary XDATA bytes
+plus the unchanged 64-byte status reservation, and observed peak SP `2B`.
+Its copied template is `0062..00DC`, XDATA buffer `0009..0083`, mapped CODE
+`8009..8083`; the whole private prefix ends at `009A`. These are verified
+test-image allocations, not fixed addresses imposed on future integration.
+The static staged command/data sequence is 42 **tabulated best-case**
+CC2530 clocks (2.625 us at nominal16MHz); TI explicitly does not make its
+instruction table a general worst-case timing guarantee. Physical XMAP,
+20-us transfer timing, flash effects and reset/power interruption remain
+the separate #8 hardware gate, not simulator evidence.
+
+`make test-flash-exec` is host-tested, exact-image-checked and alias-aware
+simulated. **Never flash `flash_exec_test.ihx`.** All board images exclude
+both flash modules and their harnesses; this adds no board fixture, automatic
+device access or completed M2 milestone.
 
 ## Persistence design
 

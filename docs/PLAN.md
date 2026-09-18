@@ -366,9 +366,14 @@ The [reserved flash read foundation](ARCHITECTURE.md#reserved-flash-read-foundat
 now reserves physical pages125/126 and provides bounded, staged reads with
 strict chip, mapping, controller and output-ownership checks. It is isolated
 from all board images and has host, exact-image and alias-aware synthetic
-evidence only. Page127 and the information page are excluded. Erase/program,
-the RAM executor, interrupted-write recovery and persistent records are not
-implemented; this is progress toward the flash gate, not M2 completion.
+evidence only. Page127 and the information page are excluded.
+The subsequent [internal RAM executor](ARCHITECTURE.md#internal-ram-flash-command-executor)
+implements command/address/data writes from a copied, verified 123-byte RAM
+path, with a genuine idle-before-return ABI and retained RAM-only fail-stop.
+It has host, exact-image and alias-aware synthetic evidence, not hardware
+observations. Controller-idle is not verified flash content. Public
+erase/program, write-history/readback policy, physical acceptance and
+persistent records remain separate tasks; M2 is not complete.
 
 Deliver independent interfaces for:
 
@@ -698,6 +703,9 @@ Simulation is not hardware validation; a visible image is not Zigbee
 interoperability; a successful join is not a complete SED implementation.
 
 The plan deliberately does not promise a delivery date or a final byte count.
-Update it when measurements or normative review change a decision. A future
-issue tracker may split these milestones, but this document remains the
-canonical dependency and acceptance plan.
+Update it when measurements or normative review change a decision.
+The [ordered issue roadmap #5](https://github.com/faronov/cc2530-zigbee/issues/5)
+now splits the remaining work into dependency-linked implementation and
+evidence tasks. Mark completed acceptance checkboxes as evidence lands;
+do not close a whole milestone for a bounded subtask. This document remains
+the canonical dependency and acceptance plan.

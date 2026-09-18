@@ -85,6 +85,52 @@ flash-read, erase/program, endurance, electrical interruption or persistent
 record evidence. Synthetic BUSY rejection does not prove a real CPU can
 execute from flash while its controller is busy.
 
+## Internal RAM flash executor coverage
+
+`make test-flash-exec` is focused offline coverage for the internal command
+engine, not the future public writer. The native corpus exercises 131,815
+calls: every reserved word address, both erase pages, clock/cache/XBANK
+combinations, full 16-bit argument/source-boundary domains, identity and
+ownership states, command rejection/ABORT/controller errors, mapping/address
+readback failures, all four ownership observations and retained failures.
+Its callback is explicitly a C controller/assembly model, not production
+execution or successful flash emulation; modeled fail-stop uses a nonlocal
+test escape rather than returning to the wrapper.
+
+The 1,451-byte linked image has SHA-256
+`1565921ea42f0222f67a9bf9bc72865d1dfe98a112ab4616a4c2668677163926`,
+168 ordinary XDATA bytes plus64 reserved, and observed peak SP `2B`.
+The verifier checks every CODE byte, matching relocated instructions,
+typed ABI, compiler-private allocation, exact peripheral access sites,
+physical copy/readback and all relative RAM branch destinations.
+The 123-byte template has no calls, absolute jumps or CODE loads.
+The four FWDATA stores are actual consecutive register/MOVX pairs.
+The 42-clock instruction-table count is **best-case**, not hardware timing.
+
+The 181 linked scenarios execute genuine copied instructions at
+`8009..8083` through synthetic CODE-to-RAM decoders, introduced only after
+the real MEMCTR write. Ignored-map rejection never gets that decoder.
+They inspect actual command/address/ordered data writes, the genuine common
+return PC `04B3`, idle-before-RET and restored mapping. First/last permitted
+completion, rejected commands with active status, late ownership changes,
+ABORT, FULL/cache mismatches and failed mapping restoration are covered.
+Every copied RAM byte is individually corrupted before C's physical
+readback and must prevent command execution.
+
+Stuck BUSY and WRITE-without-BUSY exercise limits1/255/256/257/65,535.
+A simulator FCTL-read breakpoint counts the exact requested polls and
+observes one remaining count before the final decrement. The exhausted
+engine preserves result7, final controller status, XMAP and stack frame in
+its RAM self-loop, including after a synthetic later-idle event. Faulted
+re-entry must reach no peripheral access. Unallocated/status XDATA,
+information/reserved-page windows, upper IRAM and alias guards remain strict.
+The Make inventory and all-board exclusion checks cover the new corpus.
+
+This is **host-tested, image-checked and simulated**, not hardware-observed.
+The emulator supplies status transitions, not a physical bank mux or flash
+write/erase effects. No verified NV operation, write-history policy, wear,
+power-cut recovery, board fixture or completed M2 gate is claimed.
+
 ## M0 coverage
 
 The current build must cover:

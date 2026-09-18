@@ -55,7 +55,7 @@ class LocalChecksTests(unittest.TestCase):
         commands = self.dry_run("test-local")
         self.assertEqual(sum("unittest" in args for args in commands), 1)
         expected_components = {
-            "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "flash",
+            "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "flash", "flash_exec",
             "mac_frame", "nwk_beacon", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch",
         }

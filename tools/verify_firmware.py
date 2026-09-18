@@ -246,8 +246,9 @@ def xdata_ranges(symbols):
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
     require(not any(name.startswith("_flash_") for name in symbols) and
-            not any(f"C${name}$" in debug for name in ("flash.c", "test_flash.c")),
-            "Board image must not link the isolated flash reader/test")
+            not any(f"C${name}$" in debug for name in
+                    ("flash.c", "test_flash.c", "flash_exec.c", "test_flash_exec.c")),
+            "Board image must not link the isolated flash services/tests")
     require(not any(name.startswith("_radio_rx_test") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("test_radio_rx.c", "test_radio_rx_fixture.c")),
             "Board image must not link the isolated passive RX test")
