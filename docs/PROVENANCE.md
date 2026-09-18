@@ -824,6 +824,13 @@ recorded in the dedicated contract. The copy's SHA256 is
 `d245c8bb208f6cdb585fb753cefa67e367d30eebd55b9ed9957c8fd152d6a055`.
 The PDF and temporary research tools are not vendored or CI artifacts.
 
+The Beacon Request extension uses section 7.3.7 p.156/Figure62 and the
+selected nonbeacon-enabled channel-access scope in section 7.5.1.1
+pp.167-168. It reuses the actual command/header codec, with TX Pending
+rejection; its eight-byte body does not require ACK or frame retransmission.
+Section 7.5.2.1.2 pp.173-174 was read directly to separate that command from
+the still-unimplemented PAN-filter/channel/receive-window scan procedure.
+
 The receive-only ACK normalization follows the selected edition's ignored
 FCF-subfield rules, then calls the unchanged strict codec; it is not a
 loosening of general frame admission. Single-slot capacity, generation tags,

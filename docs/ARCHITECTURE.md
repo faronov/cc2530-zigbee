@@ -87,7 +87,8 @@ network state and is not linked into bootstrap/fixture firmware. Its
 
 The separate [offline MAC transmission scheduler](MAC_TX.md) composes that
 real codec with one caller-owned context (168 bytes on SDCC) and one copied
-DATA body.
+DATA or canonical Beacon Request body. Request transmission is not a scan;
+channel changes, Beacon receive windows and association remain separate.
 It owns the device-wide DSN sequence, unslotted NB/BE backoff, finite retry
 state and ACK matching. Every external action/event is correlated by a
 nonwrapping generation, retry and backoff attempt; retransmission preserves

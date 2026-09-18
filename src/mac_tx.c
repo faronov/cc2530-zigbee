@@ -39,15 +39,20 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
         return MAC_TX_GENERATION_EXHAUSTED;
     if (mac_frame_decode(body, length, &decoded) != MAC_CODEC_OK)
         return MAC_TX_UNSUPPORTED;
-    /* Direct DATA only. Canonical TX compression is stricter than the codec.
-     * No association/address-allocation or indirect Frame Pending policy here.
+    if (decoded.header.flags & MAC_FLAG_PENDING)
+        return MAC_TX_UNSUPPORTED;
+    /* The codec checks the complete source-less broadcast command layout.
+     * Its receive-only Pending allowance does not authorize transmission.
+     * Compressed DATA PAN equality is also already established by decoding.
      */
-    if (decoded.header.type != MAC_FRAME_DATA
-            || (decoded.header.flags & MAC_FLAG_PENDING)
+    if (decoded.header.type == MAC_FRAME_COMMAND) {
+        if (body[decoded.payload_offset] != MAC_COMMAND_BEACON_REQUEST)
+            return MAC_TX_UNSUPPORTED;
+    } else if (decoded.header.type != MAC_FRAME_DATA
             || decoded.header.source_pan == 0xffffu
             || decoded.header.destination_pan == 0xffffu
-            || ((decoded.header.source_pan == decoded.header.destination_pan)
-                != ((decoded.header.flags & MAC_FLAG_PAN_COMPRESSION) != 0u))
+            || (!(decoded.header.flags & MAC_FLAG_PAN_COMPRESSION)
+                && decoded.header.source_pan == decoded.header.destination_pan)
             || (decoded.header.source_mode == MAC_ADDRESS_SHORT
                 && decoded.header.source[0] == 0xfeu && decoded.header.source[1] == 0xffu)
             || (decoded.header.destination_mode == MAC_ADDRESS_SHORT
@@ -138,6 +143,7 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
 {
     uint8_t emitted = MAC_TX_ACTION_NONE;
     uint8_t kind = 0;
+    uint8_t phase;
     uint8_t normalized[3];
     mac_frame_info_t decoded;
 
@@ -147,9 +153,10 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
                 || (event->kind == MAC_TX_EVENT_ACK && event->length != 0u
                     && event->bytes == NULL))))
         return MAC_TX_INVALID;
-    if (tx->phase == MAC_TX_IDLE)
+    phase = tx->phase;
+    if (phase == MAC_TX_IDLE)
         return MAC_TX_STATE;
-    if (tx->phase == MAC_TX_DONE || tx->phase == MAC_TX_FAULT)
+    if (phase == MAC_TX_DONE || phase == MAC_TX_FAULT)
         goto publish;
     if ((uint32_t)(now - tx->last) >= MAC_TX_HALF) {
         fault(tx, MAC_TX_CLOCK_ERROR);
@@ -163,7 +170,7 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
     if (reached(tx->last, tx->ready_at) || reached(now, tx->ready_at))
         tx->ready_at = now;
     tx->last = now;
-    if (tx->phase == MAC_TX_STOPPING) {
+    if (phase == MAC_TX_STOPPING) {
         if (tx->retry_pending && (reached(now, tx->deadline)
                     || tx->steps == 0u || kind == MAC_TX_EVENT_CANCEL)) {
             tx->retry_pending = 0;
@@ -203,10 +210,10 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
         goto publish;
     }
     tx->steps--;
-    if (tx->phase == MAC_TX_DRAW) {
+    if (phase == MAC_TX_DRAW) {
         tx->phase = MAC_TX_DRAW_WAIT;
         emitted = MAC_TX_ACTION_RANDOM;
-    } else if (tx->phase == MAC_TX_DRAW_WAIT && kind == MAC_TX_EVENT_RANDOM) {
+    } else if (phase == MAC_TX_DRAW_WAIT && kind == MAC_TX_EVENT_RANDOM) {
         tx->at = reached(now, tx->ready_at) ? now : tx->ready_at;
         tx->at += (uint32_t)(event->value & ((1u << tx->be) - 1u)) * MAC_TX_BACKOFF_SYMBOLS;
         if (reached(tx->at, tx->deadline)) {
@@ -216,7 +223,7 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
             tx->phase = MAC_TX_RADIO;
             emitted = MAC_TX_ACTION_ATTEMPT;
         }
-    } else if (tx->phase == MAC_TX_RADIO) {
+    } else if (phase == MAC_TX_RADIO) {
         if (kind == MAC_TX_EVENT_BUSY || kind == MAC_TX_EVENT_SENT) {
             if (!reached(event->stamp, tx->at + (kind == MAC_TX_EVENT_BUSY
                          ? 8u : (uint32_t)(24u + 2u * tx->length)))) {
@@ -243,7 +250,7 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
                 }
             }
         }
-    } else if (tx->phase == MAC_TX_ACK_WAIT) {
+    } else if (phase == MAC_TX_ACK_WAIT) {
         if (kind == MAC_TX_EVENT_ACK && event->length == 3u
                 && (event->bytes[0] & 7u) == MAC_FRAME_ACK
                 && (uint32_t)(event->stamp - tx->tx_end) > 0u

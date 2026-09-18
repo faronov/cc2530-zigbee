@@ -438,6 +438,12 @@ TX/RX owners cannot fulfill that contract by simple composition. #13's
 physical/integration gate remains open, and the standalone image's narrow
 IRAM headroom is not complete-stack or interrupt-nesting acceptance.
 
+Initial #14 preparation additionally admits canonical unsecured Beacon
+Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.
+They require neither ACK nor frame retries. This does not yet implement
+channel walking, bounded Beacon receive windows, candidate selection or
+association, and does not waive #13's real-adapter gate.
+
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
 their addressing layouts, with host, linked-image and

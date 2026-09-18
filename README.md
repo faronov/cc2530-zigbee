@@ -451,7 +451,9 @@ networking, calibrated power or complete-stack-fit claim follows.
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy
 ACK/DSN matching and retransmission state for one copied unsecured DATA
-frame, using the real MAC codec. Backoff, five CCAs per attempt, four
+frame or canonical Beacon Request command, using the real MAC codec.
+Request transmission alone does not scan a channel or receive Beacons.
+Backoff, five CCAs per attempt, up to four
 transmission attempts, transaction/work limits and confirmed-quiescence
 cleanup are explicit. Retries reuse the frame and DSN; no ACK does not prove
 that the peer received nothing.

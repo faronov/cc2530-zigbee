@@ -292,7 +292,10 @@ exercise successful and missing/wrong/stale ACKs, all backoff stages, retry
 exhaustion, retained copies/DSNs, full-slot pressure, lifetime/work limits,
 timestamp ordering/wrap and confirmed versus failed quiescence. Host-only
 cases additionally enumerate 8,192 type-ACK FCF patterns, DSN/random byte
-values and supported header combinations, with ASan/UBSan coverage.
+values and supported header combinations, with ASan/UBSan coverage. Beacon
+Request admission adds 2,048 byte/value variants, exact input lengths,
+Pending/other-command rejection, busy exhaustion and shared request-to-DATA
+DSN/IFS. The target executes the real command codec and unacknowledged path.
 
 The proof pins the complete linked CODE, public checkpoint/API addresses,
 compiler-private metadata, all context/event/action field offsets and the
@@ -301,8 +304,11 @@ cover changed CODE/ABI/fields/symbols, altered or missing/duplicate listing
 records and missing IRAM aliasing. Genuine execution retains unallocated
 XDATA/status, upper-IRAM, disabled-IRQ and final stack-unwind guards, with
 the unchanged 15-second per-simulator bound. Both boards produce identical
-26,842-byte CODE, 1,051 ordinary XDATA +64 reserved and observed SP `7C`,
-only three bytes below the upper-IRAM guard. Neither the separate 28-KiB CODE
+27,323-byte CODE, 1,053 ordinary XDATA +64 reserved and observed SP `7B`,
+only four bytes below the upper-IRAM guard. The existing SP7C cap is unchanged:
+the dispatcher uses an entry-phase snapshot, and the complete portable case
+list runs directly in target main without an extra test-only wrapper frame.
+Neither the separate 28-KiB CODE
 nor 1,280-byte XDATA reservation raises an earlier budget.
 
 Both board definitions run offline; no board image may link this module or

@@ -106,6 +106,9 @@ typedef struct {
  * without mutation; valid fresh-epoch storage is initialized and returns OK.
  */
 mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now);
+/* Direct DATA or canonical Beacon Request command only. Request transmission
+ * does not scan a channel, receive a Beacon or establish a network.
+ */
 mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                               const uint8_t * volatile body, uint16_t length,
                               uint32_t now, uint32_t lifetime, uint16_t work_limit);

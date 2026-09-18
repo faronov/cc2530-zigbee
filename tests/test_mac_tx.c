@@ -14,6 +14,12 @@
 static const MCU_CODE uint8_t golden[] = {
     0x61, 0x98, 0xa5, 0x34, 0x12, 0x78, 0x56, 0xbc, 0x9a, 0xaa, 0x55, 0xcc
 };
+static const MCU_CODE uint8_t beacon_request[] = {
+    0x03, 0x08, 0xa5, 0xff, 0xff, 0xff, 0xff, 0x07
+};
+static const MCU_CODE uint8_t data_request[] = {
+    0x23, 0x80, 0xa5, 0x34, 0x12, 0xbc, 0x9a, 0x04
+};
 static mac_tx_t tx, saved;
 static mac_tx_event_t event;
 static mac_tx_action_t action, saved_action;
@@ -171,6 +177,35 @@ static uint16_t admission(void)
     tx.generation = UINT32_MAX; /* Explicit synthetic boundary, compiled on target. */
     saved = tx;
     CHECK(mac_tx_submit(&tx, body, 12, 0, 100, 10) == MAC_TX_GENERATION_EXHAUSTED);
+    CHECK(memcmp(&tx, &saved, sizeof(tx)) == 0);
+    return 0;
+}
+
+static uint16_t beacon_requests(void)
+{
+    now = 0;
+    CHECK(mac_tx_init(&tx, 0xfe, now) == MAC_TX_OK);
+    CHECK(mac_tx_submit(&tx, beacon_request, 8, now, 10000, 100) == MAC_TX_OK);
+    CHECK(tx.length == 8 && !tx.ack_requested && tx.frame[2] == 0xfe);
+    CHECK(mac_tx_copy(&tx, copy, 8, &length) == MAC_TX_OK && length == 8);
+    CHECK(copy[0] == 3 && copy[1] == 8 && memcmp(copy + 3, beacon_request + 3, 5) == 0);
+    CALL(draw(0));
+    CALL(sent());
+    CHECK(tx.phase == MAC_TX_STOPPING && tx.outcome == MAC_TX_UNACKNOWLEDGED);
+    CALL(quiesce());
+    CHECK(tx.phase == MAC_TX_DONE && tx.transmissions == 1 && tx.retries == 0);
+    CHECK(mac_tx_release(&tx) == MAC_TX_OK);
+    CHECK(mac_tx_submit(&tx, golden, 12, now, 10000, 100) == MAC_TX_OK);
+    CHECK(tx.frame[2] == 0xff && tx.next_dsn == 0);
+    CALL(draw(0));
+    CHECK(action.at == now + 12u);
+
+    CHECK(mac_tx_init(&tx, 7, 0) == MAC_TX_OK);
+    saved = tx;
+    memcpy(body, beacon_request, 8);
+    body[0] |= MAC_FLAG_PENDING; /* Ignored only by command RX, not allowed on TX. */
+    CHECK(mac_tx_submit(&tx, body, 8, 0, 1000, 100) == MAC_TX_UNSUPPORTED);
+    CHECK(mac_tx_submit(&tx, data_request, 8, 0, 1000, 100) == MAC_TX_UNSUPPORTED);
     CHECK(memcmp(&tx, &saved, sizeof(tx)) == 0);
     return 0;
 }
@@ -414,16 +449,47 @@ static uint16_t lifetimes_and_errors(void)
     return 0;
 }
 
+#ifdef CC2530_HOST_TEST
 static uint16_t self_test(void)
+#else
+volatile __xdata __at(0x1e00) uint8_t mac_tx_result[8];
+
+void main(void)
+#endif
 {
-    CALL(initialization());
-    CALL(admission());
-    CALL(success_and_spacing());
-    CALL(backoff_retry());
-    CALL(ack_edges());
-    CALL(cancellation_and_faults());
-    CALL(lifetimes_and_errors());
-    return 0;
+    uint16_t result = initialization();
+    if (!result)
+        result = admission();
+    if (!result)
+        result = beacon_requests();
+    if (!result)
+        result = success_and_spacing();
+    if (!result)
+        result = backoff_retry();
+    if (!result)
+        result = ack_edges();
+    if (!result)
+        result = cancellation_and_faults();
+    if (!result)
+        result = lifetimes_and_errors();
+#ifdef CC2530_HOST_TEST
+    return result;
+#else
+    mac_tx_result[0] = 'M';
+    mac_tx_result[1] = 'T';
+    mac_tx_result[2] = 'X';
+    mac_tx_result[3] = '1';
+    mac_tx_result[4] = 1;
+    mac_tx_result[5] = 8;
+    mac_tx_result[6] = (uint8_t)result;
+    mac_tx_result[7] = (uint8_t)(result >> 8);
+    __asm
+        .globl _mac_tx_done
+    _mac_tx_done:
+        nop
+    __endasm;
+    for (;;) {}
+#endif
 }
 
 #ifdef CC2530_HOST_TEST
@@ -436,7 +502,10 @@ static uint16_t exhaustive(void)
     unsigned n, j;
     uint8_t *exact;
     mac_header_t header;
+    mac_frame_info_t decoded;
 
+    CHECK(mac_frame_decode(data_request, sizeof(data_request), &decoded) == MAC_CODEC_OK);
+    CHECK(decoded.header.type == MAC_FRAME_COMMAND);
     for (fcf = 2; fcf <= 0xffffu; fcf += 8) {
         CALL(begin(1, 0x5a, 0, 10000, 100));
         CALL(draw(0));
@@ -486,8 +555,39 @@ static uint16_t exhaustive(void)
               == (n < 9 || n > 125 ? MAC_TX_UNSUPPORTED : MAC_TX_OK));
         if (n < 9 || n > 125)
             CHECK(memcmp(&saved, &tx, sizeof(tx)) == 0);
+        memset(exact, 0x69, n);
+        memcpy(exact, beacon_request, n < sizeof(beacon_request) ? n : sizeof(beacon_request));
+        CHECK(mac_tx_init(&tx, 0x5a, 0) == MAC_TX_OK);
+        saved = tx;
+        CHECK(mac_tx_submit(&tx, exact, (uint16_t)n, 0, 10000, 100)
+              == (n == sizeof(beacon_request) ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+        if (n != sizeof(beacon_request))
+            CHECK(memcmp(&saved, &tx, sizeof(tx)) == 0);
         free(exact);
     }
+    for (j = 0; j < sizeof(beacon_request); j++) {
+        for (n = 0; n <= 255; n++) {
+            memcpy(body, beacon_request, sizeof(beacon_request));
+            body[j] = (uint8_t)n;
+            CHECK(mac_tx_init(&tx, 0x5a, 0) == MAC_TX_OK);
+            saved = tx;
+            CHECK(mac_tx_submit(&tx, body, sizeof(beacon_request), 0, 10000, 100)
+                  == (j == 2 || n == beacon_request[j] ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+            if (j != 2 && n != beacon_request[j])
+                CHECK(memcmp(&saved, &tx, sizeof(tx)) == 0);
+        }
+    }
+    now = 0;
+    CHECK(mac_tx_init(&tx, 0x5a, now) == MAC_TX_OK);
+    CHECK(mac_tx_submit(&tx, beacon_request, 8, now, 10000, 100) == MAC_TX_OK);
+    for (n = 0; n < 5; n++) {
+        CALL(draw(0));
+        now = action.at + 8u;
+        source(MAC_TX_EVENT_BUSY);
+        CALL(step());
+    }
+    CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CHANNEL_ACCESS);
+    CHECK(tx.transmissions == 0 && tx.retries == 0 && !tx.uncertain);
     for (n = 0; n <= 4; n++) {
         exact = malloc(n ? n : 1);
         CHECK(exact != NULL);
@@ -568,28 +668,8 @@ int main(void)
         fprintf(stderr, "MAC TX failure at C line %u\n", (unsigned)result);
         return 1;
     }
-    puts("MAC TX: portable state corpus, 8192 ACK FCFs, 256 DSNs/draws, exact bounds PASS");
+    puts("MAC TX: portable state corpus, 8192 ACK FCFs, 256 DSNs/draws, "
+         "2048 Beacon Request variants, exact bounds PASS");
     return 0;
-}
-#else
-volatile __xdata __at(0x1e00) uint8_t mac_tx_result[8];
-
-void main(void)
-{
-    uint16_t result = self_test();
-    mac_tx_result[0] = 'M';
-    mac_tx_result[1] = 'T';
-    mac_tx_result[2] = 'X';
-    mac_tx_result[3] = '1';
-    mac_tx_result[4] = 1;
-    mac_tx_result[5] = 8;
-    mac_tx_result[6] = (uint8_t)result;
-    mac_tx_result[7] = (uint8_t)(result >> 8);
-    __asm
-        .globl _mac_tx_done
-    _mac_tx_done:
-        nop
-    __endasm;
-    for (;;) {}
 }
 #endif

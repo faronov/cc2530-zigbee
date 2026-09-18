@@ -160,7 +160,7 @@ explicitly and must not equate syntactic decoding with authenticated input.
 
 The separate [offline MAC transmission scheduler](docs/MAC_TX.md) has
 `make BUILD=build/mac-tx-check test-mac-tx`, also in `test-common`.
-It composes the actual MAC codec with one owned DATA copy and abstract
+It composes the actual MAC codec with one owned frame copy and abstract
 symbol-time events/actions, not successful substitutes for radio calls.
 Keep its three per-link listing snapshots, whole CODE/private/field ABI,
 alias/upper-IRAM and genuine stack-unwind checks. Its own 28-KiB CODE and

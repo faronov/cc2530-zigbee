@@ -13,9 +13,9 @@ from boot_image import (
 )
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, require, xdata_ranges
 
-SIZE = 26842
-DIGEST = "391e3cab590c3666f37e2cd6a547b5c5e5b7c74b883ede9c06724705acdbae58"
-PRIVATE_DIGEST = "86c4ca0b6e25b0c65ace27cdbb2ee6a91817f985e5c8e699effc3b614c19e505"
+SIZE = 27323
+DIGEST = "d61660859abed63926cb8af3506cb701f8791fafafc6f9b54e39a952862e5e00"
+PRIVATE_DIGEST = "bc9625651af1b1a25678efd68df5a2927ccc0f2984712f7dc3fea882c81d105d"
 # Dedicated composition, NOT changes to codec/platform/board budgets.
 CODE_BUDGET = 28672
 XDATA_BUDGET = 1280
@@ -26,12 +26,12 @@ INSTRUCTION_RE = re.compile(
 # Pin every reviewed instruction, not an arbitrary surviving subset of a listing.
 # The harness also contains non-CSEG startup instructions in listing order.
 LISTING_PROOFS = {
-    "mac_frame": (4168, 7009, "72f9beb120701760d74638443ead9cb6d1e3ca74c6281883e2b88d08db565e5a",
+    "mac_frame": (4168, 7009, "c01063cc0b3e937fb92dade25049fecf2d57937b637bcfcc44585d655857f719",
                   ((0x62, 0x1bc3),)),
-    "mac_tx": (6159, 9475, "dc565442366556b006b8956cb027280d84e8f1f2bec72ef4b483ed40a5b03baa",
-               ((0x1bc3, 0x40c6),)),
-    "mac_tx_test": (5705, 9711, "c634bb00d6af4e717ae11317babe9784cc53f781915b165a23cb651b9d14b45f",
-                    ((0, 6), (0x5f, 0x62), (0x40c6, 0x66ac))),
+    "mac_tx": (5851, 8925, "213af61417216aa5eb7572b39af03d9cc9329b5f3817bb8bd57c6b2166cc96ee",
+               ((0x1bc3, 0x3ea0),)),
+    "mac_tx_test": (6295, 10726, "5354fd9c5b12478dc13accd17b2b6e4e3f7af8457ee7bd8760459091cb90ff18",
+                    ((0, 6), (0x5f, 0x62), (0x3ea0, 0x687d))),
 }
 ENTRY_POINTS = {
     "_mac_command_decode": ("mac_frame", 0x22a),
@@ -41,11 +41,11 @@ ENTRY_POINTS = {
     "_mac_frame_encode": ("mac_frame", 0x195c),
     "_mac_tx_init": ("mac_tx", 0x1c05),
     "_mac_tx_submit": ("mac_tx", 0x1cd3),
-    "_mac_tx_copy": ("mac_tx", 0x22c9),
-    "_mac_tx_step": ("mac_tx", 0x27cd),
-    "_mac_tx_release": ("mac_tx", 0x4071),
-    "_main": ("mac_tx_test", 0x666f),
-    "_mac_tx_done": ("mac_tx_test", 0x66a8),
+    "_mac_tx_copy": ("mac_tx", 0x2284),
+    "_mac_tx_step": ("mac_tx", 0x2788),
+    "_mac_tx_release": ("mac_tx", 0x3e4b),
+    "_main": ("mac_tx_test", 0x6774),
+    "_mac_tx_done": ("mac_tx_test", 0x6879),
 }
 CALLER_OBJECTS = {
     "tx": (0x163, 168), "saved": (0x20b, 168), "event": (0x2b3, 17),
@@ -158,10 +158,10 @@ def verify(image, symbols, debug, memory, listings):
                 "MAC-TX caller ABI missing/changed")
         region = set(range(address, address + size))
         require(not region & private and region <= allocated, "Caller overlaps private prefix/alias")
-    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1051
-            and symbols["__gptrput_PARM_2"] == 0x40e,
+    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1053
+            and symbols["__gptrput_PARM_2"] == 0x410,
             "MAC-TX linked ordinary/generic-store storage changed")
-    require(symbols["s_SSEG"] == 0x62, "MAC-TX stack reservation changed")
+    require(symbols["s_SSEG"] == 0x5a, "MAC-TX stack reservation changed")
     return allocated
 
 
@@ -269,7 +269,7 @@ def main():
     require(len(peaks) == 1 and int(peaks[0], 16) <= 0x7c, "MAC-TX stack peak exceeded budget")
     ordinary = sum(end - start for start, end in xdata_ranges(symbols))
     print(f"MAC-TX: {SIZE} CODE SHA256={DIGEST}; {ordinary}+64/{XDATA_BUDGET} XDATA; "
-          f"private prefix=0..354; stack=62..ff peak={int(peaks[0], 16):02x}.")
+          f"private prefix=0..354; stack=5a..ff peak={int(peaks[0], 16):02x}.")
     for module in MODULES:
         areas = re.findall(r"^A (\S+) size ([0-9A-F]+) flags", (args.output / (module + ".rel")).read_text(), re.M)
         print(module, {name: int(size, 16) for name, size in areas if int(size, 16)})

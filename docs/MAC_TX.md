@@ -37,6 +37,8 @@ the specification and third-party implementations are not vendored.
 | ACK/retries | 7.5.6.4.1-3 pp.189-190 | No ACK-request means no retries; matching DSN inside the ACK window completes the logical exchange; wrong DSN fails that attempt; direct retransmissions reuse exactly the original DSN/body, at most three retries |
 | ACK timing at recipient | 7.5.6.4.2 p.189 | In the selected nonbeacon-enabled PAN, ACK transmission starts 12 symbols after received frame end; **not implemented or measured here** |
 | Interframe spacing | 6.1.3 Table 3 p.30; 7.5.1.3 pp.169-170; Table 85 p.159 | At least 12 symbols for MPDU length <=18, otherwise 40. Our body excludes two FCS octets, hence the body threshold is 16 |
+| Beacon Request admission | 7.3.7 p.156, Figure 62; 7.5.1.1 pp.167-168 | Unsecured version-0 command `07`, short destination/PAN `FFFF`, no source/compression/Pending/ACK request: eight body bytes. It uses the selected unslotted channel-access policy, never an ACK retry |
+| Not an active scan | 7.5.2.1.2 pp.173-174 | An actual scan also saves/restores PAN filtering, changes channels, receives bounded Beacon windows and reports descriptors/unscanned channels. None follows merely from transmitting a request |
 
 No timing/procedure facts were substituted from vendor SDKs, Contiki, a
 generated catalog or a newer IEEE revision. The reviewed secondary reference's
@@ -62,7 +64,7 @@ Do not call them from ISR context or run a codec concurrently.
 | API | Effect |
 | --- | --- |
 | `mac_tx_init(tx, random_dsn, now)` | Return `MAC_TX_INVALID` for NULL without mutation; otherwise initialize fresh-epoch storage and return `MAC_TX_OK`. All old actions/events must already be purged; no radio reset, entropy generation or recovery is performed |
-| `mac_tx_submit(tx, body, length, now, lifetime, work_limit)` | Validate with the real codec, admit direct unsecured DATA v0/v1, copy bytes, replace DSN, reserve the sole slot. Both addresses must be present; short/extended and unacknowledged short broadcast are supported |
+| `mac_tx_submit(tx, body, length, now, lifetime, work_limit)` | Validate with the real codec, admit direct unsecured DATA v0/v1 or a canonical Beacon Request command, copy bytes, replace DSN, reserve the sole slot. DATA requires both addresses; short/extended and unacknowledged short broadcast are supported |
 | `mac_tx_copy(tx, body, capacity, length)` | Copy immutable body for an adapter. No private pool pointer escapes; exact capacity succeeds, shortage leaves bytes/length unchanged. Copy is not a send |
 | `mac_tx_step(tx, now, event, action)` | One finite foreground step; NULL event polls. Produces a one-shot action or NONE plus current diagnostics. API OK means a step was processed, **not delivery** |
 | `mac_tx_release(tx)` | Release only a DONE slot; preserves DSN, generation, last time and remaining IFS. FAULT cannot be released |
@@ -88,19 +90,28 @@ implicit replacement occurs. All valid active steps consume finite work or
 cleanup budget even when input is ignored. Repeated invalid calls are caller
 bugs, not a progress mechanism.
 
-Unsupported: Beacons, commands/association/polling, indirect transmission,
-slotted CSMA/GTS, MAC security, enhanced ACKs/IEs, Frame Pending on outgoing
-DATA, broadcast PANs and short `FFFE` allocation sentinels. The existing
+Beacon Request admission reuses the codec's complete command/header checks.
+Its body is `03 08 DSN FF FF FF FF 07`; the codec's receive-only allowance for
+command Pending is explicitly rejected before transmission admission.
+Requests and DATA share the same device-wide DSN sequence, owned slot,
+CCA/backoff limits and IFS. Requests do not ask for ACKs or retransmit after
+confirmed PHY completion. Channel-access failure is explicit; it is not a
+successful scan or proof that no coordinator exists.
+
+Unsupported: Beacon frames, commands other than Beacon Request (including
+association/polling), indirect transmission, slotted CSMA/GTS, MAC security,
+enhanced ACKs/IEs, outgoing Frame Pending, DATA broadcast PANs and short
+`FFFE` allocation sentinels. The existing
 codec additionally rejects security/reserved/unsupported TX layouts and
 ACK-requested short broadcast. The payload is opaque; parsing it is not
 NWK/APS security or application acceptance.
 
-The **both-addresses-present** admission claim follows the existing
+The **both-addresses-present DATA** admission claim follows the existing
 [MAC codec contract](MAC.md#supported-subset), not an unstated scheduler
 assumption. `src/mac_frame.c::header_shape()` rejects DATA if either address
 mode is `MAC_ADDRESS_NONE`; `mac_frame_decode()` applies that check, and
 `mac_tx_submit()` rejects any non-OK decode before admitting a candidate.
-Neither the codec nor that protocol scope was changed by the initializer fix.
+The source-less Beacon Request exception does not relax DATA admission.
 
 ## Actions and real-adapter requirements
 
@@ -238,10 +249,10 @@ unchanged strict native/SDCC flags. SDCC 4.2.0 model-large, both board definitio
 | Object | CODE | Ordinary XDATA (including scratch/parameters) | Persistent IRAM | Overlay IRAM |
 | --- | ---: | ---: | ---: | ---: |
 | Existing MAC codec, including unused command/Beacon code | 7,009 | 207 | 15 | 10 |
-| MAC-TX scheduler | 9,475 | 148 | 41 | 5 |
-| Synthetic caller/constants | 9,723 | 672 | 14 | 0 |
+| MAC-TX scheduler | 8,925 | 148 | 33 | 5 |
+| Synthetic caller/constants | 10,754 | 674 | 14 | 0 |
 | Shared CRT/runtime | 635 | 24 | See linked accounting | Shared |
-| **Total** | **26,842** | **1,051** | **70** | **10 shared, not summed** |
+| **Total** | **27,323** | **1,053** | **62** | **10 shared, not summed** |
 
 This Linux toolchain's unchanged codec size is measured here rather than
 substituting an older platform's published object byte count.
@@ -254,29 +265,39 @@ budget**, including all 64 reserved status bytes. This accommodates two context
 copies for atomic-failure tests, two 125-byte test buffers, event/action copies
 and compiler/runtime storage. It does not expand the MAC-codec, platform,
 board or seven-module protocol-resource budgets, nor allocate a second
-production queue. Actual reservation use is **1115/1280**.
+production queue. Actual reservation use is **1117/1280**.
 
 Exact ordinary private prefix: codec `0000..00CE`, scheduler `00CF..0162`.
 Caller context `0163..020A`, saved context `020B..02B2`, event `02B3..02C3`,
 action `02C4..02D9`, saved action `02DA..02EF`, body `02F0..036C`,
 copy `036D..03E9`, ACK `03EA..03ED`; caller/compiler/runtime storage continues
-through `041A`. Generic-store scratch is `040E`. All ordinary allocations are
+through `041C`. Generic-store scratch is `0410`. All ordinary allocations are
 below `1E00`; status `1E00..1E3F` is reserved, only its first eight bytes used.
 `1F00..1FFF` remains an IRAM alias, never extra RAM.
 
-IRAM: 70 persistent +10 overlay +8 bank0 +1 bit-storage byte +9 unused packing
-bytes precede stack `62..FF` (158 bytes), initial/final SP61.
-Observed compiled-test peak is **SP7C**, 27 stack bytes and **three bytes**
+IRAM: 62 persistent +10 overlay +8 bank0 +1 bit-storage byte +9 unused packing
+bytes precede stack `5A..FF` (166 bytes), initial/final SP59.
+Observed compiled-test peak is **SP7B**, 34 stack bytes and **four bytes**
 below the unchanged upper-IRAM `80..FF` guard. This is limited foreground
 vector evidence, not worst-case call-graph, interrupt-nesting or full-stack
 fit evidence. No ISR is linked or simulated for this scheduler.
 
-Contiguous unbanked CODE `0000..68D9`, SHA256:
-`391e3cab590c3666f37e2cd6a547b5c5e5b7c74b883ede9c06724705acdbae58`.
+Beacon Request decoding exercises a deeper genuine command-codec call path.
+The first extension exceeded the existing SP7C component cap; that cap and
+the `80..FF` guard were **not raised**. DATA admission now reuses the decoder's
+compressed-PAN equality guarantee, and dispatch snapshots its entry phase
+instead of repeatedly loading it through a generic pointer. The portable
+case list runs directly in target `main`, removing a test-only wrapper frame;
+no case, codec call, real return or failure check is skipped. Host and target
+still share the same case functions/list. This changes harness depth and
+compiler scratch, not a claim of universal caller-stack headroom.
+
+Contiguous unbanked CODE `0000..6ABA`, SHA256:
+`d61660859abed63926cb8af3506cb701f8791fafafc6f9b54e39a952862e5e00`.
 Both generated IHX files also match byte-for-byte, file SHA256:
-`bce71b7b0cc438786ef04fb17aa914801b9f7cef6c80adbd32f5edb12162236f`.
+`60bd868f8ad26228ad8623dd60e5a3cefc851af3837a53cca6bcd945e178137e`.
 Sorted production-private CDB declaration/address record SHA256:
-`86c4ca0b6e25b0c65ace27cdbb2ee6a91817f985e5c8e699effc3b614c19e505`.
+`bc9625651af1b1a25678efd68df5a2927ccc0f2984712f7dc3fea882c81d105d`.
 The proof pins the whole image (including runtime/constants), private CDB
 declarations/addresses, field/pointer ABI, caller storage, generic-store
 scratch and **complete ordered** per-image relocated instruction records.
@@ -289,25 +310,25 @@ numbers, not records or their order.
 | Module | Instruction records | Covered instruction bytes | Exact coverage (end exclusive) |
 | --- | ---: | ---: | --- |
 | `mac_frame` | 4,168 | 7,009 | `0062..1BC3` |
-| `mac_tx` | 6,159 | 9,475 | `1BC3..40C6` |
-| `mac_tx_test` | 5,705 | 9,711 | `0000..0006`, `005F..0062`, `40C6..66AC` |
+| `mac_tx` | 5,851 | 8,925 | `1BC3..3EA0` |
+| `mac_tx_test` | 6,295 | 10,726 | `0000..0006`, `005F..0062`, `3EA0..687D` |
 
 The test record count includes its nine startup instruction bytes; its
-12 constant bytes and the 635-byte linked CRT/runtime remainder are covered
+28 constant bytes and the 635-byte linked CRT/runtime remainder are covered
 by the whole-image hash, not attributed to these instruction records.
 The normalized SHA256 values, in table order, are:
 
-- `72f9beb120701760d74638443ead9cb6d1e3ca74c6281883e2b88d08db565e5a`
-- `dc565442366556b006b8956cb027280d84e8f1f2bec72ef4b483ed40a5b03baa`
-- `c634bb00d6af4e717ae11317babe9784cc53f781915b165a23cb651b9d14b45f`
+- `c01063cc0b3e937fb92dade25049fecf2d57937b637bcfcc44585d655857f719`
+- `213af61417216aa5eb7572b39af03d9cc9329b5f3817bb8bd57c6b2166cc96ee`
+- `5354fd9c5b12478dc13accd17b2b6e4e3f7af8457ee7bd8760459091cb90ff18`
 
 Public MAC-TX entry addresses are pinned and cross-checked against map,
 CDB and actual listing labels/instruction boundaries: init `1C05`, submit
-`1CD3`, copy `22C9`, step `27CD`, release `4071`. The proof also checks the
+`1CD3`, copy `2284`, step `2788`, release `3E4B`. The proof also checks the
 five reused codec API entries. The target result ABI is an unsigned-byte
 return in DPL (`SC:U` in CDB), now including init.
-`_main=666F` is checked against map/CDB/listing and the startup LJMP at `0003`;
-`_mac_tx_done=66A8` is checked against map/listing and exact `00 80 FE 22`
+`_main=6774` is checked against map/CDB/listing and the startup LJMP at `0003`;
+`_mac_tx_done=6879` is checked against map/listing and exact `00 80 FE 22`
 checkpoint/loop/return bytes. A different location containing a zero byte
 cannot substitute for the checkpoint.
 
@@ -330,6 +351,11 @@ golden/state corpus runs under SDCC, including CODE-pointer admission.
 Both native and SDCC tests check the NULL initializer result without public
 state mutation, exact initialization from nonzero storage, and every normal
 initializer call's successful result.
+The Beacon Request extension adds 2,048 byte/value mutations, exact-sized
+lengths 0..126, command-Pending rejection, valid unsupported Data Request
+rejection, busy-CCA exhaustion, genuine CODE input/copy, unacknowledged
+completion, and shared request-to-DATA DSN wrap/IFS. Existing DATA/ACK cases
+remain enabled.
 All source events are **synthetic**, not captures or hardware observations.
 
 ## Commands and integration
@@ -380,17 +406,16 @@ No new dependency is required. Repository and whitespace checks are separate.
 An unchanged full local firmware matrix is not claimed/repeated for this
 isolated addition.
 
-**2026-09-18 initial results:** both dedicated board checks passed, as did native
-ASan/UBSan and the unchanged coupled codec host/linked corpus for each board.
+**2026-09-18 results:** the initial DATA-only composition in `30f0603` passed
+both dedicated board checks, native ASan/UBSan and the unchanged coupled
+codec host/linked corpus for each board.
 `python3 -B tools/check_repository.py`, `git diff --check` and explicit
 `git diff --no-index --check /dev/null <new-file>` checks passed.
-The pre-publication follow-up first passed explicit-recipe builds, then
-**forced full canonical Make rebuilds with `-B -j1` for both definitions**:
-native tests, all three SDCC compilations, the link/snapshots and the
-strengthened proof passed. The sanitizer commands above were also rerun for
-both definitions and passed. CODE/IHX hashes, layout and observed stack
-remain exactly as recorded above. The final integration additionally passed
-the canonical generic target, a byte-identical second-board build and the
+The Beacon Request extension passed new native and genuine linked checks
+with both definitions, all strengthened proof negatives and both sanitizer
+builds. Its two images are byte-identical with the new hashes and resource
+measurements above. Canonical Make compilation/link/snapshots are retained.
+The initial shared integration additionally passed the
 48 focused Make/orchestration and artifact-layout tests. These enforce the
 per-board component inventory, correct link/snapshot/proof order and exclusion
 of scheduler symbols/sources from every board image. Repository/whitespace
