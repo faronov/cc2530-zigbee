@@ -425,7 +425,18 @@ their first result; busy CCA requires verified shutdown before explicit reuse.
 Both board definitions have host/image/alias-aware simulator evidence, not
 physical RF evidence. These init-time owners cannot be mixed with legacy RX
 in the same reset epoch. Queue/controller composition, a boot-disarmed RF
-fixture, on-air acceptance, ACK/retries and association remain open.
+fixture, on-air acceptance, physical ACK/retries and association remain open.
+
+The separate [offline MAC transmission scheduler](MAC_TX.md) now implements
+one copied unsecured DATA transaction with unslotted CSMA-CA, legacy ACK/DSN
+matching, finite retries and lifetime/work bounds. It reuses the actual codec,
+retains the DSN/body across retries and requires confirmed quiescence before
+radio ownership can be released. Host, genuine linked-image and alias-aware
+simulator evidence cover synthetic symbol-time events, not RF timing.
+There is no real adapter or post-TX ACK receiver: the existing reset-exclusive
+TX/RX owners cannot fulfill that contract by simple composition. #13's
+physical/integration gate remains open, and the standalone image's narrow
+IRAM headroom is not complete-stack or interrupt-nesting acceptance.
 
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and

@@ -284,6 +284,33 @@ All board images reject the new module and standalone harness. The
 [future physical procedure](RADIO_TX.md#separately-authorized-future-rf-procedure)
 remains separately authorized and is never run by Make/CI.
 
+## Offline MAC transmission state coverage
+
+`make test-mac-tx` composes the actual MAC codec with the
+[bounded scheduler](MAC_TX.md), not a stub radio. Shared native/SDCC cases
+exercise successful and missing/wrong/stale ACKs, all backoff stages, retry
+exhaustion, retained copies/DSNs, full-slot pressure, lifetime/work limits,
+timestamp ordering/wrap and confirmed versus failed quiescence. Host-only
+cases additionally enumerate 8,192 type-ACK FCF patterns, DSN/random byte
+values and supported header combinations, with ASan/UBSan coverage.
+
+The proof pins the complete linked CODE, public checkpoint/API addresses,
+compiler-private metadata, all context/event/action field offsets and the
+three complete per-image relocated instruction listings. Negative controls
+cover changed CODE/ABI/fields/symbols, altered or missing/duplicate listing
+records and missing IRAM aliasing. Genuine execution retains unallocated
+XDATA/status, upper-IRAM, disabled-IRQ and final stack-unwind guards, with
+the unchanged 15-second per-simulator bound. Both boards produce identical
+26,842-byte CODE, 1,051 ordinary XDATA +64 reserved and observed SP `7C`,
+only three bytes below the upper-IRAM guard. Neither the separate 28-KiB CODE
+nor 1,280-byte XDATA reservation raises an earlier budget.
+
+Both board definitions run offline; no board image may link this module or
+upload its standalone executable. Abstract symbol events are not captured
+TX end, ACK reception, calibrated time or RF evidence. Real adapter ownership,
+ordered timestamp delivery, combined platform/protocol resources and physical
+acceptance remain open. The existing MAC codec corpus remains unchanged.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

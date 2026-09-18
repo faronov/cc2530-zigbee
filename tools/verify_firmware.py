@@ -246,6 +246,9 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith("_mac_tx_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("mac_tx.c", "test_mac_tx.c")),
+            "Board image must not link the isolated MAC TX scheduler")
     require(not any(name.startswith("_nv_record_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("nv_record.c", "test_nv_record.c")),
             "Board image must not link the isolated NV record composition")

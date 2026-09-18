@@ -443,9 +443,25 @@ their cause without retry or implicit cleanup.
 `make test-radio-tx` is **host-tested, image-checked and simulated**, not
 hardware-observed. No board image links it, and the standalone executable
 must never be flashed. Same-reset mixing with the legacy RX service is
-unsupported; queue/controller integration, ACK/retries, a boot-disarmed RF
+unsupported; queue/controller integration, physical ACK/retries, a boot-disarmed RF
 fixture and separately authorized on-air acceptance remain open. No MAC,
 networking, calibrated power or complete-stack-fit claim follows.
+
+## Offline MAC transmission state
+
+The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy
+ACK/DSN matching and retransmission state for one copied unsecured DATA
+frame, using the real MAC codec. Backoff, five CCAs per attempt, four
+transmission attempts, transaction/work limits and confirmed-quiescence
+cleanup are explicit. Retries reuse the frame and DSN; no ACK does not prove
+that the peer received nothing.
+
+`make test-mac-tx` is **host-tested, image-checked and simulated**. Its clock
+is abstract 32-bit symbols, not the raw Sleep Timer. There is no real radio
+adapter, post-TX ACK receiver or calibrated timing evidence; the existing
+reset-exclusive TX/RX services cannot simply be chained. The isolated image's
+narrow IRAM headroom is not full-stack or ISR-nesting acceptance.
+No board image links this scheduler; never flash `mac_tx_test.ihx`.
 
 ## Isolated reserved flash reader
 

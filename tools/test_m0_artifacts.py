@@ -118,6 +118,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_tx_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_tx_init", "_mac_tx_submit", "_mac_tx_step", "_mac_tx_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "MAC TX scheduler"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("mac_tx.c", "test_mac_tx.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC TX scheduler"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_nv_record_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_nv_record_load", "_nv_record_replace", "_nv_record_fault", "_nv_record_test_result"):

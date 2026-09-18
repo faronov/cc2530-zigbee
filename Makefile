@@ -76,7 +76,7 @@ endif
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 .PHONY: test-protocol-budget
 .PHONY: test-radio-rx test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
-.PHONY: test-nv-record
+.PHONY: test-nv-record test-mac-tx
 .PHONY: test-common test-tools test-board test-local
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
@@ -558,6 +558,25 @@ test-nv-record: $(BUILD)/host-nv-record-tests $(BUILD)/nv_record_test.ihx
 	$(BUILD)/host-nv-record-tests
 	$(PYTHON) -B tests/boot_nv_record.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_tx_test.rel: tests/test_mac_tx.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_tx_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/mac_tx.rel $(BUILD)/mac_tx_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/mac_tx.rel $(BUILD)/mac_tx_test.rel
+	cp $(BUILD)/mac_frame.rst $(BUILD)/mac_tx_test.mac_frame.rst
+	cp $(BUILD)/mac_tx.rst $(BUILD)/mac_tx_test.mac_tx.rst
+	cp $(BUILD)/mac_tx_test.rst $(BUILD)/mac_tx_test.mac_tx_test.rst
+
+$(BUILD)/host-mac-tx-tests: tests/test_mac_tx.c src/mac_tx.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_tx.c src/mac_tx.c src/mac_frame.c -o $@
+
+test-mac-tx: $(BUILD)/host-mac-tx-tests $(BUILD)/mac_tx_test.ihx
+	$(BUILD)/host-mac-tx-tests
+	$(PYTHON) -B tests/boot_mac_tx.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
@@ -593,6 +612,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-queue test-radio-tx
+test-common: test-mac-tx
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
 	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"

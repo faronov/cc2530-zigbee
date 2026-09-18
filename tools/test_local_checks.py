@@ -57,7 +57,7 @@ class LocalChecksTests(unittest.TestCase):
         expected_components = {
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_queue", "radio_tx",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "nwk_beacon", "nwk_frame", "aps_frame", "protocol_frame",
+            "mac_frame", "mac_tx", "nwk_beacon", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch",
         }
         components = Counter()
@@ -79,25 +79,31 @@ class LocalChecksTests(unittest.TestCase):
         self.assertEqual(components, Counter({(b, c): 1 for b in BOARDS for c in expected_components}))
         self.assertEqual(len(outputs), len(BOARDS)*len(IMAGES))
 
-    def test_radio_tx_snapshots_every_composed_listing_after_its_link(self):
-        for board in BOARDS:
-            commands = self.dry_run("test-radio-tx", include_build=True, BOARD=board)
+    def test_composed_snapshots_every_listing_after_its_link(self):
+        cases = (
+            ("radio_tx", (("timebase", "timebase"), ("radio_fifo", "radio_fifo"),
+                          ("radio_tx", "radio_tx"), ("radio_tx_test", "test_radio_tx"))),
+            ("mac_tx", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
+                        ("mac_tx_test", "mac_tx_test"))),
+        )
+        for board, service, modules in ((b, s, m) for b in BOARDS for s, m in cases):
+            commands = self.dry_run("test-" + service.replace("_", "-"), include_build=True, BOARD=board)
             link = next(args for args in commands if args[0] == "sdcc" and "-c" not in args)
             self.assertEqual([Path(arg).name for arg in link if arg.endswith(".rel")],
-                             ["timebase.rel", "radio_fifo.rel", "radio_tx.rel", "radio_tx_test.rel"])
-            simulation = next(args for args in commands if "tests/boot_radio_tx.py" in args)
+                             [f"{source}.rel" for source, _ in modules])
+            simulation = next(args for args in commands if f"tests/boot_{service}.py" in args)
             output = Path(simulation[simulation.index("--output")+1])
             snapshots = [args for args in commands if args[0] == "cp"]
             self.assertEqual([(Path(args[1]).name, Path(args[2]).name) for args in snapshots],
-                             [(f"{source}.rst", f"radio_tx_test.{module}.rst")
-                              for source, module in (("timebase", "timebase"), ("radio_fifo", "radio_fifo"),
-                                                     ("radio_tx", "radio_tx"), ("radio_tx_test", "test_radio_tx"))])
+                             [(f"{source}.rst", f"{service}_test.{module}.rst")
+                              for source, module in modules])
             for args in snapshots:
                 self.assertEqual(Path(args[1]).parent, output)
                 self.assertEqual(Path(args[2]).parent, output)
                 self.assertLess(commands.index(link), commands.index(args))
                 self.assertLess(commands.index(args), commands.index(simulation))
-            native = [args for args in commands if Path(args[0]).name == "host-radio-tx-tests"]
+            native = [args for args in commands
+                      if Path(args[0]).name == "host-" + service.replace("_", "-") + "-tests"]
             self.assertEqual(len(native), 1)
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))

@@ -85,6 +85,26 @@ procedure or association state machine. The module has no board/platform depende
 network state and is not linked into bootstrap/fixture firmware. Its
 [contract](MAC.md) separates syntax success from CRC/security/peer acceptance.
 
+The separate [offline MAC transmission scheduler](MAC_TX.md) composes that
+real codec with one caller-owned context (168 bytes on SDCC) and one copied
+DATA body.
+It owns the device-wide DSN sequence, unslotted NB/BE backoff, finite retry
+state and ACK matching. Every external action/event is correlated by a
+nonwrapping generation, retry and backoff attempt; retransmission preserves
+the admitted bytes and DSN. A completed slot remains occupied until explicit
+release, while uncertain adapter/clock/cleanup faults retain ownership.
+
+Time is an abstract 32-bit symbol epoch with half-range constraints and an
+ordered event watermark, not a conversion of raw Sleep Timer ticks.
+Transaction lifetime, foreground work and cleanup each have finite bounds.
+The 54-symbol ACK window starts at captured TX end; no-ACK retries preserve
+that window plus IFS, including after an early wrong-DSN ACK. Logical results
+do not release active radio ownership without a QUIESCED event.
+There is no CC2530 adapter, same-reset TX/RX owner, ACK receive path or
+physical timing evidence. No MMIO, board GPIO, security or network membership
+is introduced; the isolated SDCC resource proof does not establish complete
+stack fit or IRQ nesting.
+
 The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC
 headers or platform code. The [NWK codec contract](NWK.md) preserves raw

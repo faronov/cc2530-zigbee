@@ -813,6 +813,25 @@ or imported. The parent corrected runner preflight from a guessed instruction
 prefix to actual linked `90 00 00 E5 95`; actual-image and wrong-prefix
 regressions retain that fix. It did not change the failed firmware bytes.
 
+### Offline MAC transmission scheduler sources
+
+The [scheduler, tests and event contract](MAC_TX.md) are original BSD-3-Clause
+work, reusing this repository's MAC codec rather than an external stack.
+Primary [IEEE Std 802.15.4-2006](https://people.ece.ubc.ca/~edc/7860/data/802.15.4-2006.pdf)
+supplies the selected 2450-MHz O-QPSK symbol/backoff, NB/BE, retry, ACK and IFS
+facts. The exact document identity and printed-section/page derivations are
+recorded in the dedicated contract. The copy's SHA256 is
+`d245c8bb208f6cdb585fb753cefa67e367d30eebd55b9ed9957c8fd152d6a055`.
+The PDF and temporary research tools are not vendored or CI artifacts.
+
+The receive-only ACK normalization follows the selected edition's ignored
+FCF-subfield rules, then calls the unchanged strict codec; it is not a
+loosening of general frame admission. Single-slot capacity, generation tags,
+work/lifetime limits, ordered event delivery and the independent cleanup
+budget are explicit project policies. Synthetic randomness is not security
+entropy. No trace, identity, SDK, driver implementation or hardware
+observation is imported. This is not an IEEE conformance or RF-timing claim.
+
 ### Offline MAC codec sources
 
 The standalone codec is original BSD-3-Clause code, not an imported Contiki
