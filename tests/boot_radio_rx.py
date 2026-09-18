@@ -17,7 +17,7 @@ from boot_image import (
 from boot_timebase import GUARD_SFRS, READ_OFFSETS, READER_BYTES
 from prng_fixture import PRNG_LENGTHS
 from radio_fifo_fixture import instructions
-from radio_rx_fixture import verify_fscal1_readback
+from radio_rx_fixture import verify_driver_listing, verify_fscal1_readback
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, peripheral_accesses, require
 
 
@@ -55,9 +55,7 @@ def verify_image(image, symbols, debug, memory, listing):
     end = cdb_address(debug, "L:XG$radio_rx_receive_init$0$0") + 1
     require((start, end) == (0x1f6, 0x137d), "RX module extent changed")
     code = instructions(image, start, end, LENGTHS)
-    listed = {int(m[1], 16): bytes.fromhex(m[2]) for m in re.finditer(
-        r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listing, re.MULTILINE)}
-    require(code == listed, "RX listing differs from actual instructions")
+    verify_driver_listing(code, listing)
     accesses = peripheral_accesses(code)
     require([data.hex() for _, data, _ in accesses] == [
         "e5a8", "e5b8", "e59a", "acbe", "e5c6", "e59e", "e5bf", "e5e9", "e591",
@@ -307,7 +305,7 @@ def main():
     image = parse_ihex(path.read_text(encoding="ascii"))
     symbols = parse_symbols(path.with_suffix(".map").read_text())
     debug, memory = (path.with_suffix(s).read_text() for s in (".cdb", ".mem"))
-    listing = (args.output / "radio_rx.rst").read_text()
+    listing = (args.output / "radio_rx_test.radio_rx.rst").read_text()
     allocated, sites = verify_image(image, symbols, debug, memory, listing)
     check_rejections(image, symbols, debug, memory, listing)
     check_alias(args.simulator)

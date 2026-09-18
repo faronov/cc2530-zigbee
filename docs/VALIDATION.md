@@ -1583,6 +1583,23 @@ This does not turn the C52 model into radio evidence, validate generic hardware,
 prove independent FCS or calibrated metadata, or close M2/M3. No raw packet,
 identity, payload digest, dump or capture was added to repository/CI artifacts.
 
+### RX shared-link listing regression
+
+The first20-job fixture CI run failed only the two RX board simulations:
+the standalone RX prerequisite in `all test` relinked the common `radio_rx.rel`,
+replacing `radio_rx.rst` with standalone addresses before the board checker
+consumed it. Both exact board images still passed their full CODE/ABI proof.
+Focused board-only runs had not exercised that link order.
+
+Each RX link now immediately preserves an image-specific relocated listing;
+both strict checkers use their own snapshot without a shared-file fallback.
+The common comparison rejects missing, changed, reordered and duplicated
+instructions. A real-SDCC regression builds both boards in fresh temporary
+directories, links board then component, reverses the order, and requires
+both preserved listings to keep matching only their respective genuine images.
+This changes test artifacts, not firmware, simulator limits or hardware evidence.
+The seven-file CI whitelist is unchanged.
+
 ## M2 quiescent radio FIFO automated coverage
 
 `make test-radio-fifo` runs strict host C and the isolated

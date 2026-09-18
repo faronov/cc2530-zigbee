@@ -12,7 +12,8 @@ from boot_image import (
 from boot_radio_fifo_fixture import sections, snapshot
 from boot_radio_rx import check_fscal1_rejections, check_fscal1_trace
 from radio_rx_fixture import (
-    CHECKPOINTS, FLAGS, LENGTHS, SETTINGS, SIZE, VALUES, check_frame, decode, instructions, verify_code, verify_fixture,
+    CHECKPOINTS, FLAGS, LENGTHS, SETTINGS, SIZE, VALUES, check_frame, decode, instructions,
+    verify_code, verify_driver_listing, verify_fixture,
 )
 from verify_firmware import cdb_address, parse_ihex, require
 
@@ -202,11 +203,8 @@ def check_radio_rx_fixture(simulator, output, board, symbols):
     image = parse_ihex(path.read_text()); debug = path.with_suffix(".cdb").read_text()
     proof = verify_fixture(image, symbols, debug); rejections(image, symbols, debug)
     # Independent listing check of actual decoded driver instructions.
-    listing = (output/"radio_rx.rst").read_text()
-    listed = {int(m[1], 16): bytes.fromhex(m[2]) for m in re.finditer(
-        r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listing, re.MULTILINE)}
-    require(listed == instructions(image, proof["driver_start"], proof["driver_end"], LENGTHS),
-            "RX fixture driver listing differs from genuine image")
+    listing = (output/"radio_rx_fixture.radio_rx.rst").read_text()
+    verify_driver_listing(instructions(image, proof["driver_start"], proof["driver_end"], LENGTHS), listing)
     vectors = [json.loads(line) for line in subprocess.run(
         [str(output/("host-radio-rx-fixture-tests_"+board)), "--vectors"],
         check=True, capture_output=True, text=True).stdout.splitlines()]

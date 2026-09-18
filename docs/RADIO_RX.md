@@ -258,6 +258,12 @@ The live copy avoids an extra return frame. Every complete CODE byte is
 pinned and mutation-tested; independent instruction/MMIO/CDB/listing checks
 cover the real calls, CODE tables, two destructive RFD read sites, fixed and
 indexed MMIO addresses, XDATA pointer ABI and caller/helper exclusion.
+SDCC overwrites the shared module's `radio_rx.rst` on every link. Each RX
+link therefore immediately saves its own `<image>.radio_rx.rst`; the strict
+checkers consume only that image-specific listing, including when `all test`
+links both images in one directory. Missing, wrong-image, reordered or
+duplicated instruction listings fail. These test-only files do not expand
+the seven-artifact upload whitelist.
 
 Reviewed instruction sites in the corrected images (hex CODE addresses):
 

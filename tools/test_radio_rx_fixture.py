@@ -7,7 +7,9 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -15,8 +17,8 @@ from unittest.mock import patch
 
 import check_radio_rx_hardware as runner
 from debug_image import DebugImage
-from radio_rx_fixture import CHECKPOINTS, check_frame, decode
-from verify_firmware import IMAGES, ROOT, verify_layout
+from radio_rx_fixture import CHECKPOINTS, LENGTHS, check_frame, decode, instructions, verify_driver_listing
+from verify_firmware import IMAGES, ROOT, cdb_address, parse_ihex, verify_layout
 import test_m0_artifacts
 
 
@@ -151,6 +153,59 @@ class WireTests(unittest.TestCase):
             verify_layout(symbols | {"l_XSEG": 961}, base.memory, debug, "radio_rx_fixture")
         with self.assertRaisesRegex(ValueError, "budget"):
             verify_layout(symbols, base.memory, base.debug)
+
+
+class ListingTests(unittest.TestCase):
+    def test_exact_ordered_instructions_required(self):
+        code = {0x100: b"\x75\x82\0", 0x103: b"\x22"}
+        lines = ("      000100 75 82 00       [24] 1 mov dpl,#0\n",
+                 "      000103 22             [24] 2 ret\n")
+        listing = "".join(lines)
+        verify_driver_listing(code, listing)
+        for bad in ("", lines[0], listing.replace("75 82", "75 83"),
+                    listing.replace("000100", "000101"), listing+lines[1],
+                    "".join(reversed(lines))):
+            with self.subTest(listing=bad), self.assertRaisesRegex(ValueError, "listing"):
+                verify_driver_listing(code, bad)
+
+    @unittest.skipUnless(all(shutil.which(tool) for tool in ("make", "sdcc", "packihx", "makebin")),
+                         "SDCC build tools required for real shared-link regression")
+    def test_image_listings_survive_both_link_orders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for board in ("generic", "lg_esl29_rev03"):
+                with self.subTest(board=board):
+                    output = Path(directory)/board
+                    command = ["make", "--no-print-directory", "--jobs=1", "-s", f"BOARD={board}",
+                               "IMAGE=radio_rx_fixture", f"BUILD={output}"]
+
+                    def build(*targets):
+                        result = subprocess.run(command+list(targets), cwd=ROOT, capture_output=True,
+                                                text=True, timeout=120)
+                        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+
+                    def checked_listing(name):
+                        image = parse_ihex((output/f"{name}.ihx").read_text())
+                        debug = (output/f"{name}.cdb").read_text()
+                        start = cdb_address(debug, "L:Fradio_rx$ordinary$0$0")
+                        stop = cdb_address(debug, "L:XG$radio_rx_receive_init$0$0")+1
+                        code = instructions(image, start, stop, LENGTHS)
+                        listing = (output/f"{name}.radio_rx.rst").read_text()
+                        verify_driver_listing(code, listing)
+                        return code, listing
+
+                    build("all", str(output/"radio_rx_test.ihx"))
+                    board_code, board_listing = checked_listing("radio_rx_fixture")
+                    test_code, test_listing = checked_listing("radio_rx_test")
+                    self.assertNotEqual(board_code, test_code)
+                    self.assertEqual((output/"radio_rx.rst").read_text(), test_listing)
+                    with self.assertRaisesRegex(ValueError, "listing"):
+                        verify_driver_listing(board_code, test_listing)
+                    build("all")
+                    self.assertEqual(checked_listing("radio_rx_fixture"), (board_code, board_listing))
+                    self.assertEqual(checked_listing("radio_rx_test"), (test_code, test_listing))
+                    self.assertEqual((output/"radio_rx.rst").read_text(), board_listing)
+                    with self.assertRaisesRegex(ValueError, "listing"):
+                        verify_driver_listing(test_code, board_listing)
 
 
 class PathTests(unittest.TestCase):

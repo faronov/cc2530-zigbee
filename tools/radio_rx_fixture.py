@@ -52,6 +52,12 @@ def verify_code(image, before):
             "RX fixture exact linked instructions/constants changed")
 
 
+def verify_driver_listing(code, listing):
+    listed = [(int(m[1], 16), bytes.fromhex(m[2])) for m in re.finditer(
+        r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listing, re.MULTILINE)]
+    require(listed == list(code.items()), "RX driver listing differs from genuine image")
+
+
 def verify_fscal1_readback(code, read, scratch, values):
     """Independent instruction check: exactly one read, mask03 only at index8."""
     # SDCC 4.2 uses bank0 R1 for the settings index, one IRAM byte for the

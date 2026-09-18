@@ -118,6 +118,9 @@ $(BUILD)/radio_rx_fixture_state.rel: src/radio_rx_fixture_state.c $(HEADERS) Mak
 # Relink with the selected board even when an explicitly shared BUILD is reused.
 $(TARGET).ihx: $(OBJECTS) force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(OBJECTS)
+ifeq ($(IMAGE),radio_rx_fixture)
+	cp $(BUILD)/radio_rx.rst $(TARGET).radio_rx.rst
+endif
 
 $(TARGET).hex: $(TARGET).ihx
 	packihx $< > $@
@@ -400,6 +403,7 @@ $(BUILD)/radio_rx_test.rel: tests/test_radio_rx.c $(HEADERS) Makefile | $(BUILD)
 
 $(BUILD)/radio_rx_test.ihx: $(BUILD)/timebase.rel $(BUILD)/radio_rx.rel $(BUILD)/radio_rx_test.rel force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/radio_rx.rel $(BUILD)/radio_rx_test.rel
+	cp $(BUILD)/radio_rx.rst $(BUILD)/radio_rx_test.radio_rx.rst
 
 $(BUILD)/host-radio-rx-tests: tests/test_radio_rx.c src/radio_rx.c src/timebase.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_rx.c src/radio_rx.c src/timebase.c tests/host_mmio.c -o $@
