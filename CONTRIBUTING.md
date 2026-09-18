@@ -228,6 +228,16 @@ call graph. The native RX model's `--queue-vectors` mode supplies successive
 real-driver traces without a peripheral reset. No vectors or
 `radio_queue_test.ihx` belong in board artifacts or physical experiments.
 
+The separate [init-time TX/CCA primitives](docs/RADIO_TX.md) have
+`make BUILD=build/radio-tx-check test-radio-tx`, also in `test-common`.
+Link timebase, FIFO, TX, then callers, and retain all four per-image relocated
+listing snapshots. Keep the 512-byte total XDATA reservation and explicit
+FIFO preload/clear calls with separately checked deadlines. TXDONE is not an
+ACK; CCA busy is recoverable only after verified shutdown. Do not compose
+this reset-exclusive owner with the legacy RX service in the same reset
+epoch, widen power profiles or add automatic RF. Neither `radio_tx_test.ihx`
+nor its synthetic traces is a board artifact or a physical-test input.
+
 For the separate RX board integration, use focused checks rather than twenty
 redundant local standalone corpora:
 

@@ -359,8 +359,9 @@ capture and two nonpublishing BAD_CRC results. Reuse after BAD_CRC and the
 terminal16-attempt cap were observed; final END016F had RX off/empty FIFOs.
 Generic, independent on-air FCS, calibrated timing/metadata and broader RF
 fault recovery remain unobserved. This finite RX slice does not complete M2/M3.
-Transmission, automatic ACK, calibrated metadata,
-continuous queues and MAC/networking remain unsupported; M2 #4 stays open.
+Transmission in board firmware, automatic ACK, calibrated metadata,
+continuous reception and MAC/networking remain unsupported; M2 #4 stays open.
+The separate offline TX/CCA preparation below does not change this record.
 
 The [reserved flash read foundation](ARCHITECTURE.md#reserved-flash-read-foundation)
 now reserves physical pages125/126 and provides bounded, staged reads with
@@ -416,6 +417,15 @@ driver errors retain their cause. Reentrant ISR storage, real generic C52
 preemption, complete linked MMIO and combined memory budgets are checked
 offline. These are software queues, not TX, ACK, a radio ISR, continuous
 reception, association or M3 hardware acceptance.
+
+The separate [bounded TX/CCA primitives](RADIO_TX.md) now implement direct
+TX, controller-gated TX-on-CCA and CCA-only sampling, with real FIFO/timebase
+composition and fresh completion/idle checks. All operational faults retain
+their first result; busy CCA requires verified shutdown before explicit reuse.
+Both board definitions have host/image/alias-aware simulator evidence, not
+physical RF evidence. These init-time owners cannot be mixed with legacy RX
+in the same reset epoch. Queue/controller composition, a boot-disarmed RF
+fixture, on-air acceptance, ACK/retries and association remain open.
 
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and

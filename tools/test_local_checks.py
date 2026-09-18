@@ -27,7 +27,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(list(Path(directory).iterdir()), [])
             return [shlex.split(line) for line in result.stdout.splitlines()
                     if line.startswith(("python3 ", directory + "/")) or
-                    include_build and line.startswith(("cc ", "sdcc "))]
+                    include_build and line.startswith(("cc ", "sdcc ", "cp "))]
 
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
@@ -55,7 +55,7 @@ class LocalChecksTests(unittest.TestCase):
         commands = self.dry_run("test-local")
         self.assertEqual(sum("unittest" in args for args in commands), 1)
         expected_components = {
-            "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_queue",
+            "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_queue", "radio_tx",
             "flash", "flash_exec", "flash_write",
             "mac_frame", "nwk_beacon", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch",
@@ -78,6 +78,29 @@ class LocalChecksTests(unittest.TestCase):
         self.assertEqual(images, Counter({(b, i): 1 for b in BOARDS for i in IMAGES}))
         self.assertEqual(components, Counter({(b, c): 1 for b in BOARDS for c in expected_components}))
         self.assertEqual(len(outputs), len(BOARDS)*len(IMAGES))
+
+    def test_radio_tx_snapshots_every_composed_listing_after_its_link(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-radio-tx", include_build=True, BOARD=board)
+            link = next(args for args in commands if args[0] == "sdcc" and "-c" not in args)
+            self.assertEqual([Path(arg).name for arg in link if arg.endswith(".rel")],
+                             ["timebase.rel", "radio_fifo.rel", "radio_tx.rel", "radio_tx_test.rel"])
+            simulation = next(args for args in commands if "tests/boot_radio_tx.py" in args)
+            output = Path(simulation[simulation.index("--output")+1])
+            snapshots = [args for args in commands if args[0] == "cp"]
+            self.assertEqual([(Path(args[1]).name, Path(args[2]).name) for args in snapshots],
+                             [(f"{source}.rst", f"radio_tx_test.{module}.rst")
+                              for source, module in (("timebase", "timebase"), ("radio_fifo", "radio_fifo"),
+                                                     ("radio_tx", "radio_tx"), ("radio_tx_test", "test_radio_tx"))])
+            for args in snapshots:
+                self.assertEqual(Path(args[1]).parent, output)
+                self.assertEqual(Path(args[2]).parent, output)
+                self.assertLess(commands.index(link), commands.index(args))
+                self.assertLess(commands.index(args), commands.index(simulation))
+            native = [args for args in commands if Path(args[0]).name == "host-radio-tx-tests"]
+            self.assertEqual(len(native), 1)
+            self.assertEqual(Path(native[0][0]).parent, output)
+            self.assertLess(commands.index(native[0]), commands.index(simulation))
 
     def test_aes_board_builds_its_own_runtime_reference_without_components(self):
         for board in BOARDS:

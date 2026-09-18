@@ -1122,6 +1122,29 @@ commissioning, transaction/binding/reporting state, device clusters, sensor/
 display, sleep, ISR nesting and banked CODE. These still require explicit
 budgets and integration evidence; **complete-stack fit remains unproven**.
 
+## Bounded init-time TX and CCA
+
+The isolated [TX/CCA composition](RADIO_TX.md) links the actual timebase,
+quiescent FIFO and new `radio_tx` services in that order. Caller-owned
+preload/clear operations have separately checked deadlines. Direct TX and
+controller-gated TX-on-CCA require fresh TXDONE and verified idle; a CCA-only
+sample reserves no future airtime. Only channels 11..26 and explicitly
+requested raw TXPOWER `05` are supported. Address/source-match RAM and board
+GPIO remain untouched; filtering/AUTOACK are disabled.
+
+This is a reset-exclusive, foreground-only owner, not a unified radio runtime.
+It may follow its own verified completions and the FIFO/clock/timebase
+preparation, but **not legacy RX or queue RX service in the same reset epoch**.
+Error returns may leave RF active and cannot authorize implicit flush/retry
+or reset. A copied queue TX candidate remains only caller-owned bytes, not a
+controller transaction; that combined image has not been proved.
+
+The standalone executable uses 8,526 CODE bytes and 374 ordinary XDATA +64
+reserved, within its unchanged 512-byte reservation. Stack begins at `59`,
+observed MMIO peak is `6C`, and the upper-IRAM guard remains intact. These
+host/image/simulator results neither add a board image nor establish complete
+stack fit, ACK timing, calibrated output power or on-air acceptance.
+
 ## Scheduling and ownership
 
 The isolated [bounded radio queue composition](RADIO_QUEUE.md) now supplies

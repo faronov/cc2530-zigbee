@@ -118,6 +118,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_radio_tx_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_radio_tx_send_init", "_radio_tx_cca_init", "_radio_tx_fault", "_radio_tx_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "radio TX/CCA"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("radio_tx.c", "test_radio_tx.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "radio TX/CCA"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_radio_queue_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_radio_queue_request_rx", "_radio_queue_service", "_radio_queue_rx", "_radio_queue_test_result"):

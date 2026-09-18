@@ -970,6 +970,25 @@ between calls. The linked image executes the actual receiver. Generic C52
 external-interrupt preemption/RETI is an ABI test, not a CC2530 RF-IRQ or
 timing observation. No SDK code, captured packet or device identity is used.
 
+### Bounded init-time TX and CCA sources
+
+The original BSD-3-Clause [TX/CCA code and synthetic model](RADIO_TX.md#primary-sources-and-provenance)
+reuse this repository's real FIFO/timebase services. No SDK, IAR sample,
+external driver, captured frame or programmer binary is imported. SWRU191F
+sections 23.4.2, 23.8, 23.9 and 23.14.9 provide the FIFO/strobe/completion,
+CCA-validity/four-clock and soft-shutdown facts. In particular, TXFIFO starts
+at `6080`, not RXFIFO `6000`; source/address RAM remains uninspected.
+SWRU191F Table 23-6 supplies recommended settings; CC2530 SWRS081B Table 2
+supplies the explicit raw `05`/TXCTRL `69` profile and its typical reference-EM
+conditions, not measured board power. SWRZ031 applicability was checked.
+
+The native and linked tests share synthetic controller expectations. Their
+agreement is not an independent silicon, timing or RF measurement. The
+linked proof executes actual strobes and FIFO/timebase instructions and pins
+the four genuine NOPs, typed ABI, private prefix and per-link listings.
+The separately documented future fixture/capture procedure grants no device,
+channel, power or recovery authority. Both boards remain offline-only for TX.
+
 ## Normative target
 
 Engineering references:

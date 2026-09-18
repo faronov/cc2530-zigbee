@@ -431,6 +431,22 @@ not transmission. `make test-radio-queue` has host, exact-image and
 alias-aware/generic-C52 preemption evidence, **not CC2530 IRQ/RF acceptance**.
 It is not linked into board images; never flash its standalone test.
 
+## Isolated TX and CCA primitives
+
+The [bounded init-time TX/CCA service](docs/RADIO_TX.md) now implements direct
+TX, controller-gated TX-on-CCA and CCA-only sampling. It composes the actual
+FIFO/timebase services, supports channels 11..26 with explicit raw power `05`,
+and requires fresh TXDONE plus verified idle for PHY completion. Busy CCA
+permits caller-directed reuse only after verified shutdown; faults retain
+their cause without retry or implicit cleanup.
+
+`make test-radio-tx` is **host-tested, image-checked and simulated**, not
+hardware-observed. No board image links it, and the standalone executable
+must never be flashed. Same-reset mixing with the legacy RX service is
+unsupported; queue/controller integration, ACK/retries, a boot-disarmed RF
+fixture and separately authorized on-air acceptance remain open. No MAC,
+networking, calibrated power or complete-stack-fit claim follows.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

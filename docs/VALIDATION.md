@@ -260,6 +260,30 @@ physical RF, TX/ACK, networking, continuous-lossless reception or complete
 stack fit is established. `radio_queue_test.ihx` is never a board image,
 flash input or CI artifact.
 
+## Bounded TX/CCA composition coverage
+
+`make test-radio-tx` runs 7,078 native calls and 51 genuine linked sequences:
+173 calls and 45,538 MMIO events against the real FIFO/timebase/TX code.
+Both board definitions have identical 8,526-byte CODE, 374 ordinary XDATA
++64 reserved, stack start `59` and observed MMIO peak `6C`. The 512-byte
+reservation, upper-IRAM/alias guards and 15-second simulator deadline are
+unchanged. Per-image snapshots retain all four relocated listings.
+
+Coverage includes every channel/body length, power/mode rejection, stale or
+missing TXDONE, busy-at-strobe, calibration/completion/shutdown stalls, all
+seven RFERR bits, overflow and PHR mismatch, wrap/backward/ambiguous ticks,
+maximum poll cap and retained failures. Every CODE byte mutation rejects;
+private ABI/allocation, actual RFD/MOVX operands, publication and status/
+unallocated memory are checked. The unchanged FIFO corpus (69,895 native
+cases/99 linked scenarios) and timebase checks also passed for both boards.
+
+The model is shared by host and simulator, not independent RF evidence.
+No frame capture, calibrated power/timing, TX board fixture, same-reset
+legacy RX/TX handoff or queue/controller integration is established.
+All board images reject the new module and standalone harness. The
+[future physical procedure](RADIO_TX.md#separately-authorized-future-rf-procedure)
+remains separately authorized and is never run by Make/CI.
+
 ## M0 coverage
 
 The current build must cover:
