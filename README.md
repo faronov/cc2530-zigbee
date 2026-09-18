@@ -465,6 +465,15 @@ reset-exclusive TX/RX services cannot simply be chained. The isolated image's
 narrow IRAM headroom is not full-stack or ISR-nesting acceptance.
 No board image links this scheduler; never flash `mac_tx_test.ihx`.
 
+The separate [Beacon candidate collector](docs/NWK_CANDIDATES.md) keeps four
+copied preliminary records using the real MAC/NWK Beacon decoders. It requires
+explicit channel/CRC metadata, PRO profile2, BO15, Association Permit and ED
+Capacity; valid changes update or withdraw a record, while malformed input
+and a full table cannot overwrite unrelated entries. `make test-nwk-candidates`
+is **host-tested, image-checked and simulated**. This is not active scanning,
+ranked parent selection, freshness, association or authenticated membership.
+Its standalone executable is excluded from board firmware and uploads.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

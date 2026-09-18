@@ -1132,6 +1132,24 @@ Test identities and payloads are original synthetic data. The PDF and
 temporary PDF reader are research-only and are not shipped in Git or CI;
 the original document's notices and licenses are not replaced by BSD-3-Clause.
 
+### Offline ED Beacon candidate sources
+
+The [four-entry collector](NWK_CANDIDATES.md), its copied-record policy and
+synthetic corpus are original BSD-3-Clause work using this repository's
+unchanged MAC/NWK decoders. IEEE 802.15.4-2006 sections 6.1.2.1,7.2.2.1
+and7.5.1.1 provide channel-map, Beacon and BO15/SO-ignore facts.
+The same pinned R22 document above supplies ED capacity (section3.6.7),
+profile2 identification (Annex D, pp.520-521) and the additional requirements
+that distinguish collection from parent selection (sections3.6.1.3-4,
+pp.335-336). Exact hashes and derivations are in the dedicated contract.
+No Enhanced Beacon implementation is inferred from Annex D's identifier.
+
+Capacity4, the NWK-aware identity key, last-observation replacement, withdrawal
+and deterministic full-table policy are explicit project choices. They do not
+implement complete discovery, link quality, update freshness, authentication
+or BDB procedures. All addresses/payloads are synthetic; no SDK, private capture,
+identity, key or third-party implementation is imported or uploaded.
+
 ### Offline R22 NWK Data frame sources
 
 The original `nwk_frame` codec uses the same

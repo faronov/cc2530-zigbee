@@ -57,7 +57,7 @@ class LocalChecksTests(unittest.TestCase):
         expected_components = {
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_queue", "radio_tx",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "nwk_beacon", "nwk_frame", "aps_frame", "protocol_frame",
+            "mac_frame", "mac_tx", "nwk_beacon", "nwk_candidates", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch",
         }
         components = Counter()
@@ -85,6 +85,9 @@ class LocalChecksTests(unittest.TestCase):
                           ("radio_tx", "radio_tx"), ("radio_tx_test", "test_radio_tx"))),
             ("mac_tx", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
                         ("mac_tx_test", "mac_tx_test"))),
+            ("nwk_candidates", (("mac_frame", "mac_frame"), ("nwk_beacon", "nwk_beacon"),
+                                ("nwk_candidates", "nwk_candidates"),
+                                ("nwk_candidates_test", "nwk_candidates_test"))),
         )
         for board, service, modules in ((b, s, m) for b in BOARDS for s, m in cases):
             commands = self.dry_run("test-" + service.replace("_", "-"), include_build=True, BOARD=board)

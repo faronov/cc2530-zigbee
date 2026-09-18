@@ -112,6 +112,18 @@ headers or platform code. The [NWK codec contract](NWK.md) preserves raw
 profile/capacity/depth/update metadata without compatibility or parent
 acceptance. It adds no firmware caller or network state machine.
 
+The separate [NWK candidate collector](NWK_CANDIDATES.md) composes the actual
+MAC frame/Beacon and NWK Beacon decoders into a four-entry copied table.
+Its 150-byte SDCC caller context applies only a preliminary PRO2/BO15/
+Association-Permit/ED-Capacity filter, with explicit channel-mask and truthful
+CRC preconditions. Eligible duplicates replace metadata; a valid changed
+advertisement can withdraw/compact an entry even while full. Malformed input
+and new identities at capacity preserve existing records. Short-address tails
+and unused slots are zeroed; outputs borrow no frame storage.
+This is not a MAC PAN-descriptor list, channel scan, ranked/fresh parent choice,
+association or membership state. No radio, timer, key or board dependency is
+introduced. Different Extended PAN identities remain distinct, without aging.
+
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
 IEEE addresses and opaque payload. Unsupported security, multicast and

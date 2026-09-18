@@ -170,6 +170,15 @@ full-stack fit. A real adapter must establish unified TX/RX ownership,
 event timestamps and physical ACK/timing behavior separately.
 **Never flash or upload `mac_tx_test.ihx`; no board image may link it.**
 
+The [Beacon candidate collector](docs/NWK_CANDIDATES.md) has
+`make BUILD=build/nwk-candidates-check test-nwk-candidates`, also in
+`test-common`. Preserve real MAC/MAC-Beacon/NWK decoding, explicit CRC/channel
+input, four copied slots, full-table duplicate/withdrawal handling and atomic
+error behavior. Its separate 20-KiB CODE/1,280-byte XDATA reservation and four
+per-link listing snapshots do not enlarge earlier budgets. Candidate retention
+is neither active scan completion nor compatible/authenticated parent selection.
+**Never flash or upload `nwk_candidates_test.ihx`; no board image may link it.**
+
 The isolated [reserved flash reader](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
 has a focused offline target:
 

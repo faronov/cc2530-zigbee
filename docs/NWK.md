@@ -40,6 +40,13 @@ security and network/parent acceptance still need their future procedures.
 Enhanced Beacons, information elements and other payload versions/layouts
 are not added by this work.
 
+The separate [four-entry candidate collector](NWK_CANDIDATES.md) now applies
+an explicitly preliminary profile2/BO15/permit/ED-capacity policy through the
+real MAC and NWK decoders. It adds bounded copied records, duplicate updates,
+withdrawal and pressure handling, not active scanning, full parent selection,
+freshness or network acceptance. This decoder's raw metadata contract is
+unchanged.
+
 ## API and ownership
 
 `nwk_beacon_decode(payload, length, result)` returns `nwk_beacon_result_t`.

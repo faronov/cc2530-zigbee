@@ -444,6 +444,15 @@ They require neither ACK nor frame retries. This does not yet implement
 channel walking, bounded Beacon receive windows, candidate selection or
 association, and does not waive #13's real-adapter gate.
 
+The independent [four-entry Beacon candidate collector](NWK_CANDIDATES.md)
+now composes the real MAC/NWK decoders with explicit CRC/channel inputs,
+preliminary profile2/BO15/permit/ED-capacity filters, copied metadata,
+duplicate updates, valid withdrawal/compaction and full-table rejection.
+Both board definitions have native/sanitizer/linked evidence. This is not
+active scan completion or complete normative parent selection: target-network
+choice, link cost, freshness/update-ID policy, actual receive windows and
+association remain open. The record/table are metadata, never membership.
+
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
 their addressing layouts, with host, linked-image and

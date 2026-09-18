@@ -317,6 +317,29 @@ TX end, ACK reception, calibrated time or RF evidence. Real adapter ownership,
 ordered timestamp delivery, combined platform/protocol resources and physical
 acceptance remain open. The existing MAC codec corpus remains unchanged.
 
+## Offline Beacon candidate collection coverage
+
+`make test-nwk-candidates` composes the actual MAC frame/Beacon and NWK Beacon
+decoders with the [four-entry preliminary collector](NWK_CANDIDATES.md).
+Shared native/SDCC cases cover both address sizes/all 72 pending layouts,
+full-table duplicates and withdrawal at every index, capacity/permit/profile/BO
+changes, compaction/reuse/zero tails, every SO with BO15, raw metadata, masks,
+malformed/unsupported inputs and unchanged error outputs. Native sanitizers
+add 381 exact-sized inputs, 2,304 control-byte variants and channel/CRC matrices.
+
+Both boards produce identical 18,349-byte CODE, 979 ordinary XDATA +64 reserved,
+150-byte table/36-byte entry, and observed SP4C. The separate 20-KiB CODE/
+1,280-byte XDATA budgets retain the private prefix, complete public/caller/
+field ABI, four per-link listing snapshots, 36 artifact negatives and a real
+missing-alias negative. All three decoder calls execute in the linked corpus,
+with upper-IRAM, unused/status, IRQ and stack-unwind guards unchanged.
+Canonical integration and 49 focused Make/artifact tests pass.
+
+This is synthetic collection evidence, not RF, actual CRC measurement,
+scan completion, link quality, freshness, compatible-parent selection,
+association or membership. No board image links or uploads the executable;
+no earlier memory limit or 15-second simulator deadline was enlarged.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the
