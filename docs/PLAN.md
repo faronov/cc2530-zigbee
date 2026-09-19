@@ -417,6 +417,9 @@ This is an RF-transmitting hardware-service foundation, not a board image or
 silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
 captured timing (#40), continuous ordinary-TX/RX arbitration, IFS and loss-aware
 MAC/POLL handoff open. Physical STOPPED is not protocol CLOSED or membership.
+The [#50 primary ownership review](RADIO_AUTOACK.md#ordinary-tx-admission-under-live-autoack)
+now identifies unresolved TX admission during ACK, completion attribution and
+concurrent TX-flush effects; no transmitting extension is inferred from it.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

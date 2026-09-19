@@ -679,6 +679,16 @@ synthetic controller/vector and linked proof code is original BSD-3-Clause.
 No SDK code, Contiki implementation, capture, identity or hardware observation
 is imported; no primary manual is redistributed.
 
+The later [#50 primary review](RADIO_AUTOACK.md#ordinary-tx-admission-under-live-autoack)
+separates supported persistent RX/FIFO preparation/soft stop from unresolved
+ordinary-TX admission. SWRU191F23.8.1 p218 and Fig23-20 p235 differ in their
+stated STXONCCA source states; pp249,253 do not settle pending/active ACK
+arbitration. RFIRQF1 pp210-211 does not expressly establish AUTOACK/TXDONE
+exclusivity, and Fig23-6 p220's ACK-to-TXFIFO independence does not prove the
+reverse TX-flush-to-ACK guarantee. SWRZ031 pp2-3 adds no clarification.
+These are explicit evidence gaps, not assertions of unsupported silicon or
+permission to invent a successful concurrent model.
+
 ### M2 deterministic PRNG sources
 
 The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)

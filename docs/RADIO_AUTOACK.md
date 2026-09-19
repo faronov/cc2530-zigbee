@@ -363,3 +363,31 @@ bounded TX-action retirement under existing MAC limits, and loss-aware
 buffer/window handoff. Physical stop/drain here cannot substitute for POLL
 `PREPARED`/`CLOSED`, nor resolve Association timing/revision gates (#45).
 Those are explicit future work, not successful adapters hidden behind this API.
+
+### Ordinary TX admission under live AUTOACK
+
+The bounded primary review in #50 found insufficient evidence to add an
+ordinary-TX submission entry point under live AUTOACK. This is an unresolved
+contract, **not a claim that the silicon cannot support a combined owner**.
+SWRU191F (April2009, revised April2014), printed pages, leaves three specific
+questions:
+
+| Boundary | Verified fact and unresolved inference |
+| --- | --- |
+| Admission during pending/active ACK | Section23.8.1 p218 says CCA-qualified STXONCCA aborts ongoing transmission or reception. Fig23-20 p235 instead draws STXONCCA with CCA from "any RX state", versus STXON from "all states". Instruction definitions pp249,253 do not resolve ACK calibration/delay/TX. A stale foreground status sample or SAMPLED_CCA alone does not prove unique acceptance. |
+| Ordinary completion identity | RFIRQF1 pp210-211 defines sticky TXDONE and TXACKDONE, but does not expressly establish that AUTOACK can never also assert TXDONE. Clearing/verifying a flag proves freshness, not unique ordinary-action attribution. TX_ACTIVE also covers ACK states48..55 (Table23-3 p236). |
+| TXFIFO flush during ACK | Fig23-6 p220 states that RX/RXFIFO and ACK activity do not affect TX-buffer state. This supports preparation from known-empty FIFO, not the reverse guarantee that SFLUSHTX cannot disturb an ACK. The generic underflow warning in23.8.3-5 pp218-219 and instruction descriptions pp250,254 do not settle every ACK phase. |
+
+Mode3 CCA and the hardware-gated strobe are not equivalent to a software CCA
+sample followed by STXON; CPU interrupt masking cannot stop autonomous radio
+transitions. SWRZ031 sections1/Table1 pp2-3 supplies no arbitration clarification.
+Do not encode guessed admission/completion behavior in a successful synthetic
+model or bypass old reset-exclusive FIFO guards.
+
+Persistent RX after ordinary/ACK TX (RXENABLE p260) and non-aborting soft stop
+(section23.9.1 p223, Fig23-20 p235) remain supported foundations. The stop
+sequence must forbid new submissions, preserve AUTOACK, confirm fresh RFIDLE
+and physical inactivity, then explicitly drain complete frames. None supplies
+IFS, timestamps or POLL closure. Further vendor clarification or separately
+scoped controlled hardware evidence is needed for the unresolved transitions;
+no such hardware experiment was performed by this review.
