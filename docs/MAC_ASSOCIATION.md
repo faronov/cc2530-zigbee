@@ -126,6 +126,67 @@ adapter obligations. This object owns no radio state and cannot release it.
 Existing reset-exclusive RX/TX/time services cannot be chained to implement
 those obligations. Memory init is not MLME reset or physical recovery.
 
+### Staged timing and confirmation gate (#45)
+
+Further direct examination of the same primary revisions establishes the
+following stages, but **not a complete normative association deadline**:
+
+| Stage | Reference event and meaning |
+| --- | --- |
+| Association Request | Actual CSMA/transmission/ACK transaction; channel-access and exhausted missing-ACK failures have Association confirmations |
+| Decision wait | Successful Request ACK receipt starts `R = macResponseWaitTime * 960` symbols |
+| Nonbeacon extraction | Send extended-source Data Request after R; its own CSMA/transmission/retry/ACK time is additional |
+| Extraction ACK Pending0 | No queued data; no Pending1 reception window |
+| Extraction ACK Pending1 | ACK receipt starts at most `F = macMaxFrameTotalWaitTime` symbols of reception |
+| Extraction reception | Corresponding Response, empty DATA or F expiry determines that extraction's result |
+
+IEEE7.1.3.1.3-7.1.3.2.3,pp.79-81 and7.5.6.3,pp.187-188 establish these
+primitive/extraction relationships. Pending1 can also mean that the coordinator
+could not determine queue state before ACK transmission; it is not a delivery
+promise. Figures31/80/81,pp.86/219-220 show the stage order, but7.7,p.215
+expressly makes the charts chronological illustrations, not exact timing.
+The p.180 terminal "within" wording remains unresolved by these passages.
+Neither R,2R nor R+F from Request ACK is established as the complete deadline;
+R+F also omits the intervening Data Request transaction.
+
+Equation13,p.160 gives a54-symbol sender ACK bound for the selected PHY.
+This is distinct from the receiver's12-symbol ACK-start requirement.
+Equation14 on that page is also kept source-faithful: the printed parentheses
+enclose only its summation. Its literal grouping is
+`sum(k=0..m-1,2^(minBE+k)) + (2^maxBE-1)*(maxCSMABackoffs-m)*20 + phyMaxFrameDuration`,
+where `m=min(maxBE-minBE,maxCSMABackoffs)`. IEEE defaults3/5/4 and266-symbol
+maximum PHY duration give1530, not1986 obtained by moving the20 multiplier
+around the entire sum. This transcription is **not an implemented timer** or
+an inferred correction/erratum; a future timing contract must preserve the
+exact selected source/revision and resolve interpretation explicitly.
+
+Generic `MLME-POLL.confirm(NO_DATA)` must not be wired straight to association
+failure: IEEE7.1.16.1.3,p.133 also returns that POLL result for a retrieved
+**MAC command**, while a valid Association Response supplies the separate
+Association confirmation. The examined text does not establish a blanket
+forwarding rule for extraction-stage POLL failures. Coordinator
+`MLME-COMM-STATUS.indication` is separate again. An unacknowledged indirect
+Response stays queued for another Data Request and retains its DSN; it does
+not autonomously use the direct-retry loop (7.5.6.4.3,p.190). Coordinator-side
+transaction persistence begins at queuing, not the child's Request ACK.
+
+R22 3.6.1.4.1/Table3-62 does not mandate that every ED be receiver-on;
+our selected awake capability must match actual PIB behavior, whose IEEE
+`macRxOnWhenIdle` default is FALSE. R22's receiver-on exemption from polling
+in3.6.1.4.2,p.341 applies to **NWK rejoin**, not MAC association.
+No association-specific replacement for R/F was found in the examined R22
+clauses; AnnexD.6,p.515 recommends minBE5/maxBE8 rather than mandating them
+as ED association overrides. `nwkParentInformation=0` before joining is a
+separate NIB requirement (3.2.2.13.3,p.260), not a timing PIB.
+
+R22 AnnexD.1 refers to IEEE2015, and AnnexD.3/TablesD-1-D-3,pp.513-514 require
+additional association header recognition, including Response destination
+PANFFFF. This exact-selected-PAN legacy context is deliberately narrower:
+it must not be presented as the complete R22 receive contract or as silently
+changing the selected IEEE2006 codec baseline. Authoritative deadline
+interpretation and revision reconciliation remain open in #45. Context work/
+lifetime limits stay explicit project policy, not fabricated IEEE NO_DATA.
+
 ## API and finite memory contract
 
 | Entry | Effect |

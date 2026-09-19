@@ -491,7 +491,11 @@ source semantics and one-shot terminal results. Both-board host/image/simulator
 evidence covers34 genuine scenarios, hostile/exact-sized inputs and atomic
 errors. Its separate test image uses14022 CODE/675 ordinary XDATA +64 reserved,
 with observed SP6B; these measurements do not establish complete-stack fit.
-Full decision-wait/retrieval/NO_DATA timing still needs primary reconciliation.
+Full decision-wait/retrieval/NO_DATA timing still needs primary reconciliation
+(#45). Staged Request-ACK wait and subsequent Data Request/response reception
+are supported; no single total Association NO_DATA deadline follows from the
+examined contradictory wording. R22 AnnexD's IEEE2015/additional-header
+requirements also prevent claiming full R22 conformance for this legacy slice.
 Immediate receiver ACK, full association control, confirmed radio restoration
 and membership remain open; neither an ACK nor a matched Response completes
 the procedure by itself.

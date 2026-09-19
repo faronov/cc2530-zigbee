@@ -1231,6 +1231,15 @@ primitive status or authentication. Unknown IEEE sources remain explicitly
 unbound to the selected short address; Extended PAN ID is not IEEE identity.
 No vendor implementation, SDK, private capture/identity or key was imported.
 
+The #45 follow-up additionally examined IEEE7.1.3,7.1.16,7.4.2/Equations13-14,
+7.5.5-6 and the7.7 sequence-chart limitation, plus R22 AnnexD.1/D.3/D.6.
+The [staged contract](MAC_ASSOCIATION.md#staged-timing-and-confirmation-gate-45)
+records exact printed equation grouping, separate POLL/Association
+confirmations, and R22's IEEE2015/additional-header requirements. This is
+primary-document review, not new executable, simulated or physical evidence.
+It does not silently repair IEEE2006 terminal timing or upgrade the codec's
+selected revision.
+
 ### Offline R22 NWK Data frame sources
 
 The original `nwk_frame` codec uses the same
