@@ -19,22 +19,22 @@ MODULES = ("mac_frame", "mac_tx", "nwk_beacon", "nwk_candidates", "mac_scan", "m
 SOURCES = tuple(m + ".c" for m in MODULES[:-1]) + ("test_mac_scan.c",)
 # A new composition budget only. Existing MAC-TX/codec/platform caps are unchanged.
 CODE_BUDGET, XDATA_BUDGET = 32768, 2048
-SIZE, XDATA, PRIVATE_END = 32651, 1449, 0x23c
-DIGEST = "70d06e4e4189dcb748f14269ca69825e62a5ede0d22a97d06c1843898adfe7b5"
-PRIVATE_DIGEST = "cd6273dea7b222dabf94bd73c4260f4dbc6c399e425058b57e5c868ce07999e6"
-CALLER_DIGEST = "0a811588db434f8bf92fcefdf6f911c6c71e23528053ffa944fc656a69181e3a"
+SIZE, XDATA, PRIVATE_END = 32670, 1449, 0x23c
+DIGEST = "26c973f6d84b2301c71d654acc7d8d8333c1db07a4203720564412c06bbe8bf5"
+PRIVATE_DIGEST = "a39c9816a006b4e8f07f737be8cf19b421b2b42ac67ac20d99b02a9b8b9004d5"
+CALLER_DIGEST = "948d40d20a5885698eba4772b951e77915e325482ca84767573fe7e7257e5d36"
 FIELD_DIGEST = "d773e2e566d7f7ff106cf3c3ac72d438f31bccf4d812644edffe13b3427feaef"
 LISTINGS = {
-    "mac_frame": (4168, 7009, "219f0d8e5277126c9eefe0e60e9b84f52eb872d1653d8f3e6df35d952bf5af8e"),
-    "mac_tx": (5796, 8861, "0a50c89bc9a482f777c31f4e89f030c4e30f4a730d1e238ec204f7736c1e2044"),
-    "nwk_beacon": (353, 601, "ac4adde33687d70f489a160d7f2442f81229775f28f9030f51d6fcc3c5abcb61"),
-    "nwk_candidates": (1519, 2334, "1f28ec62e3cb332bb8faea0aedfeaa303f9841b7e80de2ae9db559ae1249a870"),
-    "mac_scan": (6230, 8590, "be2a4f63c2864dccd46157aaca27c510feb137e37d8b69dc18fba1203b34c606"),
-    "mac_scan_test": (2686, 4483, "b4ea677f38f41e8d37a745b68da10dbacfec8df270b6c4462d99291e36a831ef"),
+    "mac_frame": (4168, 7009, "acf72244261b8375db3a7e65e38f2aad84b14248e94ca1ece66ac21f8423a159"),
+    "mac_tx": (5804, 8880, "f9801171f16984a124f1ec36b4405adb184cf099546aa7282514fcc6ac7a4b84"),
+    "nwk_beacon": (353, 601, "c1373d1a1afc4338ad838418a2c7bb0044b137fbcf8e5ee30cfc26f2cf77b610"),
+    "nwk_candidates": (1519, 2334, "b8fbac1ebdde7c91c4b63a3d4392d5392ec844538e00c78a4666911f8082f1ca"),
+    "mac_scan": (6230, 8590, "6c6a5f65e0535cffa3ab6f59e59d3bcaa5b6fc89b59e5af9fa5a78d32d612340"),
+    "mac_scan_test": (2686, 4483, "8e3839dc3aca0716da8acea5feb413232e496d7d090a25f27ef308f4e6f3b5db"),
 }
 OBJECTS = {
     "mac_frame": (7009, 207, 15, 10),
-    "mac_tx": (8861, 148, 33, 5),
+    "mac_tx": (8880, 148, 33, 5),
     "nwk_beacon": (601, 27, 9, 0),
     "nwk_candidates": (2334, 111, 4, 0),
     "mac_scan": (8598, 79, 4, 0),
@@ -45,16 +45,16 @@ ENTRIES = {
     "mac_beacon_decode": ("mac_frame", 0x08e0), "mac_frame_decode": ("mac_frame", 0x1214),
     "mac_frame_encode": ("mac_frame", 0x195c),
     "mac_tx_init": ("mac_tx", 0x1c05), "mac_tx_submit": ("mac_tx", 0x1cd3),
-    "mac_tx_copy": ("mac_tx", 0x2244), "mac_tx_step": ("mac_tx", 0x2748),
-    "mac_tx_release": ("mac_tx", 0x3e0b), "nwk_beacon_decode": ("nwk_beacon", 0x3e60),
-    "nwk_candidates_init": ("nwk_candidates", 0x4197),
-    "nwk_candidates_consider": ("nwk_candidates", 0x43d7),
-    "nwk_candidates_get": ("nwk_candidates", 0x490c),
-    "mac_scan_init": ("mac_scan", 0x4ebf), "mac_scan_start": ("mac_scan", 0x4f13),
-    "mac_scan_step": ("mac_scan", 0x54c4), "mac_scan_get": ("mac_scan", 0x69d6),
-    "mac_scan_release": ("mac_scan", 0x6a6b), "main": ("mac_scan_test", 0x6b65),
+    "mac_tx_copy": ("mac_tx", 0x2257), "mac_tx_step": ("mac_tx", 0x275b),
+    "mac_tx_release": ("mac_tx", 0x3e1e), "nwk_beacon_decode": ("nwk_beacon", 0x3e73),
+    "nwk_candidates_init": ("nwk_candidates", 0x41aa),
+    "nwk_candidates_consider": ("nwk_candidates", 0x43ea),
+    "nwk_candidates_get": ("nwk_candidates", 0x491f),
+    "mac_scan_init": ("mac_scan", 0x4ed2), "mac_scan_start": ("mac_scan", 0x4f26),
+    "mac_scan_step": ("mac_scan", 0x54d7), "mac_scan_get": ("mac_scan", 0x69e9),
+    "mac_scan_release": ("mac_scan", 0x6a7e), "main": ("mac_scan_test", 0x6b78),
 }
-DONE = 0x7cdb
+DONE = 0x7cee
 CALLER = {
     "scan": (0x23c, 212), "saved": (0x310, 212), "tx": (0x3e4, 168),
     "request": (0x48c, 16), "event": (0x49c, 23), "action": (0x4b3, 23),
@@ -263,14 +263,14 @@ def negatives(image, symbols, debug, memory, listings, objects):
     for old, new in (
         ("S:Lmac_scan.mac_scan_step$scan$", "S:Lmac_scan.mac_scan_step$wrong$"),
         ("S:Fmac_scan$beacon_request$0_0$0({8}", "S:Fmac_scan$beacon_request$0_0$0({7}"),
-        ("L:Fmac_scan$beacon_request$0_0$0:7F21", "L:Fmac_scan$beacon_request$0_0$0:7F22"),
+        ("L:Fmac_scan$beacon_request$0_0$0:7F34", "L:Fmac_scan$beacon_request$0_0$0:7F35"),
         ("F:Fmac_scan$stop$", "F:Fmac_scan$wrong_stop$"),
         ("L:XFmac_scan$stop$", "L:XFmac_scan$wrong_stop$"),
         ("{199}S:S$token", "{198}S:S$token"),
         ("({212}ST", "({211}ST"),
         ("F:G$mac_scan_init$0_0$0({2}DF,SC:U)", "F:G$mac_scan_init$0_0$0({2}DF,SV:S)"),
-        ("L:G$mac_scan_step$0$0:54C4", "L:G$mac_scan_step$0$0:54C5"),
-        ("L:XG$main$0$0:7CDE", "L:XG$main$0$0:7CDF"),
+        ("L:G$mac_scan_step$0$0:54D7", "L:G$mac_scan_step$0$0:54D8"),
+        ("L:XG$main$0$0:7CF1", "L:XG$main$0$0:7CF2"),
     ):
         require(old in debug, "Debug negative did not apply")
         reject("debug ABI", debug=debug.replace(old, new, 1))

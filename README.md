@@ -462,10 +462,12 @@ No board image links it; never flash `mac_time_test.ihx`.
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy
 ACK/DSN matching and retransmission state for one copied unsecured DATA
-frame, canonical Beacon Request or selected Association Request command,
+frame or selected Beacon/Association/Data Request command,
 using the real MAC codec. Association Requests use capability `88`/`8C`
 (receiver-on ED, address allocation and truthful caller power metadata);
 their ACK means MAC receipt, not successful association or membership.
+Data Requests require both addresses and a nonbroadcast compressed PAN;
+their ACK/Pending does not implement polling or response retrieval.
 Request transmission alone does not scan a channel or receive Beacons.
 Backoff, five CCAs per attempt, up to four
 transmission attempts, transaction/work limits and confirmed-quiescence
@@ -494,7 +496,7 @@ and copied candidate collection. It preserves separate sent/unscanned masks
 and overflow diagnostics; release requires confirmed restoration of the saved
 PAN/channel/filter/RX state. `make test-mac-scan` is **host-tested,
 image-checked and simulated**, not an operating scanner on a board.
-Its six-module test image leaves only 117 bytes below the 32-KiB CODE limit:
+Its six-module test image leaves only 98 bytes below the 32-KiB CODE limit:
 this is not complete-stack fit. A real adapter, captured timing (#40), full
 parent selection and association remain open; never flash `mac_scan_test.ihx`.
 

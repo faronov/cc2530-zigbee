@@ -28,12 +28,24 @@ static const MCU_CODE uint8_t association_extended[] = {
     0x23, 0xcc, 0xa5, 0x34, 0x12, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
     0xff, 0xff, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x01, 0x8c
 };
+static const MCU_CODE uint8_t unicast_requests[4][22] = {
+    {0x63, 0x88, 0xa5, 0x34, 0x12, 0x78, 0x56, 0xbc, 0x9a, 0x04},
+    {0x63, 0x8c, 0xa5, 0x34, 0x12, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+     0xbc, 0x9a, 0x04},
+    {0x63, 0xc8, 0xa5, 0x34, 0x12, 0x78, 0x56,
+     0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x04},
+    {0x63, 0xcc, 0xa5, 0x34, 0x12, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+     0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x04}
+};
 static mac_tx_t tx, saved;
 static mac_tx_event_t event;
 static mac_tx_action_t action, saved_action;
 static uint8_t body[125], copy[125], ack[4], length;
 static uint32_t now;
 static volatile uint8_t i;
+static uint8_t request_index, request_size;
+static const uint8_t *request_body;
+static uint32_t request_ready;
 
 static void source(uint8_t kind)
 {
@@ -248,42 +260,50 @@ static uint16_t success_and_spacing(void)
     return 0;
 }
 
-static uint16_t association_requests(void)
+static uint16_t acknowledged_requests(void)
 {
-    now = 0;
-    CHECK(mac_tx_init(&tx, 0xff, now) == MAC_TX_OK);
-    tx.stop_steps = 0xc7; /* Synthetic reset-span boundary, never a radio reset. */
-    CHECK(mac_tx_submit(&tx, association_short, 19, now, 10000, 100) == MAC_TX_OK);
-    CHECK(tx.ack_requested && tx.frame[2] == 0xff && tx.stop_steps == 0xc7);
-    CHECK(mac_tx_copy(&tx, copy, 19, &length) == MAC_TX_OK && length == 19);
-    copy[2] = 0xa5;
-    CHECK(memcmp(copy, association_short, 19) == 0);
-    copy[2] = 0xff;
-    for (i = 0; i < 4; i++) {
+    for (request_index = 0; request_index < 5; request_index++) {
+        request_size = request_index == 0 ? 19 : request_index == 1 ? 10
+                     : request_index == 4 ? 22 : 16;
+        request_body = request_index == 0 ? association_short : unicast_requests[request_index - 1u];
+        now = 0;
+        CHECK(mac_tx_init(&tx, 0xff, now) == MAC_TX_OK);
+        tx.stop_steps = 0xc7; /* Synthetic reset-span boundary, never a radio reset. */
+        CHECK(mac_tx_submit(&tx, request_body, request_size, 0, 10000, 100) == MAC_TX_OK);
+        CHECK(tx.ack_requested && tx.frame[2] == 0xff && tx.stop_steps == 0xc7
+              && tx.length == request_size);
+        CHECK(mac_tx_copy(&tx, copy, request_size, &length) == MAC_TX_OK && length == request_size);
+        copy[2] = 0xa5;
+        CHECK(memcmp(copy, request_body, request_size) == 0);
+        copy[2] = 0xff;
+        for (i = 0; i < 4; i++) {
+            CALL(draw(0));
+            CALL(sent());
+            now += i == 3 ? 34u : MAC_TX_ACK_SYMBOLS;
+            if (i == 3)
+                CALL(receive(0xff));
+            else
+                CALL(poll());
+            CHECK(tx.retries == i && memcmp(tx.frame, copy, request_size) == 0);
+            CALL(quiesce());
+        }
+        request_ready = request_size <= 16 ? 12u : 40u;
+        request_ready += now;
+        CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_ACKED
+              && tx.transmissions == 4 && tx.ready_at == request_ready);
+        CHECK(mac_tx_release(&tx) == MAC_TX_OK);
+        length = tx.stop_steps;
+        memcpy(body, association_extended, 25);
+        CHECK(mac_tx_submit(&tx, body, 25, now, 10000, 100) == MAC_TX_OK);
+        CHECK(tx.frame[2] == 0 && tx.next_dsn == 1 && tx.generation == 2
+              && tx.stop_steps == length);
         CALL(draw(0));
-        CALL(sent());
-        now += i == 3 ? 34u : MAC_TX_ACK_SYMBOLS;
-        if (i == 3)
-            CALL(receive(0xff));
-        else
-            CALL(poll());
-        CHECK(tx.retries == i && memcmp(tx.frame, copy, 19) == 0);
-        CALL(quiesce());
+        CHECK(action.at == request_ready);
+        source(MAC_TX_EVENT_FAILURE);
+        CALL(step());
+        CHECK(tx.phase == MAC_TX_FAULT && tx.outcome == MAC_TX_ADAPTER_ERROR && tx.uncertain);
+        CHECK(mac_tx_release(&tx) == MAC_TX_STATE);
     }
-    CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_ACKED
-          && tx.transmissions == 4 && tx.ready_at == now + 40u);
-    CHECK(mac_tx_release(&tx) == MAC_TX_OK);
-    length = tx.stop_steps;
-    memcpy(body, association_extended, 25);
-    CHECK(mac_tx_submit(&tx, body, 25, now, 10000, 100) == MAC_TX_OK);
-    CHECK(tx.frame[2] == 0 && tx.next_dsn == 1 && tx.generation == 2
-          && tx.stop_steps == length);
-    CALL(draw(0));
-    CHECK(action.at == now + 40u);
-    source(MAC_TX_EVENT_FAILURE);
-    CALL(step());
-    CHECK(tx.phase == MAC_TX_FAULT && tx.outcome == MAC_TX_ADAPTER_ERROR && tx.uncertain);
-    CHECK(mac_tx_release(&tx) == MAC_TX_STATE);
     return 0;
 }
 
@@ -510,7 +530,7 @@ void main(void)
     if (!result)
         result = beacon_requests();
     if (!result)
-        result = association_requests();
+        result = acknowledged_requests();
     if (!result)
         result = success_and_spacing();
     if (!result)
@@ -727,6 +747,10 @@ static mac_tx_result_t admission_reference(const uint8_t *bytes, uint16_t size)
                 && (bytes[decoded.payload_offset + 1] == 0x88
                     || bytes[decoded.payload_offset + 1] == 0x8c))
             return MAC_TX_OK;
+        if (bytes[decoded.payload_offset] == MAC_COMMAND_DATA_REQUEST
+                && h->destination_mode != MAC_ADDRESS_NONE
+                && h->destination_pan != 0xffffu)
+            return MAC_TX_OK;
         return MAC_TX_UNSUPPORTED;
     }
     if (h->type != MAC_FRAME_DATA || h->source_pan == 0xffffu || h->destination_pan == 0xffffu
@@ -755,6 +779,56 @@ static uint16_t exact_admission(const uint8_t *bytes, unsigned size, mac_tx_resu
         CHECK(memcmp(&saved, &tx, sizeof(tx)) == 0);
     }
     free(exact);
+    return 0;
+}
+
+static uint16_t request_outcomes(const uint8_t *bytes, unsigned size)
+{
+    unsigned scenario, attempt;
+
+    /* ACK/Pending are receipt metadata, never a response or completed poll. */
+    for (scenario = 0; scenario < 5; scenario++) {
+        CALL(exact_admission(bytes, size, MAC_TX_OK));
+        now = 0;
+        if (scenario == 0) {
+            for (attempt = 0; attempt < 5; attempt++) {
+                CALL(draw(0));
+                now = action.at + 8;
+                source(MAC_TX_EVENT_BUSY);
+                CALL(step());
+            }
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CHANNEL_ACCESS
+                  && tx.transmissions == 0 && !tx.uncertain);
+        } else if (scenario == 1) {
+            for (attempt = 0; attempt < 4; attempt++) {
+                CALL(draw(0)); CALL(sent());
+                now += MAC_TX_ACK_SYMBOLS;
+                CALL(poll()); CALL(quiesce());
+            }
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_NO_ACK
+                  && tx.transmissions == 4 && tx.retries == 3);
+        } else if (scenario == 2) {
+            CALL(draw(0)); CALL(sent());
+            now += 34;
+            source(MAC_TX_EVENT_ACK);
+            ack[0] = 0x12; ack[1] = 0; ack[2] = 0x5a;
+            event.bytes = ack; event.length = 3;
+            CALL(step()); CALL(quiesce());
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_ACKED && tx.pending);
+            CALL(poll());
+            CHECK(action.kind == MAC_TX_ACTION_NONE);
+        } else {
+            if (scenario == 4)
+                CALL(draw(0));
+            source(MAC_TX_EVENT_CANCEL);
+            CALL(step());
+            if (scenario == 4)
+                CALL(quiesce());
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CANCELLED
+                  && tx.uncertain == (scenario == 4));
+        }
+        CHECK(mac_tx_release(&tx) == MAC_TX_OK);
+    }
     return 0;
 }
 
@@ -873,51 +947,78 @@ static uint16_t association_exhaustive(void)
             CALL(exact_admission(vector, 8, layout && n == 7 ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
         }
     }
-    /* Request receipt is not association, including a Pending ACK. No poll or
-     * Association Response is generated; cancellation and no-ACK exhaustion
-     * retain the unchanged scheduler's physical cleanup obligations.
-     */
-    for (layout = 0; layout < 5; layout++) {
-        CALL(exact_admission(association_extended, 25, MAC_TX_OK));
-        now = 0;
-        if (layout == 0) {
-            for (j = 0; j < 5; j++) {
-                CALL(draw(0));
-                now = action.at + 8;
-                source(MAC_TX_EVENT_BUSY);
-                CALL(step());
-            }
-            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CHANNEL_ACCESS
-                  && tx.transmissions == 0 && !tx.uncertain);
-        } else if (layout == 1) {
-            for (j = 0; j < 4; j++) {
-                CALL(draw(0)); CALL(sent());
-                now += MAC_TX_ACK_SYMBOLS;
-                CALL(poll()); CALL(quiesce());
-            }
-            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_NO_ACK
-                  && tx.transmissions == 4 && tx.retries == 3);
-        } else if (layout == 2) {
-            CALL(draw(0)); CALL(sent());
-            now += 34;
-            source(MAC_TX_EVENT_ACK);
-            ack[0] = 0x12; ack[1] = 0; ack[2] = 0x5a;
-            event.bytes = ack; event.length = 3;
-            CALL(step()); CALL(quiesce());
-            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_ACKED && tx.pending);
-            CALL(poll());
-            CHECK(action.kind == MAC_TX_ACTION_NONE);
-        } else {
-            if (layout == 4)
-                CALL(draw(0));
-            source(MAC_TX_EVENT_CANCEL);
-            CALL(step());
-            if (layout == 4)
-                CALL(quiesce());
-            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CANCELLED
-                  && tx.uncertain == (layout == 4));
+    CALL(request_outcomes(association_extended, 25));
+    return 0;
+}
+
+static uint16_t data_requests_exhaustive(void)
+{
+    unsigned layout, size, n, j, source_offset;
+    uint32_t fcf;
+    uint8_t vector[126], *exact;
+    mac_tx_result_t expected;
+
+    for (layout = 0; layout < 4; layout++) {
+        size = layout == 0 ? 10 : layout == 3 ? 22 : 16;
+        for (fcf = 3; fcf <= 0xffffu; fcf += 8) {
+            memcpy(vector, unicast_requests[layout], size);
+            vector[0] = (uint8_t)fcf;
+            vector[1] = (uint8_t)(fcf >> 8);
+            expected = (size == 10 ? fcf == 0x8863u : size == 22 ? fcf == 0xcc63u
+                      : fcf == 0x8c63u || fcf == 0xc863u) ? MAC_TX_OK : MAC_TX_UNSUPPORTED;
+            CALL(exact_admission(vector, size, expected));
         }
-        CHECK(mac_tx_release(&tx) == MAC_TX_OK);
+        for (j = 0; j < size; j++) {
+            for (n = 0; n < 256; n++) {
+                memcpy(vector, unicast_requests[layout], size);
+                vector[j] = (uint8_t)n;
+                CALL(exact_admission(vector, size, admission_reference(vector, (uint16_t)size)));
+            }
+        }
+        for (n = 0; n < 256; n++) {
+            memcpy(vector, unicast_requests[layout], size);
+            vector[size - 1] = (uint8_t)n;
+            CALL(exact_admission(vector, size, n == 4 ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+        }
+        for (n = 0; n <= 126; n++) {
+            memset(vector, 0x69, sizeof(vector));
+            memcpy(vector, unicast_requests[layout], size);
+            CALL(exact_admission(vector, n, n == size ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+            CALL(exact_admission(unicast_requests[layout], size, MAC_TX_OK));
+            exact = malloc(n ? n : 1);
+            CHECK(exact != NULL);
+            memset(exact, 0xc7, n);
+            length = 0xa5;
+            CHECK(mac_tx_copy(&tx, exact, (uint16_t)n, &length)
+                  == (n < size ? MAC_TX_SPACE : MAC_TX_OK));
+            if (n < size) {
+                CHECK(length == 0xa5);
+                for (j = 0; j < n; j++)
+                    CHECK(exact[j] == 0xc7);
+            } else {
+                CHECK(length == size && memcmp(exact, tx.frame, size) == 0);
+                for (j = size; j < n; j++)
+                    CHECK(exact[j] == 0xc7);
+            }
+            free(exact);
+        }
+        memcpy(vector, unicast_requests[layout], size);
+        vector[3] = vector[4] = 0xff;
+        CALL(exact_admission(vector, size, MAC_TX_UNSUPPORTED));
+        for (n = 0xfe; n <= 0xff; n++) {
+            if (layout == 0 || layout == 2) {
+                memcpy(vector, unicast_requests[layout], size);
+                vector[5] = (uint8_t)n; vector[6] = 0xff;
+                CALL(exact_admission(vector, size, MAC_TX_UNSUPPORTED));
+            }
+            if (layout < 2) {
+                memcpy(vector, unicast_requests[layout], size);
+                source_offset = layout == 0 ? 7 : 13;
+                vector[source_offset] = (uint8_t)n; vector[source_offset + 1] = 0xff;
+                CALL(exact_admission(vector, size, MAC_TX_UNSUPPORTED));
+            }
+        }
+        CALL(request_outcomes(unicast_requests[layout], size));
     }
     return 0;
 }
@@ -931,10 +1032,12 @@ static uint16_t submit_preservation(void)
     CHECK(offsetof(mac_tx_t, stop_steps) - offsetof(mac_tx_t, retries) == 6);
     CHECK(MAC_TX_OUTCOME_NONE == 0);
     for (pattern = 0; pattern < 256; pattern++) {
-        for (layout = 0; layout < 4; layout++) {
+        for (layout = 0; layout < 8; layout++) {
             bytes = layout == 0 ? golden : layout == 1 ? beacon_request
-                  : layout == 2 ? association_short : association_extended;
-            size = layout == 0 ? 12 : layout == 1 ? 8 : layout == 2 ? 19 : 25;
+                  : layout == 2 ? association_short : layout == 3 ? association_extended
+                  : unicast_requests[layout - 4];
+            size = layout == 0 ? 12 : layout == 1 ? 8 : layout == 2 ? 19 : layout == 3 ? 25
+                 : layout == 4 ? 10 : layout == 7 ? 22 : 16;
             for (scenario = 0; scenario < 4; scenario++) {
                 /* Synthetic idle storage with every retained byte distinguishable
                  * from a zero reset. No hardware recovery/epoch is simulated.
@@ -1012,6 +1115,8 @@ int main(void)
     if (!result)
         result = association_exhaustive();
     if (!result)
+        result = data_requests_exhaustive();
+    if (!result)
         result = submit_preservation();
     if (result) {
         fprintf(stderr, "MAC TX failure at C line %u\n", (unsigned)result);
@@ -1019,7 +1124,8 @@ int main(void)
     }
     puts("MAC TX: retained corpus/8192 ACK FCFs/256 DSNs/2048 Beacon variants; "
          "Association 16384 FCFs/11264 byte variants/262144 ID-tail pairs/512 one-byte IDs, "
-         "4096 full-state preservation cases, exact bounds and scheduler outcomes PASS");
+         "Data Request 32768 FCFs/16384 byte variants/1024 IDs, "
+         "8192 full-state preservation cases, exact bounds and scheduler outcomes PASS");
     return 0;
 }
 #endif

@@ -13,9 +13,9 @@ from boot_image import (
 )
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, require, xdata_ranges
 
-SIZE = 28342
-DIGEST = "5aef7879004504b02bc8ce2e0d4b649b4aa37e925d039efcd3b04d162993ab37"
-PRIVATE_DIGEST = "1fc0a2e73350c02c66fa3dab6596c8e4352423d275ef6d5c08282e12e5d937af"
+SIZE = 28618
+DIGEST = "06e2ac44bbf9051255a88969507ee486fd99662576fc1381ee565f48b1a7f094"
+PRIVATE_DIGEST = "121df007e7bb3955a900619c399b46eacaedc385fe69195b46dd4eb744ffd13e"
 # Dedicated composition, NOT changes to codec/platform/board budgets.
 CODE_BUDGET = 28672
 XDATA_BUDGET = 1280
@@ -26,12 +26,12 @@ INSTRUCTION_RE = re.compile(
 # Pin every reviewed instruction, not an arbitrary surviving subset of a listing.
 # The harness also contains non-CSEG startup instructions in listing order.
 LISTING_PROOFS = {
-    "mac_frame": (4168, 7009, "bcdb6cdd4b8a011b54ccb3ee26726d4ff013d69fba113b70b51037c50038841a",
+    "mac_frame": (4168, 7009, "fb4f9977a3ddd3ace2067fb14acb3c437d09b7ec59405dda20494d2d764dfb3e",
                   ((0x62, 0x1bc3),)),
-    "mac_tx": (5796, 8861, "19bf4007eac51ec46f6afbd9082f227e1ee945b52dfff2af1bfc6c7b781286d8",
-               ((0x1bc3, 0x3e60),)),
-    "mac_tx_test": (6898, 11765, "e657482b19ee550ce689c973d99f7134136780d3ae24d0f2dc5aae66b146e4f2",
-                    ((0, 6), (0x5f, 0x62), (0x3e60, 0x6c4c))),
+    "mac_tx": (5804, 8880, "942e72583ae13c98ceb38573e97a285628c3a58235d3cd26eff8d8f6094195fe",
+               ((0x1bc3, 0x3e73),)),
+    "mac_tx_test": (6998, 11934, "074cc2df329cdb1d4aada358985eea9cbdc533e8aedae80196f43283e47eb8ae",
+                    ((0, 6), (0x5f, 0x62), (0x3e73, 0x6d08))),
 }
 ENTRY_POINTS = {
     "_mac_command_decode": ("mac_frame", 0x22a),
@@ -41,16 +41,18 @@ ENTRY_POINTS = {
     "_mac_frame_encode": ("mac_frame", 0x195c),
     "_mac_tx_init": ("mac_tx", 0x1c05),
     "_mac_tx_submit": ("mac_tx", 0x1cd3),
-    "_mac_tx_copy": ("mac_tx", 0x2244),
-    "_mac_tx_step": ("mac_tx", 0x2748),
-    "_mac_tx_release": ("mac_tx", 0x3e0b),
-    "_main": ("mac_tx_test", 0x6b27),
-    "_mac_tx_done": ("mac_tx_test", 0x6c48),
+    "_mac_tx_copy": ("mac_tx", 0x2257),
+    "_mac_tx_step": ("mac_tx", 0x275b),
+    "_mac_tx_release": ("mac_tx", 0x3e1e),
+    "_main": ("mac_tx_test", 0x6be3),
+    "_mac_tx_done": ("mac_tx_test", 0x6d04),
 }
 CALLER_OBJECTS = {
     "tx": (0x163, 168), "saved": (0x20b, 168), "event": (0x2b3, 17),
     "action": (0x2c4, 22), "saved_action": (0x2da, 22),
     "body": (0x2f0, 125), "copy": (0x36d, 125), "ack": (0x3ea, 4),
+    "request_index": (0x3f4, 1), "request_size": (0x3f5, 1),
+    "request_body": (0x3f6, 3), "request_ready": (0x3f9, 4),
 }
 
 
@@ -158,8 +160,8 @@ def verify(image, symbols, debug, memory, listings):
                 "MAC-TX caller ABI missing/changed")
         region = set(range(address, address + size))
         require(not region & private and region <= allocated, "Caller overlaps private prefix/alias")
-    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1053
-            and symbols["__gptrput_PARM_2"] == 0x410,
+    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1062
+            and symbols["__gptrput_PARM_2"] == 0x419,
             "MAC-TX linked ordinary/generic-store storage changed")
     require(symbols["s_SSEG"] == 0x5a, "MAC-TX stack reservation changed")
     return allocated
@@ -213,6 +215,13 @@ def main():
     rejected(lambda: verify(image, symbols, debug.replace(
         "F:G$mac_tx_init$0_0$0({2}DF,SC:U)", "F:G$mac_tx_init$0_0$0({2}DF,SV:S)"),
         memory, listings), "old void initializer ABI")
+    for old, new in (
+        ("S:Ftest_mac_tx$request_body$0_0$0({3}", "S:Ftest_mac_tx$request_body$0_0$0({2}"),
+        ("L:Ftest_mac_tx$request_ready$0_0$0:3F9", "L:Ftest_mac_tx$request_ready$0_0$0:3FA"),
+    ):
+        require(old in debug, "Request-caller negative did not apply")
+        rejected(lambda: verify(image, symbols, debug.replace(old, new), memory, listings),
+                 "changed request-caller pointer/storage ABI")
     changed = dict(listings)
     changed["mac_tx"] = re.sub(
         r"(?m)^(\s+[0-9A-F]{6} )([0-9A-F]{2}) ",
@@ -267,6 +276,8 @@ def main():
     require(ram[0x1e00:0x1e06] == b"MTX1\x01\x08", "MAC-TX result ABI mismatch")
     failure = int.from_bytes(ram[0x1e06:0x1e08], "little")
     require(failure == 0, f"MAC-TX compiled test failed at C line {failure}")
+    require(ram[CALLER_OBJECTS["request_index"][0]] == 5,
+            "MAC-TX did not execute every acknowledged-request layout")
     require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated),
             "MAC-TX wrote outside allocated XDATA/status")
     require(sfr[1] == symbols["s_SSEG"] - 1 and iram[128:] == b"\xc7" * 128,

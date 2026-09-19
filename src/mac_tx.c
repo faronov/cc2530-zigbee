@@ -55,9 +55,11 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
          */
         command = body[decoded.payload_offset];
         if (!(command == MAC_COMMAND_BEACON_REQUEST
-                || (command == MAC_COMMAND_ASSOCIATION_REQUEST
-                    && decoded.header.destination_pan != 0xffffu
-                    && (uint8_t)(body[(uint8_t)(length - 1u)] & 0xfbu) == 0x88u)))
+                || (decoded.header.destination_pan != 0xffffu
+                    && ((command == MAC_COMMAND_ASSOCIATION_REQUEST
+                         && (uint8_t)(body[(uint8_t)(length - 1u)] & 0xfbu) == 0x88u)
+                        || (command == MAC_COMMAND_DATA_REQUEST
+                            && decoded.header.destination_mode != MAC_ADDRESS_NONE)))))
             return MAC_TX_UNSUPPORTED;
     } else if (decoded.header.type != MAC_FRAME_DATA
             || decoded.header.source_pan == 0xffffu

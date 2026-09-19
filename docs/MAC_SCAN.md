@@ -287,7 +287,7 @@ Measured with SDCC4.2.0 #13081 and the canonical large-model flags:
 
 | Item | Measured |
 | --- | --- |
-| Whole CODE | **32,651**, contiguous `0000..7F8A`; only117 bytes remain below8000 |
+| Whole CODE | **32,670**, contiguous `0000..7F9D`; only98 bytes remain below8000 |
 | Ordinary XDATA | **1,449**, `0000..05A8` |
 | Including entire64-byte status reservation | **1,513** |
 | Scan context / TX context / embedded candidate table | **212 /168 /150** bytes on SDCC |
@@ -317,14 +317,14 @@ dropping any real call or scenario. No guard was relaxed to obtain a pass.
 | Object | CODE incl. constants/startup | XSEG | DSEG/OSEG | Ordered instructions / bytes |
 | --- | ---: | ---: | ---: | ---: |
 | mac_frame |7009|207|15/10|4168 /7009|
-| mac_tx |8861|148|33/5|5796 /8861|
+| mac_tx |8880|148|33/5|5804 /8880|
 | nwk_beacon |601|27|9/0|353 /601|
 | nwk_candidates |2334|111|4/0|1519 /2334|
 | mac_scan |8598|79|4/0|6230 /8590|
 | mac_scan_test |4581|851|4/0|2686 /4483|
 
-The remaining667 CODE bytes are CRT/library contributions. All20,752 ordered
-instruction records (31,878 bytes) are normalized as
+The remaining667 CODE bytes are CRT/library contributions. All20,760 ordered
+instruction records (31,897 bytes) are normalized as
 `six-hex-address:lowercase-byte-hex\n`; each per-module digest is pinned in
 the proof. Constants and runtime are also covered by the whole CODE digest.
 Private/caller/field digests cover540/54/49 complete sorted debug records,
@@ -335,15 +335,15 @@ helper declarations and helper entry/end addresses, not only local parameters.
 Both boards produced identical hashes:
 
 ```
-CODE    70d06e4e4189dcb748f14269ca69825e62a5ede0d22a97d06c1843898adfe7b5
-IHX     6e3ab1cc3b73563d500ec502b82c39ebd9bfd7087fba813c7445d0bbe0df7071
-private cd6273dea7b222dabf94bd73c4260f4dbc6c399e425058b57e5c868ce07999e6
-caller  0a811588db434f8bf92fcefdf6f911c6c71e23528053ffa944fc656a69181e3a
+CODE    26c973f6d84b2301c71d654acc7d8d8333c1db07a4203720564412c06bbe8bf5
+IHX     846967b1effeb0886c8a84c9b95f14b2a1fb95dbf232406e24d4993e0834147a
+private a39c9816a006b4e8f07f737be8cf19b421b2b42ac67ac20d99b02a9b8b9004d5
+caller  948d40d20a5885698eba4772b951e77915e325482ca84767573fe7e7257e5d36
 fields  d773e2e566d7f7ff106cf3c3ac72d438f31bccf4d812644edffe13b3427feaef
 ```
 
 Scan public addresses init/start/step/get/release are
-`4EBF/4F13/54C4/69D6/6A6B`; main/done are `6B65/7CDB`.
+`4ED2/4F26/54D7/69E9/6A7E`; main/done are `6B78/7CEE`.
 All existing codec/TX public addresses and the precise NOP/loop/return
 checkpoint are cross-checked with map, CDB, listings and image bytes.
 
@@ -373,8 +373,22 @@ after each link. Both strict native corpora and both compositions' ASan/UBSan
 executables pass for each definition. Exact sanitizer recipes and current
 MAC-TX hashes are in its dedicated ledger. The unmodified full local matrix
 was not repeated. These remain offline synthetic/linked/simulated results,
-not association or a working radio adapter; the117-byte CODE margin does not
+not association or a working radio adapter; that revision's117-byte CODE margin did not
 authorize increased limits or a full-stack fit claim.
+
+### Coupled Data Request admission revalidation
+
+The subsequent explicit [Data Request whitelist](MAC_TX.md#bounded-data-request-admission-14-prerequisite)
+adds19 CODE bytes/eight instructions to the shared transmitter, without changing
+production allocation, fields, APIs, the scanner or its caller. The current
+scan image is32,670 CODE with98 bytes remaining. All540 private and54 caller
+records remain: their changed hashes reflect relocated addresses only;
+all49 field records are unchanged. The six whole ordered listings,20 public
+entries, complete CODE,76 artifact negatives, genuine missing-alias negative
+and all28 target scenarios retain their existing bounds and checks.
+Both board definitions still measure SP7A and preserve upper IRAM/unwind.
+Admission of another command in the shared transmitter does not make the
+scanner submit it, release its lease early or implement association.
 
 ### Host-side proof parsing
 

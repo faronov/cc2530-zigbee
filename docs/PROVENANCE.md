@@ -844,6 +844,16 @@ assignments, preserving all other context bytes and error behavior. No
 association, BDB or security procedure is
 implemented by transmitting this request or receiving its ACK.
 
+Addressed Data Request admission uses the same IEEE2006 primary copy,
+section7.3.4 pp.153-154/Figure59, read directly. It selects the addressed,
+compressed-PAN, ACK-requested form with TX Pending0, excluding destination-less
+requests and broadcast PANs. Address identity/PAN/coordinator and the required
+extended source when retrieving an Association Response remain caller facts.
+The unchanged codec and scheduler supply syntax, DSN/retries/ACK/IFS;
+neither an ACK nor Pending creates a polling or response-retrieval procedure.
+Original synthetic vectors cover all four selected address layouts; no
+implementation, capture or device identity was imported.
+
 The receive-only ACK normalization follows the selected edition's ignored
 FCF-subfield rules, then calls the unchanged strict codec; it is not a
 loosening of general frame admission. Single-slot capacity, generation tags,

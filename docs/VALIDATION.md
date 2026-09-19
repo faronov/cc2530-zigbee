@@ -334,7 +334,7 @@ cover changed CODE/ABI/fields/symbols, altered or missing/duplicate listing
 records and missing IRAM aliasing. Genuine execution retains unallocated
 XDATA/status, upper-IRAM, disabled-IRQ and final stack-unwind guards, with
 the unchanged 15-second per-simulator bound. Both boards produce identical
-28,342-byte CODE, 1,053 ordinary XDATA +64 reserved and observed SP `7B`,
+28,618-byte CODE, 1,062 ordinary XDATA +64 reserved and observed SP `7B`,
 only four bytes below the upper-IRAM guard. The existing SP7C cap is unchanged:
 the dispatcher uses an entry-phase snapshot, and the complete portable case
 list runs directly in target main without an extra test-only wrapper frame.
@@ -352,6 +352,21 @@ whole-context comparisons and target boundary assertions preserve stop_steps,
 inactive fields and admission errors. The private ABI matcher now includes357
 local/file-scope/helper records and rejects helper declaration/entry/end damage,
 not just local-parameter changes.
+
+Addressed Data Request admission adds32,768 command-FCF patterns,16,384 byte
+variants,1,024 identifier cases and exact input/copy sizes0..126 across four
+short/extended address layouts. The shared native outcome helper preserves all
+prior Association cases and also covers CCA/no-ACK exhaustion, Pending receipt
+without polling, and pre-/post-radio cancellation for each new form. Full-state
+reset/admission-preservation coverage grows from4,096 to8,192 comparisons.
+The genuine target request loop retains the earlier Association CODE/XDATA
+cases while adding all four Data Request forms, identical retries, parsed ACK,
+DSN wrap and12/40-symbol IFS. Production grows19 CODE bytes with no allocation
+change; the target caller adds257 CODE/nine ordinary XDATA bytes and retains
+SP7B. The test image leaves54 CODE bytes within its unchanged cap.
+Both board definitions pass native ASan/UBSan and full MAC-TX/scan proofs;
+all59 focused metadata/Make/artifact regressions pass. This is transmission
+admission, not response retrieval, association or membership.
 
 Both board definitions run offline; no board image may link this module or
 upload its standalone executable. Abstract symbol events are not captured
@@ -417,7 +432,7 @@ partial/unscanned masks, cancellation, closure/restoration failure, natural
 time wrap and independent working/cleanup bounds. Native/sanitizer checks add
 all duration/CRC values, channel bits and381 exact-sized frame inputs.
 
-Both board definitions have identical 32,651-byte CODE, 1,449 ordinary
+Both board definitions have identical 32,670-byte CODE, 1,449 ordinary
 XDATA +64 reserved, a212-byte scan context and observed SP7A below the SP7C
 cap. Whole CODE/public/private/caller/field ABI, actual transmitter/decoder
 calls, all six ordered per-link listings, artifact negatives and a genuine
@@ -425,7 +440,7 @@ missing-alias negative remain enforced. Unused/status, upper-IRAM and stack
 unwind checks retain the15-second per-simulator bound. This separate32-KiB/
 2-KiB composition budget does not enlarge earlier component limits.
 
-Only117 CODE bytes remain in the test image; this is not full-stack or IRQ
+Only98 CODE bytes remain in the test image; this is not full-stack or IRQ
 headroom. Explicit source events and the serialized TX pump do not supply
 a hardware adapter, captured timing, measured CRC, physical receive windows,
 full parent selection or association. Board linkage/uploads remain prohibited.

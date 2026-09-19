@@ -106,8 +106,12 @@ typedef struct {
  * without mutation; valid fresh-epoch storage is initialized and returns OK.
  */
 mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now);
-/* Direct DATA, canonical Beacon Request, or canonical unsecured Association
- * Request only. Association requires extended source, short/extended coordinator
+/* Direct DATA or canonical unsecured Beacon/Association/Data Request only.
+ * Data Request requires both short/extended addresses, a non-FFFF compressed
+ * PAN, ACK request and no Pending. Caller chooses its valid allocated short
+ * address or actual IEEE address and the coordinator; association-response
+ * retrieval requires extended source. No polling/response procedure is added.
+ * Association requires extended source, short/extended coordinator
  * destination, source PAN FFFF, non-FFFF destination PAN, no compression/Pending,
  * ACK request and capability 88/8C (RX-on ED, allocate address, caller power bit).
  * Caller supplies its actual IEEE address and the permitting coordinator's
