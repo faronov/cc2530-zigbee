@@ -270,12 +270,14 @@ complete ordered relocated instruction sets. It checks the real call chain
 including serialized `mac_tx_step` in the caller, and forbids a controller
 call to `mac_tx_init` or a newly nested `mac_tx_step`.
 
-There are76 damaged-artifact negatives plus a genuine missing-alias negative:
-the original52 plus an appended conflicting public-return declaration for
+There are217 damaged-artifact negatives plus a genuine missing-alias negative.
+They retain the original52 and an appended conflicting public-return declaration for
 each of the20 entries, including main. The complete matching declaration set
 must contain only the expected declaration; identical duplicates remain
 accepted and are checked by a positive control. Four further negatives cover
 file-scope object size/address and private helper declaration/end records.
+The control-staging addition covers complete F/S/L/T inventories, raw-control
+corruption, conflicting/duplicate records and bounded staging storage.
 Every module rejects dropped, duplicate and reordered instruction records.
 CODE extent/content, private/field/caller/return ABI, entry/checkpoint, object
 extent, stack accounting and alias allocation damage are rejected.
@@ -287,26 +289,26 @@ Measured with SDCC4.2.0 #13081 and the canonical large-model flags:
 
 | Item | Measured |
 | --- | --- |
-| Whole CODE | **32,670**, contiguous `0000..7F9D`; only98 bytes remain below8000 |
-| Ordinary XDATA | **1,449**, `0000..05A8` |
-| Including entire64-byte status reservation | **1,513** |
+| Whole CODE | **29,440**, contiguous `0000..72FF`; 3328 bytes remain below8000 |
+| Ordinary XDATA | **1,492**, `0000..05D3` |
+| Including entire64-byte status reservation | **1,556** |
 | Scan context / TX context / embedded candidate table | **212 /168 /150** bytes on SDCC |
 | Request / event / action / candidate |16 /23 /23 /36 bytes on SDCC |
-| Production compiler-private XDATA |572, `0000..023B` |
-| Caller allocation |851, `023C..058E` |
-| Linked runtime XDATA |26, `058F..05A8`; `__gptrput_PARM_2` at059A |
-| DSEG / OSEG / bit backing |69 /10 /2 bytes, plus8-byte register bank |
-| Stack start / final SP / measured peak SP |`59 /58 /7A` |
-| Measured stack use / lower-IRAM remainder |34 /5 bytes; upper80-FF remains guarded |
+| Production compiler-private XDATA |615, `0000..0266` |
+| Caller allocation |851, `0267..05B9` |
+| Linked runtime XDATA |26, `05BA..05D3`; `__gptrput_PARM_2` at05C5 |
+| DSEG / OSEG / bit backing |44 /10 /2 bytes, plus8-byte register bank and1 packing byte |
+| Stack start / final SP / measured peak SP |`41 /40 /62` |
+| Measured stack use / lower-IRAM remainder |34 /29 bytes; upper80-FF remains guarded |
 
 The separately justified composition budget is **32KiB CODE /2KiB XDATA
 including64 reserved bytes**, within the assigned maximum. The image includes
 five production modules, a full28-scenario caller, a212-byte saved-context
-failure-output check and actual MAC/NWK codecs, not stand-ins. Its1513-byte
-reservation leaves535 bytes within this test budget. CODE is almost full:
-this is emphatically **not full-stack fit**, production firmware headroom,
+failure-output check and actual MAC/NWK codecs, not stand-ins. Its1556-byte
+reservation leaves492 bytes within this test budget. Recovered CODE space
+is emphatically **not full-stack fit**, production firmware headroom,
 ISR nesting evidence or permission to increase a previous component budget.
-The proof additionally enforces SP <=7C, with measured7A; the existing
+The proof additionally enforces SP <=7C, with measured62; the existing
 MAC-TX SP7C guard and every shared verifier remain unchanged.
 
 An initial direct-pump proposal failed the32KiB link. Generic-pointer and
@@ -317,33 +319,38 @@ dropping any real call or scenario. No guard was relaxed to obtain a pass.
 | Object | CODE incl. constants/startup | XSEG | DSEG/OSEG | Ordered instructions / bytes |
 | --- | ---: | ---: | ---: | ---: |
 | mac_frame |7009|207|15/10|4168 /7009|
-| mac_tx |8880|148|33/5|5804 /8880|
+| mac_tx |5650|191|8/0|3729 /5650|
 | nwk_beacon |601|27|9/0|353 /601|
 | nwk_candidates |2334|111|4/0|1519 /2334|
 | mac_scan |8598|79|4/0|6230 /8590|
 | mac_scan_test |4581|851|4/0|2686 /4483|
 
-The remaining667 CODE bytes are CRT/library contributions. All20,760 ordered
-instruction records (31,897 bytes) are normalized as
+The remaining667 CODE bytes are CRT/library contributions. All18,685 ordered
+instruction records (28,667 bytes) are normalized as
 `six-hex-address:lowercase-byte-hex\n`; each per-module digest is pinned in
 the proof. Constants and runtime are also covered by the whole CODE digest.
-Private/caller/field digests cover540/54/49 complete sorted debug records,
+Private/caller/field digests cover563/69/51 complete sorted debug records,
 preserving duplicates and a final newline, including two-byte XDATA and
 three-byte generic pointer ABIs. Private coverage includes file-scope objects,
 helper declarations and helper entry/end addresses, not only local parameters.
+The new inventory includes complete F/S/L/T records and the transmitter's
+private control/input types; existing public context layouts are unchanged.
+All217 unique public records are pinned, allowing identical public duplicates
+but rejecting conflicting declarations. Private duplicate multiplicity is
+exact. Raw-byte CDB decoding rejects non-LF controls/separators before indexing.
 
 Both boards produced identical hashes:
 
 ```
-CODE    26c973f6d84b2301c71d654acc7d8d8333c1db07a4203720564412c06bbe8bf5
-IHX     846967b1effeb0886c8a84c9b95f14b2a1fb95dbf232406e24d4993e0834147a
-private a39c9816a006b4e8f07f737be8cf19b421b2b42ac67ac20d99b02a9b8b9004d5
-caller  948d40d20a5885698eba4772b951e77915e325482ca84767573fe7e7257e5d36
-fields  d773e2e566d7f7ff106cf3c3ac72d438f31bccf4d812644edffe13b3427feaef
+CODE    96468bf60d144c46297f558f54b610fe6755865bc1314a3ae7b03fc4efd8b23d
+IHX     30d4c6fdb347ce9d7aa4a6dbb346d2f77e7c436bb12cdcd1ef7e17b5286fa729
+private 9635d4b0c073cf26aae32d5655a3c00ed653580f185c274db3e33f721ec15a71
+caller  27b97210deac66da2f841934ce4001737b8870dd7b6f9c8882da55ff2c9ddccb
+fields  659464f7b5d96ba06e79f413f6a255d76b148b1fcf94f83ef341f6e56e0a6a88
 ```
 
 Scan public addresses init/start/step/get/release are
-`4ED2/4F26/54D7/69E9/6A7E`; main/done are `6B78/7CEE`.
+`4234/4288/4839/5D4B/5DE0`; main/done are `5EDA/7050`.
 All existing codec/TX public addresses and the precise NOP/loop/return
 checkpoint are cross-checked with map, CDB, listings and image bytes.
 
@@ -380,8 +387,8 @@ authorize increased limits or a full-stack fit claim.
 
 The subsequent explicit [Data Request whitelist](MAC_TX.md#bounded-data-request-admission-14-prerequisite)
 adds19 CODE bytes/eight instructions to the shared transmitter, without changing
-production allocation, fields, APIs, the scanner or its caller. The current
-scan image is32,670 CODE with98 bytes remaining. All540 private and54 caller
+production allocation, fields, APIs, the scanner or its caller. At that revision
+the scan image was32,670 CODE with98 bytes remaining. All540 private and54 caller
 records remain: their changed hashes reflect relocated addresses only;
 all49 field records are unchanged. The six whole ordered listings,20 public
 entries, complete CODE,76 artifact negatives, genuine missing-alias negative
@@ -389,6 +396,26 @@ and all28 target scenarios retain their existing bounds and checks.
 Both board definitions still measure SP7A and preserve upper IRAM/unwind.
 Admission of another command in the shared transmitter does not make the
 scanner submit it, release its lease early or implement association.
+
+### Coupled control-staging revalidation
+
+The [transmitter's ABI-preserving control staging](MAC_TX.md#genuine-linked-evidence-and-budgets)
+reduces its CODE by3230 and persistent DATA by25 bytes, adding43 ordinary XDATA
+bytes and removing its five-byte overlay. Scanner code, headers, all28 shared
+scenarios and every other linked object remain unchanged. Per-field native/
+SDCC layout assertions preserve the original public transmitter context;
+there is no additional frame copy, address-space specialization or budget rise.
+
+Both board definitions pass canonical `test-mac-tx` and `test-mac-scan` under
+`build/mac-tx-storage/<board>/mac_tx` and
+`build/mac-tx-storage/<board>/mac_scan`. All217 artifact negatives plus the
+missing-alias negative, exact unwind, upper-IRAM guards and15-second process
+limit remain enforced. Both native corpora also pass ASan/UBSan for each board.
+The eight existing parser/cache regressions pass. The original scan execution
+and manifest were separately reproduced with the original transmitter object;
+new hashes were not accepted solely because a rebuilt image produced them.
+These are host-tested, image-checked and simulated results, not a working
+radio adapter, ISR-nesting proof or full-stack fit.
 
 ### Host-side proof parsing
 
@@ -409,8 +436,8 @@ host-side artifact checking only, not simulator or full-matrix latency.
 Eight synthetic parser regressions additionally cover exact-text changes,
 malformed/conflicting/identical records, label whitespace and duplicates,
 ordered instruction mutations, immutability and bounded cache eviction.
-Both complete board proofs still execute all28 genuine scenarios, all76
-artifact negatives and the missing-alias negative with unchanged guards and
+At that parser-only revision, both complete board proofs executed all28
+genuine scenarios, all76 artifact negatives and the missing-alias negative with unchanged guards and
 15-second per-simulator deadline. The51 Make/artifact regressions also pass.
 No firmware rebuild, hardware access or new dependency was needed.
 

@@ -495,7 +495,7 @@ that the peer received nothing.
 is abstract 32-bit symbols, not the raw Sleep Timer. There is no real radio
 adapter, post-TX ACK receiver or calibrated timing evidence; the existing
 reset-exclusive TX/RX services cannot simply be chained. The isolated image's
-narrow IRAM headroom is not full-stack or ISR-nesting acceptance.
+measured IRAM headroom is not full-stack or ISR-nesting acceptance.
 No board image links this scheduler; never flash `mac_tx_test.ihx`.
 
 The separate [Beacon candidate collector](docs/NWK_CANDIDATES.md) keeps four
@@ -513,7 +513,7 @@ and copied candidate collection. It preserves separate sent/unscanned masks
 and overflow diagnostics; release requires confirmed restoration of the saved
 PAN/channel/filter/RX state. `make test-mac-scan` is **host-tested,
 image-checked and simulated**, not an operating scanner on a board.
-Its six-module test image leaves only 98 bytes below the 32-KiB CODE limit:
+Its six-module test image leaves 3328 bytes below the 32-KiB CODE limit:
 this is not complete-stack fit. A real adapter, captured timing (#40), full
 parent selection and association remain open; never flash `mac_scan_test.ihx`.
 

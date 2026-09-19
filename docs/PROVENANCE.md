@@ -866,6 +866,15 @@ neither an ACK nor Pending creates a polling or response-retrieval procedure.
 Original synthetic vectors cover all four selected address layouts; no
 implementation, capture or device identity was imported.
 
+The later transmitter control-staging refactor is original work on this
+repository's implementation. A private ordinary-XDATA suffix mirror and
+per-field compile-time layout assertions preserve the public generic-pointer
+ABI, native padding and inactive bytes; no second frame or external algorithm
+is introduced. CODE/DATA reductions and stack measurements come from actual
+SDCC objects, linked images and alias-aware execution, not hardware.
+The unchanged native corpus, native old/new comparison and coupled scan proof
+provide behavioral evidence without importing an SDK or reference stack.
+
 The receive-only ACK normalization follows the selected edition's ignored
 FCF-subfield rules, then calls the unchanged strict codec; it is not a
 loosening of general frame admission. Single-slot capacity, generation tags,

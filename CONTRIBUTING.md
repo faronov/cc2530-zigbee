@@ -181,7 +181,9 @@ symbol-time events/actions, not successful substitutes for radio calls.
 Keep its three per-link listing snapshots, whole CODE/private/field ABI,
 alias/upper-IRAM and genuine stack-unwind checks. Its own 28-KiB CODE and
 1,280-byte XDATA reservation budgets do not enlarge earlier component limits.
-The small measured IRAM headroom is not permission to add an ISR or claim
+The private control-suffix mirror must retain per-field layout assertions,
+generic-pointer ABI, inactive bytes and native padding; do not add a second
+frame or reentrant/ISR use. Measured headroom is not permission to claim
 full-stack fit. A real adapter must establish unified TX/RX ownership,
 event timestamps and physical ACK/timing behavior separately.
 **Never flash or upload `mac_tx_test.ihx`; no board image may link it.**
@@ -201,7 +203,7 @@ Preserve the six real modules and immediate per-link listing snapshots,
 serialized `mac_tx_step` grants, persistent DSN ownership, actual collector
 calls, explicit hardware-confirmation boundaries and confirmed restoration.
 Its separate 32-KiB CODE/2-KiB XDATA reservation budget does not enlarge earlier
-limits; the current test image leaves only 98 CODE bytes. Keep the SP7C cap,
+limits; the current test image leaves 3328 CODE bytes. Keep the SP7C cap,
 alias/upper-IRAM guards and genuine complete scenario corpus. Do not replace
 missing physical timestamps or adapter behavior with successful stubs.
 **Never flash or upload `mac_scan_test.ihx`; no board image may link it.**

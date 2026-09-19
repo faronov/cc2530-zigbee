@@ -390,10 +390,10 @@ unchanged strict native/SDCC flags. SDCC 4.2.0 model-large, both board definitio
 | Object | CODE | Ordinary XDATA (including scratch/parameters) | Persistent IRAM | Overlay IRAM |
 | --- | ---: | ---: | ---: | ---: |
 | Existing MAC codec, including unused command/Beacon code | 7,009 | 207 | 15 | 10 |
-| MAC-TX scheduler | 8,880 | 148 | 33 | 5 |
+| MAC-TX scheduler | 5,650 | 191 | 8 | 0 |
 | Synthetic caller/constants | 12,094 | 683 | 14 | 0 |
 | Shared CRT/runtime | 635 | 24 | See linked accounting | Shared |
-| **Total** | **28,618** | **1,062** | **62** | **10 shared, not summed** |
+| **Total** | **25,388** | **1,105** | **37** | **10 shared, not summed** |
 
 This Linux toolchain's unchanged codec size is measured here rather than
 substituting an older platform's published object byte count.
@@ -406,22 +406,24 @@ budget**, including all 64 reserved status bytes. This accommodates two context
 copies for atomic-failure tests, two 125-byte test buffers, event/action copies
 and compiler/runtime storage. It does not expand the MAC-codec, platform,
 board or seven-module protocol-resource budgets, nor allocate a second
-production queue. Actual reservation use is **1126/1280**.
+production queue. Actual reservation use is **1169/1280**.
 
-Exact ordinary private prefix: codec `0000..00CE`, scheduler `00CF..0162`.
-Caller context `0163..020A`, saved context `020B..02B2`, event `02B3..02C3`,
-action `02C4..02D9`, saved action `02DA..02EF`, body `02F0..036C`,
-copy `036D..03E9`, ACK `03EA..03ED`; caller/compiler/runtime storage continues
-through `0425`. The additional test-only request index/size/generic-pointer/
-expected-time occupy `03F4..03FC` (1/1/3/4 bytes), with explicit caller-ABI
-checks and pointer-width/storage negatives. Generic-store scratch is `0419`.
+Exact ordinary private prefix: codec `0000..00CE`, scheduler `00CF..018D`.
+The scheduler's control mirror occupies `00CF..00F9`, scalar input staging
+`00FA..0105`; neither is a second frame slot.
+Caller context `018E..0235`, saved context `0236..02DD`, event `02DE..02EE`,
+action `02EF..0304`, saved action `0305..031A`, body `031B..0397`,
+copy `0398..0414`, ACK `0415..0418`; caller/compiler/runtime storage continues
+through `0450`. The test-only request index/size/generic-pointer/expected-time
+occupy `041F..0427` (1/1/3/4 bytes), with explicit caller-ABI checks and
+pointer-width/storage negatives. Generic-store scratch is `0444`.
 All ordinary allocations are
 below `1E00`; status `1E00..1E3F` is reserved, only its first eight bytes used.
 `1F00..1FFF` remains an IRAM alias, never extra RAM.
 
-IRAM: 62 persistent +10 overlay +8 bank0 +1 bit-storage byte +9 unused packing
-bytes precede stack `5A..FF` (166 bytes), initial/final SP59.
-Observed compiled-test peak is **SP7B**, 34 stack bytes and **four bytes**
+IRAM: 37 persistent +10 overlay +8 bank0 +1 bit-storage byte +1 unused packing
+byte precede stack `39..FF` (199 bytes), initial/final SP38.
+Observed compiled-test peak is **SP5A**, 34 stack bytes and **37 unused bytes**
 below the unchanged upper-IRAM `80..FF` guard. This is limited foreground
 vector evidence, not worst-case call-graph, interrupt-nesting or full-stack
 fit evidence. No ISR is linked or simulated for this scheduler.
@@ -445,28 +447,43 @@ That follow-up retained all preceding target cases, XDATA,
 public context/parameter/field ABI and private allocation.
 Data Request adds19 production CODE bytes and257 caller/constant bytes, with
 all earlier cases retained and four additional genuine request layouts.
-The current composition leaves **54 CODE bytes** below28KiB.
+That pre-staging composition left **54 CODE bytes** below28KiB.
 Development layouts exceeded CODE by18/21 bytes; the latter reached
 SP85. Staging only test input/expected-time calculations in nine bytes of
 ordinary test XDATA restored SP7B and CODE fit. The actual request/copy/retry/
 ACK/cleanup calls and every assertion remain; no production or test-image
 feature switch, larger cap or skipped case was used.
-The coupled scan composition is now32,670 CODE (98 bytes below8000), still
-1449+64 XDATA and SP7A; its28 genuine scenarios and76+1 negatives pass with
-the full private matcher and reviewed relocated records. See [its ledger](MAC_SCAN.md).
+The later control-staging refactor saves **3230 CODE /25 persistent DATA /
+5 overlay bytes**, with a net increase of43 ordinary XDATA bytes. It leaves
+**3284 CODE bytes** within this image's unchanged28KiB cap. The coupled scan
+image is now29440 CODE,1492+64 XDATA and SP62; all28 scenarios and217 artifact
+negatives plus the alias negative pass. See [its ledger](MAC_SCAN.md).
 
-Contiguous unbanked CODE `0000..6FC9`, SHA256:
-`06e2ac44bbf9051255a88969507ee486fd99662576fc1381ee565f48b1a7f094`.
+Only the public context's control suffix is copied into private ordinary
+XDATA during serialized foreground calls. The public generic-pointer API,
+168-byte context and original125-byte frame are unchanged. Compile-time checks
+pin every mirrored field's offset/size and both enclosing extents, including
+native layouts. Unsigned-character object-representation copies stop after
+`stop_steps`: native frame-alignment/tail padding and inactive members are
+preserved. Invalid calls do not publish staged control. Successful calls
+publish before returning; there are no callbacks or reentrant/ISR users.
+The12-byte scalar staging record and cached copy length reduce compiler
+spills without changing admission, ACK, DSN, IFS or cleanup semantics.
+
+Contiguous unbanked CODE `0000..632B`, SHA256:
+`f658150863b450952fdb2e70a466f4c92691a117b40d03f2fe356a581bb51ef6`.
 Both generated IHX files also match byte-for-byte, file SHA256:
-`146c568d4514f4a520364811638b24748341145f25fe74b06597b742f79d7434`.
-Sorted production-private CDB declaration/address record SHA256:
-`121df007e7bb3955a900619c399b46eacaedc385fe69195b46dd4eb744ffd13e`.
-The parent's complete private matcher is unchanged: its356 prior records are
-retained with reviewed addresses, plus the cached-command local declaration,
-for357 total. It covers file-scope helper declarations and entry/end addresses
-as well as local parameters. All three added helper negatives remain. The scan
-matcher likewise retains its539 records plus that declaration, for540 total,
-and all49 field records. No extra private byte is allocated for the new local.
+`1de50373b956465c7895d3024f46689a7f07f4ca5ce05023edaafc27c4909c95`.
+Sorted complete production-private F/S/L/T record SHA256:
+`7863fd66009ea481c458789f3b3a540319fff645c75c083456097186dcff0125`.
+The reviewed357 private records include file-scope staging, helper
+declarations/entries/ends, locals and complete type records. This is a new
+inventory, not a claim that the earlier357 records retained their identities.
+All253 caller records and181 unique public records are also pinned. Private
+duplicate multiplicity is exact; legitimate identical public declarations
+remain accepted. The raw-byte CDB loader rejects non-LF controls/separators
+before parsing, including prefixed conflicting duplicates. The123 added
+metadata negatives cover these boundaries through the actual loader.
 The proof pins the whole image (including runtime/constants), private CDB
 declarations/addresses, field/pointer ABI, caller storage, generic-store
 scratch and **complete ordered** per-image relocated instruction records.
@@ -479,25 +496,25 @@ numbers, not records or their order.
 | Module | Instruction records | Covered instruction bytes | Exact coverage (end exclusive) |
 | --- | ---: | ---: | --- |
 | `mac_frame` | 4,168 | 7,009 | `0062..1BC3` |
-| `mac_tx` | 5,804 | 8,880 | `1BC3..3E73` |
-| `mac_tx_test` | 6,998 | 11,934 | `0000..0006`, `005F..0062`, `3E73..6D08` |
+| `mac_tx` | 3,729 | 5,650 | `1BC3..31D5` |
+| `mac_tx_test` | 6,998 | 11,934 | `0000..0006`, `005F..0062`, `31D5..606A` |
 
 The test record count includes its nine startup instruction bytes; its
 160 constant bytes and the 635-byte linked CRT/runtime remainder are covered
 by the whole-image hash, not attributed to these instruction records.
 The normalized SHA256 values, in table order, are:
 
-- `fb4f9977a3ddd3ace2067fb14acb3c437d09b7ec59405dda20494d2d764dfb3e`
-- `942e72583ae13c98ceb38573e97a285628c3a58235d3cd26eff8d8f6094195fe`
-- `074cc2df329cdb1d4aada358985eea9cbdc533e8aedae80196f43283e47eb8ae`
+- `6f42dd5789a73ec3024332b64ec3a61a5a29a4e5d541dbb8564aa35c0e6eb423`
+- `b9923d41551ab54b15d2079d0312b73514e0466041cb0d13a344abe156f85e0c`
+- `1c3686695fbb7421ecf5cb5d19e8e22d120b731a8ed1c91a19cdaa5ef96bec30`
 
 Public MAC-TX entry addresses are pinned and cross-checked against map,
-CDB and actual listing labels/instruction boundaries: init `1C05`, submit
-`1CD3`, copy `2257`, step `275B`, release `3E1E`. The proof also checks the
+CDB and actual listing labels/instruction boundaries: init `1C87`, submit
+`1D55`, copy `21AF`, step `23FC`, release `3180`. The proof also checks the
 five reused codec API entries. The target result ABI is an unsigned-byte
 return in DPL (`SC:U` in CDB), now including init.
-`_main=6BE3` is checked against map/CDB/listing and the startup LJMP at `0003`;
-`_mac_tx_done=6D04` is checked against map/listing and exact `00 80 FE 22`
+`_main=5F45` is checked against map/CDB/listing and the startup LJMP at `0003`;
+`_mac_tx_done=6066` is checked against map/listing and exact `00 80 FE 22`
 checkpoint/loop/return bytes. A different location containing a zero byte
 cannot substitute for the checkpoint.
 
@@ -554,15 +571,14 @@ All source events are **synthetic**, not captures or hardware observations.
 Canonical focused checks, run serially from the repository root:
 
 ```sh
-make -B -j1 BOARD=generic BUILD=build/mac-association-request-dev/generic \
+make -j1 BOARD=generic BUILD=build/mac-tx-control/generic \
   test-mac-tx test-mac-scan
-make -B -j1 BOARD=lg_esl29_rev03 BUILD=build/mac-association-request-dev/lg_esl29_rev03 \
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/mac-tx-control/lg_esl29_rev03 \
   test-mac-tx test-mac-scan
 ```
 
-These force recompilation of both native executables and linked compositions,
-as used for final canonical validation. Outputs remain isolated in
-`build/mac-association-request-dev/<board>`. The MAC-TX target uses the
+Both commands passed from fresh output directories after control staging.
+Outputs remain isolated in `build/mac-tx-control/<board>`. The MAC-TX target uses the
 unchanged strict native/SDCC flags and link bounds, links
 `mac_frame` -> `mac_tx` -> `mac_tx_test`, snapshots all three relocated
 listings immediately after linking, then runs the native corpus and
@@ -590,23 +606,14 @@ python3 -B tests/boot_mac_frame.py --output build/mac-tx-dev/generic/codec
 Additional native ASan/UBSan checks, after the canonical builds:
 
 ```sh
-# Repeat with number=1 and board=lg_esl29_rev03.
-number=0
-board=generic
-out=build/mac-association-request-dev/$board
-cc -std=c99 -O1 -g -Wall -Wextra -Werror -pedantic \
-  -fsanitize=address,undefined -fno-omit-frame-pointer \
-  -DCC2530_HOST_TEST -Iinclude -DCC2530_BOARD="$number" -Itests \
-  tests/test_mac_tx.c src/mac_tx.c src/mac_frame.c \
-  -o "$out/host-mac-tx-sanitized" &&
-  UBSAN_OPTIONS=halt_on_error=1 "$out/host-mac-tx-sanitized"
-# Same flags for the coupled scan sanitizer:
-cc -std=c99 -O1 -g -Wall -Wextra -Werror -pedantic \
-  -fsanitize=address,undefined -fno-omit-frame-pointer \
-  -DCC2530_HOST_TEST -Iinclude -DCC2530_BOARD="$number" -Itests \
-  tests/test_mac_scan.c src/mac_frame.c src/mac_tx.c src/nwk_beacon.c \
-  src/nwk_candidates.c src/mac_scan.c -o "$out/host-mac-scan-sanitized" &&
-  UBSAN_OPTIONS=halt_on_error=1 "$out/host-mac-scan-sanitized"
+export ASAN_OPTIONS=abort_on_error=1:detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1
+for board in generic lg_esl29_rev03; do
+  out=build/mac-tx-control-sanitizers/$board
+  make -j1 BOARD="$board" BUILD="$out" \
+    HOST_CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer' \
+    "$out/host-mac-tx-tests" "$out/host-mac-scan-tests" || exit
+  "$out/host-mac-tx-tests" && "$out/host-mac-scan-tests" || exit
+done
 ```
 
 No new dependency is required. Repository and whitespace checks are separate.
@@ -650,6 +657,16 @@ types and scopes; only CODE addresses relocate. No scanner source/header/
 scenario, codec, shared verifier, Make target or board image changed.
 All59 focused metadata/Make/artifact regressions pass, including the eight
 scan-parser tests. Hardware, response retrieval and association remain open.
+
+**Control-staging follow-up:** both canonical shared-build compositions and
+all four native sanitizer executables pass with the current resources above.
+The unchanged native TX suite retains8192 complete-context preservation cases;
+a separate native old/new comparison additionally passed300,000 API pairs,
+including full object representations. The64 focused Make/artifact/parser
+regressions and repository/whitespace checks pass. Existing public headers,
+native corpora and all limits remain unchanged. This is host-tested,
+image-checked and alias-aware simulated evidence only; a composed POLL image
+or hardware MAC is not established by these transmitter/scan results.
 
 Before real use, implement/review the unified adapter and exact time domain;
 separately authorize a boot-disarmed fixture, board/channel/power/attempt

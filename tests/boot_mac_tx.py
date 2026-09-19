@@ -6,6 +6,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import re
+from tempfile import TemporaryDirectory
 
 from boot_image import (
     ALIAS, check_alias, check_pc, simulate, snapshot_commands, verify_component_layout,
@@ -13,9 +14,11 @@ from boot_image import (
 )
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, require, xdata_ranges
 
-SIZE = 28618
-DIGEST = "06e2ac44bbf9051255a88969507ee486fd99662576fc1381ee565f48b1a7f094"
-PRIVATE_DIGEST = "121df007e7bb3955a900619c399b46eacaedc385fe69195b46dd4eb744ffd13e"
+SIZE = 25388
+DIGEST = "f658150863b450952fdb2e70a466f4c92691a117b40d03f2fe356a581bb51ef6"
+PRIVATE_DIGEST = "7863fd66009ea481c458789f3b3a540319fff645c75c083456097186dcff0125"
+CALLER_DIGEST = "37c47d910a8530b7a9d53d052d55c1838b3771ba247165416a2746093d4e184c"
+PUBLIC_DIGEST = "d5b115694201f970b6e1b9b095e1a4df1e2661bbbc316e2b48f2b1a282a8d32e"
 # Dedicated composition, NOT changes to codec/platform/board budgets.
 CODE_BUDGET = 28672
 XDATA_BUDGET = 1280
@@ -26,12 +29,12 @@ INSTRUCTION_RE = re.compile(
 # Pin every reviewed instruction, not an arbitrary surviving subset of a listing.
 # The harness also contains non-CSEG startup instructions in listing order.
 LISTING_PROOFS = {
-    "mac_frame": (4168, 7009, "fb4f9977a3ddd3ace2067fb14acb3c437d09b7ec59405dda20494d2d764dfb3e",
+    "mac_frame": (4168, 7009, "6f42dd5789a73ec3024332b64ec3a61a5a29a4e5d541dbb8564aa35c0e6eb423",
                   ((0x62, 0x1bc3),)),
-    "mac_tx": (5804, 8880, "942e72583ae13c98ceb38573e97a285628c3a58235d3cd26eff8d8f6094195fe",
-               ((0x1bc3, 0x3e73),)),
-    "mac_tx_test": (6998, 11934, "074cc2df329cdb1d4aada358985eea9cbdc533e8aedae80196f43283e47eb8ae",
-                    ((0, 6), (0x5f, 0x62), (0x3e73, 0x6d08))),
+    "mac_tx": (3729, 5650, "b9923d41551ab54b15d2079d0312b73514e0466041cb0d13a344abe156f85e0c",
+               ((0x1bc3, 0x31d5),)),
+    "mac_tx_test": (6998, 11934, "1c3686695fbb7421ecf5cb5d19e8e22d120b731a8ed1c91a19cdaa5ef96bec30",
+                    ((0, 6), (0x5f, 0x62), (0x31d5, 0x606a))),
 }
 ENTRY_POINTS = {
     "_mac_command_decode": ("mac_frame", 0x22a),
@@ -39,26 +42,46 @@ ENTRY_POINTS = {
     "_mac_beacon_decode": ("mac_frame", 0x8e0),
     "_mac_frame_decode": ("mac_frame", 0x1214),
     "_mac_frame_encode": ("mac_frame", 0x195c),
-    "_mac_tx_init": ("mac_tx", 0x1c05),
-    "_mac_tx_submit": ("mac_tx", 0x1cd3),
-    "_mac_tx_copy": ("mac_tx", 0x2257),
-    "_mac_tx_step": ("mac_tx", 0x275b),
-    "_mac_tx_release": ("mac_tx", 0x3e1e),
-    "_main": ("mac_tx_test", 0x6be3),
-    "_mac_tx_done": ("mac_tx_test", 0x6d04),
+    "_mac_tx_init": ("mac_tx", 0x1c87),
+    "_mac_tx_submit": ("mac_tx", 0x1d55),
+    "_mac_tx_copy": ("mac_tx", 0x21af),
+    "_mac_tx_step": ("mac_tx", 0x23fc),
+    "_mac_tx_release": ("mac_tx", 0x3180),
+    "_main": ("mac_tx_test", 0x5f45),
+    "_mac_tx_done": ("mac_tx_test", 0x6066),
 }
 CALLER_OBJECTS = {
-    "tx": (0x163, 168), "saved": (0x20b, 168), "event": (0x2b3, 17),
-    "action": (0x2c4, 22), "saved_action": (0x2da, 22),
-    "body": (0x2f0, 125), "copy": (0x36d, 125), "ack": (0x3ea, 4),
-    "request_index": (0x3f4, 1), "request_size": (0x3f5, 1),
-    "request_body": (0x3f6, 3), "request_ready": (0x3f9, 4),
+    "tx": (0x18e, 168), "saved": (0x236, 168), "event": (0x2de, 17),
+    "action": (0x2ef, 22), "saved_action": (0x305, 22),
+    "body": (0x31b, 125), "copy": (0x398, 125), "ack": (0x415, 4),
+    "request_index": (0x41f, 1), "request_size": (0x420, 1),
+    "request_body": (0x421, 3), "request_ready": (0x424, 4),
 }
+
+
+def validate_cdb(debug):
+    require(re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u2028\u2029]", debug) is None,
+            "CDB contains a non-LF control/separator")
+
+
+def read_cdb(path):
+    debug = path.read_bytes().decode("utf-8")
+    validate_cdb(debug)
+    return debug
+
+
+def abi_records(debug, pattern):
+    return "\n".join(sorted(re.findall(pattern, debug, re.M))) + "\n"
 
 
 def private_records(debug):
-    return "\n".join(sorted(line for line in debug.splitlines()
-                           if re.match(r"^[FSL]:(?:X?F|L)(?:mac_frame|mac_tx)[.$]", line)))
+    return abi_records(debug, r"^[FSLT]:(?:X?F|L)(?:mac_frame|mac_tx)[.$][^\n]+$")
+
+
+def public_records(debug):
+    # Public declarations can repeat identically across translation units.
+    # Keep complete raw records: a conflicting variant must change this set.
+    return "\n".join(sorted(set(re.findall(r"^[FSL]:(?:X?G)\$[^\n]+$", debug, re.M)))) + "\n"
 
 
 def field_abi(debug, tag, names, sizes):
@@ -96,6 +119,7 @@ def verify_instructions(module, listing, image):
 
 
 def verify(image, symbols, debug, memory, listings):
+    validate_cdb(debug)
     require(len(image) == SIZE and set(image) == set(range(SIZE))
             and SIZE <= CODE_BUDGET, "MAC-TX whole CODE extent/budget changed")
     require(hashlib.sha256(bytes(image[a] for a in range(SIZE))).hexdigest() == DIGEST,
@@ -106,6 +130,11 @@ def verify(image, symbols, debug, memory, listings):
     )
     require(hashlib.sha256(private_records(debug).encode()).hexdigest() == PRIVATE_DIGEST,
             "MAC-TX compiler-private storage/ABI changed")
+    require(hashlib.sha256(abi_records(
+        debug, r"^[FSLT]:(?:X?F|L)test_mac_tx[.$][^\n]+$").encode()).hexdigest() == CALLER_DIGEST,
+        "MAC-TX complete caller storage/helper/field ABI changed")
+    require(hashlib.sha256(public_records(debug).encode()).hexdigest() == PUBLIC_DIGEST,
+            "MAC-TX complete public declarations/entries/ends changed")
     field_abi(debug, "__00000004",
               ("frame", "last", "deadline", "at", "tx_end", "ready_at", "generation", "stop_at",
                "steps", "phase", "next_dsn", "length", "ack_requested", "nb", "be", "retries",
@@ -142,7 +171,7 @@ def verify(image, symbols, debug, memory, listings):
                     "MAC-TX entry CDB disagrees with map/instructions: " + name)
         if name.startswith("_mac_tx_") and name != "_mac_tx_done":
             declarations = re.findall(rf"^F:G\${name[1:]}\$.*$", debug, re.M)
-            require(declarations == [f"F:G${name[1:]}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0"],
+            require(set(declarations) == {f"F:G${name[1:]}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0"},
                     "MAC-TX public result ABI changed: " + name)
     require(symbols.get("__sdcc_program_startup") == 3
             and bytes(image[a] for a in range(3, 6))
@@ -151,7 +180,12 @@ def verify(image, symbols, debug, memory, listings):
     done = ENTRY_POINTS["_mac_tx_done"][1]
     require(bytes(image[a] for a in range(done, done + 4)) == b"\x00\x80\xfe\x22",
             "MAC-TX final NOP/loop/return checkpoint changed")
-    require(private == set(range(355)), "MAC-TX private/compiler prefix changed")
+    require(private == set(range(398)), "MAC-TX private/compiler prefix changed")
+    for name, address, size in (("control", 0xcf, 43), ("input", 0xfa, 12)):
+        require(cdb_address(debug, f"L:Fmac_tx${name}$0_0$0") == address
+                and f"S:Fmac_tx${name}$0_0$0({{{size}}}" in debug
+                and set(range(address, address + size)) <= private,
+                "MAC-TX bounded staging storage changed")
     for name, (address, size) in CALLER_OBJECTS.items():
         declaration = re.findall(rf"^S:Ftest_mac_tx\${name}\$[^\n]*", debug, re.M)
         addresses = re.findall(rf"^L:Ftest_mac_tx\${name}\$[^:]+:([0-9A-F]+)$", debug, re.M)
@@ -160,10 +194,10 @@ def verify(image, symbols, debug, memory, listings):
                 "MAC-TX caller ABI missing/changed")
         region = set(range(address, address + size))
         require(not region & private and region <= allocated, "Caller overlaps private prefix/alias")
-    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1062
-            and symbols["__gptrput_PARM_2"] == 0x419,
+    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1105
+            and symbols["__gptrput_PARM_2"] == 0x444,
             "MAC-TX linked ordinary/generic-store storage changed")
-    require(symbols["s_SSEG"] == 0x5a, "MAC-TX stack reservation changed")
+    require(symbols["s_SSEG"] == 0x39, "MAC-TX stack reservation changed")
     return allocated
 
 
@@ -181,6 +215,57 @@ def rejected(call, label):
     raise ValueError("Missing negative-control rejection: " + label)
 
 
+def metadata_negatives(debug, check, directory):
+    count = 0
+
+    def reject(changed, name):
+        nonlocal count
+        rejected(lambda: check(changed), name)
+        count += 1
+
+    prefixes = [
+        f"{kind}:{scope}mac_tx${name}$"
+        for name in ("load_control", "save_control")
+        for kind, scope in (("F", "F"), ("S", "F"), ("L", "F"), ("L", "XF"))
+    ] + [
+        f"{kind}:Fmac_tx${name}$" for name in ("control", "input") for kind in ("S", "L")
+    ] + ["T:Fmac_tx$__00000007[", "T:Fmac_tx$__00000008["]
+    for prefix in prefixes:
+        found = [line for line in debug.split("\n") if line.startswith(prefix)]
+        require(len(found) == 1, "Staging/helper negative needs one complete record: " + prefix)
+        record = found[0]
+        reject(debug.replace(record, record + "!", 1), "malformed complete private record")
+        reject(debug + "\n" + record + "\n", "private duplicate multiplicity")
+    parameters = re.findall(r"^S:Lmac_tx\.[^\n]*\(\{3\}DG,[^\n]+$", debug, re.M)
+    require(parameters, "Generic-pointer negatives need real parameter/local declarations")
+    for record in parameters:
+        reject(debug + "\n" + record.replace("({3}DG,", "({2}DX,", 1) + "\n",
+               "conflicting generic-pointer declaration")
+    public = public_records(debug)
+    declarations = [line for line in public.split("\n")
+                    if line.startswith(("F:G$", "S:G$")) and "DF," in line]
+    require(declarations, "Public-return negatives need real declarations")
+    for record in declarations:
+        result = "SC:U" if "DF,SV:S" in record else "SV:S"
+        changed = re.sub(r"(DF,)[^)]+", r"\g<1>" + result, record, count=1)
+        require(changed != record, "Public-return negative did not apply")
+        reject(debug + "\n" + changed + "\n", "conflicting F/S public return declaration")
+    check(debug + "\n" + public)
+    record = next(line for line in debug.split("\n") if line.startswith("F:Fmac_tx$load_control$"))
+    hostile = record.replace("$load_control$", "$wrong_control$")
+    with TemporaryDirectory(prefix="cdb-negative-", dir=directory) as temporary:
+        path = Path(temporary) / "metadata.cdb"
+        for separator in ("\0", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e",
+                          "\x1f", "\x7f", "\x85", "\u2028", "\u2029"):
+            reject(debug.replace(record, record + separator, 1), "raw record separator")
+            changed = debug + "\n" + separator + hostile + "\n"
+            reject(changed, "separator-prefixed hostile helper")
+            path.write_bytes(changed.encode("utf-8"))
+            rejected(lambda: check(read_cdb(path)), "raw CDB artifact loader")
+            count += 1
+    return count
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
@@ -189,10 +274,13 @@ def main():
     path = args.output / "mac_tx_test.ihx"
     image = parse_ihex(path.read_text())
     symbols = parse_symbols(path.with_suffix(".map").read_text())
-    debug = path.with_suffix(".cdb").read_text()
+    debug = read_cdb(path.with_suffix(".cdb"))
     memory = path.with_suffix(".mem").read_text()
     listings = {m: (args.output / ("mac_tx_test." + m + ".rst")).read_text() for m in MODULES}
     allocated = verify(image, symbols, debug, memory, listings)
+    metadata_count = metadata_negatives(
+        debug, lambda changed: verify(image, symbols, changed, memory, listings), args.output,
+    )
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, alias=False), "missing IRAM alias")
     corrupt = dict(image)
@@ -217,7 +305,7 @@ def main():
         memory, listings), "old void initializer ABI")
     for old, new in (
         ("S:Ftest_mac_tx$request_body$0_0$0({3}", "S:Ftest_mac_tx$request_body$0_0$0({2}"),
-        ("L:Ftest_mac_tx$request_ready$0_0$0:3F9", "L:Ftest_mac_tx$request_ready$0_0$0:3FA"),
+        ("L:Ftest_mac_tx$request_ready$0_0$0:424", "L:Ftest_mac_tx$request_ready$0_0$0:425"),
     ):
         require(old in debug, "Request-caller negative did not apply")
         rejected(lambda: verify(image, symbols, debug.replace(old, new), memory, listings),
@@ -285,15 +373,17 @@ def main():
     require(all(sfr[a - 0x80] == 0 for a in (0xa8, 0xb8, 0x9a)),
             "MAC-TX enabled interrupts")
     peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", indexed[1])
-    require(len(peaks) == 1 and int(peaks[0], 16) <= 0x7c, "MAC-TX stack peak exceeded budget")
+    require(len(peaks) == 1 and int(peaks[0], 16) == 0x5a
+            and int(peaks[0], 16) <= 0x7c, "MAC-TX reviewed stack peak/budget changed")
     ordinary = sum(end - start for start, end in xdata_ranges(symbols))
     print(f"MAC-TX: {SIZE} CODE SHA256={DIGEST}; {ordinary}+64/{XDATA_BUDGET} XDATA; "
-          f"private prefix=0..354; stack=5a..ff peak={int(peaks[0], 16):02x}.")
+          f"private prefix=0..397; stack=39..ff peak={int(peaks[0], 16):02x}.")
     for module in MODULES:
         areas = re.findall(r"^A (\S+) size ([0-9A-F]+) flags", (args.output / (module + ".rel")).read_text(), re.M)
         print(module, {name: int(size, 16) for name, size in areas if int(size, 16)})
         print("instruction records/covered bytes:", LISTING_PROOFS[module][:2])
-    print("Whole linked CODE/private/public ABI, complete ordered instruction records, "
+    print(f"Whole linked CODE/private/public ABI, {metadata_count} new metadata negatives, "
+          "complete ordered instruction records, "
           "drop/duplicate/reorder and checkpoint negatives, genuine compiled vectors, alias negative control, "
           "allocation and upper-IRAM guards PASS. Synthetic only; never flash.")
 

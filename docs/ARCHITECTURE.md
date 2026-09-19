@@ -103,6 +103,13 @@ nonwrapping generation, retry and backoff attempt; retransmission preserves
 the admitted bytes and DSN. A completed slot remains occupied until explicit
 release, while uncertain adapter/clock/cleanup faults retain ownership.
 
+Serialized foreground calls stage only the43-byte control suffix in private
+ordinary XDATA, not a second125-byte frame. Per-field offset/size assertions
+retain the public generic-pointer ABI and native layouts; object-representation
+copies preserve inactive members and native padding. This reduces the SDCC
+module to5650 CODE/8 permanent DATA/191 XDATA bytes, with no reentrancy,
+callback, ISR or full-stack-fit claim.
+
 Time is an abstract 32-bit symbol epoch with half-range constraints and an
 ordered event watermark, not a conversion of raw Sleep Timer ticks.
 Transaction lifetime, foreground work and cleanup each have finite bounds.
@@ -160,7 +167,8 @@ count and sticky capacity loss remain distinct. DONE requires restoration of
 the saved logical PAN/channel/filter/RX state; unresolved faults retain the
 lease. The action/event interface is not a CC2530 adapter, a full MLME-SCAN
 descriptor service, complete parent selection or association.
-Its almost-full six-module test image is not complete-stack resource evidence.
+Its six-module test image uses29440 CODE and1492 ordinary XDATA bytes plus
+the64-byte status reservation; it is not complete-stack resource evidence.
 
 The [Association Response context](MAC_ASSOCIATION.md) separately owns73 bytes
 and composes the real frame/command decoders. Its copied selection, nonzero

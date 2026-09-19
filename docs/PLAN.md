@@ -479,8 +479,10 @@ restoration of saved logical radio state. Host/sanitizer, linked-image and
 alias-aware checks cover both board definitions, including partial/unscanned
 masks, cancellation and retained restoration faults. This is not a physical
 scanner or full MAC PAN-descriptor service: #13/#40 adapter/timestamp gates,
-full parent policy and association remain open. The composed test's 32,670-byte
-CODE leaves only 98 bytes below the unbanked limit; no full-stack fit follows.
+full parent policy and association remain open. ABI-preserving transmitter
+control staging reduces the composed test to29,440 CODE bytes, with1492
+ordinary XDATA +64 reserved and observed SP62. Public contexts and all existing
+scenarios/limits are unchanged; no full-stack fit follows.
 
 The same transmitter now admits canonical unsecured Association Requests
 with extended source, short/extended coordinator destination and capability
