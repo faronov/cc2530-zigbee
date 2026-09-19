@@ -438,6 +438,17 @@ TX/RX owners cannot fulfill that contract by simple composition. #13's
 physical/integration gate remains open, and the standalone image's narrow
 IRAM headroom is not complete-stack or interrupt-nesting acceptance.
 
+The [awake MAC Timer foundation](MAC_TIME.md) (#39) now establishes bounded
+one-shot asynchronous initialization and coherent raw live tuples, using the
+actual Sleep Timer for independent deadlines and the TI low-FF workaround.
+Both board definitions have host/image/simulator evidence. Positive periods
+512/`FFFFFF` imply a non-power-of-two coarse modulus, not an extended symbol
+epoch. Radio quiescence remains mandatory; this is not a same-reset RX/TX
+owner. The primary sources' SFD-rise versus TX-end capture discrepancy,
+capture freshness/overwrite, epoch/fine-phase conversion and physical timing
+remain prerequisites for the real adapter. Neither a live sample nor raw
+Sleep Timer ticks may replace captured TX/ACK end.
+
 Initial #14 preparation additionally admits canonical unsecured Beacon
 Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.
 They require neither ACK nor frame retries. This does not yet implement

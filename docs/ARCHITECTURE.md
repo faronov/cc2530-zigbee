@@ -106,6 +106,22 @@ physical timing evidence. No MMIO, board GPIO, security or network membership
 is introduced; the isolated SDCC resource proof does not establish complete
 stack fit or IRQ nesting.
 
+The isolated [MAC Timer foundation](MAC_TIME.md) owns untouched reset-state
+Timer2 under stable undivided XOSC32, disabled interrupts and quiescent
+radio/CSP/DMA. It disables timer event outputs, sets positive periods
+512/`FFFFFF`, starts asynchronously and confirms STATE, not RUN echo.
+Common latching and bounded rejection of fine-low FF produce a coherent
+raw tuple: fine0..511, periods0..FFFFFE. One raw Sleep Timer deadline and
+a positive work cap bound each operation. A first operational fault is
+retained without cleanup/recovery; error outputs are unchanged.
+This service does not rewrite counters, acknowledge flags, select clocks,
+start RF or expose a capture API. Its ordinary-XDATA private prefix/output
+checks and 512-byte reservation budget remain isolated. A live tuple is
+neither an extended `mac_tx` symbol epoch nor a captured PHY end; the
+quiescent-radio requirement prohibits silently chaining it with RX/TX.
+Primary capture selection/freshness, fine phase, delivery order, unified
+ownership and physical timing remain separate gates.
+
 The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC
 headers or platform code. The [NWK codec contract](NWK.md) preserves raw

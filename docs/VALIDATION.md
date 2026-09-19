@@ -317,6 +317,31 @@ TX end, ACK reception, calibrated time or RF evidence. Real adapter ownership,
 ordered timestamp delivery, combined platform/protocol resources and physical
 acceptance remain open. The existing MAC codec corpus remains unchanged.
 
+## Offline MAC Timer foundation coverage
+
+`make test-mac-time` composes the real Sleep Timer and
+[awake Timer2 service](MAC_TIME.md). Each board passes 8,384 native calls
+and 48 genuine linked sequences /158 calls /10,550 MMIO events, covering
+configuration/readback, RUN without STATE, common latches, fine/coarse
+rollovers, the low-FF erratum, deadline equality, full16-bit work exhaustion,
+output preservation and retained faults. A genuine range-valid torn-latch
+negative must fail against the original T2M0-instant oracle.
+Both native definitions also pass ASan/UBSan.
+
+Both boards have identical 2,999-byte CODE, 124 ordinary XDATA +64 reserved
+within512, stack start21 and observed MMIO peakSP2E. Complete CODE, public/
+private/caller/field ABI, actual MMIO operands, all three per-link listings,
+alias/upper-IRAM and stack-unwind checks remain mandatory, with the unchanged
+15-second simulator limit. Canonical Make wiring and all-board artifact
+exclusions pass the 50 focused integration regressions.
+
+The shared ten SFR declarations preserve both representative bringup and
+timebase-fixture BINs byte-for-byte; directly coupled timebase/TX corpora also
+pass for both boards. These results are host-tested, image-checked and simulated,
+not hardware-observed. They do not establish calibration, captured TX/ACK end,
+PM continuity, a multiwrap epoch, a real MAC adapter or complete-stack fit.
+No board image links or uploads this standalone executable.
+
 ## Offline Beacon candidate collection coverage
 
 `make test-nwk-candidates` composes the actual MAC frame/Beacon and NWK Beacon

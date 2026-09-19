@@ -63,7 +63,17 @@
     X(SOC_RFST, 0xe1) \
     X(SOC_RFIRQF0, 0xe9) \
     X(SOC_RFIRQF1, 0x91) \
-    X(SOC_RFERRF, 0xbf)
+    X(SOC_RFERRF, 0xbf) \
+    X(SOC_T2CTRL, 0x94) \
+    X(SOC_T2MSEL, 0xc3) \
+    X(SOC_T2M0, 0xa2) \
+    X(SOC_T2M1, 0xa3) \
+    X(SOC_T2MOVF0, 0xa4) \
+    X(SOC_T2MOVF1, 0xa5) \
+    X(SOC_T2MOVF2, 0xa6) \
+    X(SOC_T2IRQF, 0xa1) \
+    X(SOC_T2IRQM, 0xa7) \
+    X(SOC_T2EVTCFG, 0x9c)
 
 #define SFR_ADDRESS(name, address) name##_ADDRESS = address,
 enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };

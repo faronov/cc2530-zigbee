@@ -158,6 +158,16 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The isolated [awake MAC Timer foundation](docs/MAC_TIME.md) has
+`make BUILD=build/mac-time-check test-mac-time`, also in `test-common`.
+Keep the actual timebase/service/caller link order and all three immediate
+relocated-listing snapshots, exact MMIO/latch/ABI proof, torn-latch and alias
+negative controls, and independent deadline/work bounds. Its positive
+512/`FFFFFF` periods do not define a power-of-two coarse modulus, calibrated
+clock or captured TX/ACK end. Faults retain ownership; do not add implicit
+recovery or silently compose its quiescent-radio contract with RX/TX.
+**Never flash or upload `mac_time_test.ihx`; no board image may link it.**
+
 The separate [offline MAC transmission scheduler](docs/MAC_TX.md) has
 `make BUILD=build/mac-tx-check test-mac-tx`, also in `test-common`.
 It composes the actual MAC codec with one owned frame copy and abstract

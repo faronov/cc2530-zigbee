@@ -447,6 +447,17 @@ unsupported; queue/controller integration, physical ACK/retries, a boot-disarmed
 fixture and separately authorized on-air acceptance remain open. No MAC,
 networking, calibrated power or complete-stack-fit claim follows.
 
+## Isolated MAC Timer foundation
+
+The [awake MAC Timer service](docs/MAC_TIME.md) configures positive periods
+512/`FFFFFF`, confirms asynchronous RUN through STATE and reads coherent raw
+fine/coarse tuples, with the TI low-byte-FF erratum workaround. Independent
+deadline/work limits and retained faults prevent unbounded retries or partial
+publication. `make test-mac-time` is **host-tested, image-checked and simulated**.
+It requires reset-exclusive timer ownership and a quiescent radio; it is not
+captured TX/ACK end, a calibrated symbol clock or a real MAC adapter.
+No board image links it; never flash `mac_time_test.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

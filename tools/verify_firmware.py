@@ -246,6 +246,9 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith("_mac_time_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("mac_time.c", "test_mac_time.c", "host_mac_time.c")),
+            "Board image must not link the isolated MAC Timer foundation")
     require(not any(name.startswith("_nwk_candidates_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("nwk_candidates.c", "test_nwk_candidates.c")),
             "Board image must not link the isolated NWK candidate collector")

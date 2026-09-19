@@ -1132,6 +1132,26 @@ Test identities and payloads are original synthetic data. The PDF and
 temporary PDF reader are research-only and are not shipped in Git or CI;
 the original document's notices and licenses are not replaced by BSD-3-Clause.
 
+### Awake MAC Timer foundation sources
+
+The [Timer2 service and synthetic tests](MAC_TIME.md) are original
+BSD-3-Clause work. Functional facts come from TI SWRU191F, April2009/revised
+April2014, sections4.4-4.5 and chapter22: system-clock ownership, asynchronous
+first start, positive period replacement, RUN versus STATE, CC253x event
+selectors, common live latching and masked flags. The exact register/page
+derivations are recorded in the dedicated contract. SWRZ031, April2009/history
+2009-04-29, section1.2 pp.2-3 supplies the low-byte-FF latch workaround.
+
+SWRS081B, April2009/revised February2011, p.21 and SWRU191F's overview p.22
+advertise end capture, whereas the register-level procedure in section22.1.10 p.199
+establishes SFD-rising capture. This unresolved distinction, capture-register
+overwrite/coherence and freshness prevent adding a captured-end API.
+CC2541 proprietary-mode TXCAP/RXCAP controls in Table25-13 p.304 are not
+CC2530 controls and are not transferred. No SDK implementation, private
+capture, identity or recovery material was imported; manuals remain linked
+references, not redistributed artifacts. Offline models do not establish
+physical capture semantics, calibration or PM/debugger continuity.
+
 ### Offline ED Beacon candidate sources
 
 The [four-entry collector](NWK_CANDIDATES.md), its copied-record policy and
