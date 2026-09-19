@@ -470,6 +470,24 @@ Same-reset mixing with legacy RX, queue/controller integration, physical
 ACK/retries, busy-channel/fault recovery and broader RF acceptance remain open.
 Neither this observation nor old image-specific records establish MAC/networking.
 
+## Isolated filtered receiver and AUTOACK
+
+The [receiver/AUTOACK owner](docs/RADIO_AUTOACK.md) configures and verifies
+caller PAN/short/IEEE addresses, version-0 hardware filtering, CRC metadata
+and unslotted hardware ACK with Pending0. It maintains an RX request, copies
+complete queued frames through RFD, and explicitly stops/drains without
+aborting an in-flight reception or ACK. CRC-bad bodies remain explicitly
+classified; operational faults retain ownership without hidden cleanup.
+
+`make test-radio-autoack` is **host-tested, image-checked and simulated only**,
+with both-board 4410 CODE bytes,427 ordinary XDATA +64 reserved and whole-run
+SP`0x33`. It runs once per board in `test-common`, but no board image links it.
+**Never flash `radio_autoack_test.ihx`.** AUTOACK is RF transmission, not passive
+reception; no hardware ACK/timing observation or finite over-air ACK-count
+guarantee is supplied. Broadcast-AR and ignored ACK-FCF compatibility remain
+explicit limits. Physical stop/drain is not IFS completion, a continuous
+MAC/POLL window closure, ordinary-TX handoff or security acceptance.
+
 ## Isolated MAC Timer foundation
 
 The [awake MAC Timer service](docs/MAC_TIME.md) configures positive periods

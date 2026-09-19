@@ -164,6 +164,18 @@ is test-only: do not flash it, add it to firmware support claims or upload it
 as a board image. Protocol codecs must reject unsupported security/layouts
 explicitly and must not equate syntactic decoding with authenticated input.
 
+The isolated [filtered receiver/AUTOACK owner](docs/RADIO_AUTOACK.md) has
+`make BUILD=build/radio-autoack-check test-radio-autoack`, also in `test-common`.
+Preserve the real timebase/service/caller link, all three immediate snapshots,
+complete libc-scratch exclusions, atomic frame publication and exactly-once
+destructive RFD reads. Its separate 24-KiB CODE/1536-byte XDATA reservation
+and SP7C caps do not enlarge earlier budgets. Soft stop must retain AUTOACK
+through in-flight completion and explicitly drain frames, never abort/flush
+or hide loss. Do not turn physical STOPPED into MAC/POLL CLOSED, IFS completion,
+ordinary-TX permission or a release to another reset-exclusive API.
+AUTOACK transmits RF autonomously; these tests and CI authorize no hardware.
+**Never flash or upload `radio_autoack_test.ihx`; no board image may link it.**
+
 The isolated [awake MAC Timer foundation](docs/MAC_TIME.md) has
 `make BUILD=build/mac-time-check test-mac-time`, also in `test-common`.
 Keep the actual timebase/service/caller link order and all three immediate

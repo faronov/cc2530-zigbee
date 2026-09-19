@@ -409,6 +409,15 @@ Exit:
 
 ### M3 - Radio and end-device MAC
 
+The separate [filtered receiver/AUTOACK owner](RADIO_AUTOACK.md) implements
+cold address/profile verification, persistent RX request, atomic complete-frame
+servicing and non-aborting stop with explicit FIFO drainage. Both boards have
+host/image/alias-aware simulation evidence:4410 CODE,427+64 XDATA and SP33.
+This is an RF-transmitting hardware-service foundation, not a board image or
+silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
+captured timing (#40), continuous ordinary-TX/RX arbitration, IFS and loss-aware
+MAC/POLL handoff open. Physical STOPPED is not protocol CLOSED or membership.
+
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.
 One foreground service invokes the real bounded passive receiver; full

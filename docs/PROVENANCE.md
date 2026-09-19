@@ -558,6 +558,33 @@ positions. This is public reference-source inspection, not a source/binary
 identity proof for the installed Nordic firmware. Neither its discarded
 octets nor a software-recomputed CRC are independent received-FCS evidence.
 
+### Filtered receiver/AUTOACK ownership sources
+
+The original [receiver/AUTOACK owner](RADIO_AUTOACK.md#primary-basis-and-limits)
+uses TI SWRU191F (April2009, revised April2014), not an imported radio stack.
+Section23.4.3/Table23-1 p214 establishes the unknown-after-reset local-address
+RAM; sections23.9.5 pp224-226 and23.9.7-8 pp230-232 establish filtering,
+AUTOCRC metadata, automatic-ACK eligibility/DSN and unslotted12-symbol timing.
+Sections23.9.1-2 pp222-223, Fig23-20 p235/Table23-3 p236, flags pp210-211
+and registers pp257-267 underpin persistent RX, non-aborting mask clear,
+fresh idle confirmation and explicit FIFO drainage through RFD.
+The register definitions RXMASKSET/RXMASKCLR resolve older prose names.
+
+Disable source matching/AUTOPEND/PENDING_OR; incoming Pending is not echoed.
+Broadcast filtering has no express AUTOACK broadcast exclusion. Opaque
+security-enabled bodies are not excluded by this register profile, and
+compatibility with all ignored ACK-FCF variants accepted by `mac_tx` remains
+unproved. Sticky TXACKDONE supplies neither a per-frame ACK count nor time.
+RX-to-RX timeout removal is not MAC IFS; physical stop/drain is not receiver-on
+POLL CLOSED. These limits are part of the contract, not hidden test restrictions.
+
+SWRS081B (revised February2011), Table2 p24 supplies the reference raw05 power
+profile, not calibrated board output. SWRZ031 (April2009), sections1.1-1.2
+pp2-3 covers DMA/Timer2 issues; this owner uses neither. All implementation,
+synthetic controller/vector and linked proof code is original BSD-3-Clause.
+No SDK code, Contiki implementation, capture, identity or hardware observation
+is imported; no primary manual is redistributed.
+
 ### M2 deterministic PRNG sources
 
 The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)

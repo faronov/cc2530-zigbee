@@ -118,6 +118,17 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_radio_autoack_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_radio_autoack_acquire", "_radio_autoack_receive",
+                         "_radio_autoack_stop", "_radio_autoack_diagnostic", "_radio_autoack_state",
+                         "_radio_autoack_reserved_end", "_radio_autoack_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "receiver AUTOACK"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("radio_autoack.c", "test_radio_autoack.c", "host_radio_autoack.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "receiver AUTOACK"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_scan_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_scan_init", "_mac_scan_start", "_mac_scan_step",

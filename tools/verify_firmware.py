@@ -226,6 +226,10 @@ def xdata_ranges(symbols):
 
 def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name in IMAGES, "Unknown firmware image")
+    require(not any(name.startswith("_radio_autoack_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in
+                    ("radio_autoack.c", "test_radio_autoack.c", "host_radio_autoack.c")),
+            "Board image must not link the isolated receiver AUTOACK owner")
     require(not any(name.startswith("_mac_scan_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_scan.c", "test_mac_scan.c", "host_mac_scan.c")),
             "Board image must not link the isolated MAC scan controller")

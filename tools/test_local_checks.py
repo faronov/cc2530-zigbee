@@ -55,7 +55,8 @@ class LocalChecksTests(unittest.TestCase):
         commands = self.dry_run("test-local")
         self.assertEqual(sum("unittest" in args for args in commands), 1)
         expected_components = {
-            "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_queue", "radio_tx",
+            "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
+            "radio_queue", "radio_tx",
             "flash", "flash_exec", "flash_write", "nv_record",
             "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_frame", "aps_frame", "protocol_frame",
@@ -82,6 +83,8 @@ class LocalChecksTests(unittest.TestCase):
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
+            ("radio_autoack", (("timebase", "timebase"), ("radio_autoack", "radio_autoack"),
+                               ("radio_autoack_test", "radio_autoack_test"))),
             ("radio_tx", (("timebase", "timebase"), ("radio_fifo", "radio_fifo"),
                           ("radio_tx", "radio_tx"), ("radio_tx_test", "test_radio_tx"))),
             ("mac_tx", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
@@ -111,6 +114,8 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual([(Path(args[1]).name, Path(args[2]).name) for args in snapshots],
                              [(f"{source}.rst", f"{service}_test.{module}.rst")
                               for source, module in modules])
+            start = commands.index(link) + 1
+            self.assertEqual(commands[start:start+len(snapshots)], snapshots)
             for args in snapshots:
                 self.assertEqual(Path(args[1]).parent, output)
                 self.assertEqual(Path(args[2]).parent, output)

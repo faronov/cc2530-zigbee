@@ -677,6 +677,39 @@ continuous-RX adapter, whole Association confirmation or membership. Configured
 PIB F, captured end/ordering and loss-free closure remain deployment
 preconditions. Neither executable is board firmware or a CI-uploaded image.
 
+## Filtered receiver/AUTOACK owner coverage
+
+`make test-radio-autoack` composes the unchanged real timebase, the
+[receiver/AUTOACK owner](RADIO_AUTOACK.md) and its genuine caller in that order.
+Both-board strict native and ASan/UBSan corpora cover155490 API calls, including
+all bounded lengths/CRC bytes, address/profile values, exact storage ownership,
+atomic publication, inactive tails and retained faults.
+
+Both boards produce4410 CODE bytes and427 ordinary XDATA +64 reserved, with
+initial SP20, MMIO-sampled peak2D and whole-run peak33. The separate24-KiB CODE,
+1536-byte reservation and SP7C limits leave older budgets unchanged.
+The125 genuine sequences execute759 API calls and549 exactly-once RFD reads.
+They cover multiple/circular/full FIFO, concurrent arrival, delayed calibration,
+receive/ACK soft stop, stale flags, partial/overflow/underflow/pointer faults,
+equality/work exhaustion, and no-MMIO/error-output preservation.
+
+Complete CODE/constants/runtime, public/private/helper/caller/field metadata
+multisets, storage and all three immediate listing snapshots are pinned.
+All6248 artifact negatives and the genuine missing-alias negative pass.
+Entire libc scratch, unused RAM, full status tail, upper IRAM and stack unwind
+remain guarded, with the unchanged15-second limit per simulator process.
+The164 exhaustive libc-overlap rejections run in11 fresh sequences of at most
+16 each, with genuine acquisition/empty/stop postconditions. This removes a
+parent-observed timeout without dropping any original input, snapshot or guard.
+Common orchestration runs the corpus once per board; every board image rejects
+the service/test symbols and sources. No board IMAGE or upload path is added.
+
+These are host-tested, image-checked and simulated results only. The synthetic
+controller does not calculate FCS, apply over-air filtering or generate RF ACKs.
+No hardware ACK/timing, broadcast exclusion, MAC/security acceptance, IFS,
+continuous ordinary-TX/RX handoff or loss-free POLL closure is established.
+Never flash `radio_autoack_test.ihx`.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

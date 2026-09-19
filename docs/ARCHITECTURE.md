@@ -783,6 +783,38 @@ BAD_CRC nonpublication/reuse, a pre-RF timeout with separate reset recovery
 and the16-attempt terminal cap. Generic and broader RF fault recovery remain
 unobserved; neither result introduces transmission, continuous queues or MAC.
 
+## Isolated filtered receiver and AUTOACK ownership
+
+The original [AUTOACK owner](RADIO_AUTOACK.md) is a separate reset-exclusive
+foreground hardware service, not a composition of the old RX/TX/FIFO/queue
+or MAC Timer owners. It verifies all12 local-address RAM bytes and a fixed
+version-0 DATA/ACK/command filter, AUTOCRC/AUTOACK, unslotted/Pending0 profile
+and reviewed raw-power settings before requesting RX. It excludes source
+matching/AUTOPEND, ordinary TX, TXFIFO reuse, CSP programs, DMA and IRQs.
+READY additionally requires completed calibration, actual RX, PLL lock and
+RSSI_VALID. Hardware ACK can transmit independently of CPU progress.
+
+One private staged frame makes publication atomic; each destructive RFD read
+executes once. Caller configuration/output must be persistent ordinary XDATA
+beyond the complete timebase/service prefix and outside all linked libc
+scratch. Complete CRC-good and CRC-bad bodies retain raw metadata, with no
+security/duplicate/window parsing. Invalid calls preserve diagnostics/output;
+the first operational fault retains ownership and forbids subsequent MMIO.
+
+Soft stop clears only this owner's RX mask after separately clearing/verifying
+old RFIDLE. It preserves AUTOACK while reception/ACK finishes, confirms fresh
+RFIDLE and physical idle, then retains complete FIFO frames for explicit reads.
+Partial/inconsistent FIFO or any RF error cannot become drained success.
+STOPPED is terminal physical stop/drain, not receiver-on POLL CLOSED, IFS,
+ordinary-TX permission or release to a reset-exclusive service.
+
+Both-board host/image/alias-aware evidence covers4410 CODE,427+64 reserved
+XDATA and whole-run SP33 within separate24576/1536/SP7C limits. No board image
+links this synthetic test composition. Broadcast-AR behavior, global ACK-FCF
+compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration
+and IFS/loss-aware handoff remain full-adapter gates. No silicon AUTOACK or
+finite over-air ACK-count claim follows from bounded CPU calls.
+
 ## Isolated channel-0 DMA copy
 
 [`dma_copy_init(source, destination, length, timeout, limit, diagnostics)`](../include/dma.h)

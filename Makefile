@@ -79,7 +79,7 @@ endif
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
 .PHONY: test-protocol-budget
-.PHONY: test-radio-rx test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
+.PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
 .PHONY: test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
 .PHONY: test-common test-tools test-board test-local
@@ -453,6 +453,25 @@ test-radio-rx: $(BUILD)/host-radio-rx-tests $(BUILD)/radio_rx_test.ihx
 	$(BUILD)/host-radio-rx-tests
 	$(PYTHON) -B tests/boot_radio_rx.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/radio_autoack.rel: src/radio_autoack.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_autoack_test.rel: tests/test_radio_autoack.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_autoack_test.ihx: $(BUILD)/timebase.rel $(BUILD)/radio_autoack.rel $(BUILD)/radio_autoack_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/radio_autoack.rel $(BUILD)/radio_autoack_test.rel
+	cp $(BUILD)/timebase.rst $(BUILD)/radio_autoack_test.timebase.rst
+	cp $(BUILD)/radio_autoack.rst $(BUILD)/radio_autoack_test.radio_autoack.rst
+	cp $(BUILD)/radio_autoack_test.rst $(BUILD)/radio_autoack_test.radio_autoack_test.rst
+
+$(BUILD)/host-radio-autoack-tests: tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c -o $@
+
+test-radio-autoack: $(BUILD)/host-radio-autoack-tests $(BUILD)/radio_autoack_test.ihx
+	$(BUILD)/host-radio-autoack-tests
+	$(PYTHON) -B tests/boot_radio_autoack.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/prng_test.rel: tests/test_prng.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -738,7 +757,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-queue test-radio-tx
+test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common: test-mac-tx test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
