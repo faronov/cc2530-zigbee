@@ -3,9 +3,11 @@
 """Pin and execute the real offline scan/TX/collector composition, without RF."""
 
 import argparse
+from functools import lru_cache
 import hashlib
 import re
 from pathlib import Path
+from types import MappingProxyType
 
 from boot_image import (
     ALIAS, check_alias, check_pc, memory_dump, simulate, snapshot_commands,
@@ -67,6 +69,9 @@ INSTRUCTION = re.compile(
     r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)"
     r"\[\s*\d+\]\s+\d+\s+\S.*$", re.MULTILINE,
 )
+LABEL = re.compile(
+    r"^\s*([0-9A-Fa-f]{6})\s+\d+\s+_([A-Za-z_][A-Za-z_0-9]*):\s*$", re.MULTILINE,
+)
 
 
 def digest(text):
@@ -91,20 +96,48 @@ def field_records(debug):
     return abi_records(debug, r"^T:F[^\n]+$")
 
 
+@lru_cache(maxsize=4)
+def cdb_index(debug):
+    addresses, declarations = {}, {}
+    # Preserve every record and its exact value, including malformed duplicates.
+    # Split at the FIRST value separator: an extra colon must still be rejected.
+    for line in debug.split("\n"):
+        if line.startswith("L:"):
+            record, separator, _ = line[2:].partition(":")
+            if separator:
+                addresses.setdefault("L:" + record, []).append(line)
+        elif line.startswith("F:G$"):
+            parts = line.split("$", 2)
+            if len(parts) == 3:
+                declarations.setdefault(parts[1], []).append(line)
+    return (MappingProxyType({name: "\n".join(lines) for name, lines in addresses.items()}),
+            MappingProxyType({name: tuple(lines) for name, lines in declarations.items()}))
+
+
+@lru_cache(maxsize=12)
 def records(text):
-    return [(int(m[1], 16), bytes.fromhex(m[2])) for m in INSTRUCTION.finditer(text)]
+    return tuple((int(m[1], 16), bytes.fromhex(m[2])) for m in INSTRUCTION.finditer(text))
 
 
+@lru_cache(maxsize=12)
 def listing_metrics(text):
     found = records(text)
     return (len(found), sum(len(data) for _, data in found),
             digest("".join(f"{address:06x}:{data.hex()}\n" for address, data in found)))
 
 
+@lru_cache(maxsize=12)
+def label_index(text):
+    found = {}
+    for match in LABEL.finditer(text):
+        found.setdefault(match[2], []).append(int(match[1], 16))
+    return MappingProxyType({name: tuple(addresses) for name, addresses in found.items()})
+
+
 def label(text, name):
-    found = re.findall(rf"^\s*([0-9A-Fa-f]{{6}})\s+\d+\s+_{name}:\s*$", text, re.MULTILINE)
+    found = label_index(text).get(name, ())
     require(len(found) == 1, f"Missing/duplicate checkpoint/entry label: {name}")
-    return int(found[0], 16)
+    return found[0]
 
 
 def verify(image, symbols, debug, memory, listings, objects):
@@ -121,6 +154,18 @@ def verify(image, symbols, debug, memory, listings, objects):
     require(digest(caller_records(debug)) == CALLER_DIGEST, "Caller ABI changed")
     require(digest(field_records(debug)) == FIELD_DIGEST, "Whole field ABI changed")
     require(set(listings) == set(objects) == set(MODULES), "Incomplete module set")
+    addresses, declarations = cdb_index(debug)
+    for name, (_, address) in ENTRIES.items():
+        record = f"L:G${name}$0$0"
+        require(symbols.get("_" + name) == address
+                and cdb_address(addresses.get(record, ""), record) == address,
+                "Entry/checkpoint address ABI changed: " + name)
+        declaration = (f"F:G${name}$0_0$0({{2}}DF,SV:S),C,0,0,0,0,0" if name == "main"
+                       else f"F:G${name}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0")
+        require(set(declarations.get(name, ())) == {declaration}, "Public return ABI changed: " + name)
+    require(symbols.get("_mac_scan_done") == DONE
+            and cdb_address(addresses.get("L:XG$main$0$0", ""), "L:XG$main$0$0") == DONE + 3,
+            "Exact final checkpoint ABI changed")
     starts, calls, private = {}, {}, set()
     for module in MODULES:
         text = listings[module]
@@ -156,23 +201,18 @@ def verify(image, symbols, debug, memory, listings, objects):
     caller = set()
     for name, (address, size) in CALLER.items():
         prefix = f"Ftest_mac_scan${name}$0_0$0"
-        require(cdb_address(debug, "L:" + prefix) == address
+        require(cdb_address(addresses.get("L:" + prefix, ""), "L:" + prefix) == address
                 and f"S:{prefix}({{{size}}}" in debug, "Caller object ABI changed: " + name)
         span = set(range(address, address + size))
         require(not span.intersection(private | caller) and span <= allocated, "Caller storage overlap")
         caller.update(span)
     require(caller == set(range(PRIVATE_END, 0x58f)), "Caller coverage changed")
     for name, (module, address) in ENTRIES.items():
-        require(symbols.get("_" + name) == address and label(listings[module], name) == address
-                and cdb_address(debug, f"L:G${name}$0$0") == address
+        require(label(listings[module], name) == address
                 and address in starts[module], "Entry/checkpoint address ABI changed: " + name)
-        declaration = (f"F:G${name}$0_0$0({{2}}DF,SV:S),C,0,0,0,0,0" if name == "main"
-                       else f"F:G${name}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0")
-        declarations = set(re.findall(rf"^F:G\${re.escape(name)}\$[^\n]*$", debug, re.MULTILINE))
-        require(declarations == {declaration}, "Public return ABI changed: " + name)
-    require(symbols["_mac_scan_done"] == DONE and label(listings["mac_scan_test"], "mac_scan_done") == DONE
-            and DONE in starts["mac_scan_test"] and raw[DONE:DONE + 4] == b"\0\x80\xfe\x22"
-            and cdb_address(debug, "L:XG$main$0$0") == DONE + 3, "Exact final checkpoint ABI changed")
+    require(label(listings["mac_scan_test"], "mac_scan_done") == DONE
+            and DONE in starts["mac_scan_test"] and raw[DONE:DONE + 4] == b"\0\x80\xfe\x22",
+            "Exact final checkpoint ABI changed")
     require(raw[3:6] == bytes((2, ENTRIES["main"][1] >> 8, ENTRIES["main"][1] & 255)),
             "Startup target changed")
     for module, names in (

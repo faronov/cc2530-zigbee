@@ -376,6 +376,30 @@ was not repeated. These remain offline synthetic/linked/simulated results,
 not association or a working radio adapter; the117-byte CODE margin does not
 authorize increased limits or a full-stack fit claim.
 
+### Host-side proof parsing
+
+The checker indexes complete CDB address/public-declaration records and listing
+labels, retaining every duplicate and conflicting value. Address validation
+still uses the shared `cdb_address` rules. Immutable parsed instructions,
+ordered-listing metrics and indices use bounded caches keyed by the **complete
+exact input text**: four CDB texts and twelve texts per listing cache. No image
+or successful verification result is cached. Every call still validates CODE,
+layout, ABI, storage, instruction bytes and required real calls; cheap public
+map/CDB failures now precede expensive instruction traversal.
+
+Using identical `480087f` linked artifacts and the unchanged76-negative corpus,
+one positive check plus the negatives (including their duplicate-declaration
+positive control,78 total `verify` calls) took **68.933 ->12.003 seconds** under
+`cProfile`, a **5.74x** speedup with initially cold parse caches. This measures
+host-side artifact checking only, not simulator or full-matrix latency.
+Eight synthetic parser regressions additionally cover exact-text changes,
+malformed/conflicting/identical records, label whitespace and duplicates,
+ordered instruction mutations, immutability and bounded cache eviction.
+Both complete board proofs still execute all28 genuine scenarios, all76
+artifact negatives and the missing-alias negative with unchanged guards and
+15-second per-simulator deadline. The51 Make/artifact regressions also pass.
+No firmware rebuild, hardware access or new dependency was needed.
+
 ## Reproduction and integration
 
 Run the canonical targets from the repository root:
@@ -392,6 +416,12 @@ Each link immediately snapshots all six listings as
 the proof's inputs. Object extent checks additionally consume the six `.rel`
 files. The common checks include this composition once per board definition
 in `test-local`. All51 focused Make/artifact regressions pass.
+
+The host-only metadata regressions are included in `make test-tools`, or run:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_mac_scan_metadata -q
+```
 
 For additional native sanitizer coverage:
 

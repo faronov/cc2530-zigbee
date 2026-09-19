@@ -64,6 +64,36 @@ upper-IRAM, stack, poll-limit or retained-fault check is relaxed. These changes
 provide **host-tested, image-checked and simulated** evidence only; they
 perform no USB/RF operation or new hardware acceptance.
 
+### Scan-proof artifact parsing
+
+A later focused measurement uses the exact `480087f` scan artifacts and its
+unchanged76 damaged-artifact cases. Each run includes one normal verification
+and the identical-public-declaration positive control inside the negatives:
+78 verification calls in total. Both measurements use `cProfile`; parse caches
+start empty. Artifact loading, new unit tests and actual simulation are outside
+this timed interval.
+
+| Corpus | Before | After | Speedup |
+| --- | ---: | ---: | ---: |
+| Same scan positive/negative artifact corpus |68.933 s|12.003 s|5.74x|
+| Python function calls in that interval |20,452,536|6,368,154|not a wall-time measurement|
+
+The [scan proof](MAC_SCAN.md#host-side-proof-parsing) caches only immutable
+parsed metadata and ordered-listing metrics by complete exact source text,
+with fixed small bounds. CDB indices retain malformed values and all duplicate
+records for the existing strict validator; public declaration conflicts and
+duplicate labels still fail. Earlier public map/CDB checks reject bad inputs
+before costly instruction traversal, without removing any acceptance check.
+No CODE image or successful proof result is cached.
+
+Eight additional synthetic metadata tests and all51 focused Make/artifact
+regressions pass. The complete `generic` and `lg_esl29_rev03` proofs were rerun
+against their unchanged images: each retains76 artifact negatives, the real
+missing-alias negative and all28 genuine target scenarios. Whole CODE/ABI/
+storage/listing checks, stack/upper-IRAM guards and the15-second simulator
+deadline remain unchanged. This is **host-tested, image-checked and simulated**
+evidence only, not a full-matrix speedup or a hardware observation.
+
 ## Reserved flash reader coverage
 
 `make test-flash` exercises only the new reader. The host corpus checks
