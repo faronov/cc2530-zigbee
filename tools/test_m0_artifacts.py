@@ -178,11 +178,24 @@ class LayoutTests(unittest.TestCase):
 
     def test_isolated_radio_tx_cannot_enter_board_images(self):
         for image in IMAGES:
-            for name in ("_radio_tx_send_init", "_radio_tx_cca_init", "_radio_tx_fault", "_radio_tx_test_result"):
+            if image == "radio_tx_fixture":
+                continue
+            for name in ("_radio_tx_send_init", "_radio_tx_cca_init", "_radio_tx_fault",
+                         "_radio_tx_fixture_state", "_radio_tx_fixture_poll"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "radio TX/CCA"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for source in ("radio_tx.c", "test_radio_tx.c"):
+            for source in ("radio_tx.c", "radio_tx_fixture.c", "radio_tx_fixture_state.c"):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "radio TX/CCA"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
+    def test_radio_native_callers_never_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_radio_tx_test_result", "_radio_tx_component_main", "_radio_fifo_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "tests/models"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("test_radio_tx.c", "test_radio_tx_fixture.c",
+                           "test_radio_fifo.c", "test_radio_fifo_fixture.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "tests/models"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
     def test_isolated_radio_queue_cannot_enter_board_images(self):
@@ -203,13 +216,21 @@ class LayoutTests(unittest.TestCase):
 
     def test_isolated_radio_fifo_cannot_enter_board_images(self):
         for image in IMAGES:
-            if image == "radio_fifo_fixture":
+            if image in ("radio_fifo_fixture", "radio_tx_fixture"):
                 continue
             for name in ("_radio_fifo_clear_init", "_radio_fifo_preload_init"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
                     verify_layout(dict(self.symbols, **{name: 0x100}), self.memory, self.debug, image)
             with self.assertRaisesRegex(ValueError, "isolated radio FIFO"):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$radio_fifo.c$1", image)
+
+    def test_fifo_board_caller_cannot_enter_tx_fixture(self):
+        for name in ("_radio_fifo_fixture_state", "_radio_fifo_fixture_cycle"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "FIFO board caller"):
+                verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, "radio_tx_fixture")
+        for source in ("radio_fifo_fixture.c", "radio_fifo_fixture_state.c"):
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, "FIFO board caller"):
+                verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", "radio_tx_fixture")
 
     def test_passive_rx_never_enters_existing_board_images(self):
         for image in IMAGES:
@@ -224,7 +245,7 @@ class LayoutTests(unittest.TestCase):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
     def test_dma_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 11)
+        self.assertEqual(len(IMAGES), 12)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -234,8 +255,8 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "isolated DMA"):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
-    def test_aes_cannot_enter_any_of_the_fourteen_board_images(self):
-        self.assertEqual(len(IMAGES), 11)
+    def test_aes_cannot_enter_other_board_images(self):
+        self.assertEqual(len(IMAGES), 12)
         for image in IMAGES:
             if image == "aes_fixture":
                 continue

@@ -29,8 +29,14 @@ STATE_FIELDS = (
     ("initial_flags", 9), ("flags", 9), ("guards", 2), ("reserved", 3),
 )
 IMAGE_HASHES = {
-    0x140: "f19112019fc6b3ab22d81ad4b8d4d1a5fd310a36ee38493cfcefa8ab2a8974a0",
-    0x168: "e18db3859aa23c673e9edb5770f65056efea8040986e560c49fcc9c88061094d",
+    0x140: "d3085c2c616b2d0a4907bf22c1652cf7a6f94de3f3f613bee35931766f16359d",
+    0x168: "74addb4a8af51eb3076aa767c9660e7b16b77c3f537cf34ddfb2c2ee5a15727e",
+}
+CLOCK_PROFILES = {
+    (731, 25, 8844): ("45662edf1782d56f2b3b85b77b7d16253e43c809ea536ec63fa6ee8c34f9e1aa",
+                      "7f361afab0a46b62821c363b00140e3eb20e944ec31ec53f3a357437cae7707d", 8),
+    (771, 25, 8884): ("794774c95be6c7f2995e217e33e7c6f877480628562448d87fba17fe05d3e179",
+                      "037359a09ff3850faeeed4d6eac67ebb386209e958989eea74ffc5df09a4eb47", 8),
 }
 DIRECT = {0x25, 0x35, 0x43, 0x45, 0x53, 0x75, 0x95, 0xb5, 0xc0, 0xd0, 0xe5, 0xf5}
 DIRECT |= set(range(0x88, 0x90)) | set(range(0xa8, 0xb0))
@@ -167,10 +173,10 @@ def verify_fixture(image, symbols, debug):
     layout_fields(debug, "dma", "verified", tuple(zip(DMA_FIELDS, (4, 2) + (1,) * 13)))
     code, proof = verify_dma_relocated(image, symbols, debug)
     state, a, b, work = (symbols["_dma_fixture_" + n] for n in ("state", "a", "b", "work"))
-    require((state, a, b, work, symbols["l_XSEG"], symbols["s_SSEG"]) == (0x88, 0xfc, 0x10e, 0x120, 324, 0x69)
+    require((state, a, b, work, symbols["l_XSEG"], symbols["s_SSEG"]) == (0x92, 0x106, 0x118, 0x12a, 334, 0x3c)
             and symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0,
             "DMA fixture/private allocation layout changed")
-    require(proof["xdata_start"] + 67 == state and symbols["__gptrput_PARM_2"] == 0x143,
+    require(proof["xdata_start"] + 67 == state and symbols["__gptrput_PARM_2"] == 0x14d,
             "DMA caller/helper allocation exclusion changed")
     for name, size in (("state", SIZE), ("a", 18), ("b", 18), ("work", 19)):
         require(cdb_address(debug, f"L:G$dma_fixture_{name}$0_0$0") == symbols["_dma_fixture_" + name] and

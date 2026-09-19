@@ -17,12 +17,18 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
-`make test-local` now covers all twenty-two board/image checks while running
+`make test-local` now covers all twenty-four board/image checks while running
 the Python tool suite once and each standalone component corpus once per
 board definition instead of once per image. It uses isolated component and
 board-image directories and serial, fail-fast submakes. The existing full
-`make ... all test` and twenty-two-job CI coverage remain available.
-The measurements below predate the flash fixture and retain their original
+`make ... all test` and twenty-four-job CI coverage remain available.
+CI runs the complete board-independent Python tool suite once in the
+generic/bringup job; that suite itself exercises both-board image profiles.
+Every matrix job still runs all standalone component and selected-board
+native/linked/simulator checks. It no longer repeats the identical Python
+suite twice per job, while retaining the15-minute job and15-second simulator
+limits and the seven-path artifact whitelist.
+The measurements below predate the flash/TX fixtures and retain their original
 twenty-image scope; they are not timings for the expanded matrix.
 Dry-run regressions account for every component, board/image, fixture host
 test and tool-suite invocation; synthetic submake failures prove that later
@@ -260,7 +266,7 @@ This is **host-tested, image-checked and simulated only**. Synthetic status,
 XMAP and flash-window effects are not physical flash physics,20-us timing,
 endurance, power interruption, preservation of real excluded regions or
 recovery. Both hardware gates and #8 remain open; no device/private data access
-was performed. CI has22 board jobs and the unchanged seven-path board-artifact
+was performed. The expanded CI has24 board jobs and the unchanged seven-path board-artifact
 whitelist, with `hardware_tested=false`. Standalone executables, snapshots,
 private recovery files and captures are not uploaded as board artifacts.
 
@@ -308,11 +314,83 @@ unallocated memory are checked. The unchanged FIFO corpus (69,895 native
 cases/99 linked scenarios) and timebase checks also passed for both boards.
 
 The model is shared by host and simulator, not independent RF evidence.
-No frame capture, calibrated power/timing, TX board fixture, same-reset
+No frame capture, calibrated power/timing, same-reset
 legacy RX/TX handoff or queue/controller integration is established.
-All board images reject the new module and standalone harness. The
+Only the separately proved TX board fixture admits the service; all board
+images reject its standalone harness. The
 [future physical procedure](RADIO_TX.md#separately-authorized-future-rf-procedure)
 remains separately authorized and is never run by Make/CI.
+
+### Boot-disarmed TX board composition and clock staging
+
+The actual `radio_tx_fixture` image uses the real clock/FIFO/TX services with
+separate finite ARM/RUN windows. Consuming RUN reaches ADMITTED without MMIO;
+only a further continuation performs one conditional-clear channel15/raw05
+attempt. Confirmed PHY_DONE/CCA_BUSY precedes explicit final FIFO clear and
+END. FAULT is retained and never authorizes retry or implicit cleanup.
+
+| Current image | CODE bytes | Ordinary XDATA +64 reserved | Stack start |
+| --- | ---: | ---: | --- |
+| `clock_test`, either board |3402|164+64=228|`0x21`|
+| `clock_fixture`, generic / LG |3781 /3821|166+64=230|`0x21`|
+| `radio_tx_fixture`, generic / LG |11291 /11331|347+64=411|`0x61`|
+| `radio_fifo_fixture`, generic / LG |8990 /9030|319+64=383|`0x4F`|
+| `dma_fixture`, generic / LG |8873 /8913|334+64=398|`0x3C`|
+| `aes_fixture`, generic / LG |12776 /12816|447+64=511|`0x41`|
+| `prng_fixture`, generic / LG |7272 /7312|320+64=384|`0x21`|
+| `radio_rx_fixture`, generic / LG |9143 /9183|548+64=612|`0x49`|
+
+The original TX composition hit a real lower-DATA/OSEG link failure: no
+contiguous21-byte overlay area was available. Bounded clock XDATA staging
+reduces permanent clock DATA45 to12, changes clock XDATA44 to54 and module
+CODE1824 to1875, without changing its public ABI, clock/deadline/rollback
+semantics, compiler flags or any existing budget. It is not additional SRAM:
+XDATA1F00..1FFF still aliases IRAM, ordinary allocation still stops below1E00
+and all64 status bytes remain reserved.
+
+Both canonical TX builds/image checks and their1,329 native fixture polls
+pass. Normal/failure clock, clock-board and TX native executables also pass
+combined AddressSanitizer/UndefinedBehaviorSanitizer on both boards.
+The original clock CMD/STA/source/clamping/bounds/rollback corpora,
+40 linked standalone scenarios and full771-step clock-board corpus pass on
+both boards. Clock standalone/board listings are now independently captured
+immediately after linking and checked in exact instruction order. TX retains
+nine immediate snapshots, complete CODE/ABI/private/caller/field/storage
+proofs, native/model exclusions and the existing15-second simulator bound.
+Its complete fixture contract and genuine corpus are recorded in
+[RADIO_TX_FIXTURE.md](RADIO_TX_FIXTURE.md#final-tx-image-memory-and-offline-evidence).
+The ten unaffected bringup/debug/timebase/IRQ/flash board BINs were rebuilt
+and compared byte-for-byte with published `61394a2` CI run35428791950 artifacts;
+all match, rather than merely remaining inside their size budgets.
+
+The complete TX corpus runs36 cases/80 checkpoints/38,674 real MMIO events
+per board. MMIO-stop samples peak at`0x74`, while the separately parsed,
+required cumulative simulator high-water reaches **`0x77 < 0x80`**. Neither
+metric establishes a hardware or universal worst-case stack bound.
+Clock and TX pin72 and404 complete private metadata records respectively,
+including helper declarations/entries/ends and duplicate multiplicity.
+Conflicting public ABI/field records, corrupted raw line separators and
+hostile appended records reject, even with updated outer artifact hashes.
+
+The five older clock-consuming fixtures retain every native/execution case:
+FIFO257 cycles/11 bounded segments; DMA257 cycles/514 transfers/6,289 bytes/
+41 faults; AES102 scenarios including257 cycles/514 calls/32,896 bytes;
+PRNG33 segments/4,111 READY checkpoints/131,084 words plus stopped-frame and
+9 driver/81 flag faults; RX67 checkpoints and full-cap33 continuations.
+AES's long normal case now uses nine bounded continuations, preserving and
+comparing complete CPU/RAM/peripheral state and idle controller-model state.
+No case/count/byte coverage or firmware/simulator deadline was relaxed.
+Normalized non-clock service instructions remain unchanged; RX normalization
+was compared against both published pre-staging images and every one of its
+4,487 byte mutations rejected. Clock/PRNG manual preflights use the verified
+new operands/stack layout rather than weakening their checks.
+
+The earlier clock/FIFO/DMA/AES/PRNG/RX sections retain their original,
+image-specific resource/address and physical records. Changed clock consumers
+require reviewed updated emission proofs and full corresponding corpora;
+old physical acceptance is not inherited by their newly linked images.
+These current measurements are **host-tested/image-checked/simulated**,
+not hardware observations or proof that a complete Zigbee stack fits.
 
 ## Offline MAC transmission state coverage
 
@@ -887,7 +965,10 @@ failing no-alias control. SFR values are **synthetic**: generic C52/s51 does not
 model CC2530 analogue oscillator startup, source stability, divider-transition
 timing, automatic calibration, or physical Sleep Timer ticking/latching.
 
-SDCC 4.2.0 model-large/code-size accounting:
+SDCC 4.2.0 model-large/code-size accounting for the historical cancellation
+fix below; the later [clock staging prerequisite](RADIO_TX_FIXTURE.md#clock-iram-prerequisite-resolved-without-changing-old-budgets)
+changes these allocations and image bytes without inheriting old hardware
+acceptance:
 
 | Component | CODE | Ordinary XDATA | IRAM |
 | --- | ---: | ---: | --- |

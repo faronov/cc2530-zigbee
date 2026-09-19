@@ -3,6 +3,7 @@
 import hashlib
 import re
 
+from dma_fixture import DIRECT
 from prng_fixture import PRNG_LENGTHS
 from radio_fifo_fixture import instructions
 from verify_firmware import (
@@ -14,9 +15,16 @@ from verify_firmware import (
 SIZE = 96
 CHECKPOINTS = tuple("_radio_rx_fixture_" + n for n in ("before", "ready", "fault", "end"))
 HASHES = {
-    0x140: (9120, "473758bc8bf8e9bf1b503117e254a907ac23918a34bf006bbb62c4e3da63a9e7"),
-    0x168: (9160, "0e31578a708d9c8d4556caec33f062fd82baf7498ebef1af3b708f868ab6c8d2"),
+    0x140: (9143, "b4f46a781bcedf0c69d48341d3bda3b83ae106621f8226fbb794986dea56b5b1"),
+    0x168: (9183, "241d6dad76db7dd98f9c5c12a647e8f1af854ad98599297c6d4d093a856c883d"),
 }
+CLOCK_PROFILES = {
+    (734, 25, 9084): ("76e25ad5f5c7fa27efe683a096a2e3cbe617a9d04134565fbe8cbd8d478aa3cb",
+                      "f011e07e0795b690cfc13f86bf9f2acf7012493bdb38dc799f303748f67fa7fc", 8),
+    (774, 25, 9124): ("d7a3ba03e602835ca92e0889eccc85a4ba48d99137a6c8010d7e4fe578de376e",
+                      "10b56899bbf4b994c858c9997c344c90f90c0c4159914a2861566331cb9a53a4", 8),
+}
+DRIVER_HASH = "eb279689518f0b1cebafcdcad15356e3fb41d2bf7b88985038d61848232f97de"
 # SWRU191F (April2014), Table2-3 p.37: 52 is two-byte ANL direct,A.
 # Reviewed below as the sole ANL AR0,A (not an SFR).
 LENGTHS = PRNG_LENGTHS | CLOCK_INSTRUCTION_LENGTHS | {
@@ -42,6 +50,67 @@ STATE_FIELDS = (
     ("initial_flags", 7), ("flags", 7), ("guards", 3),
 )
 FLAGS = (0xa9, 0xb9, 0x88, 0x98, 0x9b, 0xe8, 0xc0)
+
+
+def normalized_driver(image, symbols, debug):
+    """Normalize only reviewed CODE/XDATA/DATA/overlay address operands.
+
+    Reference is the published, corrected RX board module, NOT a new golden
+    algorithm. Peripheral operands, opcodes, branches, bit scratch and constants
+    are never normalized. Both bytes of every split pointer are proved.
+    """
+    start = cdb_address(debug, "L:Fradio_rx$ordinary$0$0")
+    stop = cdb_address(debug, "L:XG$radio_rx_receive_init$0$0")+1
+    require(stop-start == 4487, "RX unchanged service extent changed")
+    xb = symbols["_radio_rx_fault"]
+    db = cdb_address(debug, "L:Lradio_rx.poll$sloc0$0_1$0")
+    ob = cdb_address(debug, "L:Lradio_rx.observe$sloc0$0_1$0")
+    ordinary = {a for lo, hi in xdata_ranges(symbols) for a in range(lo, hi)}
+    require(symbols["_radio_rx_reserved_end"] == xb+181 and
+            set(range(xb, xb+182)) <= ordinary and
+            8 <= db < db+21 <= symbols["s_SSEG"] <= 128 and
+            symbols["s_OSEG"] <= ob < ob+19 <= symbols["s_OSEG"]+symbols["l_OSEG"] <= symbols["s_SSEG"] and
+            not set(range(db, db+21)) & set(range(ob, ob+19)), "RX private/overlay allocation changed")
+    tables = {cdb_address(debug, f"L:Fradio_rx${n}$0_0$0"): base
+              for n, base in (("settings", 0x4000), ("values", 0x4020))}
+    external = {symbols[n]: address for n, address in
+                (("_timebase_read_awake_ticks24", 0x62), ("_timebase_deadline_after", 0xba),
+                 ("_timebase_expired", 0x14e))}
+    blob = bytearray(image[a] for a in range(start, stop))
+    for pc, raw in instructions(image, start, stop, LENGTHS).items():
+        offset, op = pc-start, raw[0]
+        if op in (2, 0x12, 0x90):
+            value = int.from_bytes(raw[1:], "big")
+            if op != 0x90:
+                require(start <= value < stop or value in external, "RX unreviewed external call/jump")
+                target = value-start+0x1f6 if start <= value < stop else external[value]
+            elif xb <= value < xb+182:
+                target = value-xb+0x19
+            elif value in tables:
+                target = tables[value]
+            else:
+                require(value < 25 or 0x6000 <= value < 0x6400, "RX unreviewed absolute data operand")
+                target = value
+            blob[offset+1:offset+3] = target.to_bytes(2, "big")
+        for pos in (1, 2) if op == 0x85 else (1,) if op in DIRECT | {0x05, 0x52} else ():
+            value = raw[pos]
+            if db <= value < db+21: blob[offset+pos] = value-db+8
+            elif ob <= value < ob+19: blob[offset+pos] = value-ob+0x21
+            else: require(value < 8 or value >= 128, "RX unreviewed direct storage")
+    settings = cdb_address(debug, "L:Fradio_rx$settings$0_0$0")
+    for low, high, actual, reference in (
+        (0x197, 0x19b, settings, 0x4000), (0x9da, 0x9de, settings, 0x4000),
+        (0x563, 0x566, xb+152, 0xb1),
+        (0x691, 0x694, xb+181, 0xce),
+        (0x697, 0x69a, symbols["__gptrput_PARM_2"], 0x176),
+        (0x7d6, 0x7d9, xb+164, 0xbd), (0x8bd, 0x8c0, xb+172, 0xc5),
+        (0xe9a, 0xe9f, xb+1, 0x1a), (0xf9f, 0xfa4, xb+1, 0x1a),
+        (0xfbd, 0xfc2, xb+1, 0x1a), (0x112a, 0x112f, xb+1, 0x1a),
+    ):
+        require(blob[low] == actual & 255 and blob[high] == actual >> 8,
+                "RX split pointer differs from proved storage/CODE")
+        blob[low], blob[high] = reference & 255, reference >> 8
+    return bytes(blob)
 
 
 def verify_code(image, before):
@@ -98,6 +167,8 @@ def verify_fixture(image, symbols, debug):
     require(all(n in symbols for n in CHECKPOINTS), "Missing RX fixture checkpoint symbol")
     before, ready, fault, end = (symbols[n] for n in CHECKPOINTS)
     verify_code(image, before)
+    require(hashlib.sha256(normalized_driver(image, symbols, debug)).hexdigest() == DRIVER_HASH,
+            "RX differs from the published complete service instructions")
     delta = before - 0x140
     require((ready, fault, end) == (before+2, before+4, before+7) and
             bytes(image[i] for i in range(before, before+10)) == b"\0\x22\0\x22\0\x80\xfd\0\x80\xfd",
@@ -120,18 +191,18 @@ def verify_fixture(image, symbols, debug):
     fields(debug, "radio_rx", "__00000000",
            (("length", 1), ("rssi_raw", 1), ("correlation", 1), ("body", 125)))
     ordinary = {a for lo, hi in xdata_ranges(symbols) for a in range(lo, hi)}
-    require(symbols["l_XSEG"] == 538 and symbols["s_SSEG"] == 0x61 and symbols["l_SSEG"] == 159
+    require(symbols["l_XSEG"] == 548 and symbols["s_SSEG"] == 0x49 and symbols["l_SSEG"] == 183
             and symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0,
             "RX fixture allocated memory/stack changed")
-    require(symbols["_radio_rx_reserved_end"] == 0xfa and symbols["_radio_rx_fault"] == 0x45 and
-            symbols["__gptrput_PARM_2"] == 0x219, "RX fixture private prefix/helper changed")
-    for name, address, size in (("state", 0xfb, SIZE), ("frame", 0x15b, 128),
-                               ("diagnostics", 0x1db, 31), ("clock", 0x1fa, 19)):
+    require(symbols["_radio_rx_reserved_end"] == 0x104 and symbols["_radio_rx_fault"] == 0x4f and
+            symbols["__gptrput_PARM_2"] == 0x223, "RX fixture private prefix/helper changed")
+    for name, address, size in (("state", 0x105, SIZE), ("frame", 0x165, 128),
+                               ("diagnostics", 0x1e5, 31), ("clock", 0x204, 19)):
         name = "radio_rx_fixture_" + name
         sizes = re.findall(rf"^S:G\${name}\$[^(\n]+\(\{{(\d+)\}}", debug, re.MULTILINE)
         require(symbols.get("_"+name) == address and sizes and all(int(n) == size for n in sizes)
-                and set(range(address, address+size)) <= ordinary and 0xfa < address
-                and address+size <= 0x219, "RX fixture caller allocation/ABI changed")
+                and set(range(address, address+size)) <= ordinary and 0x104 < address
+                and address+size <= 0x223, "RX fixture caller allocation/ABI changed")
     for n in ("output", "d"):
         require(re.search(rf"S:Lradio_rx.radio_rx_receive_init\${n}\$[^(]+\(\{{2\}}DX,ST", debug),
                 "RX fixture driver pointer ABI is not XDATA")
@@ -139,7 +210,7 @@ def verify_fixture(image, symbols, debug):
             "RX fixture result ABI changed")
     start = cdb_address(debug, "L:Fradio_rx$ordinary$0$0")
     stop = cdb_address(debug, "L:XG$radio_rx_receive_init$0$0")+1
-    require((start, stop) == (0x9fe+delta, 0x1b85+delta), "RX fixture driver extent changed")
+    require((start, stop) == (0xa31+delta, 0x1bb8+delta), "RX fixture driver extent changed")
     code = instructions(image, start, stop, LENGTHS)
     accesses = peripheral_accesses(code)
     require([b.hex() for _, b, _ in accesses] == [
@@ -150,7 +221,7 @@ def verify_fixture(image, symbols, debug):
 
     def sfr_sites(accesses):
         for pc, data, reg in accesses:
-            write = data[0] in (0x75, 0x88)
+            write = data[0] in (0x75, 0x8f)
             sites[pc] = ("w" if write else "r", reg,
                          ("iram", data[0]-0xa8) if 0xa8 <= data[0] <= 0xaf else
                          ("sfr", reg if write else 0xe0))
@@ -168,14 +239,14 @@ def verify_fixture(image, symbols, debug):
             require(code.get(pc+3) == b"\xe0", "RX fixture unexpected XREG operation")
             actual_reads.append(address); sites[pc+3] = ("r", address, ("sfr", 0xe0))
     require(tuple(actual_reads) == XREADS, "RX fixture expanded static MMIO")
-    for pc, op, kind in ((0xba9+delta, b"\xe0", "r"), (0x1413+delta, b"\xf0", "w")):
+    for pc, op, kind in ((0xbdc+delta, b"\xe0", "r"), (0x1446+delta, b"\xf0", "w")):
         require(code.get(pc) == op, "RX fixture reviewed indexed MMIO site changed")
         sites[pc] = (kind, None, ("sfr", 0xe0) if kind == "r" else ("xram", None))
     for name, value in (("settings", b"".join(a.to_bytes(2, "little") for a in SETTINGS)),
                         ("values", VALUES)):
         a = cdb_address(debug, f"L:Fradio_rx${name}$0_0$0")
         require(bytes(image[i] for i in range(a, a+len(value))) == value, "RX fixture CODE table changed")
-    verify_fscal1_readback(code, 0xba9+delta, 0x4e, cdb_address(debug, "L:Fradio_rx$values$0_0$0"))
+    verify_fscal1_readback(code, 0xbdc+delta, 0x36, cdb_address(debug, "L:Fradio_rx$values$0_0$0"))
     caller = instructions(image, stop, cdb_address(debug, "L:XG$main$0$0")+1, LENGTHS)
     reads = peripheral_accesses(caller)
     require([data for _, data, _ in reads] ==
@@ -188,7 +259,7 @@ def verify_fixture(image, symbols, debug):
     clock_code, _ = verify_clock_code(image, symbols, debug)
     sfr_sites(peripheral_accesses(clock_code))
     verify_clock_diagnostics(debug); verify_deadline_helper(image, symbols, debug)
-    verify_timebase_reader(image, symbols, debug, 0xfb, SIZE)
+    verify_timebase_reader(image, symbols, debug, 0x105, SIZE)
     reader = symbols["_timebase_read_awake_ticks24"]
     for offset, reg in ((3, 0x95), (9, 0x96), (15, 0x97)):
         sites[reader+offset] = ("r", reg, ("sfr", 0xe0))
@@ -199,8 +270,8 @@ def verify_fixture(image, symbols, debug):
         require(calls.count(b"\x12"+symbols[name].to_bytes(2, "big")) == 1,
                 "RX fixture must call each real service at exactly one site")
     return {"checkpoints": [before, ready, fault, end], "sites": sites,
-            "driver_start": start, "driver_end": stop, "state": 0xfb, "frame": 0x15b,
-            "diagnostics": 0x1db, "clock": 0x1fa, "stack_start": 0x61}
+            "driver_start": start, "driver_end": stop, "state": 0x105, "frame": 0x165,
+            "diagnostics": 0x1e5, "clock": 0x204, "stack_start": 0x49}
 
 
 def decode(data):

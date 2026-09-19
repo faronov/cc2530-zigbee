@@ -171,10 +171,12 @@ class ListingTests(unittest.TestCase):
     @unittest.skipUnless(all(shutil.which(tool) for tool in ("make", "sdcc", "packihx", "makebin")),
                          "SDCC build tools required for real shared-link regression")
     def test_image_listings_survive_both_link_orders(self):
-        with tempfile.TemporaryDirectory() as directory:
-            for board in ("generic", "lg_esl29_rev03"):
+        for board in ("generic", "lg_esl29_rev03"):
+            root = ROOT/"build/radio-tx-fixture-dev"/("coupled-"+board)/"radio_rx_fixture"
+            root.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix="shared-link-", dir=root) as directory:
                 with self.subTest(board=board):
-                    output = Path(directory)/board
+                    output = Path(directory)
                     command = ["make", "--no-print-directory", "--jobs=1", "-s", f"BOARD={board}",
                                "IMAGE=radio_rx_fixture", f"BUILD={output}"]
 
@@ -277,14 +279,26 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), "")
 
     def test_genuine_preflight(self):
-        for board in ("generic", "lg_esl29_rev03"):
-            path = ROOT/"build"/board/"radio_rx_fixture"
-            if not (path/"build-info.json").exists(): continue
-            image = DebugImage(path, board, "radio_rx_fixture")
-            program = (path/"radio_rx_fixture.bin").read_bytes()
-            runner.validate_program(image, program, 16)
-            self.assertEqual(image.symbol("_radio_rx_fixture_frame").size, 128)
-            self.assertEqual(image.symbol("_radio_rx_fixture_diagnostics").size, 31)
+        template = os.environ.get("CC2530_RX_FIXTURE_OUTPUT")
+        if template is None and not all(shutil.which(tool) for tool in
+                                        ("make", "sdcc", "packihx", "makebin")):
+            self.skipTest("SDCC build tools required for fresh real preflight")
+        with tempfile.TemporaryDirectory(prefix="cc2530-rx-preflight-") as directory:
+            for board in ("generic", "lg_esl29_rev03"):
+                with self.subTest(board=board):
+                    path = ROOT/template.format(board=board) if template is not None else Path(directory)/board
+                    if template is None:
+                        result = subprocess.run(
+                            ["make", "--no-print-directory", "--jobs=1", "-s", f"BOARD={board}",
+                             "IMAGE=radio_rx_fixture", f"BUILD={path}", "all"],
+                            cwd=ROOT, capture_output=True, text=True, timeout=120,
+                        )
+                        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+                    image = DebugImage(path, board, "radio_rx_fixture")
+                    program = (path/"radio_rx_fixture.bin").read_bytes()
+                    runner.validate_program(image, program, 16)
+                    self.assertEqual(image.symbol("_radio_rx_fixture_frame").size, 128)
+                    self.assertEqual(image.symbol("_radio_rx_fixture_diagnostics").size, 31)
 
     def test_cli_private_preflight_and_cleanup_failure(self):
         with tempfile.TemporaryDirectory() as directory:

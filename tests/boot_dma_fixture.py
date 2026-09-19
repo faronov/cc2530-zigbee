@@ -55,8 +55,11 @@ def model(symbols, proof):
 def check_dma_fixture(simulator, output, board, symbols):
     path = output / "dma_fixture.ihx"
     image = parse_ihex(path.read_text(encoding="ascii"))
-    debug = path.with_suffix(".cdb").read_text()
+    debug = path.with_suffix(".cdb").read_bytes().decode("utf-8")
     proof = verify_fixture(image, symbols, debug)
+    from boot_radio_fifo_fixture import check_service_listings
+    code, _ = verify_dma_relocated(image, symbols, debug)
+    check_service_listings(output, "dma_fixture", "dma", code, image, symbols, debug)
     before, ready, fault = proof["checkpoints"]
     state = proof["state"]
     case = unittest.TestCase()

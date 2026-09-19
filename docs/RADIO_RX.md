@@ -394,7 +394,8 @@ PC0000/config26 without another application resume. END016F above is the
 historical endpoint of the RX run, not the latest physical state.
 
 These are finite channel15 observations on one LG board. The reference tool
-strips FCS; body equality is not independent on-air CRC verification.
+omits the final two serial-frame octets, which are not independently established
+as literal FCS; body equality is not independent on-air CRC verification.
 Generic hardware, other channels, calibrated timing/RSSI/LQI, controller
 overflow recovery and stopped-clock/poll-cap behavior remain unobserved on
 silicon. No lossless/continuous reception, MAC syntax/security/network

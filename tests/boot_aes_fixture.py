@@ -3,13 +3,14 @@
 import re
 import unittest
 from boot_image import boot_commands, check_guards, check_pc, expected_status, marker, simulate, snapshot_commands, memory_dump
-from boot_radio_fifo_fixture import sections, snapshot
+from boot_radio_fifo_fixture import check_service_listings, continuation_commands, sections, snapshot
 from aes_fixture import CONTROLLER, check_timeout, decode, expected_buffers, inspect_context, public_vectors, verify_fixture, verify_relocated
 from check_aes_hardware import validate_program
 from debug_image import DebugImage
 from verify_firmware import parse_ihex, require
 
 AES_ALIAS = "memory create addressdecoder xram 0x70b1 0x70b2 sfr_chip 0x31"
+CHUNK_STAGES = 128
 
 
 def output_effects(p, vectors, count=16, start=0):
@@ -25,7 +26,7 @@ def output_effects(p, vectors, count=16, start=0):
     return text
 
 
-def verify_transfers(text, vectors):
+def verify_transfers(text, vectors, p):
     calls, phase = [], 0
     for raw in re.findall(r"^0x(a[012][0-9a-f]{6})\r?$", text, re.MULTILINE):
         event = int(raw, 16); kind, value = event >> 24, event & 0xffffff
@@ -45,7 +46,7 @@ def verify_transfers(text, vectors):
             require(index < 16 and (kind == 0xa1 or (phase == 3 and calls[-1][2] == 16)),
                     "AES extra/premature alias transfer")
             data = (row[:16] if phase == 1 else bytes(16) if phase == 2 else row[16:32]) if kind == 0xa1 else row[32:48]
-            address = (0x5d+16*phase if kind == 0xa1 else 0x9d)+index
+            address = p["descriptor0"]+(24+16*phase if kind == 0xa1 else 88)+index
             require(value == address*256+data[index], "AES actual descriptor/alias byte differs from oracle inputs/output")
             calls[-1][phase-1 if kind == 0xa1 else 3] += 1
     return calls
@@ -97,7 +98,7 @@ def start_handler(p, vectors, phase, mode="normal"):
     return text + "expression aes_model=0; run"
 
 
-def model(symbols, p, vectors):
+def model(symbols, p, vectors, *, initialize=True):
     commands = ["var aes_model", "var aes_arm", "var aes_ready", "var aes_phase", "var aes_delayed",
                 "expression aes_model=1", "expression aes_arm=0", "expression aes_ready=0", "expression aes_phase=0", "expression aes_delayed=0",
                 "break sfr w 0xc6",
@@ -124,6 +125,8 @@ def model(symbols, p, vectors):
                  "commands 12 expression /0 (0x98000000+sfr[0x98]); expression aes_phase=0; run",
                  'break sfr w 0x98 if "aes_model==0 && aes_phase==2"',
                  "commands 13 expression /0 (0x98000000+sfr[0x98]); run"]
+    if not initialize:
+        return commands+[AES_ALIAS, "expression aes_model=0"]
     commands += boot_commands(symbols) + [AES_ALIAS, "fill xram 0x6000 0x70ff 0xa6",
                   "set memory sfr 0xbe 0x84", "set memory sfr 0x95 100 0 0",
                   "set memory sfr 0xb3 8", "set memory sfr 0xd1 0 0 0 0 0 0 0",
@@ -133,11 +136,53 @@ def model(symbols, p, vectors):
     return commands + ["expression aes_model=0"]
 
 
+def check_continuation(memory, peripheral, carry):
+    require(memory == carry[0] and peripheral == carry[1],
+            "AES continuation changed genuine CPU/RAM/controller state")
+
+
+def normal_segment(simulator, commands, path, carry, ready, symbols):
+    """Continue only an actually idle READY, with the whole finite run intact."""
+    text = simulate(simulator, commands, path)
+    if carry is not None:
+        parts = sections(text)
+        check_pc(parts[6100], ready)
+        check_continuation(snapshot(parts, 6100), memory_dump(parts[6106], 0x6000, 0x1100), carry)
+        require(memory_dump(parts[6104], 0x6000, 512) == carry[1][:512], "AES shared restoration dump changed")
+        split = re.split(rf"^0x2530{6200:04x}\r?\n", text, flags=re.M)
+        require(len(split) == 2, "AES continuation trace boundary changed")
+        text = split[1]
+    parts = sections(text)
+    if 6000 not in parts:
+        return text, None
+    check_pc(parts[6000], ready)
+    memory = ram, iram, sfr = snapshot(parts, 6000)
+    check_guards(ram, iram[128:], sfr, symbols)
+    require(sfr[1] == symbols["s_SSEG"]+1 and
+            re.search(r"^0x0+\r?$", parts[6006], re.M), "AES carry has an active model or leaked frame")
+    radio = memory_dump(parts[6004], 0x6000, 0x1100)
+    expected = bytearray(b"\xa6"*0x1100); expected[0x10b1:0x10b3] = sfr[0x31:0x33]
+    require(radio == expected, "AES carry touched another peripheral address")
+    # Genuine saved-state negatives, not merely a successful restore. No byte
+    # class (ordinary/reserved XDATA, IRAM/alias stack, SFR, peripheral) is ignored.
+    for n, original in enumerate((*memory, radio)):
+        for index in (0, len(original)//2, len(original)-1):
+            changed = list((*memory, radio))
+            data = bytearray(original); data[index] ^= 1; changed[n] = bytes(data)
+            with unittest.TestCase().assertRaises(ValueError):
+                check_continuation(tuple(changed[:3]), changed[3], (memory, radio))
+    # Exclude restoration/checkpoint echo from the actual transfer transcript.
+    split = re.split(rf"^0x2530{6000:04x}\r?\n", text, flags=re.M)
+    require(len(split) == 2, "AES segment terminal snapshot boundary changed")
+    return split[0], (memory, radio)
+
+
 def execute(simulator, path, board, symbols, p, vectors, mode="normal", cycles=257):
     before, ready, fault = p["checkpoints"]
     positive = mode in ("normal", "3:cap-success")
     commands = model(symbols, p, vectors) + [f"run {symbols['_main']} {before}"] + snapshot_commands(1)
     pc = before
+    texts, carry = [], None
     stages = 1 + 4*cycles if mode == "normal" else 2 if mode == "clock" else 3
     for i in range(stages):
         if pc == ready: commands += ["step 1"]; pc += 1
@@ -145,6 +190,15 @@ def execute(simulator, path, board, symbols, p, vectors, mode="normal", cycles=2
                      f"dump /h xram {p['state']} {p['output']+17}", "dump /h xram 0x1e00 0x1e1f",
                      "dump /h sfr 0x81 0x81", marker(101+2*i)]
         pc = ready
+        if mode == "normal" and (i+1) % CHUNK_STAGES == 0 and i+1 < stages:
+            commands += snapshot_commands(6000)+[marker(6004), "dump /h xram 0x6000 0x70ff",
+                marker(6006), "expression /0 (aes_model|aes_arm|aes_ready|aes_phase|aes_delayed)",
+                marker(6007)]
+            text, carry = normal_segment(simulator, commands, path, carry, ready, symbols)
+            texts.append(text)
+            commands = model(symbols, p, vectors, initialize=False)+["fill xram 0x6000 0x70ff 0xa6"]
+            commands += continuation_commands(carry[0], carry[1][:512], ready)[:-1]
+            commands += [marker(6106), "dump /h xram 0x6000 0x70ff", marker(6200)]
     if mode == "pre-key":
         commands += ["commands 3 expression aes_ready=aes_ready|1; expression /0 0xa4000001",
                      f"run {ready} {p['arm_ret']}"] + snapshot_commands(4000)
@@ -190,14 +244,16 @@ def execute(simulator, path, board, symbols, p, vectors, mode="normal", cycles=2
         commands += ["expression aes_model=1"]
         if mode == "partial":
             for i in range(7, 16):
-                commands += [f"expression xram[0x70b1]=xram[{0x6d+i}]",
-                             f"expression /0 (0xa1000000+{(0x6d+i)*256}+xram[0x70b1])"]
+                address = p["descriptor0"]+40+i
+                commands += [f"expression xram[0x70b1]=xram[{address}]",
+                             f"expression /0 (0xa1000000+{address*256}+xram[0x70b1])"]
         else:
             commands += [output_effects(p, vectors, start=7).rstrip("; ")]
         commands += ["set memory sfr 0x98 0xa7", f"set memory sfr 0xd6 {2 if mode == 'partial' else 0}",
                      f"set memory sfr 0xd1 {1 if mode == 'partial' else 3}", "expression aes_model=0",
                      "step 64"] + snapshot_commands(5020)
-    text = simulate(simulator, commands, path); parts = sections(text)
+    text = normal_segment(simulator, commands, path, carry, ready, symbols)[0] if mode == "normal" else simulate(simulator, commands, path)
+    text = "".join(texts+[text]); parts = sections(text)
     initial, _, _ = snapshot(parts, 1)
     require(initial[0x1e00:0x1e20] == expected_status(board), "AES changed startup evidence")
     decode(initial[p["state"]:p["state"]+64])
@@ -221,11 +277,12 @@ def execute(simulator, path, board, symbols, p, vectors, mode="normal", cycles=2
     peak = max(int(n, 16) for n in re.findall(r"Max value of stack pointer= 0x([0-9a-f]+)", text))
     require(peak < 128, "AES reached upper IRAM guard")
     r = decode(ram[p["state"]:p["state"]+64])
-    transfers = verify_transfers(text, vectors)
+    transfers = verify_transfers(text, vectors, p)
     descriptors = re.findall(r"^0xa500000([123])\r?$\n(.*?)^0xa6000000\r?$", text, re.MULTILINE | re.DOTALL)
     require(descriptors, "AES lacks actual fetched descriptor evidence")
     for phase, body in descriptors:
-        expected = bytes((0, 0x5d+16*int(phase)))+b"\x70\xb1\0\x10\x1d\x41\x70\xb2\0\x9d\0\x10\x1e\x11"+bytes(24)
+        expected = (p["descriptor0"]+24+16*int(phase)).to_bytes(2, "big")+b"\x70\xb1\0\x10\x1d\x41\x70\xb2"
+        expected += (p["descriptor0"]+88).to_bytes(2, "big")+b"\0\x10\x1e\x11"+bytes(24)
         require(memory_dump(body, p["descriptor0"], 40) == expected, "AES actual finite SINGLE-byte descriptors changed")
     if mode in ("pre-key", "final"):
         saved, stack, regs = snapshot(parts, 4010)
@@ -277,8 +334,10 @@ def execute(simulator, path, board, symbols, p, vectors, mode="normal", cycles=2
 
 
 def check_aes_fixture(simulator, output, board, symbols):
-    path = output/"aes_fixture.ihx"; image = parse_ihex(path.read_text()); debug = path.with_suffix(".cdb").read_text()
+    path = output/"aes_fixture.ihx"; image = parse_ihex(path.read_text()); debug = path.with_suffix(".cdb").read_bytes().decode("utf-8")
     p = verify_fixture(image, symbols, debug); vectors = public_vectors(output/"aes-reference")
+    code, _ = verify_relocated(image, symbols, debug)
+    check_service_listings(output, "aes_fixture", "aes", code, image, symbols, debug)
     require(bytes(image[a] for a in range(p["vectors"], p["vectors"]+1029)) == b"".join(vectors), "AES fixture table differs from independent oracle")
     board_image = DebugImage(output, board, "aes_fixture")
     program = path.with_suffix(".bin").read_bytes()
@@ -307,4 +366,5 @@ def check_aes_fixture(simulator, output, board, symbols):
         high, _, _ = execute(simulator, path, board, symbols, p, vectors, mode)
         peak = max(peak, high); count += 1
     print(f"{board}: AES fixture {count} compiled scenarios; 257 cycles/514 AES calls/32896 actual descriptor/alias bytes, "
-          f"21 public vectors/all spaces/both clocks; corrected module/negative contexts/terminal guards PASS, peak SP={peak:02x} (synthetic only).")
+          f"21 public vectors/all spaces/both clocks in {(1+4*257+CHUNK_STAGES-1)//CHUNK_STAGES} bounded normal segments; "
+          f"corrected module/negative contexts/terminal guards PASS, peak SP={peak:02x} (synthetic only).")

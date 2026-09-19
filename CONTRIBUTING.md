@@ -57,7 +57,7 @@ git diff --check
 
 `test-local` runs the complete Python tool suite once, all standalone
 host/image/simulator component corpora once **for each board definition**,
-and the board-specific host/image/simulator checks for all twenty-two board/image
+and the board-specific host/image/simulator checks for all twenty-four board/image
 combinations. Components have no `IMAGE`-dependent inputs. This removes
 duplicate runs, not cases: every component still runs with both
 `CC2530_BOARD` definitions, and every board fixture retains its own checks.
@@ -67,7 +67,10 @@ the 15-second per-simulator deadline; extra CPU cores do not justify
 concurrent links into a shared directory or relaxed timeouts.
 
 The existing `make BOARD=... IMAGE=... all test` command remains a full
-single-configuration check and is unchanged in the twenty-two-job CI matrix.
+single-configuration check. The twenty-four-job CI matrix runs its identical
+Python tool suite once in generic/bringup, and `all test-common test-board`
+in every job. The tool suite itself includes both-board image profiles;
+no component, board-image, simulator or artifact check is omitted.
 For focused iteration, the explicit parts are:
 
 ```sh
@@ -268,7 +271,7 @@ The fixture links real services before callers, retains whole CODE/ABI/private
 prefix proofs and per-linked-image relocated listing snapshots, and measures
 500 XDATA bytes including reservation within its own512-byte budget. Do not
 enlarge component budgets or convert IRAM alias/gaps to storage. The exact
-one-page sequence is terminal, without retry. CI's22 board jobs retain exactly
+one-page sequence is terminal, without retry. CI's24 board jobs retain exactly
 seven upload paths and `hardware_tested=false`; no standalone flash executable
 or private recovery material is a board artifact. Physical arming/running is
 blocked on new board/scratch/backup/destructive-scope authority and resolution
@@ -300,7 +303,26 @@ this reset-exclusive owner with the legacy RX service in the same reset
 epoch, widen power profiles or add automatic RF. Neither `radio_tx_test.ihx`
 nor its synthetic traces is a board artifact or a physical-test input.
 
-For the separate RX board integration, use focused checks rather than twenty
+The separate [boot-disarmed TX board fixture](docs/RADIO_TX_FIXTURE.md) has:
+
+```sh
+make BOARD=generic IMAGE=radio_tx_fixture test-board
+make BOARD=lg_esl29_rev03 IMAGE=radio_tx_fixture test-board
+PYTHONPATH=tools python3 -B -m unittest test_radio_tx_fixture test_clock_fixture test_local_checks test_m0_artifacts -q
+```
+
+Keep timebase/FIFO/TX/clock before every caller, all nine immediate per-image
+listing snapshots and the existing512-byte total reservation budget. Boot and
+ordinary unarmed continuation must perform no RF; distinct ARM/RUN admissions
+are followed by an inspectable ADMITTED return before the one conditional-clear
+attempt. Do not add retries, ACK, alternate power modes or implicit fault cleanup.
+The manual runner needs its separate reset/CPU/read/write/breakpoint permissions
+and RF opt-in; it never flashes and must not run from Make or CI.
+Clock staging affects every clock consumer: preserve their full corpora,
+exact changed emission proofs and old budgets, not just the new TX image.
+Clock standalone and board listings also need immediate distinct snapshots.
+
+For the separate RX board integration, use focused checks rather than
 redundant local standalone corpora:
 
 ```sh
@@ -310,15 +332,16 @@ PYTHONPATH=tools python3 -B -m unittest test_radio_rx_fixture test_m0_artifacts 
 ```
 
 Run heavy s51 jobs **serially**, preserving15 seconds per process and exact
-CPU/RAM continuations for the full poll-cap test. Rebuild/image-check the18
-older board BINs and compare their complete sizes/hashes to the baseline;
-the parent performs broader final regressions/publication separately.
+CPU/RAM continuations for the full poll-cap test. Rebuild/image-check affected
+board BINs: unchanged consumers retain their complete baseline hashes, while
+intentional changes require reviewed updated proofs and separate hardware
+evidence. Perform broader final regressions/publication separately.
 The fixture is **RF-capable passive RX**, not another non-RF image. Never
 invoke its [manual runner](docs/DEBUGGING.md#parent-only-passive-rx-acceptance)
 from tests/CI. It requires a separately authorized board/recovery task and a
 new mode0600 capture in a user-owned0700 directory outside the repository.
 No raw bodies, addresses, identities or frame hashes belong in stdout/CI.
-CI now has22 jobs (including the flash fixture) and exactly the existing seven upload paths, with
+CI now has24 jobs (including flash and boot-disarmed TX fixtures) and exactly the existing seven upload paths, with
 `hardware_tested=false`; the new1024-byte reservation budget applies only to
 this board fixture, not the component or older512-budget tests.
 Shared host-MMIO write hooks must consume, not bypass or enlarge, the bounded

@@ -364,6 +364,24 @@ class PrngTests(unittest.TestCase):
                 with self.subTest(index=index,mode=mode),self.assertRaises(ValueError):
                     runner.validate_program(image,changed,mode)
 
+    def test_preflight_binds_relocated_operands_to_verified_storage(self):
+        for field in ("limit", "probe_output", "state"):
+            image=image_fixture(); image.prng_proof=dict(image.prng_proof)
+            image.prng_proof[field] += 10
+            for mode in ("short","full","stopped"):
+                with self.subTest(field=field,mode=mode),self.assertRaises(ValueError):
+                    runner.validate_program(image,PROGRAM,mode)
+        image=image_fixture(); image.prng_proof=dict(image.prng_proof)
+        for field in ("limit", "probe_output", "state"):
+            image.prng_proof[field] += 10
+        p=image.prng_proof; program=bytearray(PROGRAM)
+        for address, value in ((p["stop"]+4,p["limit"]), (p["stop"]+10,p["probe_output"]),
+                               (p["flag_check"]+7,p["state"]+59)):
+            program[address:address+2]=value.to_bytes(2,"big")
+        image.sha256=hashlib.sha256(program).hexdigest()
+        for mode in ("short","full","stopped"):
+            runner.validate_program(image,bytes(program),mode)
+
     def test_cli_offline_prevalidation_and_success_only_after_cleanup(self):
         for extra in ([],["--confirm-prng-test","--bus","0"]):
             with patch.object(runner.PyUsbBackend,"load") as load:

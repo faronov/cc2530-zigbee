@@ -354,8 +354,8 @@ RC16/XOSC32, plus short seed/reseed cases. The host checks every actual word,
 not just a count/hash. A separately selected genuine stopped-RCTRL probe tests
 terminal rejection; holding the CPU is **not** a PRNG poll-timeout experiment.
 That PRNG addition preserved all sixteen older BINs and existing drivers.
-The passive RX addition brought CI to twenty jobs; the offline flash fixture
-below brings it to twenty-two, with the
+The passive RX addition brought CI to twenty jobs; the flash and boot-disarmed
+TX fixtures bring it to twenty-four, with the
 same seven artifacts and `hardware_tested=false`.
 The original **7,224-byte wirev1 LG PRNG image** passed
 [short hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
@@ -441,11 +441,24 @@ permits caller-directed reuse only after verified shutdown; faults retain
 their cause without retry or implicit cleanup.
 
 `make test-radio-tx` is **host-tested, image-checked and simulated**, not
-hardware-observed. No board image links it, and the standalone executable
-must never be flashed. Same-reset mixing with the legacy RX service is
-unsupported; queue/controller integration, physical ACK/retries, a boot-disarmed RF
-fixture and separately authorized on-air acceptance remain open. No MAC,
-networking, calibrated power or complete-stack-fit claim follows.
+hardware-observed. Its standalone executable must never be flashed.
+The separate [boot-disarmed board fixture](docs/RADIO_TX_FIXTURE.md), selected
+with `IMAGE=radio_tx_fixture`, now links the actual clock/FIFO/TX services.
+It requires distinct ARM/RUN admissions and an inspectable ADMITTED stop before
+one conditional-clear attempt on channel15/raw power05 with public `TXF1`
+bytes, no ACK request and no real identity. Failures retain evidence without
+implicit cleanup or retry. `make ... IMAGE=radio_tx_fixture test-board` stays
+offline; its manual RF runner is never invoked by builds/CI.
+
+The clock prerequisite reduces permanent DATA45 to12 bytes, with ten extra
+XDATA bytes, rather than enlarging memory limits. The TX test composition uses
+11,291/11,331 CODE bytes (generic/LG),347 ordinary XDATA +64 reserved and
+MMIO-sampled SP`0x74`/full-run simulator high-water`0x77`.
+These are measured image sizes and exercised paths, not full-stack fit.
+Same-reset mixing with legacy RX, queue/controller integration, physical
+ACK/retries and separately authorized on-air acceptance remain open. Neither
+the fixture nor old image-specific hardware records establish MAC/networking
+or calibrated power on this new build.
 
 ## Isolated MAC Timer foundation
 

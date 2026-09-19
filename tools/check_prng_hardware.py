@@ -28,10 +28,12 @@ def validate_program(image,program,mode):
             program[p["high_write"]:p["low_write"]+2] == b"\x8f\xbc\x8e\xbc" and
             program[p["command"]:p["command"]+2] == b"\xf5\xb4" and
             program[p["stop"]:p["probe_call"]+3] ==
-            b"\x75\xb4\x3f\x90\0\x5c\x74\x10\xf0\x90\0\xff\x12"+p["next"].to_bytes(2,"big") and
+            b"\x75\xb4\x3f\x90"+p["limit"].to_bytes(2,"big")+b"\x74\x10\xf0\x90"+
+            p["probe_output"].to_bytes(2,"big")+b"\x12"+p["next"].to_bytes(2,"big") and
             program[p["probe_return"]-3:p["probe_return"]] == b"\x12"+p["probe"].to_bytes(2,"big") and
             program[p["flag_check"]+6:p["flag_check"]+18] ==
-            b"\x90\0\x9e\xe0\xff\xc0\x07\x12"+p["snapshot"].to_bytes(2,"big")+b"\xd0\x07",
+            b"\x90"+(p["state"]+59).to_bytes(2,"big")+b"\xe0\xff\xc0\x07\x12"+
+            p["snapshot"].to_bytes(2,"big")+b"\xd0\x07",
             "PRNG actual seed/command/stopped-call/frame proof differs from program")
 
 
@@ -49,7 +51,8 @@ def inspect(debugger,image,pc,history,*,probe=False):
     status=debugger.read_debug_status(); debugger._check_status(status,active=True,halted=True)
     require(status & Status.HALT_STATUS,"PRNG halt was not a breakpoint")
     registers=debugger.read_registers()
-    require(registers.pc == pc and registers.sp == 0x4f and registers.dps == 0 and not registers.psw & 0x18,
+    require(registers.pc == pc and registers.sp == image.metrics["iram_stack_start"] + 1
+            and registers.dps == 0 and not registers.psw & 0x18,
             "PRNG checkpoint PC/stack/DPS/register bank mismatch")
     r=decode(debugger.read_xdata(p["state"],SIZE),running=probe)
     boot=debugger.read_xdata(0x1e00,32); startup=decode_bootstrap(boot,image.board)
@@ -66,7 +69,7 @@ def inspect(debugger,image,pc,history,*,probe=False):
                 "PRNG reset caller objects were not zero initialized")
     context=None
     if probe:
-        frame=debugger.read_xdata(0x1f4e,2)
+        frame=debugger.read_xdata(0x1f00 + image.metrics["iram_stack_start"],2)
         require(pc == p["probe_call"] and r["phase"] == 2 and r["stage"] == 6 and
                 r["total"] == 131084 and r["probe"] == [0]*3 and r["fault_latch"] == 0 and
                 registers.dptr0 == p["probe_output"] and debugger.read_xdata(p["limit"],1) == b"\x10" and

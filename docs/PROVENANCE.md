@@ -538,13 +538,25 @@ Independent reference capture used official Nordic sniffer firmware0.8.0
 on the nRF52840 DK, channel15. The externally installed host tool came from
 [upstream revision e459feba9730f85b22a78d3559c67c4df6bf876a](https://github.com/nordicsemi/nRF-Sniffer-for-802.15.4/tree/e459feba9730f85b22a78d3559c67c4df6bf876a);
 its distribution metadata reports version0.0.0, not the firmware's version.
-Its parser strips the two FCS octets;
+Its parser omits the final two serial-frame octets;
 private comparison checked complete FCS-free bodies, not independent CRC or
 authentication. The original standard-library comparison checked PCAP2.4,
 DLT283, complete record lengths and TAP channel/metadata structure.
 Only processed counts/statuses and this project's public image hash are
 recorded here. No capture, frame, address, payload hash, factory identity,
 external sniffer implementation or programmer binary is imported or uploaded.
+
+Keeping those two octets would **not by itself establish genuine on-air FCS**.
+The host README points to the nRF Connect SDK2.6.0
+[sniffer sample](https://github.com/nrfconnect/sdk-nrf/blob/3190fa573ff67bfb745028f203e9d0ea4144a1ce/samples/peripheral/802154_sniffer/src/main.c#L53-L83),
+whose configuration enables RAW_MODE and whose
+[manifest](https://github.com/nrfconnect/sdk-nrf/blob/3190fa573ff67bfb745028f203e9d0ea4144a1ce/west.yml)
+selects Zephyr `v3.5.99-ncs1`. That pinned
+[radio driver](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/drivers/ieee802154/ieee802154_nrf5.c#L156-L164)
+distinguishes LQI/automatic-CRC metadata from literal FCS in the trailing buffer
+positions. This is public reference-source inspection, not a source/binary
+identity proof for the installed Nordic firmware. Neither its discarded
+octets nor a software-recomputed CRC are independent received-FCS evidence.
 
 ### M2 deterministic PRNG sources
 
@@ -1037,6 +1049,19 @@ linked proof executes actual strobes and FIFO/timebase instructions and pins
 the four genuine NOPs, typed ABI, private prefix and per-link listings.
 The separately documented future fixture/capture procedure grants no device,
 channel, power or recovery authority. Both boards remain offline-only for TX.
+
+The separate [boot-disarmed board fixture and original synthetic corpus](RADIO_TX_FIXTURE.md)
+reuse these unchanged timebase/FIFO/TX implementations and existing board
+policy. Its fixed public `TXF1` body contains no observed identity or capture.
+ARM/RUN complements/guards, admission budgets and one-attempt policy are
+project choices, not hardware authentication or MAC acknowledgement.
+The clock staging prerequisite is original BSD-3-Clause work preserving the
+SWRU191F pp.68-69 register contract and existing public ABI/rollback semantics;
+it imports no SDK or compiler workaround from third-party implementations.
+Strict emission checks identify the changed storage, helper declarations and
+real instructions; synthetic peripherals remain distinct from physical proof.
+The manual runner adds no new debugger USB/MMIO command, programming path or
+automatic hardware/CI activity.
 
 ### Generic two-page NV record sources
 

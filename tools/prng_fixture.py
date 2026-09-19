@@ -12,8 +12,14 @@ from verify_firmware import (
 
 SIZE, WORDS, LIMIT, READY_COUNT, TOTAL = 88, 32, 16, 4111, 131084
 CHECKPOINTS = tuple("_prng_fixture_"+n for n in ("before", "ready", "fault"))
-HASHES = {0x140: (7249, "220da5183f9e11670bb094d14f079b06c6f94b40900abf63f83858e7cc45cf50"),
-          0x168: (7289, "b53ecd587fdd897287114fd8f4cee369af6f9388f79892cbb4b67d4729602c9f")}
+HASHES = {0x140: (7272, "05751be8d5c37ad4b950c80f25094f3d5908b1bf34d493cc345c15728d9e8694"),
+          0x168: (7312, "b91788b7e1fd71a8bdf334d95c042dc41787211b60ffc39e1a1a009aa8a6e920")}
+CLOCK_PROFILES = {
+    (731, 25, 7047): ("0a85c2e292b75273f0a391d10599ec57b678dec2622ac0f07b26e005c6f01b10",
+                      "7f361afab0a46b62821c363b00140e3eb20e944ec31ec53f3a357437cae7707d", 8),
+    (771, 25, 7087): ("c45c48c22a9dea97b8b363392b350bcb3259bec8e404c0bbfc03bbf9f142b7aa",
+                      "037359a09ff3850faeeed4d6eac67ebb386209e958989eea74ffc5df09a4eb47", 8),
+}
 MODULE_HASH = "df20f1945e7993fcfefab707ba75ebec8474a8f949857ef9bed3608679681954"
 FIELDS = (
     ("signature",4), ("version",1), ("size",1), ("phase",1), ("reason",1), ("stage",1), ("run",1),
@@ -41,7 +47,7 @@ def advance(state):
 def verify_relocated(image, symbols, debug):
     start = cdb_address(debug, "L:Fprng$valid_state$0$0")
     end = cdb_address(debug, "L:XG$prng_next16$0$0")+1
-    require(end-start == 1043 and symbols["_prng_fault"] == 0x45 and symbols["_prng_reserved_end"] == 0x62,
+    require(end-start == 1043 and symbols["_prng_fault"] == 0x4f and symbols["_prng_reserved_end"] == 0x6c,
             "PRNG complete private/module extent changed")
     code = instructions(image,start,end,PRNG_LENGTHS)
     blob = bytearray(image[a] for a in range(start,end))
@@ -53,20 +59,20 @@ def verify_relocated(image, symbols, debug):
             blob[off+1:off+3] = (target-start+0x62).to_bytes(2,"big")
         if op == 0x90:
             address = int.from_bytes(raw[1:],"big")
-            require(0x45 <= address <= 0x62, "PRNG private DPTR operand escaped prefix")
-            blob[off+1:off+3] = (address-0x45).to_bytes(2,"big")
+            require(0x4f <= address <= 0x6c, "PRNG private DPTR operand escaped prefix")
+            blob[off+1:off+3] = (address-0x4f).to_bytes(2,"big")
     for off in (0x2a,0x2e,0x32,0x34):
         require(blob[off] == 1 and symbols["l_BSEG"] == 3, "PRNG BIT scratch changed")
         blob[off] = 0
-    require(blob[0x297] == 0x62, "PRNG private fence immediate changed")
+    require(blob[0x297] == 0x6c, "PRNG private fence immediate changed")
     blob[0x297] = 0x1d
     require(hashlib.sha256(blob).hexdigest() == MODULE_HASH, "PRNG differs from published complete1043-byte driver")
     require(symbols["_prng_seed_explicit"] == start+0x176 and symbols["_prng_next16"] == start+0x24a,
             "PRNG entry addresses changed")
-    require(symbols["_prng_next16_PARM_2"] == 0x5c, "PRNG map limit argument changed")
-    for name, shape, address in (("prng_seed_explicit$seed","{2}SI:U",0x58),
-                                 ("prng_next16$output","{2}DX,SI:U",0x5d),
-                                 ("prng_next16$limit","{1}SC:U",0x5c)):
+    require(symbols["_prng_next16_PARM_2"] == 0x66, "PRNG map limit argument changed")
+    for name, shape, address in (("prng_seed_explicit$seed","{2}SI:U",0x62),
+                                 ("prng_next16$output","{2}DX,SI:U",0x67),
+                                 ("prng_next16$limit","{1}SC:U",0x66)):
         require(cdb_local(debug,"Lprng."+name,f"({shape}),F,0,0") == address, "PRNG public argument ABI changed")
     for name in ("prng_seed_explicit","prng_next16"):
         require(f"F:G${name}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0" in debug, "PRNG return ABI changed")
@@ -84,36 +90,36 @@ def verify_fixture(image, symbols, debug):
             bytes(image[a] for a in range(before,before+7)) == b"\0\x22\0\x22\0\x80\xfd",
             "PRNG marker instructions changed")
     start, code = verify_relocated(image,symbols,debug)
-    require(symbols["l_XSEG"] == 310 and symbols["s_XSEG"] == 0 and symbols["s_SSEG"] == 0x4e and
+    require(symbols["l_XSEG"] == 320 and symbols["s_XSEG"] == 0 and symbols["s_SSEG"] == 0x21 and
             symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0 and
-            symbols["__gptrput_PARM_2"] == 0x130, "PRNG fixture allocation/helper changed")
-    objects = {"state":(0x63,SIZE), "buffer":(0xbb,68), "probe_output":(0xff,2), "clock":(0x101,19)}
+            symbols["__gptrput_PARM_2"] == 0x13a, "PRNG fixture allocation/helper changed")
+    objects = {"state":(0x6d,SIZE), "buffer":(0xc5,68), "probe_output":(0x109,2), "clock":(0x10b,19)}
     for name,(address,length) in objects.items():
         require(symbols["_prng_fixture_"+name] == cdb_address(debug,f"L:G$prng_fixture_{name}$0_0$0") == address,
                 "PRNG caller address changed")
         sizes = re.findall(rf"^S:G\$prng_fixture_{name}\$[^(\n]+\(\{{(\d+)\}}",debug,re.M)
-        require(sizes and all(int(n) == length for n in sizes) and address > 0x62 and address+length <= 0x130,
+        require(sizes and all(int(n) == length for n in sizes) and address > 0x6c and address+length <= 0x13a,
                 "PRNG caller size/private/helper exclusion changed")
     covered = set()
     for name,length in re.findall(r"^S:([^(\n]+)\(\{(\d+)\}[^\n]*\),F,0,0$",debug,re.M):
-        if not (name.startswith(("Ltimebase.","Lclock.","Lprng.","Fprng$")) or
+        if not (name.startswith(("Ltimebase.","Lclock.","Fclock$","Lprng.","Fprng$")) or
                 re.match(r"G\$prng_(fault|seeded|reserved_end)\$",name)): continue
         if not re.search("^L:"+re.escape(name)+":",debug,re.M): continue
         address = cdb_address(debug,"L:"+name); area = set(range(address,address+int(length)))
-        require(area <= set(range(0x63)), "Clock/timebase/PRNG private scratch escaped prefix")
+        require(area <= set(range(0x6d)), "Clock/timebase/PRNG private scratch escaped prefix")
         covered |= area
-    require(covered == set(range(0x63)), "Clock/timebase/PRNG private prefix has a hole")
+    require(covered == set(range(0x6d)), "Clock/timebase/PRNG private prefix has a hole")
     for module in ("prng_fixture","prng_fixture_state"):
         layout_fields(debug,module,"seed_calls",FIELDS)
-    verify_timebase_reader(image,symbols,debug,0x63,SIZE)
+    verify_timebase_reader(image,symbols,debug,0x6d,SIZE)
     verify_deadline_helper(image,symbols,debug); verify_expiry(image,symbols,debug)
-    verify_clock_code(image,symbols,debug)
+    _, clock_sites = verify_clock_code(image,symbols,debug)
     probe = cdb_address(debug,"L:Fprng_fixture_state$probe$0$0")
     probe_code = instructions(image,probe,cdb_address(debug,"L:XFprng_fixture_state$probe$0$0"),PRNG_LENGTHS)
     stop = probe+0x3f; call = probe+0x4b
     require(probe_code[stop] == b"\x75\xb4\x3f" and
             bytes(image[a] for a in range(stop+3,call+3)) ==
-            b"\x90\0\x5c\x74\x10\xf0\x90\0\xff\x12"+symbols["_prng_next16"].to_bytes(2,"big"),
+            b"\x90\0\x66\x74\x10\xf0\x90\x01\x09\x12"+symbols["_prng_next16"].to_bytes(2,"big"),
             "PRNG intentional stop/first real caller arguments changed")
     main_code = instructions(image,symbols["_main"],cdb_address(debug,"L:XG$main$0$0")+1,PRNG_LENGTHS)
     callers = [pc for pc,raw in main_code.items() if raw == b"\x12"+probe.to_bytes(2,"big")]
@@ -128,7 +134,7 @@ def verify_fixture(image, symbols, debug):
             "PRNG raw C snapshot read order changed")
     flag_check=cdb_address(debug,"L:Fprng_fixture_state$unchanged$0$0")
     require(bytes(image[a] for a in range(flag_check+6,flag_check+18)) ==
-            b"\x90\0\x9e\xe0\xff\xc0\x07\x12"+snapshot.to_bytes(2,"big")+b"\xd0\x07",
+            b"\x90\0\xa8\xe0\xff\xc0\x07\x12"+snapshot.to_bytes(2,"big")+b"\xd0\x07",
             "PRNG previous raw IRCON must be retained before the next C snapshot")
     body = instructions(image,cdb_address(debug,"L:Fprng_fixture_state$put16$0$0"),
                         cdb_address(debug,"L:XG$main$0$0")+1,PRNG_LENGTHS)
@@ -136,14 +142,14 @@ def verify_fixture(image, symbols, debug):
     require(all(reg in READS for _,_,reg in accesses) and
             [(pc,raw) for pc,raw,reg in accesses if raw[0] != 0xe5] == [(stop,b"\x75\xb4\x3f")],
             "Fixture gained an ADC/CRC/DMA/RF/IRQ/clock or unreviewed write")
-    clock_write=before+0x298
-    require(bytes(image[a] for a in range(clock_write,clock_write+2)) == b"\x88\xc6",
+    clock_write=clock_sites[(0x8f, 0xc6)]
+    require(bytes(image[a] for a in range(clock_write,clock_write+2)) == b"\x8f\xc6",
             "PRNG fixture original clock write site changed")
-    return dict(state=0x63,buffer=0xbb,probe_output=0xff,clock=0x101,checkpoints=[before,ready,fault],
-                module_start=start,module_end=start+1043,private_end=0x62,limit=0x5c,
+    return dict(state=0x6d,buffer=0xc5,probe_output=0x109,clock=0x10b,checkpoints=[before,ready,fault],
+                module_start=start,module_end=start+1043,private_end=0x6c,limit=0x66,
                 seed=symbols["_prng_seed_explicit"],next=symbols["_prng_next16"],
                 high_write=start+0x1e6,low_write=start+0x1e8,command=start+0x334,
-                probe=probe,stop=stop,probe_call=call,probe_return=callers[0]+3,probe_sp=0x4f,
+                probe=probe,stop=stop,probe_call=call,probe_return=callers[0]+3,probe_sp=0x22,
                 cpu_reader=reads,clock_write=clock_write,fill=cdb_address(debug,"L:Fprng_fixture_state$fill_batch$0$0"),
                 flag_check=flag_check,snapshot=snapshot,wire_version=2)
 

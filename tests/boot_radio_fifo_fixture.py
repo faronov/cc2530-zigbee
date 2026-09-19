@@ -9,11 +9,37 @@ from boot_image import (
     simulate, snapshot_commands,
 )
 from radio_fifo_fixture import decode, inspect_deadline, verify_fixture, verify_fifo_relocated
-from verify_firmware import parse_ihex, require
+from verify_firmware import parse_ihex, require, verify_clock_code
 
 
 MODES = ("normal", "timeout", "controller", "bytes", "cap", "clock", "flags")
 CHUNK_STAGES = 128
+
+
+def check_service_listings(output, image_name, service, code, image, symbols, debug):
+    """Consume this image's immediate snapshots, never a later shared .rst.
+
+    Complete ordered instruction boundaries must equal the independently
+    decoded/pinned modules. Deletion, duplication, reordering and operand
+    corruption remain failures, even when every surviving line is genuine.
+    """
+    clock, _ = verify_clock_code(image, symbols, debug)
+    for module, expected in ((service, code), ("clock", clock)):
+        listing = (output/f"{image_name}.{module}.rst").read_text()
+        pattern = r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]"
+        def verify(text):
+            listed = [(int(m[1], 16), bytes.fromhex(m[2])) for m in re.finditer(pattern, text, re.M)]
+            require(listed == list(expected.items()), "Coupled service/clock complete relocated listing changed")
+        verify(listing)
+        lines = listing.splitlines(keepends=True)
+        indexes = [n for n, line in enumerate(lines) if re.match(pattern, line)]
+        a, b = indexes[:2]
+        reordered = list(lines); reordered[a], reordered[b] = lines[b], lines[a]
+        corrupted = list(lines); m = re.match(pattern, lines[a]); position = m.start(2)
+        corrupted[a] = lines[a][:position]+f"{int(m[2][:2], 16)^1:02X}"+lines[a][position+2:]
+        for actual in (lines[:a]+lines[a+1:], lines+[lines[a]], reordered, corrupted):
+            with unittest.TestCase().assertRaises(ValueError):
+                verify("".join(actual))
 
 
 def sections(text):
@@ -246,8 +272,10 @@ def check_rejections(image, symbols, debug):
 def check_radio_fifo_fixture(simulator, output, board, symbols):
     path = output / "radio_fifo_fixture.ihx"
     image = parse_ihex(path.read_text(encoding="ascii"))
-    debug = (output / "radio_fifo_fixture.cdb").read_text(encoding="utf-8")
+    debug = (output / "radio_fifo_fixture.cdb").read_bytes().decode("utf-8")
     proof = check_rejections(image, symbols, debug)
+    code, _ = verify_fifo_relocated(image, symbols, debug)
+    check_service_listings(output, "radio_fifo_fixture", "radio_fifo", code, image, symbols, debug)
     before, ready, fault = proof["checkpoints"]
     for mode in MODES:
         commands = model(symbols, mode, proof["tx_read_address"]) + [

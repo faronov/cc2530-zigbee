@@ -424,8 +424,13 @@ composition and fresh completion/idle checks. All operational faults retain
 their first result; busy CCA requires verified shutdown before explicit reuse.
 Both board definitions have host/image/alias-aware simulator evidence, not
 physical RF evidence. These init-time owners cannot be mixed with legacy RX
-in the same reset epoch. Queue/controller composition, a boot-disarmed RF
-fixture, on-air acceptance, physical ACK/retries and association remain open.
+in the same reset epoch. The separate [boot-disarmed TX fixture](RADIO_TX_FIXTURE.md)
+now provides bounded ARM/RUN admission and one conditional-clear channel15/raw05
+attempt through those real services. A clock scratch-allocation prerequisite
+reduces DATA45 to12 without relaxing any existing budget or upper-IRAM guard.
+Queue/controller composition, separately observed on-air acceptance, physical
+ACK/retries and association remain open; old clock/RX hardware records do not
+automatically validate newly linked images.
 
 The separate [offline MAC transmission scheduler](MAC_TX.md) now implements
 one copied unsecured DATA transaction with unslotted CSMA-CA, legacy ACK/DSN

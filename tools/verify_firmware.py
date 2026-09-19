@@ -14,7 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
 IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
-          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture", "flash_fixture")
+          "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture",
+          "flash_fixture", "radio_tx_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -27,6 +28,7 @@ CAPABILITIES = {
     "prng_fixture": "non-networking-explicitly-seeded-deterministic-prng-fixture",
     "radio_rx_fixture": "non-networking-bounded-passive-radio-rx-fixture",
     "flash_fixture": "non-rf-boot-disarmed-destructive-flash-fixture",
+    "radio_tx_fixture": "non-networking-boot-disarmed-one-attempt-radio-tx-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -160,30 +162,8 @@ def peripheral_accesses(instructions):
 
 
 def verify_clock_code(image, symbols, debug):
-    start = cdb_address(debug, "L:Fclock$effective_status$0$0")
-    end = cdb_address(debug, "L:XG$clock_select_init$0$0") + 1
-    require(symbols["_timebase_expired"] < start < symbols["_clock_select_init"] < end <= CODE_LIMIT,
-            "Clock module extent changed")
-    instructions = {}
-    address = start
-    while address < end:
-        size = CLOCK_INSTRUCTION_LENGTHS.get(image.get(address))
-        require(size is not None and address + size <= end
-                and all(address + i in image for i in range(size)), "Unreviewed clock instruction/length")
-        instructions[address] = bytes(image[address + i] for i in range(size))
-        address += size
-    require(image[end - 1] == 0x22, "Clock module does not end in RET")
-    accesses = peripheral_accesses(instructions)
-    expected = (b"\xe5\xc6", b"\xe5\x9e", b"\x88\xc6",
-                b"\xe5\xa8", b"\xe5\xb8", b"\xe5\x9a", b"\xe5\xbe")
-    require(tuple(data for _, data, _ in accesses) == expected,
-            "Clock peripheral read/write instruction contract changed")
-    sites = {(data[0], operand): address for address, data, operand in accesses}
-    calls = [int.from_bytes(data[1:], "big") for data in instructions.values() if data[0] == 0x12]
-    for name, count in (("_timebase_read_awake_ticks24", 2), ("_timebase_deadline_after", 1),
-                        ("_timebase_expired", 1)):
-        require(calls.count(symbols[name]) == count, "Clock linked timebase calls changed")
-    return instructions, sites
+    from clock_fixture import verify_clock_code as verify
+    return verify(image, symbols, debug)
 
 
 def parse_ihex(text):
@@ -264,9 +244,14 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(not any(name.startswith("_nv_record_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("nv_record.c", "test_nv_record.c")),
             "Board image must not link the isolated NV record composition")
-    require(not any(name.startswith("_radio_tx_") for name in symbols) and
-            not any(f"C${name}$" in debug for name in ("radio_tx.c", "test_radio_tx.c")),
-            "Board image must not link the isolated radio TX/CCA composition")
+    require(not any(name.startswith(("_radio_tx_test", "_radio_tx_component_main")) for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("test_radio_tx.c", "test_radio_tx_fixture.c")),
+            "Board image must not link the isolated radio TX/CCA tests/models")
+    require(image_name == "radio_tx_fixture" or
+            (not any(name.startswith("_radio_tx_") for name in symbols) and
+             not any(f"C${name}$" in debug for name in
+                     ("radio_tx.c", "radio_tx_fixture.c", "radio_tx_fixture_state.c"))),
+            "Board image must not link the isolated radio TX/CCA outside radio_tx_fixture")
     require(not any(name.startswith("_radio_queue_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("radio_queue.c", "test_radio_queue.c")),
             "Board image must not link the isolated radio queue composition")
@@ -306,9 +291,16 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(image_name == "dma_fixture" or
             (not any(name.startswith("_dma_") for name in symbols) and "C$dma.c$" not in debug),
             "Board image must not link the isolated DMA foundation")
-    require(image_name == "radio_fifo_fixture" or
+    require(not any(name.startswith("_radio_fifo_test") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("test_radio_fifo.c", "test_radio_fifo_fixture.c")),
+            "Board image must not link the isolated radio FIFO tests/models")
+    require(image_name in ("radio_fifo_fixture", "radio_tx_fixture") or
             (not any(name.startswith("_radio_fifo_") for name in symbols) and "C$radio_fifo" not in debug),
             "Board image must not link the isolated radio FIFO driver")
+    require(image_name == "radio_fifo_fixture" or
+            (not any(name.startswith("_radio_fifo_fixture_") for name in symbols) and
+             not any(f"C${name}$" in debug for name in ("radio_fifo_fixture.c", "radio_fifo_fixture_state.c"))),
+            "Board image must not link the isolated radio FIFO board caller outside radio_fifo_fixture")
     require(image_name == "irq_fixture" or
             ("_irq_save_disable" not in symbols and "_irq_restore" not in symbols and "C$irq.c$" not in debug),
             "Board image must not link the isolated IRQ primitives")
@@ -401,10 +393,13 @@ def verify_artifacts(output, board, image_name="bringup"):
     require(binary == (output / f"{image_name}.bin").read_bytes(), "HEX/BIN content differs")
     symbols = parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8"))
     memory = (output / f"{image_name}.mem").read_text(encoding="utf-8")
-    debug = (output / f"{image_name}.cdb").read_text(encoding="utf-8")
+    debug = (output / f"{image_name}.cdb").read_bytes().decode("utf-8")
     metrics = verify_layout(symbols, memory, debug, image_name)
     for name in ("_main", "_bringup_initialize", "_bringup_tick", "__sdcc_external_startup"):
         require(symbols[name] in image, f"Code symbol {name} is outside image")
+    address = symbols["_board_description"]
+    require(all(image.get(address + offset) == BOARDS[board] for offset in range(2)),
+            "Linked board identity/policy does not match selected board")
     if image_name == "debug_fixture":
         verify_fixture_code(image, symbols)
     elif image_name == "timebase_fixture":
@@ -432,9 +427,9 @@ def verify_artifacts(output, board, image_name="bringup"):
     elif image_name == "flash_fixture":
         from flash_fixture import verify_fixture
         verify_fixture(image, symbols, debug)
-    address = symbols["_board_description"]
-    require(bytes(image[address + offset] for offset in range(2)) == bytes([BOARDS[board]] * 2),
-            "Linked board identity/policy does not match selected board")
+    elif image_name == "radio_tx_fixture":
+        from radio_tx_fixture import verify_fixture
+        verify_fixture(image, symbols, debug, board)
     flash = re.search(
         r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)",
         memory,
@@ -548,116 +543,6 @@ def verify_deadline_helper(image, symbols, debug):
     return start, stop, locals_
 
 
-def clock_timeout_checkpoint(image, symbols, debug, instructions, sites):
-    start, stop, locals_ = verify_deadline_helper(image, symbols, debug)
-    ordinary = {a for lo, hi in xdata_ranges(symbols) for a in range(lo, hi)}
-    call_bytes = b"\x12" + start.to_bytes(2, "big")
-    calls = [address for address, data in instructions.items() if data == call_bytes]
-    require(len(calls) == 1, "Deadline helper must have one clock call site")
-    call = calls[0]
-    require(cdb_address(debug, "L:Fclock$request_and_wait$0$0") < call <
-            cdb_address(debug, "L:XFclock$request_and_wait$0$0"), "Deadline call is outside clock wait")
-    require([a for a in image if all(image.get(a + i) == value for i, value in enumerate(call_bytes))] == calls,
-            "Unexpected additional deadline call in board image")
-    # The straight-line continuation saves DPL, unwinds three saved registers,
-    # stores the helper result, reloads the owned command, then writes CLKCONCMD.
-    context = bytearray.fromhex(
-        "a8 82 d0 01 d0 02 d0 03 85 00 82 85 00 83 85 00 f0 e8 12 00 00 90 00 00 e0 f8 88 c6")
-    wait_scratch = cdb_local(debug, "Lclock.request_and_wait$sloc0", "({3}DG,SC:U),E,0,0")
-    command = cdb_local(debug, "Lclock.request_and_wait$command", "({1}SC:U),F,0,0")
-    deadline = cdb_local(debug, "Lclock.request_and_wait$deadline", "({4}SL:U),F,0,0")
-    require(command in ordinary and set(range(deadline, deadline + 4)) <= ordinary,
-            "Clock wait command/deadline is not allocated")
-    require(0x21 <= wait_scratch and wait_scratch + 3 <= symbols["s_SSEG"],
-            "Clock wait scratch is outside DATA")
-    for offset, delta in ((9, 0), (12, 1), (15, 2)):
-        context[offset] = wait_scratch + delta
-    context[19:21] = symbols["__gptrput"].to_bytes(2, "big")
-    context[22:24] = command.to_bytes(2, "big")
-    require(sites[(0x88, 0xc6)] == call + 3 + 26 and
-            all(image.get(call + 3 + i) == value for i, value in enumerate(context)),
-            "Deadline return-to-request context changed")
-    # A separate late-source experiment stops after the real request write,
-    # then at the poll's timer call, after C has stored actual source evidence.
-    observe = cdb_address(debug, "L:Fclock$observe$0$0")
-    wait_start = cdb_address(debug, "L:Fclock$request_and_wait$0$0")
-    wait_end = cdb_address(debug, "L:XFclock$request_and_wait$0$0")
-    observe_calls = [a for a, data in instructions.items()
-                     if wait_start < a < wait_end and data == b"\x12" + observe.to_bytes(2, "big")]
-    timer_calls = [a for a, data in instructions.items()
-                   if wait_start < a < wait_end and
-                   data == b"\x12" + symbols["_timebase_read_awake_ticks24"].to_bytes(2, "big")]
-    require(len(observe_calls) == 1 and len(timer_calls) == 2
-            and sites[(0x88, 0xc6)] < observe_calls[0] < timer_calls[1],
-            "Clock poll observation/sample context changed")
-    prefix = bytearray.fromhex(
-        "12 00 00 d0 00 d0 01 d0 02 d0 03 90 00 00 e0 f5 00 a3 e0 f5 00 a3 e0 f5 00 "
-        "74 11 25 00 f5 00 e4 35 00 f5 00 85 00 00 85 00 82 85 00 83 85 00 f0 "
-        "12 00 00 f5 00 74 0f 25 00 f8 e4 35 00 fc af 00 88 82 8c 83 8f f0 12 00 00 "
-        "65 00 d0 00 20 e6 0e 85 00 82 85 00 83 85 00 f0 74 01 12 00 00 "
-        "85 00 82 85 00 83 85 00 f0 12 00 00 60 06 75 82 05 02 00 00 "
-        "c0 00 c0 03 c0 02 c0 01 c0 00 12 00 00")
-    parameter = cdb_local(debug, "Lclock.request_and_wait$diagnostics", "({3}DG,ST__00000001:S),F,0,0")
-    require(set(range(parameter, parameter + 3)) <= ordinary, "Clock diagnostics pointer is not allocated")
-    prefix[12:14] = parameter.to_bytes(2, "big")
-    for index, size, declaration, offsets in (
-        (0, 3, "DG,SC:U", ((95, 0), (98, 1), (101, 2))),
-        (3, 3, "DG,SC:U", ((81, 0), (84, 1), (87, 2))),
-        (7, 3, "DG,SC:U", ((30, 0), (35, 1), (38, 2), (40, 0), (43, 1), (46, 2))),
-        (8, 1, "SC:U", ((52, 0), (74, 0))),
-        (9, 3, "DG,ST__00000001:S", ((16, 0), (20, 1), (24, 2), (28, 0),
-                                    (33, 1), (37, 2), (56, 0), (60, 1), (63, 2))),
-    ):
-        address = cdb_local(debug, f"Lclock.request_and_wait$sloc{index}", f"({{{size}}}{declaration}),E,0,0")
-        require(0x21 <= address and address + size <= symbols["s_SSEG"], "Clock poll scratch is outside DATA")
-        for offset, delta in offsets:
-            prefix[offset] = address + delta
-    for offset, address in ((1, observe), (49, symbols["__gptrget"]), (71, symbols["__gptrget"]),
-                            (92, symbols["__gptrput"]), (104, symbols["__gptrget"]),
-                            (112, wait_end), (125, symbols["_timebase_read_awake_ticks24"])):
-        prefix[offset:offset + 2] = address.to_bytes(2, "big")
-    require(timer_calls[1] == observe_calls[0] + 124
-            and all(image.get(observe_calls[0] + i) == value for i, value in enumerate(prefix)),
-            "Clock source-evidence-to-sample bytes changed")
-    source_seen = cdb_local(debug, "Lclock.clock_select_init$source_seen", "({1}SC:U),F,0,0")
-    diagnostics = cdb_local(debug, "Fclock_fixture_state$diagnostics", "({19}ST__00000003:S),F,0,0")
-    require(source_seen in ordinary and set(range(diagnostics, diagnostics + 19)) <= ordinary
-            and not diagnostics <= source_seen < diagnostics + 19
-            and not symbols["_clock_fixture_state"] <= diagnostics <
-            symbols["_clock_fixture_state"] + CLOCK_FIXTURE_SIZE,
-            "Clock evidence/diagnostic storage overlaps or is not allocated")
-    select_end = cdb_address(debug, "L:XG$clock_select_init$0$0")
-    clear_seen = b"\x90" + source_seen.to_bytes(2, "big") + b"\xe4\xf0"
-    require(sum(all(image.get(a + i) == byte for i, byte in enumerate(clear_seen))
-                for a in range(symbols["_clock_select_init"], select_end)) == 1,
-            "Clock per-call source evidence initialization changed")
-    for key, declaration, value, count, begin, end in (
-        ("Lclock.request_and_wait$source_seen", "DG,SC:U", source_seen, 2,
-         symbols["_clock_select_init"], select_end),
-        ("Lclock.clock_select_init$diagnostics", "DG,ST__00000001:S", diagnostics, 1,
-         symbols["_clock_fixture_cycle"], cdb_address(debug, "L:XG$clock_fixture_cycle$0$0")),
-        ("Ltimebase.timebase_deadline_after$deadline", "DG,SL:U", deadline, 1, wait_start, wait_end),
-    ):
-        parameter = cdb_local(debug, key, f"({{3}}{declaration}),F,0,0")
-        require(set(range(parameter, parameter + 3)) <= ordinary, "Clock pointer argument is not allocated")
-        store = (b"\x90" + parameter.to_bytes(2, "big") +
-                 bytes((0x74, value & 255, 0xf0, 0x74, value >> 8, 0xa3, 0xf0, 0xe4, 0xa3, 0xf0)))
-        require(sum(all(image.get(a + i) == byte for i, byte in enumerate(store))
-                    for a in range(begin, end)) == count,
-                "Clock inspected object differs from actual pointer argument")
-    post_write = sites[(0x88, 0xc6)] + 2
-    command_scratch = cdb_local(debug, "Lclock.request_and_wait$sloc2", "({1}SC:U),E,0,0")
-    require(instructions.get(post_write) == bytes((0x88, command_scratch))
-            and 0x21 <= command_scratch < symbols["s_SSEG"], "Post-request checkpoint instruction changed")
-    return {"address": stop, "function_start": start, "function_size": 148,
-            "return_address": call + 3, "call_address": call,
-            "command_write_address": sites[(0x88, 0xc6)], "deadline_address": deadline,
-            "command_address": command, "post_request_address": post_write,
-            "poll_observe_address": observe_calls[0], "poll_sample_address": timer_calls[1],
-            "source_seen_address": source_seen, "diagnostics_address": diagnostics,
-            "return_abi": "DPL=0 with DPS=0; RET shared with error path"}
-
-
 def verify_clock_fixture_code(image, symbols, debug):
     names = CLOCK_CHECKPOINTS + ("_main", "_clock_fixture_initialize", "_clock_fixture_cycle",
                                 "_clock_select_init", "_timebase_read_awake_ticks24",
@@ -691,8 +576,8 @@ def verify_clock_fixture_code(image, symbols, debug):
         require(symbols.get("_SOC_" + name) == address, "Clock fixture SFR address mismatch")
     verify_timebase_reader(image, symbols, debug, symbols["_clock_fixture_state"], CLOCK_FIXTURE_SIZE)
     verify_clock_diagnostics(debug)
-    instructions, sites = verify_clock_code(image, symbols, debug)
-    return clock_timeout_checkpoint(image, symbols, debug, instructions, sites)
+    from clock_fixture import verify_clock_board
+    return verify_clock_board(image, symbols, debug)
 
 
 def main():

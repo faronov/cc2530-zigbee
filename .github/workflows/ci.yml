@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [generic, lg_esl29_rev03]
-        image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture]
+        image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture, radio_tx_fixture]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,8 +41,11 @@ jobs:
 
       - name: Check repository policy and documentation links
         run: |
-          python3 -m unittest discover -s tools -p 'test_*.py' -v
           python3 tools/check_repository.py
+
+      - name: Check host tool regressions
+        if: matrix.board == 'generic' && matrix.image == 'bringup'
+        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
 
       - name: Test optional PyUSB resource management without hardware
         if: matrix.board == 'generic' && matrix.image == 'bringup'
@@ -56,7 +59,7 @@ jobs:
           BOARD: ${{ matrix.board }}
           IMAGE: ${{ matrix.image }}
           BUILD: build/${{ matrix.board }}/${{ matrix.image }}
-        run: make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test
+        run: make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-common test-board
 
       - name: Upload generated board artifacts (never hardware-tested by CI)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

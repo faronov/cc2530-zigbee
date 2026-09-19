@@ -19,7 +19,7 @@ from test_m1_transport import Clock
 BEFORE, READY, FAULT = 0x140, 0x142, 0x144
 VECTORS = tuple(b"".join(bytes.fromhex(s) for s in KATS[i % 5])+b"\0" for i in range(21))
 INITIAL_FLAGS = bytes.fromhex("31 0e 03 03 55 aa 12 37")
-P = dict(state=0xfb, key=0x13b, input=0x14b, output=0x15b, work=0x16d, vectors=0x3000,
+P = dict(state=0xfb, key=0x13b, input=0x14b, output=0x15b, work=0x16d, vectors=0x3000, stack_start=0x6e,
          descriptor0=0x45, descriptor1=0x4d, checkpoints=[BEFORE, READY, FAULT],
          arm_input=0xbf1, arm_output=0xbfe, arm_ret=0xbfd, expiry=0x2da, expiry_call=0x103f,
          reader=0x147, pre_latch=0x14a, reader_call=0xfa1, final_gate=0x1da3,

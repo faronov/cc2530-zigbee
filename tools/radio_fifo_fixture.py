@@ -39,8 +39,16 @@ SPLIT_POINTERS = (
     (0x8c0, 0x8c3, 0x22), (0x976, 0x979, 0x22), (0xa3f, 0xa42, 0x22),
 )
 IMAGE_HASHES = {
-    0x140: "4f7f2691d6d710ea48b5679a4e657a0660b61ece7ce1ec3d4ed377bc680641ac",
-    0x168: "caa26c090473b2e9008652d2ee67bb90226b493f392582d978a6ad71aaf37497",
+    0x140: "5f3c8134f82102b0fb77c14e6e9512db10ee284a95479effefd65679711d4a26",
+    0x168: "6d8095db7891f10e7c17fbd0ed2046b3f31be49ceea325687fb87af8081c7c13",
+}
+# Exact relocations of the accepted clock object (identical unlinked assembly).
+# Consumed by the shared clock proof; no masks or successful-proof cache.
+CLOCK_PROFILES = {
+    (3851, 183, 8808): ("70b7de7fcf81c1c3d7bca213e2a43fe217d1b24655d42aed7af79f9bcec8737d",
+                       "3bef706d49fc8b9bf7efc9684a14368a6f7ae57e69ddc72b2d32fb11b54173dd", 10),
+    (3891, 183, 8848): ("7aa630290468418e79632d13e2f114993c94a86178f91c1f78ca4b24054e75a7",
+                       "61c71d6cad3c7000b36f1f1642feaaed1bb46243466d118a9eeddec98cc9e54d", 10),
 }
 STATE_FIELDS = (
     ("signature", 4), ("version", 1), ("size", 1), ("phase", 1), ("reason", 1),
@@ -187,14 +195,14 @@ def verify_fixture(image, symbols, debug):
             fields = re.findall(r"\(\{(\d+)\}S:S\$([^$]+)\$0_0\$0\(\{(\d+)\}", line)
             require([(int(a), b, int(c)) for a, b, c in fields] == expected,
                     "FIFO diagnostic/context field ABI changed")
-    require(symbols["_radio_fifo_fixture_state"] == 0 and symbols["l_XSEG"] == 309
-            and symbols["s_SSEG"] == 0x6d and symbols["l_SSEG"] == 147
+    require(symbols["_radio_fifo_fixture_state"] == 0 and symbols["l_XSEG"] == 319
+            and symbols["s_SSEG"] == 0x4f and symbols["l_SSEG"] == 177
             and symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0,
             "Radio FIFO state/workspace/stack layout changed")
     work = cdb_local(debug, "Fradio_fifo_fixture_state$work", "({21}ST__00000006:S),F,0,0")
     small = cdb_local(debug, "Fradio_fifo_fixture_state$small", "({3}DA3d,SC:U),F,0,0")
     maximum = cdb_local(debug, "Fradio_fifo_fixture_state$maximum", "({125}DA125d,SC:U),D,0,0")
-    require(work == 108 and small == 129 and maximum == before + 0x212e
+    require(work == 108 and small == 129 and maximum == before + 0x2161
             and program[maximum:maximum + 125] == bytes(i ^ 0x69 for i in range(125)),
             "Radio FIFO workspace or CODE/XDATA payload changed")
     fixture_code = instructions(
@@ -235,7 +243,7 @@ def verify_fixture(image, symbols, debug):
                        ("body", "({3}DG,SC:U)"), ("w", "({23}ST__00000001:S)")):
         private[name] = cdb_local(debug, "Lradio_fifo.operate$" + name, kind + ",F,0,0")
     require(private == dict(zip(("length", "timeout", "limit", "d", "body", "w"),
-                                (249, 250, 254, 256, 258, 261))), "FIFO operation storage changed")
+                                (259, 260, 264, 266, 268, 271))), "FIFO operation storage changed")
     caller = before + 0xae3
     require(symbols["_main"] < caller < cdb_address(debug, "L:XG$main$0$0") == before + 0xc36,
             "FIFO caller is not in the genuine inlined main")
@@ -247,7 +255,7 @@ def verify_fixture(image, symbols, debug):
                 fixture_return=caller + 3, helper_locals=locals_, private=private,
                 work=work, small=small, maximum=maximum, state=0,
                 checkpoints=[before, ready, fault], tx_read_bounds=[0x6080, 0x60fd],
-                tx_read_address=reads[0], deadline_sp=0x74)
+                tx_read_address=reads[0], deadline_sp=0x56)
 
 
 def inspect_deadline(proof, read, sp, dpl, dps):

@@ -16,8 +16,14 @@ SIZE, TIMEOUT, LIMIT = 64, 32768, 4096
 CHECKPOINTS = tuple("_aes_fixture_" + n for n in ("before", "ready", "fault"))
 LENGTHS = DMA_LENGTHS | {0x05: 2, 0x0d: 1, 0x2b: 1, 0x3c: 1, 0x49: 1, 0x52: 2, 0x5a: 1, 0x5f: 1, 0xd5: 3, 0xa4: 1}
 AES_HASH = "b80e064f5fb405c8a5d2c28722e18b51f25c5d99d90dd8aaec6da4332103befd"
-HASHES = {0x140: (12725, "ce8bf5e85291c93901432612824ab428f0350baaa674d4d2939a6531f3313b92"),
-          0x168: (12765, "0ee3e0946685c6fac10fbdd589ce75a6d2fbc14d4bad07e632faf0cd4f2d4997")}
+HASHES = {0x140: (12776, "327a9afbafdf87a67eecb599303687fcad4b850bd4f67251b17efb4987489790"),
+          0x168: (12816, "691727bd26827ddda5b2dfb0d48fda91aa4d4a81003d7d20076c26e1b1670326")}
+CLOCK_PROFILES = {
+    (731, 25, 11518): ("aaa480583e50566ab57c9c9cee72b02c139d0c42146752863beeb69a0a5eb866",
+                       "7f361afab0a46b62821c363b00140e3eb20e944ec31ec53f3a357437cae7707d", 8),
+    (771, 25, 11558): ("fef7e99c6ca8532b7b5a0a6acca20ce38a49363a1dac0a14ca584e641145194a",
+                       "037359a09ff3850faeeed4d6eac67ebb386209e958989eea74ffc5df09a4eb47", 8),
+}
 FIELDS = (
     ("signature", 4), ("version", 1), ("size", 1), ("phase", 1), ("reason", 1), ("stage", 1),
     ("completed", 1), ("vector", 1), ("spaces", 1), ("result", 1), ("kind", 1), ("checked", 1),
@@ -64,8 +70,8 @@ def verify_relocated(image, symbols, debug):
     code = instructions(image, start, end, LENGTHS)
     blob = bytearray(image[a] for a in range(start, end))
     xb, db = symbols["_aes_dma0"], cdb_address(debug, "L:Laes.source_range$sloc0$0_1$0")
-    require(xb == 0x45 and symbols["_aes_reserved_end"] == 0xfa and db == 0x4e and
-            symbols["__gptrput_PARM_2"] == 0x1af, "AES private/direct/helper layout changed")
+    require(xb == 0x4f and symbols["_aes_reserved_end"] == 0x104 and db == 0x21 and
+            symbols["__gptrput_PARM_2"] == 0x1b9, "AES private/direct/helper layout changed")
     external = {"_timebase_read_awake_ticks24": 0x62, "_timebase_deadline_after": 0xba,
                 "_timebase_expired": 0x14e, "__gptrget": 0x17e3}
     params = {"_timebase_deadline_after_PARM_2": (3, 4), "_timebase_deadline_after_PARM_3": (7, 3),
@@ -97,8 +103,13 @@ def verify_relocated(image, symbols, debug):
               (0xd31, 0x45, 0x19), (0xd53, 0x4d, 0x21), (0xe87, 0x7d, 0x51),
               (0xe8f, 0x8d, 0x61), (0x1450, 0x9d, 0x71))
     for offset, actual, original in splits:
+        actual += 10  # Reviewed XDATA relocation only; reference module stays unchanged.
         require(blob[offset] == actual & 255, "AES split pointer changed")
         blob[offset] = original & 255
+    # The same linked fence now crosses FF. Prove/normalize its HIGH byte too;
+    # retaining an assumed zero would silently weaken the pointer exclusion.
+    require(blob[0xcc:0xce] == b"\x7f\x01", "AES private fence high-byte relocation changed")
+    blob[0xcd] = 0
     require(hashlib.sha256(blob).hexdigest() == AES_HASH, "AES differs from complete corrected 5254-byte module")
     return code, start
 
@@ -149,16 +160,17 @@ def verify_fixture(image, symbols, debug):
                           ("AEF_IP0", 0xa9), ("AEF_IP1", 0xb9), ("AEF_TCON", 0x88),
                           ("AEF_S1CON", 0x9b), ("AEF_RFIRQF0", 0xe9), ("AEF_RFIRQF1", 0x91), ("AEF_IRCON2", 0xe8)):
         require(symbols.get("_"+name) == address, "AES fixture SFR declaration changed: "+name)
-    require(symbols["l_XSEG"] == 437 and symbols["s_XSEG"] == 0 and symbols["s_SSEG"] == 0x6e and
+    require(symbols["l_XSEG"] == 447 and symbols["s_XSEG"] == 0 and symbols["s_SSEG"] == 0x41 and
             symbols["l_PSEG"] == symbols["l_XISEG"] == symbols["l_XABS"] == 0, "AES board allocation changed")
     for name, address, length in (("dma0", 0x45, 8), ("dma1", 0x4d, 32), ("key", 0x6d, 16),
                                   ("iv", 0x7d, 16), ("input", 0x8d, 16), ("output", 0x9d, 16),
                                   ("fault", 0xad, 1), ("used", 0xae, 1), ("reserved_end", 0xfa, 1)):
+        address += 10
         require(symbols.get("_aes_"+name) == cdb_address(debug, f"L:G$aes_{name}$0_0$0") == address,
                 "AES private object map/CDB mismatch")
         sizes = re.findall(rf"^S:G\$aes_{name}\$[^(\n]+\(\{{(\d+)\}}", debug, re.MULTILINE)
         require(sizes and all(int(n) == length for n in sizes), "AES private object extent changed")
-    objects = {"state": (0xfb, SIZE), "key": (0x13b, 16), "input": (0x14b, 16), "output": (0x15b, 18), "work": (0x16d, 29)}
+    objects = {"state": (0x105, SIZE), "key": (0x145, 16), "input": (0x155, 16), "output": (0x165, 18), "work": (0x177, 29)}
     require(symbols["_aes_fixture_vectors"] == cdb_address(debug, "L:G$aes_fixture_vectors$0_0$0") and
             symbols["_aes_fixture_vectors"]+1029 <= size, "AES public CODE corpus location changed")
     ordinary = {a for lo, hi in xdata_ranges(symbols) for a in range(lo, hi)}
@@ -171,19 +183,19 @@ def verify_fixture(image, symbols, debug):
                 not address <= symbols["__gptrput_PARM_2"] < address+length, "AES caller/helper exclusion changed")
     covered = set()
     for name, length in re.findall(r"^S:([^(\n]+)\(\{(\d+)\}[^\n]*\),F,0,0$", debug, re.MULTILINE):
-        if not (name.startswith(("Ltimebase.", "Lclock.", "Laes.", "Faes$")) or
+        if not (name.startswith(("Ltimebase.", "Lclock.", "Fclock$", "Laes.", "Faes$")) or
                 re.match(r"G\$aes_(dma0|dma1|key|iv|input|output|fault|used|reserved_end)\$", name)): continue
         if not re.search(r"^L:"+re.escape(name)+":", debug, re.MULTILINE): continue
         address = cdb_address(debug, "L:"+name)
         block = set(range(address, address+int(length)))
-        require(block <= set(range(0xfb)), "AES/clock/timebase private scratch escapes prefix")
+        require(block <= set(range(0x105)), "AES/clock/timebase private scratch escapes prefix")
         covered |= block
-    require(covered == set(range(0xfb)), "AES/clock/timebase private-prefix accounting has a hole")
+    require(covered == set(range(0x105)), "AES/clock/timebase private-prefix accounting has a hole")
     for module in ("aes_fixture", "aes_fixture_state"):
         layout_fields(debug, module, "initial_enc", FIELDS)
         layout_fields(debug, module, "output_drained", tuple(zip(AES_FIELDS, (4, 2)+(1,)*23)))
     layout_fields(debug, "aes", "output_drained", tuple(zip(AES_FIELDS, (4, 2)+(1,)*23)))
-    verify_timebase_reader(image, symbols, debug, 0xfb, SIZE)
+    verify_timebase_reader(image, symbols, debug, 0x105, SIZE)
     verify_deadline_helper(image, symbols, debug); verify_clock_code(image, symbols, debug)
     expiry, helper = expiry_proof(image, symbols, debug)
     private = {n: cdb_local(debug, "Laes.aes128_encrypt_block$"+n, decl+",F,0,0")
@@ -192,7 +204,7 @@ def verify_fixture(image, symbols, debug):
                                ("limit", "({2}SI:U)"), ("d", "({2}DX,ST__00000000:S)"))}
     sample = {n: cdb_local(debug, "Laes.sample$"+n, decl+",F,0,0")
               for n, decl in (("d", "({2}DX,ST__00000000:S)"), ("final", "({1}SC:U)"), ("expired", "({1}:S)"))}
-    require(cdb_address(debug, "L:Faes$w$0_0$0") == 0xaf, "AES wait context allocation changed")
+    require(cdb_address(debug, "L:Faes$w$0_0$0") == 0xb9, "AES wait context allocation changed")
     main = instructions(image, symbols["_main"], cdb_address(debug, "L:XG$main$0$0")+1, LENGTHS)
     callers = [pc for pc, op in main.items() if op == b"\x12"+symbols["_aes128_encrypt_block"].to_bytes(2, "big")]
     require(len(callers) == 1, "AES genuine inlined fixture caller changed")
@@ -208,15 +220,16 @@ def verify_fixture(image, symbols, debug):
                         (0x13ca, bytes.fromhex("8e 82 8f 83"))):
         require(bytes(image[a] for a in range(start+offset, start+offset+len(raw))) == raw,
                 "AES negative saved-register path changed")
-    return dict(state=0xfb, key=0x13b, input=0x14b, output=0x15b, work=0x16d, descriptor0=0x45, descriptor1=0x4d,
+    return dict(state=0x105, key=0x145, input=0x155, output=0x165, work=0x177, descriptor0=0x4f, descriptor1=0x57,
                 vectors=symbols["_aes_fixture_vectors"], checkpoints=[before, ready, fault], module_start=start,
                 module_end=start+5254, arm_input=arm_input, arm_output=arm_output, arm_ret=arm_input+12,
                 armed_sample_call=start+0xf5a, final_sample_call=start+0x13ce,
-                expiry_call=start+0x644, expiry=expiry, helper=helper, sample=sample, private=private, wait=0xaf,
+                expiry_call=start+0x644, expiry=expiry, helper=helper, sample=sample, private=private, wait=0xb9,
                 fixture_return=callers[0]+3, final_gate=start+0x13a6+2,
                 reader=symbols["_timebase_read_awake_ticks24"], pre_latch=symbols["_timebase_read_awake_ticks24"]+3,
                 reader_call=start+0x5a6, aes_start=start+0xff5,
-                verify_buffers=cdb_address(debug, "L:Faes_fixture_state$verify_buffers$0$0"))
+                verify_buffers=cdb_address(debug, "L:Faes_fixture_state$verify_buffers$0$0"),
+                stack_start=symbols["s_SSEG"])
 
 
 def unpack_aes(data):
@@ -287,7 +300,8 @@ def expected_buffers(vector, success):
 
 def inspect_context(p, read, sp, dpl, dps, controller, record, mode):
     require(mode in ("pre-key", "final") and dpl == dps == 0 and
-            sp == (0x7b if mode == "pre-key" else 0x73), "AES negative CPU context changed")
+            sp == p["stack_start"]+(13 if mode == "pre-key" else 5) and sp < 128,
+            "AES negative CPU context changed")
     r = record
     require((r["phase"], r["stage"], r["completed"], r["vector"], r["spaces"], r["result"], r["kind"]) ==
             (2, 3, 0, 0, 1, 255, 2) and r["command"] == r["status"] == 0x88 and
@@ -300,7 +314,7 @@ def inspect_context(p, read, sp, dpl, dps, controller, record, mode):
         ("timeout", TIMEOUT.to_bytes(4, "little")), ("limit", LIMIT.to_bytes(2, "little")),
     ):
         require(read(p["private"][name], len(value)) == value, "AES live generic/XDATA argument changed: "+name)
-    require(read(0xad, 2) == b"\0\x01" and read(p["sample"]["d"], 2) == p["work"].to_bytes(2, "little") and
+    require(read(p["descriptor0"]+104, 2) == b"\0\x01" and read(p["sample"]["d"], 2) == p["work"].to_bytes(2, "little") and
             read(p["sample"]["final"], 1) == bytes([mode == "final"]), "AES owned history/sample mode changed")
     w = read(p["wait"], 22)
     start, previous, deadline = (int.from_bytes(w[i:i+4], "little") for i in (0, 4, 8))
@@ -313,9 +327,9 @@ def inspect_context(p, read, sp, dpl, dps, controller, record, mode):
               p["descriptor0"].to_bytes(2, "little")+p["descriptor1"].to_bytes(2, "little")
     require(controller == control and not r["initial_ircon"] & 1 and not r["initial_enc"] & 3,
             "AES actual owned control/IRQ/config state changed")
-    source = 0x6d if mode == "pre-key" else 0x8d
+    source = p["descriptor0"]+(40 if mode == "pre-key" else 72)
     descriptors = source.to_bytes(2, "big")+b"\x70\xb1\0\x10\x1d\x41" + \
-                  b"\x70\xb2\0\x9d\0\x10\x1e\x11"+bytes(24)
+                  b"\x70\xb2"+(p["descriptor0"]+88).to_bytes(2, "big")+b"\0\x10\x1e\x11"+bytes(24)
     require(read(p["descriptor0"], 40) == descriptors, "AES finite input/output descriptors changed")
     d = unpack_aes(read(p["work"], 29))
     elapsed = (previous-start)&0xffffff
@@ -345,7 +359,7 @@ def inspect_context(p, read, sp, dpl, dps, controller, record, mode):
     if mode == "pre-key":
         stack += (p["work"]+6).to_bytes(2, "big")+p["work"].to_bytes(2, "big")
     stack += (p["expiry_call"]+3 if mode == "pre-key" else p["reader_call"]+3).to_bytes(2, "little")
-    require(read(0x1f6e, len(stack)) == stack, "AES complete nested caller/saved-register frame changed")
+    require(read(0x1f00+p["stack_start"], len(stack)) == stack, "AES complete nested caller/saved-register frame changed")
     vector = b"".join(bytes.fromhex(s) for s in KATS[0])+b"\0"
     require(read(p["key"], 50) == expected_buffers(vector, False), "AES pre-publication caller buffers changed")
     return dict(mode=mode, start=start, previous=previous, deadline=deadline, sampled_now=now,

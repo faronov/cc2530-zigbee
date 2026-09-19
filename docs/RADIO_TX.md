@@ -197,14 +197,17 @@ Immediately after linking, Make snapshots the timebase, FIFO, TX and caller
 relocated listings as `radio_tx_test.<module>.rst`. A later component link
 cannot silently substitute different relocations. The standalone inventory
 and all-board exclusion regressions cover this target and its source/symbols.
-No board `IMAGE`, upload path, RF runner or hardware command is added.
-Existing component budgets and the seven-path board-artifact whitelist remain
-unchanged.
+The standalone target does not itself add an image or hardware operation.
+The separate [boot-disarmed board fixture](RADIO_TX_FIXTURE.md) now composes
+these services with the actual clock and guarded caller; only that selected
+board image is an eventual programming input. Existing component budgets and
+the seven-path board-artifact whitelist remain unchanged.
 
 ## Separately authorized future RF procedure
 
-This is preparation **only**, not authorization or an executable runner.
-There is no TX board fixture yet. Before physical execution:
+This is preparation **only**, not authorization. The
+[separate board fixture/manual runner](RADIO_TX_FIXTURE.md) implements the
+bounded one-attempt path, not physical acceptance. Before physical execution:
 
 1. Identify the exact board/revision/CC2530F256, recovery material, separately
    selected **boot-disarmed board fixture**, linked image hash/toolchain and

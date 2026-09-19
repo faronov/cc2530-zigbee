@@ -136,7 +136,7 @@ class DebugImage:
         self.image_name = image_name
         self.sha256 = hashes[f"{image_name}.bin"]
         image = parse_ihex((output / f"{image_name}.ihx").read_text(encoding="ascii"))
-        debug_text = (output / f"{image_name}.cdb").read_text(encoding="utf-8")
+        debug_text = (output / f"{image_name}.cdb").read_bytes().decode("utf-8")
         self.symbols = linked_symbols((output / f"{image_name}.map").read_text(encoding="utf-8"),
                                       debug_text, image)
         self.source_locations = linked_source_locations(debug_text, image)
@@ -166,6 +166,10 @@ class DebugImage:
             from radio_rx_fixture import verify_fixture
             self.radio_rx_proof = verify_fixture(
                 image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text)
+        if image_name == "radio_tx_fixture":
+            from radio_tx_fixture import verify_fixture
+            self.radio_tx_proof = verify_fixture(
+                image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text, board)
 
     def symbol(self, name: str) -> Symbol:
         require(name in self.symbols, f"No supported linked global/label named {name}")

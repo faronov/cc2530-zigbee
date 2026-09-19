@@ -20,12 +20,12 @@ from verify_firmware import CLOCK_CHECKPOINTS
 
 DEADLINE, CALL, WRITE = 0x180, 0x1a0, 0x1bd
 POST, OBSERVE = WRITE + 2, WRITE + 8
-SAMPLE = OBSERVE + 124
+SAMPLE = OBSERVE + 40
 data = bytearray(bytes(range(256)) * 3)
 data[DEADLINE - 3:DEADLINE + 1] = b"\x75\x82\0\x22"
 data[CALL:CALL + 3] = b"\x12" + (DEADLINE - 147).to_bytes(2, "big")
-data[WRITE:WRITE + 2] = b"\x88\xc6"
-data[POST], data[SAMPLE] = 0x88, 0x12
+data[WRITE:WRITE + 2] = b"\x8f\xc6"
+data[POST], data[SAMPLE] = 0x8f, 0x12
 PROGRAM = bytes(data)
 
 
@@ -259,6 +259,26 @@ class ClockHardwareTests(unittest.TestCase):
                 self.exercise(debugger, late=True)
             self.assertEqual(debugger.pc, SAMPLE)
             self.assertNotIn(("breakpoint", 3, SAMPLE, False), debugger.events)
+
+    def test_staged_instruction_guards_reject_old_emission_despite_matching_hash(self):
+        for address, value in ((WRITE, 0x88), (POST, 0x88), (SAMPLE, 0)):
+            program = bytearray(PROGRAM)
+            program[address] = value
+            image = image_fixture()
+            image.sha256 = hashlib.sha256(program).hexdigest()
+            debugger = ClockDebugger()
+            with self.subTest(address=address), self.assertRaises(ValueError):
+                runner.exercise(debugger, image, bytes(program))
+            self.assertEqual(debugger.events, [])
+        image = image_fixture()
+        image.clock_timeout_checkpoint["poll_sample_address"] = OBSERVE + 124
+        program = bytearray(PROGRAM)
+        program[OBSERVE + 124] = 0x12
+        image.sha256 = hashlib.sha256(program).hexdigest()
+        debugger = ClockDebugger()
+        with self.assertRaises(ValueError):
+            runner.exercise(debugger, image, bytes(program))
+        self.assertEqual(debugger.events, [])
 
     def test_uncertain_cancellation_never_becomes_hardware_rollback_acceptance(self):
         def unconfirmed(data):

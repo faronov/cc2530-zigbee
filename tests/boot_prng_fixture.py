@@ -4,7 +4,7 @@ import re
 import unittest
 
 from boot_image import ALIAS, boot_commands, check_guards, check_pc, expected_status, marker, memory_dump, simulate, snapshot_commands
-from boot_radio_fifo_fixture import sections, snapshot
+from boot_radio_fifo_fixture import check_service_listings, sections, snapshot
 from prng_fixture import FLAGS, FlagHistory, Sequence, advance, decode, verify_fixture, verify_relocated
 from verify_firmware import parse_ihex, require
 
@@ -63,7 +63,7 @@ def check_snapshot(parts,n,symbols,proof,pc,initial_boot,*,injected_irq=False):
         require(sfr[0xa8-128] == 1,"PRNG lost the deliberately injected IRQ enable")
         guard_sfr=sfr[:0xa8-128]+b"\0"+sfr[0xa9-128:]
     check_guards(ram,iram[128:],guard_sfr,symbols)
-    require(sfr[1] == 0x4f, "PRNG fixture stack did not unwind")
+    require(sfr[1] == symbols["s_SSEG"]+1, "PRNG fixture stack did not unwind")
     record=decode(ram[proof["state"]:proof["state"]+88],running=pc == proof["probe_call"])
     boot=ram[0x1e00:0x1e20]
     require(boot[:8]+boot[9:] == initial_boot[:8]+initial_boot[9:] and boot[8] == record["completed"],
@@ -78,14 +78,16 @@ def inspect_probe(proof,record,memory):
             record["fault_latch"] == 0 and record["probe"] == [0]*3 and
             sfr[1] == proof["probe_sp"] and sfr[2:4] == proof["probe_output"].to_bytes(2,"little") and
             sfr[0x12] == 0 and ram[proof["limit"]] == 16 and
-            iram[0x4e:0x50] == proof["probe_return"].to_bytes(2,"little") and
+            iram[proof["probe_sp"]-1:proof["probe_sp"]+1] == proof["probe_return"].to_bytes(2,"little") and
             sfr[0xb4-128] == record["initial_adc"]|12 and ram[proof["probe_output"]:proof["probe_output"]+2] == b"\x69\x96",
             "PRNG actual stopped-call frame/arguments/state changed")
 
 
 def check_prng_fixture(simulator,output,board,symbols):
-    path=output/"prng_fixture.ihx"; image=parse_ihex(path.read_text()); debug=path.with_suffix(".cdb").read_text()
+    path=output/"prng_fixture.ihx"; image=parse_ihex(path.read_text()); debug=path.with_suffix(".cdb").read_bytes().decode("utf-8")
     proof=verify_fixture(image,symbols,debug); before,ready,fault=proof["checkpoints"]
+    _, code = verify_relocated(image, symbols, debug)
+    check_service_listings(output, "prng_fixture", "prng", code, image, symbols, debug)
     case=unittest.TestCase()
     for a in image:
         with case.assertRaises(ValueError): verify_fixture(image | {a:image[a]^1},symbols,debug)
@@ -98,6 +100,17 @@ def check_prng_fixture(simulator,output,board,symbols):
     from check_prng_hardware import validate_program
     actual=DebugImage(output,board,"prng_fixture")
     for mode in ("short","full","stopped"): validate_program(actual,path.with_suffix(".bin").read_bytes(),mode)
+    execute_prng_fixture(simulator,output,board,symbols,proof)
+
+
+def execute_prng_fixture(simulator,output,board,symbols,proof):
+    """Whole genuine corpus, also callable after independent image preflight.
+
+    The normal entry above still requires every artifact/runner check. Keeping
+    execution separate permits offline service proof while a separately owned
+    hardware-runner relocation gate remains closed; it never relaxes that gate.
+    """
+    path=output/"prng_fixture.ihx"; before,ready,fault=proof["checkpoints"]
     seq=Sequence(); history=FlagHistory()
     carry=None; peak=0; transitions=[]; seed_writes=[]; clocks=[]; chunks=0
     initial_boot=expected_status(board)
@@ -115,25 +128,25 @@ def check_prng_fixture(simulator,output,board,symbols):
             if seq.ready+i+1 == 128:
                 commands += ["expression sfr[0xc0]=sfr[0xc0]|128"]
             commands += [marker(100+3*i),"state",
-                         "dump /h xram 0x63 0x100","dump /h xram 0x1e00 0x1e1f",
+                         f"dump /h xram {proof['state']} {proof['probe_output']+1}","dump /h xram 0x1e00 0x1e1f",
                          marker(101+3*i),"dump /h sfr 0x80 0xff",marker(102+3*i)]
             pc=ready
         commands+=snapshot_commands(500)+[marker(504),"dump /h xram 0x6000 0x70ff",marker(505)]
         text=simulate(simulator,commands,path); parts=sections(text)
         if carry is None:
             r,first=check_snapshot(parts,1,symbols,proof,before,initial_boot)
-            require(r["phase"] == 1 and first[0][0xbb:0x101] == bytes(70),"PRNG initial C/caller checks failed")
+            require(r["phase"] == 1 and first[0][proof["buffer"]:proof["buffer"]+70] == bytes(70),"PRNG initial C/caller checks failed")
             history.observe(r,[first[2][reg-128] for reg in FLAGS])
         else:
             check_pc(parts[1],ready)
             require(snapshot(parts,1) == carry,"PRNG continuation did not restore complete genuine memory/CPU state")
         for i in range(count):
             part=parts[100+3*i]; check_pc(part,ready)
-            r=decode(memory_dump(part,0x63,88))
+            r=decode(memory_dump(part,proof["state"],88))
             sfr=memory_dump(parts[101+3*i],0x80,128)
             history.observe(r,[sfr[reg-128] for reg in FLAGS])
-            seq.accept(r,memory_dump(part,0xbb,68))
-            require(memory_dump(parts[101+3*i],0x81,1) == b"\x4f","PRNG READY stack leak")
+            seq.accept(r,memory_dump(part,proof["buffer"],68))
+            require(memory_dump(parts[101+3*i],0x81,1) == bytes([symbols["s_SSEG"]+1]),"PRNG READY stack leak")
             boot=memory_dump(part,0x1e00,32)
             require(boot[:8]+boot[9:] == initial_boot[:8]+initial_boot[9:] and boot[8] == seq.completed,
                     "PRNG per-batch M0 mismatch")
@@ -159,9 +172,10 @@ def check_prng_fixture(simulator,output,board,symbols):
     r,failed=check_snapshot(parts,10,symbols,proof,fault,initial_boot)
     history.observe(r,[failed[2][reg-128] for reg in FLAGS])
     require(r["reason"] == 7 and r["probe"] == [6]*3 and r["fault_latch"] == 6 and
-            failed == snapshot(parts,20) and failed[0][0xbb:0xff] == carry[0][0xbb:0xff],
+            failed == snapshot(parts,20) and
+            failed[0][proof["buffer"]:proof["buffer"]+68] == carry[0][proof["buffer"]:proof["buffer"]+68],
             "PRNG genuine stopped probe/re-entry/frozen output failure")
-    require(failed[0][0x101:0x114] == carry[0][0x101:0x114],
+    require(failed[0][proof["clock"]:proof["clock"]+19] == carry[0][proof["clock"]:proof["clock"]+19],
             "PRNG stopped probe corrupted the adjacent native clock diagnostic")
     require(history.observations == 4114 and history.summary()["observations_after_transition"] == 3985,
             "PRNG stopped probe lost sticky-flag history")
@@ -175,7 +189,7 @@ def check_prng_fixture(simulator,output,board,symbols):
         for i in range(5):
             r,memory=check_snapshot(parts,10+10*i,symbols,proof,ready,initial_boot)
             flags.observe(r,[memory[2][reg-128] for reg in FLAGS])
-            short.accept(r,memory[0][0xbb:0xff])
+            short.accept(r,memory[0][proof["buffer"]:proof["buffer"]+68])
         require(short.total == 8 and flags.last_c[9] == flags.last_live[9] == 0xa0 and
                 (flags.transition is None if stif else flags.transition["source"] == "c-snapshot"),
                 "PRNG initial STIF1 or actual C-execution assertion failed")

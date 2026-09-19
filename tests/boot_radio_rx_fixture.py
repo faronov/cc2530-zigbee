@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Actual board instructions, shared host trace replay; no ROM patches or USB."""
+import hashlib
 import json
 import re
 import subprocess
@@ -9,10 +10,10 @@ from boot_image import (
     ALIAS, boot_commands, check_guards, check_pc, marker, memory_dump,
     simulate, snapshot_commands,
 )
-from boot_radio_fifo_fixture import sections, snapshot
+from boot_radio_fifo_fixture import check_service_listings, sections, snapshot
 from boot_radio_rx import check_fscal1_rejections, check_fscal1_trace
 from radio_rx_fixture import (
-    CHECKPOINTS, FLAGS, LENGTHS, SETTINGS, SIZE, VALUES, check_frame, decode, instructions,
+    CHECKPOINTS, DRIVER_HASH, FLAGS, LENGTHS, SETTINGS, SIZE, VALUES, check_frame, decode, instructions, normalized_driver,
     verify_code, verify_driver_listing, verify_fixture,
 )
 from verify_firmware import cdb_address, parse_ihex, require
@@ -37,12 +38,21 @@ def rejections(image, symbols, debug):
     case = unittest.TestCase()
     start = cdb_address(debug, "L:Fradio_rx$ordinary$0$0")
     end = cdb_address(debug, "L:XG$radio_rx_receive_init$0$0")+1
-    check_fscal1_rejections(instructions(image, start, end, LENGTHS), start+0x1ab, 0x4e,
+    check_fscal1_rejections(instructions(image, start, end, LENGTHS), start+0x1ab, 0x36,
                            cdb_address(debug, "L:Fradio_rx$values$0_0$0"))
     for address in image:
         changed = dict(image); changed[address] ^= 1
         with case.assertRaisesRegex(ValueError, "instructions"):
             verify_code(changed, symbols[CHECKPOINTS[0]])
+    # Test the unchanged-service comparison independently of the whole-image
+    # hash: no opcode, branch, constant or relocation operand may disappear.
+    for address in range(start, end):
+        changed = image | {address: image[address]^1}
+        try:
+            digest = hashlib.sha256(normalized_driver(changed, symbols, debug)).hexdigest()
+        except ValueError:
+            continue
+        require(digest != DRIVER_HASH, "RX normalized proof ignored a changed service byte")
     for name in (*CHECKPOINTS, "_radio_rx_fixture_frame", "_radio_rx_fixture_diagnostics",
                  "_radio_rx_reserved_end", "__gptrput_PARM_2", "s_SSEG", "l_XSEG"):
         with case.assertRaises(ValueError):
@@ -136,7 +146,7 @@ def poll_limit(simulator, path, symbols, proof, carry):
     for a, value in defaults.items(): commands.append(f"set memory xram {a:#x} {value:#x}")
     commands += ["set memory sfr 0x95 0 0 0", "set memory sfr 0xe9 0", "set memory sfr 0x91 0"]
     # Stop at the real poll entry every 2048 hits. No argument/count patch.
-    debug = path.with_suffix(".cdb").read_text()
+    debug = path.with_suffix(".cdb").read_bytes().decode("utf-8")
     poll = cdb_address(debug, "L:Fradio_rx$poll$0$0")
     e3 = next(pc for pc, (kind, a, _) in proof["sites"].items()
               if kind == "w" and a == 0xe1 and pc < proof["driver_end"]-400)
@@ -189,7 +199,7 @@ def poll_limit(simulator, path, symbols, proof, carry):
             check_frame(r, ram[proof["frame"]:proof["frame"]+128])
             require(r["result"] == r["fault_latch"] == 11 and r["attempt"] == 1 and
                     r["completed"] == 0 and r["diagnostic"]["elapsed_ticks"] == 0 and
-                    r["diagnostic"]["actions"] == 1 and sfr[1] == 0x62,
+                    r["diagnostic"]["actions"] == 1 and sfr[1] == symbols["s_SSEG"]+1,
                     "RX full poll cap not retained at genuine FAULT")
             require(snapshot(parts, 20) == memory, "RX full-cap FAULT did not remain terminal")
             return chunk+1
@@ -200,11 +210,14 @@ def poll_limit(simulator, path, symbols, proof, carry):
 
 def check_radio_rx_fixture(simulator, output, board, symbols):
     path = output/"radio_rx_fixture.ihx"
-    image = parse_ihex(path.read_text()); debug = path.with_suffix(".cdb").read_text()
+    image = parse_ihex(path.read_text()); debug = path.with_suffix(".cdb").read_bytes().decode("utf-8")
     proof = verify_fixture(image, symbols, debug); rejections(image, symbols, debug)
     # Independent listing check of actual decoded driver instructions.
     listing = (output/"radio_rx_fixture.radio_rx.rst").read_text()
     verify_driver_listing(instructions(image, proof["driver_start"], proof["driver_end"], LENGTHS), listing)
+    check_service_listings(output, "radio_rx_fixture", "radio_rx",
+                           instructions(image, proof["driver_start"], proof["driver_end"], LENGTHS),
+                           image, symbols, debug)
     vectors = [json.loads(line) for line in subprocess.run(
         [str(output/("host-radio-rx-fixture-tests_"+board)), "--vectors"],
         check=True, capture_output=True, text=True).stdout.splitlines()]

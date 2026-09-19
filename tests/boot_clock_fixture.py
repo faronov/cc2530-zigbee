@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Actual clock board C execution with synthetic SFR clocks; no hardware access."""
 
+import re
 import unittest
 
 from boot_image import (
@@ -43,7 +44,7 @@ def check_rejections(image, symbols, debug):
         debug.replace("$sloc0$0_1$0:8\n", "$sloc0$0_1$0:7\n"),
         debug.replace("{17}S:S$diagnostics", "{18}S:S$diagnostics"),
         debug.replace("{19}DA19d,SC:U", "{18}DA18d,SC:U"),
-        debug.replace("source_seen$1_0$14:9A\n", "source_seen$1_0$14:9B\n"),
+        debug.replace("{17}S:S$source_seen", "{16}S:S$source_seen"),
         debug.replace("Fclock_fixture_state$diagnostics$0_0$0:38\n",
                       "Fclock_fixture_state$diagnostics$0_0$0:39\n"),
     ):
@@ -52,20 +53,24 @@ def check_rejections(image, symbols, debug):
             verify_clock_fixture_code(image, symbols, changed)
     extra = dict(image)
     extra.update({0x7f00: 0x12, 0x7f01: proof["function_start"] >> 8, 0x7f02: proof["function_start"] & 255})
-    with case.assertRaisesRegex(ValueError, "additional deadline call"):
+    with case.assertRaises(ValueError):
         verify_clock_fixture_code(extra, symbols, debug)
 
 
 def check_clock_fixture(simulator, output, board, symbols):
     path = output / "clock_fixture.ihx"
     image = parse_ihex(path.read_text(encoding="ascii"))
-    debug = (output / "clock_fixture.cdb").read_text(encoding="utf-8")
+    debug = (output / "clock_fixture.cdb").read_bytes().decode("utf-8")
     proof = verify_clock_fixture_code(image, symbols, debug)
     check_rejections(image, symbols, debug)
-    _, sites = verify_clock_code(image, symbols, debug)
+    code, sites = verify_clock_code(image, symbols, debug)
+    listing = (output / "clock_fixture.clock.rst").read_text(encoding="ascii")
+    listed = [(int(match[1], 16), bytes.fromhex(match[2])) for match in re.finditer(
+        r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listing, re.M)]
+    require(listed == list(code.items()), "Ordered clock board listing differs from linked CODE")
     before, ready, fault = (symbols[name] for name in CLOCK_CHECKPOINTS)
     state, reader = symbols["_clock_fixture_state"], symbols["_timebase_read_awake_ticks24"]
-    write, status_read = sites[(0x88, 0xc6)], sites[(0xe5, 0x9e)]
+    write, status_read = sites[(0x8f, 0xc6)], sites[(0xe5, 0x9e)]
     initial_commands = boot_commands(symbols) + ["set memory sfr 0xbe 4", "set memory sfr 0x9d 0x60",
                                               f"run {symbols['_main']:#x} {before:#x}"]
     commands = initial_commands + snapshot_commands(1)

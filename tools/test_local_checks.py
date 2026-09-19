@@ -119,6 +119,48 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))
 
+    def test_clock_and_tx_snapshots_are_immediate_and_image_specific(self):
+        for board in BOARDS:
+            cases = (
+                ("test-clock", "bringup", "clock_test",
+                 ("timebase", "clock", "clock_test"), (("clock", "clock"),)),
+                ("test-board", "clock_fixture", "clock_fixture",
+                 (f"startup_{board}", f"status_{board}", f"board_{board}",
+                  f"example_clock_fixture_{board}", "clock_fixture_state", "timebase", "clock"),
+                 (("clock", "clock"),)),
+                ("test-board", "radio_tx_fixture", "radio_tx_fixture",
+                 ("timebase", "radio_fifo", "radio_tx", "clock", f"startup_{board}",
+                  f"status_{board}", f"board_{board}", f"example_radio_tx_fixture_{board}",
+                  "radio_tx_fixture_state"),
+                 (("timebase", "timebase"), ("radio_fifo", "radio_fifo"), ("radio_tx", "radio_tx"),
+                  ("clock", "clock"), (f"startup_{board}", "startup"), (f"status_{board}", "status"),
+                  (f"board_{board}", board), (f"example_radio_tx_fixture_{board}", "radio_tx_fixture"),
+                  ("radio_tx_fixture_state", "radio_tx_fixture_state"))),
+            )
+            for service in ("radio_fifo", "dma", "aes", "prng", "radio_rx"):
+                image = service + "_fixture"
+                caller = (f"startup_{board}", f"status_{board}", f"board_{board}",
+                          f"example_{image}_{board}")
+                modules = ((image + "_state", "timebase", "clock", service)
+                           if service == "radio_fifo" else
+                           ("timebase", "clock", service, image + "_state"))
+                cases += (("test-board", image, image, caller + modules,
+                           (("clock", "clock"), (service, service))),)
+            for target, image, stem, modules, copies in cases:
+                with self.subTest(board=board, image=image, target=target):
+                    commands = self.dry_run(target, BOARD=board, IMAGE=image, include_build=True)
+                    links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
+                    self.assertEqual(len(links), 1)
+                    link = links[0]
+                    self.assertEqual([Path(arg).name for arg in link if arg.endswith(".rel")],
+                                     [module + ".rel" for module in modules])
+                    snapshots = [args for args in commands if args[0] == "cp"]
+                    self.assertEqual([(Path(args[1]).name, Path(args[2]).name) for args in snapshots],
+                                     [(source + ".rst", f"{stem}.{name}.rst") for source, name in copies])
+                    start = commands.index(link) + 1
+                    self.assertEqual(commands[start:start+len(copies)], snapshots)
+                    self.assertTrue(all(Path(args[1]).parent == Path(args[2]).parent for args in snapshots))
+
     def test_aes_board_builds_its_own_runtime_reference_without_components(self):
         for board in BOARDS:
             commands = self.dry_run("test-board", include_build=True, BOARD=board, IMAGE="aes_fixture")

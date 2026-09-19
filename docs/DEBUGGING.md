@@ -3312,7 +3312,7 @@ files in an owned0700 directory outside Git; processes were stopped cleanly,
 the sniffer put to sleep and the serial port released afterward.
 Private parsing checked PCAP2.4/DLT283, complete/nontruncated record lengths,
 ordered timestamps, TAP header/TLV layout and channel15. The tool strips
-the two FCS octets, so comparison was byte-for-byte **FCS-free body equality**,
+the final two serial-frame octets, so comparison was byte-for-byte **FCS-free body equality**,
 not independent FCS validation or authentication. No payload or payload hash
 is published.
 
@@ -3444,10 +3444,38 @@ preceded a bounded private capture; process responsiveness,154 complete
 PCAP/TAP records and channel metadata were checked. The owned process was
 stopped, sleep was commanded, channel readback repeated and the serial port
 released. This is **sniffer preparation only**: it was not simultaneous with
-the preceding LG RX regression and no CC2530 TX occurred. The tool strips FCS,
-so this does not independently validate on-air CRC.
+the preceding LG RX regression and no CC2530 TX occurred. The tool omits the
+final two serial-frame octets; neither those octets nor the retained bodies
+independently validate on-air CRC. See the Nordic reference-source distinction
+in [provenance](PROVENANCE.md#m2-passive-radio-reception-sources).
 
 These finite **hardware-observed** results prepare separate board-image
 acceptance. They establish no TX/CCA behavior, calibration, captured PHY
 timing, association, NV execution/recovery or networking. No private data,
 backup hash, device identity, capture or external binary is published.
+
+### Boot-disarmed conditional-clear TX acceptance boundary
+
+Use only the separately selected `radio_tx_fixture` board image and the
+[manual runner](RADIO_TX_FIXTURE.md#manual-runner-boundary--not-authorization)
+after complete host/image/simulator acceptance. Its exact image hash,
+explicit USB selection, five debugger permissions and additional one-attempt
+RF opt-in are independent requirements. Programming, recovery backup and
+independent physical readback must be established separately; the runner
+neither programs nor selects a device automatically.
+
+The runner observes boot DISARMED, an empty-mailbox continuation, ARM and
+ADMITTED before allowing continuous real clock/FIFO/TX execution. Inspect
+ordinary state/diagnostic RAM only while halted; do not step or inject MMIO
+during RF work. A private independently channel-checked sniffer must already
+be responsive before that final continuation. Match the public13-byte `TXF1`
+body, not an ambient identity or a payload hash. PHY_DONE and CCA_BUSY remain
+distinct outcomes, and the standard Nordic capture does not establish
+independent FCS or calibrated timing/power.
+
+`--admit-only` leaves the CPU halted with **live RF authorization**, not safely
+disarmed; a subsequent resume performs the attempt. Any timeout, transport
+failure or FAULT preserves its evidence without automatic retry, reset,
+flush or claimed RF-off state. Another attempt requires a separately
+established full reset. Neither this procedure nor the existing RX record is
+hardware acceptance of the newly linked clock-staged TX/RX images.

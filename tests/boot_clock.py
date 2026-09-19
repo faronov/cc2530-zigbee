@@ -3,6 +3,7 @@
 """Isolated linked clock checks with synthetic SFRs, never oscillator hardware."""
 
 import argparse
+import hashlib
 from pathlib import Path
 import re
 import unittest
@@ -13,14 +14,18 @@ from boot_image import (
 )
 from boot_timebase import GUARD_SFRS, READ_OFFSETS, READER_BYTES
 from verify_firmware import (
-    CODE_LIMIT, parse_ihex, parse_symbols, require, cdb_address, verify_clock_code,
-    verify_clock_diagnostics, CLOCK_INSTRUCTION_LENGTHS as INSTRUCTION_LENGTHS,
+    CODE_LIMIT, parse_ihex, parse_symbols, require, cdb_address, verify_clock_diagnostics,
 )
+from clock_fixture import verify_clock_code, LENGTHS as INSTRUCTION_LENGTHS
 
 
 def verify_clock(image, symbols, debug, memory, listing):
     allocated = verify_component_layout(image, symbols, debug, memory, "clock_test_result",
                                          ("clock.c", "timebase.c", "test_clock.c"))
+    require(set(image) == set(range(3402)) and
+            hashlib.sha256(bytes(image[a] for a in range(3402))).hexdigest() ==
+            "82d47ac15fe82617a3ad86052e785cfa57b2e61e028f63113487e468efa128d8",
+            "Clock complete standalone instructions/CODE/caller/runtime changed")
     names = ("_main", "_clock_select_init", "_clock_test_cycle", "_clock_test_before", "_clock_test_done",
              "_timebase_read_awake_ticks24", "_timebase_deadline_after", "_timebase_expired")
     require(all(name in symbols and symbols[name] in image for name in names)
@@ -49,7 +54,7 @@ def verify_clock(image, symbols, debug, memory, listing):
     verify_clock_diagnostics(debug, ("clock", "test_clock"))
 
     start = cdb_address(debug, "L:Fclock$effective_status$0$0")
-    end = cdb_address(debug, "L:XG$clock_select_init$0$0") + 1
+    end = cdb_address(debug, "L:XG$clock_select_init$0$0") + 3
     require(symbols["_timebase_expired"] < start < symbols["_clock_select_init"] < end,
             "Clock module extent changed")
     instructions = {}
@@ -71,7 +76,8 @@ def verify_clock(image, symbols, debug, memory, listing):
     require(image[end - 1] == 0x22, "Clock module does not end in RET")
 
     decoded, sites = verify_clock_code(image, symbols, debug)
-    require(decoded == instructions, "Clock listing instruction boundaries differ from linked CODE")
+    require(list(decoded.items()) == list(instructions.items()),
+            "Ordered clock listing differs from linked CODE")
     return allocated, sites
 
 
@@ -86,9 +92,9 @@ def check_rejections(image, symbols, debug, memory, listing):
                 verify_clock(changed, symbols, debug, memory, listing)
     for operand in (0x95, 0x96, 0x97, 0xbe, 0xa8, 0x9e, 0x80):
         changed = dict(image)
-        changed[sites[(0x88, 0xc6)] + 1] = operand
-        with case.assertRaisesRegex(ValueError, "peripheral"):
-            verify_clock(changed, symbols, debug, memory, listing.replace("88 C6", f"88 {operand:02X}"))
+        changed[sites[(0x8f, 0xc6)] + 1] = operand
+        with case.assertRaisesRegex(ValueError, "instructions|peripheral"):
+            verify_clock(changed, symbols, debug, memory, listing.replace("8F C6", f"8F {operand:02X}"))
     for name, value in (
         ("_SOC_SLEEPCMD", 0x9d), ("_SOC_CLKCONSTA", 0xc6), ("_clock_select_init", CODE_LIMIT),
         ("_clock_test_done", symbols["_clock_test_done"] + 1), ("_clock_test_result", 0x1f00),
@@ -109,6 +115,17 @@ def check_rejections(image, symbols, debug, memory, listing):
         verify_clock(image, symbols, debug, memory.replace("bytes available", "bytes absent"), listing)
     with case.assertRaises(ValueError):
         verify_clock(image, symbols, debug, memory, "")
+    lines = listing.splitlines(keepends=True)
+    rows = [index for index, line in enumerate(lines) if re.match(
+        r"^\s+[0-9A-F]{6} (?:[0-9A-F]{2} ){1,3}\s+\[\s*\d+\]", line)]
+    require(len(rows) > 1, "Missing clock listing mutation sites")
+    dropped, duplicate, reordered = lines.copy(), lines.copy(), lines.copy()
+    del dropped[rows[0]]
+    duplicate.insert(rows[0], lines[rows[0]])
+    reordered[rows[0]], reordered[rows[1]] = reordered[rows[1]], reordered[rows[0]]
+    for changed in (dropped, duplicate, reordered):
+        with case.assertRaises(ValueError):
+            verify_clock(image, symbols, debug, memory, "".join(changed))
 
 
 def vectors():
@@ -178,7 +195,7 @@ def check_execution(simulator, path, symbols, allocated, sites, vector):
     reader = symbols["_timebase_read_awake_ticks24"]
     reads = {operand: address for (opcode, operand), address in sites.items() if opcode == 0xe5}
     reads.update({0x95 + i: reader + offset for i, offset in enumerate(READ_OFFSETS)})
-    write = sites[(0x88, 0xc6)]
+    write = sites[(0x8f, 0xc6)]
     guards = dict(GUARD_SFRS)
     guards.update({0xc6: saved, 0x9e: initial_status, 0xbe: 0x84, 0x9d: 0x60})
     guards.update(overrides)
@@ -234,9 +251,12 @@ def check_execution(simulator, path, symbols, allocated, sites, vector):
     final = 12 + len(expected_events) * 2
     commands += ["run"] + snapshot_commands(final)
     text = simulate(simulator, commands, path)
+    # Index the unchanged complete transcript once, not once per MMIO event.
+    split = re.split(r"^0x2530([0-9a-f]{4})\r?\n", text, flags=re.M)
+    blocks = {int(split[i], 16): split[i+1] for i in range(1, len(split), 2)}
     for number, address, sfr, value in expected_events:
-        check_pc(section(text, number), address)
-        require(memory_dump(section(text, number + 1), sfr, 1) == bytes([value]),
+        check_pc(blocks[number], address)
+        require(memory_dump(blocks[number + 1], sfr, 1) == bytes([value]),
                 f"{name}: linked MMIO read/write value mismatch")
     check_pc(section(text, final), done)
     ram, iram, sfr = snapshot(text, final)
@@ -264,11 +284,11 @@ def main():
     path = args.output / "clock_test.ihx"
     image = parse_ihex(path.read_text(encoding="ascii"))
     symbols = parse_symbols((args.output / "clock_test.map").read_text(encoding="utf-8"))
-    debug = (args.output / "clock_test.cdb").read_text(encoding="utf-8")
+    debug = (args.output / "clock_test.cdb").read_bytes().decode("utf-8")
     memory = (args.output / "clock_test.mem").read_text(encoding="utf-8")
     # This link's listing must match; board inspection uses its own IHX/CDB,
     # not a listing that a later standalone link may overwrite.
-    listing = (args.output / "clock.rst").read_text(encoding="utf-8")
+    listing = (args.output / "clock_test.clock.rst").read_text(encoding="utf-8")
     allocated, sites = verify_clock(image, symbols, debug, memory, listing)
     check_rejections(image, symbols, debug, memory, listing)
     check_alias(args.simulator)

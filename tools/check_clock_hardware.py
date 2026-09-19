@@ -36,12 +36,12 @@ def validate_program(image, program, cycles, induce_timeout, induce_late_timeout
             and program[proof["address"] - 3:proof["address"] + 1] == b"\x75\x82\0\x22"
             and program[proof["call_address"]:proof["return_address"]] ==
             b"\x12" + proof["function_start"].to_bytes(2, "big")
-            and program[proof["command_write_address"]:proof["command_write_address"] + 2] == b"\x88\xc6",
+            and program[proof["command_write_address"]:proof["command_write_address"] + 2] == b"\x8f\xc6",
             "Clock timeout checkpoint differs from verified program")
     require(proof["post_request_address"] == proof["command_write_address"] + 2
-            and program[proof["post_request_address"]] == 0x88
+            and program[proof["post_request_address"]] == 0x8f
             and program[proof["poll_sample_address"]] == 0x12
-            and proof["poll_sample_address"] == proof["poll_observe_address"] + 124,
+            and proof["poll_sample_address"] == proof["poll_observe_address"] + 40,
             "Clock late-source checkpoint differs from verified program")
 
 

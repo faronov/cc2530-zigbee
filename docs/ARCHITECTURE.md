@@ -1229,6 +1229,28 @@ observed MMIO peak is `6C`, and the upper-IRAM guard remains intact. These
 host/image/simulator results neither add a board image nor establish complete
 stack fit, ACK timing, calibrated output power or on-air acceptance.
 
+The separately selected [TX board fixture](RADIO_TX_FIXTURE.md) links
+timebase/FIFO/TX/clock before every startup/board/example/state caller and
+preserves nine immediate relocated listings. Its24-byte state and8-byte mailbox
+sit after the entire227-byte service/compiler prefix. Total ordinary XDATA347
+plus64 reserved fits the existing512-byte fixture budget; MMIO-sampled SP`0x74`
+and full-run simulator high-water`0x77` remain below the unchanged upper-IRAM
+guard. These are exercised-path measurements, not a universal stack bound.
+Two explicit finite ARM/RUN stages return
+ADMITTED without MMIO before any real clock/FIFO/RF work. Only one IF_CLEAR
+attempt is possible per full reset; successful/busy quiescence and final
+explicit FIFO clear precede END. FAULT cannot authorize retry or cleanup.
+
+That composition initially failed genuine lower-DATA/OSEG allocation. The
+clock's ABI-compatible XDATA staging and generic-store leaves reduce its
+permanent DATA45 to12, with XDATA44 to54 and1875 module CODE bytes. Sequential
+request/rollback work reuses one private counter; published diagnostics remain
+distinct and retain their existing observation boundaries. This is not extra
+IRAM, a new memory model, weaker stack guards or a change to oscillator,
+deadline or rollback policy. Every other clock consumer needs its corresponding
+new exact image/ABI proof; previous image-specific hardware acceptance is
+historical rather than inherited.
+
 ## Scheduling and ownership
 
 The isolated [bounded radio queue composition](RADIO_QUEUE.md) now supplies
