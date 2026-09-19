@@ -326,7 +326,7 @@ remains separately authorized and is never run by Make/CI.
 
 The actual `radio_tx_fixture` image uses the real clock/FIFO/TX services with
 separate finite ARM/RUN windows. Consuming RUN reaches ADMITTED without MMIO;
-only a further continuation performs one conditional-clear channel15/raw05
+only a further continuation performs one conditional-clear channel26/raw05
 attempt. Confirmed PHY_DONE/CCA_BUSY precedes explicit final FIFO clear and
 END. FAULT is retained and never authorizes retry or implicit cleanup.
 
@@ -349,7 +349,7 @@ semantics, compiler flags or any existing budget. It is not additional SRAM:
 XDATA1F00..1FFF still aliases IRAM, ordinary allocation still stops below1E00
 and all64 status bytes remain reserved.
 
-Both canonical TX builds/image checks and their1,329 native fixture polls
+Both canonical TX builds/image checks and their1,332 native fixture polls
 pass. Normal/failure clock, clock-board and TX native executables also pass
 combined AddressSanitizer/UndefinedBehaviorSanitizer on both boards.
 The original clock CMD/STA/source/clamping/bounds/rollback corpora,
@@ -364,7 +364,7 @@ The ten unaffected bringup/debug/timebase/IRQ/flash board BINs were rebuilt
 and compared byte-for-byte with published `61394a2` CI run35428791950 artifacts;
 all match, rather than merely remaining inside their size budgets.
 
-The complete TX corpus runs36 cases/80 checkpoints/38,674 real MMIO events
+The complete TX corpus runs38 cases/83 checkpoints/38,674 real MMIO events
 per board. MMIO-stop samples peak at`0x74`, while the separately parsed,
 required cumulative simulator high-water reaches **`0x77 < 0x80`**. Neither
 metric establishes a hardware or universal worst-case stack bound.
@@ -409,6 +409,18 @@ once equivalent full CI passed: **no completed full-local-matrix result is
 claimed**. Earlier tool-stage failures were a stale11-image CI expectation
 and optional RX preflight selecting historical artifacts; both were corrected,
 with fresh isolated RX builds rather than overwriting the physical baseline.
+
+The later channel26 profile changes exactly five operand bytes per board,
+with unchanged CODE sizes, complete public/private ABI, other eight listing
+inventories, allocation and stack measurements. Both38-case genuine proofs,
+both native ASan/UBSan executables and65 focused runner/artifact/Make tests
+pass. The original36 cases remain; two new cases reject channel15 ARM/RUN
+packets before MMIO. Successful paths check FREQCTRL56/raw power05. No old
+clock service or unrelated fixture changed, so the historical full clock
+corpora above were not repeated locally for this channel-only delta.
+No target or coordinator was reconfigured or programmed. The earlier
+channel15 artifacts and physical record remain separate; channel26 has no
+CC2530 RF evidence.
 
 ### 2026-09-19 LG single-attempt TX evidence
 

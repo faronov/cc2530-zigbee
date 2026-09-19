@@ -50,7 +50,7 @@ static void fixture_begin(const char *name)
     /* A stale packet before initialization must be cleared, never admitted. */
     memset((void *)radio_tx_fixture_mailbox, 0xa6, 8);
     radio_tx_fixture_initialize();
-    assert(state.phase == TXF_DISARMED && !state.attempts && !events);
+    assert(state.phase == TXF_DISARMED && state.channel == 26 && !state.attempts && !events);
     for (i = 0; i < 8; i++) assert(!radio_tx_fixture_mailbox[i]);
     first = 1;
     if (!exporting) return;
@@ -65,7 +65,7 @@ static void fixture_begin(const char *name)
 static void packet_write(unsigned run)
 {
     unsigned i;
-    uint8_t p[8] = {0xa6, 0x59, 15, 0xf0, 0x3c, 0xc3, 0x69, 0x96};
+    uint8_t p[8] = {0xa6, 0x59, TXF_CHANNEL, (uint8_t)~TXF_CHANNEL, 0x3c, 0xc3, 0x69, 0x96};
     if (run) { p[0] = 0x59; p[1] = 0xa6; p[4] = 0xc3; p[5] = 0x3c; }
     for (i = 0; i < 8; i++) radio_tx_fixture_mailbox[i] = p[i];
 }
@@ -146,6 +146,14 @@ int main(int argc, char **argv)
     }
     fixture_begin("RUN before ARM"); packet_write(1); checkpoint(1);
     assert(state.reason == TXF_PACKET && !events); fixture_finish();
+    for (stage = 0; stage < 2; stage++) {
+        fixture_begin("previous channel profile");
+        if (stage) { packet_write(0); checkpoint(1); }
+        packet_write(stage);
+        radio_tx_fixture_mailbox[2] = 15; radio_tx_fixture_mailbox[3] = 0xf0;
+        checkpoint(1);
+        assert(state.reason == TXF_PACKET && !events); fixture_finish();
+    }
     fixture_begin("ARM replay"); packet_write(0); checkpoint(1); packet_write(0); checkpoint(1);
     assert(state.reason == TXF_PACKET && !events); fixture_finish();
     fixture_begin("new packet after admission"); admitted(); packet_write(1); checkpoint(1);
@@ -172,6 +180,7 @@ int main(int argc, char **argv)
         if (i < 4 || i == 13) {
             assert(state.phase == TXF_END && state.completed == 1 && state.attempts == 1);
             assert(!XR(0x618b) && !XR(0x619b) && !XR(0x619c));
+            assert(XR(0x618f) == 0x56 && XR(0x6190) == 5);
             assert(state.tx_result == ((i == 1 || i == 2) ? RADIO_TX_CCA_BUSY : RADIO_TX_PHY_DONE));
         } else assert(state.phase == TXF_FAULT && !state.completed);
         if (i == 4) assert(state.reason == TXF_CLOCK && state.clock_result == CLOCK_TIMEOUT);

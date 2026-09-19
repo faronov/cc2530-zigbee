@@ -445,15 +445,17 @@ hardware-observed. Its standalone executable must never be flashed.
 The separate [boot-disarmed board fixture](docs/RADIO_TX_FIXTURE.md), selected
 with `IMAGE=radio_tx_fixture`, now links the actual clock/FIFO/TX services.
 It requires distinct ARM/RUN admissions and an inspectable ADMITTED stop before
-one conditional-clear attempt on channel15/raw power05 with public `TXF1`
+one conditional-clear attempt on channel26/raw power05 with public `TXF1`
 bytes, no ACK request and no real identity. Failures retain evidence without
 implicit cleanup or retry. `make ... IMAGE=radio_tx_fixture test-board` stays
 offline; its manual RF runner is never invoked by builds/CI.
 
 The separately authorized [LG hardware run](docs/DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
-returned PHY_DONE for one attempt; an independent nRF52840 capture contained
-exactly one byte-identical public body. The target remains halted at END.
-This does not establish independent FCS or calibrated power/timing.
+returned PHY_DONE for one attempt on the previous **channel15** image; an
+independent nRF52840 capture contained exactly one byte-identical public body.
+That image was left halted at END. The new channel26 profile has only offline
+evidence and has not been programmed by this change. Neither profile establishes
+independent FCS or calibrated power/timing.
 
 The clock prerequisite reduces permanent DATA45 to12 bytes, with ten extra
 XDATA bytes, rather than enlarging memory limits. The TX test composition uses

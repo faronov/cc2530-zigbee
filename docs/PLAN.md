@@ -425,12 +425,15 @@ their first result; busy CCA requires verified shutdown before explicit reuse.
 Both board definitions have host/image/alias-aware simulator evidence.
 These init-time owners cannot be mixed with legacy RX
 in the same reset epoch. The separate [boot-disarmed TX fixture](RADIO_TX_FIXTURE.md)
-now provides bounded ARM/RUN admission and one conditional-clear channel15/raw05
+now provides bounded ARM/RUN admission and one conditional-clear channel26/raw05
 attempt through those real services. A clock scratch-allocation prerequisite
 reduces DATA45 to12 without relaxing any existing budget or upper-IRAM guard.
 The separately authorized
 [LG run](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance) observed one
-PHY_DONE and one independently captured exact public body.
+PHY_DONE and one independently captured exact public body on the previous
+channel15 image. The current channel26 profile has host/image/simulator
+evidence only; neither the coordinator nor physical CC2530 was changed by
+that offline profile update.
 Physical busy-channel/fault recovery, independent FCS/calibration,
 queue/controller composition, physical ACK/retries and association remain
 open; old clock/RX records do not automatically validate other newly linked images.

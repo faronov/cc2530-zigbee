@@ -1077,6 +1077,16 @@ adds one channel15/raw05 PHY_DONE and an independent exact public-body match.
 It retains the Nordic FCS limitation described above; no raw capture, private
 factory information, backup hash or third-party implementation is imported.
 
+The prospective fixed channel26 profile uses the same documented channel/
+FREQCTRL relationship and unchanged raw-power/CCA settings. Only five linked
+channel operands change per board; complete private/public ABI and other
+service listings remain identical. Original synthetic regressions reject the
+old channel15 admission packets. The processed passive-survey counts are not
+CCA silence, a capture of our transmitter or acceptance of the channel26
+firmware. The dated channel15 hardware record remains tied to its old CODE;
+no raw capture, identity, programming or new RF operation is introduced by
+this offline profile update.
+
 ### Generic two-page NV record sources
 
 The [snapshot journal](NV_RECORDS.md) and its format, selection, commit-last

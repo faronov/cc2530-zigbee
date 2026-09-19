@@ -1,8 +1,8 @@
 # Boot-disarmed, one-attempt TX fixture — offline preparation
 
-**Offline-tested only on both board definitions.** No physical TX, CCA, power,
-capture or recovery acceptance is established here. Parent-observed RX,
-private-backup and Nordic records are separate historical evidence.
+**Current fixed channel26 profile: offline-tested on both board definitions,
+not hardware-observed.** The dated channel15 TX/RX, private-backup and Nordic
+records are separate historical evidence, not acceptance of this new profile.
 `IMAGE=radio_tx_fixture` is a separately selected board image; it is not the
 default bootstrap and its manual runner is never invoked by Make or CI.
 Standalone component executables are **never programming inputs/artifacts**.
@@ -24,8 +24,9 @@ is added.
   The last timely packet at remaining1 is accepted. Bytes are snapshotted
   once; accepted and rejected admission packets are cleared. Complements,
   channel, guards and phase are checked.
-- Packets are `[opcode, ~opcode, 15, ~15, token, ~token, 69, 96]`:
-  ARM=`A6`/token`3C`; RUN=`59`/token`C3` (hexadecimal except channel15).
+- Packets are `[opcode, ~opcode, 26, ~26, token, ~token, 69, 96]`:
+  ARM=`A6`/token`3C`; RUN=`59`/token`C3` (hexadecimal except channel26).
+  The channel pair is `1A E5`; old channel15 packets are rejected before MMIO.
   Write only the mailbox, with the CPU halted; partial writes are not an
   admission transaction. Never resume after a debugger write/readback error.
 - **RUN consumption returns ADMITTED with no MMIO.** Only a further deliberate
@@ -42,8 +43,9 @@ is added.
   cannot initiate another attempt; only a separately authorized full reset
   establishes a new epoch.
 
-Fixed profile: channel15 (nominal2425MHz), raw TXPOWER`05`, TXCTRL`69`,
-CCACTRL0`F8`, CCACTRL1`1A`, exactly the existing reference profile. No calibrated
+Fixed profile: channel26 (nominal2480MHz, FREQCTRL`56`), raw TXPOWER`05`,
+TXCTRL`69`, CCACTRL0`F8`, CCACTRL1`1A`. Only the channel differs from the
+previous fixture profile; the thirteen-byte body and PHR15 do not change. No calibrated
 board power, EIRP, RSSI/CCA conversion or regulatory permission is implied.
 The public thirteen-byte, FCS-free CODE body is:
 
@@ -120,8 +122,8 @@ larger simulator timeout. See the [current ledger](VALIDATION.md#boot-disarmed-t
 
 | Board | CODE bytes | WAIT / END / FAULT | SHA256 |
 | --- | ---: | --- | --- |
-| generic |11291|2725 /2727 /272A|`c75716d32d7575d005c1175a224f5a16d42eae3ddd4ad261ec3a11251bc0ac08`|
-| lg_esl29_rev03 |11331|274D /274F /2752|`e47714206c44cc4be5937da4752a1baa637e86b48fefab46390313c04c4c4763`|
+| generic |11291|2725 /2727 /272A|`f402afdfabcda87d6d13c73768d9f479798bd5adc3f743ee8f0f0f4d165ac20b`|
+| lg_esl29_rev03 |11331|274D /274F /2752|`f951f0324e0149fc16ee110cfd975ff61b12749e903b3fcaecdd4dfb809201e6`|
 
 Both have347 ordinary XDATA (`0000..015A`) +64 reserved =**411/512**.
 This separately scoped512-byte fixture budget includes the complete real
@@ -161,7 +163,7 @@ Generic body is2C0E..2C1A; LG body2C36..2C42.
 
 Evidence, separately classified:
 
-- **Strict native, both boards:**1,329 fixture polls each; entire unchanged
+- **Strict native, both boards:**1,332 fixture polls each; entire unchanged
   clock CMD/STA/source/clamping/bounds/rollback and failure-helper corpora,
   plus the old16 field combinations ×771 clock-board steps/error cases.
   Those four native executables also pass AddressSanitizer and
@@ -171,8 +173,8 @@ Evidence, separately classified:
   and MMIO inventories, and all nine ordered relocated listing inventories.
   Negative controls mutate every CODE byte, ABI/allocation metadata, listing
   deletion/duplication/reordering and alias behavior.
-- **Genuine linked/alias-aware simulation, both boards:**36 TX cases,
-  80 checkpoints,38,674 actual MMIO events;40 standalone clock scenarios and
+- **Genuine linked/alias-aware simulation, both boards:**38 TX cases,
+  83 checkpoints,38,674 actual MMIO events;40 standalone clock scenarios and
   the entire unchanged771-step clock-board/timeout/cancellation/late-source
   corpus. Real copied/emitted services execute, not patched success returns.
   All existing15-second per-simulator deadlines and upper-IRAM caps remain.
@@ -267,13 +269,43 @@ The separately authorized
 [2026-09-19 LG acceptance](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
 observed the admission boundaries, one PHY_DONE result and exactly one
 byte-identical public body in an independent channel15 Nordic capture.
-The verified new image remains halted at END274F/status2B/config26.
-This is hardware evidence for that one profile, not inherited acceptance.
+The verified channel15 image was left halted at END274F/status2B/config26.
+This is hardware evidence for that one profile, not acceptance of the current
+channel26 image. No programming or target execution accompanied this profile change.
 
 #12's physical busy-channel, independent FCS and failure/recovery observations
 remain open. #15 lab/capture/calibration gates, same-reset RX/TX ownership/
 adapter and complete M3 acceptance remain open. Generic-board RF and all
 other channel/power profiles remain unobserved.
+
+## Channel26 profile boundary
+
+This prospective isolated-test profile changes exactly five linked operand
+bytes on each board: four channel values `0F ->1A` and the admission complement
+`F0 ->E5`. The generic offsets are27FF/284D/2967/296F/2AE9; LG adds28 hex.
+Image sizes, all complete private/public ABI records, the other eight ordered
+listing inventories, storage and stack limits remain identical to freshly
+verified channel15 references. Historical hardware artifacts were not rebuilt
+or relabeled.
+
+Both canonical channel26 board proofs pass all38 cases,83 checkpoints and
+38674 actual synthetic MMIO events. Two new scenarios reject intact old-profile
+ARM/RUN packets without MMIO; the original36 remain. Successful paths check
+actual FREQCTRL56/raw TXPOWER05. Both native fixture executables pass ASan/UBSan,
+and65 focused runner/artifact/Make tests pass, including strict rejection of
+channel15 state records. Manual output names `profile_channel` and
+`profile_txpower_raw` explicitly; these are configured profile values, not RF
+calibration measurements.
+
+The separate passive Nordic survey observed0 decoded records during a
+requested15-second channel26 capture with a valid empty PCAP header, compared
+with259 records/requested5 seconds on channel15. Channel readback was checked
+before/after; the sniffer was sleep-commanded on26 and its port released.
+These counts do not establish CCA/RF silence, absence of Wi-Fi/BLE, or that only
+our packets can appear. The coordinator/network was not changed, and the
+CC2530 was not reset, resumed or programmed by that survey or these offline
+checks. A future channel26 transmission still needs its own explicit
+programming/identity/permission preflight and independent capture.
 
 ## Primary sources and provenance
 

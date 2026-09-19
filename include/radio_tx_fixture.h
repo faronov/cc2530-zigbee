@@ -11,6 +11,7 @@
 #define TXF_ADMISSION_POLLS 256u
 #define TXF_TIMEOUT 1024UL
 #define TXF_LIMIT 256u
+#define TXF_CHANNEL 26u
 #define TXF_LENGTH 13u
 #define TXF_SIZE 24u
 enum { TXF_DISARMED = 1, TXF_ARMED, TXF_ADMITTED, TXF_RUNNING, TXF_END, TXF_FAULT };
@@ -32,7 +33,7 @@ extern const MCU_CODE uint8_t radio_tx_fixture_body[TXF_LENGTH];
 /* Manual, one IF_CLEAR call per full SoC reset. No real identity, ACK, retry,
  * RX-owner reuse, direct fallback, automatic recovery or radio-off-on-error.
  * Only write mailbox while halted at WAIT, in DISARMED/ARMED, all eight bytes:
- * [opcode, ~opcode, 15, ~15, token, ~token, 69, 96].
+ * [opcode, ~opcode, 26, ~26, token, ~token, 69, 96].
  * ARM=A6/3C, RUN=59/C3. Not authentication or RF authorization.
  * Both windows have independent finite work caps; debugger pauses do not
  * consume a wall-time window. RUN admission clears the packet and RETURNS

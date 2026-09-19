@@ -13,16 +13,17 @@ from verify_firmware import (
 )
 
 SIZE = 24
+CHANNEL = 26
 BODY = bytes.fromhex("41 88 5a ff ff ff ff 34 12 54 58 46 31")
 CHECKPOINTS = tuple("_radio_tx_fixture_"+n for n in ("wait", "end", "fault"))
 LENGTHS = CLOCK_LENGTHS | PRNG_LENGTHS | FIFO_LENGTHS | {
     0x1c: 1, 0x23: 1, 0x2b: 1, 0x3c: 1, 0x49: 1, 0x52: 2, 0x6f: 1, 0xa4: 1,
 }
 HASHES = {
-    "generic": (11291, "c75716d32d7575d005c1175a224f5a16d42eae3ddd4ad261ec3a11251bc0ac08",
+    "generic": (11291, "f402afdfabcda87d6d13c73768d9f479798bd5adc3f743ee8f0f0f4d165ac20b",
                 "29dd66f408a74216fd5c1acc54e5c6a3a874c898306054fbeaa51d04224293a7",
                 "9c4dc40b05566c57275e4459c07df30cb4a4f4d0e065eaf2bf59af757b2e574f"),
-    "lg_esl29_rev03": (11331, "e47714206c44cc4be5937da4752a1baa637e86b48fefab46390313c04c4c4763",
+    "lg_esl29_rev03": (11331, "f951f0324e0149fc16ee110cfd975ff61b12749e903b3fcaecdd4dfb809201e6",
                       "ffb050b314786520e480caebd19f34370deec97e4b9bd554a3de2bff0ae71806",
                       "ecc7df049d46af726c57d3698c9779d084ebec4669740c9d0386da36018c4a1c"),
 }
@@ -42,7 +43,7 @@ LISTINGS = {
         "0a36fe3498e6959929ae53f73d0b85a9326a1fdc20f1cbe95c9f3cb56bcad09f",
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "00f2e52508f3104df4e5468f23169c8f8cffe6a8de36842fca17ba8101f03701",
-        "74c3f8df32a8fc91274c85f541900a9f4566c0f0eccf7a7e083208b8944bacdd"),
+        "3f6be28413313e4017554a2f795f770c6b0719a40de54cef558baa488a848124"),
     "lg_esl29_rev03": (
         "88458e5aeafb9bd88ebe0552f386550a6e25d9c77612c5e528d969b31bbcefd3",
         "27d98aa89dc856b4892cb8c2c2cdb507eb3e6f4d47901d8678c7de4e3c10e4c1",
@@ -52,19 +53,19 @@ LISTINGS = {
         "12f10421e847e41e65668d56ad04eac0eac2e86d418c47e6fc817a37504cabfd",
         "83439c50439d1f1e199f52e6e2a10e73b3fb732d641157b7381edeb3a8c14139",
         "16be25f3cc78cba6f464d89d532f0189726026a0a431bbbe3b427487497d1f96",
-        "d18b9c64d68834b23582b01db2d5d6bbacc7a343b10b22f9a32b8304f4eccdab"),
+        "e0f1bc7f4208e776a45cf4eec69113be8e74c0ab303b84c1d1a166d7d26000cb"),
 }
 
 
 def packet(stage):
     require(stage in ("arm", "run"), "TX fixture unknown admission stage")
     op, token = (0xa6, 0x3c) if stage == "arm" else (0x59, 0xc3)
-    return bytes((op, op ^ 255, 15, 240, token, token ^ 255, 0x69, 0x96))
+    return bytes((op, op ^ 255, CHANNEL, CHANNEL ^ 255, token, token ^ 255, 0x69, 0x96))
 
 
 def decode(data):
     require(type(data) is bytes and len(data) == SIZE and data[:6] == b"M3TX\x01\x18" and
-            data[14:17] == b"\x0f\x05\x0d" and data[19:] == b"\x69\x96\0\0\0",
+            data[14:17] == bytes((CHANNEL, 5, 13)) and data[19:] == b"\x69\x96\0\0\0",
             "TX fixture signature/version/size/profile/guards changed")
     phase, reason, stage, attempts, completed, clock, fifo, tx = data[6:14]
     remaining = int.from_bytes(data[17:19], "little")

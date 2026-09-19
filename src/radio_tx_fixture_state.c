@@ -43,7 +43,7 @@ void radio_tx_fixture_initialize(void)
     gate = TXF_DISARMED; state.phase = gate; consumed = 0;
     state.clock_result = CLOCK_NOT_ATTEMPTED;
     state.fifo_result = state.tx_result = 255;
-    state.channel = 15; state.power = RADIO_TX_POWER_05; state.length = TXF_LENGTH;
+    state.channel = TXF_CHANNEL; state.power = RADIO_TX_POWER_05; state.length = TXF_LENGTH;
     state.guards[0] = 0x69; state.guards[1] = 0x96;
     remaining = TXF_ADMISSION_POLLS; budget();
 }
@@ -52,7 +52,7 @@ void radio_tx_fixture_poll(void)
     uint8_t i, any = 0, opcode, token;
     if (gate == TXF_END || gate == TXF_FAULT) return;
     if (!radio_tx_fixture_initialized || state.phase != gate ||
-        state.channel != 15 || state.power != RADIO_TX_POWER_05 || state.length != TXF_LENGTH ||
+        state.channel != TXF_CHANNEL || state.power != RADIO_TX_POWER_05 || state.length != TXF_LENGTH ||
         state.guards[0] != 0x69 || state.guards[1] != 0x96 ||
         state.attempts != consumed || state.stage || state.completed || state.reason) {
         fault(TXF_INVARIANT); return;
@@ -71,7 +71,7 @@ void radio_tx_fixture_poll(void)
         opcode = gate == TXF_DISARMED ? 0xa6 : 0x59;
         token = gate == TXF_DISARMED ? 0x3c : 0xc3;
         if (packet[0] != opcode || packet[1] != (uint8_t)~opcode ||
-            packet[2] != 15 || packet[3] != (uint8_t)~15u ||
+            packet[2] != TXF_CHANNEL || packet[3] != (uint8_t)~TXF_CHANNEL ||
             packet[4] != token || packet[5] != (uint8_t)~token ||
             packet[6] != 0x69 || packet[7] != 0x96) {
             fault(TXF_PACKET); return;
@@ -99,7 +99,7 @@ void radio_tx_fixture_poll(void)
     if (state.fifo_result != RADIO_FIFO_OK) { fault(TXF_PRELOAD); return; }
     /* Consume the sole attempt BEFORE calling the controller, including error. */
     consumed = 1; state.attempts = 1; state.stage = 4;
-    state.tx_result = radio_tx_send_init(RADIO_TX_IF_CLEAR, 15, RADIO_TX_POWER_05,
+    state.tx_result = radio_tx_send_init(RADIO_TX_IF_CLEAR, TXF_CHANNEL, RADIO_TX_POWER_05,
                                          TXF_LENGTH, TXF_TIMEOUT, TXF_LIMIT, &radio_tx_fixture_tx);
     if (state.tx_result != RADIO_TX_PHY_DONE && state.tx_result != RADIO_TX_CCA_BUSY) {
         fault(TXF_TRANSMIT); return;

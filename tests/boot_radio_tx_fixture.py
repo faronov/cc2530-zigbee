@@ -203,7 +203,7 @@ def check_radio_tx_fixture(simulator, output, board, symbols):
     native = subprocess.run([str(output/("host-radio-tx-fixture-tests_"+board)), "--vectors"],
                             capture_output=True, text=True, timeout=15, check=True)
     vectors = [json.loads(line) for line in native.stdout.splitlines()]
-    require(len(vectors) == 36, "TX fixture case inventory changed")
+    require(len(vectors) == 38, "TX fixture case inventory changed")
     peaks = [run_vector(simulator, path, board, symbols, fixture.radio_tx_proof, v) for v in vectors]
     mmio_peak = max(p[0] for p in peaks)
     full_peak = max(p[1] for p in peaks)

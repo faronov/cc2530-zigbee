@@ -11,7 +11,7 @@ import time
 from cc_debugger import Access, Debugger, DebuggerError, PyUsbBackend, UsbAddress
 from check_timebase_hardware import reset_and_verify_code, step_nop, wait_checkpoint
 from debug_image import decode_bootstrap
-from radio_tx_fixture import BODY, CHECKPOINTS, HASHES, SIZE, check_end, decode, load_image, packet
+from radio_tx_fixture import BODY, CHANNEL, CHECKPOINTS, HASHES, SIZE, check_end, decode, load_image, packet
 from verify_firmware import require
 
 
@@ -117,6 +117,7 @@ def exercise(debugger, image, program, sha256, rf_permission=False, admit_only=F
                 "no retry/reset/resume/flush attempted")
     return dict(evidence="hardware-observed", scope="one-conditional-clear-tx-fixture",
                 board=image.board, image=image.image_name, image_sha256=sha256,
+                profile_channel=CHANNEL, profile_txpower_raw=5,
                 debug_config=config, verified_code_bytes=len(program), register_preservation=True,
                 final_pc=registers.pc, final_cpu="halted-admitted" if admit_only else "halted-END",
                 rf_attempts=record["attempts"], result="ADMITTED" if admit_only else

@@ -188,7 +188,7 @@ class ClockMetadataTests(unittest.TestCase):
 
 def wire(phase=1, *, busy=False, remaining=None):
     r = bytearray(b"M3TX\x01\x18"+bytes(18))
-    r[6] = phase; r[11:17] = b"\x08\xff\xff\x0f\x05\x0d"; r[19:21] = b"\x69\x96"
+    r[6] = phase; r[11:17] = b"\x08\xff\xff\x1a\x05\x0d"; r[19:21] = b"\x69\x96"
     r[17:19] = (256 if phase < 3 else 0).to_bytes(2, "little")
     if remaining is not None: r[17:19] = remaining.to_bytes(2, "little")
     if phase == 5: r[8:14] = bytes((6, 1, 1, 0, 0, 2 if busy else 0))
@@ -276,6 +276,7 @@ class FixtureTests(unittest.TestCase):
         for name in ("arm", "run"):
             data = packet(name)
             self.assertEqual(len(data), 8)
+            self.assertEqual(data[2:4], b"\x1a\xe5")
             self.assertTrue(all(data[i] ^ data[i+1] == 255 for i in (0, 2, 4, 6)))
         for bad in ("", None, "direct"):
             with self.assertRaises(ValueError): packet(bad)
@@ -286,6 +287,8 @@ class FixtureTests(unittest.TestCase):
             with self.subTest(index=index), self.assertRaises(ValueError): decode(bytes(raw))
         for raw in (b"", bytearray(wire()), wire()+b"\0", wire(4)):
             with self.assertRaises(ValueError): decode(raw)
+        old_profile = bytearray(wire()); old_profile[14] = 15
+        with self.assertRaisesRegex(ValueError, "profile"): decode(bytes(old_profile))
         for index, value in ((7, 1), (8, 5), (9, 0), (10, 0), (11, 3), (12, 8), (13, 1), (17, 1)):
             raw = bytearray(wire(5)); raw[index] = value
             with self.subTest(index=index), self.assertRaises(ValueError): decode(bytes(raw))
@@ -293,6 +296,7 @@ class FixtureTests(unittest.TestCase):
     def test_normal_busy_admitted_and_every_failure_boundary(self):
         fake = Synthetic(); result = self.run_fake(fake)
         self.assertEqual(result["result"], "PHY_DONE")
+        self.assertEqual((result["profile_channel"], result["profile_txpower_raw"]), (26, 5))
         self.assertEqual(fake.calls.count("reset"), 1)
         self.assertEqual(fake.calls.count("write"), 2)
         self.assertEqual(fake.calls.count("resume"), 5)
