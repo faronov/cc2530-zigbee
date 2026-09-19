@@ -183,6 +183,31 @@ This is not the decision-wait/retrieval procedure, NWK address admission,
 parent installation or membership. The16-KiB CODE/1-KiB XDATA reservation
 budget belongs to its standalone test image, not the complete stack.
 
+The [conditional legacy extraction controller](MAC_POLL.md) leases the same
+idle device-wide transmitter without resetting its DSN, generation or IFS.
+Its266-byte SDCC context separates123-byte control from a143-byte copied
+receipt. Foreground staging uses the same control type; later cleanup never
+overwrites a taken or established receipt. One action grants one real
+`mac_tx_step`, with the original event reported before advancing time.
+
+Only an accepted matching ACK transition establishes captured end A.
+Pending0 gives NO_DATA; Pending1 opens `A < complete_frame_end <= A+F`, where
+F is a caller-valid configured PIB, not a guessed timeout. Nonempty DATA gives
+SUCCESS; empty DATA and supported commands give NO_DATA with independent
+copied delivery. Commands require independent caller dispatch; the genuine
+test forwards Association Responses to the real response context using original
+bytes/epoch/stamp, preserving its separate half-open lifetime.
+Timeout NO_DATA requires loss-free ordered closure, not elapsed foreground time.
+Cancellation, capture/order/adapter errors and cleanup faults remain local.
+
+An independently confirmed continuous RX/ACK lease must survive prompt
+retirement of the real TX action under its unchanged QUIESCED contract.
+CLOSED covers drainage, required receiver ACKs and applicable IFS; FAULT
+retains ownership. The existing reset-exclusive platform services cannot
+supply that handoff. No automatic repeat extraction, total Association
+confirmation, IEEE2015 header support, radio adapter or membership is added.
+The31109-CODE/1942-byte-reservation test composition is not full-stack fit.
+
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
 IEEE addresses and opaque payload. Unsupported security, multicast and

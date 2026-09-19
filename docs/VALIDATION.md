@@ -606,6 +606,39 @@ exclusions. No board IMAGE or upload path is added. Neither CRC/timestamp
 inputs nor matching metadata proves physical ACK, association, authenticated
 membership, restoration or complete-stack fit.
 
+## Conditional legacy POLL extraction coverage
+
+`make test-mac-poll` links the actual MAC codec, transmitter, Association
+context, [extraction controller](MAC_POLL.md) and shared caller in that order.
+Both-board native and ASan/UBSan checks cover52 shared scenarios plus exact
+receive spans0..126, invalid channels, atomic errors and retained-copy/staging
+behavior. Genuine calls cover Pending0/1, complete-frame deadline equality,
+timeouts requiring ordered closure, DATA/empty/command results, real Response
+dispatch, independent Association expiry, DSN/IFS inheritance, cancellation,
+retirement, retained cleanup faults and receipt preservation.
+
+Both boards produce31109 CODE bytes,1878 ordinary XDATA +64 reserved, a266-byte
+context and observed SP73, with stack start4A and final SP49. The separate
+32-KiB CODE/2-KiB reservation and SP7C cap leave all old component budgets
+unchanged. The proof pins20 public entries,21422 raw F/S/L/T records,
+507 private/helper and139 caller records, all51 field records, five ordered
+per-link instruction listings and127 caller data bytes. All259 artifact,
+one alias and17 continuation negatives pass.
+
+The52 cases execute in13 four-case processes, each retaining the15-second
+simulator limit. PC, every IRAM/SFR byte and the entire64-KiB XDATA view are
+preserved and compared across boundaries; disabled timers/UART and complete
+peripheral state are checked. No instruction, return, case or caller state is
+patched to succeed. The independently named no-poll floor retains the original
+34 Association cases and separately passes205+1 negatives,19780 CODE,870+64
+XDATA and SP6B; it is never substituted for POLL acceptance.
+
+These are host-tested, image-checked and alias-aware simulated results only.
+There is no RF/CRC/timing observation, immediate receiver ACK service, real
+continuous-RX adapter, whole Association confirmation or membership. Configured
+PIB F, captured end/ordering and loss-free closure remain deployment
+preconditions. Neither executable is board firmware or a CI-uploaded image.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

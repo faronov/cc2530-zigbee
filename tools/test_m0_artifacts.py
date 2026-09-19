@@ -138,6 +138,16 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "Association Response"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_poll_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_poll_init", "_mac_poll_start", "_mac_poll_step",
+                         "_mac_poll_take", "_mac_poll_release", "_mac_poll_result", "_mac_poll_floor"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "MAC poll"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("mac_poll.c", "test_mac_poll.c", "host_mac_poll.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC poll"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_time_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_time_init", "_mac_time_read_live", "_mac_time_diagnostic",

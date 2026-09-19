@@ -214,6 +214,13 @@ with or without Pending, is only receipt metadata. Every request reuses the
 existing owned bytes, device-wide DSN, CCA/backoff, ACK parsing/retries,
 lifetime/work bounds and confirmed cleanup.
 
+The separate [conditional POLL controller](MAC_POLL.md) now leases this
+unchanged transmitter for one legacy extraction. It witnesses the real
+accepted ACK and preserves device-wide DSN/IFS and prompt TX retirement;
+it does not add automatic polling to this scheduler or weaken QUIESCED.
+Its continuous RX/ACK lease and captured-time preconditions still require a
+real adapter.
+
 ## Explicit command whitelist and bounded storage reset
 
 Admission caches the decoded payload's first octet in a `uint8_t` command

@@ -187,6 +187,14 @@ changing the selected IEEE2006 codec baseline. Authoritative deadline
 interpretation and revision reconciliation remain open in #45. Context work/
 lifetime limits stay explicit project policy, not fabricated IEEE NO_DATA.
 
+The separate [conditional POLL controller](MAC_POLL.md) now implements one
+legacy extraction using caller-valid configured F. Its genuine caller forwards
+copied Response bytes/epoch/stamp here even when POLL reports NO_DATA.
+At exact F expiry, a timely extraction can coexist with this context's
+half-open EXPIRED result. Neither replaces the other deadline or resolves #45;
+receiver ACK, continuous RX ownership and full Association confirmation remain
+independent gates.
+
 ## API and finite memory contract
 
 | Entry | Effect |

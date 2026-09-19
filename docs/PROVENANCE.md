@@ -1279,6 +1279,30 @@ primary-document review, not new executable, simulated or physical evidence.
 It does not silently repair IEEE2006 terminal timing or upgrade the codec's
 selected revision.
 
+### Conditional legacy POLL extraction sources
+
+The [controller, API and synthetic corpus](MAC_POLL.md) are original
+BSD-3-Clause work composing the repository's real MAC codec, transmitter and
+Association context. IEEE2006 7.1.16.1.3-7.1.16.3 pp.133-135 and7.5.6.3
+pp.187-188 supply Pending0/1 and the distinction between DATA, empty DATA,
+command delivery and POLL confirmation. Sections6.2.1.3 p.34 and7.5.6.2
+pp.186-187 require complete reception, including FCS; a frame start is not
+the accepted trailing-end timestamp. Section6.2.2.7.3 pp.39-40 separates
+physical receiver shutdown from the logical deadline.
+
+The caller-valid configured PIB F follows7.4.2 p.160/Table86 p.164; no
+default, Eq.(14) repair or total Association timer is inferred. Sections
+7.5.6.2/7.5.6.4.2 and7.5.1.3 retain immediate receiver ACK and IFS obligations,
+which this foreground controller does not implement. R22 AnnexD.1/D.3
+pp.513-514 retains the IEEE2015/additional-header gate. Exact document hashes
+and printed-page derivations are in the dedicated contract.
+
+Finite work/cleanup limits, action grants, copied receipts and loss-free
+ordered closure are explicit project policies. The independent no-poll
+diagnostic and complete simulator-state continuations are original validation
+code, not replacements for real protocol calls. No SDK, third-party stack,
+specification body, private capture, identity or physical observation is imported.
+
 ### Offline R22 NWK Data frame sources
 
 The original `nwk_frame` codec uses the same

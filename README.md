@@ -528,6 +528,19 @@ full-stack fit. The context does not transmit retrieval requests, deliver the
 required receiver ACK, restore radio state or complete association.
 Never flash `mac_association_test.ihx`.
 
+The separate [legacy Data Request extraction controller](docs/MAC_POLL.md)
+leases that same transmitter for one conditional POLL transaction. It retains
+the accepted ACK's captured end, handles Pending0/1 and a caller-valid configured
+frame-wait PIB, and copies DATA or commands without conflating command delivery
+with POLL SUCCESS. Commands require independent caller dispatch; the genuine
+test forwards Association Responses to the real response context, with its
+separate lifetime. `make test-mac-poll` is
+**host-tested, image-checked and simulated**, with 52 shared scenarios.
+Loss-free closure, continuous RX, immediate receiver ACK and applicable IFS
+are explicit adapter obligations, not implemented radio services. This is not
+repeated polling, complete association, membership or full-stack fit.
+Never flash `mac_poll_test.ihx`.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

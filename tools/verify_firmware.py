@@ -232,6 +232,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(not any(name.startswith("_mac_association_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_association.c", "test_mac_association.c")),
             "Board image must not link the isolated MAC Association Response context")
+    require(not any(name.startswith("_mac_poll_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("mac_poll.c", "test_mac_poll.c", "host_mac_poll.c")),
+            "Board image must not link the isolated MAC poll extraction controller")
     require(not any(name.startswith("_mac_time_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_time.c", "test_mac_time.c", "host_mac_time.c")),
             "Board image must not link the isolated MAC Timer foundation")

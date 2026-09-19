@@ -510,6 +510,18 @@ Immediate receiver ACK, full association control, confirmed radio restoration
 and membership remain open; neither an ACK nor a matched Response completes
 the procedure by itself.
 
+The [conditional legacy Data Request extraction controller](MAC_POLL.md)
+now implements one bounded offline POLL transaction through the real
+transmitter and codec. Pending0/1, captured ACK-end reception windows,
+caller-valid configured PIB F, copied DATA/command delivery and loss-free
+timeout closure remain distinct. A command can produce POLL NO_DATA while
+the real Association context separately accepts or expires its copied Response.
+Both-board host/sanitizer, linked-image and alias-aware evidence covers all52
+scenarios:31109 CODE,1878 ordinary XDATA +64 reserved, observed SP73.
+No old component limit or scenario was relaxed. Continuous RX/ACK ownership,
+captured timing (#40), configured-F deployment, total Association timing (#45),
+IEEE2015 headers, lower-MAC ACK/IFS and membership remain open.
+
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
 their addressing layouts, with host, linked-image and

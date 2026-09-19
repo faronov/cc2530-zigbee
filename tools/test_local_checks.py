@@ -57,7 +57,7 @@ class LocalChecksTests(unittest.TestCase):
         expected_components = {
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_queue", "radio_tx",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association",
+            "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch",
         }
@@ -93,6 +93,9 @@ class LocalChecksTests(unittest.TestCase):
                           ("mac_scan", "mac_scan"), ("mac_scan_test", "mac_scan_test"))),
             ("mac_association", (("mac_frame", "mac_frame"), ("mac_association", "mac_association"),
                                  ("mac_association_test", "mac_association_test"))),
+            ("mac_poll", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
+                          ("mac_association", "mac_association"), ("mac_poll", "mac_poll"),
+                          ("mac_poll_test", "mac_poll_test"))),
             ("nwk_candidates", (("mac_frame", "mac_frame"), ("nwk_beacon", "nwk_beacon"),
                                 ("nwk_candidates", "nwk_candidates"),
                                 ("nwk_candidates_test", "nwk_candidates_test"))),

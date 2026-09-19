@@ -218,6 +218,19 @@ authentication. Captured time, epoch and immediate receiver ACK are independent
 adapter obligations, not services supplied by this foreground metadata filter.
 **Never flash or upload `mac_association_test.ihx`; no board image may link it.**
 
+The [conditional legacy extraction controller](docs/MAC_POLL.md) has
+`make BUILD=build/mac-poll-check test-mac-poll`, also in `test-common`.
+Preserve the real MAC codec/TX/Association/POLL/caller link order and five
+immediate listing snapshots. Its separate 32-KiB CODE/2-KiB XDATA reservation
+and SP7C cap do not enlarge earlier budgets. Keep all52 scenarios, full raw
+metadata, actual Association forwarding, exact-D reception and independent
+logical-result/cleanup checks. The13 four-case simulator continuations require
+complete CPU/IRAM/SFR/64-KiB-XDATA comparison and the unchanged15-second process
+deadline; never reset caller state or patch returns to finish the corpus.
+Configured PIB F, captured ACK end, loss-free closure and immediate lower-MAC
+ACK/IFS are truthful adapter preconditions, not successful stubs.
+**Never flash or upload `mac_poll_test.ihx` or its independent floor diagnostic.**
+
 The isolated [reserved flash reader](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
 has a focused offline target:
 
