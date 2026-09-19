@@ -2038,6 +2038,19 @@ This does not turn the C52 model into radio evidence, validate generic hardware,
 prove independent FCS or calibrated metadata, or close M2/M3. No raw packet,
 identity, payload digest, dump or capture was added to repository/CI artifacts.
 
+### 2026-09-19 connected LG RX revalidation
+
+The [new separately authorized physical record](DEBUGGING.md#2026-09-19-connected-lg-rx-revalidation)
+first confirmed the known halted9,160-byte image without reset/resume.
+The standard manual runner then reset, verified complete physical CODE again
+and completed16 bounded attempts:15 CRC_OK and one BAD_CRC, with preserved
+CPU registers. The same-epoch cap and an additional terminal-loop pass retained
+END016F, attempt16/completed15/heartbeat15 and unchanged state/frame/bootstrap/
+registers. Private raw records remain outside Git/CI.
+This is **hardware-observed on LG/channel15 only**. No programming, independent
+sniffer comparison, TX, capture timing, calibrated metadata or MAC/network
+acceptance is established by this regression.
+
 ### RX shared-link listing regression
 
 The first20-job fixture CI run failed only the two RX board simulations:

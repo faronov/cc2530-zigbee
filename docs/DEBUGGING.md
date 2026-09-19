@@ -3363,3 +3363,31 @@ metadata, overflow/stopped-clock/poll-cap recovery, continuous queues, TX/ACK,
 MAC/security/networking and the remaining M2/M3 gates are not established.
 All18 older board BINs are unchanged; CI remains offline with20 jobs,
 the seven-artifact whitelist and `hardware_tested=false`.
+
+### 2026-09-19 connected LG RX revalidation
+
+Under renewed explicit permission to check the connected equipment, the parent
+first inspected the existing halted session without reset or resume:
+PC016F/status2B/config26. Every9,160 CODE bytes matched the published corrected
+LG RX fixture above, and the complete CPU register context was preserved.
+No programmer, flash write, factory-data read or unknown application execution
+was involved.
+
+A separate manual `check_radio_rx_hardware.py --attempts 16` invocation then
+performed its own full reset, reset-config26 check and complete physical CODE
+comparison before execution. It returned16 attempts, **15 CRC_OK publications
+and one BAD_CRC**, with register preservation. The raw records were created in
+a new0600 file in a user-owned0700 directory outside the repository.
+
+The parent next advanced the already-verified sixteenth READY to END016F.
+The attempt/completion/heartbeat counts stayed16/15/15, the frame and bootstrap
+record were unchanged, and a further real terminal-loop pass preserved the
+entire serialized state, frame, bootstrap and CPU context. There was no17th
+receive. **Final physical state at this record: halted at END016F.**
+
+This is a fresh bounded channel15 **hardware-observed** regression of the same
+firmware, not new TX, MAC, association, capture-timing or calibration evidence.
+There was no simultaneous independent sniffer comparison in this run; the
+earlier body-agreement results remain dated observations, not a claim for
+these15 publications. No packet contents, identifiers or payload hashes are
+published, and automated tests/CI still perform no hardware operation.

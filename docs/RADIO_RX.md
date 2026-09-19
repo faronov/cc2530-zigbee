@@ -383,6 +383,12 @@ Subsequent success after attempt4 establishes bounded BAD_CRC reuse, not an
 automatic reset. The next step reached retained END016F without a17th receive;
 RX was disabled, both FIFOs empty and heartbeat14.
 
+The [2026-09-19 connected-board revalidation](DEBUGGING.md#2026-09-19-connected-lg-rx-revalidation)
+rechecked every byte of the same halted image, then separately reset and ran16
+attempts:15 CRC_OK/one BAD_CRC. The cap and a terminal-loop pass retained
+END016F with attempt16/completed15/heartbeat15 and unchanged frame/bootstrap/
+CPU context. This later run did not repeat independent sniffer comparison.
+
 These are finite channel15 observations on one LG board. The reference tool
 strips FCS; body equality is not independent on-air CRC verification.
 Generic hardware, other channels, calibrated timing/RSSI/LQI, controller
