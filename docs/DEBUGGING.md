@@ -3536,6 +3536,75 @@ not sufficient to claim received-FCS validation.
 
 All raw captures, programmer logs, factory data and recovery material remain
 private and outside git/CI. Only the public synthetic body and public firmware
-hash appear here. **Latest physical state: the new TX image remains halted at
-END `0x274F`, status`0x2B`, config`0x26`; no additional reset, resume or RF
-attempt followed.** The old RX image is no longer installed.
+hash appear here. **State at the end of this record:** the channel15 TX image
+was left halted at END `0x274F`, status`0x2B`, config`0x26`. The old RX image
+was no longer installed. The separate channel26 operation below later
+superseded that installed TX image; it does not relabel this capture.
+
+### 2026-09-19 LG channel26 isolated TX acceptance
+
+The separately scoped #47 operation followed the explicit request to move
+isolated tests away from the coordinator's channel. Published `a471f3d` had
+passed all24 jobs in CI run35447462231 before hardware use. Both board
+definitions retained the full38-case offline fixture corpus and unchanged
+resource/stack guards. Only the LG Rev0.3 was physically exercised.
+
+The installed channel26 image has11,331 CODE bytes, SHA256:
+`f951f0324e0149fc16ee110cfd975ff61b12749e903b3fcaecdd4dfb809201e6`.
+The public body, raw TXPOWER05 and one-attempt policy are unchanged.
+The coordinator/network was not reconfigured.
+
+A fresh, single-use private operator plan first passed offline validation.
+It pinned the existing reviewed helper source and no-run guard, used new
+output names and never replayed the consumed channel15 programming operation.
+The original complete private recovery copy, original factory copy and
+previous public TX input were retained. Fresh selected-device checks found
+the old image at END274F/status2B/config26/SP62, and **all11,331 old CODE
+bytes** matched that preserved input without changing CPU context.
+
+A new factory-page read matched the private backup before erase/write.
+The reviewed programmer's guarded write/read-verification ended with blocked
+normal-run cleanup. Independent halt and factory-page checks, explicit debug
+reset and comparison of **all11,331 new CODE bytes** then established
+PC0000/status22/config26, application not resumed and zero RF attempts.
+Exit86 alone was not success evidence. The remaining full main-flash tail
+was **not reread**; this is not acceptance of the project's NV flash executor.
+
+The separate Nordic capture explicitly selected/read back channel26.
+Because the channel initially yielded no decoded frame, its startup gate
+required a responsive process and valid PCAP header, not invented RF-readiness
+evidence. This planned-test mode still required a nonempty final capture;
+it was distinct from the earlier empty-allowed passive survey.
+
+The manual runner independently verified complete programmed CODE, observed
+DISARMED/remaining256, the real empty poll to255, ARM and ADMITTED with cleared
+mailbox/zero service state, then permitted exactly one continuous real
+clock/FIFO/IF_CLEAR/final-clear sequence.
+
+| Observation | Result |
+| --- | --- |
+| Selected profile | Channel26, raw TXPOWER05, one IF_CLEAR attempt |
+| Public FCS-free body | `41 88 5A FF FF FF FF 34 12 54 58 46 31` |
+| Compiled result | PHY_DONE, attempts1/completed1, stage6/reason0, clock/FIFO/TX results0 |
+| Completed independent capture | Requested90 seconds; exactly1 PCAP/TAP record, containing the exact public body |
+| Independent final inspection | END `0x274F`, status`0x2B`, config`0x26`, checkpoint SP`0x62`; full CPU context preserved |
+| Sniffer cleanup | Clean capture exit, sleep commanded, channel26 read back, port released |
+
+One local JSON report write used bytes on a text stream after successful
+read-only hardware checks. The empty failed report was retained; corrected
+text output and a fresh passive inspection passed. No reset, resume or
+additional transmission was used to resolve that local reporting error.
+
+This is **hardware-observed** single-attempt transmission and independent
+body equality on LG/channel26, not proof of permanent channel exclusivity,
+CCA/RF silence, absence of Wi-Fi/BLE, independent FCS, calibrated frequency/
+power/timing, physical busy/fault recovery, ACK/retry, captured MAC timestamps,
+same-reset RX/TX ownership, association or Zigbee membership. The Nordic
+final-two-octet/FCS provenance limitation remains unchanged. Checkpoint SP
+is not a hardware stack high-water measurement.
+
+All raw captures, factory data, recovery copies, programmer logs and detailed
+operator reports remain private and outside Git/CI. **Latest physical state:
+the channel26 image is halted at END `0x274F`, status`0x2B`, config`0x26`;
+the sniffer is sleep-commanded on26 with its port released.** No further
+reset, resume or RF attempt followed the successful final inspection.

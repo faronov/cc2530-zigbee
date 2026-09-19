@@ -431,9 +431,12 @@ reduces DATA45 to12 without relaxing any existing budget or upper-IRAM guard.
 The separately authorized
 [LG run](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance) observed one
 PHY_DONE and one independently captured exact public body on the previous
-channel15 image. The current channel26 profile has host/image/simulator
-evidence only; neither the coordinator nor physical CC2530 was changed by
-that offline profile update.
+channel15 image. The channel26 profile first passed host/image/simulator
+checks without hardware access. A later separately scoped
+[LG channel26 run](DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance)
+verified guarded programming and observed one PHY_DONE plus one exact public
+body in a completed one-record capture. The coordinator was unchanged; this
+does not establish channel exclusivity or the remaining RF/MAC gates.
 Physical busy-channel/fault recovery, independent FCS/calibration,
 queue/controller composition, physical ACK/retries and association remain
 open; old clock/RX records do not automatically validate other newly linked images.

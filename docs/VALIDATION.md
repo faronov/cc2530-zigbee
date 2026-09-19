@@ -418,9 +418,9 @@ pass. The original36 cases remain; two new cases reject channel15 ARM/RUN
 packets before MMIO. Successful paths check FREQCTRL56/raw power05. No old
 clock service or unrelated fixture changed, so the historical full clock
 corpora above were not repeated locally for this channel-only delta.
-No target or coordinator was reconfigured or programmed. The earlier
-channel15 artifacts and physical record remain separate; channel26 has no
-CC2530 RF evidence.
+No target or coordinator was reconfigured or programmed by that offline
+update. CI35447462231 passed24/24 before the later hardware activity below.
+Earlier channel15 artifacts and physical evidence remain separate.
 
 ### 2026-09-19 LG single-attempt TX evidence
 
@@ -444,6 +444,32 @@ Physical busy-channel behavior, independent FCS, calibration, fault
 containment/recovery, generic RF, ACK/retry, a unified RX/TX owner and complete
 MAC/networking remain unproven. All raw captures, factory data and backups
 stay outside the repository and generated CI artifacts.
+
+### 2026-09-19 LG channel26 isolated TX evidence
+
+The separate [hardware record](DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance)
+pins the new11,331-byte LG CODE to
+`f951f0324e0149fc16ee110cfd975ff61b12749e903b3fcaecdd4dfb809201e6`.
+Fresh checks matched all old CODE bytes and the private factory backup before
+guarded programming; independent checks matched all new CODE and factory data
+afterward. Normal-run cleanup was blocked, not assumed safe from an exit code.
+The complete remaining flash tail was not reread.
+
+One real empty poll, separate channel26 ARM/RUN and inspected ADMITTED preceded
+one continuous IF_CLEAR attempt. PHY_DONE, attempts1/completed1, successful
+final FIFO clear and END were observed. The completed requested90-second
+independent channel26 capture contained exactly1 record and1 exact public
+TXF1-body match. Startup had shown a responsive process/header and channel
+readback, not a received frame; final capture validation still required packets.
+Two passive END inspections preserved CPU context; a local report-file type
+error between them required no reset, resume or additional transmission.
+
+Final state is END274F/status2B/config26/checkpoint SP62; the sniffer is
+sleep-commanded on26 and its port released. The coordinator/network was not
+changed. This is bounded **hardware-observed** transmission/body equality,
+not exclusive/RF-silent channel proof, independent FCS, calibration, busy/fault
+recovery, a captured-time API, immediate ACK, a unified MAC adapter or
+networking. Raw records, backups and identities remain outside Git/CI.
 
 ## Offline MAC transmission state coverage
 

@@ -453,9 +453,13 @@ offline; its manual RF runner is never invoked by builds/CI.
 The separately authorized [LG hardware run](docs/DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
 returned PHY_DONE for one attempt on the previous **channel15** image; an
 independent nRF52840 capture contained exactly one byte-identical public body.
-That image was left halted at END. The new channel26 profile has only offline
-evidence and has not been programmed by this change. Neither profile establishes
-independent FCS or calibrated power/timing.
+That image was left halted at END. A later separately authorized
+[channel26 run](docs/DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance)
+also returned PHY_DONE once; its completed requested90-second capture contained
+exactly one record with the public body. The channel26 image is now halted at
+END, and the sniffer is sleep-commanded on26. The coordinator was not changed.
+Neither run establishes permanent channel exclusivity, independent FCS or
+calibrated power/timing.
 
 The clock prerequisite reduces permanent DATA45 to12 bytes, with ten extra
 XDATA bytes, rather than enlarging memory limits. The TX test composition uses

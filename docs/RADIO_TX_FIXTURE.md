@@ -1,8 +1,9 @@
-# Boot-disarmed, one-attempt TX fixture — offline preparation
+# Boot-disarmed, one-attempt TX fixture
 
 **Current fixed channel26 profile: offline-tested on both board definitions,
-not hardware-observed.** The dated channel15 TX/RX, private-backup and Nordic
-records are separate historical evidence, not acceptance of this new profile.
+with one separately hardware-observed LG attempt and independent body match.**
+The [channel26 record](DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance)
+is separate from the dated channel15 TX/RX, backup and Nordic records.
 `IMAGE=radio_tx_fixture` is a separately selected board image; it is not the
 default bootstrap and its manual runner is never invoked by Make or CI.
 Standalone component executables are **never programming inputs/artifacts**.
@@ -270,17 +271,27 @@ The separately authorized
 observed the admission boundaries, one PHY_DONE result and exactly one
 byte-identical public body in an independent channel15 Nordic capture.
 The verified channel15 image was left halted at END274F/status2B/config26.
-This is hardware evidence for that one profile, not acceptance of the current
-channel26 image. No programming or target execution accompanied this profile change.
+This is hardware evidence for that one profile, not inherited channel26
+acceptance. No programming or target execution accompanied the offline
+profile commit itself.
+
+The later separately scoped
+[channel26 operation](DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance)
+verified old/new complete CODE and factory-page preservation around guarded
+programming, then observed one PHY_DONE and exactly one matching public body
+in a completed requested90-second capture containing one record. The current
+channel26 image was independently inspected at END274F/status2B/config26/SP62.
+The sniffer was sleep-commanded on26 and released; the coordinator was unchanged.
 
 #12's physical busy-channel, independent FCS and failure/recovery observations
 remain open. #15 lab/capture/calibration gates, same-reset RX/TX ownership/
-adapter and complete M3 acceptance remain open. Generic-board RF and all
-other channel/power profiles remain unobserved.
+adapter and complete M3 acceptance remain open. Generic-board RF and settings
+other than the two recorded LG/channel15/channel26/raw05 attempts remain
+unobserved.
 
 ## Channel26 profile boundary
 
-This prospective isolated-test profile changes exactly five linked operand
+The isolated-test profile changes exactly five linked operand
 bytes on each board: four channel values `0F ->1A` and the admission complement
 `F0 ->E5`. The generic offsets are27FF/284D/2967/296F/2AE9; LG adds28 hex.
 Image sizes, all complete private/public ABI records, the other eight ordered
@@ -304,8 +315,8 @@ before/after; the sniffer was sleep-commanded on26 and its port released.
 These counts do not establish CCA/RF silence, absence of Wi-Fi/BLE, or that only
 our packets can appear. The coordinator/network was not changed, and the
 CC2530 was not reset, resumed or programmed by that survey or these offline
-checks. A future channel26 transmission still needs its own explicit
-programming/identity/permission preflight and independent capture.
+checks. The subsequent channel26 acceptance above is separate evidence;
+any further attempt still needs a fresh explicit scope and full-reset epoch.
 
 ## Primary sources and provenance
 
