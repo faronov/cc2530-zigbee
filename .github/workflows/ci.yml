@@ -59,7 +59,11 @@ jobs:
           BOARD: ${{ matrix.board }}
           IMAGE: ${{ matrix.image }}
           BUILD: build/${{ matrix.board }}/${{ matrix.image }}
-        run: make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-common test-board
+        run: |
+          make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-board
+          if [ "$IMAGE" = debug_fixture ]; then
+            make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" test-common
+          fi
 
       - name: Upload generated board artifacts (never hardware-tested by CI)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

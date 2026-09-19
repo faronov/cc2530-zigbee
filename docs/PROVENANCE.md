@@ -1048,7 +1048,7 @@ agreement is not an independent silicon, timing or RF measurement. The
 linked proof executes actual strobes and FIFO/timebase instructions and pins
 the four genuine NOPs, typed ABI, private prefix and per-link listings.
 The separately documented future fixture/capture procedure grants no device,
-channel, power or recovery authority. Both boards remain offline-only for TX.
+channel, power or recovery authority. The component checks remain offline-only.
 
 The separate [boot-disarmed board fixture and original synthetic corpus](RADIO_TX_FIXTURE.md)
 reuse these unchanged timebase/FIFO/TX implementations and existing board
@@ -1062,6 +1062,11 @@ Strict emission checks identify the changed storage, helper declarations and
 real instructions; synthetic peripherals remain distinct from physical proof.
 The manual runner adds no new debugger USB/MMIO command, programming path or
 automatic hardware/CI activity.
+The separately authorized
+[LG hardware record](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
+adds one channel15/raw05 PHY_DONE and an independent exact public-body match.
+It retains the Nordic FCS limitation described above; no raw capture, private
+factory information, backup hash or third-party implementation is imported.
 
 ### Generic two-page NV record sources
 

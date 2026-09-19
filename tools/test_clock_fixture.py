@@ -15,6 +15,7 @@ from unittest.mock import patch
 import debug_image
 import clock_fixture
 from debug_image import decode_clock_fixture
+from fixture_test_artifacts import linked_fixture
 from verify_firmware import ARTIFACT_EXTENSIONS, IMAGES, ROOT, cdb_address, parse_ihex, parse_symbols
 
 
@@ -51,10 +52,7 @@ class ClockLinkedMetadataTests(unittest.TestCase):
     """Synthetic corruption of real immutable artifacts; never run equipment."""
     @classmethod
     def setUpClass(cls):
-        paths = [ROOT/"build/radio-tx-fixture-dev"/b/"clock-board-after/clock_fixture"
-                 for b in ("generic", "lg_esl29_rev03")]
-        if not all(p.with_suffix(s).exists() for p in paths for s in (".ihx", ".map", ".cdb")):
-            raise unittest.SkipTest("Build the isolated both-board clock fixtures first")
+        paths = [linked_fixture(board, "clock_fixture") for board in ("generic", "lg_esl29_rev03")]
         cls.artifacts = [(p, parse_ihex(p.with_suffix(".ihx").read_text()),
                           parse_symbols(p.with_suffix(".map").read_text()),
                           p.with_suffix(".cdb").read_bytes().decode("utf-8"))

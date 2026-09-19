@@ -450,15 +450,19 @@ bytes, no ACK request and no real identity. Failures retain evidence without
 implicit cleanup or retry. `make ... IMAGE=radio_tx_fixture test-board` stays
 offline; its manual RF runner is never invoked by builds/CI.
 
+The separately authorized [LG hardware run](docs/DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
+returned PHY_DONE for one attempt; an independent nRF52840 capture contained
+exactly one byte-identical public body. The target remains halted at END.
+This does not establish independent FCS or calibrated power/timing.
+
 The clock prerequisite reduces permanent DATA45 to12 bytes, with ten extra
 XDATA bytes, rather than enlarging memory limits. The TX test composition uses
 11,291/11,331 CODE bytes (generic/LG),347 ordinary XDATA +64 reserved and
 MMIO-sampled SP`0x74`/full-run simulator high-water`0x77`.
 These are measured image sizes and exercised paths, not full-stack fit.
 Same-reset mixing with legacy RX, queue/controller integration, physical
-ACK/retries and separately authorized on-air acceptance remain open. Neither
-the fixture nor old image-specific hardware records establish MAC/networking
-or calibrated power on this new build.
+ACK/retries, busy-channel/fault recovery and broader RF acceptance remain open.
+Neither this observation nor old image-specific records establish MAC/networking.
 
 ## Isolated MAC Timer foundation
 

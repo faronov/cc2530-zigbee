@@ -263,10 +263,17 @@ manual preflights now validate the actual staged instruction/operand and
 stack layouts; their gates are not bypassed. AES has only one byte of its
 unchanged budget margin. No old physical record is reused as new acceptance.
 
-#12 physical conditional-clear TX/busy, independently captured bytes/FCS and
-failure/recovery observations remain open. #15 lab/capture/calibration gates,
-same-reset RX/TX ownership/adapter and complete M3 acceptance remain open.
-No physical observation was made by this implementation task.
+The separately authorized
+[2026-09-19 LG acceptance](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
+observed the admission boundaries, one PHY_DONE result and exactly one
+byte-identical public body in an independent channel15 Nordic capture.
+The verified new image remains halted at END274F/status2B/config26.
+This is hardware evidence for that one profile, not inherited acceptance.
+
+#12's physical busy-channel, independent FCS and failure/recovery observations
+remain open. #15 lab/capture/calibration gates, same-reset RX/TX ownership/
+adapter and complete M3 acceptance remain open. Generic-board RF and all
+other channel/power profiles remain unobserved.
 
 ## Primary sources and provenance
 

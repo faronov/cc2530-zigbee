@@ -207,7 +207,10 @@ the seven-path board-artifact whitelist remain unchanged.
 
 This is preparation **only**, not authorization. The
 [separate board fixture/manual runner](RADIO_TX_FIXTURE.md) implements the
-bounded one-attempt path, not physical acceptance. Before physical execution:
+bounded one-attempt path. The
+[separate LG record](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
+now supplies one PHY_DONE/independent-body observation, not blanket acceptance
+or authorization for another run. Before physical execution:
 
 1. Identify the exact board/revision/CC2530F256, recovery material, separately
    selected **boot-disarmed board fixture**, linked image hash/toolchain and
@@ -219,11 +222,11 @@ bounded one-attempt path, not physical acceptance. Before physical execution:
    maximum one attempt per command, total attempts, permitted debugger/reset
    operations and recovery conditions. The low reference-design power setting
    is not a safe universal board power or regulatory clearance.
-3. Review a future finite fixture: default/reset/resume disarmed, deliberate
+3. Review the selected finite fixture: default/reset/resume disarmed, deliberate
    bounded admission, unchanged board startup/GPIO, no AUTOACK, automatic retry
    or automatic fault reset, explicit END/FAULT. Do not enable legacy RX and
-   this init-time TX owner together. This document does not implement that
-   fixture or a shared MAC ownership transfer.
+   this init-time TX owner together. The linked board fixture is separate;
+   neither document establishes a shared MAC ownership transfer.
 4. Under that separate authorization, first observe default no-command
    behavior. Capture separately admitted direct TX, conditional-clear TX and
    busy CCA. Any controlled busy-channel source needs its own RF permission.
@@ -243,8 +246,10 @@ bounded one-attempt path, not physical acceptance. Before physical execution:
    tool versions, actual channel/raw settings, measured power/timing **only if
    measured**, finite attempt counts, completion/busy/fault outcomes and limits.
 
-**Open gates:** no new hardware observation exists for either board. #12's
-on-air acceptance and fixture execution remain open. #15 also requires its
+**Open gates:** the one LG conditional-clear/body observation does not cover
+physical busy-channel behavior, independent FCS, fault containment/recovery,
+generic hardware or calibration. Those #12 acceptance gates remain open.
+#15 also requires its
 separate lab fixture, independent captures and unimplemented ACK/retry/
 association behavior; this slice closes none of those or M3 as a whole.
 

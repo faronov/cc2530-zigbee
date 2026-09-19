@@ -392,6 +392,9 @@ The subsequent [read-only backup activity](DEBUGGING.md#2026-09-19-guarded-priva
 separately reset and rechecked the unchanged firmware, leaving it halted at
 PC0000/config26 without another application resume. END016F above is the
 historical endpoint of the RX run, not the latest physical state.
+The later [TX acceptance](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
+replaced this RX image and left the new TX image halted at END274F; the
+RX/backup endpoints above are historical.
 
 These are finite channel15 observations on one LG board. The reference tool
 omits the final two serial-frame octets, which are not independently established

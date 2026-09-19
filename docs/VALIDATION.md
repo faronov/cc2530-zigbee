@@ -24,10 +24,11 @@ board-image directories and serial, fail-fast submakes. The existing full
 `make ... all test` and twenty-four-job CI coverage remain available.
 CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
-Every matrix job still runs all standalone component and selected-board
-native/linked/simulator checks. It no longer repeats the identical Python
-suite twice per job, while retaining the15-minute job and15-second simulator
-limits and the seven-path artifact whitelist.
+Every matrix job runs its selected-board native/linked/simulator checks;
+the two debug-fixture jobs also run the complete standalone component
+corpus, once per board definition, as `test-local` already does. This removes
+identical repeated work, not cases, while retaining the15-minute job and
+15-second simulator limits and the seven-path artifact whitelist.
 The measurements below predate the flash/TX fixtures and retain their original
 twenty-image scope; they are not timings for the expanded matrix.
 Dry-run regressions account for every component, board/image, fixture host
@@ -371,6 +372,13 @@ Clock and TX pin72 and404 complete private metadata records respectively,
 including helper declarations/entries/ends and duplicate multiplicity.
 Conflicting public ABI/field records, corrupted raw line separators and
 hostile appended records reject, even with updated outer artifact hashes.
+These linked-metadata regressions lazily build fresh, process-local artifacts
+for both boards/all16 clock-containing images; they no longer depend on
+pre-existing developer build directories or skip merely because fresh CI
+has no such directories. Missing compiler tools cause an explicit skip; build/proof failures
+remain failures. Generated fixtures are shared only within the test process
+and cleaned up afterward. All30 clock/TX regression methods passed against
+these freshly built artifacts, without skips, in413.804 seconds.
 
 The five older clock-consuming fixtures retain every native/execution case:
 FIFO257 cycles/11 bounded segments; DMA257 cycles/514 transfers/6,289 bytes/
@@ -391,6 +399,39 @@ require reviewed updated emission proofs and full corresponding corpora;
 old physical acceptance is not inherited by their newly linked images.
 These current measurements are **host-tested/image-checked/simulated**,
 not hardware observations or proof that a complete Zigbee stack fits.
+
+The parent's complete Python discovery passed525 tests with19 optional-PyUSB
+skips; the separate existing-PyUSB run passed all274 M1 tests without skips
+or hardware access. Published `b01e86d` CI run35437436026 passed all24 board
+jobs. The broader local matrix had no reported failure after its corrected
+tool stage, but was deliberately stopped during the generic AES board run
+once equivalent full CI passed: **no completed full-local-matrix result is
+claimed**. Earlier tool-stage failures were a stale11-image CI expectation
+and optional RX preflight selecting historical artifacts; both were corrected,
+with fresh isolated RX builds rather than overwriting the physical baseline.
+
+### 2026-09-19 LG single-attempt TX evidence
+
+The separate [hardware record](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance)
+documents guarded programming of the exact11,331-byte LG image, independent
+complete CODE comparison and factory-page equality before/after. The old
+complete private recovery copy was retained; the new full flash tail was not
+reread. This is not a hardware test of the platform NV flash executor.
+
+Actual DISARMED/default-empty/ARM/ADMITTED observations preceded one continuous
+conditional-clear channel15/raw05 attempt. The compiled result was PHY_DONE,
+attempts1/completed1 and final verified FIFO clear. Exactly one public13-byte
+`TXF1` body matched one of2,623 complete independent private Nordic records.
+The stopped target was independently re-inspected at END274F/status2B/
+config26/SP62 with preserved CPU context and no further reset/resume.
+An operator assertion that had incorrectly expected reset-status22 was
+resolved by documented breakpoint/CRT status interpretation, not recovery.
+
+This is **hardware-observed** transmission/body equality on one LG board.
+Physical busy-channel behavior, independent FCS, calibration, fault
+containment/recovery, generic RF, ACK/retry, a unified RX/TX owner and complete
+MAC/networking remain unproven. All raw captures, factory data and backups
+stay outside the repository and generated CI artifacts.
 
 ## Offline MAC transmission state coverage
 

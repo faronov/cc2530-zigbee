@@ -134,15 +134,10 @@ class ClockMetadataTests(unittest.TestCase):
                                  "\n".join(sorted(records)))
 
     def test_genuine_clock_metadata_for_every_coupled_profile(self):
-        root = ROOT/"build/radio-tx-fixture-dev"
-        paths = []
-        for board in ("generic", "lg_esl29_rev03"):
-            paths += [root/board/"clock-after/clock_test", root/board/"clock-board-after/clock_fixture",
-                      root/board/"radio_tx_fixture"]
-            paths += [root/("coupled-"+board)/n/n for n in
-                      ("radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture")]
-        if not all(p.with_suffix(s).exists() for p in paths for s in (".cdb", ".ihx", ".map")):
-            self.skipTest("Build the isolated both-board clock and coupled fixture proofs first")
+        from fixture_test_artifacts import linked_fixture
+        paths = [linked_fixture(board, name) for board in ("generic", "lg_esl29_rev03")
+                 for name in ("clock_test", "clock_fixture", "radio_tx_fixture", "radio_fifo_fixture",
+                              "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture")]
         for path in paths:
             image = parse_ihex(path.with_suffix(".ihx").read_text())
             symbols = parse_symbols(path.with_suffix(".map").read_text())
@@ -173,10 +168,8 @@ class ClockMetadataTests(unittest.TestCase):
                         clock_fixture.verify_clock_code(image, symbols, mutation)
 
     def test_genuine_clock_board_conflicting_field_and_object_declarations(self):
-        paths = [ROOT/"build/radio-tx-fixture-dev"/b/"clock-board-after/clock_fixture"
-                 for b in ("generic", "lg_esl29_rev03")]
-        if not all(p.with_suffix(".cdb").exists() for p in paths):
-            self.skipTest("Build the isolated both-board clock fixtures first")
+        from fixture_test_artifacts import linked_fixture
+        paths = [linked_fixture(board, "clock_fixture") for board in ("generic", "lg_esl29_rev03")]
         for path in paths:
             image = parse_ihex(path.with_suffix(".ihx").read_text())
             symbols = parse_symbols(path.with_suffix(".map").read_text())
@@ -433,11 +426,9 @@ class FixtureTests(unittest.TestCase):
                 stack_high_water(text)
 
     def test_genuine_artifact_and_listing_rejections(self):
-        root = ROOT/"build/radio-tx-fixture-dev"
-        if not all((root/b/"radio_tx_fixture.bin").exists() for b in ("generic", "lg_esl29_rev03")):
-            self.skipTest("Run isolated genuine both-board fixture builds first")
+        from fixture_test_artifacts import linked_fixture
         for board in ("generic", "lg_esl29_rev03"):
-            source = root/board; image = load_image(source, board)
+            source = linked_fixture(board, "radio_tx_fixture").parent; image = load_image(source, board)
             self.assertIsInstance(image, DebugImage)
             self.assertEqual(image.metrics["ordinary_xdata_bytes"], 347)
             self.assertEqual(image.metrics["nonaliased_xdata_reserved_bytes"], 411)

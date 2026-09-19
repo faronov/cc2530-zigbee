@@ -69,8 +69,11 @@ concurrent links into a shared directory or relaxed timeouts.
 The existing `make BOARD=... IMAGE=... all test` command remains a full
 single-configuration check. The twenty-four-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
-in every job. The tool suite itself includes both-board image profiles;
+is split into `all test-board` in every job plus `test-common` in the two
+debug-fixture jobs, once per board definition. The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
+Linked clock/TX metadata tests build their own fresh temporary artifacts when
+SDCC is available; do not prepopulate development directories to activate them.
 For focused iteration, the explicit parts are:
 
 ```sh

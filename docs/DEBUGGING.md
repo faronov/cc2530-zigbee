@@ -3433,7 +3433,7 @@ private. Only **one complete main-flash backup** is claimed.
 Independently opening the stopped target confirmed PC0000/status22/config22
 after the guarded read. A further explicit reset restored config26, and the
 ordinary guarded debugger compared all9,160 physical CODE bytes again.
-**Latest physical LG state: halted at PC0000, status22, config26.**
+**At the end of this backup activity: halted at PC0000, status22, config26.**
 Nothing was flashed or erased and no application was resumed in this activity.
 Exit86 alone was never accepted as success or halt evidence.
 
@@ -3479,3 +3479,63 @@ failure or FAULT preserves its evidence without automatic retry, reset,
 flush or claimed RF-off state. Another attempt requires a separately
 established full reset. Neither this procedure nor the existing RX record is
 hardware acceptance of the newly linked clock-staged TX/RX images.
+
+### 2026-09-19 LG single-attempt TX acceptance
+
+Under the standing explicit parent/operator hardware authorization, the
+published `b01e86d` LG Rev0.3 board image was programmed and exercised once.
+The exact11,331-byte image SHA256 is
+`e47714206c44cc4be5937da4752a1baa637e86b48fefab46390313c04c4c4763`.
+Changed-surface native/image/alias-aware simulation and all coupled clock
+consumer proofs had passed before execution. CI run35437436026 subsequently
+passed all24 board jobs; it is not the source of the physical observations.
+
+Programming was a separately selected, single-use private operator plan,
+not a Make/CI action. It checked the reviewed programmer binary, rebuilt the
+original no-run guard and established its real help-only ELF interposition.
+Before erase/write, all9,160 old physical CODE bytes and a fresh2,048-byte
+factory-page read matched the private recovery baseline. The guarded
+erase/write/read-verification operation ended with the expected blocked
+normal-run cleanup. An independent halt check, another matching factory-page
+read, an explicit debug reset and comparison of **all11,331 new CODE bytes**
+established halted PC0000/status22/config26. Exit86 alone was not accepted as
+success. The full remaining main-flash tail was **not reread**; neither this
+programmer operation nor the backup proves the project's NV flash executor.
+
+The nRF52840 reference capture was independently set/read back to channel15
+and proved responsive before the CC2530 application was resumed. The manual
+runner observed DISARMED/remaining256, an actual empty-mailbox continuation
+to remaining255, separate ARM and RUN packets, and ADMITTED with zero service
+diagnostics/attempts and cleared mailbox. Only then did it resume the real
+clock/FIFO/conditional-clear TX sequence continuously.
+
+| Observation | Result |
+| --- | --- |
+| Selected RF profile | Channel15, raw TXPOWER05, one IF_CLEAR attempt |
+| Public FCS-free body | `41 88 5A FF FF FF FF 34 12 54 58 46 31` |
+| Compiled result | PHY_DONE, attempts1/completed1, successful final explicit FIFO clear |
+| Independent reference | Exactly one byte-identical public body among2,623 complete private PCAP/TAP records |
+| Final target | END `0x274F`, status`0x2B`, config`0x26`, checkpoint SP`0x62` |
+| Inspection | Full CPU context preserved; separate post-capture state/diagnostic check passed |
+| Sniffer cleanup | Owned process stopped normally; sleep commanded, channel read back, port released |
+
+One extra post-capture assertion incorrectly expected reset status22 rather
+than the post-CRT/breakpoint status2B. It failed without reset or resume; a
+separate read confirmed the unchanged END PC/config and the subsequent full
+inspection passed. `HALT_STATUS` accounts for bit3. As documented above,
+SWRU191F Table3-3's bit0 detects a DATA-FF write, including the CRT clear; the
+flag alone does not establish an overflowing call chain. The hardware SP
+value is only a stopped checkpoint, not the simulator's full-run`0x77` peak.
+
+These are finite **hardware-observed** transmission and independent body
+equality results on one LG board, not independent on-air FCS, calibrated
+power/timing/CCA, a physically busy-channel case, fault containment/recovery,
+generic-board RF, ACK/retry, same-reset RX/TX, MAC association or networking.
+The Nordic path omits its final two serial-frame octets; their provenance is
+not sufficient to claim received-FCS validation.
+
+All raw captures, programmer logs, factory data and recovery material remain
+private and outside git/CI. Only the public synthetic body and public firmware
+hash appear here. **Latest physical state: the new TX image remains halted at
+END `0x274F`, status`0x2B`, config`0x26`; no additional reset, resume or RF
+attempt followed.** The old RX image is no longer installed.

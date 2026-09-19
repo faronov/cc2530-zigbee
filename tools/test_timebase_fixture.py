@@ -161,7 +161,11 @@ class TimebaseCodeTests(unittest.TestCase):
         tool_step = workflow.split("- name: Check host tool regressions\n", 1)[1].split("- name:", 1)[0]
         self.assertIn("if: matrix.board == 'generic' && matrix.image == 'bringup'", tool_step)
         self.assertIn("python3 -m unittest discover -s tools -p 'test_*.py' -v", tool_step)
-        self.assertIn('run: make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-common test-board',
+        self.assertIn('make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-board',
+                      workflow)
+        self.assertIn('if [ "$IMAGE" = debug_fixture ]; then\n'
+                      '            make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" test-common\n'
+                      '          fi',
                       workflow)
         uploads = workflow.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
