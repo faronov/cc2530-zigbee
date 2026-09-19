@@ -365,6 +365,29 @@ scan completion, link quality, freshness, compatible-parent selection,
 association or membership. No board image links or uploads the executable;
 no earlier memory limit or 15-second simulator deadline was enlarged.
 
+## Offline active-scan composition coverage
+
+`make test-mac-scan` links the real MAC codec/transmitter, NWK Beacon decoder,
+candidate collector and [scan controller](MAC_SCAN.md) with a genuine SDCC
+caller. Its 28 scenarios cover all16 channels, duration14, empty/full/lossy
+results, duplicate withdrawal, exact Requests/DSNs, inherited IFS, busy CCA,
+partial/unscanned masks, cancellation, closure/restoration failure, natural
+time wrap and independent working/cleanup bounds. Native/sanitizer checks add
+all duration/CRC values, channel bits and381 exact-sized frame inputs.
+
+Both board definitions have identical 32,715-byte CODE, 1,449 ordinary
+XDATA +64 reserved, a212-byte scan context and observed SP7A below the SP7C
+cap. Whole CODE/public/private/caller/field ABI, actual transmitter/decoder
+calls, all six ordered per-link listings, artifact negatives and a genuine
+missing-alias negative remain enforced. Unused/status, upper-IRAM and stack
+unwind checks retain the15-second per-simulator bound. This separate32-KiB/
+2-KiB composition budget does not enlarge earlier component limits.
+
+Only53 CODE bytes remain in the test image; this is not full-stack or IRQ
+headroom. Explicit source events and the serialized TX pump do not supply
+a hardware adapter, captured timing, measured CRC, physical receive windows,
+full parent selection or association. Board linkage/uploads remain prohibited.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

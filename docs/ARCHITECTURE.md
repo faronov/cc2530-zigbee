@@ -140,6 +140,20 @@ This is not a MAC PAN-descriptor list, channel scan, ranked/fresh parent choice,
 association or membership state. No radio, timer, key or board dependency is
 introduced. Different Extended PAN identities remain distinct, without aging.
 
+The [offline active-scan controller](MAC_SCAN.md) leases the caller's existing
+device-wide transmitter and owns a 212-byte SDCC context, including the copied
+candidate table. It walks requested page0 channels11-26 in ascending order,
+submits real canonical Beacon Requests and grants one serialized foreground
+`mac_tx_step` at a time; it never resets the DSN or nests another transmitter
+implementation. Confirmed receive windows feed the actual collector/decoders.
+Working lifetime/steps and separate restoration bounds are finite. A channel
+leaves `unscanned` only after confirmed full-window closure; `sent`, candidate
+count and sticky capacity loss remain distinct. DONE requires restoration of
+the saved logical PAN/channel/filter/RX state; unresolved faults retain the
+lease. The action/event interface is not a CC2530 adapter, a full MLME-SCAN
+descriptor service, complete parent selection or association.
+Its almost-full six-module test image is not complete-stack resource evidence.
+
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
 IEEE addresses and opaque payload. Unsupported security, multicast and

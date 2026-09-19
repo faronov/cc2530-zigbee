@@ -1170,6 +1170,26 @@ implement complete discovery, link quality, update freshness, authentication
 or BDB procedures. All addresses/payloads are synthetic; no SDK, private capture,
 identity, key or third-party implementation is imported or uploaded.
 
+### Offline active-scan controller sources
+
+The [bounded controller and original synthetic corpus](MAC_SCAN.md) compose
+the unchanged MAC transmitter and candidate collector, not a vendor scanner.
+The pinned IEEE 802.15.4-2006 source above supplies channel order/page0,
+duration0-14 and the960-symbol base duration, canonical Beacon Request,
+PAN save/FFFF/restore, Beacon-only observation and requested-but-unscanned
+semantics: sections6.1.2.1,7.1.11.1-2,7.3.7,7.5.2.1-1.2 and
+Tables67/68/82/85. The dedicated contract records printed page locations.
+The same R22 sections3.6.1.3-4 and3.6.7 distinguish preliminary collection
+from complete discovery/parent selection.
+
+Continuing after four candidate entries, sticky capacity-loss reporting,
+saved channel/filter/RX restoration, separate cleanup limits and the serialized
+foreground pump are explicit project policies. They do not implement the
+IEEE PAN-descriptor-limit/macAutoRequest algorithm or fabricate its status
+codes. No association, security, BDB or radio/capture facts are inferred from
+successful synthetic events. No SDK implementation or private material was
+imported; all new code/tests are original BSD-3-Clause work.
+
 ### Offline R22 NWK Data frame sources
 
 The original `nwk_frame` codec uses the same

@@ -47,6 +47,10 @@ withdrawal and pressure handling, not active scanning, full parent selection,
 freshness or network acceptance. This decoder's raw metadata contract is
 unchanged.
 
+The separate [offline scan controller](MAC_SCAN.md) uses that collector within
+bounded channel/window and restoration state. Its synthetic action/event
+evidence adds neither a hardware scanner nor full parent selection.
+
 ## API and ownership
 
 `nwk_beacon_decode(payload, length, result)` returns `nwk_beacon_result_t`.

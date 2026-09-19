@@ -98,6 +98,11 @@ CCA/backoff limits and IFS. Requests do not ask for ACKs or retransmit after
 confirmed PHY completion. Channel-access failure is explicit; it is not a
 successful scan or proof that no coordinator exists.
 
+The separate [offline scan controller](MAC_SCAN.md) now leases this existing
+transmitter across its channel/window procedure, without resetting DSN or
+adding a nested `mac_tx_step`. Its explicit foreground pump grants and
+confirmed restoration do not implement a radio adapter or association.
+
 Unsupported: Beacon frames, commands other than Beacon Request (including
 association/polling), indirect transmission, slotted CSMA/GTS, MAC security,
 enhanced ACKs/IEs, outgoing Frame Pending, DATA broadcast PANs and short

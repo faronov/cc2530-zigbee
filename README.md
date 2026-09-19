@@ -485,6 +485,16 @@ is **host-tested, image-checked and simulated**. This is not active scanning,
 ranked parent selection, freshness, association or authenticated membership.
 Its standalone executable is excluded from board firmware and uploads.
 
+The [offline active-scan controller](docs/MAC_SCAN.md) adds ascending channel
+walking, real Beacon Request/DSN/CCA state, confirmed receive-window handling
+and copied candidate collection. It preserves separate sent/unscanned masks
+and overflow diagnostics; release requires confirmed restoration of the saved
+PAN/channel/filter/RX state. `make test-mac-scan` is **host-tested,
+image-checked and simulated**, not an operating scanner on a board.
+Its six-module test image leaves only 53 bytes below the 32-KiB CODE limit:
+this is not complete-stack fit. A real adapter, captured timing (#40), full
+parent selection and association remain open; never flash `mac_scan_test.ihx`.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

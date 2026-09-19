@@ -77,7 +77,7 @@ endif
 .PHONY: test-protocol-budget
 .PHONY: test-radio-rx test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
-.PHONY: test-nwk-candidates test-mac-time
+.PHONY: test-nwk-candidates test-mac-time test-mac-scan
 .PHONY: test-common test-tools test-board test-local
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
@@ -617,6 +617,28 @@ test-mac-time: $(BUILD)/host-mac-time-tests $(BUILD)/mac_time_test.ihx
 	$(BUILD)/host-mac-time-tests
 	$(PYTHON) -B tests/boot_mac_time.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/mac_scan.rel: src/mac_scan.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_scan_test.rel: tests/test_mac_scan.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_scan_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/mac_tx.rel $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_candidates.rel $(BUILD)/mac_scan.rel $(BUILD)/mac_scan_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/mac_tx.rel $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_candidates.rel $(BUILD)/mac_scan.rel $(BUILD)/mac_scan_test.rel
+	cp $(BUILD)/mac_frame.rst $(BUILD)/mac_scan_test.mac_frame.rst
+	cp $(BUILD)/mac_tx.rst $(BUILD)/mac_scan_test.mac_tx.rst
+	cp $(BUILD)/nwk_beacon.rst $(BUILD)/mac_scan_test.nwk_beacon.rst
+	cp $(BUILD)/nwk_candidates.rst $(BUILD)/mac_scan_test.nwk_candidates.rst
+	cp $(BUILD)/mac_scan.rst $(BUILD)/mac_scan_test.mac_scan.rst
+	cp $(BUILD)/mac_scan_test.rst $(BUILD)/mac_scan_test.mac_scan_test.rst
+
+$(BUILD)/host-mac-scan-tests: tests/test_mac_scan.c src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/mac_scan.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_scan.c src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/mac_scan.c -o $@
+
+test-mac-scan: $(BUILD)/host-mac-scan-tests $(BUILD)/mac_scan_test.ihx
+	$(BUILD)/host-mac-scan-tests
+	$(PYTHON) -B tests/boot_mac_scan.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
@@ -652,7 +674,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-queue test-radio-tx
-test-common: test-mac-tx test-nwk-candidates test-mac-time
+test-common: test-mac-tx test-nwk-candidates test-mac-time test-mac-scan
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
 	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"

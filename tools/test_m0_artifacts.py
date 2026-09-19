@@ -118,6 +118,16 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "isolated flash"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_scan_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_scan_init", "_mac_scan_start", "_mac_scan_step",
+                         "_mac_scan_get", "_mac_scan_release", "_mac_scan_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "MAC scan"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("mac_scan.c", "test_mac_scan.c", "host_mac_scan.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC scan"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_time_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_time_init", "_mac_time_read_live", "_mac_time_diagnostic",

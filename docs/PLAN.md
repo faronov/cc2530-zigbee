@@ -446,8 +446,8 @@ Both board definitions have host/image/simulator evidence. Positive periods
 epoch. Radio quiescence remains mandatory; this is not a same-reset RX/TX
 owner. The primary sources' SFD-rise versus TX-end capture discrepancy,
 capture freshness/overwrite, epoch/fine-phase conversion and physical timing
-remain prerequisites for the real adapter. Neither a live sample nor raw
-Sleep Timer ticks may replace captured TX/ACK end.
+remain prerequisites for the real adapter, tracked separately in #40.
+Neither a live sample nor raw Sleep Timer ticks may replace captured TX/ACK end.
 
 Initial #14 preparation additionally admits canonical unsecured Beacon
 Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.
@@ -463,6 +463,16 @@ Both board definitions have native/sanitizer/linked evidence. This is not
 active scan completion or complete normative parent selection: target-network
 choice, link cost, freshness/update-ID policy, actual receive windows and
 association remain open. The record/table are metadata, never membership.
+
+The [offline active-scan controller](MAC_SCAN.md) now adds bounded ascending
+channel walking, real Beacon Request admission and serialized transmitter
+pumping, explicitly confirmed receive windows, copied candidate ingestion and
+restoration of saved logical radio state. Host/sanitizer, linked-image and
+alias-aware checks cover both board definitions, including partial/unscanned
+masks, cancellation and retained restoration faults. This is not a physical
+scanner or full MAC PAN-descriptor service: #13/#40 adapter/timestamp gates,
+full parent policy and association remain open. The composed test's 32,715-byte
+CODE leaves only 53 bytes below the unbanked limit; no full-stack fit follows.
 
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and

@@ -189,6 +189,17 @@ per-link listing snapshots do not enlarge earlier budgets. Candidate retention
 is neither active scan completion nor compatible/authenticated parent selection.
 **Never flash or upload `nwk_candidates_test.ihx`; no board image may link it.**
 
+The [offline active-scan controller](docs/MAC_SCAN.md) has
+`make BUILD=build/mac-scan-check test-mac-scan`, also in `test-common`.
+Preserve the six real modules and immediate per-link listing snapshots,
+serialized `mac_tx_step` grants, persistent DSN ownership, actual collector
+calls, explicit hardware-confirmation boundaries and confirmed restoration.
+Its separate 32-KiB CODE/2-KiB XDATA reservation budget does not enlarge earlier
+limits; the current test image leaves only 53 CODE bytes. Keep the SP7C cap,
+alias/upper-IRAM guards and genuine complete scenario corpus. Do not replace
+missing physical timestamps or adapter behavior with successful stubs.
+**Never flash or upload `mac_scan_test.ihx`; no board image may link it.**
+
 The isolated [reserved flash reader](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
 has a focused offline target:
 
