@@ -195,7 +195,7 @@ Preserve the six real modules and immediate per-link listing snapshots,
 serialized `mac_tx_step` grants, persistent DSN ownership, actual collector
 calls, explicit hardware-confirmation boundaries and confirmed restoration.
 Its separate 32-KiB CODE/2-KiB XDATA reservation budget does not enlarge earlier
-limits; the current test image leaves only 53 CODE bytes. Keep the SP7C cap,
+limits; the current test image leaves only 117 CODE bytes. Keep the SP7C cap,
 alias/upper-IRAM guards and genuine complete scenario corpus. Do not replace
 missing physical timestamps or adapter behavior with successful stubs.
 **Never flash or upload `mac_scan_test.ihx`; no board image may link it.**

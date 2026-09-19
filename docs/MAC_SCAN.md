@@ -287,7 +287,7 @@ Measured with SDCC4.2.0 #13081 and the canonical large-model flags:
 
 | Item | Measured |
 | --- | --- |
-| Whole CODE | **32,715**, contiguous `0000..7FCA`; only53 bytes remain below8000 |
+| Whole CODE | **32,651**, contiguous `0000..7F8A`; only117 bytes remain below8000 |
 | Ordinary XDATA | **1,449**, `0000..05A8` |
 | Including entire64-byte status reservation | **1,513** |
 | Scan context / TX context / embedded candidate table | **212 /168 /150** bytes on SDCC |
@@ -317,17 +317,17 @@ dropping any real call or scenario. No guard was relaxed to obtain a pass.
 | Object | CODE incl. constants/startup | XSEG | DSEG/OSEG | Ordered instructions / bytes |
 | --- | ---: | ---: | ---: | ---: |
 | mac_frame |7009|207|15/10|4168 /7009|
-| mac_tx |8925|148|33/5|5851 /8925|
+| mac_tx |8861|148|33/5|5796 /8861|
 | nwk_beacon |601|27|9/0|353 /601|
 | nwk_candidates |2334|111|4/0|1519 /2334|
 | mac_scan |8598|79|4/0|6230 /8590|
 | mac_scan_test |4581|851|4/0|2686 /4483|
 
-The remaining667 CODE bytes are CRT/library contributions. All20,807 ordered
-instruction records (31,942 bytes) are normalized as
+The remaining667 CODE bytes are CRT/library contributions. All20,752 ordered
+instruction records (31,878 bytes) are normalized as
 `six-hex-address:lowercase-byte-hex\n`; each per-module digest is pinned in
 the proof. Constants and runtime are also covered by the whole CODE digest.
-Private/caller/field digests cover539/54/49 complete sorted debug records,
+Private/caller/field digests cover540/54/49 complete sorted debug records,
 preserving duplicates and a final newline, including two-byte XDATA and
 three-byte generic pointer ABIs. Private coverage includes file-scope objects,
 helper declarations and helper entry/end addresses, not only local parameters.
@@ -335,17 +335,46 @@ helper declarations and helper entry/end addresses, not only local parameters.
 Both boards produced identical hashes:
 
 ```
-CODE    de6e8e45caa3b86681b45ea9bf2894d6151791630307c3b50b416caff755eb42
-IHX     cd45361f10a9a6cad563be7f312e211b66a079dcc4628325ab9a6006873ecc1f
-private 17324a1661a6bbaf985a17813d69d18c146eda41666fd2dbd335d25a1fd045ea
-caller  4dbbea8827d3a02b9bc7cb28ea4b1fed6b318a628e3082d5be0a12977c7b69ea
+CODE    70d06e4e4189dcb748f14269ca69825e62a5ede0d22a97d06c1843898adfe7b5
+IHX     6e3ab1cc3b73563d500ec502b82c39ebd9bfd7087fba813c7445d0bbe0df7071
+private cd6273dea7b222dabf94bd73c4260f4dbc6c399e425058b57e5c868ce07999e6
+caller  0a811588db434f8bf92fcefdf6f911c6c71e23528053ffa944fc656a69181e3a
 fields  d773e2e566d7f7ff106cf3c3ac72d438f31bccf4d812644edffe13b3427feaef
 ```
 
 Scan public addresses init/start/step/get/release are
-`4EFF/4F53/5504/6A16/6AAB`; main/done are `6BA5/7D1B`.
+`4EBF/4F13/54C4/69D6/6A6B`; main/done are `6B65/7CDB`.
 All existing codec/TX public addresses and the precise NOP/loop/return
 checkpoint are cross-checked with map, CDB, listings and image bytes.
+
+### Coupled Association Request admission revalidation
+
+The bounded [MAC-TX admission extension](MAC_TX.md) now uses an explicit
+positive command-ID whitelist and an equivalent six-field reset in submit.
+That follow-up saves89 production CODE bytes and68 instruction records
+compared with the prior validated final-octet predicate. Only two layout
+trials were needed: the whitelist alone exceeded the limit by10 bytes; the
+allowed reset saved127 bytes without changing allocation or public state
+semantics. The remaining linked modules have unchanged instruction
+counts/extents. Scanner source/header/corpus and all28 genuine scenarios are
+unchanged. Only mechanically coupled hash/address/object ledger values changed
+in this proof. Private declaration coverage adds exactly one cached-command
+local to the prior539 records; no prior record was removed. Other private
+changes and all caller changes are relocated addresses, not new allocation.
+The unchanged full private matcher now covers540 records;49 field records,20 public entries,
+complete ordered listings,76 artifact negatives plus the missing-alias
+negative,15-second simulator-process deadline and every budget/guard remain.
+Both-board genuine runs still measure SP7A and confirmed stack unwind.
+
+Revalidation used canonical `make -B -j1 BOARD=<board>
+BUILD=build/mac-association-request-dev/<board> test-mac-tx test-mac-scan`,
+for `generic` and `lg_esl29_rev03`, with immediate per-image listing snapshots
+after each link. Both strict native corpora and both compositions' ASan/UBSan
+executables pass for each definition. Exact sanitizer recipes and current
+MAC-TX hashes are in its dedicated ledger. The unmodified full local matrix
+was not repeated. These remain offline synthetic/linked/simulated results,
+not association or a working radio adapter; the117-byte CODE margin does not
+authorize increased limits or a full-stack fit claim.
 
 ## Reproduction and integration
 

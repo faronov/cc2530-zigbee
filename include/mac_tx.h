@@ -106,8 +106,14 @@ typedef struct {
  * without mutation; valid fresh-epoch storage is initialized and returns OK.
  */
 mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now);
-/* Direct DATA or canonical Beacon Request command only. Request transmission
- * does not scan a channel, receive a Beacon or establish a network.
+/* Direct DATA, canonical Beacon Request, or canonical unsecured Association
+ * Request only. Association requires extended source, short/extended coordinator
+ * destination, source PAN FFFF, non-FFFF destination PAN, no compression/Pending,
+ * ACK request and capability 88/8C (RX-on ED, allocate address, caller power bit).
+ * Caller supplies its actual IEEE address and the permitting coordinator's
+ * Beacon-derived address/PAN/mode, while unassociated. No selection/authorization
+ * or capability discovery is done here. Request ACK means MAC receipt only:
+ * no Association Response acceptance, polling, association or membership.
  */
 mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                               const uint8_t * volatile body, uint16_t length,

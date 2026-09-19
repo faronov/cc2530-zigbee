@@ -13,9 +13,9 @@ from boot_image import (
 )
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, require, xdata_ranges
 
-SIZE = 27323
-DIGEST = "d61660859abed63926cb8af3506cb701f8791fafafc6f9b54e39a952862e5e00"
-PRIVATE_DIGEST = "bc9625651af1b1a25678efd68df5a2927ccc0f2984712f7dc3fea882c81d105d"
+SIZE = 28342
+DIGEST = "5aef7879004504b02bc8ce2e0d4b649b4aa37e925d039efcd3b04d162993ab37"
+PRIVATE_DIGEST = "1fc0a2e73350c02c66fa3dab6596c8e4352423d275ef6d5c08282e12e5d937af"
 # Dedicated composition, NOT changes to codec/platform/board budgets.
 CODE_BUDGET = 28672
 XDATA_BUDGET = 1280
@@ -26,12 +26,12 @@ INSTRUCTION_RE = re.compile(
 # Pin every reviewed instruction, not an arbitrary surviving subset of a listing.
 # The harness also contains non-CSEG startup instructions in listing order.
 LISTING_PROOFS = {
-    "mac_frame": (4168, 7009, "c01063cc0b3e937fb92dade25049fecf2d57937b637bcfcc44585d655857f719",
+    "mac_frame": (4168, 7009, "bcdb6cdd4b8a011b54ccb3ee26726d4ff013d69fba113b70b51037c50038841a",
                   ((0x62, 0x1bc3),)),
-    "mac_tx": (5851, 8925, "213af61417216aa5eb7572b39af03d9cc9329b5f3817bb8bd57c6b2166cc96ee",
-               ((0x1bc3, 0x3ea0),)),
-    "mac_tx_test": (6295, 10726, "5354fd9c5b12478dc13accd17b2b6e4e3f7af8457ee7bd8760459091cb90ff18",
-                    ((0, 6), (0x5f, 0x62), (0x3ea0, 0x687d))),
+    "mac_tx": (5796, 8861, "19bf4007eac51ec46f6afbd9082f227e1ee945b52dfff2af1bfc6c7b781286d8",
+               ((0x1bc3, 0x3e60),)),
+    "mac_tx_test": (6898, 11765, "e657482b19ee550ce689c973d99f7134136780d3ae24d0f2dc5aae66b146e4f2",
+                    ((0, 6), (0x5f, 0x62), (0x3e60, 0x6c4c))),
 }
 ENTRY_POINTS = {
     "_mac_command_decode": ("mac_frame", 0x22a),
@@ -41,11 +41,11 @@ ENTRY_POINTS = {
     "_mac_frame_encode": ("mac_frame", 0x195c),
     "_mac_tx_init": ("mac_tx", 0x1c05),
     "_mac_tx_submit": ("mac_tx", 0x1cd3),
-    "_mac_tx_copy": ("mac_tx", 0x2284),
-    "_mac_tx_step": ("mac_tx", 0x2788),
-    "_mac_tx_release": ("mac_tx", 0x3e4b),
-    "_main": ("mac_tx_test", 0x6774),
-    "_mac_tx_done": ("mac_tx_test", 0x6879),
+    "_mac_tx_copy": ("mac_tx", 0x2244),
+    "_mac_tx_step": ("mac_tx", 0x2748),
+    "_mac_tx_release": ("mac_tx", 0x3e0b),
+    "_main": ("mac_tx_test", 0x6b27),
+    "_mac_tx_done": ("mac_tx_test", 0x6c48),
 }
 CALLER_OBJECTS = {
     "tx": (0x163, 168), "saved": (0x20b, 168), "event": (0x2b3, 17),
@@ -56,7 +56,7 @@ CALLER_OBJECTS = {
 
 def private_records(debug):
     return "\n".join(sorted(line for line in debug.splitlines()
-                           if re.match(r"^(?:S|L):L(?:mac_frame|mac_tx)\.", line)))
+                           if re.match(r"^[FSL]:(?:X?F|L)(?:mac_frame|mac_tx)[.$]", line)))
 
 
 def field_abi(debug, tag, names, sizes):
@@ -199,6 +199,14 @@ def main():
     rejected(lambda: verify(image, symbols, debug.replace(
         "S:Lmac_tx.mac_tx_step$tx$", "S:Lmac_tx.mac_tx_step$wrong$"), memory, listings),
         "changed private declaration")
+    for old, new in (
+        ("F:Fmac_frame$command_policy$", "F:Fmac_frame$wrong_command_policy$"),
+        ("L:Fmac_tx$stop$0$0:", "L:Fmac_tx$wrong_stop$0$0:"),
+        ("L:XFmac_tx$stop$0$0:", "L:XFmac_tx$wrong_stop$0$0:"),
+    ):
+        require(old in debug, "Private-helper negative did not apply")
+        rejected(lambda: verify(image, symbols, debug.replace(old, new), memory, listings),
+                 "changed private helper declaration/entry/end")
     rejected(lambda: verify(image, symbols, debug.replace(
         "S:S$generation$0_0$0({4}", "S:S$generation$0_0$0({3}"), memory, listings),
         "changed structure field")

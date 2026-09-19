@@ -20,6 +20,14 @@ static const MCU_CODE uint8_t beacon_request[] = {
 static const MCU_CODE uint8_t data_request[] = {
     0x23, 0x80, 0xa5, 0x34, 0x12, 0xbc, 0x9a, 0x04
 };
+static const MCU_CODE uint8_t association_short[] = {
+    0x23, 0xc8, 0xa5, 0x34, 0x12, 0x78, 0x56, 0xff, 0xff,
+    0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x01, 0x88
+};
+static const MCU_CODE uint8_t association_extended[] = {
+    0x23, 0xcc, 0xa5, 0x34, 0x12, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+    0xff, 0xff, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x01, 0x8c
+};
 static mac_tx_t tx, saved;
 static mac_tx_event_t event;
 static mac_tx_action_t action, saved_action;
@@ -237,6 +245,45 @@ static uint16_t success_and_spacing(void)
     CALL(sent());
     CHECK(tx.ready_at == now + 40u);
     CALL(quiesce());
+    return 0;
+}
+
+static uint16_t association_requests(void)
+{
+    now = 0;
+    CHECK(mac_tx_init(&tx, 0xff, now) == MAC_TX_OK);
+    tx.stop_steps = 0xc7; /* Synthetic reset-span boundary, never a radio reset. */
+    CHECK(mac_tx_submit(&tx, association_short, 19, now, 10000, 100) == MAC_TX_OK);
+    CHECK(tx.ack_requested && tx.frame[2] == 0xff && tx.stop_steps == 0xc7);
+    CHECK(mac_tx_copy(&tx, copy, 19, &length) == MAC_TX_OK && length == 19);
+    copy[2] = 0xa5;
+    CHECK(memcmp(copy, association_short, 19) == 0);
+    copy[2] = 0xff;
+    for (i = 0; i < 4; i++) {
+        CALL(draw(0));
+        CALL(sent());
+        now += i == 3 ? 34u : MAC_TX_ACK_SYMBOLS;
+        if (i == 3)
+            CALL(receive(0xff));
+        else
+            CALL(poll());
+        CHECK(tx.retries == i && memcmp(tx.frame, copy, 19) == 0);
+        CALL(quiesce());
+    }
+    CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_ACKED
+          && tx.transmissions == 4 && tx.ready_at == now + 40u);
+    CHECK(mac_tx_release(&tx) == MAC_TX_OK);
+    length = tx.stop_steps;
+    memcpy(body, association_extended, 25);
+    CHECK(mac_tx_submit(&tx, body, 25, now, 10000, 100) == MAC_TX_OK);
+    CHECK(tx.frame[2] == 0 && tx.next_dsn == 1 && tx.generation == 2
+          && tx.stop_steps == length);
+    CALL(draw(0));
+    CHECK(action.at == now + 40u);
+    source(MAC_TX_EVENT_FAILURE);
+    CALL(step());
+    CHECK(tx.phase == MAC_TX_FAULT && tx.outcome == MAC_TX_ADAPTER_ERROR && tx.uncertain);
+    CHECK(mac_tx_release(&tx) == MAC_TX_STATE);
     return 0;
 }
 
@@ -463,6 +510,8 @@ void main(void)
     if (!result)
         result = beacon_requests();
     if (!result)
+        result = association_requests();
+    if (!result)
         result = success_and_spacing();
     if (!result)
         result = backoff_retry();
@@ -659,17 +708,318 @@ static uint16_t exhaustive(void)
     return 0;
 }
 
+/* Explicit identifier-based reference with separate command branches and
+ * capability indexing. Syntax still goes through the unchanged real codec.
+ */
+static mac_tx_result_t admission_reference(const uint8_t *bytes, uint16_t size)
+{
+    mac_frame_info_t decoded;
+    const mac_header_t *h = &decoded.header;
+
+    if (mac_frame_decode(bytes, size, &decoded) != MAC_CODEC_OK
+            || (h->flags & MAC_FLAG_PENDING))
+        return MAC_TX_UNSUPPORTED;
+    if (h->type == MAC_FRAME_COMMAND) {
+        if (bytes[decoded.payload_offset] == MAC_COMMAND_BEACON_REQUEST)
+            return MAC_TX_OK;
+        if (bytes[decoded.payload_offset] == MAC_COMMAND_ASSOCIATION_REQUEST
+                && h->destination_pan != 0xffffu
+                && (bytes[decoded.payload_offset + 1] == 0x88
+                    || bytes[decoded.payload_offset + 1] == 0x8c))
+            return MAC_TX_OK;
+        return MAC_TX_UNSUPPORTED;
+    }
+    if (h->type != MAC_FRAME_DATA || h->source_pan == 0xffffu || h->destination_pan == 0xffffu
+            || (!(h->flags & MAC_FLAG_PAN_COMPRESSION) && h->source_pan == h->destination_pan)
+            || (h->source_mode == MAC_ADDRESS_SHORT && h->source[0] == 0xfe && h->source[1] == 0xff)
+            || (h->destination_mode == MAC_ADDRESS_SHORT
+                && h->destination[0] == 0xfe && h->destination[1] == 0xff))
+        return MAC_TX_UNSUPPORTED;
+    return MAC_TX_OK;
+}
+
+static uint16_t exact_admission(const uint8_t *bytes, unsigned size, mac_tx_result_t expected)
+{
+    uint8_t *exact = malloc(size ? size : 1);
+    CHECK(exact != NULL);
+    memcpy(exact, bytes, size);
+    CHECK(mac_tx_init(&tx, 0x5a, 0) == MAC_TX_OK);
+    saved = tx;
+    CHECK(mac_tx_submit(&tx, exact, (uint16_t)size, 0, 10000, 100) == expected);
+    CHECK(memcmp(exact, bytes, size) == 0);
+    if (expected == MAC_TX_OK) {
+        CHECK(tx.frame[2] == 0x5a && tx.next_dsn == 0x5b && tx.generation == 1);
+        CHECK(tx.length == size && memcmp(tx.frame, bytes, 2) == 0
+              && memcmp(tx.frame + 3, bytes + 3, size - 3) == 0);
+    } else {
+        CHECK(memcmp(&saved, &tx, sizeof(tx)) == 0);
+    }
+    free(exact);
+    return 0;
+}
+
+static uint16_t association_exhaustive(void)
+{
+    unsigned layout, n, j, size, offset;
+    uint32_t fcf;
+    uint8_t vector[126], payload[4], *exact;
+    const uint8_t *reference;
+    mac_header_t header;
+    mac_frame_info_t decoded;
+
+    for (layout = 0; layout < 2; layout++) {
+        reference = layout ? association_extended : association_short;
+        size = layout ? 25 : 19;
+        for (fcf = 3; fcf <= 0xffffu; fcf += 8) {
+            memcpy(vector, reference, size);
+            vector[0] = (uint8_t)fcf;
+            vector[1] = (uint8_t)(fcf >> 8);
+            CALL(exact_admission(vector, size,
+                 fcf == (layout ? 0xcc23u : 0xc823u) ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+        }
+        for (j = 0; j < size; j++) {
+            for (n = 0; n < 256; n++) {
+                memcpy(vector, reference, size);
+                vector[j] = (uint8_t)n;
+                CALL(exact_admission(vector, size, admission_reference(vector, (uint16_t)size)));
+                if (j == size - 1)
+                    CHECK((tx.phase == MAC_TX_DRAW) == (n == 0x88 || n == 0x8c));
+            }
+        }
+        for (n = 0; n <= 126; n++) {
+            memset(vector, 0x69, sizeof(vector));
+            memcpy(vector, reference, size);
+            CALL(exact_admission(vector, n, n == size ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+            CALL(exact_admission(reference, size, MAC_TX_OK));
+            exact = malloc(n ? n : 1);
+            CHECK(exact != NULL);
+            memset(exact, 0xc7, n);
+            length = 0xa5;
+            CHECK(mac_tx_copy(&tx, exact, (uint16_t)n, &length)
+                  == (n < size ? MAC_TX_SPACE : MAC_TX_OK));
+            if (n < size) {
+                CHECK(length == 0xa5);
+                for (j = 0; j < n; j++)
+                    CHECK(exact[j] == 0xc7);
+            } else {
+                CHECK(length == size && memcmp(exact, tx.frame, size) == 0);
+                for (j = size; j < n; j++)
+                    CHECK(exact[j] == 0xc7);
+            }
+            free(exact);
+        }
+        /* Broadcast PAN and both short allocation/broadcast sentinels. */
+        memcpy(vector, reference, size);
+        vector[3] = vector[4] = 0xff;
+        CALL(exact_admission(vector, size, MAC_TX_UNSUPPORTED));
+        if (!layout) {
+            vector[3] = 0x34; vector[4] = 0x12;
+            vector[6] = 0xff;
+            for (n = 0xfe; n <= 0xff; n++) {
+                vector[5] = (uint8_t)n;
+                CALL(exact_admission(vector, size, MAC_TX_UNSUPPORTED));
+            }
+        }
+    }
+    /* Every ID/final-byte pair for both Association Request MHRs, a valid
+     * compressed Disassociation MHR and a valid Association Response MHR.
+     * The oracle uses the identifier, not the optimization being tested.
+     */
+    for (layout = 0; layout < 4; layout++) {
+        reference = layout == 0 || layout == 2 ? association_short : association_extended;
+        size = layout == 0 || layout == 2 ? 19 : 25;
+        CHECK(mac_frame_decode(reference, (uint16_t)size, &decoded) == MAC_CODEC_OK);
+        header = decoded.header;
+        if (layout < 2) {
+            payload[0] = MAC_COMMAND_ASSOCIATION_REQUEST;
+            payload[1] = 0x88;
+        } else {
+            header.flags |= MAC_FLAG_PAN_COMPRESSION;
+            header.source_pan = header.destination_pan;
+            payload[0] = layout == 2 ? MAC_COMMAND_DISASSOCIATION : MAC_COMMAND_ASSOCIATION_RESPONSE;
+            payload[1] = 1;
+            payload[2] = payload[3] = 0; /* Success with allocated short address 0001. */
+        }
+        CHECK(mac_frame_encode(&header, payload, layout == 3 ? 4 : 2, vector, 125, &length)
+              == MAC_CODEC_OK);
+        size = length;
+        CHECK(mac_frame_decode(vector, length, &decoded) == MAC_CODEC_OK);
+        offset = decoded.payload_offset;
+        for (j = 0; j < 256; j++) {
+            for (n = 0; n < 256; n++) {
+                vector[offset] = (uint8_t)j;
+                vector[size - 1] = (uint8_t)n;
+                CALL(exact_admission(vector, size, admission_reference(vector, (uint16_t)size)));
+                CHECK((tx.phase == MAC_TX_DRAW)
+                      == (layout < 2 && j == 1 && (n == 0x88 || n == 0x8c)));
+            }
+        }
+        if (layout == 3) {
+            vector[offset] = MAC_COMMAND_ASSOCIATION_RESPONSE;
+            vector[offset + 1] = vector[offset + 2] = 0xff;
+            for (n = 1; n <= 2; n++) {
+                vector[size - 1] = (uint8_t)n;
+                CHECK(mac_frame_decode(vector, (uint16_t)size, &decoded) == MAC_CODEC_OK);
+                CALL(exact_admission(vector, size, MAC_TX_UNSUPPORTED));
+            }
+        }
+    }
+    /* The remaining supported one-octet command layouts, all identifiers. */
+    for (layout = 0; layout < 2; layout++) {
+        reference = layout ? beacon_request : data_request;
+        memcpy(vector, reference, 8);
+        for (n = 0; n < 256; n++) {
+            vector[7] = (uint8_t)n;
+            CALL(exact_admission(vector, 8, layout && n == 7 ? MAC_TX_OK : MAC_TX_UNSUPPORTED));
+        }
+    }
+    /* Request receipt is not association, including a Pending ACK. No poll or
+     * Association Response is generated; cancellation and no-ACK exhaustion
+     * retain the unchanged scheduler's physical cleanup obligations.
+     */
+    for (layout = 0; layout < 5; layout++) {
+        CALL(exact_admission(association_extended, 25, MAC_TX_OK));
+        now = 0;
+        if (layout == 0) {
+            for (j = 0; j < 5; j++) {
+                CALL(draw(0));
+                now = action.at + 8;
+                source(MAC_TX_EVENT_BUSY);
+                CALL(step());
+            }
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CHANNEL_ACCESS
+                  && tx.transmissions == 0 && !tx.uncertain);
+        } else if (layout == 1) {
+            for (j = 0; j < 4; j++) {
+                CALL(draw(0)); CALL(sent());
+                now += MAC_TX_ACK_SYMBOLS;
+                CALL(poll()); CALL(quiesce());
+            }
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_NO_ACK
+                  && tx.transmissions == 4 && tx.retries == 3);
+        } else if (layout == 2) {
+            CALL(draw(0)); CALL(sent());
+            now += 34;
+            source(MAC_TX_EVENT_ACK);
+            ack[0] = 0x12; ack[1] = 0; ack[2] = 0x5a;
+            event.bytes = ack; event.length = 3;
+            CALL(step()); CALL(quiesce());
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_ACKED && tx.pending);
+            CALL(poll());
+            CHECK(action.kind == MAC_TX_ACTION_NONE);
+        } else {
+            if (layout == 4)
+                CALL(draw(0));
+            source(MAC_TX_EVENT_CANCEL);
+            CALL(step());
+            if (layout == 4)
+                CALL(quiesce());
+            CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CANCELLED
+                  && tx.uncertain == (layout == 4));
+        }
+        CHECK(mac_tx_release(&tx) == MAC_TX_OK);
+    }
+    return 0;
+}
+
+static uint16_t submit_preservation(void)
+{
+    unsigned pattern, layout, scenario, size;
+    const uint8_t *bytes;
+    mac_tx_t expected;
+
+    CHECK(offsetof(mac_tx_t, stop_steps) - offsetof(mac_tx_t, retries) == 6);
+    CHECK(MAC_TX_OUTCOME_NONE == 0);
+    for (pattern = 0; pattern < 256; pattern++) {
+        for (layout = 0; layout < 4; layout++) {
+            bytes = layout == 0 ? golden : layout == 1 ? beacon_request
+                  : layout == 2 ? association_short : association_extended;
+            size = layout == 0 ? 12 : layout == 1 ? 8 : layout == 2 ? 19 : 25;
+            for (scenario = 0; scenario < 4; scenario++) {
+                /* Synthetic idle storage with every retained byte distinguishable
+                 * from a zero reset. No hardware recovery/epoch is simulated.
+                 */
+                memset(&tx, (int)pattern, sizeof(tx));
+                tx.phase = MAC_TX_IDLE;
+                tx.last = (scenario & 2u) ? 0xfffffff0UL : 100u;
+                tx.ready_at = tx.last + ((scenario & 1u) ? 40u : 0u);
+                tx.next_dsn = 0xff;
+                tx.generation = 7;
+                now = tx.last + 20u;
+                saved = tx;
+                expected = tx;
+                memcpy(expected.frame, bytes, size);
+                expected.frame[2] = expected.next_dsn++;
+                expected.length = (uint8_t)size;
+                expected.ack_requested = (bytes[0] & MAC_FLAG_ACK_REQUEST) != 0;
+                expected.generation++;
+                if (!(scenario & 1u))
+                    expected.ready_at = now;
+                expected.last = now;
+                expected.deadline = now + 10000u;
+                expected.steps = 100;
+                expected.phase = MAC_TX_DRAW;
+                expected.nb = 0;
+                expected.be = MAC_TX_MIN_BE;
+                /* Original individual assignments, not the compact reset. */
+                expected.retries = 0;
+                expected.outcome = MAC_TX_OUTCOME_NONE;
+                expected.transmissions = 0;
+                expected.uncertain = 0;
+                expected.pending = 0;
+                expected.retry_pending = 0;
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, now, 10000, 100) == MAC_TX_OK);
+                CHECK(memcmp(&tx, &expected, sizeof(tx)) == 0);
+                /* Covers stop_steps, inactive timestamps, copied tail, padding,
+                 * and every legitimate DSN/generation/IFS/time/work update.
+                 */
+                tx = saved;
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, now, 0, 100) == MAC_TX_INVALID);
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, now, MAC_TX_HALF, 100)
+                      == MAC_TX_INVALID);
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, now, 10000, 0) == MAC_TX_INVALID);
+                CHECK(mac_tx_submit(&tx, NULL, (uint16_t)size, now, 10000, 100) == MAC_TX_INVALID);
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, saved.last - 1u, 10000, 100)
+                      == MAC_TX_INVALID);
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, saved.last + MAC_TX_HALF, 10000, 100)
+                      == MAC_TX_INVALID);
+                memcpy(body, bytes, size);
+                body[0] |= MAC_FLAG_SECURITY;
+                CHECK(mac_tx_submit(&tx, body, (uint16_t)size, now, 10000, 100) == MAC_TX_UNSUPPORTED);
+                CHECK(mac_tx_submit(&tx, data_request, 8, now, 10000, 100) == MAC_TX_UNSUPPORTED);
+                CHECK(memcmp(&tx, &saved, sizeof(tx)) == 0);
+                tx.phase = MAC_TX_DONE;
+                saved = tx;
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, now, 10000, 100) == MAC_TX_FULL);
+                CHECK(memcmp(&tx, &saved, sizeof(tx)) == 0);
+                tx.phase = MAC_TX_IDLE;
+                tx.generation = UINT32_MAX;
+                saved = tx;
+                CHECK(mac_tx_submit(&tx, bytes, (uint16_t)size, now, 10000, 100)
+                      == MAC_TX_GENERATION_EXHAUSTED);
+                CHECK(memcmp(&tx, &saved, sizeof(tx)) == 0);
+            }
+        }
+    }
+    return 0;
+}
+
 int main(void)
 {
     uint16_t result = self_test();
     if (!result)
         result = exhaustive();
+    if (!result)
+        result = association_exhaustive();
+    if (!result)
+        result = submit_preservation();
     if (result) {
         fprintf(stderr, "MAC TX failure at C line %u\n", (unsigned)result);
         return 1;
     }
-    puts("MAC TX: portable state corpus, 8192 ACK FCFs, 256 DSNs/draws, "
-         "2048 Beacon Request variants, exact bounds PASS");
+    puts("MAC TX: retained corpus/8192 ACK FCFs/256 DSNs/2048 Beacon variants; "
+         "Association 16384 FCFs/11264 byte variants/262144 ID-tail pairs/512 one-byte IDs, "
+         "4096 full-state preservation cases, exact bounds and scheduler outcomes PASS");
     return 0;
 }
 #endif

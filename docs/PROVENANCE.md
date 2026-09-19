@@ -829,7 +829,20 @@ selected nonbeacon-enabled channel-access scope in section 7.5.1.1
 pp.167-168. It reuses the actual command/header codec, with TX Pending
 rejection; its eight-byte body does not require ACK or frame retransmission.
 Section 7.5.2.1.2 pp.173-174 was read directly to separate that command from
-the still-unimplemented PAN-filter/channel/receive-window scan procedure.
+the separate PAN-filter/channel/receive-window procedure. That procedure now
+has an [offline controller](MAC_SCAN.md), not a hardware adapter.
+
+Association Request admission uses IEEE2006 sections7.2.2.4.1,7.3.1.1-2,
+Figures55-56 and the same pinned R22 section3.6.1.4.1/Table3-62 pp.336-337.
+The selected capability88/8C maps ED, receiver-on, address allocation and
+caller power, without coordinator/FFD/MAC-security advertisement. Identity,
+permitting-parent choice and actual power capability remain caller facts.
+An explicit positive command-ID whitelist follows the unchanged real codec;
+the final capability octet is inspected only for an identified Association
+Request. A compact six-field reset is checked against the original individual
+assignments, preserving all other context bytes and error behavior. No
+association, BDB or security procedure is
+implemented by transmitting this request or receiving its ACK.
 
 The receive-only ACK normalization follows the selected edition's ignored
 FCF-subfield rules, then calls the unchanged strict codec; it is not a

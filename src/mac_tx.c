@@ -27,6 +27,7 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                               uint32_t now, uint32_t lifetime, uint16_t work_limit)
 {
     mac_frame_info_t decoded;
+    uint8_t command;
 
     if (tx == NULL || body == NULL || lifetime == 0u
             || lifetime >= MAC_TX_HALF || work_limit == 0u)
@@ -41,12 +42,22 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
         return MAC_TX_UNSUPPORTED;
     if (decoded.header.flags & MAC_FLAG_PENDING)
         return MAC_TX_UNSUPPORTED;
-    /* The codec checks the complete source-less broadcast command layout.
-     * Its receive-only Pending allowance does not authorize transmission.
-     * Compressed DATA PAN equality is also already established by decoding.
+    /* The unchanged codec establishes command lengths/addressing/ACK, including
+     * Association Request source PAN FFFF and no compression.
+     * DATA behavior is unchanged: compressed equality is guaranteed by decode.
+     * Pending's receive-only allowance never authorizes transmission.
      */
     if (decoded.header.type == MAC_FRAME_COMMAND) {
-        if (body[decoded.payload_offset] != MAC_COMMAND_BEACON_REQUEST)
+        /* IEEE 2006 7.3.1/Figure56; selected ED policy: RX-on, address allocation,
+         * no coordinator/FFD/MAC-security capability; truthful caller power bit.
+         * The codec has already validated addressing, ACK and exact length.
+         * Only after identifying Association Request is the last byte CAP.
+         */
+        command = body[decoded.payload_offset];
+        if (!(command == MAC_COMMAND_BEACON_REQUEST
+                || (command == MAC_COMMAND_ASSOCIATION_REQUEST
+                    && decoded.header.destination_pan != 0xffffu
+                    && (uint8_t)(body[(uint8_t)(length - 1u)] & 0xfbu) == 0x88u)))
             return MAC_TX_UNSUPPORTED;
     } else if (decoded.header.type != MAC_FRAME_DATA
             || decoded.header.source_pan == 0xffffu
@@ -71,12 +82,12 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
     tx->phase = MAC_TX_DRAW;
     tx->nb = 0;
     tx->be = MAC_TX_MIN_BE;
-    tx->retries = 0;
-    tx->outcome = MAC_TX_OUTCOME_NONE;
-    tx->transmissions = 0;
-    tx->uncertain = 0;
-    tx->pending = 0;
-    tx->retry_pending = 0;
+    /* Six contiguous uint8_t fields, retries through retry_pending; NONE is 0.
+     * Use the enclosing object's byte representation. Preserve stop_steps and
+     * all other fields, including inactive timestamps and the copied tail.
+     */
+    memset((uint8_t *)tx + offsetof(mac_tx_t, retries), 0,
+           offsetof(mac_tx_t, stop_steps) - offsetof(mac_tx_t, retries));
     return MAC_TX_OK;
 }
 

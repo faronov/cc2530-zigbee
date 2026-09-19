@@ -471,8 +471,17 @@ restoration of saved logical radio state. Host/sanitizer, linked-image and
 alias-aware checks cover both board definitions, including partial/unscanned
 masks, cancellation and retained restoration faults. This is not a physical
 scanner or full MAC PAN-descriptor service: #13/#40 adapter/timestamp gates,
-full parent policy and association remain open. The composed test's 32,715-byte
-CODE leaves only 53 bytes below the unbanked limit; no full-stack fit follows.
+full parent policy and association remain open. The composed test's 32,651-byte
+CODE leaves only 117 bytes below the unbanked limit; no full-stack fit follows.
+
+The same transmitter now admits canonical unsecured Association Requests
+with extended source, short/extended coordinator destination and capability
+88/8C for the selected receiver-on ED/address-allocation subset. Real ACK,
+retry, DSN, IFS and cleanup handling are reused; no earlier case or resource
+guard was removed. This is only transmit admission, with caller identity,
+permitting-coordinator and power preconditions. Data Request/polling,
+Association Response acceptance, association state and membership remain open;
+ACK alone never completes association.
 
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
