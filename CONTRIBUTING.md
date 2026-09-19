@@ -200,6 +200,16 @@ alias/upper-IRAM guards and genuine complete scenario corpus. Do not replace
 missing physical timestamps or adapter behavior with successful stubs.
 **Never flash or upload `mac_scan_test.ihx`; no board image may link it.**
 
+The [offline Association Response context](docs/MAC_ASSOCIATION.md) has
+`make BUILD=build/mac-association-check test-mac-association`, also in
+`test-common`. Keep the real codec/context/caller link order, three immediate
+listing snapshots and complete CODE/private/caller/field ABI proof. Its own
+16-KiB CODE/1,024-byte XDATA reservation does not enlarge earlier budgets.
+An unknown coordinator IEEE remains explicitly unbound; byte equality is not
+authentication. Captured time, epoch and immediate receiver ACK are independent
+adapter obligations, not services supplied by this foreground metadata filter.
+**Never flash or upload `mac_association_test.ihx`; no board image may link it.**
+
 The isolated [reserved flash reader](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
 has a focused offline target:
 

@@ -485,8 +485,16 @@ both short/extended addresses, nonbroadcast compressed PAN, ACK requested and
 Pending0. Caller ownership/identity and extended source for Association
 Response retrieval remain explicit preconditions. Data Request transmission
 is not a polling or response-retrieval procedure.
-Association Response acceptance, association state and membership remain open;
-ACK alone never completes association.
+The [Association Response context](MAC_ASSOCIATION.md) now supplies bounded
+contextual metadata matching with the real codec, explicit known/unbound IEEE
+source semantics and one-shot terminal results. Both-board host/image/simulator
+evidence covers34 genuine scenarios, hostile/exact-sized inputs and atomic
+errors. Its separate test image uses14022 CODE/675 ordinary XDATA +64 reserved,
+with observed SP6B; these measurements do not establish complete-stack fit.
+Full decision-wait/retrieval/NO_DATA timing still needs primary reconciliation.
+Immediate receiver ACK, full association control, confirmed radio restoration
+and membership remain open; neither an ACK nor a matched Response completes
+the procedure by itself.
 
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and

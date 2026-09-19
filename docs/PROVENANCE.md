@@ -1213,6 +1213,24 @@ codes. No association, security, BDB or radio/capture facts are inferred from
 successful synthetic events. No SDK implementation or private material was
 imported; all new code/tests are original BSD-3-Clause work.
 
+### Offline Association Response context sources
+
+The [context, API and synthetic tests](MAC_ASSOCIATION.md) are original
+BSD-3-Clause work using the existing MAC frame/command decoders. The same
+pinned IEEE2006 primary text supplies Response layout/status/address rules
+(7.3.2,Figure57,Table83,pp.151-152), selection and coordinator-IEEE learning
+(7.5.3.1,pp.179-181), receive filtering and independent ACK obligations
+(7.5.6.2-4,pp.186-189). R22 3.6.1.4.1/Table3-62,pp.336-340 distinguishes
+MAC metadata from parent selection, allocated ED addressing and authentication.
+
+The dedicated contract records the exact copies/hashes, printed pages and
+unresolved decision-wait/extraction wording; no guessed total association
+timeout is implemented. Half-open context lifetime, finite work, epoch/
+generation correlation and one-shot result are project policy, not IEEE
+primitive status or authentication. Unknown IEEE sources remain explicitly
+unbound to the selected short address; Extended PAN ID is not IEEE identity.
+No vendor implementation, SDK, private capture/identity or key was imported.
+
 ### Offline R22 NWK Data frame sources
 
 The original `nwk_frame` codec uses the same

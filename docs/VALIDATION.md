@@ -445,6 +445,32 @@ headroom. Explicit source events and the serialized TX pump do not supply
 a hardware adapter, captured timing, measured CRC, physical receive windows,
 full parent selection or association. Board linkage/uploads remain prohibited.
 
+## Offline Association Response context coverage
+
+`make test-mac-association` composes the real MAC decoder and
+[response context](MAC_ASSOCIATION.md), not a hardware adapter or association
+procedure. Both-board strict native and ASan/UBSan evidence covers34 shared
+scenarios,8192 FCF patterns,6400 byte variants,65536 short addresses,256 status
+values, exact spans, finite work/time, stale reports and atomic API errors.
+Known/unbound source semantics, refusal/FFFE metadata, half-open deadlines,
+wraparound, cancellation, duplicate/late rejection and one-shot retrieval
+execute as genuine target instructions.
+
+Both board definitions produce14022 CODE bytes and675 ordinary XDATA +64
+reserved, with a73-byte context and observed SP6B below the unchanged7C cap.
+The16-KiB CODE/1024-byte reservation budgets are project test-composition
+limits, not physical memory sizes. Full294/33/20 private/caller/field records,
+all8049 ordered instruction records,93 table/vector bytes, public ABI and
+per-link snapshots are pinned. All98 artifact negatives and the genuine
+missing-alias negative pass, with upper-IRAM, unused/status-tail and unwind
+guards and the unchanged15-second simulator deadline.
+
+Canonical Make integration runs this corpus in both per-board common suites
+and checks all three immediate snapshots and board-image source/symbol
+exclusions. No board IMAGE or upload path is added. Neither CRC/timestamp
+inputs nor matching metadata proves physical ACK, association, authenticated
+membership, restoration or complete-stack fit.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

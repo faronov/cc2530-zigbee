@@ -162,6 +162,19 @@ lease. The action/event interface is not a CC2530 adapter, a full MLME-SCAN
 descriptor service, complete parent selection or association.
 Its almost-full six-module test image is not complete-stack resource evidence.
 
+The [Association Response context](MAC_ASSOCIATION.md) separately owns73 bytes
+and composes the real frame/command decoders. Its copied selection, nonzero
+epoch, nonwrapping generation, half-open symbol-time lifetime and finite work
+bound correlate foreground reports, not authenticated on-air transactions.
+Only a known coordinator IEEE is compared; a source learned after a short
+selection is explicitly unbound. Extended PAN ID is never a substitute.
+Terminal Response/refusal/address metadata is copied once; cancellation,
+expiry and exhaustion cannot invent radio cleanup. Captured trailing-end time,
+CRC and timely receiver ACK remain truthful independent adapter obligations.
+This is not the decision-wait/retrieval procedure, NWK address admission,
+parent installation or membership. The16-KiB CODE/1-KiB XDATA reservation
+budget belongs to its standalone test image, not the complete stack.
+
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
 IEEE addresses and opaque payload. Unsupported security, multicast and

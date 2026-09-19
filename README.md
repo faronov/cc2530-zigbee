@@ -500,6 +500,17 @@ Its six-module test image leaves only 98 bytes below the 32-KiB CODE limit:
 this is not complete-stack fit. A real adapter, captured timing (#40), full
 parent selection and association remain open; never flash `mac_scan_test.ihx`.
 
+The [Association Response context](docs/MAC_ASSOCIATION.md) adds bounded,
+one-shot metadata matching through the real codec. It checks the selected
+PAN/channel/local IEEE and a known coordinator IEEE; a source learned after
+short-address selection is explicitly **unbound**, not authenticated.
+`make test-mac-association` is **host-tested, image-checked and simulated**:
+14,022 CODE bytes and675 ordinary XDATA +64 reserved in its separate test
+image. These are measured test-image sizes, not total device usage or
+full-stack fit. The context does not transmit retrieval requests, deliver the
+required receiver ACK, restore radio state or complete association.
+Never flash `mac_association_test.ihx`.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

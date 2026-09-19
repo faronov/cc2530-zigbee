@@ -128,6 +128,16 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC scan"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_association_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_association_init", "_mac_association_start", "_mac_association_step",
+                         "_mac_association_take", "_mac_association_result", "_mac_association_done"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "Association Response"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("mac_association.c", "test_mac_association.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "Association Response"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_time_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_time_init", "_mac_time_read_live", "_mac_time_diagnostic",
