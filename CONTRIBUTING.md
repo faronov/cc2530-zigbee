@@ -140,6 +140,13 @@ On Ubuntu, creating this environment may require `python3-venv`. Actual
 device access is a separate manual activity described in
 [DEBUGGING.md](docs/DEBUGGING.md#implemented-host-transport).
 
+The [Nordic recovery-artifact checker](docs/NRF_RECOVERY.md) has the focused
+offline command `PYTHONPATH=tools python3 -B -m unittest test_nrf_recovery -q`.
+Its synthetic tests also run in `test-tools`. Matching private files never
+establishes physical acquisition, successful restoration or programming
+permission. Keep the shared `private_artifacts` helpers hardware-independent;
+the passive-RX runner retains its existing `private_capture()` import surface.
+
 During offline M1 work, do not run even USB enumeration or adapter-state
 commands against physical devices. `tools/debug_image.py` and all tests above
 operate without an adapter. New control commands need explicit permissions,

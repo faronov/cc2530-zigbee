@@ -6,13 +6,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import stat
 import sys
 
 from cc_debugger import Access, Debugger, DebuggerError, PyUsbBackend, UsbAddress
 from check_timebase_hardware import reset_and_verify_code, step_nop, wait_checkpoint
 from debug_image import DebugImage, decode_bootstrap
 from radio_rx_fixture import CHECKPOINTS, SIZE, check_frame, decode
+from private_artifacts import private_capture
 from verify_firmware import BOARDS, CODE_LIMIT, ROOT, require
 
 
@@ -26,44 +26,6 @@ def validate_program(image, program, attempts):
     require(pcs == image.radio_rx_proof["checkpoints"] and
             program[pcs[0]:pcs[0]+10] == b"\0\x22\0\x22\0\x80\xfd\0\x80\xfd",
             "RX checkpoint artifacts mismatch")
-
-
-def private_capture(path):
-    """Atomically create a new 0600 file relative to an opened private directory.
-
-    Reject symlinks in every path component, repository destinations, non-owned
-    or non-0700 parent directories and overwrite. Never print contents/path.
-    Caller validates all CLI/image arguments before this and before USB loading.
-    """
-    path = Path(path)
-    require(path.is_absolute() and path.name not in ("", ".", "..") and ".." not in path.parts,
-            "Capture requires an absolute private path")
-    require(not path.resolve().is_relative_to(ROOT.resolve()), "Capture must be outside the repository")
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    # Walk using dirfds: a checked ancestor cannot be swapped for a symlink
-    # between lstat and open. O_EXCL also refuses an existing dangling symlink.
-    directory = os.open(path.anchor, flags)
-    try:
-        for part in path.parent.parts[1:]:
-            child = os.open(part, flags, dir_fd=directory)
-            os.close(directory)
-            directory = child
-        info = os.fstat(directory)
-        require(info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
-                "Capture directory must be user-owned mode 0700")
-        fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                     0o600, dir_fd=directory)
-        try:
-            info = os.fstat(fd)
-            require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and
-                    stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1,
-                    "Capture file must be new, regular, single-link mode 0600")
-            return os.fdopen(fd, "w", encoding="ascii")
-        except BaseException:
-            os.close(fd)
-            raise
-    finally:
-        os.close(directory)
 
 
 def inspect(debugger, image, pc):
