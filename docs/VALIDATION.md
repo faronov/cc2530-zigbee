@@ -2077,6 +2077,29 @@ This is **hardware-observed on LG/channel15 only**. No programming, independent
 sniffer comparison, TX, capture timing, calibrated metadata or MAC/network
 acceptance is established by this regression.
 
+### 2026-09-19 guarded backup and sniffer preparation
+
+The [separate manual record](DEBUGGING.md#2026-09-19-guarded-private-backup-and-sniffer-preparation)
+establishes one complete private262,144-byte main-flash backup matching the
+known LG RX image plus erased tail, and2,048 factory bytes matching the earlier
+completed page read. Guard exit86/diagnostics were followed by independent
+halted-state checks and a fresh reset/full9,160-byte physical CODE comparison.
+Latest LG state is PC0000/status22/config26, without application resume,
+programming or erase.
+
+The initial120-second read was incomplete at67%; endpoint-only recovery later
+failed with Overflow. Only the separately selected USB reset and subsequent
+fresh reset/CODE check established recovery. The next planned300-second read
+completed; neither failed attempt is counted as a pass or silently retried.
+This is read/USB recovery, not the unresolved mapped-RAM/busy-flash NV gate.
+
+Independent nRF preparation separately verified serial channel15, a responsive
+bounded capture with154 complete TAP records, process termination, a sleep
+command and port release. It provides no simultaneous LG body comparison,
+CC2530 TX or independent FCS validation. All raw/private materials remain
+outside the repository and generated CI artifacts; automated tests still
+perform no hardware operation.
+
 ### RX shared-link listing regression
 
 The first20-job fixture CI run failed only the two RX board simulations:

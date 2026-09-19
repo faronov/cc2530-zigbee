@@ -3391,3 +3391,63 @@ There was no simultaneous independent sniffer comparison in this run; the
 earlier body-agreement results remain dated observations, not a claim for
 these15 publications. No packet contents, identifiers or payload hashes are
 published, and automated tests/CI still perform no hardware operation.
+
+### 2026-09-19 guarded private backup and sniffer preparation
+
+This later parent-only activity used the same known LG RX image and the
+reviewed installed Linux programmer/guard, not a component test executable.
+The six offline guard regressions and actual ELF symbol binding were checked
+again before USB use. The installed programmer's help-only invocation returns1;
+that is separate from the guard's86/87 outcomes and supplies no target evidence.
+
+A read-only invocation selected the adapter explicitly, with only full-flash
+and information-page read options. New0600 output/log files were atomically
+opened in an owned0700 external directory; inherited descriptors were passed
+as explicit binary destinations, never console dumps or overwrite paths.
+No erase, write, lock, MAC-address update or application resume was requested.
+
+The **first full-flash read did not complete**: the parent's120-second process
+bound expired while the slow interface had reported67% progress. The factory
+page had been saved, but the main-flash output was empty and no blocked-cleanup
+diagnostic had occurred. This was not a verified backup or a reported
+per-transfer USB timeout. The process was terminated; there was no automatic
+retry, reset or state-restoration claim.
+
+A separate explicit endpoint-clear/drain activity followed. Although the input
+became quiet, fresh reset-attach failed its status read with USB Overflow:
+**endpoint-only recovery was insufficient** and established no halted state.
+A separately selected adapter USB reset, followed by fresh reset-attach and
+independent comparison of every9,160 known CODE bytes, then succeeded.
+PC0000/status22/config26 were verified without application resume. This
+observation is USB/read interruption recovery, not busy-flash or power-cut
+recovery, and is not built into ordinary debugger open/close.
+
+After that confirmed recovery, one newly planned read used a300-second overall
+bound justified by the observed progress, retaining the programmer's normal
+per-transfer limits. It completed with the expected active/blocked diagnostics
+and exit86. All262,144 main-flash bytes matched the known9,160-byte RX image
+followed by erasedFF tail; the2,048-byte information page matched the earlier
+completed page read. Both complete files and all failed-attempt material stay
+private. Only **one complete main-flash backup** is claimed.
+
+Independently opening the stopped target confirmed PC0000/status22/config22
+after the guarded read. A further explicit reset restored config26, and the
+ordinary guarded debugger compared all9,160 physical CODE bytes again.
+**Latest physical LG state: halted at PC0000, status22, config26.**
+Nothing was flashed or erased and no application was resumed in this activity.
+Exit86 alone was never accepted as success or halt evidence.
+
+Separately, the independent nRF52840 sniffer was checked on channel15 using
+the previously reviewed public host revision
+`e459feba9730f85b22a78d3559c67c4df6bf876a`. Explicit serial channel readback
+preceded a bounded private capture; process responsiveness,154 complete
+PCAP/TAP records and channel metadata were checked. The owned process was
+stopped, sleep was commanded, channel readback repeated and the serial port
+released. This is **sniffer preparation only**: it was not simultaneous with
+the preceding LG RX regression and no CC2530 TX occurred. The tool strips FCS,
+so this does not independently validate on-air CRC.
+
+These finite **hardware-observed** results prepare separate board-image
+acceptance. They establish no TX/CCA behavior, calibration, captured PHY
+timing, association, NV execution/recovery or networking. No private data,
+backup hash, device identity, capture or external binary is published.

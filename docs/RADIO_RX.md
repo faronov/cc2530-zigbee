@@ -388,6 +388,10 @@ rechecked every byte of the same halted image, then separately reset and ran16
 attempts:15 CRC_OK/one BAD_CRC. The cap and a terminal-loop pass retained
 END016F with attempt16/completed15/heartbeat15 and unchanged frame/bootstrap/
 CPU context. This later run did not repeat independent sniffer comparison.
+The subsequent [read-only backup activity](DEBUGGING.md#2026-09-19-guarded-private-backup-and-sniffer-preparation)
+separately reset and rechecked the unchanged firmware, leaving it halted at
+PC0000/config26 without another application resume. END016F above is the
+historical endpoint of the RX run, not the latest physical state.
 
 These are finite channel15 observations on one LG board. The reference tool
 strips FCS; body equality is not independent on-air CRC verification.
