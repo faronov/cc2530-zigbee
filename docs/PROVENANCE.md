@@ -689,6 +689,33 @@ reverse TX-flush-to-ACK guarantee. SWRZ031 pp2-3 adds no clarification.
 These are explicit evidence gaps, not assertions of unsupported silicon or
 permission to invent a successful concurrent model.
 
+### Nordic laboratory stimulus sources
+
+The separate [NS51 source/provenance ledger](../tools/nrf_stimulus/PROVENANCE.md)
+records the original application, portable control/UART logic, codecs and
+offline tests. The small `phyend-observer.patch` imports reviewed context from
+Nordic's BSD-3-Clause `nrf_802154_core.c`, preserving its complete per-file
+notice; no sample command processor or full SDK tree is vendored.
+
+The external pins are sdk-nrf `3190fa573ff67bfb745028f203e9d0ea4144a1ce`,
+sdk-zephyr `d96769facecaba386b642d2c76c92c7694c81da0`,
+sdk-nrfxlib `13cd978b22d192447537a60f7fae5fe092930dc4`,
+hal_nordic `5470822384781624efb2fda28cbc6a895a227677` and the locked CMSIS
+revision in `dependencies.json`. Radio and SL are source-built; this is not a
+claim that all SDK files share the project license or that the compiler was
+rebuilt. Zephyr/CMSIS Apache-2.0, Nordic integration LicenseRef-Nordic-5-Clause
+and toolchain/runtime terms remain separate. SDK dependencies and generated
+firmware stay outside Git/CI.
+
+Vendor-authored source/API contracts establish PHYEND dispatch, direct callback
+bookkeeping, ordinary promiscuous RX, buffer return and the actual priority0
+interrupt configuration. They are not measured radio timing. The explicit
+build audit checks selected source objects, startup bodies/macros and final
+ELF/HEX ranges; it does not grant authority to run arbitrary untrusted SDK
+build metadata or to program a device. Conditional volatile APPROTECT handling
+does not become a promise of debug access. No private identity, capture, backup
+or hardware observation is imported by this implementation.
+
 ### M2 deterministic PRNG sources
 
 The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)

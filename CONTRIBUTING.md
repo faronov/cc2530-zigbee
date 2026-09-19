@@ -147,6 +147,15 @@ establishes physical acquisition, successful restoration or programming
 permission. Keep the shared `private_artifacts` helpers hardware-independent;
 the passive-RX runner retains its existing `private_capture()` import surface.
 
+The [Nordic stimulus helper](tools/nrf_stimulus/README.md) has independent
+host-only coverage via `python3 -B -m unittest tools.test_nrf_stimulus -v`,
+automatically included in `test-tools`. Keep SDK target builds and generated
+ELF/HEX/map/evidence outside this repository and normal CI. The explicit static
+build audit is for the reviewed local pinned workspace, not untrusted downloaded
+build metadata. No `flash`, `debug`, `recover`, serial or USB action belongs in
+these tests. New helper evidence never waives the existing CC2530 or physical
+recovery gates.
+
 During offline M1 work, do not run even USB enumeration or adapter-state
 commands against physical devices. `tools/debug_image.py` and all tests above
 operate without an adapter. New control commands need explicit permissions,

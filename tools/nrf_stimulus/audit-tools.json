@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "scope": "Named executables and libgcc only; trusted host, SDK/build workspace and dependency closure required.",
+  "arm_release": {
+    "archive": "toolchain_linux-x86_64_arm-zephyr-eabi.tar.xz",
+    "sha256": "d4278e95af74f8e9210b417e1cdc3ed45936cf6db9685d4174000a1a95b9f095",
+    "files": {
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc": "6d4a9cbc68a9b0ba055f072162dee7db12c1a1fcd651548177874252b219d2be",
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-ar": "12811e034b21fc5efc524cdf5a5b79496da2451195ae03db8045619b27f0bb53",
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-nm": "f88454aa5c9c4c0a899524ad1042b04ed3eda660137d5cab3435bc393a7aaa26",
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-objdump": "d76c6c006fef872239e1e35472d99b549e0cab189aa0b14cb35856d917ee9ef8",
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy": "8ff6f6f4e7e0b627c498f87ccfbd926b9c12e955eaeb77cf6f60bab756d36e0e",
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-as": "44689f0c9919c9ebbd9ef4d1f39751c31799b3f9ae79855a1478b88e9e3836e7",
+      "arm-zephyr-eabi/bin/arm-zephyr-eabi-ld.bfd": "b19c33234bb1a2badbf0ae938395d5282aa696c06d6590a581a6b47c23f7a3ec",
+      "arm-zephyr-eabi/arm-zephyr-eabi/bin/as": "44689f0c9919c9ebbd9ef4d1f39751c31799b3f9ae79855a1478b88e9e3836e7",
+      "arm-zephyr-eabi/arm-zephyr-eabi/bin/ld.bfd": "b19c33234bb1a2badbf0ae938395d5282aa696c06d6590a581a6b47c23f7a3ec",
+      "arm-zephyr-eabi/libexec/gcc/arm-zephyr-eabi/12.2.0/cc1": "41da7b09da6ed6da25e83bea08f6530665cdb0d66249b3c272a460ac4bcb0e09",
+      "arm-zephyr-eabi/libexec/gcc/arm-zephyr-eabi/12.2.0/collect2": "91561428d017e7068f7b6a2e24964744e606a133ad74018097f04c3ac9a7ce3a",
+      "arm-zephyr-eabi/lib/gcc/arm-zephyr-eabi/12.2.0/thumb/v7e-m/nofp/libgcc.a": "48a9a5904117259af5a193639e30b2bef6f5d8e1eb415507e6a8d50db2b46f20"
+    }
+  },
+  "wheels": {
+    "ninja": {
+      "file": "ninja-1.11.1.1-py2.py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "84502ec98f02a037a169c4b0d5d86075eaf6afc55e1879003d6cab51ced2ea4b",
+      "member": "ninja/data/bin/ninja",
+      "executable_sha256": "68f6c375c4234305bff9790aa232815b38924390cbb6ad4987ea0f94ad2bc410"
+    },
+    "cmake": {
+      "file": "cmake-3.28.3-py2.py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "d3bc42bf54ea3d64e5d81eb31275076817507cf4a6aa07a49ffc01985cae1f09",
+      "member": "cmake/data/bin/cmake",
+      "executable_sha256": "6f1558312ac4ea151a3930afe061669922ec67a89937d1b02b192c414a190e23"
+    }
+  }
+}

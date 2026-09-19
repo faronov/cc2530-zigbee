@@ -421,6 +421,14 @@ The [#50 primary ownership review](RADIO_AUTOACK.md#ordinary-tx-admission-under-
 now identifies unresolved TX admission during ACK, completion attribution and
 concurrent TX-flush effects; no transmitting extension is inferred from it.
 
+The separately scoped [Nordic stimulus/observer](../tools/nrf_stimulus/README.md)
+prepares #51's laboratory side offline, with one fixed public AR frame and
+normal post-PHYEND reception instead of ACK-only filtering. It adds no CC2530
+board IMAGE, live runner or automatic SDK/hardware work to normal tests.
+Fresh device/protection/recovery binding and a separate CC2530 diagnostic
+remain prerequisites to a later experiment; building this helper closes
+neither #40 nor #50.
+
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.
 One foreground service invokes the real bounded passive receiver; full

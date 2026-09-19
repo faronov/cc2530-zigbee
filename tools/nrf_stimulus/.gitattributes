@@ -1,0 +1,2 @@
+# Blank unified-diff context lines must retain their single prefix space.
+phyend-observer.patch whitespace=-blank-at-eol

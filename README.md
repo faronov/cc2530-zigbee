@@ -488,6 +488,16 @@ guarantee is supplied. Broadcast-AR and ignored ACK-FCF compatibility remain
 explicit limits. Physical stop/drain is not IFS completion, a continuous
 MAC/POLL window closure, ordinary-TX handoff or security acceptance.
 
+A separate [Nordic laboratory stimulus](tools/nrf_stimulus/README.md) is
+prepared **offline only** for a later controlled experiment: boot-disarmed
+ARM/RUN, one fixed channel26/-20dBm public AR frame, then bounded ordinary
+promiscuous reception. Its source-built driver/SL and guarded PHYEND patch
+distinguish transmission completion from actually received ACK/data bodies.
+It is not a CC2530 board image or an installed sniffer replacement. Native
+tests and an external target build/static audit establish no RF/timing or
+restoration evidence. The [recovery-artifact checker](docs/NRF_RECOVERY.md)
+likewise cannot replace fresh physical backup and restoration verification.
+
 ## Isolated MAC Timer foundation
 
 The [awake MAC Timer service](docs/MAC_TIME.md) configures positive periods

@@ -728,6 +728,38 @@ or high-water result. Source, patches and artifacts stay outside Git/CI.
 No Contiki port, imported code, supported board image, license change or
 MAC/capture/IFS/POLL gate closure follows.
 
+## Nordic stimulus helper: offline evidence only
+
+The [NS51 helper](../tools/nrf_stimulus/README.md) has an ordinary host-only
+entry point: `python3 -B -m unittest tools.test_nrf_stimulus -v`, also discovered
+by `make test-tools`. It compiles the real portable control/UART logic with
+strict C99 and ASan/UBSan, checks C/Python wire parity and error/limit behavior,
+and uses synthetic ELF/HEX/startup/configuration negatives. Those synthetic
+files are parser fixtures, not executed Nordic firmware or a Cortex-M model.
+
+A separately invoked, pinned external SDK build supplies genuine target
+ELF/HEX/map and source/object/archive evidence. The reviewed diagnostic patch
+retains upstream normal behavior when disabled and selects ordinary RX from
+the real PHYEND path when enabled; it emits no invented ACK success. Actual
+startup preprocessing and linked paths, absent UICR output/runtime writers,
+source-only radio/SL selection and separate helper resource limits are checked.
+The helper's ledger records exact artifact/tool identities and measurements.
+It does not enlarge or replace any CC2530 budget, corpus or image proof.
+
+Independent integration reruns passed all 19 helper tests, including exactly
+160256 checks in each native and ASan/UBSan run. The actual external target
+build/static audit passed with 56204 flash bytes and 17755 allocated SRAM
+bytes (17792-byte extent). Startup coverage rejects carrying a pre-SDK quiet
+sample through initialization, preserves early faults and checks the linked
+cold-refusal branch around both SDK initialization and completion.
+
+No Nordic firmware is built, downloaded, flashed or uploaded by ordinary CI.
+No runtime stack peak, captured timing, RF event, board/UART operation, debug
+access or physical restoration is established. The two-node observer is blind
+during its own TX and turnaround; absent receipts do not prove air silence.
+The separate [recovery checker](NRF_RECOVERY.md) verifies file agreement only.
+#51 hardware preparation and #40/#50 protocol/ownership evidence stay gated.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

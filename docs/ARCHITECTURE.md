@@ -815,6 +815,30 @@ compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration
 and IFS/loss-aware handoff remain full-adapter gates. No silicon AUTOACK or
 finite over-air ACK-count claim follows from bounded CPU calls.
 
+## External Nordic laboratory companion
+
+The [NS51 helper](../tools/nrf_stimulus/README.md) runs on a separately selected
+nRF52840 DK, not in the CC2530 firmware or production stack. Portable bounded
+control/serialization and UART queues are separated from the SDK/board/radio
+adapter. A default-off BSD patch at the genuine RADIO PHYEND path preserves
+the on-air AR bit and enters normal promiscuous RX, with Nordic automatic ACK
+disabled. Scheduling, PHY completion and copied CRC-validated receipts remain
+distinct records. The latter exclude potentially modified FCS bytes.
+
+One expiring descriptor/nonce-bound grant permits one submission per boot.
+Shared foreground/callback state uses saved/restored PRIMASK, not an assumption
+that BASEPRI masks priority0. Faults, queue loss and unresolved shutdown remain
+visible; no retry, network operation, captured-time API or loss-free window
+claim exists. Software/service deadlines and SDK initialization require actual
+CPU/clock/driver progress; there is no hard RF-off-on-fault guarantee.
+
+Its target build is explicit and external, using pinned source-built radio/SL.
+Ordinary CI exercises only portable native/sanitizer/protocol and synthetic
+artifact checks; it does not fetch/build the SDK or upload Nordic firmware.
+UICR load-range and actual startup checks do not prove physical restoration
+or debug accessibility. The [offline recovery-file checker](NRF_RECOVERY.md)
+provides artifact agreement only. Actual device use remains separately gated.
+
 ## Isolated channel-0 DMA copy
 
 [`dma_copy_init(source, destination, length, timeout, limit, diagnostics)`](../include/dma.h)

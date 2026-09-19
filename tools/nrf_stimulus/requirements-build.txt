@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Explicit external build environment only, never required by ordinary tests.
+pip==24.0
+setuptools==69.5.1
+wheel==0.43.0
+cmake==3.28.3
+ninja==1.11.1.1
+west==1.2.0
+pyelftools==0.31
+PyYAML==6.0.2
+pykwalify==1.8.0
+packaging==24.0
+intelhex==2.3.0
+requests==2.31.0
+certifi==2026.7.22
+charset-normalizer==3.5.1
+colorama==0.4.6
+docopt==0.6.2
+idna==3.20
+python-dateutil==2.9.0.post0
+ruamel.yaml==0.19.1
+six==1.17.0
+urllib3==2.8.0

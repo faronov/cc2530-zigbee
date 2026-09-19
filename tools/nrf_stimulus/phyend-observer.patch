@@ -1,0 +1,92 @@
+NS51 diagnostic-only, default-off PHYEND observer.
+Source: nrfconnect/sdk-nrfxlib@13cd978b22d192447537a60f7fae5fe092930dc4
+File: nrf_802154/driver/src/nrf_802154_core.c
+Original additions are BSD-3-Clause. Upstream per-file notice, retained below
+and unchanged in the patched source:
+
+Copyright (c) 2017, Nordic Semiconductor ASA
+All rights reserved.
+
+SPDX-License-Identifier: BSD-3-Clause
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+3. Neither the name of Nordic Semiconductor ASA nor the names of its
+   contributors may be used to endorse or promote products derived from this
+   software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+diff --git a/nrf_802154/driver/src/nrf_802154_core.c b/nrf_802154/driver/src/nrf_802154_core.c
+index bc0f01d..2706c70 100644
+--- a/nrf_802154/driver/src/nrf_802154_core.c
++++ b/nrf_802154/driver/src/nrf_802154_core.c
+@@ -80,6 +80,23 @@
+ #include "nrf_802154_core_hooks.h"
+ #include "nrf_802154_sl_ant_div.h"
+ 
++#if defined(NS51_DIAGNOSTIC_PHYEND) && NS51_DIAGNOSTIC_PHYEND
++/* Diagnostic PHY completion, deliberately NOT an ACK/TX-success notification. */
++extern void ns51_phy_tx_done(uint8_t * p_frame);
++
++bool ns51_observer_profile_valid(void)
++{
++    return nrf_802154_pib_rx_on_when_idle_get() &&
++           nrf_802154_pib_promiscuous_get() &&
++           !nrf_802154_pib_auto_ack_get();
++}
++
++bool ns51_observer_asleep(void)
++{
++    return nrf_802154_core_state_get() == RADIO_STATE_SLEEP;
++}
++#endif
++
+ #if defined(CONFIG_SOC_SERIES_BSIM_NRFXX)
+ #include "nrf_802154_bsim_utils.h"
+ #include "NRF_AES_ECB.h"
+@@ -2198,6 +2215,18 @@ void nrf_802154_trx_transmit_frame_transmitted(void)
+ 
+ #endif
+ 
++#if defined(NS51_DIAGNOSTIC_PHYEND) && NS51_DIAGNOSTIC_PHYEND
++    {
++        nrf_802154_transmitted_frame_props_t props = {0};
++
++        switch_to_idle();
++        nrf_802154_critical_section_nesting_allow();
++        nrf_802154_core_hooks_transmitted(mp_tx_data);
++        nrf_802154_tx_work_buffer_original_frame_update(mp_tx_data, &props);
++        ns51_phy_tx_done(mp_tx_data);
++        nrf_802154_critical_section_nesting_deny();
++    }
++#else
+     if (ack_is_requested(mp_tx_data))
+     {
+         state_set(RADIO_STATE_RX_ACK);
+@@ -2226,6 +2255,7 @@ void nrf_802154_trx_transmit_frame_transmitted(void)
+ 
+         transmitted_frame_notify(NULL, 0, 0);
+     }
++#endif
+ 
+     nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+ }
