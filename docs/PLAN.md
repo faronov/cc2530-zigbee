@@ -558,6 +558,12 @@ are not bypassed.
 
 Adapt the BSD-licensed Contiki CC2530 RF code selectively, or implement the
 documented registers directly. Do not import Contiki's complete OS/netstack.
+The current services are original register-based implementations, not the
+outcome of a failed comparative port. The separate [#49 reference evaluation](PROVENANCE.md#contiki-cc2530-reference-evaluation)
+now genuinely links the pinned upstream example after two SDCC compatibility
+edits, but identifies retained initialization/receive-state defects and
+different OS, timing, recovery and memory contracts. It supports selective
+reuse investigation, not a drop-in replacement, source import or gate closure.
 
 Deliver:
 

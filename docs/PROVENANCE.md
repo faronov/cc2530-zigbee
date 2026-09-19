@@ -26,12 +26,106 @@ execution; they are not hardware measurements or new normative wire rules.
 | Reference | Status and permitted use |
 | --- | --- |
 | [TI CC2530](https://www.ti.com/product/CC2530) and [SWRU191F](https://www.ti.com/lit/pdf/swru191) | Primary hardware facts; link/cite documentation rather than redistribute whole manuals |
-| [Contiki CC2530 RF driver](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c) | BSD-3-Clause terms verified in this file; planned selective adaptation, not yet imported |
+| [Contiki CC2530 RF driver](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c) | BSD-3-Clause terms verified; [external reference build evaluated](#contiki-cc2530-reference-evaluation), not imported |
 | [Contiki CC253x build](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/Makefile.cc253x) | Explicit SDCC, `0x1F00` XDATA limit and banking evidence; not proof of Zigbee support |
 | [Legacy open ZBOSS](https://github.com/niclash/zboss) | Reference candidate requiring per-file license/revision review; not a proven ready CC2530/SDCC modern stack |
 | [Public LG ESL demo](https://github.com/cddwx525/cc2530_esl_demo/tree/eca70ae29c8f6c4b1bdc58b99c1192646e74d469) | Hardware reference only; no declared repository license was established, so do not copy its implementation/fonts/images |
 | [SDCC](https://sdcc.sourceforge.net/) | Build tool, with its own licenses; baseline 4.2.0 |
 | [cc-tool](https://sourceforge.net/projects/cctool/) | External GPL programmer; not vendored or relicensed as BSD code |
+
+### Contiki CC2530 reference evaluation
+
+On 2026-09-19, #49 evaluated revision
+`32b5b17f674232867c22916bb2e2534c8e9a92ff` in an isolated external public-source
+workspace. Earlier original register-based services were **not** the result of
+a comparative Contiki port proving it unsuitable. This experiment supplies
+an actual reference build and source comparison, not a port or adoption.
+Source, compatibility patches, logs and generated binaries remain outside
+this repository and its CI artifacts. No equipment or private material was used.
+
+The selected upstream `examples/hello-world` configuration uses Rime instead
+of the default IPv6/banked path. The inspected
+[CPU settings](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/Makefile.cc253x#L17-L96)
+and [link/pack rules](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/Makefile.customrules-cc253x#L72-L79)
+compile, link and pack this target; no upload/serial/firmware execution target
+was selected. After an equivalent `-n` dry run, the command was:
+
+```sh
+make --no-print-directory -j1 TARGET=cc2530dk CONTIKI_WITH_RIME=1 \
+  RELSTR=32b5b17f674232867c22916bb2e2534c8e9a92ff \
+  V=1 hello-world.cc2530dk
+```
+
+This command does **not** succeed on the unmodified source with SDCC 4.2.0:
+
+| Attempt | Actual outcome |
+| --- | --- |
+| Unmodified upstream | Exit 2: the CC253x `clock_delay` compatibility macro rewrites the deprecated `unsigned int` declaration into a conflicting `clock_delay_usec` declaration. |
+| Compatibility edit 1 | Guard the deprecated declaration at `core/sys/clock.h:141` with `#ifndef clock_delay`. The build advances, then exits 2 on legacy `void putchar(char)` versus the compiler's `int putchar(int)` ABI. |
+| Compatibility edits 1 and 2 | Change the declaration in `platform/cc2530dk/debug.h:49` and definition in `platform/cc2530dk/putchar.c` to `int putchar(int)`, convert through `unsigned char` before the existing output, and return the converted byte. The build exits 0, links and packs. |
+
+The second edit preserves actual output, not a successful output stub; it
+adds no UART error detection or EOF-on-write-error contract. No third or
+broader compatibility repair was attempted. The two retained external patches,
+`compat-01-clock-prototype.patch` and `compat-02-putchar-abi.patch`, have SHA-256
+`1ec80949308437b75ddfc6b1f0d0d098a3d22dea94d7bd8998decdb7d09f65b1` and
+`071ba09228618c369e34c1b553d8c1b5d5d5d492c895f4f097738cc7f9ef3cfe`.
+
+The genuine linked image reports **49,175 CODE bytes**, ending at `C016`,
+with **49,088 populated Intel HEX bytes**. The linker-reported XDATA extent
+is **2,782 bytes**, through `0ADD`: relocatable XSEG contributes 2,632 bytes
+from `0004` and XISEG another 146 from `0A4C`, with the leading four bytes
+included in the reported extent rather than that relocatable sum.
+Initial SP is `20`; the static 223-byte stack capacity is **not an executed
+high-water measurement**. Upstream uses `--stack-auto`, a 64-KiB CODE allowance
+and XDATA through `1EFF`, not this project's ABI/status/32-KiB policy.
+These example sizes establish no like-for-like footprint advantage.
+
+The packed `hello-world.hex` SHA-256 is
+`68993b5a73c49246939bc5c0d0ade64c4f57ca31a4e04e60983a41ab962f4f84`.
+Independent parent artifact inspection confirmed the digest, HEX checksums
+and extents, map allocation and the return-zero sequence below. This is not
+the repository's complete image/ABI proof or alias-aware execution.
+
+**A successful link is not a runnable-example claim.** Two retained defects
+qualify this particular source/toolchain/configuration:
+
+- [Platform initialization](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/platform/cc2530dk/contiki-main.c#L84-L126)
+  uses plain `char i` with `i >= 0`. It is unsigned in this build; emitted code
+  has an unconditional backward jump and indexing beyond the eight-byte address
+  buffer. No firmware execution was needed or performed to inspect that code.
+- [The driver's `receiving_packet()`](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c#L586-L596)
+  has a precedence error. Its actual linked entry at `2910` emits
+  `906193e090000022`: read FSMSTAT1, then return zero.
+
+The bounded reuse comparison is:
+
+| Area and pinned source | Useful reference and remaining difference |
+| --- | --- |
+| [RF initialization](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c#L308-L379) | Channel/power/address helpers and recommended AGC/TX-filter/FSCAL settings are useful. No equivalent cold-history, full readback or ownership admission proof is provided. |
+| [RX handling](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c#L491-L572) and [platform handoff](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/platform/cc2530dk/contiki-main.c#L298-L308) | AUTOCRC/AUTOACK and disabled source matching/AUTOPEND corroborate the hardware foundation. Platform polling feeds `packetbuf`, then RDC/MAC software filtering. Bad CRC is handled but flushes RX; this is not #48's explicit loss-preserving drain. |
+| [TX](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c#L382-L478) and [CCA/on/off](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c#L577-L630) | Unified RX/TX ownership with a persistent RX request is useful precedent. Unbounded waits, separately sampled CCA before `ISTXON`, TX_ACTIVE-based completion, hard strobes and RX flushes do not meet our bounded completion/recovery contracts. |
+| [`nullrdc` ACK path](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/core/net/mac/nullrdc.c#L110-L201) | Waits after transmit returns and checks three-byte length/DSN, not an independent ACK FCF predicate. Hardware filtering precedes it; compatibility with our ignored-FCF corpus remains unproved. |
+| [Object API](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/dev/cc2530-rf.c#L739-L778) and [rtimer](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/cpu/cc253x/rtimer-arch.c#L54-L98) | This driver exposes extended address, not a captured timestamp object. Its live 16-bit Timer1 at nominal 15625 Hz is not Timer2 RF-edge capture. The compare-programming use of capture mode does not settle #40. |
+| [CSMA scheduling](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/core/net/mac/csma.c#L145-L195) | Queues, callbacks, backoff and retries belong to MAC/OS, not the radio driver. The selected 128-Hz clock gives a minimum nonzero backoff unit of one tick, not an exact 320-us interval. The inspected path supplies no equivalent explicit 12/40-symbol IFS ledger, bounded QUIESCED retirement or loss-aware POLL CLOSED. |
+
+The driver depends on Contiki configuration, clock/rtimer, packetbuf, netstack,
+statistics and optional LEDs/energest. Its `.c/.h` files carry 2011 George
+Oikonomou BSD-3-Clause notices. Other reviewed MAC/timer files retain their
+own SICS, ADVANSEE/Benoit Thebaudeau or Loughborough University notices;
+headerless build/platform files were not assigned invented per-file notices.
+The [root license](https://github.com/contiki-os/contiki/blob/32b5b17f674232867c22916bb2e2534c8e9a92ff/LICENSE#L1-L36)
+does not remove the review/preservation obligation for a future import.
+
+**Decision:** retain a concretely evaluated reference for selective adaptation,
+not a drop-in driver/MAC replacement or a rejected platform. Repairing the
+demonstrated defects would not by itself remove OS/global-buffer coupling or
+establish our bounded timing/ownership contract. No current original-code
+hardware assumption was disproved by this secondary evidence. TI SWRU191F
+remains normative; captured freshness, ACK-filter compatibility, IFS and POLL
+handoff stay open. No hardware/interoperability or Zigbee support was observed.
+The original code's BSD-3-Clause license is unchanged; no Contiki code is
+imported by this evaluation.
 
 ### M1 host transport sources
 

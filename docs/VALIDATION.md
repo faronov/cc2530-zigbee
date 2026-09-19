@@ -710,6 +710,24 @@ No hardware ACK/timing, broadcast exclusion, MAC/security acceptance, IFS,
 continuous ordinary-TX/RX handoff or loss-free POLL closure is established.
 Never flash `radio_autoack_test.ihx`.
 
+## External Contiki reference build
+
+The [#49 reference evaluation](PROVENANCE.md#contiki-cc2530-reference-evaluation)
+genuinely compiles/links the pinned upstream CC2530/Rime hello-world example
+with SDCC 4.2.0 after two explicitly recorded compatibility edits. Unmodified
+source fails. Independent artifact inspection confirms the packed HEX digest,
+49,088 populated CODE bytes, linker-reported 49,175-byte CODE/2,782-byte XDATA
+extents and the emitted receive-state function that returns zero.
+
+This is an **external build and static inspection**, not execution, this
+repository's complete image/ABI proof, alias-aware simulation or hardware
+acceptance. The unbounded initialization loop and broken receive-state predicate
+remain unrepaired in that image. Upstream stack-auto/64-KiB CODE/XDATA policies
+differ; neither footprint nor static stack capacity is a comparable stack-fit
+or high-water result. Source, patches and artifacts stay outside Git/CI.
+No Contiki port, imported code, supported board image, license change or
+MAC/capture/IFS/POLL gate closure follows.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

@@ -692,7 +692,10 @@ of free storage. See the [memory contract](docs/ARCHITECTURE.md#memory-contract)
 
 Original project code and documentation are BSD-3-Clause; see [LICENSE](LICENSE).
 Third-party code requires per-file provenance and preserved notices before
-it is imported. The planned Contiki radio reference is BSD-licensed, but
+it is imported. The BSD-licensed Contiki radio reference has now had a
+[separate upstream build and reuse evaluation](docs/PROVENANCE.md#contiki-cc2530-reference-evaluation),
+but no code was imported. Linking after two compatibility edits did not
+establish a working port; retained defects and integration limits are recorded.
 **Contiki is not a Zigbee stack**.
 
 Do not contribute OEM flash dumps, private packet captures, network keys,
