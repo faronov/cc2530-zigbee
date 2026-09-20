@@ -836,8 +836,16 @@ unverified. No raw files, identities or hashes of private material are published
 The subsequent #55 source review identified an additional qualification:
 v1 did not capture ACL, whose read-protected regions can appear as zeros to
 the debugger. The earlier byte-agreement observation is retained, but
-usable unmasked recovery material is not verified. The v2 software correction
-is host-tested only and does not retroactively strengthen those captures.
+usable unmasked recovery material is not verified. The v2 software correction does not retroactively add ACL observations to
+those captures.
+
+The later [separate #57 manual v2 activity](NRF_RECOVERY.md#2026-09-20-acl-qualified-manual-readback)
+completed two full flash/UICR passes with all eight ACL triplets stable across
+three snapshots and sampled read-access checks passing. Independent post-checks
+also found the earlier target binding and every earlier file byte unchanged.
+This supplies sampled hardware ACL evidence, not atomicity, reset-history,
+recovery-usability, restoration or programming authorization. No write,
+protection change, reset, halt/resume or RF stimulus was requested.
 
 ## Generic NV record composition coverage
 

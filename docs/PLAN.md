@@ -447,7 +447,10 @@ files and the prior failed attempt remain private. The #55 source review
 identified missing ACL observations: read-protected flash can appear as zero,
 so usable unmasked recovery material is not yet established. The #56 v2
 operator adds all eight ACL triplets to each snapshot and passes offline
-checks; no new hardware acquisition is implied. Silicon/UICR/ACL/protection
+checks. The [separate #57 v2 activity](NRF_RECOVERY.md#2026-09-20-acl-qualified-manual-readback)
+then obtained matching complete reads and three stable ACL-qualified
+snapshots; the earlier binding and file bytes also matched. These live
+samples do not establish atomicity or recovery usability. Silicon/UICR/ACL/protection
 policy and an exact page-preserving programming/restoration scope remain
 prerequisites; no temporary firmware or RF experiment followed.
 

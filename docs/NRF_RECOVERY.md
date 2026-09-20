@@ -318,3 +318,30 @@ Installing the temporary image still requires actual silicon/UICR/ACL/
 protection policy review, trustworthy recovery material, an exact
 page-preserving write/restoration scope and fresh physical checks.
 Neither version authorizes programming or closes #40/#50.
+
+## 2026-09-20 ACL-qualified manual readback
+
+The new #57 scope used published `73d409b`, the same reviewed programmer/
+runtime pins and a new private selection/operation. Cached selector,
+descriptor, active interface and permissions were rechecked without opening
+a USB handle. Neither earlier consumed operation nor its evidence was reused
+or modified.
+
+The single v2 process completed both full flash/UICR passes. All 36 words
+agreed across the three snapshots, including the eight ACL triplets; every
+sampled PERM passed the conservative read-access predicate. The parent
+independently revalidated the v2 schema/flags, private script/selection,
+observations and complete byte agreement. The original 12-word binding
+and **all bytes of the previous v1 read files also matched**.
+The new report and separate acceptance record are durable private files,
+not repository or CI artifacts.
+
+This is **manual hardware readback with sampled ACL checks**, not a
+retroactive observation of v1's ACL state. It provides the missing sampled
+read-access qualification, but does not prove atomicity or exclude
+intervening reset/reconfiguration. `recovery_material_verified`,
+`atomic_snapshot_verified`, `restoration_verified` and
+`authorizes_programming` remain false. No protection change, reset,
+halt/resume, target-memory write, erase, unlock, recovery or RF stimulus
+command was requested. Silicon-specific startup/debug-access policy and
+fresh quiescent recovery checks remain separate prerequisites to any writer.

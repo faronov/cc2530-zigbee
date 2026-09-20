@@ -503,9 +503,10 @@ mode. Its default and ordinary tests are offline; no device backup or
 restoration is claimed from those tests.
 A [separately scoped manual readback](docs/NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)
 preserved two matching full-extent flash/UICR reads privately, but did not
-capture ACL state. Unmasked recovery usability is not yet verified; the
-ACL-qualified operator is currently host-tested only. Neither result
-establishes restored firmware or authorizes installing the helper.
+capture ACL state. A [later manual v2 read](docs/NRF_RECOVERY.md#2026-09-20-acl-qualified-manual-readback)
+matched those bytes with three stable ACL-qualified snapshots. Atomicity
+and recovery usability remain unverified; neither result establishes
+restored firmware or authorizes installing the helper.
 
 ## Isolated MAC Timer foundation
 
