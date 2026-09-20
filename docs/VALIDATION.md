@@ -760,6 +760,43 @@ during its own TX and turnaround; absent receipts do not prove air silence.
 The separate [recovery checker](NRF_RECOVERY.md) verifies file agreement only.
 #51 hardware preparation and #40/#50 protocol/ownership evidence stay gated.
 
+## Nordic preservation operator: host-only preparation
+
+`PYTHONPATH=tools python3 -B -m unittest test_nrf_acquire test_nrf_recovery -v`
+runs the actual generated acquisition Tcl under Tcl 8.6 with an original
+synthetic backend, never a device. All 14 operator tests and 17 existing
+artifact-comparison tests pass. The complete fake read flow and all 27
+operation/finalization failure positions are exercised, including a failure
+after the Tcl completion record: a failed child cannot produce parent success.
+
+Other cases cover protection/geometry/identity changes, malformed register
+responses, private selection/tool pins, file-type rejection before opening
+tool inputs, durable single-use admission, exact full-file comparison,
+bounded process/output and failure to durably finish a report. Default CLI
+validation starts no process. Tests invoke only their own temporary fake
+executable and Tcl, with no OpenOCD/SDK, USB or serial dependency. CI installs
+Tcl 8.6 for this host check and never collects or uploads recovery material.
+
+The independent external-tool integration run passed all 36 combined
+acquisition/recovery/programmer tests, including the preservation patch's
+58 real-driver synthetic sequences under syscall confinement. Source,
+package, compiled-object and loader-resolved runtime identities were checked
+separately. The genuine OpenOCD accepted the exact generated MEM-AP
+configuration/procedure prefix with `noinit` and `shutdown`, omitting the
+explicit later `init`. All 14 acquisition tests also passed with the pinned
+build's genuine Jim interpreter and the same synthetic backend. These checks
+did not initialize a real adapter or open any target connection.
+
+Full ordinary `make test-tools` discovery completed 582 tests with 20 explicit
+platform/optional skips. The optional external-programmer proof was executed
+separately as described above, not silently substituted with a skipped check.
+
+The [manual read-path contract](NRF_RECOVERY.md#read-path-source-contracts)
+distinguishes source review and synthetic execution from the later real
+programmer/device observations. Debug power/AP configuration and SWD shutdown
+traffic remain side effects; a MEM-AP model is not a Cortex-M CPU simulator.
+There is no physical backup, restoration or programming acceptance here.
+
 ## Generic NV record composition coverage
 
 `make test-nv-record` tests the real flash reader/writer/RAM engine plus the

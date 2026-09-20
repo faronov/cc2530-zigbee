@@ -716,6 +716,15 @@ build metadata or to program a device. Conditional volatile APPROTECT handling
 does not become a promise of debug access. No private identity, capture, backup
 or hardware observation is imported by this implementation.
 
+The original BSD [private acquisition operator](NRF_RECOVERY.md#read-path-source-contracts)
+uses public OpenOCD command interfaces and vendor register facts, not an
+imported Nordic recovery script. Its linked source ledger pins OpenOCD
+`9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c` and the same reviewed Nordic MDK
+revision. The separately documented host-programmer preservation patch
+retains its own OpenOCD license; it does not relicense original project code.
+No upstream `nrf52_recover` procedure, firmware, private identity or backup
+is incorporated into the operator or its synthetic Tcl backend.
+
 ### M2 deterministic PRNG sources
 
 The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)

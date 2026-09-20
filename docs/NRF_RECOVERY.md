@@ -1,4 +1,4 @@
-# Offline Nordic recovery-artifact agreement
+# Nordic recovery preparation
 
 [`tools/nrf_recovery.py`](../tools/nrf_recovery.py) is an original, hardware-free
 preparation tool for #51. It compares two sets of private raw files, **not two
@@ -71,3 +71,142 @@ short reads, report creation/errors and the deliberately limited result shape.
 The shared private-file helper preserves the existing passive-RX runner's
 public `private_capture()` entry point. No actual backup or hardware restoration
 was performed by these tests.
+
+## Explicit read-only acquisition operator
+
+[`tools/nrf_acquire.py`](../tools/nrf_acquire.py) prepares the next #51
+preservation step. Its default invocation is **offline**: it validates a
+private probe/tool selection and an empty operation directory, without
+starting OpenOCD or consuming an attempt. Only `--execute-read` starts the
+selected external tool. Builds, tests and CI never use that option against
+a real tool/device.
+
+This requires the separately reviewed
+[OpenOCD preservation mode](../tools/nrf_openocd/README.md), not stock OpenOCD.
+The pinned upstream J-Link driver otherwise unconditionally deasserts reset
+during initialization and can fall back from USB to TCP discovery. The
+generated configuration explicitly requests `jlink preserve_reset on`, USB
+serial selection, SWD and `reset_config none`; an unmodified tool rejects
+the unknown mode **before `init`**. The mode is not a firewall for arbitrary
+commands. Use only the reviewed operator and tool/runtime combination.
+
+The operator creates only a deferred-examination `mem_ap` target, no
+`cortex_m` target, flash bank, upstream target script, work area or server.
+It issues no halt, resume, CPU reset, memory write, erase, unlock or recover
+command. The `mem_ap` model's state is not evidence of the actual CPU state.
+SWD line initialization, debug power requests, AP CSW/TAR changes and the
+upstream SWD-to-JTAG shutdown sequence still occur; this is **not** a promise
+of unchanged debug registers, power, RF or firmware behavior. The firmware
+can continue running and changing memory. Ordinary OpenOCD wire-level
+WAIT/error handling and reconnect behavior remain; there is no operator-level
+retry, new process, target-state restoration or fallback after failure.
+
+Before MEM-AP examination, CTRL-AP identity and disabled access protection
+must be readable. Three fresh snapshots surround two full read passes.
+They bind CTRL-AP/MEM-AP values, FICR page geometry, DEVICEID and INFO words.
+The supported geometry is exactly nRF52840, 4096-byte pages, 256 pages,
+1024-KiB flash and 256-KiB RAM; unspecified variant/identity values fail.
+The raw variant/package are recorded, not treated as a reviewed programming
+or protection policy. Each pass invokes real `dump_image` separately for
+the whole main flash and UICR. The second pass is not a copied file or a
+cached CPU-register view. Both passes use one selected debug connection,
+not independent reconnects or power cycles.
+
+The four fixed output files must pass the original exact private-file
+comparison. Changed identity/protection, short data, disagreement, tool
+errors/warnings, malformed or incomplete observations, timeout or output
+overflow prevent a successful result. All outputs are `0600` in `0700`
+directories outside Git. The child receives already-open directory/script
+descriptors through Linux `/proc/self/fd`, not an interpolated private path.
+A durable exclusive `consumed.json` precedes device access; a failed attempt
+is retained and cannot be rerun in that directory. The process has one
+180-second deadline and a 1-MiB captured-output cap.
+
+The user-owned private selection JSON has exactly these fields; replace the
+placeholder path/digest and use the explicitly selected probe's actual serial
+only in this private file, never in Git, a command line or a public report:
+
+```json
+{
+  "schema": "nrf52840-read-selection-v1",
+  "probe_serial": "123456789",
+  "openocd": "/path/to/reviewed/external/openocd",
+  "openocd_sha256": "<reviewed executable SHA256>",
+  "library_dir": null,
+  "libraries": {}
+}
+```
+
+If the reviewed build requires private runtime libraries, `library_dir` is
+their absolute directory and `libraries` maps the selected `lib*.so` SONAME
+filenames to their vetted SHA256 values. Both must be supplied together.
+Executable and named library bytes are checked; inherited loader/Tcl/OpenOCD
+overrides are refused. The child receives only fixed `PATH`/`LC_ALL`/`HOME` and the
+selected library directory, not the rest of the caller's environment.
+These user-supplied pins are **not authentication or a certificate for an
+untrusted executable**. The operator requires a trusted,
+reviewed local build, host/runtime dependency closure, exclusively owned
+directories and no concurrent replacement of tools/files. It does not load
+arbitrary downloaded build metadata safely.
+
+Default, no-device preparation:
+
+```sh
+python3 -B tools/nrf_acquire.py \
+  --selection /path/to/private/nrf/selection.json \
+  --operation /path/to/private/nrf/new-read-operation
+```
+
+Only during the separately selected manual device activity, the same command
+with `--execute-read` performs the single read attempt. It produces two
+capture directories, private tool log/script/observations and `readback.json`.
+That report records **trusted-local-tool-reported reads**, not authenticated
+physical origin. Its nested artifact agreement retains the original false
+physical-origin claims. Successful readback does not verify firmware
+execution, restoration, future debug access or authorize programming.
+Matching live reads are not an atomic snapshot of a running device, nor
+proof that its flash cannot change afterward.
+
+The ordinary focused check is:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_nrf_acquire test_nrf_recovery -v
+```
+
+Tcl 8.6 executes the actual generated script against an original synthetic
+backend with no hardware path. It checks all 27 operation/finalization
+failure positions, protection/geometry/identity changes, malformed responses,
+complete four-region flow, private artifacts, process/output limits and
+non-retry behavior. This is host evidence, not SWD or restoration acceptance.
+
+The same 14 acquisition tests also passed manually with the genuine pinned
+Jim interpreter built alongside OpenOCD, still using only the synthetic
+backend. The real OpenOCD executable accepted the generated MEM-AP
+configuration/procedure prefix, ending **before** the explicit `init` and
+followed by `shutdown`. `noinit` alone does not make the complete script safe:
+it still contains an explicit later `init`. Neither compatibility check
+opened a device or substitutes for the separately scoped #52 readback.
+
+### Read-path source contracts
+
+The target/read-path review pins OpenOCD 0.12.0,
+`9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c`; source stays external.
+These are implementation facts, not observations of a physical board:
+
+| Boundary | Reviewed source |
+| --- | --- |
+| Initial target examination failure is logged, not sufficient to fail `init`; deferred examination and explicit read checks are required | [`openocd.c:109-181`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/openocd.c#L109-L181) |
+| MEM-AP examination/read path, dummy CPU-control state and no real register view | [`mem_ap.c:59-155`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/mem_ap.c#L59-L155), [`mem_ap.c:248-278`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/mem_ap.c#L248-L278) |
+| Debug power/error and AP configuration writes, not a passive electrical attachment | [`arm_adi_v5.c:675-846`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/arm_adi_v5.c#L675-L846) |
+| SRST-on-connect only with the separately excluded reset flag; SWD shutdown mode sequence | [`adi_v5_swd.c:397-407`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/adi_v5_swd.c#L397-L407), [`606-635`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/adi_v5_swd.c#L606-L635) |
+| Separate bounded memory-read calls per dump; host files still require exact-size/agreement checking | [`target.c:3743-3802`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/target.c#L3743-L3802), [`4601-4745`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/target.c#L4601-L4745) |
+| CTRL-AP identity/status predicate; the separate destructive recovery procedure is deliberately not imported | [`nrf52.cfg:53-81`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/tcl/target/nrf52.cfg#L53-L81) |
+| Vendor FICR offsets, part/variant and memory-size definitions | [`nrf52840.h:893-904`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L893-L904), [`nrf52840_bitfields.h:1567-1684`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L1567-L1684) |
+
+Acquiring and comparing these files is still **not an executable restoration
+plan or a programming scope**. A later writer must bind fresh actual
+silicon/protection state, preserve UICR and every non-image flash byte, define
+the exact erased pages and partial-page tail restoration, and verify complete
+physical readback before any separately authorized startup. No mass erase or
+unlock may replace that review. No actual device was read by the offline
+work recorded here.

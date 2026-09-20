@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "openocd": {
+    "url": "https://github.com/openocd-org/openocd",
+    "commit": "9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c"
+  },
+  "jimtcl": {
+    "url": "https://github.com/msteveb/jimtcl",
+    "commit": "a77ef1a6218fad4c928ddbdc03c1aedc41007e70",
+    "tar_sha256": "336ee4af957655c500b3fd232a1385f7bfa92410d4d21d10f95e44273cd6c71b"
+  },
+  "libjaylink": {
+    "url": "https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjaylink/libjaylink_0.3.1.orig.tar.xz",
+    "sha256": "dd211d3f4e8fcd53c97e9d8b7967061e4bdad6c0823d92ce99406577aaf7f254",
+    "version": "0.3.1",
+    "checksum_source": "https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjaylink/libjaylink_0.3.1-1.dsc"
+  },
+  "package_base": "https://archive.ubuntu.com/ubuntu/",
+  "packages": [
+    {
+      "path": "pool/main/libt/libtool/libltdl-dev_2.4.7-7build1_amd64.deb",
+      "sha256": "3a706efe1d9d8b493bd2335fabaa9ec28549c9134750fad6c0a5aa9868c6ee9c"
+    },
+    {
+      "path": "pool/main/a/autotools-dev/autotools-dev_20220109.1_all.deb",
+      "sha256": "d909f0327b09d9a9136239caca975df89782fa28efd721c4eb4caea422d3fc5a"
+    },
+    {
+      "path": "pool/main/a/autoconf/autoconf_2.71-3_all.deb",
+      "sha256": "cc3f9f7a1e576173fb59c36652c0a67c6426feae752b352404ba92dfcb1b26c9"
+    },
+    {
+      "path": "pool/main/a/automake-1.16/automake_1.16.5-1.3ubuntu1_all.deb",
+      "sha256": "5ae9a98e73545002cd891f028859941af2a3c760cb6190e635c7ef36953912de"
+    },
+    {
+      "path": "pool/main/libt/libtool/libtool_2.4.7-7build1_all.deb",
+      "sha256": "9d1d707179675d38e024bb13613b1d99e0d33fa6c45e5f3bcba19340781781d3"
+    },
+    {
+      "path": "pool/main/m/m4/m4_1.4.19-4build1_amd64.deb",
+      "sha256": "30ea715845a1863abd55d11e47ab91513130bf347852d4cdeae69e9d98fa795c"
+    },
+    {
+      "path": "pool/main/p/pkgconf/pkgconf_1.8.1-2build1_amd64.deb",
+      "sha256": "834a58031069d97d7cfb8b2f5bfd5effc69cecf7f30cc362071875f1f8dc1828"
+    },
+    {
+      "path": "pool/main/p/pkgconf/pkgconf-bin_1.8.1-2build1_amd64.deb",
+      "sha256": "7a812f05ee1610154b433e2ad54f6e4163fcbb306b9fb31afe959afb2e5e1545"
+    },
+    {
+      "path": "pool/main/p/pkgconf/libpkgconf3_1.8.1-2build1_amd64.deb",
+      "sha256": "fc3a57e8f931ec06cb7c51acc56878f1fec247ff02a7adcab26905c2faeb2792"
+    },
+    {
+      "path": "pool/main/libu/libusb-1.0/libusb-1.0-0-dev_1.0.27-1_amd64.deb",
+      "sha256": "01228d4112c04152ae5976563ac6c00fb1dcd8f620232395da6dc67af975003b"
+    },
+    {
+      "path": "pool/main/libu/libusb-1.0/libusb-1.0-0_1.0.27-1_amd64.deb",
+      "sha256": "d59e679a82ee2b724c556397e831e879936adbe8a007705872b65a5e1ec887b5"
+    }
+  ]
+}

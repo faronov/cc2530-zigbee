@@ -497,6 +497,10 @@ It is not a CC2530 board image or an installed sniffer replacement. Native
 tests and an external target build/static audit establish no RF/timing or
 restoration evidence. The [recovery-artifact checker](docs/NRF_RECOVERY.md)
 likewise cannot replace fresh physical backup and restoration verification.
+An explicitly gated [manual readback operator](docs/NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
+prepares two full flash/UICR reads through a separately reviewed programmer
+mode. Its default and ordinary tests are offline; no device backup or
+restoration is claimed from those tests.
 
 ## Isolated MAC Timer foundation
 
@@ -700,7 +704,10 @@ of free storage. See the [memory contract](docs/ARCHITECTURE.md#memory-contract)
 
 ## License and boundaries
 
-Original project code and documentation are BSD-3-Clause; see [LICENSE](LICENSE).
+Unless explicitly marked otherwise, original project code and documentation
+are BSD-3-Clause; see [LICENSE](LICENSE).
+The separate [OpenOCD patch and linked driver probe](tools/nrf_openocd/PROVENANCE.md)
+are GPL-2.0-or-later host-programmer integration, not CC2530 firmware.
 Third-party code requires per-file provenance and preserved notices before
 it is imported. The BSD-licensed Contiki radio reference has now had a
 [separate upstream build and reuse evaluation](docs/PROVENANCE.md#contiki-cc2530-reference-evaluation),

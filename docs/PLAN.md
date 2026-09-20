@@ -429,6 +429,13 @@ Fresh device/protection/recovery binding and a separate CC2530 diagnostic
 remain prerequisites to a later experiment; building this helper closes
 neither #40 nor #50.
 
+The [manual Nordic preservation operator](NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
+prepares two explicit full-flash/UICR reads through a restricted MEM-AP
+configuration. Its default is offline, with synthetic Tcl/process/private-file
+coverage; physical selection/readback and a reviewed page-preserving
+restoration/programming scope remain separate. It neither installs the
+stimulus nor waives #51's actual recovery prerequisites.
+
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.
 One foreground service invokes the real bounded passive receiver; full

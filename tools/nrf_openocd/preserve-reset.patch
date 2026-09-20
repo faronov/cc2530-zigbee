@@ -1,0 +1,153 @@
+SPDX-License-Identifier: GPL-2.0-or-later
+
+OpenOCD 0.12.0, commit 9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c.
+2026-09-20: default-off J-Link reset-pin preservation. Upstream copyright and license
+notices in all three files are retained without modification.
+See PROVENANCE.md and COPYING for licensing and scope.
+
+diff --git a/src/jtag/core.c b/src/jtag/core.c
+index 5748011..ac14ca2 100644
+--- a/src/jtag/core.c
++++ b/src/jtag/core.c
+@@ -615,6 +615,11 @@ static int adapter_system_reset(int req_srst)
+ {
+ 	int retval;
+ 
++	if (adapter_driver && adapter_driver->reset_pins_forbidden) {
++		LOG_ERROR("adapter forbids reset-pin operations");
++		return ERROR_FAIL;
++	}
++
+ 	if (req_srst) {
+ 		if (!(jtag_reset_config & RESET_HAS_SRST)) {
+ 			LOG_ERROR("BUG: can't assert SRST");
+@@ -1832,6 +1837,11 @@ bool transport_is_jtag(void)
+ 
+ int adapter_resets(int trst, int srst)
+ {
++	if (adapter_driver && adapter_driver->reset_pins_forbidden) {
++		LOG_ERROR("adapter forbids reset-pin operations");
++		return ERROR_FAIL;
++	}
++
+ 	if (!get_current_transport()) {
+ 		LOG_ERROR("transport is not selected");
+ 		return ERROR_FAIL;
+diff --git a/src/jtag/drivers/jlink.c b/src/jtag/drivers/jlink.c
+index 0a96ac2..cfcaee1 100644
+--- a/src/jtag/drivers/jlink.c
++++ b/src/jtag/drivers/jlink.c
+@@ -42,6 +42,8 @@ static uint8_t caps[JAYLINK_DEV_EXT_CAPS_SIZE];
+ 
+ static uint32_t serial_number;
+ static bool use_serial_number;
++static bool preserve_reset;
++extern struct adapter_driver jlink_adapter_driver;
+ static bool use_usb_location;
+ static enum jaylink_usb_address usb_address;
+ static bool use_usb_address;
+@@ -631,11 +633,25 @@ static int jlink_init(void)
+ 	struct jaylink_hardware_version hwver;
+ 	struct jaylink_hardware_status hwstatus;
+ 	size_t length;
++	const char *serial = adapter_get_required_serial();
++
++	if (preserve_reset) {
++		if (iface != JAYLINK_TIF_SWD || jtag_get_reset_config() != RESET_NONE) {
++			LOG_ERROR("J-Link reset preservation requires SWD and reset_config none");
++			return ERROR_JTAG_INIT_FAILED;
++		}
++		if (!serial || !serial[0] ||
++				strspn(serial, "0123456789") != strlen(serial) ||
++				jaylink_parse_serial_number(serial, &serial_number) != JAYLINK_OK) {
++			LOG_ERROR("J-Link reset preservation requires an explicit decimal adapter serial");
++			return ERROR_JTAG_INIT_FAILED;
++		}
++	}
+ 
+ 	LOG_DEBUG("Using libjaylink %s (compiled with %s)",
+ 		jaylink_version_package_get_string(), JAYLINK_VERSION_PACKAGE_STRING);
+ 
+-	if (!jaylink_library_has_cap(JAYLINK_CAP_HIF_USB) && use_usb_address) {
++	if (!jaylink_library_has_cap(JAYLINK_CAP_HIF_USB) && (use_usb_address || preserve_reset)) {
+ 		LOG_ERROR("J-Link driver does not support USB devices");
+ 		return ERROR_JTAG_INIT_FAILED;
+ 	}
+@@ -656,7 +672,6 @@ static int jlink_init(void)
+ 		return ERROR_JTAG_INIT_FAILED;
+ 	}
+ 
+-	const char *serial = adapter_get_required_serial();
+ 	if (serial) {
+ 		ret = jaylink_parse_serial_number(serial, &serial_number);
+ 		if (ret == JAYLINK_ERR) {
+@@ -678,7 +693,7 @@ static int jlink_init(void)
+ 	if (ret != ERROR_OK)
+ 		return ret;
+ 
+-	if (!found_device && use_serial_number) {
++	if (!found_device && use_serial_number && !preserve_reset) {
+ 		ret = jlink_open_device(JAYLINK_HIF_TCP, &found_device);
+ 		if (ret != ERROR_OK)
+ 			return ret;
+@@ -811,7 +826,8 @@ static int jlink_init(void)
+ 		return ret;
+ 	}
+ 
+-	jlink_reset(0, 0);
++	if (!preserve_reset)
++		jlink_reset(0, 0);
+ 	jtag_sleep(3000);
+ 	jlink_tap_init();
+ 
+@@ -957,6 +973,11 @@ static void jlink_reset(int trst, int srst)
+ 
+ static int jlink_reset_safe(int trst, int srst)
+ {
++	if (preserve_reset) {
++		LOG_ERROR("J-Link reset-pin operations are forbidden by reset preservation");
++		return ERROR_FAIL;
++	}
++
+ 	jlink_flush();
+ 	jlink_reset(trst, srst);
+ 	return jlink_flush();
+@@ -1873,7 +1894,24 @@ static const struct command_registration jlink_emucom_subcommand_handlers[] = {
+ 	COMMAND_REGISTRATION_DONE
+ };
+ 
++COMMAND_HANDLER(jlink_handle_preserve_reset_command)
++{
++	if (CMD_ARGC != 1)
++		return ERROR_COMMAND_SYNTAX_ERROR;
++
++	COMMAND_PARSE_ON_OFF(CMD_ARGV[0], preserve_reset);
++	jlink_adapter_driver.reset_pins_forbidden = preserve_reset;
++	return ERROR_OK;
++}
++
+ static const struct command_registration jlink_subcommand_handlers[] = {
++	{
++		.name = "preserve_reset",
++		.handler = jlink_handle_preserve_reset_command,
++		.mode = COMMAND_CONFIG,
++		.help = "Preserve reset pins; requires USB serial selection, SWD and reset_config none.",
++		.usage = "on|off",
++	},
+ 	{
+ 		.name = "jtag",
+ 		.handler = &jlink_handle_jlink_jtag_command,
+diff --git a/src/jtag/interface.h b/src/jtag/interface.h
+index a8d9ee4..62d63bd 100644
+--- a/src/jtag/interface.h
++++ b/src/jtag/interface.h
+@@ -254,6 +254,9 @@ struct adapter_driver {
+ 	 */
+ 	int (*reset)(int srst, int trst);
+ 
++	/** Reject reset-pin requests, including cached no-ops, before dispatch. */
++	bool reset_pins_forbidden;
++
+ 	/**
+ 	 * Set the interface speed.
+ 	 * @param speed The new interface speed setting.

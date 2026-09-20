@@ -47,7 +47,8 @@ working firmware features or changes the project's support claims.
 
 ## Development checks
 
-With SDCC 4.2.0, `s51`, Python 3.9 or newer, GNU Make and a host C compiler on `PATH`:
+With SDCC 4.2.0, `s51`, Python 3.9 or newer, Tcl 8.6 (`tclsh8.6`), GNU Make and
+a host C compiler on `PATH`:
 
 ```sh
 make test-local
@@ -146,6 +147,13 @@ Its synthetic tests also run in `test-tools`. Matching private files never
 establishes physical acquisition, successful restoration or programming
 permission. Keep the shared `private_artifacts` helpers hardware-independent;
 the passive-RX runner retains its existing `private_capture()` import surface.
+
+The [manual Nordic readback operator](docs/NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
+adds `PYTHONPATH=tools python3 -B -m unittest test_nrf_acquire test_nrf_recovery -v`.
+Tcl 8.6 executes its real generated script only with an original synthetic
+backend; no real OpenOCD, probe or SDK is used by ordinary tests. Never put
+`--execute-read`, a private selection file or a device capture in CI.
+The separate reviewed external programmer build is not a test dependency.
 
 The [Nordic stimulus helper](tools/nrf_stimulus/README.md) has independent
 host-only coverage via `python3 -B -m unittest tools.test_nrf_stimulus -v`,

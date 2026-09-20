@@ -839,6 +839,15 @@ UICR load-range and actual startup checks do not prove physical restoration
 or debug accessibility. The [offline recovery-file checker](NRF_RECOVERY.md)
 provides artifact agreement only. Actual device use remains separately gated.
 
+The separate [manual acquisition operator](NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
+uses an explicitly selected, locally reviewed OpenOCD preservation mode and
+only a MEM-AP target. It has no CPU-control or flash-write script, no network
+server and no automatic execution. Its private single-use operation contains
+two complete flash/UICR read passes with fresh identity/protection binding.
+Debug-interface power/configuration and SWD shutdown traffic remain real
+side effects; the dummy MEM-AP target state is not physical CPU evidence.
+Tool-reported matching reads do not authorize programming or prove restoration.
+
 ## Isolated channel-0 DMA copy
 
 [`dma_copy_init(source, destination, length, timeout, limit, diagnostics)`](../include/dma.h)
