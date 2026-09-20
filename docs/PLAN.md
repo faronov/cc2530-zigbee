@@ -342,6 +342,18 @@ also passed; `hardware_tested=false` was verified.
 Generic/EOC1/physical poll-fault and broader RF/noise entropy, security and
 sleep acceptance remain open. M2 #4 stays open; no hosted-CI pass is claimed.
 
+The separate #10 [RF-noise source review](ARCHITECTURE.md#rf-noise-entropy-qualification-boundary)
+now identifies raw RFRND.IRND as a characterization candidate, not a qualified
+entropy source. TI's receiver/no-sync/settling requirements and biased
+statistical illustration are separated from NIST SP800-90B assessment,
+raw startup/continuous health tests and SP800-90C's final2025 construction
+requirements. No entropy rate, secure sampling interval, conditioner or
+cryptographic RNG is implemented or inferred. A separately scoped raw
+diagnostic and environmental/restart characterization are next prerequisites;
+current normal RX/AUTOACK/LFSR APIs cannot silently supply this service.
+This is documentation evidence, with no new hardware operation or waiver
+of #10 or the M4/M5 security gates.
+
 The [isolated passive RX foundation](RADIO_RX.md) now has host, linked-image
 and alias-aware synthetic evidence for channel configuration, one-frame
 CRC/footer reception and checked soft-stop/flush. The subsequent

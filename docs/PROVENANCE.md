@@ -825,6 +825,40 @@ The bounded LG gate is complete, without importing private records, artifacts,
 identities or new implementation. Generic/EOC1/poll-fault/entropy/RF/security/
 sleep and broader M2 gates remain open.
 
+### RF-noise and entropy-assessment sources
+
+The #10 [qualification boundary](ARCHITECTURE.md#rf-noise-entropy-qualification-boundary)
+is a primary-document review, not a noise sampler or cryptographic RNG.
+It imports no implementation, vectors, SDK, actual noise data or equipment
+observations. The original BSD-3-Clause documentation summarizes functional
+requirements; complete source documents remain external.
+
+The directly retrieved documents have these exact identities:
+
+| Primary document | SHA-256 |
+| --- | --- |
+| [TI SWRU191F](https://www.ti.com/lit/pdf/swru191), April2009/revised April2014 | `a8fe8e92db33ad79c7f371075b0a464602a6db747614625d9f8d3e6be990b877` |
+| [NIST SP800-90B](https://doi.org/10.6028/NIST.SP.800-90B), January2018 | `9b0dd77131ade3617a91cd8457fa09e0dc354c273bb2220a6afeaca16e5defe7` |
+| [SP800-90B potential corrections](https://csrc.nist.gov/files/pubs/sp/800/90/b/final/docs/sp800-90b_errata_potential_updates.pdf), updated May29,2025 | `af99ae20161aeed6e8eab88badf650e08c9f5ac455b71cf1095c289c104a5128` |
+| [NIST SP800-90C](https://doi.org/10.6028/NIST.SP.800-90C), final September2025 | `22dc2de903b2fe602fa0729c38b9512927ad96ef5669a3da8a0ffb4d22c8e6d8` |
+
+| Primary location (printed pages) | Established fact and limit |
+| --- | --- |
+| SWRU191F14.2.2 p.144 | CC253x RF IF_ADC bits may seed the separate LFSR, with the receiver on and synchronization avoided; harvesting cannot occur during normal radio work. This is not a cryptographic construction. |
+| SWRU191F23.12 pp.236-237 | Receiver settling/RSSI-valid and I/Q raw-bit access; roughly20 million bytes illustrate measurable DC bias. Neither sampling-rate/independence guarantees nor a security min-entropy estimate is supplied by those passages. |
+| SWRU191F FRMCTRL0 p.259; RFRND p.272 | RX_MODE10 FIFO looping differs from11 symbol-search disable. The CC253x RFRND address is61A7, with IRND0/QRND1 and reserved upper bits. Do not substitute the CC2541 proprietary-radio register in chapter25. |
+| SP800-90B3.1.1-3.1.4 pp.9-14;3.2 pp.18-21 | Raw sequential/restart datasets, justified IID versus non-IID assessment, source/environment/security-boundary documentation and noninterfering acquisition. A local test is not accredited validation. |
+| SP800-90B3.1.5 pp.14-17;3.2.3 pp.19-20 | Entropy accounting and vetted/non-vetted conditioning distinction; AES-CMAC is listed, but AES hardware or a hash alone is not a qualified entropy source. |
+| SP800-90B4.2-4.4 pp.22-27 | Startup/on-demand withholding, at least1024 startup samples, continuous raw health tests and explicit errors. RCT uses assessed H; APT uses1024-sample binary or512-sample nonbinary windows, not a generic sliding window or a packed-byte reinterpretation. |
+| SP800-90B potential corrections, p.1 | Proposed numerical fixes affect5.2.4 p.39 and the6.3.1 example p.42. The notice explicitly says these are not official changes; future estimator/vector selection must account for this status, not silently substitute corrected or erroneous arithmetic. |
+| SP800-90C abstract;5/5.3 pp.49-56 | Final RBG constructions combine entropy sources and DRBGs. RBG2 requires reseeding before generation once at least2^17 output bits have been generated since instantiation/reseed; actual rendered p.55/PDF69 confirms the exponent. Construction choice, approved source material and seed/reseed accounting remain open here. |
+
+Neither the TI statistical illustration nor a NIST health-test pass is adopted
+as a measured CC2530 entropy rate. The review selects only an IRND
+characterization candidate and a fail-closed assessment boundary.
+Hardware characterization, independently checked conditioning/DRBG behavior,
+resource proofs and the separate BDB security/commissioning gates remain open.
+
 ### M2 AES CPU-transfer prerequisite
 
 The initial independent AES-128 encrypt-block investigation on 2026-09-17 did **not**

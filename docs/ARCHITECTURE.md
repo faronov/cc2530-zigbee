@@ -1152,6 +1152,100 @@ of a65,535-state period, entropy, distribution quality or security.
 [Offline evidence, bounded LG acceptance and remaining physical gates](VALIDATION.md#m2-deterministic-prng-coverage)
 remain separate from the board fixture below.
 
+### RF-noise entropy qualification boundary
+
+The #10 [primary-source review](PROVENANCE.md#rf-noise-and-entropy-assessment-sources)
+selects **raw receiver I-channel samples as a characterization candidate**,
+not an accepted entropy source. No sampler, health-test implementation,
+conditioner, cryptographic DRBG or security-random API is implemented by this
+review. There is no credited min-entropy, approved sampling cadence or
+hardware characterization result. The deterministic PRNG API above is unchanged.
+
+TI SWRU191F distinguishes two mechanisms:
+
+| Mechanism | Primary fact | Consequence |
+| --- | --- | --- |
+| RNDL/RNDH and RCTRL | Chapter14's explicitly seeded16-bit LFSR; CPU reads do not advance it | Expanding a seed does not add entropy or make this a cryptographic generator |
+| RFRND at `0x61A7` | CC253x register p.272: bit0 IRND, bit1 QRND; upper six bits read zero | A register read is not eight random bits; the initial candidate uses IRND only, with no independent-Q assumption |
+| Radio state | Sections14.2.2/23.12: receiver powered/on, no normal radio work during harvesting; wait for RX transients to settle, with RSSI-valid as the suggested indication | Dedicated RF ownership and bounded warm-up are required; RSSI-valid is not an entropy or sample-freshness test |
+| RX mode | Section14.2.2 calls for infinite RX to avoid synchronization; p.259 distinguishes `RX_MODE=10` FIFO looping from `11` symbol-search disable | Do not equate FIFO looping with disabled synchronization. A diagnostic profile must explicitly establish the no-sync receive behavior |
+| Published statistical illustration | Section23.12 pp.236-237 reports a slight DC component in roughly20 million IRND-derived bytes, with mean127.6518, histogram and FFT | This is TI's illustration, not our measurement, a worst-case min-entropy bound or a guarantee against RF influence |
+
+The reviewed TI passages supply no security-qualified read interval,
+independence guarantee between consecutive reads or I/Q channels, or
+environment-wide min-entropy bound. A tight loop, apparently balanced
+histogram, RSSI value, timestamp, device identity or fixed seed cannot fill
+those gaps. The existing passive receiver requires normal `FRMCTRL0=40` and
+exclusive reset history; AUTOACK and TX have their own ownership contracts.
+None may be silently reconfigured for noise harvesting or used as a
+cryptographic fallback.
+
+#### Required assessment and health-test contract
+
+NIST SP800-90B, January2018, is the assessment reference, not a claim of NIST
+validation. Its May2025 potential corrections are recorded with their
+non-final status in the source ledger. The following requirements constrain
+later work; **no measured H or deployed cutoffs are selected here**.
+
+| Area | Required boundary |
+| --- | --- |
+| Source definition | Fix the raw symbol, exact RF/clock/channel configuration, acquisition cadence, warm-up, restart procedure, security boundary and operating envelope. Explain the physical unpredictability and possible attacker influence; repeated register values alone cannot distinguish legitimate repetition from stale sampling. |
+| Raw evidence | Section3.1.1 calls for at least1,000,000 raw sequential samples and a separate1000-restart by1000-sample dataset. Its permitted concatenation uses consecutive segments of at least1000 samples; arbitrary debugger-paused fragments are not one continuous stream. Record all segment boundaries and demonstrate collection does not change the assessed source. |
+| Entropy estimate | Use the non-IID track unless both the design argument and prescribed sequential/restart tests support IID. Characterize the supported environment and source-specific failures; neither a Shannon-entropy calculation nor a statistical pass establishes the required min-entropy bound. |
+| Startup/on-demand tests | Sections4.2-4.3 require testing before release, with at least1024 consecutive samples for startup and at least equivalent on-demand testing. Successful startup samples may be used or discarded under the standard; for a bounded implementation, discarding them avoids needing a startup-output buffer. |
+| Continuous tests | Test raw samples before conditioning. The Repetition Count Test (RCT) and Adaptive Proportion Test (APT) are the baseline, with additional tests for identified failure modes. Passing these tests detects selected failures; it does not qualify a source or establish H. |
+| RCT | Section4.4.1 uses `C = 1 + ceil(-log2(alpha) / H)` and fails when the run count reaches C, including the first occurrence. H is assessed min-entropy per raw sample, not per packed byte. Never reset the run at a caller chunk boundary. |
+| APT | Section4.4.2 uses nonoverlapping windows of1024 samples for a binary alphabet,512 for a nonbinary alphabet. The first sample defines the reference value and starts its count at1; fail at the selected cutoff. A binary IRND stream remains binary even if stored eight samples per byte. |
+| Cutoffs/errors | Cutoffs depend on assessed H and a documented false-positive target; Section4.3 recommends alpha between `2^-20` and `2^-40`, permitting lower values. Do not adopt the illustrative `H=1` or its table cutoffs as a CC2530 measurement. Counter overflow, acquisition gaps and health failures must be explicit errors, not silent restarts or fresh seeds. |
+| Conditioning | Sections3.1.5/3.2.3 distinguish vetted conditioning functions from arbitrary mixing. AES-CMAC is a candidate because an AES block service exists, but that service alone implements neither CMAC nor a conditioner. Input entropy accounting, exact function/key/input/output sizes and independent known-answer tests remain required; XOR, CRC, LFSR expansion or a hash cannot create missing entropy. |
+
+No samples are to be suppressed because their values look undesirable:
+in particular, the LFSR's forbidden seeds0000/8003 are **not** a raw-noise
+filter. Neither conditioning nor health testing may conceal acquisition loss.
+The intended error policy is terminal failure with no usable RNG output,
+no automatic retry/reseed and no timer/LFSR fallback. Reset or explicit repair
+would require fresh source admission and startup tests, not clearing a C flag.
+These are proposed service requirements, not a new successful unsupported API.
+
+#### DRBG and separately scoped characterization
+
+SP800-90C is **final, September2025**, not the older draft. Its RBG2 model
+illustrates why initialization alone is insufficient: Section5.3 requires
+healthy validated source material and reseeding before generation once at
+least `2^17` output bits have been generated since instantiation/reseed.
+The rendered p.55 was checked for that exponent. This is a requirement of
+that construction, not an adopted API limit or a claim that RBG2 has been
+implemented. A final DRBG/construction choice must account for source
+availability during radio operation, algorithm-specific instantiation/reseed
+entropy, request/output bounds, reset/rollback handling and actual CC2530
+resources. An external provisioning-only construction is a different design,
+not permission to substitute a fixed or device-derived seed.
+
+The next diagnostic must be boot-disarmed, receiver-only with AUTOACK and
+TX disabled, and separate from normal MAC ownership. Before any physical
+collection it needs a reviewed exact no-sync register profile, finite
+warm-up/acquisition/stop deadlines and independent work limits, fixed
+ordinary-XDATA buffers below1E00, genuine linked/alias-aware proofs and a
+separately authorized board/image/channel/return scope. The first goal is
+faithful raw samples and explicit failure reporting, not generated key bytes.
+No sample rate or buffer/deadline budget is accepted before that profile is
+defined and measured.
+
+Characterization must cover the intended voltage/temperature/clock/RF
+envelope, restarts and controlled receiver/clock failures, including possible
+external signal influence. Tests must preserve raw samples and timing/gap
+metadata, not discard failing batches. Actual captures and board bindings
+stay outside Git/CI; public tests use synthetic vectors, including stuck,
+biased, periodic-but-balanced and chunk-boundary cases. Exposed diagnostic
+samples must never later seed production secrets. Assessments and independent
+estimator checks are distinct from the implementation's small online health
+tests; a million-sample dataset does not belong in CC2530 RAM.
+
+This source review is **documentation evidence only**. #10 remains open for
+the diagnostic, characterization, entropy estimate, conditioning/DRBG
+selection and resource/physical acceptance. It neither authorizes equipment
+access nor waives the BDB errata or security/commissioning entry gates.
+
 ### Deterministic PRNG board orchestration
 
 The separate [PRNG fixture](DEBUGGING.md#deterministic-prng-board-fixture)
