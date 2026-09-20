@@ -453,6 +453,11 @@ snapshots; the earlier binding and file bytes also matched. These live
 samples do not establish atomicity or recovery usability. Silicon/UICR/ACL/protection
 policy and an exact page-preserving programming/restoration scope remain
 prerequisites; no temporary firmware or RF experiment followed.
+The [#55 newer primary specification](NRF_RECOVERY.md#bounded-protection-class-source-evidence)
+now bounds protection-class interpretation for four production variants,
+without supplying the missing named-revision/errata and actual-selector
+approval. A private report-only artifact overlay is being implemented in
+#58; it cannot authorize a writer or bypass those remaining gates.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

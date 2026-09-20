@@ -107,6 +107,7 @@ References used for this review:
 | Reference | Exact scope |
 |---|---|
 | Nordic *nRF52840 Product Specification*, **4413_417 v1.1, 2019-02-28** ([Nordic URL](https://infocenter.nordicsemi.com/pdf/nRF52840_PS_v1.1.pdf), [retrieved Arduino mirror](https://content.arduino.cc/assets/Nano_BLE_MCU-nRF52840_PS_v1.1.pdf)) | Sections 4.2.2 (p.20), 4.3 (pp.24-30), 4.4 (pp.31-36), 4.5 (pp.43-46), 4.8 (pp.50-53), 5.3.6 (pp.69-70), 5.3.7.11 (p.75), 6.3 (pp.107-110). This old revision does **not** establish the later hardware/software APPROTECT variant mapping. |
+| Nordic *nRF52840 Product Specification*, **4413_417 v1.11, 2024-10-01**, [retrieved from DigiKey](https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6469/NRF52840-DK.pdf) | Sections 4.4.1.16.2 (p.37), 4.5.1.64 (p.62), 4.8.2-4.8.2.1 (pp.68-71), tables 102-106 (pp.976-977): variant encoding, bounded protection classes and exact reset distinctions. Its title/metadata/footers identify the product specification despite the distributor filename. |
 | Pinned [MDK version](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf.h#L39-L41), **8.60.3** | Actual included startup, register definitions and generated errata predicates, not a separate silicon acceptance report. |
 | [MDK configuration 249](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52_erratas.h#L13133-L13212) and [selected protection handler](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/system_nrf52_approtect.h#L35-L60) | Exact chip-selector predicate and volatile UICR-to-DISABLE copy. |
 | [Variant enumerations](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L1630-L1649), [UICR encodings](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L15853-L15861), [software protection fields](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L214-L229) | Different `0xFF` and `0x5A` disable encodings; no inferred marketing-revision mapping. |
@@ -121,14 +122,22 @@ It and its extracted text remain external under
 the parser was loaded from that wheel without installing packages into
 the accepted build environment.
 
-**Primary-document gap:** newer Nordic product/errata endpoints returned
-HTTP 403; another distributor retrieval timed out. The versioned newer
-specification and applicable complete silicon errata were not reviewed.
-The inspected MDK predicates and Nordic SDK documentation establish the
-conditional behavior below, but do not establish an approved
-`INFO.VARIANT`-to-silicon-revision allowlist. Do not substitute alphabetical
-variant comparisons, another HAL's implementation, or the MDK's
-future-revision default for that missing evidence.
+The subsequent v1.11 retrieval is 18,583,008 bytes / 980 pages, SHA-256
+`6e5950cc7e8272d1803279b8cfe3a6ea2c48be46735db3bc3b0a351e3665ecdf`.
+It remains external as `startup-contract-review/nrf52840-ps-distributor-6469.pdf`,
+with selected-page text extracts. Its encoding and explicit applicability
+ranges establish the bounded production protection-class table below.
+The parent independently checked the document identity and cited passages.
+
+**Remaining primary-document gap:** the specification's
+[SoC revisions and variants matrix](https://docs.nordicsemi.com/bundle/comp_matrix_nrf52840/page/COMP/nrf52840/nRF52840_ic_revision_overview.html),
+backend raw-page and legacy routes still returned HTTP 403. Distinct Nordic
+resource/distribution, regional, distributor-notice and archived-URL attempts
+did not supply a named "Revision 1/2/3" and complete applicable-errata mapping,
+or a mapping to the MDK's internal FICR selector words. A protection class
+is not that mapping or an approved silicon allowlist. Do not substitute
+alphabetical variant comparisons, another HAL's implementation or the MDK's
+future-revision default for the missing evidence.
 
 ### Actual linked startup and runtime effects
 
@@ -181,8 +190,32 @@ UICR to make a row pass.
 | Nonunique input | Classification |
 |---|---|
 | `INFO.PART != 0x00052840`, absent/contradictory geometry, or not the separately established DK/package/power configuration | Reject for this image. Expected geometry is 4096-byte CODEPAGESIZE, 256-page CODESIZE, INFO.FLASH=1024 KiB and INFO.RAM=256 KiB. |
-| PART=`0x00052840`; MDK-listed VARIANT `AAAA`, `AAAB`, `AABA`, `AABB`, `AAC0`, `AACA`, `AAD0`, `AAD1`, `AADA`, `AAEA`, `AAF0`, `AAFA`, `BAAA` or `CAAA` | Recognized enumeration only. This review has no authoritative complete revision/errata mapping for these values; **none is an unconditional allowlist entry**. |
+| PART=`0x00052840`; MDK-listed VARIANT `AAAA`, `AAAB`, `AABA`, `AABB`, `AAC0`, `AACA`, `AAD0`, `AAD1`, `AADA`, `AAEA`, `AAF0`, `AAFA`, `BAAA` or `CAAA` | Recognized enumeration. Only four production codes have the bounded protection-class mapping below; named revision/errata mapping remains incomplete and **none is an unconditional allowlist entry**. |
 | VARIANT=`0xFFFFFFFF`, unlisted, or inconsistent with the independently established silicon class | Unknown: reject pending primary evidence. Do not interpret a numerically later ASCII value as a supported later revision. |
+
+PS v1.11 section 4.4.1.16.2 encodes the last two package-variant letters
+followed by the first two build-code characters. Tables 102/105 identify
+the build's hardware-version character; table 106 distinguishes numeric
+production-configuration codes from alphabetic engineering codes.
+Section 4.8.2 explicitly assigns Dxx and earlier to hardware-only protection
+and Fxx and later to hardware/software protection. Applying those rules
+only to the following MDK-enumerated production codes gives:
+
+| INFO.VARIANT | Encoded hardware / production configuration | Documented protection class only |
+|---|---|---|
+| `AAC0` / `0x41414330` | C / 0 | Hardware-only |
+| `AAD0` / `0x41414430` | D / 0 | Hardware-only |
+| `AAD1` / `0x41414431` | D / 1 | Hardware-only |
+| `AAF0` / `0x41414630` | F / 0 | Hardware and software |
+
+This is a bounded application of the specification's explicit ranges,
+not an inferred ordering or permission for unlisted future values.
+`AAAA`, `AAAB`, `AABA`, `AABB`, `AACA`, `AADA` and `AAFA` have engineering
+configuration characters and are excluded from this production subset.
+`AAEA` is engineering Exx, absent from the cited protection applicability
+ranges. `BAAA`/`CAAA` do not match the documented AA function-variant
+entries. These exclusions and the remaining named-revision/errata,
+package/board and actual-selector gates must not be bypassed.
 
 The *actual* configuration-249 selector is not INFO.VARIANT. It reads
 nonunique internal FICR words at `0x10000130` and `0x10000134`:
@@ -215,6 +248,14 @@ conditions. A boot failure or interrupted image replacement before the
 software-disable write can therefore defeat a reset-based debug recovery
 assumption. No non-destructive recovery guarantee follows from an open AP
 in the preceding session.
+
+For the hardware/software class, PS v1.11 section 4.8.2 specifically lists
+pin reset, power/brownout reset, watchdog reset outside Debug Interface
+Mode and System OFF wake outside Emulated System OFF as re-protection
+events. `APPROTECT.DISABLE` follows that list; `FORCEPROTECT` resets after
+any reset. Do not generalize this into "every soft reset relocks" or assume
+that every reset preserves access. This distinction does not authorize a
+reset experiment or a destructive ERASEALL procedure.
 
 Other preserved/protection fields are independent gates (PS v1.1):
 
@@ -279,8 +320,9 @@ it is not a permitted fallback to a failed page-preserving attempt.
 
 **Decision:** static layout and conditional startup behavior are established;
 silicon-specific installation/recovery approval is **blocked**. Required
-remaining evidence includes authoritative variant/revision and applicable
-errata classification, class-correct preserved UICR/protection/ACL state,
+remaining evidence includes named silicon revision and applicable errata
+classification for the selected variant, the actual MDK-selector behavior,
+class-correct preserved UICR/protection/ACL state,
 actual board power/reset conditions, trustworthy complete private recovery
 material, and a separately reviewed/authorized halt, programming,
 interruption and restoration scope. This review supplies no live writer,

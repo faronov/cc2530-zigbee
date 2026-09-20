@@ -345,3 +345,19 @@ intervening reset/reconfiguration. `recovery_material_verified`,
 halt/resume, target-memory write, erase, unlock, recovery or RF stimulus
 command was requested. Silicon-specific startup/debug-access policy and
 fresh quiescent recovery checks remain separate prerequisites to any writer.
+
+## Bounded protection-class source evidence
+
+The [#55 source ledger](../tools/nrf_stimulus/PROVENANCE.md#nonunique-siliconprotection-decision-tables)
+now includes Nordic PS 4413_417 v1.11 (2024-10-01). Its explicit build-code
+encoding/applicability supports hardware-only protection for `AAC0`, `AAD0`,
+`AAD1`, and hardware/software protection for `AAF0`. Other engineering,
+unlisted or uncovered variants are not inferred to be supported.
+
+This is public-source classification, not a decision about a captured device.
+It does not establish named silicon revision/applicable errata, mapping to
+the actual MDK selector, board power/reset wiring or usable restoration.
+For the hardware/software class, legacy erased `PALL=0xFF` is not the
+documented `0x5A` hardware-plus-software disable sequence. Reset behavior
+also depends on the documented reset/debug-mode conditions, not simply
+whether any reset occurred. No UICR/protection modification is authorized.
