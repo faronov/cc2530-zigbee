@@ -795,7 +795,7 @@ The [manual read-path contract](NRF_RECOVERY.md#read-path-source-contracts)
 distinguishes source review and synthetic execution from the later real
 programmer/device observations. Debug power/AP configuration and SWD shutdown
 traffic remain side effects; a MEM-AP model is not a Cortex-M CPU simulator.
-There is no physical backup, restoration or programming acceptance here.
+These offline checks establish no physical backup, restoration or programming acceptance.
 The later separately scoped [manual discovery attempt](NRF_RECOVERY.md#2026-09-20-manual-discovery-failure)
 failed before any target observation or capture bytes; it does not promote
 the successful software checks to hardware readback evidence.
@@ -806,6 +806,22 @@ passed an independent 39-test integration run, including the retained
 the USB boundary is synthetic in the new corpus. No firmware/SWD/bulk
 response is faked and no physical device is used. Fresh source/runtime
 recording and the corrected-runtime inert MEM-AP prefix also pass.
+
+## Nordic recovery readback: separate manual evidence
+
+The [2026-09-20 corrected-runtime #54 activity](NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)
+obtained two complete 1-MiB flash reads and two complete 4-KiB UICR reads
+through one explicitly selected debug connection. Full bytes and three fresh
+identity/geometry/protection snapshots agreed. Parent post-acquisition checks
+revalidated the private artifacts and report; the earlier failed operation
+remains retained separately.
+
+This is **hardware readback reported by the trusted local programmer**, not
+ordinary test/CI evidence, authenticated origin or an atomic live snapshot.
+No target-memory write, reset, halt/resume, erase, unlock or RF stimulus
+command was requested. Firmware execution, electrical reset preservation,
+future debug access, restored firmware and programming authorization remain
+unverified. No raw files, identities or hashes of private material are published.
 
 ## Generic NV record composition coverage
 

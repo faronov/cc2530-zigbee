@@ -440,8 +440,12 @@ stopped at programmer discovery: the pinned library lacks the connected
 probe's USB PID. No backup was obtained and no automatic retry was made.
 The [#53 offline exact-PID correction](NRF_RECOVERY.md#offline-compatibility-correction)
 now passes genuine-library discovery and retained reset-preservation proofs.
-A new manual scope still requires the corrected pinned runtime and fresh
-selection/interface checks; the prior attempt is not reused.
+The new [#54 manual scope](NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)
+used that corrected runtime after fresh cached selection/interface checks.
+Two whole-flash/UICR passes and three binding snapshots agreed; the complete
+baseline is private and the prior failed attempt remains retained. Silicon/
+UICR/protection policy and an exact page-preserving programming/restoration
+scope remain prerequisites; no temporary firmware or RF experiment followed.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

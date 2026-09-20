@@ -253,3 +253,45 @@ configuration prefix passed with no target initialization. This removes the
 known software filter only; physical interface compatibility, target identity,
 protection and full recovery reads remain unverified. The correction neither
 reuses the consumed operation nor authorizes a new device action by itself.
+
+## 2026-09-20 corrected-runtime manual readback
+
+The new #54 scope used published `a3d2064`, the unchanged reviewed OpenOCD
+executable and the corrected, pinned libjaylink runtime. Before access,
+cached host metadata confirmed the unchanged unique selector, active
+configuration/alternate setting, interface-number/index agreement, matching
+vendor interface, two bulk IN/OUT endpoints and adequate permissions without
+a bound kernel driver. This preflight opened no USB handle and was not
+treated as target identity or physical compatibility proof.
+
+A new private selection and empty operation directory were used. The original
+selection, failed operation and consumed marker remain retained. The new
+single programmer process completed within the unchanged 180-second bound,
+without reported errors/warnings, process retry or TCP fallback. Its three
+CTRL-AP/FICR snapshots matched and accepted nRF52840 with 4096-byte pages,
+256 pages, 1024-KiB flash, 256-KiB RAM and the required access-protection
+status. Raw device identity, variant and configuration words remain private.
+
+| Region | Each complete read | Separate reads | Result |
+| --- | ---: | ---: | --- |
+| Main flash | 1,048,576 bytes | 2 | Full byte agreement |
+| UICR | 4,096 bytes | 2 | Full byte agreement |
+
+The parent independently rechecked complete file agreement, all three
+snapshots, script digest, selected runtime and the report's explicit false
+authorization/restoration claims after acquisition. The private report and
+separate acceptance record were durably retained alongside all four files,
+with `0600` files and `0700` directories outside Git/CI.
+
+This is **manual hardware readback reported by the trusted local tool**, not
+synthetic test output, authenticated physical origin or an atomic snapshot.
+No halt/resume/reset, target-memory write, flash erase, unlock, recovery,
+sniffer replacement or RF stimulus command was requested. Debug power,
+AP configuration and ordinary wire/USB cleanup remain the reviewed side
+effects; electrical reset preservation was not measured. Firmware execution,
+future debug access and actual restoration remain unverified.
+
+The full private recovery baseline now exists. Installing the temporary
+image still requires actual silicon/UICR/protection policy review, an exact
+page-preserving write/restoration scope and fresh physical checks. The
+readback result itself does not authorize programming or close #40/#50.

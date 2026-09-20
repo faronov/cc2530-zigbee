@@ -501,6 +501,9 @@ An explicitly gated [manual readback operator](docs/NRF_RECOVERY.md#explicit-rea
 prepares two full flash/UICR reads through a separately reviewed programmer
 mode. Its default and ordinary tests are offline; no device backup or
 restoration is claimed from those tests.
+A [separately scoped manual readback](docs/NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)
+has now preserved two matching complete flash/UICR copies privately.
+This does not establish restored firmware or authorize installing the helper.
 
 ## Isolated MAC Timer foundation
 
