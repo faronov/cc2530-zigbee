@@ -354,6 +354,14 @@ current normal RX/AUTOACK/LFSR APIs cannot silently supply this service.
 This is documentation evidence, with no new hardware operation or waiver
 of #10 or the M4/M5 security gates.
 
+The subsequent #65 [binary raw-noise health-test core](ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
+implements RCT/APT, startup accounting and retained failures with explicit
+diagnostic cutoffs. Both-board host/sanitizer and genuine linked/alias-aware
+checks pass:4880 CODE,76 ordinary XDATA +64 reserved, SP7C guard. It deliberately
+accepts a periodic balanced test stream, proving that a health-test pass does
+not establish entropy. No raw sampler, qualified H/cutoffs, conditioner,
+DRBG or hardware operation is added; #10 and its physical gates remain open.
+
 The [isolated passive RX foundation](RADIO_RX.md) now has host, linked-image
 and alias-aware synthetic evidence for channel configuration, one-frame
 CRC/footer reception and checked soft-stop/flush. The subsequent

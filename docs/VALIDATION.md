@@ -2282,6 +2282,26 @@ Generic/EOC1/physical poll-fault acceptance remains open.
 RF/noise entropy seeding, ADC conversion, sleep/retention, ISR/CSP coexistence,
 general randomness/security and full M2 #4 remain unimplemented/open.
 
+## M2 binary noise-health software coverage
+
+The separate #65 [binary health-test foundation](ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
+is exercised by `make test-noise-health` and both-board `test-common`.
+Actual C runs pass natively, with ASan/UBSan, and in identical SDCC images:
+4880 CODE,76 ordinary XDATA +64 reserved,15-byte context, SP7C guard.
+Full CODE/CDB/parsed-map identities,17 artifact/5 snapshot/1 alias negatives
+and the original15-second simulator limit cover the genuine caller/core link.
+An independent native whole-prefix oracle checks4096 short sequences and32
+multiwindow streams; both uint16 cutoff domains and exact context allocation
+are exercised. Make regressions retain both-board component coverage and
+exclude the module from all24 board images and their unchanged artifact scope.
+
+Evidence is **host-tested, image-checked and simulated**. In particular,
+failure on the1024th sample can leave the startup countdown at zero without
+success, and a fully predictable alternating stream passes the health tests.
+Neither result qualifies a noise source. There is no physical sampler,
+entropy estimate, accepted operating environment, conditioner or DRBG.
+Actual characterization data must remain separate and private.
+
 ## M2 PRNG board fixture offline coverage
 
 Both `IMAGE=prng_fixture` layouts use the

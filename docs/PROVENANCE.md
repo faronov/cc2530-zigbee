@@ -859,6 +859,18 @@ characterization candidate and a fail-closed assessment boundary.
 Hardware characterization, independently checked conditioning/DRBG behavior,
 resource proofs and the separate BDB security/commissioning gates remain open.
 
+The subsequent #65 [binary health-test core](ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
+is original BSD-3-Clause C with original synthetic corpora and a separate
+whole-prefix oracle. It implements the functional RCT/APT rules of
+SP800-90B4.4.1-2, pp.25-27 and the1024-sample startup accounting of4.3,
+without importing NIST code or actual noise data. The illustrative21/589
+cutoffs used in some tests correspond to `H=1, alpha=2^-20`, not a CC2530
+estimate. Other explicit diagnostic cutoffs exercise boundary/failure
+behavior. A periodic balanced passing sequence documents the tests' limited
+meaning. The genuine compiler/image evidence establishes software behavior
+only; no source qualification, RNG construction or new hardware observation
+follows.
+
 ### M2 AES CPU-transfer prerequisite
 
 The initial independent AES-128 encrypt-block investigation on 2026-09-17 did **not**

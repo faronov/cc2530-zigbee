@@ -1156,10 +1156,11 @@ remain separate from the board fixture below.
 
 The #10 [primary-source review](PROVENANCE.md#rf-noise-and-entropy-assessment-sources)
 selects **raw receiver I-channel samples as a characterization candidate**,
-not an accepted entropy source. No sampler, health-test implementation,
-conditioner, cryptographic DRBG or security-random API is implemented by this
-review. There is no credited min-entropy, approved sampling cadence or
-hardware characterization result. The deterministic PRNG API above is unchanged.
+not an accepted entropy source. No sampler, conditioner, cryptographic DRBG or
+security-random API is implemented. The later binary health-test foundation
+below implements only the software tests. There is no credited min-entropy,
+approved sampling cadence or hardware characterization result. The
+deterministic PRNG API above is unchanged.
 
 TI SWRU191F distinguishes two mechanisms:
 
@@ -1245,6 +1246,60 @@ This source review is **documentation evidence only**. #10 remains open for
 the diagnostic, characterization, entropy estimate, conditioning/DRBG
 selection and resource/physical acceptance. It neither authorizes equipment
 access nor waives the BDB errata or security/commissioning entry gates.
+
+### Binary raw-noise health-test foundation
+
+The separate #65 [`noise_health`](../include/noise_health.h) module implements
+the binary RCT and1024-sample APT algorithms above, not an entropy source.
+It takes one explicit raw bit per call and touches no MMIO, radio, timer,
+PRNG, AES or key state. It is not linked into any board firmware.
+
+`noise_health_start(ctx, rct_cutoff, apt_cutoff)` initializes a new diagnostic
+stream. The caller supplies integer cutoffs2..65535 and2..1024 respectively;
+these domains only bound the algorithms and **do not approve a source's
+H/alpha configuration**. There is no default cutoff, estimator or implicit
+source admission. Starting a new C context does not establish physical
+recovery or authorize retrying a failed entropy source.
+
+`noise_health_push(ctx, sample)` consumes exactly one0/1 sample. The caller
+owns a persistent context and preserves it across chunks; distinct contexts
+can be interleaved, but calls are foreground/non-reentrant on SDCC.
+RCT includes the first occurrence and continues across APT window boundaries.
+APT's first sample selects its reference and starts the count at1; only a
+successful complete window clears its count. Both comparisons fail at their
+cutoffs. If both fail together, RCT is retained as the first reported cause.
+There is no sample buffering, output release, filtering or conditioning.
+
+Startup accounts for1024 samples. Only successful completion sets
+`NOISE_HEALTH_MONITORING`; `startup_remaining == 0` alone is not success,
+because the last startup sample can fail. Even MONITORING means only that
+startup health checks passed, not qualified entropy or usable seed material.
+Subsequent valid calls after a health failure return the retained result
+without changing context. Invalid arguments and detected invalid state are
+atomic errors; invalid arguments do not overwrite a retained health cause.
+Range checks prevent counter wrap, but this is not a context-integrity scheme:
+the caller must not modify initialized fields.
+
+`make test-noise-health` runs the actual C implementation natively and in an
+isolated genuine SDCC image. Shared cases exercise both failures, first-sample
+counting, exact cutoff/startup/window boundaries, cross-window runs, context
+interleaving, invalid bits and terminal re-entry. A deterministic4096-bit
+alternation **passes**, explicitly demonstrating that health-test success
+is not unpredictability. Native checks add4096 twelve-bit sequences and32
+2049-bit synthetic streams against a separate whole-prefix counting oracle,
+all65536 values of each cutoff parameter, malformed contexts and an exact
+allocated context. Both board definitions passed ASan/UBSan.
+
+Both linked images and complete CDB files are byte-identical:4880 CODE,
+76 ordinary XDATA +64 reserved within the512-byte reservation budget.
+The production object is1575 CODE,11 XDATA,4 DATA and7 overlay bytes;
+the caller context is15 bytes on SDCC. The stack starts at21 and unwinds
+to20; the SP7C/upper-IRAM guard passes. No measured high-water or IRQ-nesting
+capacity is inferred from the unused guard. Complete CODE/CDB/parsed-map
+identities, including private/helper metadata, are pinned from actual links;
+17 artifact,5 snapshot and1 alias negatives retain the15-second simulator
+bound. This is **host-tested, image-checked and simulated**, never a physical
+noise/entropy result or full-stack fit. Do not flash `noise_health_test.ihx`.
 
 ### Deterministic PRNG board orchestration
 

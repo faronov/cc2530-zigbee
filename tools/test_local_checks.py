@@ -56,7 +56,7 @@ class LocalChecksTests(unittest.TestCase):
         self.assertEqual(sum("unittest" in args for args in commands), 1)
         expected_components = {
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
-            "radio_queue", "radio_tx",
+            "radio_queue", "radio_tx", "noise_health",
             "flash", "flash_exec", "flash_write", "nv_record",
             "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_frame", "aps_frame", "protocol_frame",
@@ -126,6 +126,20 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(len(native), 1)
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))
+
+    def test_noise_health_is_standalone_and_never_in_board_images(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-noise-health", include_build=True, BOARD=board)
+            links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
+            self.assertEqual(len(links), 1)
+            self.assertEqual([Path(arg).name for arg in links[0] if arg.endswith(".rel")],
+                             ["noise_health.rel", "noise_health_test.rel"])
+            self.assertEqual(sum("tests/boot_noise_health.py" in args for args in commands), 1)
+            self.assertEqual(sum(Path(args[0]).name == "host-noise-health-tests"
+                                 for args in commands), 1)
+            for image in IMAGES:
+                commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
+                self.assertFalse(any("noise_health" in arg for args in commands for arg in args))
 
     def test_clock_and_tx_snapshots_are_immediate_and_image_specific(self):
         for board in BOARDS:

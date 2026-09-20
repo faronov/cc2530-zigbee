@@ -83,6 +83,7 @@ endif
 .PHONY: test-nv-record test-mac-tx
 .PHONY: test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
 .PHONY: test-common test-tools test-board test-local
+.PHONY: test-noise-health
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
@@ -202,6 +203,22 @@ $(BUILD)/nwk_beacon_test.ihx: $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_beacon_test.r
 test-nwk-beacon: $(BUILD)/host-nwk-beacon-tests $(BUILD)/nwk_beacon_test.ihx
 	$(BUILD)/host-nwk-beacon-tests
 	$(PYTHON) -B tests/boot_nwk_beacon.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-noise-health-tests: tests/test_noise_health.c src/noise_health.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_noise_health.c src/noise_health.c -o $@
+
+$(BUILD)/noise_health.rel: src/noise_health.c include/noise_health.h Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/noise_health_test.rel: tests/test_noise_health.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/noise_health_test.ihx: $(BUILD)/noise_health.rel $(BUILD)/noise_health_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/noise_health.rel $(BUILD)/noise_health_test.rel
+
+test-noise-health: $(BUILD)/host-noise-health-tests $(BUILD)/noise_health_test.ihx
+	$(BUILD)/host-noise-health-tests
+	$(PYTHON) -B tests/boot_noise_health.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-nwk-frame-tests: tests/test_nwk_frame.c src/nwk_frame.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_nwk_frame.c src/nwk_frame.c -o $@
@@ -759,6 +776,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common: test-mac-tx test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
+test-common: test-noise-health
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
 	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"

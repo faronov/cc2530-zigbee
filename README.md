@@ -344,6 +344,11 @@ command advances 13 feedback shifts and returns the full 16-bit state.
 The two forbidden fixed points are `0000` and `8003`; exhaustive host analysis
 finds two other cycles of 32,767 states, not a 65,535-state period.
 
+The separate [binary noise health-test core](docs/ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
+provides host/image/simulator-checked RCT/APT with explicit diagnostic cutoffs.
+It neither collects RF samples nor qualifies entropy; even a periodic balanced
+stream can pass. `make test-noise-health` is offline only, with no board linkage.
+
 `make test-prng` checks the real driver against independent host mathematics
 and an isolated SDCC/alias-aware synthetic executable. **Never flash
 `prng_test.ihx`**. The separate

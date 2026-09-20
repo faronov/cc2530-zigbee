@@ -96,6 +96,14 @@ The build writes to `build/`. Generated firmware, captures and logs must not
 be committed. Do not add a dependency solely to avoid a small standard-library
 check; new dependencies need a purpose and license review.
 
+The hardware-independent [binary noise health tests](docs/ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
+have `make BUILD=build/noise-health-check test-noise-health`, also in
+`test-common` for both boards. Preserve startup/window/terminal boundaries,
+independent native oracles, complete linked identities and alias/stack guards.
+Diagnostic cutoffs and passing synthetic streams are not qualified source
+parameters or entropy evidence. No raw captures, RF sampler or board-image
+linkage belongs in this target; never flash `noise_health_test.ihx`.
+
 The M1 transport tests use synthetic USB backends and must never enumerate
 hardware. Ordinary tests need no PyUSB; optional PyUSB resource-manager tests
 are explicitly skipped when it is absent. To include those tests without any
