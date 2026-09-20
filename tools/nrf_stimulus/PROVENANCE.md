@@ -337,6 +337,11 @@ implements their explicit acquisition and original offline classification,
 without changing this source table or importing MDK code. Its source-match
 result remains conditional and preserves the whole UICR word and open
 silicon/board/reset-policy gates.
+The parent's later [#62 manual read](../../docs/NRF_RECOVERY.md#2026-09-20-v3-startup-binding-manual-read)
+obtained matching sampled facts and independently bound the conditional
+source result to complete unchanged private UICR bytes. This does not change
+the source review's missing named-revision/errata or board/reset evidence,
+and supplies no startup execution or restoration observation.
 
 | Independently established class and relevant field | Source-supported disposition |
 |---|---|

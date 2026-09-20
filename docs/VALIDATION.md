@@ -885,6 +885,11 @@ source predicates do not authorize CPU control, SRAM/flash writing or RF.
 Default invocation, including the v3 flag, remains offline. These are **host
 checks**, not a physical read or an ARM execution simulation; actual manual
 records belong separately in [Nordic recovery evidence](NRF_RECOVERY.md).
+The later [#62 manual record](NRF_RECOVERY.md#2026-09-20-v3-startup-binding-manual-read)
+adds trusted-tool hardware readback: three matching 43-word snapshots,
+two full flash/UICR passes and independent exact comparison with both #57
+passes. The conditional source match is not CPU execution or restoration
+acceptance; all raw values and captures remain private.
 
 ## Nordic page overlay: offline artifact evidence
 

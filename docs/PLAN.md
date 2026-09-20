@@ -485,6 +485,12 @@ adds explicit fresh-selector/core/watchdog/NVMC/UICR observations and a
 fail-closed source comparison, without changing default v2 commands. It is
 host-tested on Tcl and standalone Jim. Conditional source matching remains
 separate from actual startup, reset-policy and return-to-sniffer acceptance.
+The separately scoped [#62 manual v3 read](NRF_RECOVERY.md#2026-09-20-v3-startup-binding-manual-read)
+now supplies three stable 43-word snapshots and two complete flash/UICR
+passes, independently accepted and byte-identical to both retained #57
+passes. Source predicates match conditionally. No CPU control, reset, SRAM
+load, helper execution or RF command followed; remaining #55 and live
+execution/return policy is not waived.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

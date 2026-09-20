@@ -493,6 +493,45 @@ halt/resume, target-memory write, erase, unlock, recovery or RF stimulus
 command was requested. Silicon-specific startup/debug-access policy and
 fresh quiescent recovery checks remain separate prerequisites to any writer.
 
+## 2026-09-20 v3 startup-binding manual read
+
+The separate #62 scope used published `2f4e38d` after 124 coupled host
+checks, all 30 acquisition/binding tests under the reviewed standalone Jim,
+and **24/24 CI jobs** passed. The reviewed programmer/library pins and
+explicit private selector were unchanged. Cached configuration, vendor
+interface/alternate setting, interface-number/index agreement, bulk endpoints,
+device-node access and absence of a userspace owner were checked before
+staging and immediately before the one read. Those host checks opened no
+USB handle and were not treated as target identity or board-policy proof.
+
+A new private selection, scope/preflight record and empty single-use directory
+were used. The sole v3 programmer process completed within the existing
+180-second deadline, without reported errors/warnings, retry or fallback.
+All **43 words matched across three snapshots**. Both complete 1,048,576-byte
+flash reads and both complete 4,096-byte UICR reads agreed.
+
+Independent parent acceptance re-parsed the transcript, bound the exact
+executed script and reviewed runtime, and recomputed all complete capture
+hashes. **Every byte of both new flash/UICR passes also matched both retained
+#57 passes**, and all 36 common binding/ACL fields were unchanged. The sampled
+APPROTECT word matched the actual UICR bytes without masking reserved bits.
+The bounded source predicates matched conditionally; unsupported physical
+authorization and verification flags remained false.
+
+This is **hardware readback reported by the trusted local tool**, with
+sampled ACL/startup facts and independent artifact verification. It is not an
+atomic snapshot or proof of future access, electrical reset preservation,
+firmware execution, channel state or restoration. No CPU halt/resume/reset,
+DHCSR read, target-memory write, erase, unlock/recover, UART command or RF
+stimulus was requested. Debug power/AP configuration and ordinary transport
+cleanup remain real side effects; the running firmware was not controlled.
+
+Exact values, identity, captures, logs and durable acceptance remain outside
+Git and CI. Earlier evidence is unchanged. Current MDK selector behavior is
+no longer an unobserved fact for this read's samples, but named revision/
+errata, reserved UICR-bit policy, board/reset conditions and a fresh bounded
+execution/return scope remain open. **No SRAM helper was loaded or run.**
+
 ## Bounded protection-class source evidence
 
 The [#55 source ledger](../tools/nrf_stimulus/PROVENANCE.md#nonunique-siliconprotection-decision-tables)

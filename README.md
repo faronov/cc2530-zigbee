@@ -524,6 +524,9 @@ The [opt-in v3 read-only collector](docs/NRF_RECOVERY.md#opt-in-v3-startup-sourc
 now records the missing startup selectors and core/watchdog/NVMC facts.
 Its conditional source comparison does not authorize execution or remove
 the remaining silicon/board/reset and restoration gates.
+A [separate manual v3 read](docs/NRF_RECOVERY.md#2026-09-20-v3-startup-binding-manual-read)
+now has stable snapshots and full flash/UICR bytes matching the retained
+baseline. No SRAM helper was loaded or executed.
 
 ## Isolated MAC Timer foundation
 
