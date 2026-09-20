@@ -856,6 +856,14 @@ original 256-KiB flash/64-KiB SRAM limits. The two artifact profiles reject
 each other's loads and are never auto-selected. MPU/stack guards remain;
 the SRAM profile omits SoC cache/regulator enable writes. This is a linked
 image, not a volatile loader or accepted CPU handoff/restart mechanism.
+The [checked handoff preparation](../tools/nrf_stimulus/README.md#checked-volatile-handoff-preparation)
+adds original MEM-AP-only transaction primitives with actual DHCSR/DCRSR
+handshakes, full SRAM readback and irreversible fault state. It uses fresh
+SYSRESETREQ catch rather than changing an active exception's IPSR.
+Return ends at a verified **halted** original reset vector, not restored
+sniffer service. Its pinned-image admission and halted-state decoder are
+offline utilities; no live equipment operator or target-policy evaluator
+is present. They do not widen the read-only acquisition API below.
 
 The separate [manual acquisition operator](NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
 uses an explicitly selected, locally reviewed OpenOCD preservation mode and

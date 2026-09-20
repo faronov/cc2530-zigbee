@@ -836,6 +836,33 @@ These are **host/image checks**, not Cortex-M simulation, hardware handoff,
 firmware execution, RF or return-to-sniffer acceptance. See the
 [exact SRAM provenance](../tools/nrf_stimulus/PROVENANCE.md#sram-only-alternative).
 
+## Nordic volatile handoff: host transaction evidence
+
+The #60 [preparation](../tools/nrf_stimulus/README.md#checked-volatile-handoff-preparation)
+has 16 ordinary tests, including real portable-C startup records and native
+observation-ABI compilation. The actual Tcl dispatcher runs against original
+synthetic MMIO, including delayed core transfers/reset/release. Every transfer
+on the complete successful path is individually failed; every read is also
+individually shortened and corrupted. Each case proves immediate permanent
+fault with no subsequent I/O, retry, reset or resume.
+
+Other negatives cover stale/missing reset catch, unsafe inherited debug state,
+watchdog/NVMC activity, pending exceptions, MPU/FPU/radio/PPI predicates,
+core-register mismatches, initial/late SRAM corruption, payload bounds,
+operation reordering, reentry even with a swallowed nested error, and attempted
+session rearming. Exact 64-byte and
+128-KiB primitive transfer bounds pass; one word beyond the upper bound fails
+before any SRAM write. These synthetic payloads are not executable images or
+an alternative to the separate pinned-image admission.
+
+The same full corpus passes the reviewed external standalone Jim interpreter.
+The genuine accepted 73,220-byte SRAM image passes admission, and its
+observation offsets also pass the actual Arm GCC/AAPCS compiler.
+The end state is deliberately `original-reset-held`, not a running sniffer.
+This is **host-tested and image/ABI-checked**, not an ARM instruction simulator,
+hardware experiment, live loader, startup observation, unchanged-NV proof
+or restoration/RF acceptance.
+
 ## Nordic page overlay: offline artifact evidence
 
 The [report-only planner](NRF_RECOVERY.md#offline-page-overlay-report) has

@@ -178,6 +178,15 @@ for the coupled profile/overlay checks. Both SDK builds remain explicit and
 external. `--ram-only` is a static-audit selector, never a loading or execution
 option; ordinary CI still builds no Nordic image and accesses no equipment.
 
+The [checked handoff preparation](tools/nrf_stimulus/README.md#checked-volatile-handoff-preparation)
+adds `PYTHONPATH=tools python3 -B -m unittest test_nrf_handoff -q`.
+It runs the real Tcl state machine with a synthetic MEM-AP backend and compiles
+the existing portable C startup/observation ABI. No equipment, programmer or
+SDK is required. The documented explicit standalone-Jim rerun checks the
+reviewed external interpreter separately; never point its test override at
+a device-enabled OpenOCD executable. A halted reset-vector result is not
+successful original-firmware restart or RF/restoration acceptance.
+
 During offline M1 work, do not run even USB enumeration or adapter-state
 commands against physical devices. `tools/debug_image.py` and all tests above
 operate without an adapter. New control commands need explicit permissions,

@@ -475,6 +475,11 @@ in 73,220 bytes of SRAM and has no flash load bytes. It is host/image-checked,
 not loaded or executed. The default flash HEX is unchanged. A reviewed
 volatile CPU/peripheral handoff and return to the original sniffer remain
 separate prerequisites; the artifact result neither closes #55 nor permits RF.
+The #60 [checked handoff preparation](../tools/nrf_stimulus/README.md#checked-volatile-handoff-preparation)
+now implements host-tested MEM-AP core/SRAM transactions and a checked return
+to a halted original reset vector. It supplies no live operator and does not
+restart or validate sniffer service. Fresh binding, preservation checks and
+the separately reviewed physical execution/return scope remain no-go gates.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

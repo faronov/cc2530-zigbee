@@ -517,7 +517,9 @@ emitting only a hash/count report, never a programming payload or permission.
 An [opt-in SRAM-only helper](tools/nrf_stimulus/README.md#optional-sram-only-profile)
 now passes host/image checks with 73,220 bytes in RAM and no flash loads,
 avoiding flash replacement in a future design. It has not been loaded or
-executed; CPU handoff and return to the original sniffer remain unimplemented.
+executed. [Checked MEM-AP handoff primitives](tools/nrf_stimulus/README.md#checked-volatile-handoff-preparation)
+are now host-tested, but no live operator or accepted restart of the original
+sniffer exists; a halted reset-vector result is not restored service.
 
 ## Isolated MAC Timer foundation
 

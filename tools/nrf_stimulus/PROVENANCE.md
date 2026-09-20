@@ -124,6 +124,55 @@ still need a separate reviewed scope. In particular, copying SRAM and
 resuming the old PC is invalid, and boot disarming does not neutralize
 SystemInit. No existing silicon/debug/RF gate is silently declared satisfied.
 
+## Checked MEM-AP handoff source basis
+
+#60 adds original BSD-3-Clause offline preparation in `tools/nrf_handoff.py`
+and its original synthetic MMIO backend. No OpenOCD implementation or Arm
+manual text is imported. This supplies checked primitives, not a live loader
+or a claim that target/startup/recovery policy has been satisfied.
+
+The Arm-authored **ARMv7-M Architecture Reference Manual, ARM DDI 0403E.b,
+ID120114**, was inspected as a 916-page public PDF, retained outside Git.
+The [Arm documentation family](https://developer.arm.com/documentation/ddi0403/)
+identifies the reference; the inspected bytes came from this
+[public mirror](https://kib.kiev.ua/x86docs/ARM/ARMARMv7/DDI0403E_B_armv7m_arm.pdf).
+SHA-256 is `2d4af213859ed4650066b28937e3fc7a62974e521d0ff6df965bb3766d171f2c`.
+The selected Nordic source is PS 4413_417 v1.11, already identified below.
+Neither PDF is redistributed.
+
+| Functional fact used | Primary location |
+|---|---|
+| DHCSR reset/retirement status is read-clear; C_MASKINTS/C_DEBUGEN transitions have constraints; SNAPSTALL can make memory state unpredictable | Arm C1.6.2, pp.759-762 |
+| DCRSR selector 20 packs CONTROL/FAULTMASK/BASEPRI/PRIMASK; selector 15 is an even DebugReturnAddress; IPSR must be preserved | Arm C1.6.3, pp.762-764 |
+| DCRSR clears S_REGRDY; DCRDR data is consumed only after completed transfer; xPSR IT/ICI must match the new entry | Arm C1.6.4, pp.764-765 |
+| DWT reads are unknown with TRCENA off; DEMCR reset catch requires halting debug enabled | Arm C1.6.5, pp.765-768 |
+| SYSRESETREQ is soft reset; CPU/peripherals/GPIO reset, but debug components, RAM, watchdog and retained registers do not become a fresh power-on baseline | Nordic 5.3.6.4 and 5.3.6.8, pp.89-90 |
+
+The already pinned OpenOCD
+`9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c` was inspected, not copied:
+[`cortex_m.c`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/cortex_m.c)
+984-1082, 1162-1200 and 1395-1590 contain ignored halt/reset/resume results or
+the core-only VECTRESET route;
+[`armv7m.c`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/armv7m.c)
+168-190 and 228-241 distinguish unchecked context restoration/cached setters
+from actual core transfers.
+[`mem_ap.c`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/mem_ap.c)
+98-120 exposes synthetic CPU state; 237-264 propagates memory-transfer results.
+Only the latter memory interface is used by the preparation.
+
+The accepted ELF binds `control` to `2000E048`/2,808 bytes, `uart_ready` to
+`2000F020`/1 byte and `retained_count` to `2000DDF8`/4 bytes. The observation
+offsets, including `state=2736`, `error=2737`, `sdk_ready=2806` and
+`startup_pending=2807`, pass real native and Arm GCC/AAPCS compile-time
+assertions against `control.h`. These are byte-layout facts, not hardware
+observations or a substitute for a healthy complete startup predicate.
+
+The complete Tcl transaction/error corpus passes Tcl 8.6 and the pinned
+OpenOCD build's standalone Jim. The first Jim run rejected Tcl's `min()`
+expression, so the implementation now uses its supported conditional
+expression; the full corpus was rerun, not accepted from Tcl-only success.
+Neither interpreter run invokes OpenOCD or touches a device.
+
 ## Offline startup and preservation prerequisites
 
 This #55 review concerns the accepted #51 image, not a newly built image or a

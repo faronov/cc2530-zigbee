@@ -347,7 +347,87 @@ An old active exception, MPU, interrupt, DMA/radio, watchdog or debug state
 cannot be assumed safe. A separately reviewed quiescent handoff and controlled
 return to the original firmware are still required, with fresh target and
 protection binding. No live loader, CPU-control command, reset, flash write,
-RF experiment or restoration acceptance is supplied here.
+RF experiment or restoration acceptance is supplied by the image build.
+
+## Checked volatile handoff preparation
+
+The original [`nrf_handoff.py`](../nrf_handoff.py) supplies **offline-tested
+MEM-AP transaction primitives, not an equipment operator**. Importing the
+module or loading its Tcl definitions performs no device operation. There is
+no connection, selection, execution CLI, automatic reset, UART command or
+flash writer. The read-only acquisition operator is unchanged.
+
+`payload(elf_bytes, hex_bytes)` admits only the exact audited SRAM ELF/HEX
+identified in [provenance](PROVENANCE.md#sram-only-alternative), then runs the
+strict shared RAM parser. HEX is supplied as bytes: universal-newline
+normalization would change its pinned identity. The returned 73,220 bytes
+include canonical FF gaps. This is image admission, not target authorization.
+
+The Tcl library expects an already established, exclusively owned `nrfp.mem`
+MEM-AP target. Its only public dispatcher is `nrfh_operation`; raw helpers and
+Tcl itself are **not a permission sandbox**. A future operator must use the
+admitted payload, not arbitrary synthetic words accepted by the primitive.
+
+| Operation | Required state | Checked result |
+|---|---|---|
+| `halt` | new | Actual DHCSR halt, idle NVMC, stopped watchdog, Cortex-M4 identity, valid original flash vectors and inactive breakpoint/watchpoint/debug-monitor features |
+| `reset` | halted | SYSRESETREQ with preverified vector catch, a fresh read-clear reset indication, DFSR catch and the original MSP/PC; Thread mode, interrupt/MPU/FPU and radio/PPI reset predicates |
+| `load` | caught | Lower-128-KiB SRAM only, at most 256 bytes per write; immediate chunk readback and another complete readback |
+| `start` | staged | Fresh quiescence/full SRAM comparison; actual MSP, privileged CONTROL/PRIMASK, xPSR, LR, even DebugReturnAddress and VTOR readback before unhalting; bounded release/retirement observation |
+| `hold` | running | Actual CPU halt for a stable observation, not a cached debugger state |
+| `return` | observed-halt | A second checked SYSRESETREQ, ending **halted at the original flash reset vector**, not with the sniffer running |
+
+Every operational failure permanently faults that library instance before
+any further public operation. No error path retries, resets, resumes, clears
+stalls or attempts restoration. Re-sourcing cannot rearm the instance.
+Polls have a 100-iteration/1-ms-sleep limit. This does **not** replace the
+future operator's single end-to-end deadline or bound a blocked backend call.
+During reset, any transfer error fails immediately rather than being ignored
+as a possibly normal reset effect.
+
+The Cortex-M register protocol polls S_REGRDY after every DCRSR request and
+reads back each core write through a new transfer. It never uses OpenOCD's
+synthetic MEM-AP CPU state, Cortex-M register cache or high-level
+halt/reset/resume helpers. IPSR is not rewritten to manufacture Thread mode:
+a fresh reset/catch must already establish it. DebugReturnAddress is even;
+xPSR independently carries Thumb state. DWT is inspected with TRCENA enabled,
+since its reads are architecturally unknown when TRCENA is clear. Nordic soft
+reset leaves watchdog and debug state intact; both need separate admission.
+These volatile operations and SYSRESETREQ are not electrically inert.
+
+`disarmed(control_bytes, uart_ready_bytes, retained_count_bytes)` checks a
+complete, coherent **halted** snapshot of the pinned image's existing objects.
+It requires the single HELLO state (queued or drained), no command/input/work/
+trial/fault activity, stopped radio state in the control object, SDK readiness,
+UART readiness and no retained receive buffers. SDK readiness alone can
+coexist with a fault and is rejected. The 2,808-byte C object and every
+observed field offset are compile-checked natively and were independently
+checked with the actual Arm toolchain. This decoder does not acquire bytes,
+verify live RADIO/SDK state or prove RF silence.
+
+**Current physical decision: no-go.** A live operator still needs fresh
+target/protection/ACL/MDK-selector and board/reset-policy binding; exclusive
+probe/UART ownership; private single-use records and one deadline; actual
+startup/radio observation; full before/after flash/UICR comparison; and a
+separately reviewed original-firmware restart/channel check. Those gates
+are not boolean caller assertions or satisfied by the image's hashes.
+Instruction retirement, a healthy decoded control object and a reset vector
+catch are three different observations; none proves restored sniffer service.
+No SRAM transfer, reset, helper execution or RF experiment has been performed.
+
+Focused portable checks:
+
+```sh
+PYTHONPATH=tools python3 -B -m unittest test_nrf_handoff -q
+```
+
+The same corpus can explicitly use the reviewed external build's **standalone
+Jim interpreter**, never its device-enabled OpenOCD executable:
+
+```sh
+NRF_HANDOFF_TEST_INTERPRETER=/reviewed/build/jimtcl/jimsh \
+  PYTHONPATH=tools python3 -B -m unittest test_nrf_handoff -q
+```
 
 ## Measured flash-profile evidence and actual build diagnostics
 
