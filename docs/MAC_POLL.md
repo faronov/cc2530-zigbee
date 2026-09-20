@@ -167,6 +167,31 @@ ordinary CSMA frames, or supply a successful hardware stub.
 
 ## Genuine resources and proof
 
+### Current shared-code refresh (#63)
+
+The explicit R22 Response profile in the shared codec/context does **not**
+change this controller's legacy admission. All52 original cases still use
+legacy decoding and dispatch. Current linked totals are **31401 CODE,
+1898 ordinary XDATA +64 reserved**, stack start4C/unwind4B/observed peak79.
+The original CODE8000, XDATA2048 and SP7C caps remain unchanged: this is
+foreground composition evidence, not IRQ headroom or full-stack fit.
+
+The proof pins22 public entries and21648 complete non-public F/S/L/T records
+(40/542/21015/51), all ordered instructions/data and genuine wrapper calls.
+The independent floor now runs108 Association cases, including the preserved
+legacy corpus and explicit R22 variants: **20844 CODE,891+64 XDATA,
+46/45/71 stack start/unwind/peak**,17 public entries and14005 metadata rows.
+Both retain complete continuation/alias/storage/stack checks; the floor is
+still not POLL acceptance.
+
+Current hashes live beside their exact layouts in `tests/boot_mac_poll.py`;
+the [shared evidence summary](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63)
+records their scope. **The remainder of this resource section is the original
+POLL acceptance ledger**, including its historical addresses and hashes,
+not the current shared-code measurement.
+
+### Original acceptance ledger
+
 Both board definitions produce identical IHX, CDB and memory reports.
 The new **test composition** budget is CODE <=0x8000, ordinary XDATA plus the
 64-byte status reservation <=2048, observed SP <=7C. It contains four real

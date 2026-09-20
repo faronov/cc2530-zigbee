@@ -11,6 +11,8 @@
 #define MAC_COMMAND_MAX_PAYLOAD 4u
 #define MAC_BEACON_MAX_PAYLOAD 52u
 #define MAC_BEACON_MAX_PENDING 7u
+#define MAC_RX_IEEE2006 0u
+#define MAC_RX_R22_ASSOCIATION_RESPONSE 1u
 
 #define MAC_FRAME_BEACON 0u
 #define MAC_FRAME_DATA 1u
@@ -107,11 +109,18 @@ typedef struct {
 /* Bodies exclude the PHY length, FCS and radio metadata. OK is not authentication.
  * Outputs are unchanged on error. Input/output objects must not overlap.
  * Use in the foreground; the SDCC implementation is not ISR-reentrant.
- * Volatile pointer copies reduce SDCC IRAM spills, not alter pointed-to
+ * Volatile parameter copies reduce SDCC IRAM spills, not alter pointed-to
  * bytes; caller storage/lifetime requirements are unchanged.
  */
 mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
                                     mac_frame_info_t * volatile result);
+/* Explicit RX-only profile. R22 additionally recognizes uncompressed
+ * Association Responses; all other command, version/security/IE rules stay
+ * unchanged. Raw PAN fields are not selected-context or membership evidence.
+ * The original decode entry always uses IEEE2006; encoding is unchanged.
+ */
+mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint16_t length,
+                                    mac_frame_info_t * volatile result, uint8_t volatile profile);
 mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
                                     const uint8_t * volatile payload, uint16_t payload_length,
                                     uint8_t * volatile body, uint16_t capacity, uint8_t * volatile length);

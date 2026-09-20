@@ -239,8 +239,9 @@ static mac_codec_result_t address_policy(const mac_header_t *header)
 
 static mac_codec_result_t command_header_policy(const mac_header_t *header,
                                                 const uint8_t *payload, uint16_t length,
-                                                uint8_t transmitting)
+                                                uint8_t volatile mode)
 {
+    /* Mode 0 is legacy RX, 1 is TX, and 2 is R22 Response RX. */
     mac_command_t command;
     mac_codec_result_t status;
     uint8_t compressed = (header->flags & MAC_FLAG_PAN_COMPRESSION) != 0u;
@@ -251,7 +252,7 @@ static mac_codec_result_t command_header_policy(const mac_header_t *header,
     if (status != MAC_CODEC_OK)
         return status;
     /* Pending is required to be zero on transmission, ignored on reception. */
-    if (transmitting && (header->flags & MAC_FLAG_PENDING))
+    if (mode == 1u && (header->flags & MAC_FLAG_PENDING))
         return MAC_CODEC_INVALID_HEADER;
     if (command.identifier == MAC_COMMAND_BEACON_REQUEST) {
         if (header->destination_mode != MAC_ADDRESS_SHORT || header->source_mode != MAC_ADDRESS_NONE
@@ -275,20 +276,22 @@ static mac_codec_result_t command_header_policy(const mac_header_t *header,
     if (command.identifier == MAC_COMMAND_ASSOCIATION_REQUEST) {
         if (compressed || header->source_pan != 0xffffu)
             return MAC_CODEC_INVALID_HEADER;
-    } else if (!compressed || (command.identifier == MAC_COMMAND_ASSOCIATION_RESPONSE
-                              && header->destination_mode != MAC_ADDRESS_EXTENDED))
+    } else if ((command.identifier == MAC_COMMAND_ASSOCIATION_RESPONSE
+                && header->destination_mode != MAC_ADDRESS_EXTENDED)
+               || (!compressed && !(mode == 2u
+                    && command.identifier == MAC_COMMAND_ASSOCIATION_RESPONSE)))
         return MAC_CODEC_INVALID_HEADER;
     return MAC_CODEC_OK;
 }
 
-mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
-                                    mac_frame_info_t * volatile result)
+mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint16_t length,
+                                    mac_frame_info_t * volatile result, uint8_t volatile profile)
 {
     mac_frame_info_t candidate;
     mac_codec_result_t status;
     uint8_t destination_size, source_size, header_size, position;
 
-    if (body == NULL || result == NULL)
+    if (body == NULL || result == NULL || profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return MAC_CODEC_INVALID_ARGUMENT;
     if (length > MAC_FRAME_MAX_BODY)
         return MAC_CODEC_TOO_LONG;
@@ -332,7 +335,7 @@ mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t leng
         return status;
     if (candidate.header.type == MAC_FRAME_COMMAND) {
         status = command_header_policy(&candidate.header, body + header_size,
-                                       length - header_size, 0);
+                                       length - header_size, (uint8_t)(profile << 1));
         if (status != MAC_CODEC_OK)
             return status;
     }
@@ -345,6 +348,12 @@ mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t leng
     candidate.payload_length = (uint8_t)(length - header_size);
     *result = candidate;
     return MAC_CODEC_OK;
+}
+
+mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
+                                    mac_frame_info_t * volatile result)
+{
+    return mac_frame_decode_profile(body, length, result, MAC_RX_IEEE2006);
 }
 
 /* Keep emission a leaf so SDCC can overlay its temporary IRAM. */

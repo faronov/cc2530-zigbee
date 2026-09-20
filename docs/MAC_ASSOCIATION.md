@@ -3,9 +3,10 @@
 Original BSD-3-Clause, based on published protocol baseline `65dda70`.
 This is a bounded **response metadata context/filter**, not an association
 procedure, MLME-ASSOCIATE implementation, radio adapter or Zigbee membership.
-It uses the actual `mac_frame_decode` and `mac_command_decode`, not another
-wire parser or a successful hardware substitute. The existing transmitter,
-scanner, collector, codecs and proofs were not changed.
+It uses the actual frame and command decoders, not another wire parser or a
+successful hardware substitute. The original #43 slice left the shared
+components unchanged; #63 adds the explicit receive profile below and
+revalidates dependent compositions without changing their limits.
 
 ## Primary decisions
 
@@ -53,8 +54,9 @@ also expose their source as unbound, without installing it as a parent.
 does not accept an Extended PAN ID field or substitute one.
 
 PAN, actual receive channel, local extended destination and caller epoch must
-match. This project deliberately requires the exact selected nonbroadcast PAN,
-not merely the general receive filter's broadcast-PAN allowance. Short
+match. The legacy entry requires the exact selected nonbroadcast destination
+PAN; the explicit R22 alternative below still requires the actual selected
+source PAN. Neither substitutes the general receive filter for this context. Short
 selections reject FFFE/FFFF and require zero tails, like existing admission.
 No IEEE-allocation registry or source authorization is implemented.
 
@@ -85,6 +87,70 @@ In particular, FFFE is valid IEEE metadata but not a usable allocated address
 for the selected R22 ED/address-allocation roadmap. Even another MAC-allocated
 value is not admitted here as a valid/unique Zigbee network address. NWK/PIB
 updates, parent installation, BDB and authentication remain absent.
+
+### Explicit R22 Response receive profile (#63)
+
+The same pinned **R22 05-3474-22**, Annex D.3/Table D-3, printed p.514,
+was rechecked as an actual rendered table, not a flattened text row.
+`mac_frame_decode_profile(body,length,result,profile)` and
+`mac_association_step_rx(ctx,now,event,observation,profile)` add a per-call
+`MAC_RX_R22_ASSOCIATION_RESPONSE` selection. `MAC_RX_IEEE2006` and both
+original entry points retain legacy behavior; the context ABI/version stays1.
+
+| Received Response | Raw R22 decoding | Selected-PAN context |
+| --- | --- | --- |
+| Compressed, destination PAN selected | Accepted | Accepted with all other checks |
+| Uncompressed, both PANs selected | Accepted | Accepted with all other checks |
+| Uncompressed, destination FFFF/source selected | Accepted | Accepted with all other checks |
+| Compressed, destination FFFF | Accepted; implied source FFFF | MISMATCH; no selected PAN is invented |
+| Explicit source PAN different from selected | Raw fields retained | MISMATCH even with selected destination |
+
+The uncompressed body has27 bytes: `23 CC DSN`, destination PAN, local IEEE,
+explicit source PAN, source IEEE, then the same four-byte command payload.
+`33 CC` preserves ignored RX Pending. Extended/extended addressing, AR1,
+version0, no security/IE, exact length and status/address consistency remain
+mandatory. No other command or encoder rule is broadened. This is bounded
+Response-header recognition, not a claim to reconcile every IEEE2015 frame
+rule or every combination of Annex D alternatives.
+
+CRC, actual channel, known/unbound IEEE, correlation, time/work, terminal
+atomicity and independent receiver ACK obligations are unchanged. Unknown
+profile bytes return INVALID/INVALID_ARGUMENT without mutating outputs or
+context. The shorter `step_rx` name keeps SDCC's parameter symbols distinct
+in its bounded-width map output. Volatile **parameter copies**, not caller
+objects, prevent extra persistent IRAM spills; no heap or hidden receive mode
+is added. The default path never inherits a previous call's profile.
+
+The existing POLL controller still uses legacy decoding and does not yet
+forward these additional uncompressed headers. Request/Data Request header
+alternatives, whole-procedure timing (#45), radio/ACK and BDB gates remain open.
+
+**Current #63 evidence:** all34 original shared scenarios remain and run in
+legacy, R22-compressed and R22-uncompressed forms. Two additional scenarios
+per form distinguish wrong explicit source PAN and legacy rejection:
+**108 genuine target cases**, including CODE/RAM inputs and explicit invalid
+profile atomicity. Native tests additionally cover24,576 command FCFs,
+6,400 byte variants, three complete65,536-address and256-status sweeps,
+exact allocations0..126, all254 unknown profiles, raw/context distinction
+and unchanged encoder/Pending rejection. ASan/UBSan exercise exact spans.
+
+| Current genuine composition | Value |
+| --- | --- |
+| CODE / ordinary XDATA / reserved status |15086 /696 /64 bytes |
+| Production object CODE/XSEG/DSEG | mac_frame7136/216/15; mac_association2839/76/27 |
+| Context/request/event/record |73/30/20/27 bytes, unchanged |
+| Stack start / unwind / observed peak / cap |46/45/71/7C |
+| Public entries / complete private/caller/field records |12 /314/38/20 |
+| Ordered instructions / ordered table and CODE data |8694 /122 bytes,35 switch targets |
+| Artifact negatives / missing-alias negative |110 /1 |
+
+Whole CODE SHA256:
+`52f5c012c144f21368e7d5201de45aa9a3aaf7fc5eb6f10bc271f1641e28a4ca`.
+The original16-KiB CODE and1024-byte XDATA-reservation budgets are unchanged.
+Full relocated-byte, parameter/helper/public ABI, real wrapper/decoder call,
+alias/unallocated/status/upper-IRAM and bounded simulator checks remain.
+This is host-tested, image-checked and simulated evidence, **not hardware**.
+See the [shared composition refresh](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63).
 
 ### Wait, retrieval, ACK and restoration remain separate
 
@@ -181,9 +247,9 @@ separate NIB requirement (3.2.2.13.3,p.260), not a timing PIB.
 
 R22 AnnexD.1 refers to IEEE2015, and AnnexD.3/TablesD-1-D-3,pp.513-514 require
 additional association header recognition, including Response destination
-PANFFFF. This exact-selected-PAN legacy context is deliberately narrower:
-it must not be presented as the complete R22 receive contract or as silently
-changing the selected IEEE2006 codec baseline. Authoritative deadline
+PANFFFF. The explicit #63 profile above covers bounded Response alternatives,
+not the complete R22 receive contract and not a silent change to the selected
+IEEE2006 default. Authoritative deadline
 interpretation and revision reconciliation remain open in #45. Context work/
 lifetime limits stay explicit project policy, not fabricated IEEE NO_DATA.
 
@@ -202,6 +268,7 @@ independent gates.
 | `init(ctx,now)` | Explicit result; NULL invalid; otherwise fresh memory context and IDLE. Caller already purged old reports before reinitialization |
 | `start(ctx,request,now)` | Validate/copy context; IDLE only; advance nonwrapping generation; open logical wait. Caller supplies truthful selected PAN/channel/local identity and actual confirmed reception/ACK-service preconditions |
 | `step(ctx,now,event,observation)` | NULL event polls; frame or correlated cancellation otherwise. API OK means processed, not delivery/association |
+| `step_rx(ctx,now,event,observation,profile)` | Same finite contract with explicit per-call receive profile; unknown profiles are atomic API errors |
 | `take(ctx,record)` | Copy terminal record exactly once, then IDLE. Preserve generation and time watermark; no radio/transmitter cleanup |
 
 All records are caller-owned ordinary RAM (two-byte XDATA pointers on SDCC);
@@ -241,6 +308,10 @@ Only RESPONSE makes status/address/source fields meaningful; other terminal
 records carry outcome, epoch, generation and termination time.
 
 ## Evidence and resource ledger
+
+This section retains the **original #43** figures, hashes and entry addresses
+as historical evidence. The [current #63 profile](#explicit-r22-response-receive-profile-63)
+above supersedes these measurements without weakening their budgets or guards.
 
 Both board definitions: strict C99 native tests, ASan/UBSan exact spans, and
 genuine linked SDCC4.2.0 #13081 instructions with alias-aware s51 execution.

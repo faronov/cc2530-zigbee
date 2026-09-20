@@ -577,7 +577,7 @@ and copied candidate collection. It preserves separate sent/unscanned masks
 and overflow diagnostics; release requires confirmed restoration of the saved
 PAN/channel/filter/RX state. `make test-mac-scan` is **host-tested,
 image-checked and simulated**, not an operating scanner on a board.
-Its six-module test image leaves 3328 bytes below the 32-KiB CODE limit:
+Its six-module test image leaves 3201 bytes below the 32-KiB CODE limit:
 this is not complete-stack fit. A real adapter, captured timing (#40), full
 parent selection and association remain open; never flash `mac_scan_test.ihx`.
 
@@ -585,8 +585,11 @@ The [Association Response context](docs/MAC_ASSOCIATION.md) adds bounded,
 one-shot metadata matching through the real codec. It checks the selected
 PAN/channel/local IEEE and a known coordinator IEEE; a source learned after
 short-address selection is explicitly **unbound**, not authenticated.
+An explicit R22 receive profile additionally recognizes uncompressed Responses
+and permits a broadcast destination PAN only with the selected source PAN
+actually present. Default decoding and the legacy POLL path remain unchanged.
 `make test-mac-association` is **host-tested, image-checked and simulated**:
-14,022 CODE bytes and675 ordinary XDATA +64 reserved in its separate test
+15,086 CODE bytes and696 ordinary XDATA +64 reserved in its separate test
 image. These are measured test-image sizes, not total device usage or
 full-stack fit. The context does not transmit retrieval requests, deliver the
 required receiver ACK, restore radio state or complete association.

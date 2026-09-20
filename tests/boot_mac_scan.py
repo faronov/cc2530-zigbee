@@ -20,53 +20,69 @@ MODULES = ("mac_frame", "mac_tx", "nwk_beacon", "nwk_candidates", "mac_scan", "m
 SOURCES = tuple(m + ".c" for m in MODULES[:-1]) + ("test_mac_scan.c",)
 # A new composition budget only. Existing MAC-TX/codec/platform caps are unchanged.
 CODE_BUDGET, XDATA_BUDGET = 32768, 2048
-SIZE, XDATA, PRIVATE_END = 29440, 1492, 0x267
-DIGEST = "96468bf60d144c46297f558f54b610fe6755865bc1314a3ae7b03fc4efd8b23d"
-PRIVATE_DIGEST = "9635d4b0c073cf26aae32d5655a3c00ed653580f185c274db3e33f721ec15a71"
-CALLER_DIGEST = "27b97210deac66da2f841934ce4001737b8870dd7b6f9c8882da55ff2c9ddccb"
-PUBLIC_DIGEST = "2a6dec8f3d856441a7162814b0fa9fa11c4ff07b38c6fdcfbd7781b82969a960"
-FIELD_DIGEST = "659464f7b5d96ba06e79f413f6a255d76b148b1fcf94f83ef341f6e56e0a6a88"
-LISTINGS = {
-    "mac_frame": (4168, 7009, "6578813b8ab8e35d0eaad2a3303f5988a419a6f19a6eac890cfe8168735e92e1"),
-    "mac_tx": (3729, 5650, "ca4922d7c831be30b54492a4d454a706e57c54d1c1943367d79cb3fc967c45a4"),
-    "nwk_beacon": (353, 601, "26589a82b93289dbbf7ced184d237c64bd0f04ab58af8e27acce31f2a6456617"),
-    "nwk_candidates": (1519, 2334, "cabc3b520a0a662f3ef4f4e2f83e652a762bf9df05d7383f97b60cbd799aa9cd"),
-    "mac_scan": (6230, 8590, "43e0b51638efa6bf849a8496707b79a6c0347f7c6422e93eda81897601778596"),
-    "mac_scan_test": (2686, 4483, "90e99f4244393df834b302da2e32b676e0c491d80b303c658e067e90e2a52d60"),
-}
-OBJECTS = {
-    "mac_frame": (7009, 207, 15, 10),
-    "mac_tx": (5650, 191, 8, 0),
-    "nwk_beacon": (601, 27, 9, 0),
-    "nwk_candidates": (2334, 111, 4, 0),
-    "mac_scan": (8598, 79, 4, 0),
-    "mac_scan_test": (4581, 851, 4, 0),
-}
-ENTRIES = {
-    "mac_command_decode": ("mac_frame", 0x022a), "mac_command_encode": ("mac_frame", 0x0425),
-    "mac_beacon_decode": ("mac_frame", 0x08e0), "mac_frame_decode": ("mac_frame", 0x1214),
-    "mac_frame_encode": ("mac_frame", 0x195c),
-    "mac_tx_init": ("mac_tx", 0x1c87), "mac_tx_submit": ("mac_tx", 0x1d55),
-    "mac_tx_copy": ("mac_tx", 0x21af), "mac_tx_step": ("mac_tx", 0x23fc),
-    "mac_tx_release": ("mac_tx", 0x3180), "nwk_beacon_decode": ("nwk_beacon", 0x31d5),
-    "nwk_candidates_init": ("nwk_candidates", 0x350c),
-    "nwk_candidates_consider": ("nwk_candidates", 0x374c),
-    "nwk_candidates_get": ("nwk_candidates", 0x3c81),
-    "mac_scan_init": ("mac_scan", 0x4234), "mac_scan_start": ("mac_scan", 0x4288),
-    "mac_scan_step": ("mac_scan", 0x4839), "mac_scan_get": ("mac_scan", 0x5d4b),
-    "mac_scan_release": ("mac_scan", 0x5de0), "main": ("mac_scan_test", 0x5eda),
-}
-DONE = 0x7050
-CALLER = {
-    "scan": (0x267, 212), "saved": (0x33b, 212), "tx": (0x40f, 168),
-    "request": (0x4b7, 16), "event": (0x4c7, 23), "action": (0x4de, 23),
-    "before": (0x4f5, 23), "tx_event": (0x50c, 17), "tx_action": (0x51d, 22),
-    "entry": (0x533, 36), "body": (0x557, 44), "copy": (0x583, 36),
-    "length": (0x5a7, 1), "scenario": (0x5a8, 1), "injected": (0x5a9, 1),
-    "received": (0x5aa, 1), "dsn": (0x5ab, 1), "j": (0x5ac, 1),
-    "was_radio": (0x5ad, 1), "iterations": (0x5ae, 2), "failure": (0x5b0, 2),
-    "now": (0x5b2, 4), "floor_at": (0x5b6, 4),
-}
+SIZE, XDATA, PRIVATE_END = (29567, 1501, 624)
+DIGEST = 'b7cd7de8f7d65a8947d0d9cf5f665dc39055f17441d4b73bffcfd448ff0c7f2f'
+PRIVATE_DIGEST = '4cd43dbe1fe247b33a6dcb03e16b858acb3ab56242c6d963e04a6e20d5a7bc33'
+CALLER_DIGEST = '1b63792254c1c83193592011bd1d0e716589ac4a3d7c98901cbcedba55a77446'
+PUBLIC_DIGEST = 'f0e4b9743298d1bf4d5e007d552cfe2b49def7c0525c056e21309c9c145c6d09'
+FIELD_DIGEST = '659464f7b5d96ba06e79f413f6a255d76b148b1fcf94f83ef341f6e56e0a6a88'
+LISTINGS = {'mac_frame': (4253, 7136, '57bcc5353c828abab7ec0980b1f8933eafce4e3b71d1df6a641ebfd3515dada4'),
+ 'mac_tx': (3729, 5650, 'e7e7e7297e5b54e67341ec7b20b7890fd683f3abe922bed08bbbe1e1c2ed7609'),
+ 'nwk_beacon': (353, 601, '651a0dbc54d34506bee1bdc0dba2f13eca32242c43893224fc5c7820d8038cc4'),
+ 'nwk_candidates': (1519, 2334, '6e777928c2e6a3af47f09ef582036cb1bb493e4c7b4332ad118bb717158b12b0'),
+ 'mac_scan': (6230, 8590, 'dfefce2d53a32f4d0de221153f44086b0d7dcd7a13b123a1ec5ff77ef3c269a5'),
+ 'mac_scan_test': (2686, 4483, 'dc28154510bbd9f4def2ba2761eb233e75517a0f551c13ea1ae7ae5147322f25')}
+OBJECTS = {'mac_frame': (7136, 216, 15, 10),
+ 'mac_tx': (5650, 191, 8, 0),
+ 'nwk_beacon': (601, 27, 9, 0),
+ 'nwk_candidates': (2334, 111, 4, 0),
+ 'mac_scan': (8598, 79, 4, 0),
+ 'mac_scan_test': (4581, 851, 4, 0)}
+ENTRIES = {'mac_command_decode': ('mac_frame', 554),
+ 'mac_command_encode': ('mac_frame', 1061),
+ 'mac_beacon_decode': ('mac_frame', 2272),
+ 'mac_frame_decode': ('mac_frame', 5814),
+ 'mac_frame_encode': ('mac_frame', 6619),
+ 'mac_tx_init': ('mac_tx', 7430),
+ 'mac_tx_submit': ('mac_tx', 7636),
+ 'mac_tx_copy': ('mac_tx', 8750),
+ 'mac_tx_step': ('mac_tx', 9339),
+ 'mac_tx_release': ('mac_tx', 12799),
+ 'nwk_beacon_decode': ('nwk_beacon', 12884),
+ 'nwk_candidates_init': ('nwk_candidates', 13707),
+ 'nwk_candidates_consider': ('nwk_candidates', 14283),
+ 'nwk_candidates_get': ('nwk_candidates', 15616),
+ 'mac_scan_init': ('mac_scan', 17075),
+ 'mac_scan_start': ('mac_scan', 17159),
+ 'mac_scan_step': ('mac_scan', 18616),
+ 'mac_scan_get': ('mac_scan', 24010),
+ 'mac_scan_release': ('mac_scan', 24159),
+ 'main': ('mac_scan_test', 24409),
+ 'mac_frame_decode_profile': ('mac_frame', 4644)}
+DONE = 28879
+CALLER = {'scan': (624, 212),
+ 'saved': (836, 212),
+ 'tx': (1048, 168),
+ 'request': (1216, 16),
+ 'event': (1232, 23),
+ 'action': (1255, 23),
+ 'before': (1278, 23),
+ 'tx_event': (1301, 17),
+ 'tx_action': (1318, 22),
+ 'entry': (1340, 36),
+ 'body': (1376, 44),
+ 'copy': (1420, 36),
+ 'length': (1456, 1),
+ 'scenario': (1457, 1),
+ 'injected': (1458, 1),
+ 'received': (1459, 1),
+ 'dsn': (1460, 1),
+ 'j': (1461, 1),
+ 'was_radio': (1462, 1),
+ 'iterations': (1463, 2),
+ 'failure': (1465, 2),
+ 'now': (1467, 4),
+ 'floor_at': (1471, 4)}
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)"
     r"\[\s*\d+\]\s+\d+\s+\S.*$", re.MULTILINE,
@@ -151,7 +167,7 @@ def verify(image, symbols, debug, memory, listings, objects):
         image, symbols, debug, memory, "mac_scan_result", SOURCES, xdata_budget=XDATA_BUDGET,
     )
     require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == XDATA
-            and symbols["s_SSEG"] == 0x41 and symbols["__gptrput_PARM_2"] == 0x5c5,
+            and symbols["s_SSEG"] == 0x41 and symbols["__gptrput_PARM_2"] == 0x5ce,
             "Exact ordinary/stack/runtime allocation changed")
     require(digest(private_records(debug)) == PRIVATE_DIGEST, "Private ABI changed")
     require(digest(caller_records(debug)) == CALLER_DIGEST, "Caller ABI changed")
@@ -210,7 +226,7 @@ def verify(image, symbols, debug, memory, listings, objects):
         span = set(range(address, address + size))
         require(not span.intersection(private | caller) and span <= allocated, "Caller storage overlap")
         caller.update(span)
-    require(caller == set(range(PRIVATE_END, 0x5ba)), "Caller coverage changed")
+    require(caller == set(range(PRIVATE_END, 1475)), "Caller coverage changed")
     for name, (module, address) in ENTRIES.items():
         require(label(listings[module], name) == address
                 and address in starts[module], "Entry/checkpoint address ABI changed: " + name)
@@ -267,14 +283,15 @@ def negatives(image, symbols, debug, memory, listings, objects):
     for old, new in (
         ("S:Lmac_scan.mac_scan_step$scan$", "S:Lmac_scan.mac_scan_step$wrong$"),
         ("S:Fmac_scan$beacon_request$0_0$0({8}", "S:Fmac_scan$beacon_request$0_0$0({7}"),
-        ("L:Fmac_scan$beacon_request$0_0$0:7296", "L:Fmac_scan$beacon_request$0_0$0:7297"),
+        ("L:Fmac_scan$beacon_request$0_0$0:", "L:Fmac_scan$wrong_request$0_0$0:"),
         ("F:Fmac_scan$stop$", "F:Fmac_scan$wrong_stop$"),
         ("L:XFmac_scan$stop$", "L:XFmac_scan$wrong_stop$"),
         ("{199}S:S$token", "{198}S:S$token"),
         ("({212}ST", "({211}ST"),
         ("F:G$mac_scan_init$0_0$0({2}DF,SC:U)", "F:G$mac_scan_init$0_0$0({2}DF,SV:S)"),
-        ("L:G$mac_scan_step$0$0:4839", "L:G$mac_scan_step$0$0:483A"),
-        ("L:XG$main$0$0:7053", "L:XG$main$0$0:7054"),
+        (f"L:G$mac_scan_step$0$0:{ENTRIES['mac_scan_step'][1]:X}",
+         f"L:G$mac_scan_step$0$0:{ENTRIES['mac_scan_step'][1] + 1:X}"),
+        (f"L:XG$main$0$0:{DONE + 3:X}", f"L:XG$main$0$0:{DONE + 4:X}"),
     ):
         require(old in debug, "Debug negative did not apply")
         reject("debug ABI", debug=debug.replace(old, new, 1))
@@ -289,7 +306,7 @@ def negatives(image, symbols, debug, memory, listings, objects):
         reject("appended conflicting return: " + name, debug=debug + "\n" + conflicting + "\n")
         duplicates.append(original)
     # Identical repeated records remain valid; only a conflicting declaration
-    # must fail. Exercise all20 entries together without changing any ABI digest.
+    # must fail. Exercise all entries together without changing any ABI digest.
     verify(image, symbols, debug + "\n" + "\n".join(duplicates) + "\n", memory, listings, objects)
     for module in MODULES:
         lines = listings[module].splitlines(keepends=True)
@@ -341,8 +358,9 @@ def run(simulator, path, symbols, allocated):
     require(sfr[0xa8 - 0x80] == sfr[0xb8 - 0x80] == sfr[0x9a - 0x80] == 0,
             "Interrupts became enabled")
     peak = re.search(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", sections[1])
-    require(peak is not None and int(peak[1], 16) == 0x62
-            and int(peak[1], 16) <= 0x7c, "Reviewed stack high-water/cap changed")
+    require(peak is not None and int(peak[1], 16) == 0x66
+            and int(peak[1], 16) <= 0x7c,
+            f"Reviewed stack high-water/cap changed: {peak[1] if peak else 'missing'}")
 
 
 def main():
@@ -365,7 +383,7 @@ def main():
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, alias=False), "missing alias")
     run(args.simulator, path, symbols, allocated)
-    print(f"MAC scan: {SIZE} CODE, {XDATA}+64 XDATA, context212, SP62; "
+    print(f"MAC scan: {SIZE} CODE, {XDATA}+64 XDATA, context212, SP66; "
           f"28 real composition scenarios, whole ABI/listings and {count}+1 negatives "
           "PASS (simulation only).")
 

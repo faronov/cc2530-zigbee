@@ -119,11 +119,22 @@ mac_association_result_t mac_association_start(mac_association_t MAC_ASSOCIATION
  * too late. Frame stamps must be between previous watermark and now inclusive.
  * Consume completed events before later-time polls/cancellation. No retimestamp.
  * Last allowed step may record/cancel; otherwise it terminates EXHAUSTED.
+ * Volatile parameter copies bound SDCC spills; pointed-to bytes are unchanged.
  */
-mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM *ctx,
+mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * volatile ctx,
                     uint32_t now,
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
                     uint8_t MAC_ASSOCIATION_RAM *observation);
+/* Per-call RX profile, not stored; context layout and timing rules stay intact.
+ * R22 additionally admits uncompressed Responses with selected source PAN and
+ * selected/broadcast destination PAN. Compressed broadcast PAN has no selected
+ * PAN on wire and remains a contextual mismatch, not invented membership.
+ * All CRC, identity, epoch, ACK and lifetime obligations above still apply.
+ */
+mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATION_RAM *ctx,
+                    uint32_t now,
+                    const mac_association_event_t MAC_ASSOCIATION_RAM *event,
+                    uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t volatile profile);
 /* One-shot copy of a terminal record, then IDLE; generation/time are preserved.
  * Taking/cancelling a memory context does NOT stop/release a radio, transmitter
  * lease or outstanding ACK. Caller must separately finish confirmed cleanup.

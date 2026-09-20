@@ -14,11 +14,11 @@ from boot_image import (
 )
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, require, xdata_ranges
 
-SIZE = 25388
-DIGEST = "f658150863b450952fdb2e70a466f4c92691a117b40d03f2fe356a581bb51ef6"
-PRIVATE_DIGEST = "7863fd66009ea481c458789f3b3a540319fff645c75c083456097186dcff0125"
-CALLER_DIGEST = "37c47d910a8530b7a9d53d052d55c1838b3771ba247165416a2746093d4e184c"
-PUBLIC_DIGEST = "d5b115694201f970b6e1b9b095e1a4df1e2661bbbc316e2b48f2b1a282a8d32e"
+SIZE = 25515
+DIGEST = '2d8cf43e6f538343b0c175b1dc1ec9d287f4dd3a35ae34b7ab6cc2e0abfd1373'
+PRIVATE_DIGEST = '5b6976bb216df50af6a82a056e59b385426410bde325056df0a9c8ec311f8e46'
+CALLER_DIGEST = '04031a37717c9f3722d0d8011de3ab04e19a0e969ed0e31b49045edef489491f'
+PUBLIC_DIGEST = '78a00ef5de725ae72e2bbf5121ed0bc5596a73e8de7c3a8fad2a68ed54f65e2f'
 # Dedicated composition, NOT changes to codec/platform/board budgets.
 CODE_BUDGET = 28672
 XDATA_BUDGET = 1280
@@ -28,35 +28,37 @@ INSTRUCTION_RE = re.compile(
 # Ordered normalized records are "six-hex-address:lowercase-byte-hex\n".
 # Pin every reviewed instruction, not an arbitrary surviving subset of a listing.
 # The harness also contains non-CSEG startup instructions in listing order.
-LISTING_PROOFS = {
-    "mac_frame": (4168, 7009, "6f42dd5789a73ec3024332b64ec3a61a5a29a4e5d541dbb8564aa35c0e6eb423",
-                  ((0x62, 0x1bc3),)),
-    "mac_tx": (3729, 5650, "b9923d41551ab54b15d2079d0312b73514e0466041cb0d13a344abe156f85e0c",
-               ((0x1bc3, 0x31d5),)),
-    "mac_tx_test": (6998, 11934, "1c3686695fbb7421ecf5cb5d19e8e22d120b731a8ed1c91a19cdaa5ef96bec30",
-                    ((0, 6), (0x5f, 0x62), (0x31d5, 0x606a))),
-}
-ENTRY_POINTS = {
-    "_mac_command_decode": ("mac_frame", 0x22a),
-    "_mac_command_encode": ("mac_frame", 0x425),
-    "_mac_beacon_decode": ("mac_frame", 0x8e0),
-    "_mac_frame_decode": ("mac_frame", 0x1214),
-    "_mac_frame_encode": ("mac_frame", 0x195c),
-    "_mac_tx_init": ("mac_tx", 0x1c87),
-    "_mac_tx_submit": ("mac_tx", 0x1d55),
-    "_mac_tx_copy": ("mac_tx", 0x21af),
-    "_mac_tx_step": ("mac_tx", 0x23fc),
-    "_mac_tx_release": ("mac_tx", 0x3180),
-    "_main": ("mac_tx_test", 0x5f45),
-    "_mac_tx_done": ("mac_tx_test", 0x6066),
-}
-CALLER_OBJECTS = {
-    "tx": (0x18e, 168), "saved": (0x236, 168), "event": (0x2de, 17),
-    "action": (0x2ef, 22), "saved_action": (0x305, 22),
-    "body": (0x31b, 125), "copy": (0x398, 125), "ack": (0x415, 4),
-    "request_index": (0x41f, 1), "request_size": (0x420, 1),
-    "request_body": (0x421, 3), "request_ready": (0x424, 4),
-}
+LISTING_PROOFS = {'mac_frame': (4253, 7136, '00668a64d3b0c972fa8e3312b8bd5da97b667ef2affe065a484540bee50951d4', ((98, 7234),)),
+ 'mac_tx': (3729, 5650, '65c994b5f08608b63354180fdff821b188fb56f9b2154c8e74bf2b4fac1fff6b', ((7234, 12884),)),
+ 'mac_tx_test': (6998,
+                 11934,
+                 '9f7442bac474dc66fa124c487c915264da9785e004982104161f6cdc607a0b72',
+                 ((0, 6), (95, 98), (12884, 24809)))}
+ENTRY_POINTS = {'_mac_command_decode': ('mac_frame', 554),
+ '_mac_command_encode': ('mac_frame', 1061),
+ '_mac_beacon_decode': ('mac_frame', 2272),
+ '_mac_frame_decode': ('mac_frame', 5814),
+ '_mac_frame_encode': ('mac_frame', 6619),
+ '_mac_tx_init': ('mac_tx', 7430),
+ '_mac_tx_submit': ('mac_tx', 7636),
+ '_mac_tx_copy': ('mac_tx', 8750),
+ '_mac_tx_step': ('mac_tx', 9339),
+ '_mac_tx_release': ('mac_tx', 12799),
+ '_main': ('mac_tx_test', 24516),
+ '_mac_tx_done': ('mac_tx_test', 24805),
+ '_mac_frame_decode_profile': ('mac_frame', 4644)}
+CALLER_OBJECTS = {'tx': (407, 168),
+ 'saved': (575, 168),
+ 'event': (743, 17),
+ 'action': (760, 22),
+ 'saved_action': (782, 22),
+ 'body': (804, 125),
+ 'copy': (929, 125),
+ 'ack': (1054, 4),
+ 'request_index': (1064, 1),
+ 'request_size': (1065, 1),
+ 'request_body': (1066, 3),
+ 'request_ready': (1069, 4)}
 
 
 def validate_cdb(debug):
@@ -180,8 +182,8 @@ def verify(image, symbols, debug, memory, listings):
     done = ENTRY_POINTS["_mac_tx_done"][1]
     require(bytes(image[a] for a in range(done, done + 4)) == b"\x00\x80\xfe\x22",
             "MAC-TX final NOP/loop/return checkpoint changed")
-    require(private == set(range(398)), "MAC-TX private/compiler prefix changed")
-    for name, address, size in (("control", 0xcf, 43), ("input", 0xfa, 12)):
+    require(private == set(range(407)), "MAC-TX private/compiler prefix changed")
+    for name, address, size in (("control", 216, 43), ("input", 259, 12)):
         require(cdb_address(debug, f"L:Fmac_tx${name}$0_0$0") == address
                 and f"S:Fmac_tx${name}$0_0$0({{{size}}}" in debug
                 and set(range(address, address + size)) <= private,
@@ -194,8 +196,8 @@ def verify(image, symbols, debug, memory, listings):
                 "MAC-TX caller ABI missing/changed")
         region = set(range(address, address + size))
         require(not region & private and region <= allocated, "Caller overlaps private prefix/alias")
-    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1105
-            and symbols["__gptrput_PARM_2"] == 0x444,
+    require(sum(e - s for s, e in xdata_ranges(symbols)) == 1114
+            and symbols["__gptrput_PARM_2"] == 0x44d,
             "MAC-TX linked ordinary/generic-store storage changed")
     require(symbols["s_SSEG"] == 0x39, "MAC-TX stack reservation changed")
     return allocated
@@ -305,7 +307,8 @@ def main():
         memory, listings), "old void initializer ABI")
     for old, new in (
         ("S:Ftest_mac_tx$request_body$0_0$0({3}", "S:Ftest_mac_tx$request_body$0_0$0({2}"),
-        ("L:Ftest_mac_tx$request_ready$0_0$0:424", "L:Ftest_mac_tx$request_ready$0_0$0:425"),
+        (f"L:Ftest_mac_tx$request_ready$0_0$0:{CALLER_OBJECTS['request_ready'][0]:X}",
+         f"L:Ftest_mac_tx$request_ready$0_0$0:{CALLER_OBJECTS['request_ready'][0] + 1:X}"),
     ):
         require(old in debug, "Request-caller negative did not apply")
         rejected(lambda: verify(image, symbols, debug.replace(old, new), memory, listings),
@@ -373,11 +376,11 @@ def main():
     require(all(sfr[a - 0x80] == 0 for a in (0xa8, 0xb8, 0x9a)),
             "MAC-TX enabled interrupts")
     peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", indexed[1])
-    require(len(peaks) == 1 and int(peaks[0], 16) == 0x5a
-            and int(peaks[0], 16) <= 0x7c, "MAC-TX reviewed stack peak/budget changed")
+    require(len(peaks) == 1 and int(peaks[0], 16) == 0x5e
+            and int(peaks[0], 16) <= 0x7c, f"MAC-TX reviewed stack peak/budget changed: {peaks}")
     ordinary = sum(end - start for start, end in xdata_ranges(symbols))
     print(f"MAC-TX: {SIZE} CODE SHA256={DIGEST}; {ordinary}+64/{XDATA_BUDGET} XDATA; "
-          f"private prefix=0..397; stack=39..ff peak={int(peaks[0], 16):02x}.")
+          f"private prefix=0..406; stack=39..ff peak={int(peaks[0], 16):02x}.")
     for module in MODULES:
         areas = re.findall(r"^A (\S+) size ([0-9A-F]+) flags", (args.output / (module + ".rel")).read_text(), re.M)
         print(module, {name: int(size, 16) for name, size in areas if int(size, 16)})

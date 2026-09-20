@@ -587,9 +587,12 @@ is not a polling or response-retrieval procedure.
 The [Association Response context](MAC_ASSOCIATION.md) now supplies bounded
 contextual metadata matching with the real codec, explicit known/unbound IEEE
 source semantics and one-shot terminal results. Both-board host/image/simulator
-evidence covers34 genuine scenarios, hostile/exact-sized inputs and atomic
-errors. Its separate test image uses14022 CODE/675 ordinary XDATA +64 reserved,
-with observed SP6B; these measurements do not establish complete-stack fit.
+evidence covers108 genuine scenarios, hostile/exact-sized inputs and atomic
+errors. Its separate test image uses15086 CODE/696 ordinary XDATA +64 reserved,
+with observed SP71; these measurements do not establish complete-stack fit.
+The explicit #63 R22 Response receive profile accepts uncompressed headers
+and a broadcast destination PAN only with an actual selected source PAN.
+Legacy defaults, context layouts, transmission and POLL admission stay unchanged.
 Full decision-wait/retrieval/NO_DATA timing still needs primary reconciliation
 (#45). Staged Request-ACK wait and subsequent Data Request/response reception
 are supported; no single total Association NO_DATA deadline follows from the
@@ -606,7 +609,7 @@ caller-valid configured PIB F, copied DATA/command delivery and loss-free
 timeout closure remain distinct. A command can produce POLL NO_DATA while
 the real Association context separately accepts or expires its copied Response.
 Both-board host/sanitizer, linked-image and alias-aware evidence covers all52
-scenarios:31109 CODE,1878 ordinary XDATA +64 reserved, observed SP73.
+scenarios:31401 CODE,1898 ordinary XDATA +64 reserved, observed SP79.
 No old component limit or scenario was relaxed. Continuous RX/ACK ownership,
 captured timing (#40), configured-F deployment, total Association timing (#45),
 IEEE2015 headers, lower-MAC ACK/IFS and membership remain open.

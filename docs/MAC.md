@@ -49,6 +49,7 @@ association policy belong to a future MAC, not this codec.
 
 Payload lengths include the one-byte command identifier, but not the MHR.
 All command frames in this subset are unsecured and use version 0.
+The table describes legacy receive and the unchanged transmit policy.
 
 | Command | ID / payload bytes | Addressing and fixed fields |
 | --- | --- | --- |
@@ -57,6 +58,16 @@ All command frames in this subset are unsecured and use version 0.
 | Disassociation notification | `03` / 2 | Short/extended destination, extended source, compressed PAN; ACK requested |
 | Data request | `04` / 1 | Short/extended source; destination absent/short/extended; compression iff destination present; ACK requested |
 | Beacon request | `07` / 1 | Short destination `FFFF`, destination PAN `FFFF`, no source/compression/ACK request |
+
+`mac_frame_decode_profile(..., MAC_RX_R22_ASSOCIATION_RESPONSE)` explicitly
+adds the uncompressed extended/extended Association Response layout described
+by R22 Annex D.3/Table D-3, printed p.514. The actual destination/source PANs
+are returned without inferring a selection or identity. The ordinary
+`mac_frame_decode()` and explicit `MAC_RX_IEEE2006` retain the table above;
+encoding does not gain this receive-only alternative. Other commands,
+version/security/IE restrictions, exact payload/status/address validation and
+Pending reception are unchanged. Unknown profiles return INVALID_ARGUMENT
+without changing output. See the [contextual restrictions](MAC_ASSOCIATION.md#explicit-r22-response-receive-profile-63).
 
 Request capability bits 4/5 are rejected as reserved in this strict subset.
 The remaining capability bits are caller data, including the security-capable

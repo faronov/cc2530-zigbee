@@ -237,6 +237,14 @@ aging, LQI/RSSI calibration, link cost, freshness or ranking policy.
 
 ## Evidence and resource ledger
 
+The detailed numbers/hashes below record the earlier control-staging baseline.
+The #63 shared-code refresh leaves the scanner and all28 scenarios unchanged:
+**29567 CODE,1501+64 XDATA, SP66**, with3201 CODE bytes remaining and the same
+budgets/guards. All21 public entries, including the explicit decoder, are
+pinned;221 artifact negatives and the missing-alias negative are retained.
+See the [current evidence summary](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63);
+these RX-header alternatives do not broaden scan admission.
+
 Both board definitions passed strict native C99, ASan/UBSan and the genuine
 six-module SDCC image. Native additions cover all256 duration values, all32
 single mask bits, explicit request/API failures and unchanged output checks,

@@ -391,6 +391,13 @@ they add no over-the-air identity or security guarantee.
 
 ## Genuine linked evidence and budgets
 
+The detailed ledger below records the earlier control-staging baseline.
+With #63's explicit receive profile in the shared codec, this unchanged
+transmitter/corpus measures **25515 CODE,1114+64 XDATA, SP5E**, still within
+all original limits. Default decoding and TX admission are unchanged.
+The [current shared refresh](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63)
+distinguishes this from the historical hashes/addresses below.
+
 The dedicated composition links **mac_frame, mac_tx, then test caller** with
 unchanged strict native/SDCC flags. SDCC 4.2.0 model-large, both board definitions:
 

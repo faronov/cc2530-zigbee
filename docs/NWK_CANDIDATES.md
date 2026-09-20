@@ -171,6 +171,13 @@ storage strategy, not concurrency safety.
 
 ## Evidence and measured resources
 
+The detailed figures/hashes below describe the original collector delivery.
+The #63 shared-code refresh leaves its source and corpus unchanged:
+**18476 CODE,988+64 XDATA, SP4E**. Legacy Beacon selection is not broadened
+by an explicit Association Response receive profile. The
+[current shared summary](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63)
+supersedes historical addresses/hashes below; all original budgets remain.
+
 Both `generic` (`CC2530_BOARD=0`) and `lg_esl29_rev03` (`=1`) passed:
 
 * Strict C99 native tests and ASan/UBSan, including 381 exact-sized length

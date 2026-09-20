@@ -21,83 +21,122 @@ from verify_firmware import code_bytes, parse_ihex, parse_symbols, require
 
 CODE_BUDGET, XDATA_BUDGET, SP_CAP = 0x8000, 2048, 0x7c
 COMMON_MODULES = ("mac_frame", "mac_tx", "mac_association")
-COMMON_PUBLIC = {
-    "mac_command_decode": ("mac_frame", 554, 1060),
-    "mac_command_encode": ("mac_frame", 1061, 1594),
-    "mac_beacon_decode": ("mac_frame", 2272, 2375),
-    "mac_frame_decode": ("mac_frame", 4628, 5766),
-    "mac_frame_encode": ("mac_frame", 6492, 7106),
-    "mac_tx_init": ("mac_tx", 7303, 7508),
-    "mac_tx_submit": ("mac_tx", 7509, 8622),
-    "mac_tx_copy": ("mac_tx", 8623, 8868),
-    "mac_tx_step": ("mac_tx", 9212, 12671),
-    "mac_tx_release": ("mac_tx", 12672, 12756),
-    "mac_association_init": ("mac_association", 12823, 12938),
-    "mac_association_start": ("mac_association", 12939, 13662),
-    "mac_association_step": ("mac_association", 13663, 15286),
-    "mac_association_take": ("mac_association", 15287, 15430),
-}
-OBJECTS = {
-    "mac_frame": (7009, 207, 15, 10, 1),
-    "mac_tx": (5650, 191, 8, 0, 3),
-    "mac_association": (2674, 65, 25, 0, 1),
-    "mac_poll": (7332, 323, 5, 0, 4),
-    "mac_poll_test": (7809, 1068, 0, 0, 1),
-    "mac_association_test": (3812, 383, 0, 0, 0),
-}
-POLL = {
-    "name": "mac_poll_test", "modules": COMMON_MODULES + ("mac_poll", "mac_poll_test"),
-    "result": "mac_poll_result", "tag": b"POL1", "cases": 52,
-    "size": 31109, "xdata": 1878, "private_end": 786, "caller_end": 1854,
-    "stack": 0x4a, "gptrput": 1865, "done": 0x7746, "boundary": 0x6a65,
-    "code": "35c4a8245c271cb6115c5d136887acc00bd27ef6471c5b9433bfd72a423b4277",
-    "metadata": (21422, "58d34a5bc45a609e3ae72ff05192377897bff46ded0ce8617e2c8dc788465d39"),
-    "public": {**COMMON_PUBLIC,
-        "mac_poll_init": ("mac_poll", 16637, 16721),
-        "mac_poll_start": ("mac_poll", 16722, 17961),
-        "mac_poll_step": ("mac_poll", 17962, 22185),
-        "mac_poll_take": ("mac_poll", 22186, 22409),
-        "mac_poll_release": ("mac_poll", 22410, 22762),
-        "main": ("mac_poll_test", 30471, 30537)},
-    "listings": {
-        "mac_frame": (4168, 7009, "ae3da97205098b5b6e4f3f8411fe1d344911c04407e2179680b5add902fa599c"),
-        "mac_tx": (3729, 5650, "f9141aa8bb3363fff593f09f93bcb558a6aeefef7b14152a997047026127f1ee"),
-        "mac_association": (1715, 2674, "b2e999c78a812f6f441924586343b98d9592f4facc144b4d4f31553d1b03bbef"),
-        "mac_poll": (4884, 7332, "b8024503f580a1f6b55a0e13c7770857668ab8d8adc729a128193aafe8364646"),
-        "mac_poll_test": (4580, 7682, "4ce59dfde9e6582aacbf83a96a4c2911d1720349271a06d0fc443f33d803a93f")},
-    "data": (127, 51, "dde481525fd01bd5e8b48c757767256f46aec0876b727b688baf623c1d69e0e3"),
-    "caller": {
-        "poll": (786, 266), "tx": (1052, 168), "request": (1220, 35),
-        "event": (1255, 48), "action": (1303, 25), "record": (1328, 143),
-        "source": (1471, 17), "radio_action": (1488, 22),
-        "association": (1510, 73), "association_request": (1583, 30),
-        "association_event": (1613, 20), "association_record": (1633, 27),
-        "header": (1660, 26), "bytes": (1686, 126), "ack": (1812, 3),
-        "length": (1815, 1), "scenario": (1816, 1), "mode": (1817, 1),
-        "observation": (1818, 1), "i": (1819, 1), "attempt": (1820, 1),
-        "failure": (1821, 2), "grant": (1823, 2), "now": (1825, 4),
-        "origin": (1829, 4), "checksum": (1833, 4)},
-}
-FLOOR = {
-    "name": "association_tx_floor", "modules": COMMON_MODULES + ("mac_association_test",),
-    "result": "mac_association_result", "tag": b"ASR1", "cases": 34,
-    "size": 19780, "xdata": 870, "private_end": 463, "caller_end": 846,
-    "stack": 0x44, "gptrput": 857, "done": 0x4b05,
-    "code": "432c4b07bb57eae4c0368ae973cd934c97adbb2553d3c4e9122501e73be3877c",
-    "metadata": (13305, "0bbb6ecc06b894e87de2d58d24cda8e049877f6edc1fd3a8e1ec2f285b5e7072"),
-    "public": {**COMMON_PUBLIC, "main": ("mac_association_test", 19149, 19208)},
-    "listings": {
-        "mac_frame": (4168, 7009, "808744a52869cb26ff80a317f2924bb138d71d80d31fd30c2cd26262eccb38bd"),
-        "mac_tx": (3729, 5650, "285a3e49f506ba4fc95d7d17e3e9a534303747e75143b8aa4495db16b1a58080"),
-        "mac_association": (1715, 2674, "3b2eae4ec0a13b8cd50bb6d546f9c5311fc93dc89f6b66aa52a4bfd98fc3a2a5"),
-        "mac_association_test": (2166, 3719, "26c2f7a6796de9a8e4f0581117ebbb8470589248a86230c30e7b15d0f9fd34d5")},
-    "data": (93, 34, "b159bd5ce37d2b8fb7cb2329a2f072dbbcc4b8d4a252fa60b862f442e6f6af4b"),
-    "caller": {
-        "ctx": (463, 73), "saved": (536, 73), "request": (609, 30),
-        "event": (639, 20), "record": (659, 27), "before": (686, 27),
-        "body": (713, 126), "observation": (839, 1), "expected": (840, 1),
-        "scenario": (841, 1), "now": (842, 4)},
-}
+COMMON_PUBLIC = {'mac_command_decode': ('mac_frame', 554, 1060),
+ 'mac_command_encode': ('mac_frame', 1061, 1594),
+ 'mac_beacon_decode': ('mac_frame', 2272, 2375),
+ 'mac_frame_decode': ('mac_frame', 5814, 5893),
+ 'mac_frame_encode': ('mac_frame', 6619, 7233),
+ 'mac_tx_init': ('mac_tx', 7430, 7635),
+ 'mac_tx_submit': ('mac_tx', 7636, 8749),
+ 'mac_tx_copy': ('mac_tx', 8750, 8995),
+ 'mac_tx_step': ('mac_tx', 9339, 12798),
+ 'mac_tx_release': ('mac_tx', 12799, 12883),
+ 'mac_association_init': ('mac_association', 12950, 13065),
+ 'mac_association_start': ('mac_association', 13066, 13789),
+ 'mac_association_step': ('mac_association', 15483, 15578),
+ 'mac_association_take': ('mac_association', 15579, 15722),
+ 'mac_frame_decode_profile': ('mac_frame', 4644, 5813),
+ 'mac_association_step_rx': ('mac_association', 13790, 15482)}
+OBJECTS = {'mac_frame': (7136, 216, 15, 10, 1),
+ 'mac_tx': (5650, 191, 8, 0, 3),
+ 'mac_association': (2839, 76, 27, 0, 1),
+ 'mac_poll': (7332, 323, 5, 0, 4),
+ 'mac_poll_test': (7809, 1068, 0, 0, 1),
+ 'mac_association_test': (4584, 384, 0, 0, 0)}
+POLL = {'name': 'mac_poll_test',
+ 'modules': ('mac_frame', 'mac_tx', 'mac_association', 'mac_poll', 'mac_poll_test'),
+ 'result': 'mac_poll_result',
+ 'tag': b'POL1',
+ 'cases': 52,
+ 'size': 31401,
+ 'xdata': 1898,
+ 'private_end': 806,
+ 'caller_end': 1874,
+ 'stack': 76,
+ 'gptrput': 1885,
+ 'done': 30826,
+ 'boundary': 27529,
+ 'code': '56979afc143ace349695d6434d332fc6192a337b718b6e555561542efb484925',
+ 'metadata': (21648, '76857c48c6559853c6e982d82a72f66ef7d16b428efac04026087d290dcaf229'),
+ 'public': {**COMMON_PUBLIC, 'mac_poll_init': ('mac_poll', 16929, 17013),
+ 'mac_poll_start': ('mac_poll', 17014, 18253),
+ 'mac_poll_step': ('mac_poll', 18254, 22477),
+ 'mac_poll_take': ('mac_poll', 22478, 22701),
+ 'mac_poll_release': ('mac_poll', 22702, 23054),
+ 'main': ('mac_poll_test', 30763, 30829)},
+ 'listings': {'mac_frame': (4253, 7136, '646b8e67615465bc59fc1808c30253fa682ed5dbe0bee07250c6b717dc1977bc'),
+              'mac_tx': (3729, 5650, '1e3bb655b3ac1dd41de77bcaacd7875f5dfff7b4d16b4dc5d8acd06c084c6a44'),
+              'mac_association': (1821,
+                                  2839,
+                                  '929aaa03ca628dc93adde7a4f6037b253b8f9c21486b4a46cb2670b8bb0b68a1'),
+              'mac_poll': (4884, 7332, 'acd1b81291a491ea296f85433a82337f0a9143e6c085ab5926f49691a0cded04'),
+              'mac_poll_test': (4580,
+                                7682,
+                                '693b9b157a12074754d2c3cb7ec7dc89bcec5dda8e095c675a8755753562f263')},
+ 'data': (127, 51, 'accd67f7737bcac63bef1d734c86c7355185e46114c26be7cbab3b0285d1aef3'),
+ 'caller': {'poll': (806, 266),
+            'tx': (1072, 168),
+            'request': (1240, 35),
+            'event': (1275, 48),
+            'action': (1323, 25),
+            'record': (1348, 143),
+            'source': (1491, 17),
+            'radio_action': (1508, 22),
+            'association': (1530, 73),
+            'association_request': (1603, 30),
+            'association_event': (1633, 20),
+            'association_record': (1653, 27),
+            'header': (1680, 26),
+            'bytes': (1706, 126),
+            'ack': (1832, 3),
+            'length': (1835, 1),
+            'scenario': (1836, 1),
+            'mode': (1837, 1),
+            'observation': (1838, 1),
+            'i': (1839, 1),
+            'attempt': (1840, 1),
+            'failure': (1841, 2),
+            'grant': (1843, 2),
+            'now': (1845, 4),
+            'origin': (1849, 4),
+            'checksum': (1853, 4)}}
+FLOOR = {'name': 'association_tx_floor',
+ 'modules': ('mac_frame', 'mac_tx', 'mac_association', 'mac_association_test'),
+ 'result': 'mac_association_result',
+ 'tag': b'ASR1',
+ 'cases': 36,
+ 'size': 20844,
+ 'xdata': 891,
+ 'private_end': 483,
+ 'caller_end': 867,
+ 'stack': 70,
+ 'gptrput': 878,
+ 'done': 20242,
+ 'code': 'ae2c358b210f08f5c626bd70423b7ac8985f8d77c9915527b3b6e12e9ab7a777',
+ 'metadata': (14005, '0754ccffea1e900aed4cfe6cd0525da1344b1bdfed0a60f68539451dbbf823bd'),
+ 'public': {**COMMON_PUBLIC, 'main': ('mac_association_test', 20186, 20245)},
+ 'listings': {'mac_frame': (4253, 7136, '5a492c3c71c0346fb71688c701042e6ee75be7179a8e8b5406f8f39d800f95cc'),
+              'mac_tx': (3729, 5650, '41f65af4d57d66ac7cd5fd72da45166049f6edf47124e739f6886dfb6af5c223'),
+              'mac_association': (1821,
+                                  2839,
+                                  '8763f802c34fced1f6a689a089ee52aea35e665e7a9395ce87bea065638e71c2'),
+              'mac_association_test': (2620,
+                                       4462,
+                                       'be3247f5b786b25672d6d1bcd7fee312c271d03e45170ccacde576cc23f41c76')},
+ 'data': (122, 35, '75ef70ec37ac2b6289d0fe2135c69e5249b402e2e20280c6e003e8518efa9c0c'),
+ 'caller': {'ctx': (483, 73),
+            'saved': (556, 73),
+            'request': (629, 30),
+            'event': (659, 20),
+            'record': (679, 27),
+            'before': (706, 27),
+            'body': (733, 126),
+            'observation': (859, 1),
+            'expected': (860, 1),
+            'scenario': (861, 1),
+            'now': (863, 4),
+            'profile': (862, 1)},
+ 'rounds': 3}
 INSTRUCTION = re.compile(r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)"
                          r"\[\s*\d+\]\s+\d+\s+\S.*$", re.M)
 DATA = re.compile(r"^\s*([0-9A-Fa-f]{6})\s+([0-9A-Fa-f]{2})\s+\d+\s+\.db\s+\S.*$", re.M)
@@ -238,8 +277,12 @@ def verify(profile, image, symbols, debug, memory, listings, objects):
             and p["done"] in starts[p["modules"][-1]]
             and raw[p["done"]:p["done"] + 4] == b"\0\x80\xfe\x22", "Checkpoint changed")
     require(raw[3:6] == b"\x02" + public["main"][1].to_bytes(2, "big"), "Startup target changed")
-    edges = {"mac_association": ("mac_frame_decode", "mac_command_decode"),
-             p["modules"][-1]: tuple(n for n in public if n.startswith("mac_association_"))}
+    edges = {"mac_frame": ("mac_frame_decode_profile",),
+             "mac_association": ("mac_frame_decode_profile", "mac_command_decode", "mac_association_step_rx"),
+             p["modules"][-1]: ("mac_association_init", "mac_association_start",
+                               "mac_association_step", "mac_association_take")}
+    if "rounds" in p:
+        edges[p["modules"][-1]] += ("mac_association_step_rx",)
     if "mac_poll" in p["modules"]:
         edges["mac_poll"] = ("mac_frame_encode", "mac_frame_decode", "mac_tx_submit", "mac_tx_release")
         edges["mac_tx"] = ("mac_frame_decode",)
@@ -399,6 +442,8 @@ def guards(parts, number, p, allocated, pc, finished):
         failure = int.from_bytes(ram[0x1e06:0x1e08], "little")
         require(not failure, f"Real corpus failed at C line {failure}")
         require(ram[p["caller"]["scenario"][0]] == p["cases"], "Incomplete scenario corpus")
+        if "rounds" in p:
+            require(ram[p["caller"]["profile"][0]] == p["rounds"], "Incomplete receive-profile corpus")
     return memory, int(peaks[0], 16)
 
 
@@ -435,7 +480,7 @@ def execute(simulator, path, p, allocated):
     if "boundary" not in p:
         text = simulate(simulator, initial + [f"run {start:#x} {p['done']:#x}"] + complete_commands(1), path)
         _, peak = guards(sections(text), 1, p, allocated, p["done"], True)
-        require(peak == 0x6b, "Reviewed floor peak changed")
+        require(peak == 0x71, f"Reviewed floor peak changed: {peak:#x}")
         return peak, 1, 0
     carry, peak, negatives_count = None, 0, 0
     boundary, scenario = p["boundary"], p["caller"]["scenario"][0]
@@ -466,7 +511,7 @@ def execute(simulator, path, p, allocated):
         finished = first + 4 == p["cases"]
         carry, high = guards(parts, 500, p, allocated, p["done"] if finished else boundary, finished)
         peak = max(peak, high)
-    require(peak == 0x73, "Reviewed poll peak changed")
+    require(peak == 0x79, f"Reviewed poll peak changed: {peak:#x}")
     return peak, p["cases"] // 4, negatives_count
 
 
@@ -488,7 +533,7 @@ def main():
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, alias=False))
     peak, chunks, continuation_count = execute(args.simulator, path, p, allocated)
-    print(f"{p['name']}: {p['cases']} genuine cases, {p['size']} CODE, {p['xdata']}+64 XDATA, "
+    print(f"{p['name']}: {p['cases'] * p.get('rounds', 1)} genuine cases, {p['size']} CODE, {p['xdata']}+64 XDATA, "
           f"SP{peak:02X}, {chunks} bounded processes; {p['metadata'][0]} raw F/S/L/T records, "
           f"{count} artifact +1 alias +{continuation_count} continuation negatives PASS "
           "(simulation only" + ("; independent floor, NOT poll acceptance)." if args.diagnose_floor else ")."))

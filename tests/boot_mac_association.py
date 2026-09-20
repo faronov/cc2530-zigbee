@@ -18,43 +18,50 @@ MODULES = ("mac_frame", "mac_association", "mac_association_test")
 SOURCES = ("mac_frame.c", "mac_association.c", "test_mac_association.c")
 # Independent standalone corpus budget, never an increase to existing components.
 CODE_BUDGET, XDATA_BUDGET = 16384, 1024
-SIZE, XDATA, PRIVATE_END, CALLER_END = 14022, 675, 0x110, 0x28f
-DIGEST = "18921a1d34eab51efc32993ea0513b32c6e2d454bb238406f9ddf88775e3e115"
-PRIVATE = "8a41a37b099aa0ff9c5620e981d7d28568ee0f4d95543d940aeb0c7481a985fc"
-CALLER_DIGEST = "bf59b3e2ef5acb1578445c855c2acce591bee50d8d599854d16a4d9d01529f5a"
-FIELDS = "75cc77b4721e8ca829854b73fa5b772634cc7a6568f9be75f8a1cfe4df9838f4"
-LISTINGS = {
-    "mac_frame": (4168, 7009, "38ee1522e79fa71f00b1faf3b1bcc40c1c7a1aba2e652373f1559d8dd4bf165e",
-                  ((0x62, 0x1bc3),)),
-    "mac_association": (1715, 2674, "6b3d9bf8e917b9a61d3bf65f06950af5ec9bf4fda1d660abfbdf8a85f3a3667e",
-                        ((0x1bc3, 0x2635),)),
-    "mac_association_test": (2166, 3719, "2828458b61d8816bd73ac5c400a6d0c88dc430d6bd23cbd733f454f03be21daa",
-                             ((0, 6), (0x5f, 0x62), (0x2635, 0x2adc), (0x2b20, 0x34f7))),
-}
+SIZE, XDATA, PRIVATE_END, CALLER_END = (15086, 696, 292, 676)
+DIGEST = '52f5c012c144f21368e7d5201de45aa9a3aaf7fc5eb6f10bc271f1641e28a4ca'
+PRIVATE = 'ad8455288e59b8b7992c65a91606e455ddf9e8c158a176eaab884e46eab535ba'
+CALLER_DIGEST = 'e80ae926afc0fb97bd00624d03de1a3ae9b1656ca4ac90acb5aeb329fc810dd6'
+FIELDS = '75cc77b4721e8ca829854b73fa5b772634cc7a6568f9be75f8a1cfe4df9838f4'
+LISTINGS = {'mac_frame': (4253, 7136, '45a4702a525b30064f5902513bdcb68d82cc91362f4769d1d3e777b0f9e86a4c', ((98, 7234),)),
+ 'mac_association': (1821,
+                     2839,
+                     'a714a5fb0b97ffdf16b3ad79e149638fd6dfd730c9bd3d700bb19936183bd17e',
+                     ((7234, 10073),)),
+ 'mac_association_test': (2620,
+                          4462,
+                          'ad17f7a52c8458cec1f9fde20fcc519f654505081f01ba22374874185d97e74d',
+                          ((0, 6), (95, 98), (10073, 11269), (11339, 14596)))}
 # CODE including startup/constants, XSEG, DSEG, OSEG, BSEG bits.
-OBJECTS = {"mac_frame": (7009, 207, 15, 10, 1),
-           "mac_association": (2674, 65, 25, 0, 1),
-           "mac_association_test": (3812, 383, 0, 0, 0)}
+OBJECTS = {'mac_frame': (7136, 216, 15, 10, 1),
+ 'mac_association': (2839, 76, 27, 0, 1),
+ 'mac_association_test': (4584, 384, 0, 0, 0)}
 # Module, entry, exact CDB end (RET instruction).
-PUBLIC = {
-    "mac_command_decode": ("mac_frame", 0x22a, 0x424),
-    "mac_command_encode": ("mac_frame", 0x425, 0x63a),
-    "mac_beacon_decode": ("mac_frame", 0x8e0, 0x947),
-    "mac_frame_decode": ("mac_frame", 0x1214, 0x1686),
-    "mac_frame_encode": ("mac_frame", 0x195c, 0x1bc2),
-    "mac_association_init": ("mac_association", 0x1c05, 0x1c78),
-    "mac_association_start": ("mac_association", 0x1c79, 0x1f4c),
-    "mac_association_step": ("mac_association", 0x1f4d, 0x25a4),
-    "mac_association_take": ("mac_association", 0x25a5, 0x2634),
-    "main": ("mac_association_test", 0x34bb, 0x34f6),
-}
-DONE = 0x34f3
-CALLER = {
-    "ctx": (0x110, 73), "saved": (0x159, 73), "request": (0x1a2, 30),
-    "event": (0x1c0, 20), "record": (0x1d4, 27), "before": (0x1ef, 27),
-    "body": (0x20a, 126), "observation": (0x288, 1), "expected": (0x289, 1),
-    "scenario": (0x28a, 1), "now": (0x28b, 4),
-}
+PUBLIC = {'mac_command_decode': ('mac_frame', 554, 1060),
+ 'mac_command_encode': ('mac_frame', 1061, 1594),
+ 'mac_beacon_decode': ('mac_frame', 2272, 2375),
+ 'mac_frame_decode': ('mac_frame', 5814, 5893),
+ 'mac_frame_encode': ('mac_frame', 6619, 7233),
+ 'mac_association_init': ('mac_association', 7300, 7415),
+ 'mac_association_start': ('mac_association', 7416, 8139),
+ 'mac_association_step': ('mac_association', 9833, 9928),
+ 'mac_association_take': ('mac_association', 9929, 10072),
+ 'main': ('mac_association_test', 14536, 14595),
+ 'mac_frame_decode_profile': ('mac_frame', 4644, 5813),
+ 'mac_association_step_rx': ('mac_association', 8140, 9832)}
+DONE = 14592
+CALLER = {'ctx': (292, 73),
+ 'saved': (365, 73),
+ 'request': (438, 30),
+ 'event': (468, 20),
+ 'record': (488, 27),
+ 'before': (515, 27),
+ 'body': (542, 126),
+ 'observation': (668, 1),
+ 'expected': (669, 1),
+ 'scenario': (670, 1),
+ 'now': (672, 4),
+ 'profile': (671, 1)}
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)"
     r"\[\s*\d+\]\s+\d+\s+\S.*$", re.M)
@@ -98,7 +105,7 @@ def verify(image, symbols, debug, memory, listings, objects):
     allocated = verify_component_layout(image, symbols, debug, memory, "mac_association_result",
                                         SOURCES, xdata_budget=XDATA_BUDGET)
     require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == XDATA
-            and symbols["s_SSEG"] == 0x44 and symbols["__gptrput_PARM_2"] == 0x29a,
+            and symbols["s_SSEG"] == 0x46 and symbols["__gptrput_PARM_2"] == 0x2af,
             "Exact allocation/stack/runtime changed")
     require(digest(private_records(debug)) == PRIVATE, "Full private ABI changed")
     require(digest(caller_records(debug)) == CALLER_DIGEST, "Full caller ABI changed")
@@ -137,13 +144,13 @@ def verify(image, symbols, debug, memory, listings, objects):
         require((code,) + tuple(areas.get(n, 0) for n in ("XSEG", "DSEG", "OSEG", "BSEG"))
                 == OBJECTS[module], "Object CODE/private extent changed")
     require(private == set(range(PRIVATE_END)), "Private prefix coverage changed")
-    # Real compiler switch table: 34 low bytes, then 34 high bytes. The caller's
-    # 25 CODE input bytes also have complete ordered .db records, not instructions.
+    # Real compiler switch table: 35 low bytes, then 35 high bytes. Both CODE
+    # input vectors also have complete ordered .db records, not instructions.
     data = [(int(m[1], 16), int(m[2], 16)) for m in DATA.finditer(listings["mac_association_test"])]
-    require([a for a, _ in data] == list(range(0x2adc, 0x2b20)) + list(range(0x36ad, 0x36c6))
+    require([a for a, _ in data] == list(range(11269, 11339)) + list(range(15034, 15086))
             and all(image[a] == b for a, b in data), "Complete CODE table/constant records changed")
-    require(all((image[0x2adc + i] | image[0x2afe + i] << 8) in starts["mac_association_test"]
-                for i in range(34)), "Switch table target is not an instruction")
+    require(all((image[11269 + i] | image[11304 + i] << 8) in starts["mac_association_test"]
+                for i in range(35)), "Switch table target is not an instruction")
     caller = set()
     for name, (address, size) in CALLER.items():
         prefix = f"Ftest_mac_association${name}$0_0$0"
@@ -169,7 +176,9 @@ def verify(image, symbols, debug, memory, listings, objects):
     require(raw[3:6] == bytes((2, PUBLIC["main"][1] >> 8, PUBLIC["main"][1] & 255)),
             "Startup target changed")
     require(all(PUBLIC[n][1] in calls["mac_association"]
-                for n in ("mac_frame_decode", "mac_command_decode")), "Real decoder composition missing")
+                for n in ("mac_frame_decode_profile", "mac_command_decode", "mac_association_step_rx")),
+            "Real decoder/profile composition missing")
+    require(PUBLIC["mac_frame_decode_profile"][1] in calls["mac_frame"], "Legacy decoder wrapper missing")
     require(all(PUBLIC[n][1] in calls["mac_association_test"]
                 for n in PUBLIC if n.startswith("mac_association_")), "Real caller entries missing")
     return allocated
@@ -253,12 +262,12 @@ def negatives(image, symbols, debug, memory, listings, objects):
     reject("checkpoint label", listings={**listings, "mac_association_test":
            text.replace("_mac_association_done:", "_wrong_done:", 1)})
     text = objects["mac_association"]
-    require("A XSEG size 41 " in text, "Object negative did not apply")
+    require("A XSEG size 4C " in text, "Object negative did not apply")
     reject("object extent", objects={**objects, "mac_association":
-           text.replace("A XSEG size 41 ", "A XSEG size 40 ", 1)})
+           text.replace("A XSEG size 4C ", "A XSEG size 4B ", 1)})
     reject("alias allocation", symbols={**symbols, "s_XSEG": 0x1f00})
-    require("188 bytes available" in memory, "Stack negative did not apply")
-    reject("stack extent", memory=memory.replace("188 bytes available", "187 bytes available"))
+    require("186 bytes available" in memory, "Stack negative did not apply")
+    reject("stack extent", memory=memory.replace("186 bytes available", "185 bytes available"))
     return count
 
 
@@ -279,9 +288,10 @@ def run(simulator, path, symbols, allocated):
     require(ram[0x1e00:0x1e06] == b"ASR1\x01\x08", "Result ABI changed")
     failure = int.from_bytes(ram[0x1e06:0x1e08], "little")
     require(not failure, f"Genuine C corpus failed at line {failure}")
-    require(ram[CALLER["scenario"][0]] == 34, "Incomplete scenario corpus")
+    require(ram[CALLER["scenario"][0]] == 36 and ram[CALLER["profile"][0]] == 3,
+            "Incomplete scenario/profile corpus")
     require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated), "Unallocated/status-tail write")
-    require(iram[128:] == b"\xc7" * 128 and sfr[1] == 0x43, "Upper-IRAM/unwind guard failed")
+    require(iram[128:] == b"\xc7" * 128 and sfr[1] == 0x45, "Upper-IRAM/unwind guard failed")
     require(all(sfr[a - 0x80] == 0 for a in (0xa8, 0xb8, 0x9a)), "Interrupts enabled")
     peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", parts[1])
     require(len(peaks) == 1 and int(peaks[0], 16) <= 0x7c, "Stack cap exceeded")
@@ -305,7 +315,7 @@ def main():
     rejected(lambda: check_alias(args.simulator, alias=False), "missing alias")
     peak = run(args.simulator, path, symbols, allocated)
     print(f"Association context: {SIZE} CODE; {XDATA}+64 XDATA; context73; SP{peak:02X}; "
-          f"34 genuine scenarios, complete ABI/listings, {count}+1 negatives PASS. Offline only.")
+          f"108 genuine scenarios, complete ABI/listings, {count}+1 negatives PASS. Offline only.")
 
 
 if __name__ == "__main__":

@@ -1474,6 +1474,16 @@ primary-document review, not new executable, simulated or physical evidence.
 It does not silently repair IEEE2006 terminal timing or upgrade the codec's
 selected revision.
 
+The #63 receive-profile addition rechecked the exact R22 PDF hash recorded in
+[the Response contract](MAC_ASSOCIATION.md), and visually inspected Annex
+D.3/Table D-3 on PDF page539/printed p.514 to preserve its alternative-row
+layout. It adds original RX-only code and synthetic vectors for explicit
+source PAN and broadcast destination PAN, not a copied stack implementation.
+The selected PAN must still occur on wire for contextual acceptance; no
+IEEE2015-wide procedure, Request/Data Request alternative or total timer is
+inferred. The downloaded PDF, extraction and rendering remain outside Git
+and generated CI artifacts; no new repository or CI dependency is required.
+
 ### Conditional legacy POLL extraction sources
 
 The [controller, API and synthetic corpus](MAC_POLL.md) are original

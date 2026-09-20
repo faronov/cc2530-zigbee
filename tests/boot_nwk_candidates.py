@@ -19,46 +19,48 @@ SOURCES = ("mac_frame.c", "nwk_beacon.c", "nwk_candidates.c", "test_nwk_candidat
 # Separate composed-corpus budgets, NOT increases to existing codec budgets.
 CODE_BUDGET = 20480
 XDATA_BUDGET = 1280
-CODE_SIZE = 18349
-CODE_SHA256 = "cf9126b3ddfe31199be6c5e0a6c56749f6a3e82779b25194e1a32d4988e4119d"
-PRIVATE_SHA256 = "99dc41a3676e93f58a0c69d5fd7cc0c1a02a8d44c4483504ccdab5b06a04ae59"
-CALLER_SHA256 = "1cadde1df220feeeb2fd5cd428d5cdd0c70e11060d45f3ffe5feda9f881d2415"
-FIELDS_SHA256 = "ff3aa08d250d6bd3d54c9a021d1a81dfe64fbea00541d7cebae177a3cdda8014"
-PUBLIC = {
-    "mac_command_decode": ("mac_frame", 0x022a),
-    "mac_command_encode": ("mac_frame", 0x0425),
-    "mac_beacon_decode": ("mac_frame", 0x08e0),
-    "mac_frame_decode": ("mac_frame", 0x1214),
-    "mac_frame_encode": ("mac_frame", 0x195c),
-    "nwk_beacon_decode": ("nwk_beacon", 0x1bc3),
-    "nwk_candidates_init": ("nwk_candidates", 0x1efa),
-    "nwk_candidates_consider": ("nwk_candidates", 0x213a),
-    "nwk_candidates_get": ("nwk_candidates", 0x266f),
-    "main": ("nwk_candidates_test", 0x4555),
-}
-DONE = 0x458d
+CODE_SIZE = 18476
+CODE_SHA256 = 'd6bd2fb14e5815892ae03d6aa9f662028b1525dcaffb20ef5b3062e75dcc8408'
+PRIVATE_SHA256 = '609d82fb2492154c1642b73cc774882b0d2bb7d371aeef76aa14f87d913de3bd'
+CALLER_SHA256 = '05ff62dab66731a727588c8eb126726bf51e98b26c665ed43abd63692e15f90a'
+FIELDS_SHA256 = 'ff3aa08d250d6bd3d54c9a021d1a81dfe64fbea00541d7cebae177a3cdda8014'
+PUBLIC = {'mac_command_decode': ('mac_frame', 554),
+ 'mac_command_encode': ('mac_frame', 1061),
+ 'mac_beacon_decode': ('mac_frame', 2272),
+ 'mac_frame_decode': ('mac_frame', 5814),
+ 'mac_frame_encode': ('mac_frame', 6619),
+ 'nwk_beacon_decode': ('nwk_beacon', 7234),
+ 'nwk_candidates_init': ('nwk_candidates', 8057),
+ 'nwk_candidates_consider': ('nwk_candidates', 8633),
+ 'nwk_candidates_get': ('nwk_candidates', 9966),
+ 'main': ('nwk_candidates_test', 17876),
+ 'mac_frame_decode_profile': ('mac_frame', 4644)}
+DONE = 17932
 # Per module: complete ordered instruction count, byte coverage, digest.
-LISTINGS = {
-    "mac_frame": (4168, 7009, "6a3a991e2dd2a8d6cc0d1816b05ca5a0675af595761d75186d744b9224a0d452"),
-    "nwk_beacon": (353, 601, "2dc2a9ef7918445c289343b1976139b49d9971840ade8eaa4c6f5f424cae0b56"),
-    "nwk_candidates": (1519, 2334, "710e34fa9cddc7e131ed6e88dec114d9b34a684e65ee0077e43acd360215f6b3"),
-    "nwk_candidates_test": (4173, 7776, "d621b04582fed5f96f5e4f1e3d4e65a814db22a9f73d15006ef7ec4378e46b3a"),
-}
+LISTINGS = {'mac_frame': (4253, 7136, 'f5a28b08489ec5888e1fbf4a8134bcbb13e4c7a20bc6ca93558686466dcae87a'),
+ 'nwk_beacon': (353, 601, '6c8fc277d70a85221e0fdd27299e3f25da855099a08d783e6cbdca873ed36baf'),
+ 'nwk_candidates': (1519, 2334, '3d1704d8e2aaac0b58f271d179d420d3c455a38c842a3774911ca110d4426a21'),
+ 'nwk_candidates_test': (4173, 7776, '5b9f8712e44e36f75db92ac8d60aee5b7915a41ebd98185ba2fe78cdc516f5db')}
 # CODE (including CONST/startup contributions), XSEG, DSEG, OSEG.
-OBJECTS = {
-    "mac_frame": (7009, 207, 15, 10),
-    "nwk_beacon": (601, 27, 9, 0),
-    "nwk_candidates": (2334, 111, 4, 0),
-    "nwk_candidates_test": (7846, 612, 0, 0),
-}
-CALLER_OBJECTS = {
-    "table": (0x159, 150), "saved": (0x1ef, 150),
-    "entry": (0x285, 36), "saved_entry": (0x2a9, 36),
-    "header": (0x2cd, 26), "body": (0x2e7, 126), "payload": (0x365, 75),
-    "length": (0x3b0, 1), "i": (0x3b1, 1), "j": (0x3b2, 1),
-    "k": (0x3b3, 1), "mode": (0x3b4, 1), "shorts": (0x3b5, 1),
-    "extendeds": (0x3b6, 1), "position": (0x3b7, 1),
-}
+OBJECTS = {'mac_frame': (7136, 216, 15, 10),
+ 'nwk_beacon': (601, 27, 9, 0),
+ 'nwk_candidates': (2334, 111, 4, 0),
+ 'nwk_candidates_test': (7846, 612, 0, 0)}
+CALLER_OBJECTS = {'table': (354, 150),
+ 'saved': (504, 150),
+ 'entry': (654, 36),
+ 'saved_entry': (690, 36),
+ 'header': (726, 26),
+ 'body': (752, 126),
+ 'payload': (878, 75),
+ 'length': (953, 1),
+ 'i': (954, 1),
+ 'j': (955, 1),
+ 'k': (956, 1),
+ 'mode': (957, 1),
+ 'shorts': (958, 1),
+ 'extendeds': (959, 1),
+ 'position': (960, 1)}
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)"
     r"\[\s*\d+\]\s+\d+\s+\S.*$", re.MULTILINE,
@@ -118,9 +120,9 @@ def verify(image, symbols, debug, memory, listings, objects):
         image, symbols, debug, memory, "nwk_candidates_test_result", SOURCES,
         xdata_budget=XDATA_BUDGET,
     )
-    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 979
+    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 988
             and symbols["s_SSEG"] == 0x2f, "Composed XDATA/stack extent changed")
-    require(symbols.get("__gptrput_PARM_2") == 0x3c8, "Runtime scratch address changed")
+    require(symbols.get("__gptrput_PARM_2") == 0x3d1, "Runtime scratch address changed")
     require(digest(private_records(debug)) == PRIVATE_SHA256, "Private storage ABI changed")
     require(digest(caller_records(debug)) == CALLER_SHA256, "Caller storage ABI changed")
     require(digest(field_records(debug)) == FIELDS_SHA256, "Field ABI digest changed")
@@ -148,7 +150,7 @@ def verify(image, symbols, debug, memory, listings, objects):
         if re.search(rf"^L:{re.escape(match[1])}:", debug, re.MULTILINE):
             start = cdb_address(debug, "L:" + match[1])
             private.update(range(start, start + int(match[2])))
-    require(private == set(range(0x159)), "Compiler-private XDATA prefix changed")
+    require(private == set(range(354)), "Compiler-private XDATA prefix changed")
     caller = set()
     for name, (address, size) in CALLER_OBJECTS.items():
         prefix = f"Ftest_nwk_candidates${name}$0_0$0"
@@ -157,7 +159,7 @@ def verify(image, symbols, debug, memory, listings, objects):
         span = set(range(address, address + size))
         require(not span.intersection(private | caller), "Caller storage overlaps")
         caller.update(span)
-    require(caller == set(range(0x159, 0x3b8)), "Caller object coverage changed")
+    require(caller == set(range(354, 961)), "Caller object coverage changed")
     # Pin all module instructions, not a conveniently chosen subset of lines.
     instructions = {}
     require(set(listings) == set(objects) == set(MODULES), "Module set changed")
@@ -237,8 +239,9 @@ def negative_controls(image, symbols, debug, memory, listings, objects):
         ("({150}ST", "({149}ST"),
         ("S:Lnwk_candidates.nwk_candidates_consider$table$", "S:Lnwk_candidates.nwk_candidates_consider$bad$"),
         ("F:G$nwk_candidates_init$0_0$0({2}DF,SC:U)", "F:G$nwk_candidates_init$0_0$0({2}DF,SV:S)"),
-        ("L:G$nwk_candidates_consider$0$0:213A", "L:G$nwk_candidates_consider$0$0:213B"),
-        ("L:XG$main$0$0:4590", "L:XG$main$0$0:4591"),
+        (f"L:G$nwk_candidates_consider$0$0:{PUBLIC['nwk_candidates_consider'][1]:X}",
+         f"L:G$nwk_candidates_consider$0$0:{PUBLIC['nwk_candidates_consider'][1] + 1:X}"),
+        (f"L:XG$main$0$0:{DONE + 3:X}", f"L:XG$main$0$0:{DONE + 4:X}"),
     ):
         require(old in debug, "CDB negative mutation did not apply")
         reject("debug ABI", debug=debug.replace(old, new, 1))
@@ -301,7 +304,7 @@ def run_corpus(simulator, path, symbols, allocated):
     require(sfr[0xa8 - 0x80] == sfr[0xb8 - 0x80] == sfr[0x9a - 0x80] == 0,
             "Interrupts became enabled")
     peak = re.search(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", sections[1])
-    require(peak is not None and int(peak[1], 16) == 0x4c, "Reviewed peak stack usage changed")
+    require(peak is not None and int(peak[1], 16) == 0x4e, "Reviewed peak stack usage changed")
     return int(peak[1], 16)
 
 
@@ -322,7 +325,7 @@ def main():
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, alias=False), "missing simulator alias")
     peak = run_corpus(args.simulator, path, symbols, allocated)
-    print(f"NWK candidates: {len(image)} CODE, 979+64 reserved XDATA, context150/entry36; "
+    print(f"NWK candidates: {len(image)} CODE, 988+64 reserved XDATA, context150/entry36; "
           f"peak SP {peak:02x}; complete ABI/listings and {negatives}+1 negatives, "
           "real linked corpus/alias/storage/stack PASS (simulation only).")
 

@@ -473,6 +473,10 @@ networking. Raw records, backups and identities remain outside Git/CI.
 
 ## Offline MAC transmission state coverage
 
+The detailed figures in this section are the earlier control-staging evidence.
+The [#63 shared-code refresh](#r22-response-profile-and-shared-proof-refresh-63)
+below supplies the current sizes/stack without changing this corpus.
+
 `make test-mac-tx` composes the actual MAC codec with the
 [bounded scheduler](MAC_TX.md), not a stub radio. Shared native/SDCC cases
 exercise successful and missing/wrong/stale ACKs, all backoff stages, retry
@@ -570,6 +574,10 @@ No board image links or uploads this standalone executable.
 
 ## Offline Beacon candidate collection coverage
 
+The figures here record the original delivery; see the
+[#63 shared refresh](#r22-response-profile-and-shared-proof-refresh-63)
+for current linked sizes/stack with the same collector behavior.
+
 `make test-nwk-candidates` composes the actual MAC frame/Beacon and NWK Beacon
 decoders with the [four-entry preliminary collector](NWK_CANDIDATES.md).
 Shared native/SDCC cases cover both address sizes/all 72 pending layouts,
@@ -592,6 +600,10 @@ association or membership. No board image links or uploads the executable;
 no earlier memory limit or 15-second simulator deadline was enlarged.
 
 ## Offline active-scan composition coverage
+
+The figures here record the earlier control-staging baseline; the
+[#63 shared refresh](#r22-response-profile-and-shared-proof-refresh-63)
+retains all28 scenarios and gives current sizes/stack.
 
 `make test-mac-scan` links the real MAC codec/transmitter, NWK Beacon decoder,
 candidate collector and [scan controller](MAC_SCAN.md) with a genuine SDCC
@@ -618,7 +630,65 @@ the serialized TX pump do not supply
 a hardware adapter, captured timing, measured CRC, physical receive windows,
 full parent selection or association. Board linkage/uploads remain prohibited.
 
+## R22 Response profile and shared proof refresh (#63)
+
+This is **host-tested, image-checked and alias-aware simulated** work only;
+no device is opened, flashed, resumed or used for RF. The explicit
+[R22 Response receive profile](MAC_ASSOCIATION.md#explicit-r22-response-receive-profile-63)
+recognizes uncompressed extended/extended headers. Context admission requires
+the actual selected source PAN and selected/broadcast destination PAN.
+Compressed broadcast PAN is recognizable syntax, but remains a contextual
+mismatch. Default decoding, encoder, TX, scan, collector and POLL admission
+are unchanged. No timing, immediate ACK, identity binding or membership is
+invented.
+
+The original34 Association cases are preserved;36 cases in each of three
+forms give108 genuine target cases. Native coverage adds two8192-FCF
+sweeps, all254 unsupported profiles with atomic outputs, exact allocations,
+raw/context separation, encoder rejection and two additional complete
+short-address/status sweeps. The original byte/counter/error corpora remain.
+The real SDCC CODE/RAM cases and native ASan/UBSan spans are distinct evidence.
+
+| Genuine composition | CODE | Ordinary XDATA +64 reserved | Observed SP |
+| --- | ---: | ---: | ---: |
+| Association |15086|696 +64|71 |
+| Independent Association/TX floor |20844|891 +64|71 |
+| Legacy POLL,52 cases |31401|1898 +64|79 |
+| MAC TX, unchanged corpus |25515|1114 +64|5E |
+| Scan, unchanged28 cases |29567|1501 +64|66 |
+| NWK candidates, unchanged corpus |18476|988 +64|4E |
+| Integrated protocol budget |22959|1509 +64|7A |
+
+No budget,15-second per-process deadline or old scenario is relaxed.
+`mac_frame` is7136 CODE/216 XSEG/15 DSEG, still below its7680/256/16 limits.
+The first straightforward profile implementation exceeded that DSEG budget;
+explicit volatile parameter copies removed those spills without ambient
+global receive state. A long Association API name also collided after SDCC
+map-name truncation; `mac_association_step_rx` keeps real parameter symbols
+distinct instead of weakening the map parser.
+
+Exact proof identities were derived from genuine links and immediate per-link
+`.rst` snapshots. They retain complete ABI/instruction/constant coverage and
+negative controls, add the new public entries and bind both legacy wrappers
+to their real profile implementations. Structure sizes stay unchanged.
+Association has110 artifact plus1 alias negatives; the independent floor has
+217 plus1. POLL preserves complete-state13-process continuation, its52 cases
+and its separate SP7C cap. None is a board image or CI upload artifact.
+All eight affected native corpora pass ASan/UBSan for both board definitions.
+The separately linked LG and generic Association/TX floors have identical
+IHX/CDB bytes and each passes the217 artifact plus1 alias negatives.
+
+The detailed component ledgers below and in their contracts retain historical
+delivery measurements where explicitly identified. This table supersedes
+those figures for #63. Full IEEE2015 reconciliation, R22 Request/Data Request
+alternatives, POLL integration, #45 total timing, #40/#50 physical radio and
+#55 Nordic startup-policy gates remain open.
+
 ## Offline Association Response context coverage
+
+The following Association and POLL sections record their original deliveries;
+the [#63 shared refresh](#r22-response-profile-and-shared-proof-refresh-63)
+above gives current sizes, cases and proof identities.
 
 `make test-mac-association` composes the real MAC decoder and
 [response context](MAC_ASSOCIATION.md), not a hardware adapter or association

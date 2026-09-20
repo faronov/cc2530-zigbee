@@ -60,16 +60,16 @@ mac_association_result_t mac_association_start(mac_association_t MAC_ASSOCIATION
     return MAC_ASSOCIATION_OK;
 }
 
-mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM *ctx,
+mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATION_RAM *ctx,
                     uint32_t now,
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
-                    uint8_t MAC_ASSOCIATION_RAM *observation)
+                    uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t volatile profile)
 {
     mac_frame_info_t frame;
     mac_command_t command;
     uint8_t decision = MAC_ASSOCIATION_WAITING;
 
-    if (!valid(ctx) || observation == NULL)
+    if (!valid(ctx) || observation == NULL || profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return MAC_ASSOCIATION_INVALID;
     if (ctx->phase != MAC_ASSOCIATION_WAIT)
         return MAC_ASSOCIATION_STATE;
@@ -99,7 +99,8 @@ mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_
                 decision = MAC_ASSOCIATION_MISMATCH;
             else if (!event->crc_valid)
                 decision = MAC_ASSOCIATION_BAD_CRC;
-            else if (mac_frame_decode(event->body, event->length, &frame) != MAC_CODEC_OK)
+            else if (mac_frame_decode_profile(event->body, event->length, &frame, profile)
+                     != MAC_CODEC_OK)
                 decision = MAC_ASSOCIATION_MALFORMED;
             else if (frame.header.type != MAC_FRAME_COMMAND)
                 decision = MAC_ASSOCIATION_MISMATCH;
@@ -107,16 +108,19 @@ mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_
                                         frame.payload_length, &command) != MAC_CODEC_OK)
                 decision = MAC_ASSOCIATION_MALFORMED;
             else if (command.identifier != MAC_COMMAND_ASSOCIATION_RESPONSE
-                    || frame.header.destination_pan != ctx->request.pan_id
+                    || frame.header.source_pan != ctx->request.pan_id
+                    || (frame.header.destination_pan != ctx->request.pan_id
+                        && (profile != MAC_RX_R22_ASSOCIATION_RESPONSE
+                            || frame.header.destination_pan != 0xffffu))
                     || memcmp(frame.header.destination, ctx->request.local, 8)
                     || (ctx->request.coordinator_mode == MAC_ADDRESS_EXTENDED
                         && memcmp(frame.header.source, ctx->request.coordinator, 8)))
                 decision = MAC_ASSOCIATION_MISMATCH;
             else {
-                /* IEEE2006 7.3.2: codec checked ext/ext, compression, AR,
-                 * exact payload and status/address consistency. Pending is
-                 * ignored on RX. 7.5.3.1 permits learning an unknown source
-                 * IEEE here, NOT verifying its binding to a selected short.
+                /* Both profiles checked ext/ext, AR and exact command bytes.
+                 * A selected PAN must actually be present; R22 D.3 may put it
+                 * only in the uncompressed source. IEEE2006 7.5.3.1 permits
+                 * learning an unknown IEEE, not verifying its short binding.
                  */
                 ctx->record.stamp = event->stamp;
                 ctx->record.short_address = command.short_address;
@@ -144,6 +148,14 @@ mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_
     }
     *observation = decision;
     return MAC_ASSOCIATION_OK;
+}
+
+mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * volatile ctx,
+                    uint32_t now,
+                    const mac_association_event_t MAC_ASSOCIATION_RAM *event,
+                    uint8_t MAC_ASSOCIATION_RAM *observation)
+{
+    return mac_association_step_rx(ctx, now, event, observation, MAC_RX_IEEE2006);
 }
 
 mac_association_result_t mac_association_take(mac_association_t MAC_ASSOCIATION_RAM *ctx,

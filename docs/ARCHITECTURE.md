@@ -182,6 +182,12 @@ CRC and timely receiver ACK remain truthful independent adapter obligations.
 This is not the decision-wait/retrieval procedure, NWK address admission,
 parent installation or membership. The16-KiB CODE/1-KiB XDATA reservation
 budget belongs to its standalone test image, not the complete stack.
+`mac_frame_decode_profile` and `mac_association_step_rx` select a per-call
+R22 Association Response receive policy without adding fields to the73-byte
+context. Explicit source PAN permits selected/broadcast destination PAN;
+compressed broadcast PAN still cannot establish the selected source PAN.
+Legacy entry points always select IEEE2006. The existing POLL controller
+continues to use that legacy path; this is not full IEEE2015 header support.
 
 The [conditional legacy extraction controller](MAC_POLL.md) leases the same
 idle device-wide transmitter without resetting its DSN, generation or IFS.
@@ -206,7 +212,7 @@ CLOSED covers drainage, required receiver ACKs and applicable IFS; FAULT
 retains ownership. The existing reset-exclusive platform services cannot
 supply that handoff. No automatic repeat extraction, total Association
 confirmation, IEEE2015 header support, radio adapter or membership is added.
-The31109-CODE/1942-byte-reservation test composition is not full-stack fit.
+The31401-CODE/1962-byte-reservation test composition is not full-stack fit.
 
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
