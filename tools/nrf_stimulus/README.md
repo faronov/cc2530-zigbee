@@ -1,8 +1,9 @@
 # NS51: offline-built nRF52840 PHYEND observer
 
-**Deferred prototype, outside the current device role.** The Nordic board
-is only a passive sniffer/reference observer. Do not continue installation,
-active-stimulus or flash-planning work as a prerequisite for CC2530 progress.
+**Controlled test-node preparation may continue.** This laboratory role is
+distinct from passive sniffing; permission to prepare it is not permission
+to install firmware or transmit. Preserve the separate recovery/RF gates and
+continue unrelated CC2530 work independently.
 
 **Not authorized for installation or RF use.** This is a separately scoped,
 original diagnostic application for `nrf52840dk_nrf52840`, not a board IMAGE,

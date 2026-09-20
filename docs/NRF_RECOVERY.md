@@ -1,10 +1,10 @@
 # Nordic recovery preparation
 
-**Current scope: Nordic remains a passive sniffer only.** Temporary firmware,
-active-stimulus and flash-planning work is parked. The following tools and
-records are retained as historical evidence, not an active prerequisite for
-CC2530 development or permission for further programmer/device activity.
-The existing sniffer firmware was not replaced by this work.
+**Controlled active test-node preparation may continue**, alongside passive
+sniffing. Preparation and artifact reports do not authorize installation or
+RF activity and do not bypass the separate preservation/recovery gates.
+This work is not a prerequisite for unrelated CC2530 development. The
+existing sniffer firmware has not been replaced.
 
 [`tools/nrf_recovery.py`](../tools/nrf_recovery.py) is an original, hardware-free
 preparation tool for #51. It compares two sets of private raw files, **not two
@@ -55,6 +55,55 @@ Schema `nrf52840-artifact-agreement-v1` explicitly sets physical origin,
 independent acquisition, firmware execution, debug access, restoration and
 programming authorization to **false**. No CLI option can promote those claims.
 Do not upload the report, source files or captures to Git/CI.
+
+## Offline page-overlay report
+
+[`tools/nrf_overlay.py`](../tools/nrf_overlay.py) completes the artifact-only
+step in #58. It takes the same two full capture directories plus privately
+staged ELF/HEX files. All six input files must be distinct and satisfy the
+private-path rules above. ELF and HEX input limits are 16 MiB and 4 MiB;
+the new report is limited to 128 KiB.
+
+```sh
+python3 -B tools/nrf_overlay.py \
+  --first /path/to/private/nrf/read-01 \
+  --second /path/to/private/nrf/read-02 \
+  --elf /path/to/private/nrf/image/ns51.elf \
+  --hex /path/to/private/nrf/image/ns51.hex \
+  --report /path/to/private/nrf/overlay-01.json
+```
+
+The existing strict [artifact comparison](../tools/nrf_stimulus/artifact.py)
+checks ELF/HEX agreement, vectors and the helper's 256-KiB flash/64-KiB SRAM
+profile. Canonical explicit HEX bytes, including its checked FF gap padding,
+take precedence in an **in-memory** copy of the baseline; ELF LOAD padding
+does not substitute for those bytes. Every byte outside image coverage must
+remain unchanged, including partial-page tails and unaffected pages. UICR
+is compared but excluded from the overlay.
+
+Schema `nrf52840-artifact-overlay-v1` records per-page addresses, covered/
+preserved/changed counts and before/overlay hashes. Covered pages are not
+erase requests, and need not have changed bytes. No binary payload, command,
+programmer process, SDK build or device operation is produced. Geometry is
+assumed, not detected. Physical origin, independent acquisition, ACL
+readability, atomicity, usable recovery material, silicon compatibility,
+startup, execution, debug access, restoration and programming authorization
+remain **false** even when actual captured files are supplied.
+
+Inputs and directory bindings are rechecked through report completion.
+The exclusive `0600` report is flushed, fsynced and read back. **Accept only
+an exit-zero invocation**, not the mere presence of a file: failed/interrupted
+attempts confer no validity, and uncertain cleanup/durability is an explicit
+error. A replaced output is not deleted as though it were the created report.
+Reports and their hashes remain private.
+
+The parent separately ran this offline CLI on the retained #57 capture
+pairs and accepted public image, then independently recomputed every page's
+counts/hashes and all non-image preservation. It measured **14 pages (0..13),
+56,204 image bytes, 1,140 preserved final-page bytes and 242 unaffected pages**.
+UICR remained excluded and unchanged. The report and durable acceptance
+record stayed outside Git; no device was accessed. This is artifact arithmetic,
+not new hardware observation or completion of #55.
 
 ## Remaining manual gates
 

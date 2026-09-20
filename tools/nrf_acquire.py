@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 
-from nrf_recovery import REGIONS, _fingerprint, _read_capture, compare_captures
+from nrf_recovery import REGIONS, _fingerprint, _read_capture, compare_captures, private_bytes
 from private_artifacts import private_capture, private_directory
 from verify_firmware import require
 
@@ -126,17 +126,6 @@ puts $out "COMPLETE"
 close $out
 shutdown
 """
-
-
-def private_bytes(path, limit):
-    path = Path(path)
-    with private_directory(path.parent) as directory:
-        info = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
-        require(0 < info.st_size <= limit, "Private input has an invalid size")
-        try:
-            return _read_capture(directory, path.name, info.st_size)[0]
-        except ValueError as error:
-            raise ValueError(str(error).replace(path.name, "private input")) from error
 
 
 def tool_path(value):

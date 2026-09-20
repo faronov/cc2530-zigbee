@@ -51,6 +51,17 @@ def _read_capture(directory, name, size):
         os.close(fd)
 
 
+def private_bytes(path, limit):
+    path = Path(path)
+    with private_directory(path.parent) as directory:
+        info = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+        require(0 < info.st_size <= limit, "Private input has an invalid size")
+        try:
+            return _read_capture(directory, path.name, info.st_size)[0]
+        except ValueError as error:
+            raise ValueError(str(error).replace(path.name, "private input")) from error
+
+
 def compare_captures(first, second):
     """Check exact file agreement, not independent acquisition or physical origin.
 

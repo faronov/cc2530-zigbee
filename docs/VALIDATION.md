@@ -818,6 +818,26 @@ The unchanged NS51 image also passed a fresh static build audit; its
 [startup/protection ledger](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites)
 records conditional volatile APPROTECT effects and the missing silicon gates.
 
+## Nordic page overlay: offline artifact evidence
+
+The [report-only planner](NRF_RECOVERY.md#offline-page-overlay-report) has
+34 synthetic tests covering complete byte preservation, sparse/unaligned
+pure-helper cases, exact page hashes/counts and report shape, strict ELF/HEX
+negatives and limits, private-path/alias/input-mutation rejection, and report
+write/close/fsync/replacement/cleanup failures. The real CLI runs under audit
+hooks rejecting subprocess and device/build backend access. Ordinary
+`test-tools` includes this suite without SDK or physical equipment.
+
+The parent passed 94 combined overlay/recovery/acquisition/programmer/stimulus
+tests with the separately retained external offline programmer proofs enabled.
+A separate private, **offline** invocation used the accepted image and retained
+#57 capture pairs. Independent recomputation verified all page hashes/counts,
+every non-image byte, and excluded/unchanged UICR: 14 covered pages, 56,204
+image bytes, 1,140 preserved tail bytes and 242 unaffected pages. Both report
+and acceptance record remain private. No new image was emitted or installed;
+all physical/recovery/startup/restoration/programming claims remain false.
+Neither test success nor this artifact result resolves #55.
+
 ## Nordic recovery readback: separate manual evidence
 
 The [2026-09-20 corrected-runtime #54 activity](NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)

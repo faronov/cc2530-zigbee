@@ -725,6 +725,13 @@ retains its own OpenOCD license; it does not relicense original project code.
 No upstream `nrf52_recover` procedure, firmware, private identity or backup
 is incorporated into the operator or its synthetic Tcl backend.
 
+The original BSD-3-Clause [offline overlay planner](NRF_RECOVERY.md#offline-page-overlay-report)
+reuses the existing private-file checks and ELF/HEX parser. Its byte/page
+arithmetic and synthetic tests import no vendor writer, SDK or device backend.
+The 1-MiB/4-KiB artifact geometry is assumed, not detected; strict artifact
+comparison does not establish silicon, startup or restoration compatibility.
+Actual captured bytes and derived private hashes remain outside Git/CI.
+
 ### M2 deterministic PRNG sources
 
 The original BSD-3-Clause [explicitly seeded deterministic PRNG](ARCHITECTURE.md#isolated-deterministic-prng)

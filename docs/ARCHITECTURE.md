@@ -817,11 +817,17 @@ finite over-air ACK-count claim follows from bounded CPU calls.
 
 ## External Nordic laboratory companion
 
-The Nordic's current role is **passive sniffer/reference observer only**.
-The following NS51/programmer work is deferred research, not an active
-development dependency or authorization to replace the sniffer firmware.
+The Nordic may be a **controlled stimulus/observer as well as a passive
+sniffer**. Preparing that laboratory role does not authorize installation,
+RF use or bypass of preservation/recovery gates, and is not a dependency for
+unrelated CC2530 work.
 
-The deferred [NS51 helper](../tools/nrf_stimulus/README.md) targets a separately selected
+The [offline overlay planner](NRF_RECOVERY.md#offline-page-overlay-report)
+shares hardware-independent private-file checks with acquisition tooling.
+It emits only artifact hashes/counts after checking every non-image byte;
+it has no writer/device path and does not evaluate programming authority.
+
+The [NS51 helper](../tools/nrf_stimulus/README.md) targets a separately selected
 nRF52840 DK, not in the CC2530 firmware or production stack. Portable bounded
 control/serialization and UART queues are separated from the SDK/board/radio
 adapter. A default-off BSD patch at the genuine RADIO PHYEND path preserves

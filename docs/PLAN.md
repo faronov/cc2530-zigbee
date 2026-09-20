@@ -421,13 +421,13 @@ The [#50 primary ownership review](RADIO_AUTOACK.md#ordinary-tx-admission-under-
 now identifies unresolved TX admission during ACK, completion attribution and
 concurrent TX-flush effects; no transmitting extension is inferred from it.
 
-**Current Nordic role: passive sniffer/reference observer only.** The
-active-stimulus/temporary-firmware branch (#51/#55/#58) is parked, not a
-prerequisite for unrelated CC2530 implementation. Preserve the existing
-sniffer firmware. Unsupported controlled-RF scenarios remain open; do not
-silently waive them or repurpose the sniffer to satisfy them.
+**The controlled active Nordic test-node role is approved**, alongside
+passive sniffing. The #51/#55/#58 preparation branch has resumed after that
+role was clarified. Preserve the existing firmware until separate
+programming/restoration and RF gates are satisfied. This laboratory work
+does not block unrelated CC2530 implementation or waive unsupported RF cases.
 
-The deferred [Nordic stimulus/observer](../tools/nrf_stimulus/README.md)
+The [Nordic stimulus/observer](../tools/nrf_stimulus/README.md)
 prepared #51's laboratory side offline, with one fixed public AR frame and
 normal post-PHYEND reception instead of ACK-only filtering. It adds no CC2530
 board IMAGE, live runner or automatic SDK/hardware work to normal tests.
@@ -462,9 +462,12 @@ prerequisites; no temporary firmware or RF experiment followed.
 The [#55 newer primary specification](NRF_RECOVERY.md#bounded-protection-class-source-evidence)
 now bounds protection-class interpretation for four production variants,
 without supplying the missing named-revision/errata and actual-selector
-approval. The uncommitted #58 overlay draft was removed from the active
-worktree and retained outside Git when this role boundary was reaffirmed.
-None of this historical work authorizes replacing the sniffer firmware.
+approval. The #58 [report-only overlay planner](NRF_RECOVERY.md#offline-page-overlay-report)
+computes page-preserving artifact hashes, not device commands or programming
+authorization. Its separate private offline result and independent recomputation
+cover 14 pages, 56,204 image bytes, 1,140 preserved tail bytes and 242 unaffected
+pages, with UICR excluded/unchanged. None of these results by itself authorizes
+replacing the sniffer firmware.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

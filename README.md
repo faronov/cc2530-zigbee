@@ -488,12 +488,12 @@ guarantee is supplied. Broadcast-AR and ignored ACK-FCF compatibility remain
 explicit limits. Physical stop/drain is not IFS completion, a continuous
 MAC/POLL window closure, ordinary-TX handoff or security acceptance.
 
-**The Nordic board is a passive sniffer/reference observer only.** Active
-stimulus generation and temporary replacement firmware are outside the
-current scope, not prerequisites for further CC2530 development.
+**A controlled active Nordic test node is an allowed laboratory role** in
+addition to passive sniffing. Preparation is separate from permission to
+replace firmware or transmit, and does not block unrelated CC2530 work.
 
 The [Nordic laboratory stimulus](tools/nrf_stimulus/README.md) is a
-**deferred offline prototype**, not a planned installation: boot-disarmed
+**source-built offline prototype**, not an installed image: boot-disarmed
 ARM/RUN, one fixed channel26/-20dBm public AR frame, then bounded ordinary
 promiscuous reception. Its source-built driver/SL and guarded PHYEND patch
 distinguish transmission completion from actually received ACK/data bodies.
@@ -511,6 +511,9 @@ capture ACL state. A [later manual v2 read](docs/NRF_RECOVERY.md#2026-09-20-acl-
 matched those bytes with three stable ACL-qualified snapshots. Atomicity
 and recovery usability remain unverified; neither result establishes
 restored firmware or authorizes installing the helper.
+The [offline overlay planner](docs/NRF_RECOVERY.md#offline-page-overlay-report)
+checks preservation of non-image bytes and UICR using private artifacts,
+emitting only a hash/count report, never a programming payload or permission.
 
 ## Isolated MAC Timer foundation
 

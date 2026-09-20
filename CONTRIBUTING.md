@@ -155,6 +155,13 @@ backend; no real OpenOCD, probe or SDK is used by ordinary tests. Never put
 `--execute-read`, a private selection file or a device capture in CI.
 The separate reviewed external programmer build is not a test dependency.
 
+The [report-only Nordic overlay planner](docs/NRF_RECOVERY.md#offline-page-overlay-report)
+adds `PYTHONPATH=tools python3 -B -m unittest test_nrf_overlay test_nrf_recovery test_nrf_acquire test_nrf_stimulus -q`.
+Its synthetic tests are included in `test-tools` and exercise the actual CLI
+without SDK, programmer, USB or serial access. Only an exclusive private JSON
+report is produced; keep actual captures, staged images and reports outside
+Git/CI. An artifact overlay never grants programming or recovery approval.
+
 The [Nordic stimulus helper](tools/nrf_stimulus/README.md) has independent
 host-only coverage via `python3 -B -m unittest tools.test_nrf_stimulus -v`,
 automatically included in `test-tools`. Keep SDK target builds and generated
