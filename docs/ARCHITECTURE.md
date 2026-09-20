@@ -844,9 +844,17 @@ uses an explicitly selected, locally reviewed OpenOCD preservation mode and
 only a MEM-AP target. It has no CPU-control or flash-write script, no network
 server and no automatic execution. Its private single-use operation contains
 two complete flash/UICR read passes with fresh identity/protection binding.
+Version 2 includes all eight ACL triplets in each of three snapshots and
+rejects read-denial/unknown permission encodings. Version 1 did not cover
+ACL debugger read-as-zero and cannot establish unmasked recovery material.
+Live sampled ACL agreement is not an atomicity or reset-history proof.
 Debug-interface power/configuration and SWD shutdown traffic remain real
 side effects; the dummy MEM-AP target state is not physical CPU evidence.
 Tool-reported matching reads do not authorize programming or prove restoration.
+The helper's [actual startup audit](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites)
+also distinguishes absent linked NV writers from conditional volatile
+APPROTECT, cache and regulator effects before application disarming.
+Silicon-specific reset/debug recovery must be established separately.
 
 ## Isolated channel-0 DMA copy
 

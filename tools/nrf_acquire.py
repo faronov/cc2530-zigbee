@@ -28,7 +28,9 @@ DEADLINE_SECONDS = 180
 LOG_LIMIT = 1024 * 1024
 SELECTION_SCHEMA = "nrf52840-read-selection-v1"
 WORDS = ("ctrl_id", "approtect_status", "mem_ap_id", "page_size", "page_count",
-         "device_id_0", "device_id_1", "part", "variant", "package", "ram_kib", "flash_kib")
+         "device_id_0", "device_id_1", "part", "variant", "package", "ram_kib", "flash_kib") + tuple(
+             f"acl_{slot}_{field}" for slot in range(8) for field in ("addr", "size", "perm"))
+ACL_ADDRESSES = tuple(0x4001e800 + 0x10 * slot for slot in range(8))
 OVERRIDES = ("LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "OPENOCD_SCRIPTS", "TCL_LIBRARY")
 
 SCRIPT = r"""
@@ -60,9 +62,21 @@ proc nrfp_control {} {
 }
 proc nrfp_words {address count} {
     set raw [nrfp.mem read_memory $address 32 $count]
-    if {[llength $raw] != $count} {error "incomplete FICR read"}
+    if {[llength $raw] != $count} {error "incomplete register read"}
     set values {}
     foreach v $raw {lappend values [nrfp_u32 $v]}
+    return $values
+}
+proc nrfp_acl {} {
+    set values {}
+    foreach address {@ACL_ADDRESSES@} {
+        set region [nrfp_words $address 3]
+        set permission [lindex $region 2]
+        if {$permission != 0 && $permission != 2} {
+            error "ACL read denial or unknown permission; no reset or write"
+        }
+        set values [concat $values $region]
+    }
     return $values
 }
 proc nrfp_snapshot {} {
@@ -81,6 +95,7 @@ proc nrfp_snapshot {} {
         ([lindex $values 5] == 0xffffffff && [lindex $values 6] == 0xffffffff)} {
         error "invalid device identity"
     }
+    set values [concat $values [nrfp_acl]]
     set encoded {}
     foreach v $values {lappend encoded [format %08x $v]}
     return [join $encoded " "]
@@ -91,7 +106,7 @@ poll off
 nrfp_control
 nrfp.mem arp_examine
 set out [open @ROOT@/observations.txt a]
-puts $out "NS51_READ_V1"
+puts $out "NS51_READ_V2"
 set before [nrfp_snapshot]
 puts $out "before $before"
 flush $out
@@ -201,18 +216,19 @@ def render_script(serial, directory_fd):
     require(isinstance(serial, str) and re.fullmatch(r"[1-9][0-9]{0,9}", serial)
             and int(serial) <= 0xffffffff, "Invalid probe serial")
     require(type(directory_fd) is int and directory_fd >= 0, "Invalid directory descriptor")
-    return SCRIPT.replace("@SERIAL@", serial).replace("@ROOT@", f"/proc/self/fd/{directory_fd}")
+    return (SCRIPT.replace("@SERIAL@", serial).replace("@ROOT@", f"/proc/self/fd/{directory_fd}")
+            .replace("@ACL_ADDRESSES@", " ".join(f"0x{address:08x}" for address in ACL_ADDRESSES)))
 
 
 def observations(data):
     require(len(data) <= 2048, "Oversized acquisition observations")
     text = data.decode("ascii")
     rows = text.split("\n")
-    require(len(rows) == 6 and rows[0] == "NS51_READ_V1"
+    require(len(rows) == 6 and rows[0] == "NS51_READ_V2"
             and rows[4:] == ["COMPLETE", ""], "Incomplete acquisition observations")
     snapshots = []
     for label, row in zip(("before", "after-first", "after-second"), rows[1:4]):
-        require(re.fullmatch(label + r"(?: [0-9a-f]{8}){12}", row) is not None,
+        require(re.fullmatch(rf"{label}(?: [0-9a-f]{{8}}){{{len(WORDS)}}}", row) is not None,
                 "Malformed acquisition snapshot")
         snapshots.append(tuple(int(word, 16) for word in row.split(" ")[1:]))
     require(snapshots[0] == snapshots[1] == snapshots[2],
@@ -226,6 +242,8 @@ def observations(data):
             "Unexpected target geometry or protection")
     require((values["device_id_0"], values["device_id_1"])
             not in ((0, 0), (0xffffffff, 0xffffffff)), "Invalid acquired identity")
+    require(all(values[f"acl_{slot}_perm"] in (0, 2) for slot in range(8)),
+            "ACL read denial or unknown permission; no reset or write")
     return values
 
 
@@ -319,12 +337,15 @@ def acquire(selected, operation):
             with private_directory(operation / pass_name) as child:
                 os.fsync(child)
         report = {
-            "schema": "nrf52840-readback-v1",
+            "schema": "nrf52840-readback-v2",
             "evidence": "trusted-local-openocd-reported-readback",
             "target_words": identity,
             "read_passes": 2,
             "region_reads": 4,
             "same_debug_connection": True,
+            "acl_read_checks_passed": True,
+            "atomic_snapshot_verified": False,
+            "recovery_material_verified": False,
             "agreement": agreement,
             "script_sha256": hashlib.sha256(script.encode("ascii")).hexdigest(),
             "selection": selected,
@@ -371,7 +392,7 @@ def main(argv=None):
         print(f"nrf-acquire: host file/process operation failed (errno {error.errno}); no retry.",
               file=sys.stderr)
         return 1
-    print("Two read passes agree. Restoration and programming are NOT authorized.")
+    print("Two read passes and sampled ACL checks agree. Restoration and programming are NOT authorized.")
     return 0
 
 

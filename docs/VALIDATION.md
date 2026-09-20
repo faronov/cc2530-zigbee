@@ -764,8 +764,8 @@ The separate [recovery checker](NRF_RECOVERY.md) verifies file agreement only.
 
 `PYTHONPATH=tools python3 -B -m unittest test_nrf_acquire test_nrf_recovery -v`
 runs the actual generated acquisition Tcl under Tcl 8.6 with an original
-synthetic backend, never a device. All 14 operator tests and 17 existing
-artifact-comparison tests pass. The complete fake read flow and all 27
+synthetic backend, never a device. All 16 operator tests and 17 existing
+artifact-comparison tests pass. The complete fake read flow and all 51
 operation/finalization failure positions are exercised, including a failure
 after the Tcl completion record: a failed child cannot produce parent success.
 
@@ -777,17 +777,17 @@ validation starts no process. Tests invoke only their own temporary fake
 executable and Tcl, with no OpenOCD/SDK, USB or serial dependency. CI installs
 Tcl 8.6 for this host check and never collects or uploads recovery material.
 
-The independent external-tool integration run passed all 36 combined
+The initial external-tool integration run passed all 36 combined
 acquisition/recovery/programmer tests, including the preservation patch's
 58 real-driver synthetic sequences under syscall confinement. Source,
 package, compiled-object and loader-resolved runtime identities were checked
 separately. The genuine OpenOCD accepted the exact generated MEM-AP
 configuration/procedure prefix with `noinit` and `shutdown`, omitting the
-explicit later `init`. All 14 acquisition tests also passed with the pinned
+explicit later `init`. The initial 14 acquisition tests also passed with the pinned
 build's genuine Jim interpreter and the same synthetic backend. These checks
 did not initialize a real adapter or open any target connection.
 
-Full ordinary `make test-tools` discovery completed 582 tests with 20 explicit
+Initial full ordinary `make test-tools` discovery completed 582 tests with 20 explicit
 platform/optional skips. The optional external-programmer proof was executed
 separately as described above, not silently substituted with a skipped check.
 
@@ -807,6 +807,17 @@ the USB boundary is synthetic in the new corpus. No firmware/SWD/bulk
 response is faked and no physical device is used. Fresh source/runtime
 recording and the corrected-runtime inert MEM-AP prefix also pass.
 
+The later ACL-qualified v2 operator passed 41 combined tests and all
+16 acquisition tests under genuine Jim. Coverage includes all eight ACL
+slots, every permission bit in the host parser, generated-Tcl denials/
+unknown bits, write-only positive cases, short/malformed ACL responses and
+changed ADDR/SIZE/PERM fields. All 51 transfer/finalization failure positions
+remain fail-closed. Old v1/short transcripts cannot satisfy the v2 shape.
+The genuine noinit-only prefix passes without adapter initialization.
+The unchanged NS51 image also passed a fresh static build audit; its
+[startup/protection ledger](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites)
+records conditional volatile APPROTECT effects and the missing silicon gates.
+
 ## Nordic recovery readback: separate manual evidence
 
 The [2026-09-20 corrected-runtime #54 activity](NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)
@@ -822,6 +833,11 @@ No target-memory write, reset, halt/resume, erase, unlock or RF stimulus
 command was requested. Firmware execution, electrical reset preservation,
 future debug access, restored firmware and programming authorization remain
 unverified. No raw files, identities or hashes of private material are published.
+The subsequent #55 source review identified an additional qualification:
+v1 did not capture ACL, whose read-protected regions can appear as zeros to
+the debugger. The earlier byte-agreement observation is retained, but
+usable unmasked recovery material is not verified. The v2 software correction
+is host-tested only and does not retroactively strengthen those captures.
 
 ## Generic NV record composition coverage
 

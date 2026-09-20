@@ -77,7 +77,35 @@ proc nrfp.mem {args} {
         "read_memory 0x10000010 32 2" {set result {0x1000 0x100}}
         "read_memory 0x10000060 32 2" {set result {0x12345678 0x9abcdef0}}
         "read_memory 0x10000100 32 5" {set result {0x52840 0x41414430 0x2004 0x100 0x400}}
-        default {error "unexpected memory/CPU operation"}
+        default {
+            if {[llength $args] != 4 || [lindex $args 0] ne "read_memory" ||
+                [lindex $args 2] ne "32" || [lindex $args 3] ne "3" ||
+                [lindex $args 1] ni {0x4001e800 0x4001e810 0x4001e820 0x4001e830
+                                   0x4001e840 0x4001e850 0x4001e860 0x4001e870}} {
+                error "unexpected memory/CPU operation"
+            }
+            set slot [expr {([lindex $args 1] - 0x4001e800) / 16}]
+            set result {0x0 0x0 0x0}
+            if {$scenario eq "acl-write-only"} {
+                set result [list [format 0x%x [expr {$slot * 4096}]] 0x1000 0x2]
+            }
+            if {[regexp {^acl-deny-([0-7])-(0x[0-9a-f]+)$} $scenario all selected permission] &&
+                $slot == $selected} {
+                lset result 2 $permission
+            }
+            if {$slot == 7} {
+                if {$scenario eq "acl-short"} {return {0x0 0x0}}
+                if {$scenario eq "acl-bad-word"} {lset result 1 {[exec forbidden]}}
+                if {[regexp {^acl-change-(addr|size|perm)-([23])$} $scenario all field phase] &&
+                    $snapshots >= $phase} {
+                    switch -- $field {
+                        addr {lset result 0 0x1000}
+                        size {lset result 1 0x1000}
+                        perm {lset result 2 0x2}
+                    }
+                }
+            }
+        }
     }
     if {$scenario eq "wrong-part" && [lindex $args 1] == 0x10000100} {
         lset result 0 0x52832
@@ -196,14 +224,18 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(set(report), {
             "schema", "evidence", "target_words", "read_passes", "region_reads",
             "same_debug_connection", "agreement", "script_sha256", "selection",
+            "acl_read_checks_passed", "atomic_snapshot_verified", "recovery_material_verified",
             "reset_requested", "cpu_control_requested", "target_memory_write_requested",
             "firmware_execution_verified", "restoration_verified", "authorizes_programming",
         })
         self.assertEqual(report["read_passes"], 2)
+        self.assertEqual(report["schema"], "nrf52840-readback-v2")
         self.assertEqual(report["region_reads"], 4)
         self.assertEqual(report["target_words"]["part"], 0x52840)
+        self.assertIs(report["acl_read_checks_passed"], True)
         for key in ("reset_requested", "cpu_control_requested", "target_memory_write_requested",
-                    "firmware_execution_verified", "restoration_verified", "authorizes_programming"):
+                    "firmware_execution_verified", "restoration_verified", "authorizes_programming",
+                    "atomic_snapshot_verified", "recovery_material_verified"):
             self.assertIs(report[key], False)
         self.assertFalse(report["agreement"]["physical_origin_verified"])
         for directory in (self.operation, self.operation / "read-01", self.operation / "read-02"):
@@ -216,6 +248,10 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(log.count(" init\n"), 1)
         self.assertEqual(log.count(" shutdown\n"), 1)
         self.assertEqual(log.count("read_memory 0x10000060 32 2"), 3)
+        for slot in range(8):
+            self.assertEqual(log.count(f"read_memory 0x{0x4001e800 + 16 * slot:08x} 32 3"), 3)
+            for field in ("addr", "size", "perm"):
+                self.assertEqual(report["target_words"][f"acl_{slot}_{field}"], 0)
         with patch.object(acquire.subprocess, "Popen", side_effect=AssertionError("no retry")):
             self.assertEqual(self.invoke()[0], 1)
 
@@ -224,7 +260,7 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(self.invoke()[0], 0)
         lines = (self.operation / "openocd.txt").read_text().splitlines()
         count = len([line for line in lines if line.startswith("CALL ")])
-        self.assertEqual(count, 27)
+        self.assertEqual(count, 51)
         for failed in range(1, count + 1):
             with self.subTest(failed=failed), patch.dict(os.environ, {"NRFP_TEST_SCENARIO": f"fail-{failed}"}):
                 self.operation = self.new_operation()
@@ -244,6 +280,41 @@ class AcquisitionTests(unittest.TestCase):
                 self.operation = self.new_operation()
                 self.assertEqual(self.invoke()[0], 1)
                 self.assertEqual((self.operation / "openocd.txt").read_text().count(" dump "), reads)
+                self.assertFalse((self.operation / "readback.json").exists())
+
+    def test_acl_read_denial_and_unknown_bits_reject_every_slot_before_dumps(self):
+        self.require_tcl()
+        for slot in range(8):
+            for permission in (1, 4, 6, 8, 0x80000000, 0xffffffff):
+                scenario = f"acl-deny-{slot}-0x{permission:x}"
+                with self.subTest(slot=slot, permission=permission), \
+                        patch.dict(os.environ, {"NRFP_TEST_SCENARIO": scenario}):
+                    self.operation = self.new_operation()
+                    self.assertEqual(self.invoke()[0], 1)
+                    log = (self.operation / "openocd.txt").read_text()
+                    self.assertNotIn(" dump ", log)
+                    self.assertFalse((self.operation / "readback.json").exists())
+                    self.assertTrue((self.operation / "consumed.json").exists())
+        self.operation = self.new_operation()
+        with patch.dict(os.environ, {"NRFP_TEST_SCENARIO": "acl-write-only"}):
+            self.assertEqual(self.invoke()[0], 0)
+        report = json.loads((self.operation / "readback.json").read_bytes())
+        for slot in range(8):
+            for field, expected in (("addr", slot * 4096), ("size", 4096), ("perm", 2)):
+                self.assertEqual(report["target_words"][f"acl_{slot}_{field}"], expected)
+        self.assertFalse(report["authorizes_programming"])
+        self.assertFalse(report["recovery_material_verified"])
+
+    def test_acl_changes_and_malformed_reads_never_produce_success(self):
+        self.require_tcl()
+        cases = [("acl-short", 0), ("acl-bad-word", 0)]
+        cases += [(f"acl-change-{field}-{phase}", 2 if phase == 2 else 4)
+                  for field in ("addr", "size", "perm") for phase in (2, 3)]
+        for scenario, dumps in cases:
+            with self.subTest(scenario=scenario), patch.dict(os.environ, {"NRFP_TEST_SCENARIO": scenario}):
+                self.operation = self.new_operation()
+                self.assertEqual(self.invoke()[0], 1)
+                self.assertEqual((self.operation / "openocd.txt").read_text().count(" dump "), dumps)
                 self.assertFalse((self.operation / "readback.json").exists())
 
     def test_scope_marker_durability_failure_prevents_any_programmer(self):
@@ -373,17 +444,18 @@ class AcquisitionTests(unittest.TestCase):
 
     def test_observation_parser_requires_exact_complete_bound_identity(self):
         words = (0x02880000, 1, 0x24770011, 4096, 256, 0x12345678, 0x9abcdef0,
-                 0x52840, 0x41414430, 0x2004, 256, 1024)
+                 0x52840, 0x41414430, 0x2004, 256, 1024) + (0,) * 24
 
         def transcript(values):
             row = " ".join(f"{v:08x}" for v in values)
-            return ("NS51_READ_V1\n" + "".join(f"{label} {row}\n"
+            return ("NS51_READ_V2\n" + "".join(f"{label} {row}\n"
                     for label in ("before", "after-first", "after-second")) + "COMPLETE\n").encode()
 
         good = transcript(words)
         self.assertEqual(acquire.observations(good), dict(zip(acquire.WORDS, words)))
         for bad in (good[:-1], good + b"\n", good.replace(b"\n", b"\r\n"), good[:80],
-                    good.replace(b"COMPLETE", b"UNKNOWN"), good.replace(b"02880000", b"02880001", 1)):
+                    good.replace(b"COMPLETE", b"UNKNOWN"), good.replace(b"02880000", b"02880001", 1),
+                    good.replace(b"NS51_READ_V2", b"NS51_READ_V1"), transcript(words[:12])):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 acquire.observations(bad)
         for index in (0, 1, 2, 3, 4, 7, 8, 10, 11):
@@ -391,6 +463,24 @@ class AcquisitionTests(unittest.TestCase):
             values[index] = 0
             with self.subTest(index=index), self.assertRaises(ValueError):
                 acquire.observations(transcript(values))
+        for slot in range(8):
+            for bit in range(32):
+                values = list(words)
+                values[12 + slot * 3 + 2] = 1 << bit
+                with self.subTest(slot=slot, bit=bit):
+                    if bit == 1:
+                        self.assertEqual(acquire.observations(transcript(values))[f"acl_{slot}_perm"], 2)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "ACL"):
+                            acquire.observations(transcript(values))
+            for field in range(3):
+                values = list(words)
+                values[12 + slot * 3 + field] = 2 if field == 2 else 4096
+                changed = transcript(values).splitlines(keepends=True)
+                mixed = good.splitlines(keepends=True)
+                mixed[2] = changed[2]
+                with self.subTest(slot=slot, field=field), self.assertRaises(ValueError):
+                    acquire.observations(b"".join(mixed))
 
 
 if __name__ == "__main__":

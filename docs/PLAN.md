@@ -442,10 +442,14 @@ The [#53 offline exact-PID correction](NRF_RECOVERY.md#offline-compatibility-cor
 now passes genuine-library discovery and retained reset-preservation proofs.
 The new [#54 manual scope](NRF_RECOVERY.md#2026-09-20-corrected-runtime-manual-readback)
 used that corrected runtime after fresh cached selection/interface checks.
-Two whole-flash/UICR passes and three binding snapshots agreed; the complete
-baseline is private and the prior failed attempt remains retained. Silicon/
-UICR/protection policy and an exact page-preserving programming/restoration
-scope remain prerequisites; no temporary firmware or RF experiment followed.
+Two full-extent flash/UICR passes and three binding snapshots agreed; those
+files and the prior failed attempt remain private. The #55 source review
+identified missing ACL observations: read-protected flash can appear as zero,
+so usable unmasked recovery material is not yet established. The #56 v2
+operator adds all eight ACL triplets to each snapshot and passes offline
+checks; no new hardware acquisition is implied. Silicon/UICR/ACL/protection
+policy and an exact page-preserving programming/restoration scope remain
+prerequisites; no temporary firmware or RF experiment followed.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

@@ -103,7 +103,11 @@ retry, new process, target-state restoration or fallback after failure.
 
 Before MEM-AP examination, CTRL-AP identity and disabled access protection
 must be readable. Three fresh snapshots surround two full read passes.
-They bind CTRL-AP/MEM-AP values, FICR page geometry, DEVICEID and INFO words.
+They bind CTRL-AP/MEM-AP values, FICR page geometry, DEVICEID and INFO words,
+plus all eight ACL ADDR/SIZE/PERM triplets. Only PERM `0` or `2` is accepted:
+read denial or unknown permission bits fail even for an apparently inactive
+region. Write-only protection is recorded, not interpreted as permission
+to write. No reserved ACL word is read and no ACL register is written.
 The supported geometry is exactly nRF52840, 4096-byte pages, 256 pages,
 1024-KiB flash and 256-KiB RAM; unspecified variant/identity values fail.
 The raw variant/package are recorded, not treated as a reviewed programming
@@ -160,12 +164,17 @@ python3 -B tools/nrf_acquire.py \
 Only during the separately selected manual device activity, the same command
 with `--execute-read` performs the single read attempt. It produces two
 capture directories, private tool log/script/observations and `readback.json`.
-That report records **trusted-local-tool-reported reads**, not authenticated
+The `nrf52840-readback-v2` report records **trusted-local-tool-reported reads**, not authenticated
 physical origin. Its nested artifact agreement retains the original false
 physical-origin claims. Successful readback does not verify firmware
 execution, restoration, future debug access or authorize programming.
 Matching live reads are not an atomic snapshot of a running device, nor
 proof that its flash cannot change afterward.
+The `NS51_READ_V2` transcript requires exactly 36 words per snapshot; v1
+evidence without ACL state is rejected, not silently upgraded. The report
+sets `acl_read_checks_passed=true`, but `atomic_snapshot_verified=false` and
+`recovery_material_verified=false`. Sampled ACL agreement does not exclude
+intervening reset/reconfiguration or certify future restoration.
 
 The ordinary focused check is:
 
@@ -174,12 +183,14 @@ PYTHONPATH=tools python3 -B -m unittest test_nrf_acquire test_nrf_recovery -v
 ```
 
 Tcl 8.6 executes the actual generated script against an original synthetic
-backend with no hardware path. It checks all 27 operation/finalization
+backend with no hardware path. It checks all 51 operation/finalization
 failure positions, protection/geometry/identity changes, malformed responses,
 complete four-region flow, private artifacts, process/output limits and
-non-retry behavior. This is host evidence, not SWD or restoration acceptance.
+non-retry behavior. All ACL slots, known read/write permissions, unknown
+permission bits and changes to each triplet field are covered. This is
+host evidence, not SWD or restoration acceptance.
 
-The same 14 acquisition tests also passed manually with the genuine pinned
+The same 16 acquisition tests also passed manually with the genuine pinned
 Jim interpreter built alongside OpenOCD, still using only the synthetic
 backend. The real OpenOCD executable accepted the generated MEM-AP
 configuration/procedure prefix, ending **before** the explicit `init` and
@@ -202,6 +213,7 @@ These are implementation facts, not observations of a physical board:
 | Separate bounded memory-read calls per dump; host files still require exact-size/agreement checking | [`target.c:3743-3802`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/target.c#L3743-L3802), [`4601-4745`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/src/target/target.c#L4601-L4745) |
 | CTRL-AP identity/status predicate; the separate destructive recovery procedure is deliberately not imported | [`nrf52.cfg:53-81`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/tcl/target/nrf52.cfg#L53-L81) |
 | Vendor FICR offsets, part/variant and memory-size definitions | [`nrf52840.h:893-904`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L893-L904), [`nrf52840_bitfields.h:1567-1684`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L1567-L1684) |
+| Eight ACL triplets, READ bit 2 and WRITE bit 1; debugger read-as-zero on read denial | [`nrf52840.h:604-613`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L604-L613), [`2357-2360`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L2357-L2360), [`nrf52840_bitfields.h:199-209`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L199-L209), [Nordic PS 4413_417 v1.1 section 6.3, pp.107-110](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites) |
 
 Acquiring and comparing these files is still **not an executable restoration
 plan or a programming scope**. A later writer must bind fresh actual
@@ -269,7 +281,7 @@ selection, failed operation and consumed marker remain retained. The new
 single programmer process completed within the unchanged 180-second bound,
 without reported errors/warnings, process retry or TCP fallback. Its three
 CTRL-AP/FICR snapshots matched and accepted nRF52840 with 4096-byte pages,
-256 pages, 1024-KiB flash, 256-KiB RAM and the required access-protection
+256 pages, 1024-KiB flash, 256-KiB RAM and the required global access-protection
 status. Raw device identity, variant and configuration words remain private.
 
 | Region | Each complete read | Separate reads | Result |
@@ -291,7 +303,18 @@ AP configuration and ordinary wire/USB cleanup remain the reviewed side
 effects; electrical reset preservation was not measured. Firmware execution,
 future debug access and actual restoration remain unverified.
 
-The full private recovery baseline now exists. Installing the temporary
-image still requires actual silicon/UICR/protection policy review, an exact
-page-preserving write/restoration scope and fresh physical checks. The
-readback result itself does not authorize programming or close #40/#50.
+**Qualification from #55:** these full-extent matching files exist, but v1
+did not capture ACL state. Nordic PS section 6.3 permits debugger
+read-as-zero for ACL-protected flash even with global APPROTECT open.
+Usable, unmasked recovery material is therefore **not yet verified**.
+No actual ACL denial or damaged data is inferred. The old files/report
+remain unchanged, with a separate private qualification record appended.
+
+The #56 v2 correction now adds ACL samples and strict permission checks;
+it cannot retroactively qualify the v1 operation. Its independent 41-test
+integration, all 16 tests under genuine Jim and the real noinit-only
+configuration prefix pass **offline**, with no new hardware attempt.
+Installing the temporary image still requires actual silicon/UICR/ACL/
+protection policy review, trustworthy recovery material, an exact
+page-preserving write/restoration scope and fresh physical checks.
+Neither version authorizes programming or closes #40/#50.
