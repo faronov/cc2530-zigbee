@@ -602,7 +602,10 @@ frame-wait PIB, and copies DATA or commands without conflating command delivery
 with POLL SUCCESS. Commands require independent caller dispatch; the genuine
 test forwards Association Responses to the real response context, with its
 separate lifetime. `make test-mac-poll` is
-**host-tested, image-checked and simulated**, with 52 shared scenarios.
+**host-tested, image-checked and simulated**, with 56 shared scenarios,
+including all52 original cases. An explicit per-call R22 receive path now
+forwards supported uncompressed Responses without broadening DATA filtering
+or changing default legacy admission.
 Loss-free closure, continuous RX, immediate receiver ACK and applicable IFS
 are explicit adapter obligations, not implemented radio services. This is not
 repeated polling, complete association, membership or full-stack fit.

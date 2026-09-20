@@ -186,8 +186,9 @@ budget belongs to its standalone test image, not the complete stack.
 R22 Association Response receive policy without adding fields to the73-byte
 context. Explicit source PAN permits selected/broadcast destination PAN;
 compressed broadcast PAN still cannot establish the selected source PAN.
-Legacy entry points always select IEEE2006. The existing POLL controller
-continues to use that legacy path; this is not full IEEE2015 header support.
+Legacy entry points always select IEEE2006. Default POLL admission remains
+legacy; its explicit `mac_poll_step_rx` path can now forward those R22
+Responses. This is not full IEEE2015 header support.
 
 The [conditional legacy extraction controller](MAC_POLL.md) leases the same
 idle device-wide transmitter without resetting its DSN, generation or IFS.
@@ -211,8 +212,12 @@ retirement of the real TX action under its unchanged QUIESCED contract.
 CLOSED covers drainage, required receiver ACKs and applicable IFS; FAULT
 retains ownership. The existing reset-exclusive platform services cannot
 supply that handoff. No automatic repeat extraction, total Association
-confirmation, IEEE2015 header support, radio adapter or membership is added.
-The31401-CODE/1962-byte-reservation test composition is not full-stack fit.
+confirmation, full IEEE2015 header support, radio adapter or membership is added.
+Both POLL step entries replace their private argument staging before calling
+the same worker. This avoids four additional persistent SDCC IRAM spills;
+no profile is installed in the public context or inherited by a later call.
+The32641-CODE/1989-byte-reservation test composition reaches SP7B under the
+unchanged SP7C cap. Its127-byte CODE margin is not full-stack or IRQ headroom.
 
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional

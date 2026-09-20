@@ -2,7 +2,8 @@
 
 Original BSD-3-Clause. **Host-tested, linked-image-checked and alias-aware
 simulated for generic and LG; not hardware-observed.** This is one conditional
-offline legacy extraction transaction, not a complete MAC, MLME-ASSOCIATE
+offline extraction transaction with legacy defaults and explicit R22 Response
+reception, not a complete MAC, MLME-ASSOCIATE
 procedure, radio adapter, repeated-poll service or Zigbee membership.
 
 `mac_poll` uses the actual MAC encoder/decoder and the existing device-wide
@@ -41,7 +42,7 @@ legacy operation. Channels 11..26 are caller inputs; there is no RF default.
 | Further extraction | IEEE 7.5.6.3, p.188: received DATA Pending can lead to another Request; this module retains the flag but never starts that optional transaction |
 | Indirect retry | IEEE 7.5.6.4.3, p.190: another Request is required; the response DSN can repeat, so no invented on-air replay suppression |
 | Unknown coordinator IEEE | IEEE 7.5.3.1, p.181: short selection may learn a Response IEEE; #43 retains SOURCE_UNBOUND, not an authenticated short/IEEE binding |
-| R22 receive gate | R22 Annex D.1/D.3, pp.513-514: IEEE2015 and additional header forms remain outside this explicit legacy slice |
+| R22 receive boundary | R22 Annex D.3/Table D-3, p.514: #64 explicitly forwards #63's supported Response forms; defaults, Request/Data Request transmission and broader IEEE2015 reconciliation remain unchanged |
 
 `frame_wait` is a caller-valid, currently configured PIB F, not an arbitrary
 application timeout. Its deployment derivation remains gated. Request
@@ -56,6 +57,7 @@ timer. The IEEE2006 p.180 decision-wait/extraction wording and #45 remain open.
 | `mac_poll_init` | Fresh ordinary memory only; not recovery of an active/faulted radio epoch |
 | `mac_poll_start` | Copy configuration, encode canonical Data Request, lease an idle existing transmitter; no DSN/generation/IFS reset |
 | `mac_poll_step` | Consume one ordered event, bounded work and time; issue one-shot PREPARE, TX-step grant or CLOSE |
+| `mac_poll_step_rx` | Same transaction with explicit per-call RX profile; no stored policy or context-layout change; unknown profiles are atomic API errors |
 | `mac_poll_take` | One-shot copied result, available before cleanup completes |
 | `mac_poll_release` | Require DONE+taken, release the actual transmitter slot without resetting DSN/generation/IFS |
 
@@ -127,7 +129,7 @@ Timeout is provisional until CLOSED confirms loss-free ordered drainage
 through D. A fresh in-window frame delivered after an earlier timeout poll
 is an ordering fault, not permission to reopen or claim absence.
 
-The real MAC codec classifies the received legacy subset. A frame must have
+The default path classifies the received legacy subset. A frame must have
 the requested nonbroadcast PAN, exact local destination mode/address and
 corresponding coordinator source. No short/IEEE alias is invented. An
 Association Response to an extended local address may carry an unbound
@@ -165,9 +167,83 @@ drainage and safe receiver-on handoff before releasing the shared transmitter.
 The controller does not mutate read-only `ready_at`, queue immediate ACKs as
 ordinary CSMA frames, or supply a successful hardware stub.
 
+## Explicit R22 Response reception (#64)
+
+`mac_poll_step_rx(poll,tx,now,event,action,profile)` selects the existing
+`MAC_RX_IEEE2006` or `MAC_RX_R22_ASSOCIATION_RESPONSE` codec policy for that
+call. `mac_poll_step()` always selects IEEE2006. No profile is installed in
+the266-byte context, and every entry replaces all of its private arguments
+before the same worker runs; a later call cannot inherit a previous profile.
+Serialization/nonreentrancy and disjoint-storage obligations remain unchanged.
+
+Only an identified Association Response under the explicit R22 profile may
+use destination PANFFFF, and its **actual source PAN must still be selected**.
+Uncompressed selected/selected and broadcast/selected PAN forms can therefore
+be copied and forwarded. Compressed broadcast PAN still implies sourceFFFF
+and is foreign. Broadcast-PAN DATA remains foreign even when it has an
+explicit selected source PAN. Other command/DATA rules, known/unbound source
+relation, local identity, CRC/channel, captured-end window and cleanup are
+unchanged. Unknown profiles return INVALID with caller state/action/TX intact.
+
+The copied command still produces **POLL NO_DATA/COMMAND**, not SUCCESS or
+association. The caller explicitly forwards its exact bytes, timestamp and
+epoch to `mac_association_step_rx` with the corresponding profile. Immediate
+receiver ACK/IFS, #45 whole-procedure timing, broader IEEE2015 reconciliation
+and membership remain separate; no repeated extraction or physical adapter
+is added.
+
+All52 original genuine scenarios continue through the legacy entry.
+Cases52..55 add CODE/RAM uncompressed Response delivery, broadcast destination
+with unbound IEEE, wrong explicit source PAN, non-Response broadcast rejection,
+unknown-profile atomicity and legacy rejection followed by explicit acceptance.
+Native tests additionally cover exact R22 allocations0..126 and all254
+unsupported profile bytes; both-board ASan/UBSan runs pass.
+
+The first real forwarding-wrapper image reached **SP7F**, above SP7C, and was
+rejected. SDCC had allocated four persistent IRAM spill bytes while gathering
+the wrapper's arguments. Removing parameter volatility alone did not remove
+those spills. Sequential owned-XDATA argument staging restores5 DSEG bytes
+for `mac_poll`; it retains the original public qualifiers/layouts and a shared
+worker without an ambient receive-policy setting. No compiler option, old
+case, memory cap or simulator deadline was relaxed.
+
 ## Genuine resources and proof
 
-### Current shared-code refresh (#63)
+### Current explicit-reception profile (#64)
+
+The current composition is genuinely **32641 CODE /1925 ordinary XDATA +64
+reserved**, stack start4C/unwind4B/observed peak7B. The same CODE8000,
+reservation2048 and SP7C caps leave **127 CODE bytes,59 reservation bytes and
+one SP increment to the cap**. These are test-composition margins, not
+deployment or ISR-nesting capacity.
+
+`mac_poll` is7619 CODE/350 XSEG/5 DSEG/0 OSEG/4 BSEG bits; its caller is
+8762 CODE/1068 XSEG/0 DSEG/0 OSEG/2 bits. Other modules and public layouts
+are unchanged. Private/caller/runtime XDATA account for833/1068/24 bytes.
+Both boards produce identical IHX and CDB bytes.
+
+The complete proof checks23 public entries and22455 raw F/S/L/T rows
+(41/559/21804/51), all five immediate relocated listings,164 ordered CODE
+data bytes and56 switch targets. Both step entries must actually call the
+same private worker; the genuine caller invokes both profile-aware POLL and
+Association APIs. **278 artifact +1 alias +17 continuation negatives pass.**
+All56 cases execute in14 four-case processes with complete-state restoration
+and the original15-second per-process limit; no instruction/return is patched.
+
+```
+contiguous CODE SHA256
+9758b6de16fedd17df3d8dfac38e5138b53edf9d8cc78ea0b382f7b55cbdb0d1
+IHX SHA256
+d76d7e8212d849e24d1973ff99f425f2e829f94e5e090e6f6fcc1e90b1566a32
+full non-public-entry F/S/L/T SHA256
+6554dce6aa96e6cfaabe9afcacac68dc54fa1f04aa588fb69feb242eddca6d83
+```
+
+The independent Association/TX floor does not link `mac_poll` and retains
+the #63 identity and108 cases. The following ledgers preserve earlier
+acceptance evidence; they are not the current POLL measurements.
+
+### Prior shared-code refresh (#63)
 
 The explicit R22 Response profile in the shared codec/context does **not**
 change this controller's legacy admission. All52 original cases still use

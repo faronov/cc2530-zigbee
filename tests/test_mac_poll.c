@@ -13,6 +13,10 @@ static const MCU_CODE uint8_t response[] = {
     0x73, 0xcc, 0x91, 0x34, 0x12, 1,2,3,4,5,6,7,8,
     0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18, 2,0x78,0x56,0
 };
+static const MCU_CODE uint8_t response_r22[] = {
+    0x33, 0xcc, 0x91, 0x34, 0x12, 1,2,3,4,5,6,7,8, 0x34,0x12,
+    0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18, 2,0x78,0x56,0
+};
 static mac_poll_t poll;
 static mac_tx_t tx;
 static mac_poll_request_t request;
@@ -50,7 +54,9 @@ static uint32_t hash(const void *memory, uint16_t size)
 
 static void tick(void)
 {
-    CHECK(mac_poll_step(&poll, &tx, now, NULL, &action) == MAC_POLL_OK);
+    CHECK((scenario < 52 ? mac_poll_step(&poll, &tx, now, NULL, &action)
+           : mac_poll_step_rx(&poll, &tx, now, NULL, &action, MAC_RX_R22_ASSOCIATION_RESPONSE))
+          == MAC_POLL_OK);
 }
 
 static void input(uint8_t kind)
@@ -64,7 +70,9 @@ static void input(uint8_t kind)
 
 static void send(void)
 {
-    CHECK(mac_poll_step(&poll, &tx, now, &event, &action) == MAC_POLL_OK);
+    CHECK((scenario < 52 ? mac_poll_step(&poll, &tx, now, &event, &action)
+           : mac_poll_step_rx(&poll, &tx, now, &event, &action, MAC_RX_R22_ASSOCIATION_RESPONSE))
+          == MAC_POLL_OK);
 }
 
 static void setup(void)
@@ -80,7 +88,7 @@ static void setup(void)
     request.local_mode = request.coordinator_mode = MAC_ADDRESS_EXTENDED;
     memcpy(request.local, response + 5, 8);
     memcpy(request.coordinator, response + 13, 8);
-    if (scenario == 3 || scenario == 36 || scenario == 38) {
+    if (scenario == 3 || scenario == 36 || scenario == 38 || scenario == 53) {
         request.coordinator_mode = MAC_ADDRESS_SHORT;
         memset(request.coordinator, 0, 8);
         request.coordinator[0] = 0x44; request.coordinator[1] = 0x33;
@@ -263,15 +271,18 @@ static void forward_response(void)
     association_event.crc_valid = 1;
     association_event.body = record.body;
     association_event.length = record.length;
-    CHECK(mac_association_step(&association, now, &association_event, &observation) == MAC_ASSOCIATION_OK);
+    CHECK((scenario < 52 ? mac_association_step(&association, now, &association_event, &observation)
+           : mac_association_step_rx(&association, now, &association_event, &observation,
+                                     MAC_RX_R22_ASSOCIATION_RESPONSE)) == MAC_ASSOCIATION_OK);
     CHECK(observation == (scenario == 4 ? MAC_ASSOCIATION_EXPIRED : MAC_ASSOCIATION_RESPONSE));
     CHECK(mac_association_take(&association, &association_record) == MAC_ASSOCIATION_OK);
     if (scenario != 4) {
         CHECK(association_record.short_address == 0x5678);
-        CHECK(association_record.source_relation == (scenario == 3
+        CHECK(association_record.source_relation == (scenario == 3 || scenario == 53
               ? MAC_ASSOCIATION_SOURCE_UNBOUND : MAC_ASSOCIATION_SOURCE_MATCHED));
         CHECK(record.source_relation == association_record.source_relation);
-        CHECK(association_record.stamp == record.stamp && record.body[0] == 0x73);
+        CHECK(association_record.stamp == record.stamp && record.body[0] == (scenario < 52 ? 0x73 : 0x33));
+        CHECK(record.payload_offset == (scenario < 52 ? 21 : 23) && record.payload_length == 4);
     }
 }
 
@@ -304,7 +315,7 @@ static void interrupted(void)
 static void corpus(void)
 {
     CHECK(mac_poll_init(NULL) == MAC_POLL_INVALID);
-    for (scenario = 0; scenario < 52 && !failure; scenario++) {
+    for (scenario = 0; scenario < 56 && !failure; scenario++) {
         setup();
         mode = scenario == 27 ? 1 : scenario == 28 ? 2 : scenario == 29 ? 3
              : scenario == 33 ? 4 : 0;
@@ -335,6 +346,10 @@ static void corpus(void)
                 if (scenario == 2 || scenario == 3 || scenario == 4 || scenario == 40) {
                     memcpy(bytes, response, sizeof(response)); length = sizeof(response);
                 }
+                if (scenario >= 52) {
+                    memcpy(bytes, response_r22, sizeof(response_r22)); length = sizeof(response_r22);
+                    if (scenario == 53) bytes[3] = bytes[4] = 0xff;
+                }
                 if (scenario == 4 || scenario == 7) now = poll.control.receive_end;
                 if (scenario == 4) {
                     /* An independently chosen half-open metadata context ends
@@ -349,6 +364,7 @@ static void corpus(void)
                 }
                 frame_event();
                 if (scenario == 2) event.body = response; /* Real generic CODE decode. */
+                if (scenario == 52) event.body = response_r22;
                 switch (scenario) {
                 case 6: case 26: case 42:
                     now = poll.control.receive_end; tick();
@@ -409,12 +425,29 @@ static void corpus(void)
                     CHECK(poll.control.reason == MAC_POLL_ORDER_ERROR); break;
                 case 50:
                     tx.generation++; tick(); break;
+                case 54:
+                    bytes[0] ^= 2; bytes[3] = bytes[4] = 0xff;
+                    send();
+                    CHECK(action.observation == MAC_POLL_OBS_FOREIGN && !poll.control.ready);
+                    bytes[0] ^= 2; bytes[3] = 0x34; bytes[4] = 0x12;
+                    now++; frame_event();
+                    bytes[13] ^= 1; send();
+                    CHECK(action.observation == MAC_POLL_OBS_FOREIGN && !poll.control.ready);
+                    bytes[13] ^= 1;
+                    now++; frame_event(); send(); break;
+                case 55:
+                    checksum = hash(&poll, sizeof(poll));
+                    CHECK(mac_poll_step_rx(&poll, &tx, now, &event, &action, 2) == MAC_POLL_INVALID);
+                    CHECK(hash(&poll, sizeof(poll)) == checksum);
+                    CHECK(mac_poll_step(&poll, &tx, now, &event, &action) == MAC_POLL_OK);
+                    CHECK(action.observation == MAC_POLL_OBS_MALFORMED && !poll.control.ready);
+                    now++; frame_event(); send(); break;
                 default: send(); break;
                 }
                 if (poll.record.length) {
                     CHECK(poll.control.ready && poll.control.phase == MAC_POLL_DRAIN);
                     CHECK(poll.record.protocol == (scenario == 1 || scenario == 2 || scenario == 3
-                          || scenario == 4 || scenario == 40 || scenario == 41
+                          || scenario == 4 || scenario == 40 || scenario == 41 || scenario >= 52
                           ? MAC_POLL_NO_DATA : MAC_POLL_SUCCESS));
                     take();
                     CHECK(record.length == length && !memcmp(record.body, bytes, length));
@@ -537,13 +570,36 @@ static void native(void)
     CHECK(!memcmp(&poll, &saved, sizeof(poll)));
     CHECK(!memcmp(&record, &old, sizeof(record)));
     CHECK(!memcmp(&tx, &saved_tx, sizeof(tx)));
+
+    setup(); saved = poll; saved_tx = tx; before = action;
+    for (n = 2; n < 256; n++) {
+        CHECK(mac_poll_step_rx(&poll, &tx, now, NULL, &action, (uint8_t)n) == MAC_POLL_INVALID);
+        CHECK(!memcmp(&poll, &saved, sizeof(poll)) && !memcmp(&tx, &saved_tx, sizeof(tx)));
+        CHECK(!memcmp(&action, &before, sizeof(action)));
+    }
+    scenario = 52;
+    setup(); mode = 0; request_ack(); pump(); make_data(2);
+    header.flags &= (uint8_t)~MAC_FLAG_PAN_COMPRESSION;
+    header.destination_pan = 0xffff;
+    CHECK(mac_frame_encode(&header, ack, 2, bytes, sizeof(bytes), &length) == MAC_CODEC_OK);
+    now++; frame_event(); send();
+    CHECK(action.observation == MAC_POLL_OBS_FOREIGN && !poll.control.ready && !poll.record.length);
+    for (n = 0; n <= 126 && !failure; n++) {
+        setup(); mode = 0; request_ack(); pump();
+        exact = malloc(n ? n : 1); CHECK(exact != NULL);
+        memset(exact, 0x6b, n);
+        memcpy(exact, response_r22, n < sizeof(response_r22) ? n : sizeof(response_r22));
+        now++; frame_event(); event.body = exact; event.length = (uint16_t)n;
+        send(); free(exact);
+        CHECK((poll.record.cause == MAC_POLL_COMMAND) == (n == sizeof(response_r22)));
+    }
 }
 int main(void)
 {
     corpus();
     if (!failure) native();
     if (failure) { fprintf(stderr, "mac_poll scenario %u failed line %u\n", scenario, failure); return 1; }
-    puts("MAC poll: 52 shared synthetic scenarios + native exact/atomic cases PASS");
+    puts("MAC poll: 56 shared synthetic scenarios + legacy/R22 exact/atomic cases PASS");
     return 0;
 }
 #else

@@ -121,9 +121,11 @@ in its bounded-width map output. Volatile **parameter copies**, not caller
 objects, prevent extra persistent IRAM spills; no heap or hidden receive mode
 is added. The default path never inherits a previous call's profile.
 
-The existing POLL controller still uses legacy decoding and does not yet
-forward these additional uncompressed headers. Request/Data Request header
-alternatives, whole-procedure timing (#45), radio/ACK and BDB gates remain open.
+Default POLL admission stays legacy. The explicit
+[#64 POLL receive path](MAC_POLL.md#explicit-r22-response-reception-64) now
+forwards these supported uncompressed headers to `mac_association_step_rx`.
+Request/Data Request alternatives, whole-procedure timing (#45), radio/ACK
+and BDB gates remain open.
 
 **Current #63 evidence:** all34 original shared scenarios remain and run in
 legacy, R22-compressed and R22-uncompressed forms. Two additional scenarios

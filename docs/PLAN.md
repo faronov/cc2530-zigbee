@@ -592,7 +592,8 @@ errors. Its separate test image uses15086 CODE/696 ordinary XDATA +64 reserved,
 with observed SP71; these measurements do not establish complete-stack fit.
 The explicit #63 R22 Response receive profile accepts uncompressed headers
 and a broadcast destination PAN only with an actual selected source PAN.
-Legacy defaults, context layouts, transmission and POLL admission stay unchanged.
+Legacy defaults, context layouts and transmission stay unchanged. The #64
+explicit POLL receive path now forwards the same supported Response forms.
 Full decision-wait/retrieval/NO_DATA timing still needs primary reconciliation
 (#45). Staged Request-ACK wait and subsequent Data Request/response reception
 are supported; no single total Association NO_DATA deadline follows from the
@@ -608,8 +609,12 @@ transmitter and codec. Pending0/1, captured ACK-end reception windows,
 caller-valid configured PIB F, copied DATA/command delivery and loss-free
 timeout closure remain distinct. A command can produce POLL NO_DATA while
 the real Association context separately accepts or expires its copied Response.
-Both-board host/sanitizer, linked-image and alias-aware evidence covers all52
-scenarios:31401 CODE,1898 ordinary XDATA +64 reserved, observed SP79.
+Both-board host/sanitizer, linked-image and alias-aware evidence covers56
+scenarios, retaining all52 originals:32641 CODE,1925 ordinary XDATA +64
+reserved, observed SP7B. Only the explicit R22 receive path admits an identified
+Response with broadcast destination PAN and actual selected source PAN;
+uncompressed broadcast-PAN DATA remains foreign. Sequential private argument
+staging resolves a measured SP7F failure without raising any budget.
 No old component limit or scenario was relaxed. Continuous RX/ACK ownership,
 captured timing (#40), configured-F deployment, total Association timing (#45),
 IEEE2015 headers, lower-MAC ACK/IFS and membership remain open.

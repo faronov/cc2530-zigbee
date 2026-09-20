@@ -11,6 +11,16 @@ static mac_poll_action_t MAC_POLL_RAM output;
 static mac_poll_record_t MAC_POLL_RAM *receipt;
 static uint32_t MAC_POLL_RAM step_time;
 
+/* Sequential argument staging avoids a forwarding call's four SDCC IRAM
+ * spills. Both entries replace every argument, including the RX profile.
+ */
+static mac_poll_t MAC_POLL_RAM * volatile step_poll;
+static mac_tx_t MAC_POLL_RAM * volatile step_tx;
+static const mac_poll_event_t MAC_POLL_RAM * volatile step_event;
+static mac_poll_action_t MAC_POLL_RAM * volatile step_action;
+static volatile uint32_t MAC_POLL_RAM step_now;
+static volatile uint8_t MAC_POLL_RAM step_profile;
+
 typedef char control_first[(offsetof(mac_poll_t, control) == 0) ? 1 : -1];
 typedef char request_first[(offsetof(mac_poll_control_t, request) == 0) ? 1 : -1];
 typedef char record_boundary[(offsetof(mac_poll_t, record) == sizeof(mac_poll_control_t)) ? 1 : -1];
@@ -167,18 +177,15 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
     return MAC_POLL_OK;
 }
 
-mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
-    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
-    const mac_poll_event_t MAC_POLL_RAM * volatile event,
-    mac_poll_action_t MAC_POLL_RAM * volatile action)
+static mac_poll_result_t step(void)
 {
     mac_frame_info_t frame;
-    volatile uint8_t kind, observation, status, unbound;
+    volatile uint8_t kind, observation, status, unbound, response;
     volatile uint32_t remaining;
-    if (p == NULL || tx == NULL || action == NULL)
+    if (step_poll == NULL || step_tx == NULL || step_action == NULL || step_profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return MAC_POLL_INVALID;
-    if (event != NULL) {
-        memcpy(&input, event, sizeof(input));
+    if (step_event != NULL) {
+        memcpy(&input, step_event, sizeof(input));
         if (input.kind < MAC_POLL_PREPARED || input.kind > MAC_POLL_FAILURE
                 || input.crc_valid > 1
                 || (input.kind == MAC_POLL_FRAME && (input.body == NULL || !input.serial
@@ -188,46 +195,46 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
                     && input.source.length && input.source.bytes == NULL))
             return MAC_POLL_INVALID;
     }
-    memcpy(&control, &p->control, sizeof(control));
+    memcpy(&control, &step_poll->control, sizeof(control));
     if (control.version != MAC_POLL_VERSION || control.phase == MAC_POLL_IDLE
-            || control.phase > MAC_POLL_FAULT || control.owner != tx)
+            || control.phase > MAC_POLL_FAULT || control.owner != step_tx)
         return MAC_POLL_STATE;
-    receipt = &p->record;
-    step_time = now;
+    receipt = &step_poll->record;
+    step_time = step_now;
     memset(&output, 0, sizeof(output));
     kind = 0;
     observation = MAC_POLL_OBS_NONE;
     if (control.phase >= MAC_POLL_DONE)
         goto publish;
-    if (!reached(now, control.last)) {
+    if (!reached(step_now, control.last)) {
         fault(MAC_POLL_CLOCK_ERROR);
         goto publish;
     }
-    if (event != NULL) {
+    if (step_event != NULL) {
         observation = MAC_POLL_OBS_STALE;
         if (input.epoch == control.request.epoch && input.generation == control.generation) {
             if (input.kind == MAC_POLL_FRAME && input.serial <= control.rx_serial)
                 observation = MAC_POLL_OBS_DUPLICATE;
-            else if (reached(input.stamp, control.last) && reached(now, input.stamp)) {
+            else if (reached(input.stamp, control.last) && reached(step_now, input.stamp)) {
                 kind = input.kind;
                 observation = MAC_POLL_OBS_NONE;
             } else if (input.kind == MAC_POLL_FRAME)
                 drain(MAC_POLL_ORDER_ERROR);
         }
     }
-    control.last = now;
-    if (tx->generation != control.tx_generation || (!control.submitted && tx->phase != MAC_TX_IDLE)) {
+    control.last = step_now;
+    if (step_tx->generation != control.tx_generation || (!control.submitted && step_tx->phase != MAC_TX_IDLE)) {
         fault(MAC_POLL_TX_ERROR);
         goto publish;
     }
     if (control.phase == MAC_POLL_DRAIN) {
-        if (reached(now, control.stop_at) || !control.stop_steps) {
+        if (reached(step_now, control.stop_at) || !control.stop_steps) {
             fault(MAC_POLL_CLEANUP_FAILED);
             goto publish;
         }
         control.stop_steps--;
     } else if (kind == MAC_POLL_CANCEL || kind == MAC_POLL_FAILURE
-            || reached(now, control.deadline) || !control.steps)
+            || reached(step_now, control.deadline) || !control.steps)
         drain(kind == MAC_POLL_CANCEL ? MAC_POLL_CANCELLED
               : kind == MAC_POLL_FAILURE ? MAC_POLL_ADAPTER_ERROR
               : !control.steps ? MAC_POLL_WORK_LIMIT : MAC_POLL_LIFETIME);
@@ -239,31 +246,31 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
     if (kind == MAC_POLL_PREPARED && control.phase == MAC_POLL_ARM && control.token
             && input.token == control.token) {
         control.prepared = 1;
-        remaining = control.deadline - now;
-        if (mac_tx_submit(tx, control.outgoing, control.outgoing_length, now,
+        remaining = control.deadline - step_now;
+        if (mac_tx_submit(step_tx, control.outgoing, control.outgoing_length, step_now,
                          remaining, MAC_POLL_TX_STEPS) != MAC_TX_OK)
             drain(MAC_POLL_TX_ERROR);
         else {
             control.submitted = 1;
-            control.tx_generation = tx->generation;
+            control.tx_generation = step_tx->generation;
             control.phase = MAC_POLL_REQUEST;
         }
     }
     if (kind == MAC_POLL_TX && control.tx_issued && input.token == control.tx_token) {
         control.tx_issued = 0;
-        control.tx_outcome = tx->outcome;
-        if (input.tx_result != MAC_TX_OK || tx->phase == MAC_TX_IDLE
-                || tx->last != input.stamp || tx->phase == MAC_TX_FAULT) {
+        control.tx_outcome = step_tx->outcome;
+        if (input.tx_result != MAC_TX_OK || step_tx->phase == MAC_TX_IDLE
+                || step_tx->last != input.stamp || step_tx->phase == MAC_TX_FAULT) {
             drain(MAC_POLL_TX_ERROR);
-        } else if (!control.ack_seen && tx->outcome == MAC_TX_ACKED) {
+        } else if (!control.ack_seen && step_tx->outcome == MAC_TX_ACKED) {
             /* Witness the ORIGINAL event used by the real granted MAC call.
              * Parsing/ignored ACK bits belong to mac_tx, not another decoder.
              */
-            if (!accept_ack(tx))
+            if (!accept_ack(step_tx))
                 drain(MAC_POLL_TX_ERROR);
-        } else if (tx->phase == MAC_TX_DONE && !control.ack_seen && control.phase != MAC_POLL_DRAIN) {
-            if (tx->outcome == MAC_TX_NO_ACK || tx->outcome == MAC_TX_CHANNEL_ACCESS)
-                decide(tx->outcome == MAC_TX_NO_ACK ? MAC_POLL_NO_ACK : MAC_POLL_CHANNEL_ACCESS,
+        } else if (step_tx->phase == MAC_TX_DONE && !control.ack_seen && control.phase != MAC_POLL_DRAIN) {
+            if (step_tx->outcome == MAC_TX_NO_ACK || step_tx->outcome == MAC_TX_CHANNEL_ACCESS)
+                decide(step_tx->outcome == MAC_TX_NO_ACK ? MAC_POLL_NO_ACK : MAC_POLL_CHANNEL_ACCESS,
                        MAC_POLL_TX_RESULT, input.stamp);
             else
                 drain(MAC_POLL_TX_ABORT);
@@ -283,7 +290,7 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
             else if (!input.crc_valid)
                 observation = MAC_POLL_OBS_BAD_CRC;
             else {
-                status = mac_frame_decode(input.body, input.length, &frame);
+                status = mac_frame_decode_profile(input.body, input.length, &frame, step_profile);
                 if (status == MAC_CODEC_UNSUPPORTED_TYPE || status == MAC_CODEC_UNSUPPORTED_VERSION
                         || status == MAC_CODEC_UNSUPPORTED_SECURITY
                         || status == MAC_CODEC_UNSUPPORTED_ADDRESSING
@@ -294,11 +301,13 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
                     observation = MAC_POLL_OBS_MALFORMED;
                 else {
                     /* Only Response can learn a still-unbound coordinator IEEE. */
-                    unbound = frame.header.type == MAC_FRAME_COMMAND
-                        && input.body[frame.payload_offset] == MAC_COMMAND_ASSOCIATION_RESPONSE
-                        && control.request.coordinator_mode == MAC_ADDRESS_SHORT;
+                    response = frame.header.type == MAC_FRAME_COMMAND
+                        && input.body[frame.payload_offset] == MAC_COMMAND_ASSOCIATION_RESPONSE;
+                    unbound = response && control.request.coordinator_mode == MAC_ADDRESS_SHORT;
                     if ((frame.header.type != MAC_FRAME_DATA && frame.header.type != MAC_FRAME_COMMAND)
-                            || frame.header.destination_pan != control.request.pan
+                            || (frame.header.destination_pan != control.request.pan
+                                && !(step_profile == MAC_RX_R22_ASSOCIATION_RESPONSE && response
+                                     && frame.header.destination_pan == 0xffffu))
                             || frame.header.source_pan != control.request.pan
                             || frame.header.destination_mode != control.request.local_mode
                             || memcmp(frame.header.destination, control.request.local, 8)
@@ -322,7 +331,7 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
             }
         }
     }
-    if (control.phase == MAC_POLL_RECEIVE && reached(now, control.receive_end)) {
+    if (control.phase == MAC_POLL_RECEIVE && reached(step_now, control.receive_end)) {
         control.timeout_pending = 1;
         drain(0);
     }
@@ -335,8 +344,8 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
             control.closed = 1;
     }
     if (control.phase == MAC_POLL_DRAIN && control.closed && !control.tx_issued
-            && (!control.submitted || tx->phase == MAC_TX_DONE || tx->phase == MAC_TX_FAULT)) {
-        if (control.uncertain || tx->phase == MAC_TX_FAULT)
+            && (!control.submitted || step_tx->phase == MAC_TX_DONE || step_tx->phase == MAC_TX_FAULT)) {
+        if (control.uncertain || step_tx->phase == MAC_TX_FAULT)
             fault(MAC_POLL_CLEANUP_FAILED);
         else {
             if (control.timeout_pending)
@@ -348,18 +357,18 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
         output.kind = MAC_POLL_ACTION_PREPARE;
         output.token = ++control.token;
     } else if (control.phase < MAC_POLL_DONE && control.submitted && !control.tx_issued
-            && tx->phase != MAC_TX_DONE && tx->phase != MAC_TX_FAULT) {
+            && step_tx->phase != MAC_TX_DONE && step_tx->phase != MAC_TX_FAULT) {
         control.tx_issued = 1;
-        control.tx_phase = tx->phase;
-        control.tx_retry = tx->retries;
-        control.tx_nb = tx->nb;
-        control.tx_mark = tx->last;
+        control.tx_phase = step_tx->phase;
+        control.tx_retry = step_tx->retries;
+        control.tx_nb = step_tx->nb;
+        control.tx_mark = step_tx->last;
         control.tx_token = ++control.token;
         output.token = control.tx_token;
         output.kind = MAC_POLL_ACTION_TX;
-        output.tx_cancel = control.phase == MAC_POLL_DRAIN && tx->phase != MAC_TX_STOPPING;
+        output.tx_cancel = control.phase == MAC_POLL_DRAIN && step_tx->phase != MAC_TX_STOPPING;
     } else if (control.phase == MAC_POLL_DRAIN && !control.close_issued && !control.tx_issued
-            && (!control.submitted || tx->phase == MAC_TX_DONE || tx->phase == MAC_TX_FAULT)) {
+            && (!control.submitted || step_tx->phase == MAC_TX_DONE || step_tx->phase == MAC_TX_FAULT)) {
         control.close_issued = 1;
         control.close_token = ++control.token;
         output.token = control.close_token;
@@ -375,9 +384,37 @@ publish:
     output.reason = control.reason;
     output.cleanup_error = control.cleanup_error;
     output.ready = control.ready && !control.taken;
-    memcpy(&p->control, &control, sizeof(control));
-    memcpy(action, &output, sizeof(output));
+    memcpy(&step_poll->control, &control, sizeof(control));
+    memcpy(step_action, &output, sizeof(output));
     return MAC_POLL_OK;
+}
+
+mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
+    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    const mac_poll_event_t MAC_POLL_RAM * volatile event,
+    mac_poll_action_t MAC_POLL_RAM * volatile action)
+{
+    step_poll = p;
+    step_tx = tx;
+    step_now = now;
+    step_event = event;
+    step_action = action;
+    step_profile = MAC_RX_IEEE2006;
+    return step();
+}
+
+mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
+    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    const mac_poll_event_t MAC_POLL_RAM * volatile event,
+    mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile)
+{
+    step_poll = p;
+    step_tx = tx;
+    step_now = now;
+    step_event = event;
+    step_action = action;
+    step_profile = profile;
+    return step();
 }
 
 mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,

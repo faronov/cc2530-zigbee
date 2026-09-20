@@ -680,9 +680,10 @@ IHX/CDB bytes and each passes the217 artifact plus1 alias negatives.
 
 The detailed component ledgers below and in their contracts retain historical
 delivery measurements where explicitly identified. This table supersedes
-those figures for #63. Full IEEE2015 reconciliation, R22 Request/Data Request
-alternatives, POLL integration, #45 total timing, #40/#50 physical radio and
-#55 Nordic startup-policy gates remain open.
+those figures for #63. POLL integration was still open at that revision;
+#64 below supplies the explicit Response path. Full IEEE2015 reconciliation,
+R22 Request/Data Request alternatives, #45 total timing, #40/#50 physical radio
+and #55 Nordic startup-policy gates remain open.
 
 ## Offline Association Response context coverage
 
@@ -713,6 +714,35 @@ and checks all three immediate snapshots and board-image source/symbol
 exclusions. No board IMAGE or upload path is added. Neither CRC/timestamp
 inputs nor matching metadata proves physical ACK, association, authenticated
 membership, restoration or complete-stack fit.
+
+## Explicit R22 POLL reception (#64)
+
+The [explicit POLL path](MAC_POLL.md#explicit-r22-response-reception-64)
+passes **host, linked-image and alias-aware simulator** checks for both board
+definitions. Their IHX/CDB artifacts are identical. All52 legacy cases remain;
+four additional cases exercise uncompressed CODE/RAM delivery, actual selected
+source PAN, command-only broadcast-destination admission, explicit/default
+policy separation, invalid-profile atomicity and real Association forwarding.
+Native exact allocations0..126, all254 unsupported profiles and both-board
+ASan/UBSan runs retain the existing state/record/TX preservation corpus.
+
+The genuine composition is **32641 CODE,1925 ordinary XDATA +64 reserved,
+SP7B**, with23 public entries,22455 raw F/S/L/T rows and164 ordered CODE data
+bytes. **278 artifact +1 alias +17 continuation negatives pass**;56 scenarios
+use14 bounded four-case processes. Source/parameter/helper/global ABI,
+complete-state restoration and full upper-IRAM/alias/peripheral/stack guards
+remain. No instruction or return is patched to succeed.
+
+The first wrapper attempt failed the real SP7C cap at7F. Sequential private
+argument staging removes its four persistent IRAM spills and keeps
+`mac_poll` at5 DSEG bytes. Both entries replace all arguments and policy before
+the same worker; public layouts and default admission stay unchanged.
+The unchanged caps leave127 CODE bytes,59 XDATA-reservation bytes and one SP
+increment: no full-stack or IRQ-headroom claim follows.
+
+This section supersedes #63's POLL row only; the other #63 compositions and
+independent floor are unchanged. Receiver ACK/IFS, physical ownership/capture,
+whole Association timing, broader IEEE2015 and BDB/security gates stay open.
 
 ## Conditional legacy POLL extraction coverage
 

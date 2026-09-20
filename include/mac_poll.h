@@ -151,6 +151,14 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile poll,
     mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action);
+/* Per-call profile, not stored in the context. Only an R22 Association
+ * Response may use broadcast destination PAN, with actual selected source PAN.
+ * The legacy step always uses IEEE2006; all lease/timing/ACK duties are intact.
+ */
+mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile poll,
+    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    const mac_poll_event_t MAC_POLL_RAM * volatile event,
+    mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile);
 mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile poll,
     mac_poll_record_t MAC_POLL_RAM * volatile record);
 mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile poll,

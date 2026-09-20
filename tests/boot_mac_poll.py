@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""Genuine legacy POLL composition; optional independent no-poll allocation floor.
+"""Genuine legacy/R22 POLL composition; independent no-poll allocation floor.
 
 Synthetic caller events, real codec/TX/Association/controller instructions.
 Neither executable is a board image or a radio adapter. All s51 processes
@@ -40,66 +40,67 @@ COMMON_PUBLIC = {'mac_command_decode': ('mac_frame', 554, 1060),
 OBJECTS = {'mac_frame': (7136, 216, 15, 10, 1),
  'mac_tx': (5650, 191, 8, 0, 3),
  'mac_association': (2839, 76, 27, 0, 1),
- 'mac_poll': (7332, 323, 5, 0, 4),
- 'mac_poll_test': (7809, 1068, 0, 0, 1),
+ 'mac_poll': (7619, 350, 5, 0, 4),
+ 'mac_poll_test': (8762, 1068, 0, 0, 2),
  'mac_association_test': (4584, 384, 0, 0, 0)}
 POLL = {'name': 'mac_poll_test',
  'modules': ('mac_frame', 'mac_tx', 'mac_association', 'mac_poll', 'mac_poll_test'),
  'result': 'mac_poll_result',
  'tag': b'POL1',
- 'cases': 52,
- 'size': 31401,
- 'xdata': 1898,
- 'private_end': 806,
- 'caller_end': 1874,
+ 'cases': 56,
+ 'size': 32641,
+ 'xdata': 1925,
+ 'private_end': 833,
+ 'caller_end': 1901,
  'stack': 76,
- 'gptrput': 1885,
- 'done': 30826,
- 'boundary': 27529,
- 'code': '56979afc143ace349695d6434d332fc6192a337b718b6e555561542efb484925',
- 'metadata': (21648, '76857c48c6559853c6e982d82a72f66ef7d16b428efac04026087d290dcaf229'),
+ 'gptrput': 1912,
+ 'done': 32039,
+ 'boundary': 28151,
+ 'code': '9758b6de16fedd17df3d8dfac38e5138b53edf9d8cc78ea0b382f7b55cbdb0d1',
+ 'metadata': (22455, '6554dce6aa96e6cfaabe9afcacac68dc54fa1f04aa588fb69feb242eddca6d83'),
  'public': {**COMMON_PUBLIC, 'mac_poll_init': ('mac_poll', 16929, 17013),
  'mac_poll_start': ('mac_poll', 17014, 18253),
- 'mac_poll_step': ('mac_poll', 18254, 22477),
- 'mac_poll_take': ('mac_poll', 22478, 22701),
- 'mac_poll_release': ('mac_poll', 22702, 23054),
- 'main': ('mac_poll_test', 30763, 30829)},
- 'listings': {'mac_frame': (4253, 7136, '646b8e67615465bc59fc1808c30253fa682ed5dbe0bee07250c6b717dc1977bc'),
-              'mac_tx': (3729, 5650, '1e3bb655b3ac1dd41de77bcaacd7875f5dfff7b4d16b4dc5d8acd06c084c6a44'),
+ 'mac_poll_step': ('mac_poll', 22538, 22649),
+ 'mac_poll_take': ('mac_poll', 22765, 22988),
+ 'mac_poll_release': ('mac_poll', 22989, 23341),
+ 'main': ('mac_poll_test', 31976, 32042),
+ 'mac_poll_step_rx': ('mac_poll', 22650, 22764)},
+ 'listings': {'mac_frame': (4253, 7136, '082f1b1418da0c19f0555325854426ef62805fb42807a45d490caf82ee47ad78'),
+              'mac_tx': (3729, 5650, '7d67f14fabe7b996f489f578b2fff7ff47dae1574b4928a63c8f60609d233d21'),
               'mac_association': (1821,
                                   2839,
-                                  '929aaa03ca628dc93adde7a4f6037b253b8f9c21486b4a46cb2670b8bb0b68a1'),
-              'mac_poll': (4884, 7332, 'acd1b81291a491ea296f85433a82337f0a9143e6c085ab5926f49691a0cded04'),
-              'mac_poll_test': (4580,
-                                7682,
-                                '693b9b157a12074754d2c3cb7ec7dc89bcec5dda8e095c675a8755753562f263')},
- 'data': (127, 51, 'accd67f7737bcac63bef1d734c86c7355185e46114c26be7cbab3b0285d1aef3'),
- 'caller': {'poll': (806, 266),
-            'tx': (1072, 168),
-            'request': (1240, 35),
-            'event': (1275, 48),
-            'action': (1323, 25),
-            'record': (1348, 143),
-            'source': (1491, 17),
-            'radio_action': (1508, 22),
-            'association': (1530, 73),
-            'association_request': (1603, 30),
-            'association_event': (1633, 20),
-            'association_record': (1653, 27),
-            'header': (1680, 26),
-            'bytes': (1706, 126),
-            'ack': (1832, 3),
-            'length': (1835, 1),
-            'scenario': (1836, 1),
-            'mode': (1837, 1),
-            'observation': (1838, 1),
-            'i': (1839, 1),
-            'attempt': (1840, 1),
-            'failure': (1841, 2),
-            'grant': (1843, 2),
-            'now': (1845, 4),
-            'origin': (1849, 4),
-            'checksum': (1853, 4)}}
+                                  '5540851c55afef1b0f950bd27943c8b83c31141cb5151688ee4c5653268b2a87'),
+              'mac_poll': (5082, 7619, '834fb337813a163e979fbc1baba30ee8e88bedc09042dcb33743603b127fa175'),
+              'mac_poll_test': (5113,
+                                8598,
+                                '58884b5e06ab0b995882b525c7dc284c91275c2e1f560f3b6e7f33e0ed7ecc90')},
+ 'data': (164, 56, '6dea002d2de5239c7de9f69a91179b2ae2cff88be68c862c14f554c1f7eb0fa8'),
+ 'caller': {'poll': (833, 266),
+            'tx': (1099, 168),
+            'request': (1267, 35),
+            'event': (1302, 48),
+            'action': (1350, 25),
+            'record': (1375, 143),
+            'source': (1518, 17),
+            'radio_action': (1535, 22),
+            'association': (1557, 73),
+            'association_request': (1630, 30),
+            'association_event': (1660, 20),
+            'association_record': (1680, 27),
+            'header': (1707, 26),
+            'bytes': (1733, 126),
+            'ack': (1859, 3),
+            'length': (1862, 1),
+            'scenario': (1863, 1),
+            'mode': (1864, 1),
+            'observation': (1865, 1),
+            'i': (1866, 1),
+            'attempt': (1867, 1),
+            'failure': (1868, 2),
+            'grant': (1870, 2),
+            'now': (1872, 4),
+            'origin': (1876, 4),
+            'checksum': (1880, 4)}}
 FLOOR = {'name': 'association_tx_floor',
  'modules': ('mac_frame', 'mac_tx', 'mac_association', 'mac_association_test'),
  'result': 'mac_association_result',
@@ -284,10 +285,17 @@ def verify(profile, image, symbols, debug, memory, listings, objects):
     if "rounds" in p:
         edges[p["modules"][-1]] += ("mac_association_step_rx",)
     if "mac_poll" in p["modules"]:
-        edges["mac_poll"] = ("mac_frame_encode", "mac_frame_decode", "mac_tx_submit", "mac_tx_release")
+        edges["mac_poll"] = ("mac_frame_encode", "mac_frame_decode_profile", "mac_tx_submit", "mac_tx_release")
         edges["mac_tx"] = ("mac_frame_decode",)
         edges["mac_poll_test"] += tuple(n for n in public if n.startswith("mac_poll_"))
-        edges["mac_poll_test"] += ("mac_tx_init", "mac_tx_copy", "mac_tx_step")
+        edges["mac_poll_test"] += ("mac_tx_init", "mac_tx_copy", "mac_tx_step", "mac_association_step_rx")
+        worker = label(listings["mac_poll"], "step")
+        require(worker in starts["mac_poll"], "Private receive worker absent")
+        for name in ("mac_poll_step", "mac_poll_step_rx"):
+            _, low, high = public[name]
+            require(any(low <= a <= high and data[0] in (2, 0x12) and len(data) == 3
+                        and int.from_bytes(data[1:], "big") == worker
+                        for a, data in records(listings["mac_poll"])), "Receive entry bypasses shared worker")
         a = p["boundary"]
         require(a in starts["mac_poll_test"] and raw[a:a + 3] ==
                 b"\x12" + label(listings["mac_poll_test"], "setup").to_bytes(2, "big"),
@@ -367,6 +375,10 @@ def negatives(args, output):
     text = args["listings"][caller]
     done_name = p["result"].replace("_result", "_done")
     reject(listings={**args["listings"], caller: text.replace("_" + done_name + ":", "_wrong:", 1)})
+    if "mac_poll" in p["modules"]:
+        worker = args["listings"]["mac_poll"]
+        require("_step:" in worker, "Private worker negative did not apply")
+        reject(listings={**args["listings"], "mac_poll": worker.replace("_step:", "_wrong_step:", 1)})
     line = DATA.search(text)[0]
     reject(listings={**args["listings"], caller: text.replace(line, "", 1)})
     reject(listings={**args["listings"], caller: text + "\n" + line + "\n"})
@@ -511,7 +523,7 @@ def execute(simulator, path, p, allocated):
         finished = first + 4 == p["cases"]
         carry, high = guards(parts, 500, p, allocated, p["done"] if finished else boundary, finished)
         peak = max(peak, high)
-    require(peak == 0x79, f"Reviewed poll peak changed: {peak:#x}")
+    require(peak == 0x7b, f"Reviewed poll peak changed: {peak:#x}")
     return peak, p["cases"] // 4, negatives_count
 
 

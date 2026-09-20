@@ -1486,6 +1486,14 @@ and generated CI artifacts; no new repository or CI dependency is required.
 
 ### Conditional legacy POLL extraction sources
 
+The #64 explicit receive-path extension reuses #63's reviewed R22 Annex
+D.3/Table D-3 classifier and synthetic Response layouts. It introduces no new
+normative timeout, transmit format or general broadcast-DATA permission.
+Its private argument staging and shared worker are original C/SDCC work;
+real object/stack measurements rejected SP7F and verified the subsequent
+SP7B result under the unchanged SP7C cap. Neither native inputs nor simulator
+continuations are hardware observations.
+
 The [controller, API and synthetic corpus](MAC_POLL.md) are original
 BSD-3-Clause work composing the repository's real MAC codec, transmitter and
 Association context. IEEE2006 7.1.16.1.3-7.1.16.3 pp.133-135 and7.5.6.3
