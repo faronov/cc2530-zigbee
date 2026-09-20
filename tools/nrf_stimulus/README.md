@@ -414,6 +414,11 @@ are not boolean caller assertions or satisfied by the image's hashes.
 Instruction retirement, a healthy decoded control object and a reset vector
 catch are three different observations; none proves restored sniffer service.
 No SRAM transfer, reset, helper execution or RF experiment has been performed.
+The separate [opt-in v3 read-only profile](../../docs/NRF_RECOVERY.md#opt-in-v3-startup-source-binding)
+now collects the selector/CPUID/watchdog/NVMC facts and evaluates the bounded
+source predicates against complete UICR bytes. A conditional source match
+does not remove those physical gates or turn retained samples into a fresh
+execution grant.
 
 Focused portable checks:
 

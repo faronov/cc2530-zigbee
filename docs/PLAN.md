@@ -480,6 +480,11 @@ now implements host-tested MEM-AP core/SRAM transactions and a checked return
 to a halted original reset vector. It supplies no live operator and does not
 restart or validate sniffer service. Fresh binding, preservation checks and
 the separately reviewed physical execution/return scope remain no-go gates.
+The #61 [v3 acquisition profile](NRF_RECOVERY.md#opt-in-v3-startup-source-binding)
+adds explicit fresh-selector/core/watchdog/NVMC/UICR observations and a
+fail-closed source comparison, without changing default v2 commands. It is
+host-tested on Tcl and standalone Jim. Conditional source matching remains
+separate from actual startup, reset-policy and return-to-sniffer acceptance.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

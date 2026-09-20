@@ -31,6 +31,16 @@ WORDS = ("ctrl_id", "approtect_status", "mem_ap_id", "page_size", "page_count",
          "device_id_0", "device_id_1", "part", "variant", "package", "ram_kib", "flash_kib") + tuple(
              f"acl_{slot}_{field}" for slot in range(8) for field in ("addr", "size", "perm"))
 ACL_ADDRESSES = tuple(0x4001e800 + 0x10 * slot for slot in range(8))
+STARTUP_READS = (
+    (0x10000130, ("mdk_selector_0", "mdk_selector_1")),
+    (0xe000ed00, ("cpuid",)),
+    (0x40010400, ("wdt_runstatus",)),
+    (0x4001e400, ("nvmc_ready",)),
+    (0x4001e504, ("nvmc_config",)),
+    (0x10001208, ("uicr_approtect",)),
+)
+STARTUP_WORDS = tuple(name for _, names in STARTUP_READS for name in names)
+WORDS_V3 = WORDS + STARTUP_WORDS
 OVERRIDES = ("LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "OPENOCD_SCRIPTS", "TCL_LIBRARY")
 
 SCRIPT = r"""
@@ -96,7 +106,7 @@ proc nrfp_snapshot {} {
         error "invalid device identity"
     }
     set values [concat $values [nrfp_acl]]
-    set encoded {}
+    @STARTUP_SNAPSHOT@set encoded {}
     foreach v $values {lappend encoded [format %08x $v]}
     return [join $encoded " "]
 }
@@ -201,28 +211,49 @@ def selection(path):
     return data
 
 
-def render_script(serial, directory_fd):
+def observation_profile(startup_binding):
+    require(type(startup_binding) is bool, "Observation profile must be an explicit boolean")
+    return ("NS51_READ_V3", WORDS_V3) if startup_binding else ("NS51_READ_V2", WORDS)
+
+
+def render_script(serial, directory_fd, *, startup_binding=False):
+    header, _ = observation_profile(startup_binding)
     require(isinstance(serial, str) and re.fullmatch(r"[1-9][0-9]{0,9}", serial)
             and int(serial) <= 0xffffffff, "Invalid probe serial")
     require(type(directory_fd) is int and directory_fd >= 0, "Invalid directory descriptor")
+    extra = ""
+    if startup_binding:
+        reads = " ".join(f"[nrfp_words 0x{address:08x} {len(names)}]"
+                         for address, names in STARTUP_READS)
+        extra = f"set values [concat $values {reads}]\n    "
     return (SCRIPT.replace("@SERIAL@", serial).replace("@ROOT@", f"/proc/self/fd/{directory_fd}")
+            .replace("@STARTUP_SNAPSHOT@", extra).replace("NS51_READ_V2", header)
             .replace("@ACL_ADDRESSES@", " ".join(f"0x{address:08x}" for address in ACL_ADDRESSES)))
 
 
-def observations(data):
+def observations(data, *, startup_binding=False):
+    header, words = observation_profile(startup_binding)
     require(len(data) <= 2048, "Oversized acquisition observations")
     text = data.decode("ascii")
     rows = text.split("\n")
-    require(len(rows) == 6 and rows[0] == "NS51_READ_V2"
+    require(len(rows) == 6 and rows[0] == header
             and rows[4:] == ["COMPLETE", ""], "Incomplete acquisition observations")
     snapshots = []
     for label, row in zip(("before", "after-first", "after-second"), rows[1:4]):
-        require(re.fullmatch(rf"{label}(?: [0-9a-f]{{8}}){{{len(WORDS)}}}", row) is not None,
+        require(re.fullmatch(rf"{label}(?: [0-9a-f]{{8}}){{{len(words)}}}", row) is not None,
                 "Malformed acquisition snapshot")
         snapshots.append(tuple(int(word, 16) for word in row.split(" ")[1:]))
     require(snapshots[0] == snapshots[1] == snapshots[2],
-            "Acquired identity, geometry or protection changed")
-    values = dict(zip(WORDS, snapshots[0]))
+            "Acquired identity, protection or sampled state changed")
+    values = dict(zip(words, snapshots[0]))
+    validate_words(values, words)
+    return values
+
+
+def validate_words(values, words):
+    require(type(values) is dict and set(values) == set(words) and
+            all(type(v) is int and 0 <= v <= 0xffffffff for v in values.values()),
+            "Expected exact observation fields and uint32 values")
     require(values["ctrl_id"] == 0x02880000 and values["approtect_status"] == 1
             and values["mem_ap_id"] not in (0, 0xffffffff)
             and values["page_size"] == 4096 and values["page_count"] == 256
@@ -233,7 +264,66 @@ def observations(data):
             not in ((0, 0), (0xffffffff, 0xffffffff)), "Invalid acquired identity")
     require(all(values[f"acl_{slot}_perm"] in (0, 2) for slot in range(8)),
             "ACL read denial or unknown permission; no reset or write")
-    return values
+
+
+def assess_startup(values, uicr):
+    """Bind sampled v3 facts to the audited MDK branch, never grant execution."""
+    validate_words(values, WORDS_V3)
+    require(type(uicr) is bytes and len(uicr) == REGIONS[1][2],
+            "Startup binding requires the complete immutable UICR capture")
+    word = int.from_bytes(uicr[0x208:0x20c], "little")
+    require(word == values["uicr_approtect"], "UICR capture differs from sampled APPROTECT word")
+    classes = {0x41414330: "hardware-only", 0x41414430: "hardware-only",
+               0x41414431: "hardware-only", 0x41414630: "hardware-and-software"}
+    protection = classes.get(values["variant"], "unknown")
+    first, second = values["mdk_selector_0"], values["mdk_selector_1"]
+    supported = first == 8 and second <= 5
+    copies = first == 8 and second >= 5
+    blockers = []
+    if protection == "unknown":
+        blockers.append("unsupported-production-variant")
+    if not supported:
+        blockers.append("unsupported-mdk-selector")
+    if protection != "unknown":
+        enhanced = protection == "hardware-and-software"
+        if supported and copies != enhanced:
+            blockers.append("selector-protection-class-conflict")
+        if word & 0xff != (0x5a if enhanced else 0xff):
+            blockers.append("uicr-pall-not-class-disabled")
+    if values["cpuid"] & 0xff0ffff0 != 0x410fc240:
+        blockers.append("unexpected-cortex-m-family")
+    if values["wdt_runstatus"] & 1:
+        blockers.append("watchdog-running")
+    if values["nvmc_ready"] & 1 != 1:
+        blockers.append("nvmc-busy")
+    if values["nvmc_config"] & 3:
+        blockers.append("nvmc-not-read-only")
+    return {
+        "schema": "nrf52840-startup-source-binding-v1",
+        "evidence": "recorded-read-samples-and-audited-source-only",
+        "disposition": "conditional-source-match" if not blockers else "no-go",
+        "source_predicates_met": not blockers,
+        "blockers": blockers,
+        "protection_class": protection,
+        "mdk_selector_supported": supported,
+        "predicted_whole_word_copy": copies,
+        "predicted_copy_value": word if copies else None,
+        "uicr_approtect_word": word,
+        "uicr_capture_sha256": hashlib.sha256(uicr).hexdigest(),
+        "physical_execution_decision": "no-go",
+        "open_gates": [
+            "named-silicon-revision-and-errata", "reserved-uicr-bit-policy",
+            "board-power-and-reset", "fresh-live-operator-binding",
+            "full-nv-and-sniffer-return",
+        ],
+        "silicon_compatibility_verified": False,
+        "startup_verified": False,
+        "debug_access_after_reset_verified": False,
+        "authorizes_cpu_control": False,
+        "authorizes_sram_write": False,
+        "authorizes_programming": False,
+        "authorizes_rf": False,
+    }
 
 
 def run_programmer(argv, operation, environment, descriptors, log):
@@ -270,7 +360,8 @@ def run_programmer(argv, operation, environment, descriptors, log):
         process.stdout.close()
 
 
-def acquire(selected, operation):
+def acquire(selected, operation, *, startup_binding=False):
+    header, _ = observation_profile(startup_binding)
     require(sys.platform == "linux" and Path("/proc/self/fd").is_dir(),
             "Acquisition requires the reviewed Linux descriptor interface")
     for name in OVERRIDES:
@@ -279,8 +370,11 @@ def acquire(selected, operation):
     with private_directory(operation) as directory:
         require(not os.listdir(directory), "Operation directory must be new and empty; no retry")
         with private_capture(operation / "consumed.json") as stream:
-            json.dump({"schema": "nrf52840-read-attempt-v1", "selection": selected,
-                       "programming_authorized": False}, stream, sort_keys=True)
+            marker = {"schema": "nrf52840-read-attempt-v1", "selection": selected,
+                      "programming_authorized": False}
+            if startup_binding:
+                marker.update(schema="nrf52840-read-attempt-v2", observation_schema=header)
+            json.dump(marker, stream, sort_keys=True)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -292,7 +386,7 @@ def acquire(selected, operation):
                     pass
         with private_capture(operation / "observations.txt"):
             pass
-        script = render_script(selected["probe_serial"], directory)
+        script = render_script(selected["probe_serial"], directory, startup_binding=startup_binding)
         with private_capture(operation / "acquire.tcl") as stream:
             stream.write(script)
             stream.flush()
@@ -317,8 +411,15 @@ def acquire(selected, operation):
         log = private_bytes(operation / "openocd.txt", LOG_LIMIT)
         require(re.search(rb"(?m)^(?:Error|Warn)\s*:", log) is None,
                 "Programmer reported an error or warning; inspect the private log")
-        identity = observations(private_bytes(operation / "observations.txt", 2048))
+        observation_data = private_bytes(operation / "observations.txt", 2048)
+        identity = observations(observation_data, startup_binding=startup_binding)
         agreement = compare_captures(operation / "read-01", operation / "read-02")
+        if startup_binding:
+            with private_directory(operation / "read-01") as first:
+                uicr, _ = _read_capture(first, REGIONS[1][0], REGIONS[1][2])
+            require(hashlib.sha256(uicr).hexdigest() == agreement["regions"][1]["sha256"],
+                    "UICR changed after full capture comparison")
+            binding = assess_startup(identity, uicr)
         for pass_name in ("read-01", "read-02"):
             for name, _, _ in REGIONS:
                 with (operation / pass_name / name).open("rb") as stream:
@@ -345,6 +446,9 @@ def acquire(selected, operation):
             "restoration_verified": False,
             "authorizes_programming": False,
         }
+        if startup_binding:
+            report.update(schema="nrf52840-readback-v3", startup_binding=binding,
+                          observations_sha256=hashlib.sha256(observation_data).hexdigest())
         with private_capture(operation / "readback.json") as stream:
             json.dump(report, stream, sort_keys=True, indent=2)
             stream.write("\n")
@@ -359,6 +463,8 @@ def main(argv=None):
     parser.add_argument("--selection", required=True, type=Path, help="Private pinned-tool/probe JSON")
     parser.add_argument("--operation", required=True, type=Path, help="New empty private 0700 directory")
     parser.add_argument("--execute-read", action="store_true", help="Explicitly start one real read attempt")
+    parser.add_argument("--startup-binding", action="store_true",
+                        help="Explicit v3 sampled startup facts; never permits execution")
     args = parser.parse_args(argv)
     try:
         selected = selection(args.selection)
@@ -367,7 +473,7 @@ def main(argv=None):
         if not args.execute_read:
             print("Selection/tool pins checked offline; no device opened and no operation consumed.")
             return 0
-        acquire(selected, args.operation)
+        report = acquire(selected, args.operation, startup_binding=args.startup_binding)
     except (ValueError, UnicodeError) as error:
         # JSON error messages can contain private input fragments.
         message = "Invalid private JSON selection" if isinstance(error, json.JSONDecodeError) else str(error)
@@ -381,6 +487,12 @@ def main(argv=None):
         print(f"nrf-acquire: host file/process operation failed (errno {error.errno}); no retry.",
               file=sys.stderr)
         return 1
+    if args.startup_binding:
+        if not report["startup_binding"]["source_predicates_met"]:
+            print("nrf-acquire: startup source predicates are NO-GO; inspect the private report. "
+                  "No CPU control, writes or RF authorized.", file=sys.stderr)
+            return 2
+        print("Sampled startup source predicates match conditionally; physical execution remains NO-GO.")
     print("Two read passes and sampled ACL checks agree. Restoration and programming are NOT authorized.")
     return 0
 

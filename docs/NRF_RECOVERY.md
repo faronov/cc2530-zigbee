@@ -265,6 +265,82 @@ followed by `shutdown`. `noinit` alone does not make the complete script safe:
 it still contains an explicit later `init`. Neither compatibility check
 opened a device or substitutes for the separately scoped #52 readback.
 
+### Opt-in v3 startup-source binding
+
+#61 adds an explicit `--startup-binding` read profile. The default v2
+generated commands remain **byte-identical** to the reviewed predecessor.
+V3 still has no CPU control, writes or recovery fallback and still requires
+the separate `--execute-read` switch to open a device.
+
+```sh
+python3 -B tools/nrf_acquire.py \
+  --selection /path/to/private/nrf/selection.json \
+  --operation /path/to/private/nrf/new-v3-operation \
+  --startup-binding
+```
+
+Without `--execute-read` this checks only private selection/tool pins and
+the empty operation directory; no startup facts have been acquired.
+During separately scoped manual use, v3 adds the following **seven words**
+to each of the existing three 36-word snapshots:
+
+| Address | Recorded facts | Read boundary |
+|---|---|---|
+| `10000130`, `10000134` | Actual factory selectors for the audited MDK configuration-249 branch | One two-word FICR read |
+| `E000ED00` | CPUID | Core identity only, not a DHCSR read or CPU-state command |
+| `40010400` | WDT.RUNSTATUS | No watchdog stop, feed or configuration |
+| `4001E400`, `4001E504` | NVMC.READY and CONFIG | Separate reads; no NVMC operation |
+| `10001208` | Complete UICR.APPROTECT word | Bound to the actual complete UICR captures, not only PALL |
+
+`NS51_READ_V3` requires exactly **43 words** per snapshot. Both profiles
+reject unexpected headers/counts and any change between samples. There is
+no automatic schema detection or promotion: retained v1/v2 records keep
+their original claims, v1 remains insufficient for ACL qualification, and
+v2 is not accepted as v3 evidence. A v3 attempt has its own versioned
+consumed marker. Its `nrf52840-readback-v3` report also binds the exact
+observation transcript's SHA-256.
+
+After the same two complete flash/UICR passes and ACL checks, the operator
+rereads the first full UICR file, requires its hash to match the comparison,
+and binds the sampled APPROTECT word to those bytes. `assess_startup()`
+revalidates exact typed v3 fields, geometry and all ACL predicates; it does
+not accept missing fields, old observations or caller-supplied approval flags.
+
+The bounded source comparison recognizes only the four production variants
+in the [protection-class ledger](#bounded-protection-class-source-evidence).
+Supported selector pairs are first `8`, second `0..5`; legacy class must
+skip the copy and have PALL `FF`, enhanced class must take the copy and
+have PALL `5A`. The actual MDK default branch for a future selector is
+reported accurately, **but remains unsupported/no-go**, not an allowlist
+extension. The whole predicted copied word is retained without normalization.
+Reserved UICR-bit policy is an explicit open gate.
+
+CPUID checks the same Cortex-M4 family mask as the handoff primitives; it
+records, but does not approve, core variant/revision. Documented status
+fields require WDT stopped, NVMC ready and read-only. Other register bits
+remain recorded rather than interpreted as documented fields. Unknown
+production/selector values, contradictory class/branch/PALL, active watchdog
+or uncertain NVMC fields produce `disposition=no-go`, named blockers and
+**CLI exit 2**. A structurally valid negative report is retained privately;
+it is not successful startup acceptance. Acquisition, malformed data or
+capture conflicts instead return exit 1 without an accepted readback report.
+
+Matching source predicates have `disposition=conditional-source-match`,
+not permission to run. **Every v3 report keeps physical execution no-go**:
+named silicon revision/errata, reserved UICR bits, board power/reset,
+fresh live-operation binding and full NV/sniffer return remain open.
+All CPU/SRAM/programming/RF authorization flags are false. Historical v3
+samples are not a fresh grant for a later connection, nor proof that the
+running firmware did not change state between/after reads.
+
+The 30 acquisition/binding tests pass Tcl 8.6 and the reviewed standalone
+Jim, including all 69 v3 failure positions, every added word's changed/
+short/malformed cases, both source classes, all PALL bytes, reserved-bit
+preservation, schema mismatch, UICR conflict and post-comparison mutation.
+The ordinary tests use only synthetic tools/data. An explicit compatibility
+rerun can set `NRF_ACQUIRE_TEST_INTERPRETER=/reviewed/build/jimtcl/jimsh`;
+never select a device-enabled OpenOCD executable for this test override.
+
 ### Read-path source contracts
 
 The target/read-path review pins OpenOCD 0.12.0,
@@ -281,6 +357,10 @@ These are implementation facts, not observations of a physical board:
 | CTRL-AP identity/status predicate; the separate destructive recovery procedure is deliberately not imported | [`nrf52.cfg:53-81`](https://github.com/openocd-org/openocd/blob/9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c/tcl/target/nrf52.cfg#L53-L81) |
 | Vendor FICR offsets, part/variant and memory-size definitions | [`nrf52840.h:893-904`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L893-L904), [`nrf52840_bitfields.h:1567-1684`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L1567-L1684) |
 | Eight ACL triplets, READ bit 2 and WRITE bit 1; debugger read-as-zero on read denial | [`nrf52840.h:604-613`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L604-L613), [`2357-2360`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L2357-L2360), [`nrf52840_bitfields.h:199-209`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L199-L209), [Nordic PS 4413_417 v1.1 section 6.3, pp.107-110](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites) |
+| Actual nRF52840 configuration-249 selector cases/default, not INFO.VARIANT | [`nrf52_erratas.h:13163-13207`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52_erratas.h#L13163-L13207) |
+| Selected handler copies the whole UICR word to volatile APPROTECT.DISABLE | [`system_nrf52_approtect.h:41-58`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/system_nrf52_approtect.h#L41-L58) |
+| UICR.APPROTECT, watchdog and NVMC register offsets and read access | [`nrf52840.h:939`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L939), [`2076`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L2076), [`2375-2379`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840.h#L2375-L2379) |
+| Documented NVMC/WDT/PALL masks, not assumptions about reserved bits | [`nrf52840_bitfields.h:4968-4990`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L4968-L4990), [`15857-15858`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L15857-L15858), [`17322-17325`](https://github.com/zephyrproject-rtos/hal_nordic/blob/5470822384781624efb2fda28cbc6a895a227677/nrfx/mdk/nrf52840_bitfields.h#L17322-L17325) |
 
 Acquiring and comparing these files is still **not an executable restoration
 plan or a programming scope**. A later writer must bind fresh actual

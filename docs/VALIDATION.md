@@ -863,6 +863,29 @@ This is **host-tested and image/ABI-checked**, not an ARM instruction simulator,
 hardware experiment, live loader, startup observation, unchanged-NV proof
 or restoration/RF acceptance.
 
+## Nordic startup binding: explicit v3 observations
+
+The opt-in #61 acquisition profile has 30 combined acquisition/binding tests
+passing both Tcl 8.6 and the reviewed standalone Jim. The default v2 generated
+script is byte-identical to its predecessor. V3 is selected explicitly and
+retains all three ACL-qualified snapshots and four complete region reads,
+adding exactly seven words per snapshot (43 total).
+
+All 69 v3 operation/finalization failure points stop without another command.
+Each extra word is independently changed at both later boundaries, shortened
+and malformed; no partial/changed transcript becomes a report. Pure cases
+cover supported/excluded production classes, bounded selectors versus the
+MDK's actual future default, every PALL byte, whole-word reserved-bit retention,
+typed-field/schema rejection and every ACL permission bit. Complete UICR hash
+and sampled-word conflicts reject stale/mutated binding inputs.
+
+Stable unsupported source facts retain an explicit negative private report
+and return exit 2; malformed/acquisition failures return exit 1. Matching
+source predicates do not authorize CPU control, SRAM/flash writing or RF.
+Default invocation, including the v3 flag, remains offline. These are **host
+checks**, not a physical read or an ARM execution simulation; actual manual
+records belong separately in [Nordic recovery evidence](NRF_RECOVERY.md).
+
 ## Nordic page overlay: offline artifact evidence
 
 The [report-only planner](NRF_RECOVERY.md#offline-page-overlay-report) has

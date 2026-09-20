@@ -862,8 +862,8 @@ handshakes, full SRAM readback and irreversible fault state. It uses fresh
 SYSRESETREQ catch rather than changing an active exception's IPSR.
 Return ends at a verified **halted** original reset vector, not restored
 sniffer service. Its pinned-image admission and halted-state decoder are
-offline utilities; no live equipment operator or target-policy evaluator
-is present. They do not widen the read-only acquisition API below.
+offline utilities; no live execution operator or complete physical-policy
+approval is present. They do not widen acquisition into CPU control.
 
 The separate [manual acquisition operator](NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
 uses an explicitly selected, locally reviewed OpenOCD preservation mode and
@@ -877,6 +877,13 @@ Live sampled ACL agreement is not an atomicity or reset-history proof.
 Debug-interface power/configuration and SWD shutdown traffic remain real
 side effects; the dummy MEM-AP target state is not physical CPU evidence.
 Tool-reported matching reads do not authorize programming or prove restoration.
+The [explicit v3 profile](NRF_RECOVERY.md#opt-in-v3-startup-source-binding)
+extends each snapshot with seven startup words, while preserving the default
+v2 command script. It binds actual MDK selectors, core-family/watchdog/NVMC
+facts and complete UICR.APPROTECT to both full UICR captures. Unsupported or
+contradictory source conditions have a negative report/exit, not an execution
+grant; even a match leaves all CPU/SRAM/RF permissions false. This read-only
+source classifier is not named-revision/errata or board/reset approval.
 The helper's [actual startup audit](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites)
 also distinguishes absent linked NV writers from conditional volatile
 APPROTECT, cache and regulator effects before application disarming.

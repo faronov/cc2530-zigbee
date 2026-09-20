@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -22,6 +23,16 @@ set calls 0
 set reads 0
 set snapshots 0
 set scenario $env(NRFP_TEST_SCENARIO)
+set profile $env(NRFP_TEST_PROFILE)
+set startup_words {0x8 0x2 0x410fc241 0x0 0x1 0x0 0xffffffff}
+if {[string match "startup-enhanced*" $scenario]} {
+    lset startup_words 1 0x5
+    lset startup_words 6 0xaabbcc5a
+    if {$scenario eq "startup-enhanced-erased"} {lset startup_words 6 0xffffffff}
+}
+if {[regexp {^startup-set-([0-6])-(0x[0-9a-f]+)$} $scenario all index value]} {
+    lset startup_words $index $value
+}
 if {$scenario eq "library-env" && $env(LD_LIBRARY_PATH) ne $env(NRFP_TEST_LIBRARY)} {
     error "wrong selected library environment"
 }
@@ -69,7 +80,7 @@ proc nrfp.dap {args} {
     }
 }
 proc nrfp.mem {args} {
-    global scenario snapshots
+    global scenario snapshots profile startup_words
     if {$args eq "configure -work-area-size 0"} {return}
     action memory {*}$args
     switch -- $args {
@@ -78,6 +89,30 @@ proc nrfp.mem {args} {
         "read_memory 0x10000060 32 2" {set result {0x12345678 0x9abcdef0}}
         "read_memory 0x10000100 32 5" {set result {0x52840 0x41414430 0x2004 0x100 0x400}}
         default {
+            set start -1
+            switch -- $args {
+                "read_memory 0x10000130 32 2" {set start 0; set count 2}
+                "read_memory 0xe000ed00 32 1" {set start 2; set count 1}
+                "read_memory 0x40010400 32 1" {set start 3; set count 1}
+                "read_memory 0x4001e400 32 1" {set start 4; set count 1}
+                "read_memory 0x4001e504 32 1" {set start 5; set count 1}
+                "read_memory 0x10001208 32 1" {set start 6; set count 1}
+            }
+            if {$start >= 0} {
+                if {$profile ne "v3"} {error "v2 attempted startup reads"}
+                set result [lrange $startup_words $start [expr {$start + $count - 1}]]
+                if {[regexp {^startup-(change|short|malformed)-([0-6])-([123])$} \
+                    $scenario all kind index phase] &&
+                    $start <= $index && $index < $start + $count && $snapshots >= $phase} {
+                    set offset [expr {$index - $start}]
+                    switch -- $kind {
+                        change {lset result $offset 0x1234}
+                        short {set result [lrange $result 1 end]}
+                        malformed {lset result $offset {[exec forbidden]}}
+                    }
+                }
+                return $result
+            }
             if {[llength $args] != 4 || [lindex $args 0] ne "read_memory" ||
                 [lindex $args 2] ne "32" || [lindex $args 3] ne "3" ||
                 [lindex $args 1] ni {0x4001e800 0x4001e810 0x4001e820 0x4001e830
@@ -110,6 +145,11 @@ proc nrfp.mem {args} {
     if {$scenario eq "wrong-part" && [lindex $args 1] == 0x10000100} {
         lset result 0 0x52832
     }
+    if {[string match "startup-enhanced*" $scenario] && [lindex $args 1] == 0x10000100} {
+        lset result 1 0x41414630
+    }
+    if {[regexp {^startup-variant-(0x[0-9a-f]+)$} $scenario all variant] &&
+        [lindex $args 1] == 0x10000100} {lset result 1 $variant}
     if {$scenario eq "changed-identity" && $snapshots == 2 && [lindex $args 1] == 0x10000060} {
         lset result 0 0x12345679
     }
@@ -118,7 +158,7 @@ proc nrfp.mem {args} {
     return $result
 }
 proc dump_image {path address length} {
-    global reads scenario
+    global reads scenario profile startup_words
     action dump $address $length
     incr reads
     if {$address == 0 && $length == 0x100000} {
@@ -127,6 +167,11 @@ proc dump_image {path address length} {
         set byte B
     } else {error "unexpected dump region"}
     set data [string repeat $byte $length]
+    if {$profile eq "v3" && $address == 0x10001000} {
+        set input [open $::env(NRFP_TEST_UICR) rb]
+        set data [read $input]
+        close $input
+    }
     if {$scenario eq "mismatch" && $reads == 4} {set data [string replace $data 4095 4095 C]}
     if {$scenario eq "truncated" && $reads == 4} {set data [string range $data 1 end]}
     set file [open $path wb]
@@ -151,9 +196,10 @@ class AcquisitionTests(unittest.TestCase):
         self.selection_path = self.root / "selection.json"
         self.counter = 0
         self.operation = self.new_operation()
+        self.interpreter = shutil.which(os.environ.get("NRF_ACQUIRE_TEST_INTERPRETER", "tclsh8.6"))
         self.tool('#!' + sys.executable + '\nimport os,sys\n'
-                  'os.execv(' + repr(shutil.which("tclsh8.6") or "/missing/tclsh8.6") + ', ['
-                  + repr(shutil.which("tclsh8.6") or "/missing/tclsh8.6") + ', '
+                  'os.execv(' + repr(self.interpreter or "/missing/tclsh8.6") + ', ['
+                  + repr(self.interpreter or "/missing/tclsh8.6") + ', '
                   + repr(str(self.fixture)) + ', sys.argv[2]])\n')
         self.environment = patch.dict(os.environ, {"NRFP_TEST_SCENARIO": "good"})
         self.environment.start()
@@ -193,19 +239,36 @@ class AcquisitionTests(unittest.TestCase):
         self.selection_path.write_text(json.dumps(value))
         self.selection_path.chmod(0o600)
 
-    def invoke(self, execute=True):
+    def invoke(self, execute=True, *, startup_binding=False):
         stdout, stderr = io.StringIO(), io.StringIO()
         args = ["--selection", str(self.selection_path), "--operation", str(self.operation)]
         if execute:
             args.append("--execute-read")
-        with redirect_stdout(stdout), redirect_stderr(stderr):
+        if startup_binding:
+            args.append("--startup-binding")
+        environment = {"NRFP_TEST_PROFILE": "v3" if startup_binding else "v2"}
+        if startup_binding:
+            scenario = os.environ["NRFP_TEST_SCENARIO"]
+            word = 0xaabbcc5a if scenario == "startup-enhanced" else 0xffffffff
+            selected = re.fullmatch(r"startup-set-6-(0x[0-9a-f]+)", scenario)
+            if selected:
+                word = int(selected[1], 16)
+            if scenario == "startup-uicr-mismatch":
+                word = 0
+            data = bytearray(b"B" * 4096)
+            data[520:524] = word.to_bytes(4, "little")
+            fixture = self.root / "synthetic-uicr.bin"
+            fixture.write_bytes(data)
+            environment["NRFP_TEST_UICR"] = str(fixture)
+        with redirect_stdout(stdout), redirect_stderr(stderr), \
+                patch.dict(os.environ, environment):
             result = acquire.main(args)
         self.assertNotIn(str(self.root), stdout.getvalue() + stderr.getvalue())
         self.assertNotIn("123456789", stdout.getvalue() + stderr.getvalue())
         return result, stdout.getvalue(), stderr.getvalue()
 
     def require_tcl(self):
-        self.assertIsNotNone(shutil.which("tclsh8.6"), "Tcl8.6 is required for offline script execution")
+        self.assertIsNotNone(self.interpreter, "The selected standalone Tcl interpreter is required")
 
     def test_default_is_offline_and_does_not_consume_or_start_programmer(self):
         with patch.object(acquire.subprocess, "Popen", side_effect=AssertionError("no process")):
@@ -481,6 +544,249 @@ class AcquisitionTests(unittest.TestCase):
                 mixed[2] = changed[2]
                 with self.subTest(slot=slot, field=field), self.assertRaises(ValueError):
                     acquire.observations(b"".join(mixed))
+
+    def test_v3_default_remains_offline_and_unconsumed(self):
+        with patch.object(acquire.subprocess, "Popen", side_effect=AssertionError("no process")):
+            result, stdout, stderr = self.invoke(False, startup_binding=True)
+        self.assertEqual((result, stderr), (0, ""))
+        self.assertIn("offline", stdout)
+        self.assertEqual(list(self.operation.iterdir()), [])
+
+    def test_v2_generated_commands_remain_byte_identical_to_the_reviewed_predecessor(self):
+        script = acquire.render_script("123456789", 4)
+        self.assertEqual(hashlib.sha256(script.encode("ascii")).hexdigest(),
+                         "684ca80cef03fbde284ee1936e4fd216919a48129897750a738f4a91a70d18ee")
+
+    def test_v3_reads_exact_extra_words_and_binds_complete_uicr(self):
+        self.require_tcl()
+        result, stdout, stderr = self.invoke(startup_binding=True)
+        self.assertEqual((result, stderr), (0, ""))
+        self.assertIn("physical execution remains NO-GO", stdout)
+        report = json.loads((self.operation / "readback.json").read_bytes())
+        self.assertEqual(report["schema"], "nrf52840-readback-v3")
+        self.assertEqual(len(report["target_words"]), 43)
+        marker = json.loads((self.operation / "consumed.json").read_bytes())
+        self.assertEqual(marker["observation_schema"], "NS51_READ_V3")
+        self.assertEqual(marker["schema"], "nrf52840-read-attempt-v2")
+        transcript = (self.operation / "observations.txt").read_bytes()
+        self.assertEqual(report["observations_sha256"], hashlib.sha256(transcript).hexdigest())
+        self.assertEqual(acquire.observations(transcript, startup_binding=True), report["target_words"])
+        binding = report["startup_binding"]
+        self.assertTrue(binding["source_predicates_met"])
+        self.assertEqual(binding["protection_class"], "hardware-only")
+        self.assertIs(binding["predicted_whole_word_copy"], False)
+        self.assertIsNone(binding["predicted_copy_value"])
+        self.assertEqual(binding["physical_execution_decision"], "no-go")
+        self.assertEqual(binding["uicr_capture_sha256"], report["agreement"]["regions"][1]["sha256"])
+        for name in ("silicon_compatibility_verified", "startup_verified",
+                     "debug_access_after_reset_verified", "authorizes_cpu_control",
+                     "authorizes_sram_write", "authorizes_programming", "authorizes_rf"):
+            self.assertIs(binding[name], False)
+        log = (self.operation / "openocd.txt").read_text()
+        for address, count in (("10000130", 2), ("e000ed00", 1), ("40010400", 1),
+                               ("4001e400", 1), ("4001e504", 1), ("10001208", 1)):
+            self.assertEqual(log.count(f"read_memory 0x{address} 32 {count}"), 3)
+        self.assertEqual(log.count(" dump "), 4)
+        self.assertNotIn("write_memory", log)
+        with self.assertRaises(ValueError):
+            acquire.observations(transcript)
+        with self.assertRaises(ValueError):
+            acquire.observations(transcript.replace(b"NS51_READ_V3", b"NS51_READ_V2"))
+        with patch.object(acquire.subprocess, "Popen", side_effect=AssertionError("no retry")):
+            self.assertEqual(self.invoke(startup_binding=True)[0], 1)
+
+    def test_each_v3_tcl_transfer_error_stops_without_another_call(self):
+        self.require_tcl()
+        self.assertEqual(self.invoke(startup_binding=True)[0], 0)
+        log = (self.operation / "openocd.txt").read_text()
+        reference = [line for line in log.splitlines() if line.startswith("CALL ")]
+        self.assertEqual(len(reference), 69)
+        for failed in range(1, len(reference) + 1):
+            with self.subTest(failed=failed), \
+                    patch.dict(os.environ, {"NRFP_TEST_SCENARIO": f"fail-{failed}"}):
+                self.operation = self.new_operation()
+                self.assertEqual(self.invoke(startup_binding=True)[0], 1)
+                calls = [line for line in (self.operation / "openocd.txt").read_text().splitlines()
+                         if line.startswith("CALL ")]
+                self.assertEqual(calls, reference[:failed])
+                self.assertTrue((self.operation / "consumed.json").exists())
+                self.assertFalse((self.operation / "readback.json").exists())
+
+    def test_every_startup_word_rejects_changes_short_reads_and_malformed_values(self):
+        self.require_tcl()
+        for index in range(7):
+            for kind, phase, dumps in (("change", 2, 2), ("change", 3, 4),
+                                       ("short", 1, 0), ("malformed", 1, 0)):
+                scenario = f"startup-{kind}-{index}-{phase}"
+                with self.subTest(scenario=scenario), \
+                        patch.dict(os.environ, {"NRFP_TEST_SCENARIO": scenario}):
+                    self.operation = self.new_operation()
+                    self.assertEqual(self.invoke(startup_binding=True)[0], 1)
+                    log = (self.operation / "openocd.txt").read_text()
+                    self.assertEqual(log.count(" dump "), dumps)
+                    self.assertFalse((self.operation / "readback.json").exists())
+
+    def test_stable_no_go_facts_produce_explicit_negative_report_and_cli_exit(self):
+        self.require_tcl()
+        cases = (
+            ("startup-set-0-0x0", "unsupported-mdk-selector"),
+            ("startup-set-1-0x6", "unsupported-mdk-selector"),
+            ("startup-set-1-0x5", "selector-protection-class-conflict"),
+            ("startup-set-2-0x410fc231", "unexpected-cortex-m-family"),
+            ("startup-set-3-0x1", "watchdog-running"),
+            ("startup-set-4-0x0", "nvmc-busy"),
+            ("startup-set-5-0x1", "nvmc-not-read-only"),
+            ("startup-set-5-0x2", "nvmc-not-read-only"),
+            ("startup-set-5-0x3", "nvmc-not-read-only"),
+            ("startup-set-6-0xffffff00", "uicr-pall-not-class-disabled"),
+            ("startup-variant-0x41414541", "unsupported-production-variant"),
+            ("startup-enhanced-erased", "uicr-pall-not-class-disabled"),
+        )
+        for scenario, blocker in cases:
+            with self.subTest(scenario=scenario), \
+                    patch.dict(os.environ, {"NRFP_TEST_SCENARIO": scenario}):
+                self.operation = self.new_operation()
+                result, stdout, stderr = self.invoke(startup_binding=True)
+                self.assertEqual((result, stdout), (2, ""))
+                self.assertIn("NO-GO", stderr)
+                report = json.loads((self.operation / "readback.json").read_bytes())
+                self.assertFalse(report["startup_binding"]["source_predicates_met"])
+                self.assertEqual(report["startup_binding"]["disposition"], "no-go")
+                self.assertIn(blocker, report["startup_binding"]["blockers"])
+                self.assertFalse(report["authorizes_programming"])
+                with patch.object(acquire.subprocess, "Popen", side_effect=AssertionError("no retry")):
+                    self.assertEqual(self.invoke(startup_binding=True)[0], 1)
+
+    def test_enhanced_whole_word_is_not_normalized_to_low_byte(self):
+        self.require_tcl()
+        with patch.dict(os.environ, {"NRFP_TEST_SCENARIO": "startup-enhanced"}):
+            self.assertEqual(self.invoke(startup_binding=True)[0], 0)
+        report = json.loads((self.operation / "readback.json").read_bytes())
+        binding = report["startup_binding"]
+        self.assertTrue(binding["source_predicates_met"])
+        self.assertEqual(binding["predicted_copy_value"], 0xaabbcc5a)
+        self.assertIn("reserved-uicr-bit-policy", binding["open_gates"])
+        self.assertEqual(binding["physical_execution_decision"], "no-go")
+
+    def test_uicr_snapshot_conflict_or_late_capture_mutation_is_not_a_binding(self):
+        self.require_tcl()
+        with patch.dict(os.environ, {"NRFP_TEST_SCENARIO": "startup-uicr-mismatch"}):
+            self.assertEqual(self.invoke(startup_binding=True)[0], 1)
+        self.assertFalse((self.operation / "readback.json").exists())
+        self.operation = self.new_operation()
+        compare = acquire.compare_captures
+
+        def mutate(first, second):
+            report = compare(first, second)
+            path = first / "uicr.bin"
+            data = bytearray(path.read_bytes())
+            data[0] ^= 1
+            path.write_bytes(data)
+            return report
+
+        with patch.object(acquire, "compare_captures", side_effect=mutate):
+            self.assertEqual(self.invoke(startup_binding=True)[0], 1)
+        self.assertFalse((self.operation / "readback.json").exists())
+
+    def test_observation_profile_cannot_autodetect_downgrade_or_consume_bad_arguments(self):
+        self.require_tcl()
+        self.assertEqual(self.invoke()[0], 0)
+        v2 = (self.operation / "observations.txt").read_bytes()
+        for data in (v2, v2.replace(b"NS51_READ_V2", b"NS51_READ_V3"),
+                     v2.replace(b"NS51_READ_V2", b"NS51_READ_V1")):
+            with self.assertRaises(ValueError):
+                acquire.observations(data, startup_binding=True)
+        self.operation = self.new_operation()
+        for flag in (0, 1, None, "v3"):
+            with self.subTest(flag=flag):
+                with self.assertRaises(ValueError):
+                    acquire.render_script("123456789", 4, startup_binding=flag)
+                with self.assertRaises(ValueError):
+                    acquire.observations(v2, startup_binding=flag)
+                with self.assertRaises(ValueError):
+                    acquire.acquire(self.selected, self.operation, startup_binding=flag)
+                self.assertEqual(list(self.operation.iterdir()), [])
+
+
+class StartupBindingTests(unittest.TestCase):
+    def values(self, variant=0x41414430, selector=2, word=0xffffffff):
+        base = (0x02880000, 1, 0x24770011, 4096, 256, 0x12345678, 0x9abcdef0,
+                0x52840, variant, 0x2004, 256, 1024) + (0,) * 24
+        return dict(zip(acquire.WORDS_V3, base + (8, selector, 0x410fc241, 0, 1, 0, word)))
+
+    def capture(self, values):
+        data = bytearray(b"\xa5" * 4096)
+        data[0x208:0x20c] = values["uicr_approtect"].to_bytes(4, "little")
+        return bytes(data)
+
+    def test_bounded_class_selector_matrix_never_approves_future_default(self):
+        known = (0x41414330, 0x41414430, 0x41414431, 0x41414630)
+        for variant in known + (0x41414541, 0x41414141, 0x41414641, 0x42414141, 0x41414730):
+            for first in (0, 8, 0xffffffff):
+                for second in (0, 1, 2, 3, 4, 5, 6, 0xffffffff):
+                    with self.subTest(variant=variant, first=first, second=second):
+                        enhanced = variant == 0x41414630
+                        values = self.values(variant, second, 0xffffff5a if enhanced else 0xffffffff)
+                        values["mdk_selector_0"] = first
+                        report = acquire.assess_startup(values, self.capture(values))
+                        supported = first == 8 and second <= 5
+                        copies = first == 8 and second >= 5
+                        expected = variant in known and supported and copies == enhanced
+                        self.assertIs(report["source_predicates_met"], expected)
+                        self.assertIs(report["predicted_whole_word_copy"], copies)
+                        self.assertIs(report["mdk_selector_supported"], supported)
+                        self.assertEqual(report["physical_execution_decision"], "no-go")
+                        self.assertFalse(report["authorizes_cpu_control"])
+
+    def test_all_pall_encodings_and_reserved_bits_remain_distinct(self):
+        for variant, selector, disabled in ((0x41414430, 2, 0xff), (0x41414630, 5, 0x5a)):
+            for pall in range(256):
+                for upper in (0, 0xffffff00, 0x12345600):
+                    values = self.values(variant, selector, upper | pall)
+                    report = acquire.assess_startup(values, self.capture(values))
+                    self.assertIs(report["source_predicates_met"], pall == disabled)
+                    self.assertEqual(report["uicr_approtect_word"], upper | pall)
+                    self.assertEqual(report["predicted_copy_value"],
+                                     upper | pall if selector == 5 else None)
+                    self.assertIn("reserved-uicr-bit-policy", report["open_gates"])
+
+    def test_missing_legacy_extra_or_untyped_fields_and_partial_uicr_are_rejected(self):
+        good = self.values()
+        cases = [{name: good[name] for name in acquire.WORDS}, dict(good, unreviewed=1)]
+        for field in acquire.WORDS_V3:
+            missing = good.copy()
+            del missing[field]
+            cases.append(missing)
+            for invalid in (None, True, -1, 0x100000000, "0x8"):
+                cases.append(dict(good, **{field: invalid}))
+        for values in cases:
+            with self.assertRaises(ValueError):
+                acquire.assess_startup(values, self.capture(good))
+        for data in (bytes(4095), bytes(4097), bytearray(self.capture(good)), bytes(4096)):
+            with self.assertRaises(ValueError):
+                acquire.assess_startup(good, data)
+
+    def test_binding_cannot_bypass_geometry_protection_or_acl_checks(self):
+        good = self.values()
+        for field in ("ctrl_id", "approtect_status", "mem_ap_id", "page_size",
+                      "page_count", "part", "variant", "ram_kib", "flash_kib"):
+            values = dict(good, **{field: 0})
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                acquire.assess_startup(values, self.capture(good))
+        for slot in range(8):
+            for bit in range(32):
+                values = dict(good, **{f"acl_{slot}_perm": 1 << bit})
+                if bit == 1:
+                    self.assertTrue(acquire.assess_startup(values, self.capture(good))["source_predicates_met"])
+                else:
+                    with self.assertRaises(ValueError):
+                        acquire.assess_startup(values, self.capture(good))
+
+    def test_documented_status_masks_not_reserved_bits_decide_sampled_predicates(self):
+        values = self.values()
+        values.update(cpuid=0x41afc24f, wdt_runstatus=0xfffffffe,
+                      nvmc_ready=0xffffffff, nvmc_config=0xfffffffc)
+        self.assertTrue(acquire.assess_startup(values, self.capture(values))["source_predicates_met"])
 
 
 if __name__ == "__main__":

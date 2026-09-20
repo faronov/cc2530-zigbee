@@ -520,6 +520,10 @@ avoiding flash replacement in a future design. It has not been loaded or
 executed. [Checked MEM-AP handoff primitives](tools/nrf_stimulus/README.md#checked-volatile-handoff-preparation)
 are now host-tested, but no live operator or accepted restart of the original
 sniffer exists; a halted reset-vector result is not restored service.
+The [opt-in v3 read-only collector](docs/NRF_RECOVERY.md#opt-in-v3-startup-source-binding)
+now records the missing startup selectors and core/watchdog/NVMC facts.
+Its conditional source comparison does not authorize execution or remove
+the remaining silicon/board/reset and restoration gates.
 
 ## Isolated MAC Timer foundation
 

@@ -332,6 +332,11 @@ nonunique internal FICR words at `0x10000130` and `0x10000134`:
 Even separately obtaining those nonunique words would prove only which
 branch runs, not replace the missing documented silicon/errata mapping.
 No such current-target values were obtained in this review.
+The later #61 [read-only v3 profile](../../docs/NRF_RECOVERY.md#opt-in-v3-startup-source-binding)
+implements their explicit acquisition and original offline classification,
+without changing this source table or importing MDK code. Its source-match
+result remains conditional and preserves the whole UICR word and open
+silicon/board/reset-policy gates.
 
 | Independently established class and relevant field | Source-supported disposition |
 |---|---|

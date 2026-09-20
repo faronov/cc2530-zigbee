@@ -154,6 +154,12 @@ Tcl 8.6 executes its real generated script only with an original synthetic
 backend; no real OpenOCD, probe or SDK is used by ordinary tests. Never put
 `--execute-read`, a private selection file or a device capture in CI.
 The separate reviewed external programmer build is not a test dependency.
+The opt-in [v3 startup-binding profile](docs/NRF_RECOVERY.md#opt-in-v3-startup-source-binding)
+uses the same focused command and preserves default v2 behavior. For the
+separate compatibility rerun, select only the reviewed standalone interpreter
+with `NRF_ACQUIRE_TEST_INTERPRETER=/reviewed/build/jimtcl/jimsh`.
+Do not substitute device-enabled OpenOCD or treat a source-match report as
+CPU/SRAM/RF authorization.
 
 The [report-only Nordic overlay planner](docs/NRF_RECOVERY.md#offline-page-overlay-report)
 adds `PYTHONPATH=tools python3 -B -m unittest test_nrf_overlay test_nrf_recovery test_nrf_acquire test_nrf_stimulus -q`.
