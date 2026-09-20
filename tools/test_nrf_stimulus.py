@@ -23,24 +23,36 @@ def hex_record(kind, address=0, data=b""):
     return ":" + (raw + bytes((-sum(raw) & 255,))).hex().upper() + "\n"
 
 
-def synthetic_elf():
+def synthetic_elf(*, ram_only=False):
     """Synthetic parser fixture, not executable evidence or a Cortex-M model."""
+    start = artifact.RAM_START if ram_only else 0
+    bss = artifact.RAM_START + (32 if ram_only else 0)
     data = bytearray(0x220)
     data[:16] = b"\x7fELF\x01\x01\x01" + bytes(9)
-    struct.pack_into("<HHIIIIIHHHHHH", data, 16, 2, 40, 1, 9, 52, 0x180,
+    struct.pack_into("<HHIIIIIHHHHHH", data, 16, 2, 40, 1, start + 9, 52, 0x180,
                      0x05000000, 52, 32, 2, 40, 4, 3)
-    struct.pack_into("<IIIIIIII", data, 52, 1, 0x100, 0, 0, 32, 32, 5, 4)
-    struct.pack_into("<IIIIIIII", data, 84, 1, 0, artifact.RAM_START,
-                     artifact.RAM_START, 0, 64, 6, 4)
-    data[0x100:0x120] = struct.pack("<II", artifact.RAM_START + 64, 9) + b"\xaa" * 24
+    struct.pack_into("<IIIIIIII", data, 52, 1, 0x100, start, start, 32, 32, 5, 4)
+    struct.pack_into("<IIIIIIII", data, 84, 1, 0, bss, bss, 0, 64, 6, 4)
+    data[0x100:0x120] = struct.pack("<II", bss + 64, start + 9) + b"\xaa" * 24
     strings = b"\0.text\0.bss\0.shstrtab\0"
     data[0x140:0x140 + len(strings)] = strings
-    struct.pack_into("<IIIIIIIIII", data, 0x180 + 40, 1, 1, 6, 0, 0x100, 32, 0, 0, 4, 0)
-    struct.pack_into("<IIIIIIIIII", data, 0x180 + 80, 7, 8, 3, artifact.RAM_START,
+    struct.pack_into("<IIIIIIIIII", data, 0x180 + 40, 1, 1, 6, start, 0x100, 32, 0, 0, 4, 0)
+    struct.pack_into("<IIIIIIIIII", data, 0x180 + 80, 7, 8, 3, bss,
                      0, 64, 0, 0, 4, 0)
     struct.pack_into("<IIIIIIIIII", data, 0x180 + 120, 12, 3, 0, 0, 0x140,
                      len(strings), 0, 0, 1, 0)
     return data
+
+
+def synthetic_configuration():
+    names = ("NRF_802154_RADIO_DRIVER", "NRF_802154_SOURCE_NRFXLIB",
+             "NRF_802154_SL_OPENSOURCE", "ENTROPY_NRF5_RNG",
+             "UART_INTERRUPT_DRIVEN", "UART_0_INTERRUPT_DRIVEN", "UART_NRFX_UARTE",
+             "NRF_APPROTECT_USE_UICR", "ASSERT")
+    config = "".join(f"CONFIG_{name}=y\n" for name in names)
+    return config + ('CONFIG_XIP=y\nCONFIG_HEAP_MEM_POOL_SIZE=0\nCONFIG_NRF_802154_RX_BUFFERS=4\n'
+                     'CONFIG_FLASH_SIZE=1024\nCONFIG_SRAM_SIZE=256\n'
+                     'CONFIG_BOARD="nrf52840dk_nrf52840"\n')
 
 
 class PortableControlTests(unittest.TestCase):
@@ -256,10 +268,7 @@ class ArtifactTests(unittest.TestCase):
                  "NRF_802154_SL_OPENSOURCE", "ENTROPY_NRF5_RNG",
                  "UART_INTERRUPT_DRIVEN", "UART_0_INTERRUPT_DRIVEN", "UART_NRFX_UARTE",
                  "NRF_APPROTECT_USE_UICR", "ASSERT")
-        config = "".join(f"CONFIG_{name}=y\n" for name in names)
-        config += ('CONFIG_HEAP_MEM_POOL_SIZE=0\nCONFIG_NRF_802154_RX_BUFFERS=4\n'
-                   'CONFIG_FLASH_SIZE=1024\nCONFIG_SRAM_SIZE=256\n'
-                   'CONFIG_BOARD="nrf52840dk_nrf52840"\n')
+        config = synthetic_configuration()
         dts = "/ { chosen { zephyr,entropy = &rng; }; };"
         artifact.configuration(config, dts)
         for name in names:
@@ -273,6 +282,148 @@ class ArtifactTests(unittest.TestCase):
         for mutation in ("gpio-as-nreset;", "nfct-pins-as-gpios;"):
             with self.assertRaises(artifact.ArtifactError):
                 artifact.configuration(config, dts + mutation)
+        with self.assertRaises(artifact.ArtifactError):
+            artifact.configuration(config.replace("CONFIG_XIP=y\n", ""), dts)
+
+
+class SramArtifactTests(unittest.TestCase):
+    def setUp(self):
+        self.image = synthetic_elf(ram_only=True)
+        self.prefix = hex_record(4, 0, b"\x20\x00")
+        self.hex = self.prefix + hex_record(0, 0, self.image[0x100:0x120]) + hex_record(1)
+
+    def test_explicit_profile_counts_code_data_and_bss_without_flash(self):
+        image = artifact.compare(bytes(self.image), self.hex, ram_only=True)
+        self.assertEqual((image.flash_extent, image.load_start, image.load_extent,
+                          image.sram_allocated, image.sram_extent),
+                         (0, 0x20000000, 32, 96, 96))
+        self.assertEqual(set(image.memory), set(range(0x20000000, 0x20000020)))
+        self.assertEqual(image.entry, 0x20000009)
+        entry = hex_record(5, 0, (0x20000009).to_bytes(4, "big"))
+        with_entry = self.hex.replace(hex_record(1), entry + hex_record(1))
+        self.assertEqual(artifact.compare(bytes(self.image), with_entry, ram_only=True), image)
+        self.assertEqual(artifact.compare(bytes(self.image), self.hex.replace("\n", "\r\n"),
+                                          ram_only=True), image)
+
+    def test_flash_and_sram_profiles_never_auto_detect_or_accept_each_other(self):
+        flash = synthetic_elf()
+        flash_hex = hex_record(0, 0, flash[0x100:0x120]) + hex_record(1)
+        for data, text, ram_only in ((self.image, self.hex, False), (flash, flash_hex, True)):
+            with self.subTest(ram_only=ram_only):
+                with self.assertRaises(artifact.ArtifactError):
+                    artifact.elf(bytes(data), ram_only=ram_only)
+                with self.assertRaises(artifact.ArtifactError):
+                    artifact.ihex(text, ram_only=ram_only)
+                with self.assertRaises(artifact.ArtifactError):
+                    artifact.compare(bytes(data), text, ram_only=ram_only)
+        for profile in (None, 0, 1, "ram", "flash"):
+            with self.subTest(profile=profile), self.assertRaises(artifact.ArtifactError):
+                artifact.compare(bytes(self.image), self.hex, ram_only=profile)
+
+    def test_rejects_non_sram_loads_aliases_overlap_and_nonexecutable_entry(self):
+        changes = [(52 + 12, address) for address in
+                   (0, 0x10000000, 0x10001000, 0x40000000, 0x20000004, 0x20020000)]
+        changes += [(52 + 8, 0), (52 + 24, 6), (52 + 20, 33),
+                    (84 + 12, 0), (84 + 8, 0x20020000),
+                    (0x180 + 40 + 8, 2), (0x180 + 40 + 12, 0),
+                    (0x180 + 80 + 12, 0x20020000),
+                    (24, 0x20000008), (24, 0x20000101),
+                    (0x100, 0x20020008), (0x100, 0x20000064),
+                    (0x100, 0x20000010), (84 + 24, 4), (0x104, 0x2000000B)]
+        for offset, value in changes:
+            bad = self.image.copy()
+            struct.pack_into("<I", bad, offset, value)
+            with self.subTest(offset=offset, value=value), self.assertRaises(artifact.ArtifactError):
+                artifact.elf(bytes(bad), ram_only=True)
+
+    def test_exact_128k_total_extent_including_nobits_and_one_byte_over(self):
+        image = self.image.copy()
+        for offset in (84 + 20, 0x180 + 80 + 20):
+            struct.pack_into("<I", image, offset, 128 * 1024 - 32)
+        result = artifact.elf(bytes(image), ram_only=True)
+        self.assertEqual((result.sram_allocated, result.sram_extent), (128 * 1024, 128 * 1024))
+        struct.pack_into("<I", image, 84 + 20, 128 * 1024 - 31)
+        with self.assertRaises(artifact.ArtifactError):
+            artifact.elf(bytes(image), ram_only=True)
+        last = hex_record(4, 0, b"\x20\x01") + hex_record(0, 0xFFFF, b"x")
+        self.assertEqual(artifact.ihex(last + hex_record(1), ram_only=True)[0],
+                         {0x2001FFFF: ord("x")})
+        extra = hex_record(4, 0, b"\x20\x02") + hex_record(0, 0, b"x")
+        with self.assertRaises(artifact.ArtifactError):
+            artifact.ihex(last + extra + hex_record(1), ram_only=True)
+
+    def test_hex_rejects_flash_ficr_uicr_peripherals_mixed_ranges_and_bad_entries(self):
+        for upper, address in ((0, 0), (0x1000, 0), (0x1000, 0x1000),
+                               (0x1001, 0x1000), (0x4000, 0), (0x2002, 0), (0x2004, 0)):
+            bad = self.hex.removesuffix(hex_record(1))
+            bad += hex_record(4, 0, upper.to_bytes(2, "big"))
+            bad += hex_record(0, address, b"x") + hex_record(1)
+            with self.subTest(upper=upper, address=address), self.assertRaises(artifact.ArtifactError):
+                artifact.ihex(bad, ram_only=True)
+        for entry in (9, 0x20000008, 0x2000000B, 0x20020001):
+            text = self.hex.replace(hex_record(1), hex_record(5, 0, entry.to_bytes(4, "big")) +
+                                    hex_record(1))
+            with self.subTest(entry=entry), self.assertRaises(artifact.ArtifactError):
+                artifact.compare(bytes(self.image), text, ram_only=True)
+        for text in (self.hex.replace("AA", "AB", 1), self.hex + hex_record(1),
+                     self.hex.removesuffix(hex_record(1)),
+                     self.prefix + hex_record(0, 0, self.image[0x100:0x120]) * 2 + hex_record(1)):
+            with self.subTest(text=text), self.assertRaises(artifact.ArtifactError):
+                artifact.compare(bytes(self.image), text, ram_only=True)
+
+    def test_zero_load_padding_and_gaps_use_the_same_canonical_ff_rule(self):
+        image = self.image.copy()
+        struct.pack_into("<I", image, 0x180 + 40 + 20, 31)
+        with self.assertRaises(artifact.ArtifactError):
+            artifact.elf(bytes(image), ram_only=True)
+        image[0x11F] = 0
+        filled = self.prefix + hex_record(0, 0, image[0x100:0x11F] + b"\xff") + hex_record(1)
+        self.assertEqual(artifact.compare(bytes(image), filled, ram_only=True).load_extent, 32)
+
+        image = self.image.copy()
+        struct.pack_into("<IIIIIIII", image, 84, 1, 0x120, 0x20000040, 0x20000040,
+                         16, 64, 6, 4)
+        struct.pack_into("<IIIIIIIIII", image, 0x180 + 80, 7, 1, 3, 0x20000040,
+                         0x120, 16, 0, 0, 4, 0)
+        text = self.prefix + hex_record(0, 0, image[0x100:0x120])
+        text += hex_record(0, 32, b"\xff" * 32) + hex_record(0, 64, image[0x120:0x130])
+        result = artifact.compare(bytes(image), text + hex_record(1), ram_only=True)
+        self.assertEqual((result.load_extent, result.sram_extent), (80, 128))
+        self.assertTrue(all(result.memory[i] == 255 for i in range(0x20000020, 0x20000040)))
+        with self.assertRaises(artifact.ArtifactError):
+            artifact.compare(bytes(image), text.replace(hex_record(0, 32, b"\xff" * 32), "") +
+                             hex_record(1), ram_only=True)
+
+    def test_configuration_binds_non_xip_geometry_and_no_regulator_cache_enable(self):
+        config = synthetic_configuration().replace("CONFIG_FLASH_SIZE=1024", "CONFIG_FLASH_SIZE=0")
+        config = config.replace("CONFIG_XIP=y\n", "")
+        disabled = ("XIP", "BOARD_ENABLE_DCDC", "BOARD_ENABLE_DCDC_HV", "NRF_ENABLE_ICACHE")
+        config += "".join(f"# CONFIG_{name} is not set\n" for name in disabled)
+        fixed = {"FLASH_BASE_ADDRESS": "0x0", "FLASH_LOAD_OFFSET": "0", "FLASH_LOAD_SIZE": "0",
+                 "SRAM_BASE_ADDRESS": "0x20000000", "SRAM_OFFSET": "0",
+                 "INIT_ARCH_HW_AT_BOOT": "y", "CPU_CORTEX_M_HAS_VTOR": "y",
+                 "ARM_MPU": "y", "MPU_STACK_GUARD": "y"}
+        config += "".join(f"CONFIG_{name}={value}\n" for name, value in fixed.items())
+        dts = "/ { chosen { zephyr,entropy = &rng; }; };"
+        artifact.configuration(config, dts, ram_only=True)
+        for name in disabled:
+            with self.subTest(missing=name), self.assertRaises(artifact.ArtifactError):
+                artifact.configuration(config.replace(f"# CONFIG_{name} is not set\n", ""),
+                                       dts, ram_only=True)
+        for name in disabled + ("SOC_DCDC_NRF52X", "SOC_DCDC_NRF52X_HV"):
+            for value in ("y", "n", "0"):
+                with self.subTest(name=name, value=value), self.assertRaises(artifact.ArtifactError):
+                    artifact.configuration(config + f"CONFIG_{name}={value}\n", dts, ram_only=True)
+        for name, value in fixed.items():
+            with self.subTest(name=name), self.assertRaises(artifact.ArtifactError):
+                artifact.configuration(config.replace(f"CONFIG_{name}={value}\n", ""),
+                                       dts, ram_only=True)
+        for name in ("FLASH", "NRFX_NVMC", "REBOOT", "RESET_ON_FATAL_ERROR"):
+            with self.subTest(name=name), self.assertRaises(artifact.ArtifactError):
+                artifact.configuration(config + f"CONFIG_{name}=y\n", dts, ram_only=True)
+        with self.assertRaises(artifact.ArtifactError):
+            artifact.configuration(config.replace("CONFIG_FLASH_SIZE=0", "CONFIG_FLASH_SIZE=1024"),
+                                   dts, ram_only=True)
 
 
 class AuditBoundaryTests(unittest.TestCase):

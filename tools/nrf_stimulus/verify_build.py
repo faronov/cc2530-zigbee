@@ -198,7 +198,7 @@ def preprocess(item: dict, macros: bool, sdk: Path, build: Path) -> str:
     return command(args + ["-E", "-dM" if macros else "-P"], item["directory"])
 
 
-def audit(sdk: Path, build: Path) -> dict:
+def audit(sdk: Path, build: Path, *, ram_only: bool = False) -> dict:
     require = artifact.require
     environment_check()
     require(not build.is_relative_to(HERE.parents[1]), "target artifacts must stay outside repository")
@@ -226,10 +226,10 @@ def audit(sdk: Path, build: Path) -> dict:
     require("ninja: no work to do." in dry and "[1/" not in dry, "target build is stale")
     elf = (build / "zephyr/zephyr.elf").read_bytes()
     hexb = (build / "zephyr/zephyr.hex").read_bytes()
-    image = artifact.compare(elf, hexb.decode("ascii"))
+    image = artifact.compare(elf, hexb.decode("ascii"), ram_only=ram_only)
     config = (build / "zephyr/.config").read_text()
     dts = (build / "zephyr/zephyr.dts").read_text()
-    artifact.configuration(config, dts)
+    artifact.configuration(config, dts, ram_only=ram_only)
     toolbin = sdk / "zephyr-sdk-0.16.5/arm-zephyr-eabi/bin"
     compiler = toolbin / "arm-zephyr-eabi-gcc"
     inventory, object_hashes, unbuilt = [], set(), []
@@ -254,6 +254,12 @@ def audit(sdk: Path, build: Path) -> dict:
     require("/nrfxlib/nrf_802154/driver/src/" in core["file"], "wrong driver copy")
     pp, macros = preprocess(start, False, sdk, build), preprocess(start, True, sdk, build)
     startup_hashes = artifact.startup(macros, pp)
+    if ram_only:
+        soc = next(e for e in entries if e["file"].endswith("/soc/arm/nordic_nrf/nrf52/soc.c"))
+        soc_body = artifact.function_body(preprocess(soc, False, sdk, build), "nordicsemi_nrf52_init")
+        require(re.sub(r"\s+", "", soc_body) == "nordicsemi_nrf52_init(void){return0;}",
+                "SRAM-only SoC init must not enable cache or regulators")
+        startup_hashes["nordicsemi_nrf52_init"] = artifact.digest(soc_body.encode())
     baseline = build / "original-nrf_802154_core.c"
     baseline.write_bytes(subprocess.check_output(
         ["git", "-C", str(sdk / "nrfxlib"), "show",
@@ -369,7 +375,8 @@ def audit(sdk: Path, build: Path) -> dict:
                            ("radio.macros", radio_macros), ("linked.dis", disassembly)):
         (build / filename).write_text(text)
     return {
-        "schema": 1, "evidence": "build/static only; no Cortex-M simulation or hardware",
+        "schema": 2, "evidence": "build/static only; no Cortex-M simulation or hardware",
+        "image_profile": "sram-only" if ram_only else "flash",
         "trust_boundary": "Trusted locally built workspace and host, not arbitrary downloaded metadata",
         "vetted_tool_digests": identities,
         "audit_tools_lock_sha256": artifact.digest((HERE / "audit-tools.json").read_bytes()),
@@ -383,7 +390,10 @@ def audit(sdk: Path, build: Path) -> dict:
         "map_sha256": artifact.digest(map_text.encode()),
         "config_sha256": artifact.digest(config.encode()), "dts_sha256": artifact.digest(dts.encode()),
         "compile_commands_sha256": artifact.digest((build / "compile_commands.json").read_bytes()),
-        "flash_extent": image.flash_extent, "flash_load_bytes": len(image.memory),
+        "load_start": image.load_start, "load_extent": image.load_extent,
+        "flash_extent": image.flash_extent, "flash_load_bytes": 0 if ram_only else len(image.memory),
+        "sram_load_bytes": len(image.memory) if ram_only else 0,
+        "sram_budget": artifact.RAM_EXEC_LIMIT if ram_only else artifact.RAM_LIMIT,
         "sram_allocated": image.sram_allocated, "sram_extent": image.sram_extent,
         "sections": image.sections, "startup": startup_hashes,
         "firmware_startup_order": boot_order,
@@ -400,16 +410,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", required=True, type=Path)
     parser.add_argument("--build", required=True, type=Path)
+    parser.add_argument("--ram-only", action="store_true", help="Require the explicit SRAM-only profile")
     args = parser.parse_args()
     try:
-        result = audit(args.sdk.resolve(), args.build.resolve())
+        result = audit(args.sdk.resolve(), args.build.resolve(), ram_only=args.ram_only)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         parser.exit(1, f"NS51 static audit FAILED: {error}\n")
     output = args.build / "evidence.json"
     output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({k: result[k] for k in
-                     ("compiler", "elf_sha256", "hex_sha256", "flash_extent",
-                      "flash_load_bytes", "sram_allocated", "sram_extent")}, indent=2))
+                     ("compiler", "image_profile", "elf_sha256", "hex_sha256", "load_start",
+                      "load_extent", "flash_extent", "flash_load_bytes", "sram_load_bytes",
+                      "sram_allocated", "sram_extent")}, indent=2))
     print(f"Static evidence: {output}")
 
 

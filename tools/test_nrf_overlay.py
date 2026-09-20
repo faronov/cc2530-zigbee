@@ -361,6 +361,18 @@ class PrivatePlannerTests(unittest.TestCase):
         self.write(self.elf, b"not an ELF")
         self.assert_failed()
 
+    def test_valid_sram_profile_never_becomes_a_flash_overlay(self):
+        elf_data = bytes(synthetic_elf(ram_only=True))
+        text = (hex_record(4, 0, b"\x20\x00") +
+                hex_record(0, 0, elf_data[0x100:0x120]) + hex_record(1))
+        image = overlay.artifact.compare(elf_data, text, ram_only=True)
+        self.assertEqual(image.flash_extent, 0)
+        with self.assertRaises(ValueError):
+            overlay.overlay_pages(self.original, image.memory)
+        self.write(self.elf, elf_data)
+        self.write(self.hex, text.encode("ascii"))
+        self.assert_failed()
+
     def test_private_modes_and_ownership(self):
         for path in (self.first / "main-flash.bin", self.second / "uicr.bin", self.elf, self.hex):
             for mode in (0o000, 0o200, 0o640, 0o644, 0o700):

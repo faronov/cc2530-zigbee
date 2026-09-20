@@ -514,6 +514,10 @@ restored firmware or authorizes installing the helper.
 The [offline overlay planner](docs/NRF_RECOVERY.md#offline-page-overlay-report)
 checks preservation of non-image bytes and UICR using private artifacts,
 emitting only a hash/count report, never a programming payload or permission.
+An [opt-in SRAM-only helper](tools/nrf_stimulus/README.md#optional-sram-only-profile)
+now passes host/image checks with 73,220 bytes in RAM and no flash loads,
+avoiding flash replacement in a future design. It has not been loaded or
+executed; CPU handoff and return to the original sniffer remain unimplemented.
 
 ## Isolated MAC Timer foundation
 

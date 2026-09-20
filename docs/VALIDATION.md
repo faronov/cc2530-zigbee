@@ -818,17 +818,35 @@ The unchanged NS51 image also passed a fresh static build audit; its
 [startup/protection ledger](../tools/nrf_stimulus/PROVENANCE.md#offline-startup-and-preservation-prerequisites)
 records conditional volatile APPROTECT effects and the missing silicon gates.
 
+## Nordic SRAM profile: offline image evidence
+
+The later #59 SRAM-only profile passed 61 combined stimulus/overlay tests
+(26 stimulus, 35 overlay). Synthetic cases cover mutual profile rejection,
+physical/virtual aliases, overlapping LOAD extents, entry/stack permissions,
+exact 128-KiB SRAM admission and one-byte overflow, canonical padding/gaps,
+non-SRAM destinations and conflicting configuration. A valid SRAM image
+is also rejected through the actual private flash-overlay CLI.
+
+A fresh external `ram.conf` build passed the complete static audit: zero
+flash bytes, 73,220 SRAM load/extent bytes, 73,179 allocated bytes, 173
+source objects and 25 archives. Independent linked-byte inspection confirmed
+the source-defined fixed MPU table's executable SRAM attributes. A separately
+rebuilt default profile also passed and retained its accepted HEX exactly.
+These are **host/image checks**, not Cortex-M simulation, hardware handoff,
+firmware execution, RF or return-to-sniffer acceptance. See the
+[exact SRAM provenance](../tools/nrf_stimulus/PROVENANCE.md#sram-only-alternative).
+
 ## Nordic page overlay: offline artifact evidence
 
 The [report-only planner](NRF_RECOVERY.md#offline-page-overlay-report) has
-34 synthetic tests covering complete byte preservation, sparse/unaligned
+35 synthetic tests covering complete byte preservation, sparse/unaligned
 pure-helper cases, exact page hashes/counts and report shape, strict ELF/HEX
 negatives and limits, private-path/alias/input-mutation rejection, and report
 write/close/fsync/replacement/cleanup failures. The real CLI runs under audit
 hooks rejecting subprocess and device/build backend access. Ordinary
 `test-tools` includes this suite without SDK or physical equipment.
 
-The parent passed 94 combined overlay/recovery/acquisition/programmer/stimulus
+The original #58 acceptance passed 94 combined overlay/recovery/acquisition/programmer/stimulus
 tests with the separately retained external offline programmer proofs enabled.
 A separate private, **offline** invocation used the accepted image and retained
 #57 capture pairs. Independent recomputation verified all page hashes/counts,

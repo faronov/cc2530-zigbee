@@ -12,6 +12,10 @@ Ordinary tests never fetch an SDK, build target firmware, import a transport,
 enumerate devices or run a programmer. Target artifacts stay outside Git/CI.
 See [provenance and source contracts](PROVENANCE.md).
 
+An opt-in [SRAM-only build](#optional-sram-only-profile) now provides an
+alternative to replacing flash. It is image-checked, not loaded or executed;
+there is no live loader or accepted CPU handoff/restart procedure yet.
+
 ## Behavior and limits
 
 Every reset starts disarmed. UART is the DK J2/debug-port UART, **115200 8N1,
@@ -292,7 +296,60 @@ The upstream build recipes contain explicitly invoked programmer runners;
 Only `zephyr_final` and read-only inspection were executed. No SDK host-tools
 installer, USB/serial action or Cortex-M simulator was used.
 
-## Measured evidence and actual build diagnostics
+## Optional SRAM-only profile
+
+With the same reviewed external SDK, environment and sources above, use a
+**separate new build directory**; do not overwrite the accepted flash build:
+
+```sh
+cmake -S "$APP" -B "$SDK/build-ram" -G Ninja -DBOARD=nrf52840dk_nrf52840 \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DUSER_CACHE_DIR="$SDK/cache" \
+  -DZEPHYR_MODULES="$SDK/nrf;$SDK/nrfxlib;$SDK/hal_nordic;$SDK/cmsis" \
+  -DEXTRA_CONF_FILE=ram.conf
+cmake --build "$SDK/build-ram" --target zephyr_final -j 4
+python3 -B -m tools.nrf_stimulus.verify_build \
+  --sdk "$SDK" --build "$SDK/build-ram" --ram-only
+```
+
+`ram.conf` selects non-XIP linking and explicit zero flash size/base for
+the linker, not a claim that the device lacks flash. The pinned ARM Kconfig
+otherwise leaves those two defaults blank when XIP is off, producing invalid
+generated configuration symbols. No SDK/generated-file patch is needed.
+The profile omits the SoC cache/DCDC/DCDC_HV enable writes; its preprocessed
+SoC-init body must contain only `return 0`. This does not forcibly disable
+an inherited regulator or make SystemInit electrically/debug-state inert.
+MPU and stack guards remain enabled.
+
+The audit requires **explicit `--ram-only`**, never image auto-detection.
+Every ELF LOAD physical/virtual range and allocated section must be in the
+lower 128 KiB of SRAM, with no load aliases or overlapping LOAD extents.
+Executable entry and aligned MSP are checked; MSP must belong to a writable
+non-executable LOAD. The budget includes code, constants, data, BSS, noinit,
+stacks and alignment, unlike the unchanged flash profile's 64-KiB RAM budget.
+Canonical HEX must agree with the ELF's checked FF padding/gaps. The default
+flash parser and private page-overlay planner still reject SRAM images.
+Static-audit schema 2 records the selected profile and separate flash/SRAM
+load counts; an SRAM image has zero flash load bytes.
+
+The actual source-built image has **73,220 bytes** of SRAM load/total extent,
+73,179 allocated bytes and 57,852 bytes of margin to the 128-KiB limit.
+Entry is `2000175D`, initial MSP `20011580`. It passed the full static audit
+with 173 compiled objects and 25 archives. Independent inspection bound the
+actual fixed MPU table to executable, privileged-RW SRAM; this is not a
+runtime MPU observation. A fresh default-profile build passed its audit and
+produced the exact previously accepted flash HEX. See the
+[source and artifact identities](PROVENANCE.md#sram-only-alternative).
+
+**Not a drop-in resume operation:** loading this image would overwrite the
+sniffer's volatile state. The reset entry requires privileged Thread mode
+and a valid MSP; SystemInit runs before later core/MPU/vector initialization.
+An old active exception, MPU, interrupt, DMA/radio, watchdog or debug state
+cannot be assumed safe. A separately reviewed quiescent handoff and controlled
+return to the original firmware are still required, with fresh target and
+protection binding. No live loader, CPU-control command, reset, flash write,
+RF experiment or restoration acceptance is supplied here.
+
+## Measured flash-profile evidence and actual build diagnostics
 
 Completed on Linux with Python 3.12.3, CMake 3.28.3, Ninja 1.11.1, west 1.2.0,
 Arm Zephyr GCC 12.2.0 / SDK 0.16.5, C99, `-Os`, Cortex-M4 Thumb, AAPCS,
@@ -300,7 +357,7 @@ minimal libc, no application heap. Native compiler: Ubuntu GCC 13.3.0.
 
 | Evidence | Result |
 |---|---|
-| Host-tested | 160256 C checks per native and ASan/UBSan run; 19 Python tests |
+| Host-tested | 160256 C checks per native and ASan/UBSan run; now 26 Python tests across both image profiles |
 | Image/static-checked | Genuine ELF/HEX link; 174 compiled objects, 25 archives; no opaque radio/SL/MPSL |
 | Flash load / extent | 56204 bytes / 56204 bytes, limit 262144 |
 | Allocated SRAM / extent including alignment | 17755 / 17792 bytes, limit 65536 |
@@ -351,9 +408,10 @@ is off. The **actual SystemInit compilation** has
 `CONFIG_GPIO_AS_PINRESET` and `CONFIG_NFCT_PINS_AS_GPIOS` undefined, not zero.
 The selected, reviewed preprocessed startup bodies and linked calls exclude
 their runtime NVMC/UICR writes and emulation branches. There is no flash/NVMC
-driver, bootloader, provision/S1 image or regtool-UICR output. The ELF and HEX
-checks reject UICR `10001000..10001FFF`, FICR, SRAM load records, and any
-other out-of-main-flash load range.
+driver, bootloader, provision/S1 image or regtool-UICR output. The default
+flash ELF/HEX profile rejects every out-of-main-flash load, including SRAM.
+The explicit SRAM-only profile instead rejects every non-SRAM load. Neither
+admits UICR `10001000..10001FFF`, FICR or peripheral load records.
 
 `APPROTECT_USE_UICR` is deliberately selected, never LOCK. On applicable
 revisions startup **reads UICR.APPROTECT and writes volatile
@@ -361,7 +419,7 @@ APPROTECT.DISABLE**. It also reads factory calibration/errata information.
 That is not a UICR write, but it is protection handling: this build does
 **not** promise debug access or preservation of every volatile register.
 
-Before any later installation, the parent must establish fresh board
+Before any later nonvolatile installation, the parent must establish fresh board
 identity/revision, readable **whole 1 MiB flash and whole 4 KiB UICR**
 recovery material, independent reread/hash verification, protected-region
 comparison, an executable restoration plan and separately reviewed

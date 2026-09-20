@@ -71,6 +71,59 @@ with a separately named completion callback. Upstream RF timing, receive
 turnaround, packet loss/error behavior, DK UART reliability, physical power,
 debug protection and full restoration remain separate acceptance work.
 
+## SRAM-only alternative
+
+#59 adds original opt-in configuration and shared-parser/profile checks,
+without importing another loader or modifying any pinned SDK source.
+Only an external build and read-only static audit were performed.
+
+| Pinned source fact | Reference |
+---|---
+| nRF52 implies XIP, but permits an explicit non-XIP choice | [Kconfig.series 6-15](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/soc/arm/nordic_nrf/nrf52/Kconfig.series#L6-L15) |
+| Non-XIP puts ROMABLE_REGION in RAM; zero FLASH_SIZE makes ROM_ADDR equal RAM_ADDR | [Cortex-M linker 20-96](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/include/zephyr/arch/arm/cortex_m/scripts/linker.ld#L20-L96) |
+| ARM flash size/base defaults are conditional on XIP; the RAM profile supplies explicit zero values | [arch Kconfig 212-228](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/arch/Kconfig#L212-L228) |
+| Reset entry requires privileged Thread mode and valid MSP; platform init precedes its later MPU disable | [reset.S 39-119](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/arch/arm/core/cortex_m/reset.S#L39-L119) |
+| Prep-C installs the image vector table through VTOR with barriers | [prep_c.c 42-51](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/arch/arm/core/cortex_m/prep_c.c#L42-L51) |
+| Non-XIP leaves the fixed SRAM region's XN bit clear, rather than disabling the MPU | [arm_mpu_v7m.h 120-128](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/include/zephyr/arch/arm/mpu/arm_mpu_v7m.h#L120-L128) |
+| Linked region ABI is base/name/RASR; config is count/region pointer | [arm_mpu.h 27-46](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/include/zephyr/arch/arm/mpu/arm_mpu.h#L27-L46), [RASR wrapper 152-157](https://github.com/nrfconnect/sdk-zephyr/blob/d96769facecaba386b642d2c76c92c7694c81da0/include/zephyr/arch/arm/mpu/arm_mpu_v7m.h#L152-L157) |
+
+The separate `build-ram` image passed the genuine source/object/archive,
+startup, PHYEND and ELF/HEX audit. Its allocation is 73,179 bytes, total
+SRAM/load extent 73,220 bytes (`20000000..20011E03`), with **zero flash load
+bytes**. The explicit 128-KiB code-plus-data budget leaves 57,852 bytes;
+this does not relax the original flash profile or any CC2530 budget.
+Entry is `2000175D`, initial MSP `20011580`. There are 173 compiled objects
+and 25 archives; all radio/SL code remains source-built.
+
+| Artifact under `build-ram/zephyr/` | Bytes | SHA-256 |
+---|---:|---
+| `zephyr.elf` | 1359428 | `cfb862296d635953e8fe81b98ebf65582d79f68270e9680cb688c189ffd34e74` |
+| `zephyr.hex` | 206100 | `bda7868b2dbd0cdd7a1253557d90a842648b0fe093a4ef667e0bd616597866d3` |
+| `zephyr.map` | 560463 | `15cb2424e9360003966ae15590002ddfc570ebc727e7cb0dc605f961e83a1af8` |
+
+SystemInit/protection-handler normalized bodies still match the original
+reviewed hashes. The selected SoC init has only `return 0`: no cache or
+DCDC/DCDC_HV enable writes, rather than an attempt to change preserved UICR
+or infer regulator wiring. Other SystemInit effects below remain relevant.
+MPU and stack guards remain selected. Independent linked-byte inspection
+of `mpu_config` and `mpu_regions` confirms the fixed SRAM region has XN
+clear, privileged read/write access and the source-defined 256-KiB region
+size; the image admission budget remains 128 KiB. No runtime MPU state,
+stack high-water, CPU execution or timing was observed.
+
+A separately rebuilt default flash profile passed the same audit and
+retained the original HEX byte-for-byte (hash below); the accepted original
+build was not overwritten. All new binaries, build metadata and independent
+inspection records remain external.
+
+This alternative removes the need to overwrite flash **from a future
+SRAM-only design**, not from the earlier flash-programming contract.
+No live loader exists here. Fresh chip/protection/board binding, quiescent
+CPU/peripheral handoff, and a controlled return to the original firmware
+still need a separate reviewed scope. In particular, copying SRAM and
+resuming the old PC is invalid, and boot disarming does not neutralize
+SystemInit. No existing silicon/debug/RF gate is silently declared satisfied.
+
 ## Offline startup and preservation prerequisites
 
 This #55 review concerns the accepted #51 image, not a newly built image or a

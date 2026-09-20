@@ -107,6 +107,14 @@ not new hardware observation or completion of #55.
 
 ## Remaining manual gates
 
+The [SRAM-only helper profile](../tools/nrf_stimulus/README.md#optional-sram-only-profile)
+is an alternative to this nonvolatile overlay/programming route. It does
+not consume an overlay report or authorize flash writes. Its accepted
+artifact has only SRAM loads, but loading it would overwrite volatile
+sniffer state: quiescent CPU/peripheral handoff and controlled return to
+the original firmware still need review. No such loader or hardware
+activity is implemented by these recovery tools.
+
 Before any future programming, a separately reviewed private operation still
 needs fresh target/geometry/protection binding, genuinely independent complete
 recovery reads, exact modified/excluded regions, and a usable restoration path.

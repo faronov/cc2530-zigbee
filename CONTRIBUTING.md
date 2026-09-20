@@ -171,6 +171,13 @@ build metadata. No `flash`, `debug`, `recover`, serial or USB action belongs in
 these tests. New helper evidence never waives the existing CC2530 or physical
 recovery gates.
 
+Its opt-in [SRAM-only profile](tools/nrf_stimulus/README.md#optional-sram-only-profile)
+shares those tests; use
+`PYTHONPATH=tools python3 -B -m unittest test_nrf_stimulus test_nrf_overlay -q`
+for the coupled profile/overlay checks. Both SDK builds remain explicit and
+external. `--ram-only` is a static-audit selector, never a loading or execution
+option; ordinary CI still builds no Nordic image and accesses no equipment.
+
 During offline M1 work, do not run even USB enumeration or adapter-state
 commands against physical devices. `tools/debug_image.py` and all tests above
 operate without an adapter. New control commands need explicit permissions,

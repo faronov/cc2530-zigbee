@@ -849,6 +849,14 @@ UICR load-range and actual startup checks do not prove physical restoration
 or debug accessibility. The [offline recovery-file checker](NRF_RECOVERY.md)
 provides artifact agreement only. Actual device use remains separately gated.
 
+An [explicit SRAM-only build](../tools/nrf_stimulus/README.md#optional-sram-only-profile)
+uses the same application/radio source without a flash replacement. Its
+128-KiB budget includes code, data and stacks; the flash profile keeps its
+original 256-KiB flash/64-KiB SRAM limits. The two artifact profiles reject
+each other's loads and are never auto-selected. MPU/stack guards remain;
+the SRAM profile omits SoC cache/regulator enable writes. This is a linked
+image, not a volatile loader or accepted CPU handoff/restart mechanism.
+
 The separate [manual acquisition operator](NRF_RECOVERY.md#explicit-read-only-acquisition-operator)
 uses an explicitly selected, locally reviewed OpenOCD preservation mode and
 only a MEM-AP target. It has no CPU-control or flash-write script, no network

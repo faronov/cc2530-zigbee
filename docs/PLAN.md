@@ -469,6 +469,13 @@ cover 14 pages, 56,204 image bytes, 1,140 preserved tail bytes and 242 unaffecte
 pages, with UICR excluded/unchanged. None of these results by itself authorizes
 replacing the sniffer firmware.
 
+The #59 [explicit SRAM-only profile](../tools/nrf_stimulus/README.md#optional-sram-only-profile)
+now supplies a less destructive alternative: the source-built helper fits
+in 73,220 bytes of SRAM and has no flash load bytes. It is host/image-checked,
+not loaded or executed. The default flash HEX is unchanged. A reviewed
+volatile CPU/peripheral handoff and return to the original sniffer remain
+separate prerequisites; the artifact result neither closes #55 nor permits RF.
+
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.
 One foreground service invokes the real bounded passive receiver; full
