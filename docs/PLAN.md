@@ -421,8 +421,14 @@ The [#50 primary ownership review](RADIO_AUTOACK.md#ordinary-tx-admission-under-
 now identifies unresolved TX admission during ACK, completion attribution and
 concurrent TX-flush effects; no transmitting extension is inferred from it.
 
-The separately scoped [Nordic stimulus/observer](../tools/nrf_stimulus/README.md)
-prepares #51's laboratory side offline, with one fixed public AR frame and
+**Current Nordic role: passive sniffer/reference observer only.** The
+active-stimulus/temporary-firmware branch (#51/#55/#58) is parked, not a
+prerequisite for unrelated CC2530 implementation. Preserve the existing
+sniffer firmware. Unsupported controlled-RF scenarios remain open; do not
+silently waive them or repurpose the sniffer to satisfy them.
+
+The deferred [Nordic stimulus/observer](../tools/nrf_stimulus/README.md)
+prepared #51's laboratory side offline, with one fixed public AR frame and
 normal post-PHYEND reception instead of ACK-only filtering. It adds no CC2530
 board IMAGE, live runner or automatic SDK/hardware work to normal tests.
 Fresh device/protection/recovery binding and a separate CC2530 diagnostic
@@ -456,8 +462,9 @@ prerequisites; no temporary firmware or RF experiment followed.
 The [#55 newer primary specification](NRF_RECOVERY.md#bounded-protection-class-source-evidence)
 now bounds protection-class interpretation for four production variants,
 without supplying the missing named-revision/errata and actual-selector
-approval. A private report-only artifact overlay is being implemented in
-#58; it cannot authorize a writer or bypass those remaining gates.
+approval. The uncommitted #58 overlay draft was removed from the active
+worktree and retained outside Git when this role boundary was reaffirmed.
+None of this historical work authorizes replacing the sniffer firmware.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

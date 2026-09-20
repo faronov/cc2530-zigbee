@@ -488,8 +488,12 @@ guarantee is supplied. Broadcast-AR and ignored ACK-FCF compatibility remain
 explicit limits. Physical stop/drain is not IFS completion, a continuous
 MAC/POLL window closure, ordinary-TX handoff or security acceptance.
 
-A separate [Nordic laboratory stimulus](tools/nrf_stimulus/README.md) is
-prepared **offline only** for a later controlled experiment: boot-disarmed
+**The Nordic board is a passive sniffer/reference observer only.** Active
+stimulus generation and temporary replacement firmware are outside the
+current scope, not prerequisites for further CC2530 development.
+
+The [Nordic laboratory stimulus](tools/nrf_stimulus/README.md) is a
+**deferred offline prototype**, not a planned installation: boot-disarmed
 ARM/RUN, one fixed channel26/-20dBm public AR frame, then bounded ordinary
 promiscuous reception. Its source-built driver/SL and guarded PHYEND patch
 distinguish transmission completion from actually received ACK/data bodies.

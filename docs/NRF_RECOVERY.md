@@ -1,5 +1,11 @@
 # Nordic recovery preparation
 
+**Current scope: Nordic remains a passive sniffer only.** Temporary firmware,
+active-stimulus and flash-planning work is parked. The following tools and
+records are retained as historical evidence, not an active prerequisite for
+CC2530 development or permission for further programmer/device activity.
+The existing sniffer firmware was not replaced by this work.
+
 [`tools/nrf_recovery.py`](../tools/nrf_recovery.py) is an original, hardware-free
 preparation tool for #51. It compares two sets of private raw files, **not two
 devices or authenticated acquisition transcripts**. It neither collects a backup
