@@ -13,7 +13,16 @@
     "url": "https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjaylink/libjaylink_0.3.1.orig.tar.xz",
     "sha256": "dd211d3f4e8fcd53c97e9d8b7967061e4bdad6c0823d92ce99406577aaf7f254",
     "version": "0.3.1",
-    "checksum_source": "https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjaylink/libjaylink_0.3.1-1.dsc"
+    "checksum_source": "https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjaylink/libjaylink_0.3.1-1.dsc",
+    "patch": {
+      "file": "libjaylink-usb-1025.patch",
+      "sha256": "5705ecd7d29004f2535f39757a986f0257681c2cadcf67a30d691d95bb0990a4",
+      "path": "libjaylink/discovery_usb.c",
+      "before": "36890489e059500b64ae7dceb955425704870510b1502d51188785fb6f0e8cc8",
+      "after": "f49cc069b6cb4514df63d4217f8f8da5ff235189a879f06f04338e1ef95b2bae",
+      "upstream": "https://gitlab.zapb.de/libjaylink/libjaylink/-/commit/7e94e423c6a2ce5b412b1db8a9fbc749b1b29d24"
+    },
+    "baseline_library_sha256": "bd22b0246f79c15fe7fd067e33cd4f9506bdacb745a1fe698a4c6f75d581ec87"
   },
   "package_base": "https://archive.ubuntu.com/ubuntu/",
   "packages": [

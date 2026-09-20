@@ -796,6 +796,16 @@ distinguishes source review and synthetic execution from the later real
 programmer/device observations. Debug power/AP configuration and SWD shutdown
 traffic remain side effects; a MEM-AP model is not a Cortex-M CPU simulator.
 There is no physical backup, restoration or programming acceptance here.
+The later separately scoped [manual discovery attempt](NRF_RECOVERY.md#2026-09-20-manual-discovery-failure)
+failed before any target observation or capture bytes; it does not promote
+the successful software checks to hardware readback evidence.
+The following [exact-PID compatibility correction](NRF_RECOVERY.md#offline-compatibility-correction)
+passed an independent 39-test integration run, including the retained
+58 real-driver sequences and 131,097 genuine-library discovery cases in
+34 confined processes. The original library is the negative control; only
+the USB boundary is synthetic in the new corpus. No firmware/SWD/bulk
+response is faked and no physical device is used. Fresh source/runtime
+recording and the corrected-runtime inert MEM-AP prefix also pass.
 
 ## Generic NV record composition coverage
 

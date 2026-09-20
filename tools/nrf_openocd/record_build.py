@@ -8,8 +8,9 @@ import re
 import tarfile
 
 if __package__:
-    from . import offline
+    from . import discovery, offline
 else:
+    import discovery
     import offline
 
 
@@ -24,8 +25,6 @@ def record(workspace):
             sources[name] = offline.sha256(path)
     for archive_name, root, digest in (
         ("jimtcl.tar.gz", source / "jimtcl", lock["jimtcl"]["tar_sha256"]),
-        ("downloads/libjaylink_0.3.1.orig.tar.xz", workspace / "libjaylink-0.3.1",
-         lock["libjaylink"]["sha256"]),
     ):
         archive = workspace / archive_name
         if offline.sha256(archive) != digest:
@@ -39,6 +38,26 @@ def record(workspace):
                 if path.read_bytes() != tar.extractfile(member).read():
                     raise ValueError("changed dependency source: " + str(path))
                 sources[str(path.relative_to(workspace))] = offline.sha256(path)
+    sources.update(offline.validate_library_sources(workspace))
+    for path, expected in (
+        (workspace / "offline-tests/evidence.json", {
+            "cases": offline.EXPECTED_CASES, "binary_sha256": offline.sha256(binary),
+            "patch_sha256": offline.sha256(offline.HERE / "preserve-reset.patch"),
+        }),
+        (workspace / "usb-discovery-tests/evidence.json", {
+            "cases": discovery.EXPECTED_CASES, "processes": discovery.EXPECTED_PROCESSES,
+            "library_sha256": offline.sha256(workspace / "library/lib/libjaylink.so.0"),
+            "patch_sha256": lock["libjaylink"]["patch"]["sha256"],
+            "baseline_sha256": lock["libjaylink"]["baseline_library_sha256"],
+            "fake_sha256": offline.sha256(workspace / "usb-discovery-tests/libusb-1.0.so.0"),
+            "probe_sha256": offline.sha256(workspace / "usb-discovery-tests/discovery-probe"),
+            "test_sources": {name: offline.sha256(offline.HERE / name)
+                             for name in discovery.PROOF_SOURCES},
+        }),
+    ):
+        proof = json.loads(path.read_text())
+        if any(proof.get(key) != value for key, value in expected.items()):
+            raise ValueError("stale or mismatched execution proof: " + str(path))
 
     files = [
         binary, workspace / "library/lib/libjaylink.so.0",
@@ -49,7 +68,17 @@ def record(workspace):
         workspace / "openocd-strict-configure.log", workspace / "openocd-strict-build.log",
         workspace / "libjaylink-configure.log", workspace / "libjaylink-build.log",
         workspace / "no-device-checks.json", workspace / "offline-tests/evidence.json",
+        workspace / "usb-discovery-tests/evidence.json",
+        workspace / "usb-discovery-tests/libusb-1.0.so.0",
+        workspace / "usb-discovery-tests/discovery-probe",
+        workspace / "pre-usb-1025/libjaylink.so.0",
+        workspace / "operator-libs/libjaylink.so.0",
+        workspace / "operator-libs/libusb-1.0.so.0",
+        workspace / "libjaylink-usb-1025-build.log",
+        workspace / "libjaylink-usb-1025-install.log",
+        workspace / "openocd-usb-1025-build.log",
         offline.HERE / "preserve-reset.patch", offline.HERE / "dependencies.json",
+        offline.HERE / "libjaylink-usb-1025.patch",
         offline.HERE.parent / "test_nrf_openocd.py",
     ]
     for package in lock["packages"]:
@@ -69,7 +98,7 @@ def record(workspace):
     files.extend((workspace / "build").rglob("*.h"))
     files.extend((workspace / "library/include").rglob("*.h"))
     files.extend((workspace / "libjaylink-0.3.1/libjaylink/.libs").glob("*.o"))
-    for pattern in ("*.py", "*.c", "*.sh"):
+    for pattern in ("*.py", "*.c", "*.h", "*.sh"):
         files.extend(offline.HERE.glob(pattern))
 
     runtime = {}
@@ -104,6 +133,27 @@ def record(workspace):
     }
     if actual_paths != set(runtime) - {str(binary.resolve())}:
         raise ValueError("loader resolution differs from the recorded runtime closure")
+    operator_environment = dict(runtime_environment, LD_LIBRARY_PATH=str(workspace / "operator-libs"))
+    operator_listing = offline.command([interpreter, "--list", binary], env=operator_environment)
+    operator_libraries = {}
+    for soname, origin in (
+        ("libjaylink.so.0", workspace / "library/lib/libjaylink.so.0"),
+        ("libusb-1.0.so.0", workspace / "deps/usr/lib/x86_64-linux-gnu/libusb-1.0.so.0"),
+    ):
+        staged = workspace / "operator-libs" / soname
+        if staged.is_symlink() or offline.sha256(staged) != offline.sha256(origin):
+            raise ValueError("stale or indirect operator library: " + soname)
+        if soname + " => " + str(staged) + " (" not in operator_listing:
+            raise ValueError("operator library not selected: " + soname)
+        operator_libraries[soname] = offline.sha256(staged)
+    operator_paths = {str(Path(name).resolve()) for name in re.findall(
+        r"^\s*(?:\S+ => )?(/[^\s]+) \(", operator_listing, re.M)}
+    expected_operator = {
+        str(workspace / "operator-libs/libjaylink.so.0"),
+        str(workspace / "operator-libs/libusb-1.0.so.0"),
+    } | {path for path in runtime if not Path(path).is_relative_to(workspace)}
+    if operator_paths != expected_operator:
+        raise ValueError("unexpected operator runtime closure")
     for path in files:
         if not path.is_file():
             raise ValueError("missing build identity input: " + str(path))
@@ -116,6 +166,10 @@ def record(workspace):
         "binary_sha256": offline.sha256(binary),
         "runtime_environment": runtime_environment,
         "loader_list": loader_listing,
+        "operator_environment": operator_environment,
+        "operator_loader_list": operator_listing,
+        "operator_libraries": operator_libraries,
+        "libjaylink_patch": lock["libjaylink"]["patch"],
         "runtime": runtime,
         "source_files": sources,
         "files": {str(path.resolve()): offline.sha256(path) for path in files},
@@ -131,5 +185,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     evidence = record(args.workspace)
     print(json.dumps({key: evidence[key] for key in
-                      ("binary", "binary_sha256", "compiler", "runtime", "runtime_environment")},
+                      ("binary", "binary_sha256", "compiler", "runtime", "runtime_environment",
+                       "operator_environment", "operator_libraries")},
                      indent=2))

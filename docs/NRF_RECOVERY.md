@@ -210,3 +210,46 @@ the exact erased pages and partial-page tail restoration, and verify complete
 physical readback before any separately authorized startup. No mass erase or
 unlock may replace that review. No actual device was read by the offline
 work recorded here.
+
+## 2026-09-20 manual discovery failure
+
+The separate #52 attempt used the published `a073f9c` operator and the
+then-recorded programmer/runtime identities against the selected J2 debug
+connection. It failed with `Error: No J-Link device found`. Both main-flash
+files, both UICR files and the observation file remained empty. The private
+consumed marker and failure log were retained; no successful `readback.json`
+was produced. There was no process retry, TCP fallback, unlock or recovery.
+
+Subsequent inspection used only existing private artifacts, cached Linux USB
+metadata and public source, not another programmer connection. The cached
+nonunique descriptor class is SEGGER `1366:1025`, product `J-Link`.
+The unpatched, hash-locked libjaylink 0.3.1 `libjaylink/discovery_usb.c` PID table does not
+contain `1025`; its `probe_device()` rejects unsupported PIDs before opening
+them. That source limitation explains why cached host visibility and adequate
+USB-node permissions did not produce a selected programmer device.
+
+This is a **host/programmer-observed discovery failure**, not a fresh
+nRF52840 part, geometry, protection or memory observation. No physical
+backup, restored firmware, electrical reset preservation or programming
+permission was established. A separately reviewed narrow programmer
+compatibility correction is required before any new manual operation;
+the consumed attempt must not be cleared or rerun. Private selectors,
+raw files and logs remain outside Git/CI.
+
+### Offline compatibility correction
+
+The separate #53 correction adds only PID `1025` to that exact library.
+Its [primary upstream basis and retained interface assumptions](../tools/nrf_openocd/PROVENANCE.md#narrow-usb-pid-correction-for-53)
+are explicit; there is no vendor wildcard, broader library upgrade, changed
+serial filter or new reset/transport operation. The corrected runtime has a
+new library hash, so an old private selection must reject rather than silently
+use different bytes.
+
+Independent integration passed 39 combined tests, retaining all 58 confined
+real OpenOCD driver sequences and adding 131,097 genuine-library discovery
+cases in 34 confined processes. The original library remains the rejecting
+control. Source/archive/patch/object/runtime checks and the actual generated
+configuration prefix passed with no target initialization. This removes the
+known software filter only; physical interface compatibility, target identity,
+protection and full recovery reads remain unverified. The correction neither
+reuses the consumed operation nor authorizes a new device action by itself.

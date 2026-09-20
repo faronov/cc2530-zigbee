@@ -1,0 +1,21 @@
+SPDX-License-Identifier: GPL-2.0-or-later
+
+2026-09-20: admit only SEGGER USB PID 0x1025 in pinned libjaylink 0.3.1.
+Functional addition confirmed by upstream commit
+7e94e423c6a2ce5b412b1db8a9fbc749b1b29d24 (nRF52840).
+The original 2014-2016 Marc Schink copyright and GPL notices remain intact;
+this does not relicense 0.3.1 or import the later LGPL implementation.
+See PROVENANCE.md and COPYING.
+
+
+diff --git a/libjaylink/discovery_usb.c b/libjaylink/discovery_usb.c
+--- a/libjaylink/discovery_usb.c
++++ b/libjaylink/discovery_usb.c
+@@ -64,6 +64,7 @@
+ 	{0x1017, JAYLINK_USB_ADDRESS_0},
+ 	{0x1018, JAYLINK_USB_ADDRESS_0},
+ 	{0x1020, JAYLINK_USB_ADDRESS_0},
++	{0x1025, JAYLINK_USB_ADDRESS_0},
+ 	{0x1051, JAYLINK_USB_ADDRESS_0},
+ 	{0x1055, JAYLINK_USB_ADDRESS_0},
+ 	{0x1061, JAYLINK_USB_ADDRESS_0}

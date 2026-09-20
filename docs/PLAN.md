@@ -435,6 +435,13 @@ configuration. Its default is offline, with synthetic Tcl/process/private-file
 coverage; physical selection/readback and a reviewed page-preserving
 restoration/programming scope remain separate. It neither installs the
 stimulus nor waives #51's actual recovery prerequisites.
+The separate [#52 manual attempt](NRF_RECOVERY.md#2026-09-20-manual-discovery-failure)
+stopped at programmer discovery: the pinned library lacks the connected
+probe's USB PID. No backup was obtained and no automatic retry was made.
+The [#53 offline exact-PID correction](NRF_RECOVERY.md#offline-compatibility-correction)
+now passes genuine-library discovery and retained reset-preservation proofs.
+A new manual scope still requires the corrected pinned runtime and fresh
+selection/interface checks; the prior attempt is not reused.
 
 The [bounded radio ownership queues](RADIO_QUEUE.md) now implement two RX
 copies, one TX candidate and a four-cookie ISR/foreground request ring.

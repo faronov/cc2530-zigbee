@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import tarfile
 import time
 
 
@@ -50,10 +51,58 @@ def needed(path):
     return set(re.findall(r"\(NEEDED\).*?\[([^\]]+)\]", text))
 
 
+def archive_sources(archive, root, digest, change):
+    """Only one exact, hash-bound source change is allowed; every other file matches."""
+    if sha256(archive) != digest:
+        raise ValueError("source archive digest mismatch")
+    found_change = False
+    sources = {}
+    with tarfile.open(archive) as tar:
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            relative = Path(*Path(member.name).parts[1:])
+            if not relative.parts or relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("invalid source archive path")
+            original = tar.extractfile(member).read()
+            path = root / relative
+            actual = path.read_bytes()
+            if relative.as_posix() == change["path"]:
+                found_change = True
+                if hashlib.sha256(original).hexdigest() != change["before"]:
+                    raise ValueError("patch preimage mismatch")
+                if hashlib.sha256(actual).hexdigest() != change["after"]:
+                    raise ValueError("patch postimage mismatch")
+            elif actual != original:
+                raise ValueError("unreviewed dependency change: " + str(relative))
+            sources[str(path)] = hashlib.sha256(actual).hexdigest()
+    if not found_change:
+        raise ValueError("patched source missing from archive")
+    return sources
+
+
+def validate_library_sources(workspace):
+    lock = json.loads((HERE / "dependencies.json").read_text())["libjaylink"]
+    change = lock["patch"]
+    if change["file"] != "libjaylink-usb-1025.patch" or change["path"] != "libjaylink/discovery_usb.c":
+        raise ValueError("unexpected libjaylink patch scope")
+    if sha256(HERE / change["file"]) != change["sha256"]:
+        raise ValueError("libjaylink patch digest mismatch")
+    sources = archive_sources(
+        workspace / "downloads/libjaylink_0.3.1.orig.tar.xz",
+        workspace / "libjaylink-0.3.1", lock["sha256"], change,
+    )
+    # Validate the stored diff as well as its complete archived pre/postimages.
+    command(["git", "apply", "--reverse", "--check", HERE / change["file"]],
+            cwd=workspace / "libjaylink-0.3.1")
+    return {str(Path(path).relative_to(workspace)): digest for path, digest in sources.items()}
+
+
 def validate_workspace(workspace):
     workspace = Path(workspace)
     if not workspace.is_absolute() or workspace != workspace.resolve():
         raise ValueError("workspace must be an absolute, canonical trusted local path")
+    validate_library_sources(workspace)
     lock = json.loads((HERE / "dependencies.json").read_text())
     source = workspace / "openocd"
     actual = command(["git", "-C", source, "rev-parse", "HEAD"]).strip()
@@ -120,14 +169,14 @@ def build_fake(workspace):
     return fake, probe
 
 
-def synthetic_run(binary, fake, script=None, variables=None):
+def synthetic_run(binary, fake, script=None, variables=None, arguments=()):
     # Explicit allowlist: no inherited loader hooks, user Tcl configuration or open FDs.
     env = {
         "PATH": "/usr/bin:/bin", "LC_ALL": "C", "HOME": "/nonexistent",
         "LD_LIBRARY_PATH": str(fake.parent), "LD_PRELOAD": str(fake), "LD_BIND_NOW": "1",
     }
     env.update(variables or {})
-    args = [str(binary)]
+    args = [str(binary), *arguments]
     if script is not None:
         args += ["-c", PREFIX + script]
     start = time.monotonic()
