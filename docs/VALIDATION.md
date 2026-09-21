@@ -2302,6 +2302,52 @@ Neither result qualifies a noise source. There is no physical sampler,
 entropy estimate, accepted operating environment, conditioner or DRBG.
 Actual characterization data must remain separate and private.
 
+## M2 raw IRND acquisition software coverage
+
+`make test-radio-noise`, also in both-board `test-common`, runs the actual
+#66 [raw collector](ARCHITECTURE.md#isolated-raw-irnd-acquisition).
+Native coverage includes119606 cases: all sample counts1..1024, all channel
+byte values, both complete16-bit address domains' rejected ranges, unchanged
+inputs/output on admission failures, ignored configuration writes, exact
+packing/tails/cadence and terminal re-entry. Both-board ASan/UBSan runs include
+the ordinary corpus and all39 projected scenarios.
+
+The genuine SDCC executable links timebase, noise_health, radio_noise and its
+caller, with four immediately snapshotted relocated listings. Complete CODE,
+raw CDB and parsed-map identities are pinned, including private/helper ABI.
+Instruction checks bind all static SFR/XREG operations, dynamic setting
+sites, the sole RFRND read, no-sync tables, FSCAL1's limited mask, real timer
+reader, E3 and RXMASKCLR80. The projection applies synthetic hardware changes
+before actual reads and after actual writes; even an ignored write explicitly
+restores its modeled readback. CPU writes are checked before that update.
+It does not patch returns, CODE, driver state or timer calculations.
+
+All39 cases run with the unchanged15-second per-process simulator bound.
+They cover1024-bit startup and a failing final startup sample, retained RCT,
+counter wrap/half-range failure, delayed/missing warm-up, stopped clock,
+unconfirmed stop, timeout after a raw read, reserved raw bits, DMA/FIFO/ACK
+history, midstream clock/RSSI/controller/profile/VCO faults, exact work
+boundaries, NULL/overlap/private/alias/status/libc-boundary rejection.
+Every projected PC/DPTR/read/write is checked. Full captures and health
+contexts match native results, an independent bit oracle checks raw packing,
+and immutable inputs, unallocated XDATA, radio/SFR state, stack unwind and
+alias guards are enforced. Terminal re-entry cannot reach another projected
+peripheral access and preserves caller results apart from its return value.
+
+Both images/CDBs are byte-identical:6423 CODE,325 ordinary XDATA +64 reserved,
+request11/capture171/health15 bytes. Their stack starts28; projected-MMIO
+observations reach30, checkpoint unwind is29 and the SP7C/upper-IRAM guard
+passes. These hexadecimal SP values are not a measured full-run high-water.
+The6440 artifact negatives include every emitted CODE byte, complete map/ABI,
+stack metadata and each of four listings; nine snapshot and one alias
+negatives also pass. Make and artifact regressions exclude both raw-noise
+services/tests from all existing24 board images.
+
+Evidence is **host-tested, image-checked and simulated**, not hardware-observed.
+No normal-radio handoff, source independence, entropy estimate, conditioner or
+DRBG is implemented. Never flash `radio_noise_test.ihx`; physical acceptance
+requires a separate genuine boot-disarmed fixture.
+
 ## M2 PRNG board fixture offline coverage
 
 Both `IMAGE=prng_fixture` layouts use the

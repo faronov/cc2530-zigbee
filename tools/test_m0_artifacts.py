@@ -129,6 +129,17 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "receiver AUTOACK"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_noise_services_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_radio_noise_collect", "_radio_noise_fault", "_radio_noise_used",
+                         "_radio_noise_reserved_end", "_radio_noise_test_result",
+                         "_noise_health_start", "_noise_health_push", "_noise_health_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "raw-noise"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("radio_noise.c", "test_radio_noise.c", "noise_health.c", "test_noise_health.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "raw-noise"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_scan_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_scan_init", "_mac_scan_start", "_mac_scan_step",

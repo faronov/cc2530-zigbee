@@ -1156,9 +1156,9 @@ remain separate from the board fixture below.
 
 The #10 [primary-source review](PROVENANCE.md#rf-noise-and-entropy-assessment-sources)
 selects **raw receiver I-channel samples as a characterization candidate**,
-not an accepted entropy source. No sampler, conditioner, cryptographic DRBG or
-security-random API is implemented. The later binary health-test foundation
-below implements only the software tests. There is no credited min-entropy,
+not an accepted entropy source. The later binary health-test core and isolated
+raw acquisition driver below are implemented; no board sampler, conditioner,
+cryptographic DRBG or security-random API is implemented. There is no credited min-entropy,
 approved sampling cadence or hardware characterization result. The
 deterministic PRNG API above is unchanged.
 
@@ -1300,6 +1300,66 @@ identities, including private/helper metadata, are pinned from actual links;
 17 artifact,5 snapshot and1 alias negatives retain the15-second simulator
 bound. This is **host-tested, image-checked and simulated**, never a physical
 noise/entropy result or full-stack fit. Do not flash `noise_health_test.ihx`.
+
+### Isolated raw IRND acquisition
+
+The #66 [`radio_noise_collect`](../include/radio_noise.h) driver takes one
+explicit1..1024-bit capture per independently established full-reset epoch.
+It is foreground/non-reentrant, receiver-only and separate from normal
+RX/TX/AUTOACK; there is no implicit ownership transfer or board-image linkage.
+The caller must establish exclusive radio/CSP/DMA/clock/ST0 history, awake
+undivided XOSC32, disabled IRQ/RF masks/DMA and empty reset FIFOs.
+Register observations cannot prove that history or ADC sample freshness.
+
+The exact no-sync profile is `FRMCTRL0=4C`: RX_MODE11, AUTOACK0, TX_MODE00.
+Ten settings are written and read back, with the existing FSCAL1 write00/
+low-two-bit check and full-byte comparisons elsewhere. E3 enables RX.
+Sampling starts only after owned RX-enable80, calibration idle, lock/RX-active
+and RSSI-valid observations. Each sample executes one RFRND61A7 read; only
+IRND bit0 is packed, first sample in the low bit of the first byte. QRND is
+ignored; nonzero reserved bits are an error, not discarded data. The only
+stop action is RXMASKCLR80, followed by confirmed idle and empty FIFOs.
+No TX, ACK, FIFO read/flush, PRNG call or automatic retry is present.
+
+An explicit positive timeout below the24-bit half-range and an independent
+positive16-bit poll limit cover configuration, warm-up, sampling and stop.
+The requested interval1..65535 is a minimum in raw Sleep Timer ticks between
+the previous successful post-read observation and the next pre-read observation.
+The first gap starts at warm-up completion. `first_before`, `last_after`,
+`min_gap`, `max_gap` and `max_span` describe sequential observation brackets,
+not captured ADC times, a calibrated sample rate or independent symbols.
+A frozen clock terminates by the work bound. Executing CPU and no hidden
+half-range/wrap gaps remain caller preconditions; this is not asynchronous
+shutdown.
+
+The request is11 and capture171 target bytes, including128 packed-data bytes.
+Both must be disjoint ordinary XDATA after the entire service-private prefix
+and before the first linked libc scratch object, including memcpy temporaries.
+Link timebase, other service-private modules, this driver, then callers, and
+prove the complete layout for each composition. Invalid arguments/storage
+leave output and MMIO unchanged. After admission, output is zeroed and
+`samples` counts every actual raw read, including a failing `last_raw`;
+`timed_samples` counts only successful post-observations. Unused bits remain
+zero. A partial/error capture is never OK. First operational error is retained;
+subsequent calls have no MMIO/publication, and successful re-entry returns
+ALREADY_USED. **RX may remain active after failure**; no hidden repair/reset
+or normal-radio release is performed.
+
+The genuine test caller feeds raw bits to the real health core in17-bit
+chunks with one persistent context and explicit diagnostic cutoffs. A retained
+RCT/APT failure is distinct from successful raw acquisition; a failing final
+startup sample is not healthy even when its countdown is zero. Balanced
+periodic raw input deliberately passes. No output is entropy-qualified.
+
+Both boards are **host-tested, image-checked and simulated**, including
+ASan/UBSan; the images/CDBs are identical. The composition is6423 CODE and
+325 ordinary XDATA +64 reserved within8-KiB/512-byte budgets. Stack starts28,
+unwinds to29 inside the caller checkpoint, and the SP7C/alias guard passes.
+SP30 is the maximum observed at projected MMIO stops, **not a full-run
+high-water measurement**. See [coverage](VALIDATION.md#m2-raw-irnd-acquisition-software-coverage).
+No hardware behavior follows from the synthetic model. A separate genuine,
+boot-disarmed board fixture and manual acceptance are still required.
+**Never flash `radio_noise_test.ihx`.**
 
 ### Deterministic PRNG board orchestration
 

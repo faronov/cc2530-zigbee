@@ -871,6 +871,18 @@ meaning. The genuine compiler/image evidence establishes software behavior
 only; no source qualification, RNG construction or new hardware observation
 follows.
 
+The subsequent #66 [isolated IRND collector](ARCHITECTURE.md#isolated-raw-irnd-acquisition)
+and its synthetic model/caller/proofs are original BSD-3-Clause code, not
+vendor or NIST implementations. SWRU191F FRMCTRL0 p.259 supplies RX_MODE11
+and AUTOACK0; RXMASKCLR p.260 supplies the owned-bit80 soft stop; RFRND p.272
+supplies IRND0/QRND1/reserved bits. Existing reviewed radio settings and the
+[FSCAL1 readback distinction](RADIO_RX.md) are reused without weakening other
+register checks. Table2-3 instruction encodings and actual SDCC4.2 relocated
+listings establish the extra register ANL/ORL/ADD/ADDC/XRL/XCH, MUL, RL/RRC
+and DEC instruction lengths used by the checker. No hardware-model timing,
+diagnostic interval, synthetic pattern or software health pass is adopted as
+a physical source guarantee. Real raw samples remain outside Git/CI.
+
 ### M2 AES CPU-transfer prerequisite
 
 The initial independent AES-128 encrypt-block investigation on 2026-09-17 did **not**

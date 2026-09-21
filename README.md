@@ -349,6 +349,13 @@ provides host/image/simulator-checked RCT/APT with explicit diagnostic cutoffs.
 It neither collects RF samples nor qualifies entropy; even a periodic balanced
 stream can pass. `make test-noise-health` is offline only, with no board linkage.
 
+The [isolated raw IRND collector](docs/ARCHITECTURE.md#isolated-raw-irnd-acquisition)
+adds one bounded, reset-exclusive1..1024-bit no-sync receive capture with
+explicit partial-failure/timing metadata. `make test-radio-noise` exercises
+real driver/health-core code, not a physical source. Both boards are
+host-tested, image-checked and simulated; there is no board fixture or entropy
+claim yet. **Never flash `radio_noise_test.ihx`.**
+
 `make test-prng` checks the real driver against independent host mathematics
 and an isolated SDCC/alias-aware synthetic executable. **Never flash
 `prng_test.ihx`**. The separate

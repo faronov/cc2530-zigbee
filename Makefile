@@ -83,7 +83,7 @@ endif
 .PHONY: test-nv-record test-mac-tx
 .PHONY: test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
 .PHONY: test-common test-tools test-board test-local
-.PHONY: test-noise-health
+.PHONY: test-noise-health test-radio-noise
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
@@ -219,6 +219,26 @@ $(BUILD)/noise_health_test.ihx: $(BUILD)/noise_health.rel $(BUILD)/noise_health_
 test-noise-health: $(BUILD)/host-noise-health-tests $(BUILD)/noise_health_test.ihx
 	$(BUILD)/host-noise-health-tests
 	$(PYTHON) -B tests/boot_noise_health.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-radio-noise-tests: tests/test_radio_noise.c tests/host_mmio.c src/radio_noise.c src/timebase.c src/noise_health.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_noise.c tests/host_mmio.c src/radio_noise.c src/timebase.c src/noise_health.c -o $@
+
+$(BUILD)/radio_noise.rel: src/radio_noise.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_noise_test.rel: tests/test_radio_noise.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/radio_noise_test.ihx: $(BUILD)/timebase.rel $(BUILD)/noise_health.rel $(BUILD)/radio_noise.rel $(BUILD)/radio_noise_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/timebase.rel $(BUILD)/noise_health.rel $(BUILD)/radio_noise.rel $(BUILD)/radio_noise_test.rel
+	cp $(BUILD)/timebase.rst $(BUILD)/radio_noise_test.timebase.rst
+	cp $(BUILD)/noise_health.rst $(BUILD)/radio_noise_test.noise_health.rst
+	cp $(BUILD)/radio_noise.rst $(BUILD)/radio_noise_test.radio_noise.rst
+	cp $(BUILD)/radio_noise_test.rst $(BUILD)/radio_noise_test.radio_noise_test.rst
+
+test-radio-noise: $(BUILD)/host-radio-noise-tests $(BUILD)/radio_noise_test.ihx
+	$(BUILD)/host-radio-noise-tests
+	$(PYTHON) -B tests/boot_radio_noise.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-nwk-frame-tests: tests/test_nwk_frame.c src/nwk_frame.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_nwk_frame.c src/nwk_frame.c -o $@
@@ -776,7 +796,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common: test-mac-tx test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
-test-common: test-noise-health
+test-common: test-noise-health test-radio-noise
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
 	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"

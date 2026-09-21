@@ -56,7 +56,7 @@ class LocalChecksTests(unittest.TestCase):
         self.assertEqual(sum("unittest" in args for args in commands), 1)
         expected_components = {
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
-            "radio_queue", "radio_tx", "noise_health",
+            "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
             "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_frame", "aps_frame", "protocol_frame",
@@ -83,6 +83,8 @@ class LocalChecksTests(unittest.TestCase):
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
+            ("radio_noise", (("timebase", "timebase"), ("noise_health", "noise_health"),
+                             ("radio_noise", "radio_noise"), ("radio_noise_test", "radio_noise_test"))),
             ("radio_autoack", (("timebase", "timebase"), ("radio_autoack", "radio_autoack"),
                                ("radio_autoack_test", "radio_autoack_test"))),
             ("radio_tx", (("timebase", "timebase"), ("radio_fifo", "radio_fifo"),
@@ -139,7 +141,8 @@ class LocalChecksTests(unittest.TestCase):
                                  for args in commands), 1)
             for image in IMAGES:
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
-                self.assertFalse(any("noise_health" in arg for args in commands for arg in args))
+                self.assertFalse(any("noise_health" in arg or "radio_noise" in arg
+                                     for args in commands for arg in args))
 
     def test_clock_and_tx_snapshots_are_immediate_and_image_specific(self):
         for board in BOARDS:

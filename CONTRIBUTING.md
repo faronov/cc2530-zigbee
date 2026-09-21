@@ -104,6 +104,15 @@ Diagnostic cutoffs and passing synthetic streams are not qualified source
 parameters or entropy evidence. No raw captures, RF sampler or board-image
 linkage belongs in this target; never flash `noise_health_test.ihx`.
 
+The separate [raw IRND collector](docs/ARCHITECTURE.md#isolated-raw-irnd-acquisition)
+uses `make BUILD=build/radio-noise-check test-radio-noise`, likewise included
+once per board in `test-common`. Preserve its complete linked identities,
+all four immediate listings, real driver/health calls, projected MMIO ordering,
+partial captures, libc-scratch exclusions and terminal ownership. Synthetic
+timer/radio inputs are not source characterization; the15-second simulator
+deadline is unchanged. It has no board-image linkage. Never flash
+`radio_noise_test.ihx` or put actual raw captures in Git/CI.
+
 The M1 transport tests use synthetic USB backends and must never enumerate
 hardware. Ordinary tests need no PyUSB; optional PyUSB resource-manager tests
 are explicitly skipped when it is absent. To include those tests without any
