@@ -270,6 +270,14 @@ are sequential, not atomic. Only IRCON.STIF `0->1` growth is accepted across
 snapshots; `1->0` and other CPU flag/control changes are rejected. RFIRQF0/1
 belong to the driver's raw diagnostic rules, not a byte-identical flag rule.
 
+### Historical board-image layout (2026-09-18)
+
+The allocation, hashes and board instruction sites below describe the
+2026-09-18 image, before the [shared clock staging](RADIO_TX_FIXTURE.md).
+They must not be used as current debugger addresses. The wire v1 format above
+is unchanged; current image loading verifies its own exact linked metadata.
+The9,183-byte LG image has separate physical evidence below.
+
 | Allocation | Address / bytes (both boards) |
 | --- | --- |
 | Ordinary XDATA | `0000..0219`, 538 |
@@ -396,13 +404,25 @@ The later [TX acceptance](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptanc
 replaced this RX image and left the new TX image halted at END274F; the
 RX/backup endpoints above are historical.
 
+The [2026-09-21 demonstration](DEBUGGING.md#2026-09-21-lg-tx-and-passive-rx-demonstration)
+installed the current9,183-byte LG image, SHA256
+`241d6dad76db7dd98f9c5c12a647e8f1af854ad98599297c6d4d093a856c883d`.
+One passive attempt returned a10-byte CRC_OK body matching exactly one of
+1,709 concurrent Nordic records. A separate read-only inspection preserved
+the saved state/frame and full CPU context at READY016A/status2B/config26,
+checkpoint SP4A, RXENABLE0 and empty FIFOs. The current linked image has548
+ordinary XDATA bytes plus64 reserved; the historical layout above is not
+its allocation. Earlier timeout/BAD_CRC/cap observations remain tied to their
+original images, not newly repeated acceptance.
+
 These are finite channel15 observations on one LG board. The reference tool
 omits the final two serial-frame octets, which are not independently established
 as literal FCS; body equality is not independent on-air CRC verification.
 Generic hardware, other channels, calibrated timing/RSSI/LQI, controller
 overflow recovery and stopped-clock/poll-cap behavior remain unobserved on
 silicon. No lossless/continuous reception, MAC syntax/security/network
-acceptance, TX, autoACK, RF ISR or DMA is established. Physical CODE checking,
+acceptance, combined TX/RX, autoACK, RF ISR or DMA is established by these RX
+observations. Physical CODE checking,
 private captures, explicit recovery and the M2/M3 gates remain required.
 No hardware is accessed by tests/CI; their artifacts remain
 `hardware_tested=false` with the same seven-file whitelist.

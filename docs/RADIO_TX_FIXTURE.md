@@ -283,6 +283,13 @@ in a completed requested90-second capture containing one record. The current
 channel26 image was independently inspected at END274F/status2B/config26/SP62.
 The sniffer was sleep-commanded on26 and released; the coordinator was unchanged.
 
+The [2026-09-21 demonstration](DEBUGGING.md#2026-09-21-lg-tx-and-passive-rx-demonstration)
+repeated one PHY_DONE with exactly one independently matched13-byte public
+body. It then replaced TX with the separately checked passive RX image and
+observed one matching ambient channel15 body. The final installed image is RX,
+halted at READY016A with RX disabled, not the historical TX END endpoint.
+This is not a controlled reverse-path exchange or same-reset RX/TX ownership.
+
 #12's physical busy-channel, independent FCS and failure/recovery observations
 remain open. #15 lab/capture/calibration gates, same-reset RX/TX ownership/
 adapter and complete M3 acceptance remain open. Generic-board RF and settings

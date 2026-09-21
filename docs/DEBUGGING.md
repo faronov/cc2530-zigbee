@@ -3613,7 +3613,67 @@ final-two-octet/FCS provenance limitation remains unchanged. Checkpoint SP
 is not a hardware stack high-water measurement.
 
 All raw captures, factory data, recovery copies, programmer logs and detailed
-operator reports remain private and outside Git/CI. **Latest physical state:
+operator reports remain private and outside Git/CI. **State at the end of this record:
 the channel26 image is halted at END `0x274F`, status`0x2B`, config`0x26`;
 the sniffer is sleep-commanded on26 with its port released.** No further
-reset, resume or RF attempt followed the successful final inspection.
+reset, resume or RF attempt occurred within that scope. The later demonstration
+below supersedes this installed-image endpoint.
+
+### 2026-09-21 LG TX and passive RX demonstration
+
+**Hardware-observed, two separate experiments on one LG Rev0.3.** Under the
+standing operator authorization, #68 reused the existing checked board images
+and existing Nordic sniffer firmware. No firmware behavior, build/test gate,
+coordinator or network configuration changed. This is not controlled
+ping-pong, a same-reset bidirectional owner or Zigbee membership.
+
+The TX image was11,331 bytes, SHA256
+`f951f0324e0149fc16ee110cfd975ff61b12749e903b3fcaecdd4dfb809201e6`.
+The manual runner independently reset and checked all CODE, observed the
+empty/ARM/RUN admission sequence, then allowed one continuous IF_CLEAR
+attempt on channel26/raw TXPOWER05. A responsive Nordic capture and channel
+readback preceded that attempt.
+
+| Observation | Hardware result |
+| --- | --- |
+| TX | One PHY_DONE; halted END274F, no retry |
+| Public TX body | `41 88 5A FF FF FF FF 34 12 54 58 46 31` (13 bytes) |
+| Independent TX capture | Requested90 seconds, exactly one complete record and one exact public-body match |
+| Passive RX | Channel15, one attempt, one10-byte body, CC2530 CRC_OK, zero BAD_CRC |
+| Independent RX capture | Requested60 seconds,1,709 complete records; exactly one body matched the CC2530 publication |
+| RX raw metadata | Signed RSSI -17, correlation86;16,023 raw ticks/3,331 polls, not calibrated measurements |
+
+Between the experiments, a fresh single-use guarded programming scope checked
+the complete halted TX predecessor and preserved factory data before/after
+installing the9,183-byte passive RX image, SHA256
+`241d6dad76db7dd98f9c5c12a647e8f1af854ad98599297c6d4d093a856c883d`.
+The programmer's normal-run cleanup was blocked, and an independent reset/full
+CODE comparison established halted PC0 before application execution. Existing
+complete recovery material was retained; the entire main-flash tail was
+**not reread** for either demonstration transition. The RX runner then did
+its own reset/full CODE verification. AUTOACK and TX were off throughout the
+channel15 receive experiment; no response was sent into the home network.
+
+The first serial preflight reached SEGGER VCOM instead of the Nordic native
+USB interface and did not start a CC2530 attempt. After the user connected
+the native interface, one initial90-second capture ended empty because no
+transmission had yet been started. It remains a failed empty capture, not
+TX acceptance or RF-silence evidence. The subsequent capture and single TX
+attempt produced the matching record above; there was no extra transmission.
+
+A separate final read-only inspection matched the complete saved RX state
+and frame without reset/resume and preserved full CPU context. **Final state:
+RX image halted at READY `016A`, status`2B`, config`26`, SP`4A`,
+attempt1/completed1, fault latch0, RXENABLE0 and both FIFOs empty.**
+The Nordic capture exited cleanly; sleep was commanded, channel15 read back
+and the port released. READY is not terminal END: another deliberate resume
+would request another receive attempt. No such continuation occurred.
+
+Both comparisons are FCS-free body equality; the Nordic host removes two
+serial-frame octets, so independent on-air FCS remains unverified. Ambient RX
+is not a reply to the channel26 test frame. Captured-edge timing, continuous
+ownership, ACK/retries, losslessness, physical fault recovery, generic-board
+RF and MAC/security/network acceptance remain open. Raw captures, actual
+received addresses/payloads, factory data and logs remain private outside
+Git/CI; no received-body hash is published. IRND acquisition remains deferred:
+the earlier IRND image was replaced without running its collector.

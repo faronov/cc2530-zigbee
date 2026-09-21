@@ -7,10 +7,11 @@ An experimental, open C/SDCC project aiming to implement a small Zigbee end
 device and, subsequently, a sleepy end device on the TI CC2530.
 
 **Current status: bootstrap, guarded hardware-debugging tools, bounded passive RX
-and offline protocol components.
-This is not yet a working Zigbee stack.** The included firmware does not join a network,
-transmit radio packets, read a sensor or refresh a display. It does not require
-IAR or proprietary TI stack libraries.
+and single-frame TX fixtures, and offline protocol components.
+This is not yet a working Zigbee stack.** Default `bringup` does not enable radio.
+Separately selected fixtures have [hardware-observed TX/RX results](docs/DEBUGGING.md#2026-09-21-lg-tx-and-passive-rx-demonstration);
+they do not implement network join, a sensor application or display refresh.
+The project does not require IAR or proprietary TI stack libraries.
 
 The selected specification baseline is **Core R22 + PRO BDB 3.0.1**
 (`16-02828-012`). The first centralized-network ED target is a subset, not
@@ -425,6 +426,12 @@ one initial reception, a retained pre-RF timeout, then a separately reset
 Nordic capture; two BAD_CRC attempts published nothing. The16-attempt cap
 reached retained END with RX disabled and empty FIFOs.
 
+The [2026-09-21 demonstration](docs/DEBUGGING.md#2026-09-21-lg-tx-and-passive-rx-demonstration)
+also exercised the current9,183-byte LG image: one10-byte CRC_OK body matched
+exactly one concurrent Nordic record. The image remains halted at READY016A,
+with RX disabled and empty FIFOs. This was passive ambient reception, not a
+response to the separate channel26 TX.
+
 ```sh
 make BOARD=generic IMAGE=radio_rx_fixture test-radio-rx-fixture
 make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-radio-rx-fixture
@@ -473,10 +480,16 @@ independent nRF52840 capture contained exactly one byte-identical public body.
 That image was left halted at END. A later separately authorized
 [channel26 run](docs/DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance)
 also returned PHY_DONE once; its completed requested90-second capture contained
-exactly one record with the public body. The channel26 image is now halted at
-END, and the sniffer is sleep-commanded on26. The coordinator was not changed.
+exactly one record with the public body. That run left the channel26 image
+halted at END and the sniffer sleep-commanded on26. The coordinator was not changed.
 Neither run establishes permanent channel exclusivity, independent FCS or
 calibrated power/timing.
+
+The [2026-09-21 demonstration](docs/DEBUGGING.md#2026-09-21-lg-tx-and-passive-rx-demonstration)
+repeated one independently matched channel26 transmission, then installed the
+separate passive RX image and received one matching ambient channel15 body.
+The current installed image is RX, not TX. These are two separate experiments,
+not same-reset bidirectional operation or controlled ping-pong.
 
 The clock prerequisite reduces permanent DATA45 to12 bytes, with ten extra
 XDATA bytes, rather than enlarging memory limits. The TX test composition uses
