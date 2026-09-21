@@ -132,6 +132,9 @@ def rejections(image, symbols, debug, memory, listings):
             verify(image, symbols, debug.replace(line + "\n", "", 1), memory, listings)
         count += 1
     with case.assertRaises(ValueError):
+        verify(image, symbols, debug.replace("\n", "\r\n"), memory, listings)
+    count += 1
+    with case.assertRaises(ValueError):
         verify(image, symbols, debug, memory.replace("bytes available", "bytes missing"), listings)
     count += 1
     for name in listings:
@@ -287,7 +290,8 @@ def main():
     path = args.output / "radio_noise_test.ihx"
     image = parse_ihex(path.read_text(encoding="ascii"))
     symbols = parse_symbols(path.with_suffix(".map").read_text())
-    debug, memory = (path.with_suffix(s).read_text() for s in (".cdb", ".mem"))
+    debug = path.with_suffix(".cdb").read_bytes().decode("ascii")
+    memory = path.with_suffix(".mem").read_text()
     listings = {name: (args.output / f"radio_noise_test.{name}.rst").read_text() for name in LISTING_RANGES}
     allocated, sites = verify(image, symbols, debug, memory, listings)
     negatives = rejections(image, symbols, debug, memory, listings)

@@ -368,8 +368,15 @@ RX, bounded warm-up/cadence/stop, exact raw packing, partial-failure metadata
 and retained ownership. Both boards pass native/sanitizer and genuine
 linked/alias-aware checks:6423 CODE,325 ordinary XDATA +64 reserved, SP7C guard.
 The actual caller composes persistent binary health tests across17-bit chunks.
-It has no board linkage or physical evidence yet; a genuine boot-disarmed
-fixture and bounded manual acceptance are next, not the synthetic test image.
+Its standalone harness has no board linkage or physical evidence.
+The subsequent #67 [genuine boot-disarmed board fixture](RADIO_NOISE_FIXTURE.md)
+now supplies separate public build/proof integration: real startup/clock,
+fixed channel26/1024-bit acquisition, explicit ARM/RUN, retained END/FAULT,
+and health failure separate from acquisition success. Both boards have
+native/sanitizer/linked/alias-aware evidence,9426/9466 CODE,440+64 XDATA,
+full-run SP40 under SP7C. Physical acceptance is pending; #67 is not closed
+by this offline implementation. Only this distinct board image can be a
+candidate for a separately authorized experiment, never the synthetic test image.
 No entropy, secure RNG or waiver of #10's characterization gates follows.
 
 The [isolated passive RX foundation](RADIO_RX.md) now has host, linked-image

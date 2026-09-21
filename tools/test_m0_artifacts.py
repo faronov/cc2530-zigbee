@@ -134,9 +134,13 @@ class LayoutTests(unittest.TestCase):
             for name in ("_radio_noise_collect", "_radio_noise_fault", "_radio_noise_used",
                          "_radio_noise_reserved_end", "_radio_noise_test_result",
                          "_noise_health_start", "_noise_health_push", "_noise_health_test_result"):
+                if image == "radio_noise_fixture" and "_test_" not in name:
+                    continue
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "raw-noise"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
             for source in ("radio_noise.c", "test_radio_noise.c", "noise_health.c", "test_noise_health.c"):
+                if image == "radio_noise_fixture" and not source.startswith("test_"):
+                    continue
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "raw-noise"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
@@ -277,7 +281,7 @@ class LayoutTests(unittest.TestCase):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
     def test_dma_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 12)
+        self.assertEqual(len(IMAGES), 13)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -288,7 +292,7 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
     def test_aes_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 12)
+        self.assertEqual(len(IMAGES), 13)
         for image in IMAGES:
             if image == "aes_fixture":
                 continue

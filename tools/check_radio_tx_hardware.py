@@ -35,16 +35,16 @@ class Deadline:
     No new target/USB operation. A late completed operation is still failure;
     an in-flight operation retains the transport's independent 10-second cap.
     """
-    def __init__(self, target):
-        self.target, self.end = target, time.monotonic()+60
+    def __init__(self, target, label="TX"):
+        self.target, self.end, self.label = target, time.monotonic()+60, label
 
     def __getattr__(self, name):
         method = getattr(self.target, name)
 
         def bounded(*args, **kwargs):
-            require(time.monotonic() < self.end, "TX experiment deadline exhausted; no recovery attempted")
+            require(time.monotonic() < self.end, f"{self.label} experiment deadline exhausted; no recovery attempted")
             result = method(*args, **kwargs)
-            require(time.monotonic() < self.end, "TX experiment completed late; no recovery attempted")
+            require(time.monotonic() < self.end, f"{self.label} experiment completed late; no recovery attempted")
             return result
         return bounded
 

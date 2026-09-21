@@ -129,7 +129,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))
 
-    def test_noise_health_is_standalone_and_never_in_board_images(self):
+    def test_noise_health_standalone_and_only_explicit_noise_board_linkage(self):
         for board in BOARDS:
             commands = self.dry_run("test-noise-health", include_build=True, BOARD=board)
             links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
@@ -141,7 +141,9 @@ class LocalChecksTests(unittest.TestCase):
                                  for args in commands), 1)
             for image in IMAGES:
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
-                self.assertFalse(any("noise_health" in arg or "radio_noise" in arg
+                linked = any("noise_health" in arg or "radio_noise" in arg for args in commands for arg in args)
+                self.assertEqual(linked, image == "radio_noise_fixture")
+                self.assertFalse(any("test_radio_noise.c" in arg or "test_noise_health.c" in arg
                                      for args in commands for arg in args))
 
     def test_clock_and_tx_snapshots_are_immediate_and_image_specific(self):
@@ -161,6 +163,14 @@ class LocalChecksTests(unittest.TestCase):
                   ("clock", "clock"), (f"startup_{board}", "startup"), (f"status_{board}", "status"),
                   (f"board_{board}", board), (f"example_radio_tx_fixture_{board}", "radio_tx_fixture"),
                   ("radio_tx_fixture_state", "radio_tx_fixture_state"))),
+                ("test-board", "radio_noise_fixture", "radio_noise_fixture",
+                 ("timebase", "clock", "noise_health", "radio_noise", f"startup_{board}",
+                  f"status_{board}", f"board_{board}", f"example_radio_noise_fixture_{board}",
+                  "radio_noise_fixture_state"),
+                 (("timebase", "timebase"), ("clock", "clock"), ("noise_health", "noise_health"),
+                  ("radio_noise", "radio_noise"), (f"startup_{board}", "startup"), (f"status_{board}", "status"),
+                  (f"board_{board}", board), (f"example_radio_noise_fixture_{board}", "radio_noise_fixture"),
+                  ("radio_noise_fixture_state", "radio_noise_fixture_state"))),
             )
             for service in ("radio_fifo", "dma", "aes", "prng", "radio_rx"):
                 image = service + "_fixture"

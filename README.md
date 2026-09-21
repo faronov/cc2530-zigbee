@@ -347,14 +347,18 @@ finds two other cycles of 32,767 states, not a 65,535-state period.
 The separate [binary noise health-test core](docs/ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
 provides host/image/simulator-checked RCT/APT with explicit diagnostic cutoffs.
 It neither collects RF samples nor qualifies entropy; even a periodic balanced
-stream can pass. `make test-noise-health` is offline only, with no board linkage.
+stream can pass. `make test-noise-health` is a separate offline-only harness.
 
 The [isolated raw IRND collector](docs/ARCHITECTURE.md#isolated-raw-irnd-acquisition)
 adds one bounded, reset-exclusive1..1024-bit no-sync receive capture with
 explicit partial-failure/timing metadata. `make test-radio-noise` exercises
 real driver/health-core code, not a physical source. Both boards are
-host-tested, image-checked and simulated; there is no board fixture or entropy
-claim yet. **Never flash `radio_noise_test.ihx`.**
+host-tested, image-checked and simulated, without an entropy claim.
+The distinct [boot-disarmed board fixture](docs/RADIO_NOISE_FIXTURE.md),
+`IMAGE=radio_noise_fixture`, now links real startup/clock/collector/health,
+requires exact ARM then RUN, and retains one1024-bit channel26 capture.
+Both-board native/sanitizer and linked/alias-aware checks pass; hardware
+acceptance remains pending. **Never flash `radio_noise_test.ihx`.**
 
 `make test-prng` checks the real driver against independent host mathematics
 and an isolated SDCC/alias-aware synthetic executable. **Never flash
@@ -367,7 +371,8 @@ not just a count/hash. A separately selected genuine stopped-RCTRL probe tests
 terminal rejection; holding the CPU is **not** a PRNG poll-timeout experiment.
 That PRNG addition preserved all sixteen older BINs and existing drivers.
 The passive RX addition brought CI to twenty jobs; the flash and boot-disarmed
-TX fixtures bring it to twenty-four, with the
+TX fixtures brought it to twenty-four; the raw-IRND board fixture brings it
+to twenty-six, with the
 same seven artifacts and `hardware_tested=false`.
 The original **7,224-byte wirev1 LG PRNG image** passed
 [short hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):

@@ -58,7 +58,7 @@ git diff --check
 
 `test-local` runs the complete Python tool suite once, all standalone
 host/image/simulator component corpora once **for each board definition**,
-and the board-specific host/image/simulator checks for all twenty-four board/image
+and the board-specific host/image/simulator checks for all twenty-six board/image
 combinations. Components have no `IMAGE`-dependent inputs. This removes
 duplicate runs, not cases: every component still runs with both
 `CC2530_BOARD` definitions, and every board fixture retains its own checks.
@@ -68,7 +68,7 @@ the 15-second per-simulator deadline; extra CPU cores do not justify
 concurrent links into a shared directory or relaxed timeouts.
 
 The existing `make BOARD=... IMAGE=... all test` command remains a full
-single-configuration check. The twenty-four-job CI matrix runs its identical
+single-configuration check. The twenty-six-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common` in the two
 debug-fixture jobs, once per board definition. The tool suite itself includes both-board image profiles;
@@ -110,8 +110,16 @@ once per board in `test-common`. Preserve its complete linked identities,
 all four immediate listings, real driver/health calls, projected MMIO ordering,
 partial captures, libc-scratch exclusions and terminal ownership. Synthetic
 timer/radio inputs are not source characterization; the15-second simulator
-deadline is unchanged. It has no board-image linkage. Never flash
+deadline is unchanged. Its standalone harness has no board-image linkage. Never flash
 `radio_noise_test.ihx` or put actual raw captures in Git/CI.
+
+The distinct [boot-disarmed IRND board fixture](docs/RADIO_NOISE_FIXTURE.md)
+uses `make BOARD=... IMAGE=radio_noise_fixture test-radio-noise-fixture`.
+`test-board` includes strict native and ASan/UBSan cases plus the genuine linked
+proof for each board. Preserve all nine immediate listings, complete
+CODE/CDB/map identities, fixed command/profile ABI and actual full work caps;
+never enlarge the16384-CODE/768-reserved-XDATA/SP7C budgets silently.
+No physical operator is invoked by those targets, `test-local` or CI.
 
 The M1 transport tests use synthetic USB backends and must never enumerate
 hardware. Ordinary tests need no PyUSB; optional PyUSB resource-manager tests

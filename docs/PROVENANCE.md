@@ -883,6 +883,17 @@ and DEC instruction lengths used by the checker. No hardware-model timing,
 diagnostic interval, synthetic pattern or software health pass is adopted as
 a physical source guarantee. Real raw samples remain outside Git/CI.
 
+The #67 [boot-disarmed board composition](RADIO_NOISE_FIXTURE.md) and its
+fixture-specific native model/linked proof are original BSD-3-Clause work.
+No #66 production or standalone test implementation was imported or replaced.
+Primary TI SWRU191F (April2014) register facts above were checked directly,
+along with CLKCONCMD/STA pp.68–69, IRCON.STIF and Sleep Timer compare
+section11.2 (reset compareFFFFFF). SWRZ031 (April2009) issues1/2 concern
+DMA variable lengths and Timer2 latching, neither used by this fixture.
+The real existing board startup/clock/health services and SDCC4.2 runtime
+retain their own reviewed provenance. No physical samples, private identities,
+new dependency, vendor SDK object or hardware evidence is imported.
+
 ### M2 AES CPU-transfer prerequisite
 
 The initial independent AES-128 encrypt-block investigation on 2026-09-17 did **not**

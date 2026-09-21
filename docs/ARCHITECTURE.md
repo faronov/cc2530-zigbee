@@ -1357,8 +1357,12 @@ ASan/UBSan; the images/CDBs are identical. The composition is6423 CODE and
 unwinds to29 inside the caller checkpoint, and the SP7C/alias guard passes.
 SP30 is the maximum observed at projected MMIO stops, **not a full-run
 high-water measurement**. See [coverage](VALIDATION.md#m2-raw-irnd-acquisition-software-coverage).
-No hardware behavior follows from the synthetic model. A separate genuine,
-boot-disarmed board fixture and manual acceptance are still required.
+No hardware behavior follows from the synthetic model. The subsequent
+[genuine boot-disarmed board fixture](RADIO_NOISE_FIXTURE.md) now composes the
+unchanged services with real board startup and clock selection. It admits
+exact ARM then RUN for a fixed channel26/1024-bit one-shot, with separate
+acquisition/health results and retained terminal ownership. Its own
+host/image/simulator proof is not physical acceptance; hardware remains pending.
 **Never flash `radio_noise_test.ihx`.**
 
 ### Deterministic PRNG board orchestration

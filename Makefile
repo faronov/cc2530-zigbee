@@ -7,7 +7,7 @@ BOARD ?= generic
 IMAGE ?= bringup
 BUILD ?= build/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
 LOCAL_BUILD ?= build/local
-BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture flash_fixture radio_tx_fixture
+BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture flash_fixture radio_tx_fixture radio_noise_fixture
 
 ifeq ($(BOARD),generic)
 BOARD_NUMBER := 0
@@ -29,6 +29,7 @@ else ifeq ($(IMAGE),prng_fixture)
 else ifeq ($(IMAGE),radio_rx_fixture)
 else ifeq ($(IMAGE),flash_fixture)
 else ifeq ($(IMAGE),radio_tx_fixture)
+else ifeq ($(IMAGE),radio_noise_fixture)
 else
 $(error IMAGE must be one of $(BOARD_IMAGES))
 endif
@@ -75,6 +76,9 @@ endif
 ifeq ($(IMAGE),radio_tx_fixture)
 OBJECTS := $(BUILD)/timebase.rel $(BUILD)/radio_fifo.rel $(BUILD)/radio_tx.rel $(BUILD)/clock.rel $(OBJECTS) $(BUILD)/radio_tx_fixture_state.rel
 endif
+ifeq ($(IMAGE),radio_noise_fixture)
+OBJECTS := $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/noise_health.rel $(BUILD)/radio_noise.rel $(OBJECTS) $(BUILD)/radio_noise_fixture_state.rel
+endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
@@ -84,6 +88,7 @@ endif
 .PHONY: test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
 .PHONY: test-common test-tools test-board test-local
 .PHONY: test-noise-health test-radio-noise
+.PHONY: test-radio-noise-fixture test-radio-noise-fixture-sanitize
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
@@ -136,6 +141,9 @@ $(BUILD)/flash_fixture_state.rel: src/flash_fixture_state.c $(HEADERS) Makefile 
 $(BUILD)/radio_tx_fixture_state.rel: src/radio_tx_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
+$(BUILD)/radio_noise_fixture_state.rel: src/radio_noise_fixture_state.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
 # Relink with the selected board even when an explicitly shared BUILD is reused.
 $(TARGET).ihx: $(OBJECTS) force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(OBJECTS)
@@ -161,6 +169,17 @@ ifeq ($(IMAGE),radio_tx_fixture)
 	cp $(BUILD)/board_$(BOARD).rst $(TARGET).$(BOARD).rst
 	cp $(BUILD)/example_$(IMAGE)_$(BOARD).rst $(TARGET).radio_tx_fixture.rst
 	cp $(BUILD)/radio_tx_fixture_state.rst $(TARGET).radio_tx_fixture_state.rst
+endif
+ifeq ($(IMAGE),radio_noise_fixture)
+	cp $(BUILD)/timebase.rst $(TARGET).timebase.rst
+	cp $(BUILD)/clock.rst $(TARGET).clock.rst
+	cp $(BUILD)/noise_health.rst $(TARGET).noise_health.rst
+	cp $(BUILD)/radio_noise.rst $(TARGET).radio_noise.rst
+	cp $(BUILD)/startup_$(BOARD).rst $(TARGET).startup.rst
+	cp $(BUILD)/status_$(BOARD).rst $(TARGET).status.rst
+	cp $(BUILD)/board_$(BOARD).rst $(TARGET).$(BOARD).rst
+	cp $(BUILD)/example_$(IMAGE)_$(BOARD).rst $(TARGET).radio_noise_fixture.rst
+	cp $(BUILD)/radio_noise_fixture_state.rst $(TARGET).radio_noise_fixture_state.rst
 endif
 
 $(TARGET).hex: $(TARGET).ihx
@@ -222,6 +241,23 @@ test-noise-health: $(BUILD)/host-noise-health-tests $(BUILD)/noise_health_test.i
 
 $(BUILD)/host-radio-noise-tests: tests/test_radio_noise.c tests/host_mmio.c src/radio_noise.c src/timebase.c src/noise_health.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_noise.c tests/host_mmio.c src/radio_noise.c src/timebase.c src/noise_health.c -o $@
+
+$(BUILD)/host-radio-noise-fixture-tests_$(BOARD): tests/test_radio_noise_fixture.c tests/host_mmio.c src/radio_noise_fixture_state.c src/radio_noise.c src/timebase.c src/clock.c src/noise_health.c src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_noise_fixture.c tests/host_mmio.c src/radio_noise_fixture_state.c src/radio_noise.c src/timebase.c src/clock.c src/noise_health.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+$(BUILD)/host-radio-noise-fixture-sanitize_$(BOARD): tests/test_radio_noise_fixture.c tests/host_mmio.c src/radio_noise_fixture_state.c src/radio_noise.c src/timebase.c src/clock.c src/noise_health.c src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-pie -no-pie tests/test_radio_noise_fixture.c tests/host_mmio.c src/radio_noise_fixture_state.c src/radio_noise.c src/timebase.c src/clock.c src/noise_health.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+test-radio-noise-fixture-sanitize: $(BUILD)/host-radio-noise-fixture-sanitize_$(BOARD)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 $(BUILD)/host-radio-noise-fixture-sanitize_$(BOARD)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 $(PYTHON) -c 'import json,subprocess,sys; r=subprocess.run(sys.argv[1:]+["--vectors"],check=True,capture_output=True,text=True,timeout=15); v=[json.loads(s) for s in r.stdout.splitlines()]; assert len(v)==49; print("IRND sanitized synthetic stimulus serialization: 49 scenarios PASS")' $(BUILD)/host-radio-noise-fixture-sanitize_$(BOARD)
+
+ifeq ($(IMAGE),radio_noise_fixture)
+test-radio-noise-fixture: test-board
+else
+test-radio-noise-fixture:
+	$(error test-radio-noise-fixture requires IMAGE=radio_noise_fixture)
+endif
 
 $(BUILD)/radio_noise.rel: src/radio_noise.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -818,6 +854,7 @@ test-local:
 test-board: $(if $(filter flash_fixture,$(IMAGE)),$(BUILD)/host-flash-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_rx_fixture,$(IMAGE)),$(BUILD)/host-radio-rx-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_tx_fixture,$(IMAGE)),$(BUILD)/host-radio-tx-fixture-tests_$(BOARD))
+test-board: $(if $(filter radio_noise_fixture,$(IMAGE)),$(BUILD)/host-radio-noise-fixture-tests_$(BOARD) test-radio-noise-fixture-sanitize)
 test-board: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOARD) $(BUILD)/aes-reference)
 test-board: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
@@ -844,6 +881,9 @@ ifeq ($(IMAGE),radio_rx_fixture)
 endif
 ifeq ($(IMAGE),radio_tx_fixture)
 	$(BUILD)/host-radio-tx-fixture-tests_$(BOARD)
+endif
+ifeq ($(IMAGE),radio_noise_fixture)
+	$(BUILD)/host-radio-noise-fixture-tests_$(BOARD)
 endif
 ifeq ($(IMAGE),debug_fixture)
 	$(BUILD)/host-fixture-tests_$(BOARD)

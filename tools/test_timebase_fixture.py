@@ -155,7 +155,7 @@ class TimebaseCodeTests(unittest.TestCase):
     def test_ci_uploads_only_selected_board_artifacts(self):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text()
         self.assertIn("board: [generic, lg_esl29_rev03]", workflow)
-        self.assertIn("image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture, radio_tx_fixture]",
+        self.assertIn("image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture, radio_tx_fixture, radio_noise_fixture]",
                       workflow)
         self.assertEqual(workflow.count("python3 -m unittest discover -s tools -p 'test_*.py' -v"), 1)
         tool_step = workflow.split("- name: Check host tool regressions\n", 1)[1].split("- name:", 1)[0]

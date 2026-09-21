@@ -28,6 +28,15 @@ then add symbol/variable lookup and, separately, source-line conveniences.
 
 ## Debugger lifecycle contract
 
+The new [raw IRND board fixture interface](RADIO_NOISE_FIXTURE.md#stable-operator-interface-not-an-operator-implementation)
+is deliberately boot-disarmed and separate from `radio_noise_test.ihx`.
+Offline `DebugImage(..., "radio_noise_fixture")` supplies exact state/command/
+capture/health/clock addresses and WAIT/END/FAULT checkpoints. ARM confirms
+XOSC32 but never starts RX; RUN performs one uninterrupted capture. END is
+acquisition completion, not entropy acceptance; FAULT may retain active RX.
+This public interface grants no programming, reset, RF or physical-debugger
+permission and performs no hardware operation. Hardware acceptance is pending.
+
 Before implementing host commands, make these choices explicit:
 
 1. Which operation resets the target or enters debug mode?

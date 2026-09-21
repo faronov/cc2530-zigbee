@@ -17,11 +17,11 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
-`make test-local` now covers all twenty-four board/image checks while running
+`make test-local` now covers all twenty-six board/image checks while running
 the Python tool suite once and each standalone component corpus once per
 board definition instead of once per image. It uses isolated component and
 board-image directories and serial, fail-fast submakes. The existing full
-`make ... all test` and twenty-four-job CI coverage remain available.
+`make ... all test` and twenty-six-job CI coverage remain available.
 CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
@@ -2338,15 +2338,47 @@ Both images/CDBs are byte-identical:6423 CODE,325 ordinary XDATA +64 reserved,
 request11/capture171/health15 bytes. Their stack starts28; projected-MMIO
 observations reach30, checkpoint unwind is29 and the SP7C/upper-IRAM guard
 passes. These hexadecimal SP values are not a measured full-run high-water.
-The6440 artifact negatives include every emitted CODE byte, complete map/ABI,
-stack metadata and each of four listings; nine snapshot and one alias
-negatives also pass. Make and artifact regressions exclude both raw-noise
-services/tests from all existing24 board images.
+The6441 artifact negatives include every emitted CODE byte, complete map/ABI,
+raw CDB identity including CRLF rejection, stack metadata and each of four
+listings; nine snapshot and one alias negatives also pass. Make and artifact
+regressions exclude both raw-noise services/tests from all existing24 board images.
 
 Evidence is **host-tested, image-checked and simulated**, not hardware-observed.
 No normal-radio handoff, source independence, entropy estimate, conditioner or
 DRBG is implemented. Never flash `radio_noise_test.ihx`; physical acceptance
 requires a separate genuine boot-disarmed fixture.
+
+## M2 boot-disarmed raw IRND board fixture
+
+The separately selected raw IRND image has its own
+[boot-disarmed fixture evidence and budgets](RADIO_NOISE_FIXTURE.md#imageabi-and-evidence):
+8177 native cases per board (also ASan/UBSan),49 genuine linked scenarios,
+whole CODE/CDB/map/nine-listing bindings, exact10000-poll collector and
+4096-poll clock request/rollback checks, real startup/health calls and
+alias/SP7C guards. It adds two offline board jobs without replacing the
+older24 images or either standalone noise corpus. The initial failed
+per-access verbose full-poll simulation was corrected with counted
+**immutable** wait cycles and actual target counter checks, not shortened
+limits or a relaxed15-second deadline. Hardware acceptance remains pending.
+
+The earlier complete local `make test-local` rerun passed all26 board/image
+configurations and every standalone corpus for both board definitions.
+Its then-current Python suite passed677 tests with21 explicit optional/platform skips.
+The first aggregate attempt stopped on the old12-image CI-inventory assertion;
+that assertion now includes the13th image without changing the seven-path
+artifact whitelist. Repository/local-link and `git diff --check` checks pass.
+All24 older BINs were independently rebuilt/image-checked from `d022127`
+and remain byte-for-byte identical. This is not a hosted-CI or hardware result.
+
+A subsequent offline CDB-loader hardening passed9 focused Python tests and
+both boards' complete fixture targets, including native/ASan/UBSan and all49
+linked scenarios. The new CRLF negative raises the fixture artifact counts to
+16219 generic/16293 LG, plus one missing-alias negative each. Actual artifact
+loaders reject CRLF and nine other non-LF separator alternatives even with
+honestly refreshed manifest hashes; raw bytes are decoded without newline
+normalization before complete CDB identity checking. Both BIN hashes,
+resources and the frozen operator ABI are unchanged. This focused rerun
+does not claim another full-matrix run or validate a physical operator.
 
 ## M2 PRNG board fixture offline coverage
 
