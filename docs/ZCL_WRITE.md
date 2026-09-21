@@ -132,6 +132,10 @@ the64-byte status reservation is counted. Basic/Identify and integrated CODE
 caps stay24,576; every older module budget is unchanged. The new write module
 uses1,552 CODE/144 XDATA/**zero persistent IRAM**, bounded by1,792/160/0.
 The integrated image has only **one byte of CODE budget headroom**.
+Both-board CI observed Basic's new uninterrupted peak **SP5E**, separately from
+checkpoint **SP45**, after all370 target cases and allocation/alias guards
+passed. The former5A identity was updated from that execution and reviewed
+caller saves, not by raising the unchanged **SP7C** limit.
 
 No cases or work moved into an unbudgeted image. Repeated Identify test argument
 staging became one real-call helper; equivalent protocol test headers became one
