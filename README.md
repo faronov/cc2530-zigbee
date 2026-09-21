@@ -508,9 +508,12 @@ and unslotted hardware ACK with Pending0. It maintains an RX request, copies
 complete queued frames through RFD, and explicitly stops/drains without
 aborting an in-flight reception or ACK. CRC-bad bodies remain explicitly
 classified; operational faults retain ownership without hidden cleanup.
+Explicit same-owner rearm can now start another RX episode after complete
+stop/drain, preserving configuration and FIFO history. It does not recover
+a fault, transfer ownership or hide the reception gap.
 
 `make test-radio-autoack` is **host-tested, image-checked and simulated only**,
-with both-board 4410 CODE bytes,427 ordinary XDATA +64 reserved and whole-run
+with both-board 4692 CODE bytes,433 ordinary XDATA +64 reserved and whole-run
 SP`0x33`. It runs once per board in `test-common`, but no board image links it.
 **Never flash `radio_autoack_test.ihx`.** AUTOACK is RF transmission, not passive
 reception; no hardware ACK/timing observation or finite over-air ACK-count

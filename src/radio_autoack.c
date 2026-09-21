@@ -184,7 +184,8 @@ static radio_autoack_result_t operate(uint8_t operation,
         (operation == 0 && configuration == NULL) || (operation == 1 && output == NULL))
         return RADIO_AUTOACK_INVALID_ARGUMENT;
     if ((operation == 0 && radio_autoack_state != RADIO_AUTOACK_COLD) ||
-        (operation != 0 && radio_autoack_state != RADIO_AUTOACK_RX &&
+        (operation == 3 && radio_autoack_state != RADIO_AUTOACK_OFF) ||
+        ((operation == 1 || operation == 2) && radio_autoack_state != RADIO_AUTOACK_RX &&
          radio_autoack_state != RADIO_AUTOACK_DRAINING))
         return RADIO_AUTOACK_STATE;
     if (operation == 0) {
@@ -202,34 +203,42 @@ static radio_autoack_result_t operate(uint8_t operation,
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
     status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
-    if (operation == 0) {
-        owned = *configuration;
-        work.clock = MMIO_READ(SOC_CLKCONCMD);
-        work.configured = work.expected_mask = 0;
-        status.phase = 1;
-        CHECK(poll());
-        REQUIRE(idle() && !status.count && !(status.signals & 0xc0u) &&
-            !status.first && !status.last && !status.packet &&
-            !MMIO_XREAD(0x619c) && !MMIO_XREAD(0x61a1) && !MMIO_XREAD(0x61a2) &&
-            MMIO_XREAD(0x6189) == 0x40 && MMIO_XREAD(0x618a) == 1,
-            RADIO_AUTOACK_UNSUPPORTED_STATE);
-        for (work.index = 0; work.index < 25; work.index++) {
-            ROOM();
-            MMIO_XWRITE(setting_address(work.index), setting_value(work.index));
-            work.configured++; status.writes++;
+    if (operation == 0 || operation == 3) {
+        if (operation == 0) {
+            owned = *configuration;
+            work.clock = MMIO_READ(SOC_CLKCONCMD);
+            work.configured = work.expected_mask = 0;
+            status.phase = 1;
             CHECK(poll());
-            REQUIRE(idle() && !status.count && !(status.signals & 0xc0u),
-                    RADIO_AUTOACK_STATE_CHANGED);
-            status.verified = status.writes;
+            REQUIRE(idle() && !status.count && !(status.signals & 0xc0u) &&
+                !status.first && !status.last && !status.packet &&
+                !MMIO_XREAD(0x619c) && !MMIO_XREAD(0x61a1) && !MMIO_XREAD(0x61a2) &&
+                MMIO_XREAD(0x6189) == 0x40 && MMIO_XREAD(0x618a) == 1,
+                RADIO_AUTOACK_UNSUPPORTED_STATE);
+            for (work.index = 0; work.index < 25; work.index++) {
+                ROOM();
+                MMIO_XWRITE(setting_address(work.index), setting_value(work.index));
+                work.configured++; status.writes++;
+                CHECK(poll());
+                REQUIRE(idle() && !status.count && !(status.signals & 0xc0u),
+                        RADIO_AUTOACK_STATE_CHANGED);
+                status.verified = status.writes;
+            }
+        } else {
+            status.phase = 8;
+            CHECK(poll());
+            CHECK(stopped());
+            REQUIRE(status.flags1 & 4u, RADIO_AUTOACK_STATE_CHANGED);
+            REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
         }
-        ROOM(); status.phase = 2;
+        ROOM(); status.phase = operation == 0 ? 2 : 9;
         MMIO_XWRITE(0x618c, 1); status.writes++;
         work.expected_mask = 1;
         do { CHECK(poll()); }
         while ((status.calibration & 0x40u) || (status.signals & 7u) != 5u ||
                !status.rssi_valid);
         radio_autoack_state = RADIO_AUTOACK_RX;
-        status.phase = 3; result = RADIO_AUTOACK_READY;
+        status.phase = operation == 0 ? 3 : 10; result = RADIO_AUTOACK_READY;
     } else if (operation == 1) {
         status.phase = 4;
         CHECK(poll());
@@ -310,6 +319,10 @@ radio_autoack_result_t radio_autoack_receive(
 radio_autoack_result_t radio_autoack_stop(uint32_t timeout, uint16_t limit)
 {
     return operate(2, NULL, NULL, timeout, limit);
+}
+radio_autoack_result_t radio_autoack_resume(uint32_t timeout, uint16_t limit)
+{
+    return operate(3, NULL, NULL, timeout, limit);
 }
 const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void) { return &status; }
 MCU_XDATA uint8_t radio_autoack_reserved_end;

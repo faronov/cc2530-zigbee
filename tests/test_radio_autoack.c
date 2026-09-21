@@ -31,7 +31,10 @@ void radio_autoack_test_cycle(void)
         radio_autoack_test_return = radio_autoack_receive(
             radio_autoack_test_timeout, radio_autoack_test_limit,
             (radio_autoack_frame_t MCU_XDATA *)radio_autoack_test_output_ptr);
-    else radio_autoack_test_return = radio_autoack_stop(
+    else if (radio_autoack_test_operation == 2)
+        radio_autoack_test_return = radio_autoack_stop(
+            radio_autoack_test_timeout, radio_autoack_test_limit);
+    else radio_autoack_test_return = radio_autoack_resume(
         radio_autoack_test_timeout, radio_autoack_test_limit);
     radio_autoack_test_diag = MMIO_XADDRESS(radio_autoack_diagnostic());
     __asm
@@ -66,6 +69,7 @@ static unsigned head, tail, count, packets, packet_head, packet_tail, remaining;
 static unsigned mode, phase, samples, rfd_reads, accesses, calls, cases;
 static unsigned cal_delay, stop_delay, ack_delay, stop_receive, stop_ack;
 static unsigned hold_stop, suppress_idle, ready_active, ignored_clear;
+static unsigned ignored_enable, arrival_on_ready;
 static unsigned corrupt_write, config_writes, after_reads, arrive_after, corrupt_head, corrupt_count, corrupt_tail;
 static uint8_t fscal, corrupt_mask;
 static uint32_t ticks, tick_step, latched;
@@ -78,7 +82,7 @@ static const uint16_t settings[] = {
 };
 static const uint8_t values[] = {1, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69};
 #define XR(a) xregs[(a) - 0x6100u]
-#define CASE_COUNT 125u
+#define CASE_COUNT 157u
 
 static void logs(void)
 {
@@ -135,6 +139,10 @@ static void advance(void)
     if (mode == 1 && phase > cal_delay) {
         XR(0x6192) = 0; XR(0x6193) = (XR(0x6193) & 0xc0) | 4 | (ready_active ? 1 : 0);
         XR(0x6199) = 1; XR(0x61ae) = fscal; mode = 2;
+        if (arrival_on_ready) {
+            arrival_on_ready = 0;
+            enqueue(11, 0xe9, 0x38);
+        }
     } else if (mode == 3 && !hold_stop && phase > stop_delay) {
         if (stop_receive) {
             enqueue(11, 0xe9, 0x38);
@@ -206,8 +214,10 @@ static void xstore(uint16_t address, uint8_t value)
     assert(xwrite_count == 1 && xwrites[0].address == address && xwrites[0].value == value);
     xwrite_count = 0; logs(); trace('w', address, value);
     if (address == 0x618c) {
-        assert(value == 1 && !mode && config_writes == 25 && !XR(0x618b));
+        assert(value == 1 && (mode == 0 || mode == 5) &&
+               config_writes == 25 && !XR(0x618b) && !count && !packets);
         assert(XR(0x6189) == 0x60 && !XR(0x618a) && !XR(0x6182) && !XR(0x6195));
+        if (ignored_enable) return;
         XR(0x618b) = 1; XR(0x6192) = 0x40; XR(0x6193) = 1; XR(0x6199) = 0;
         mode = 1; phase = 0;
     } else if (address == 0x618d) {
@@ -253,6 +263,7 @@ static void reset(void)
     mode = phase = samples = rfd_reads = accesses = config_writes = 0;
     cal_delay = stop_delay = ack_delay = stop_receive = stop_ack = 0;
     hold_stop = suppress_idle = corrupt_write = after_reads = arrive_after = corrupt_head = ignored_clear = 0;
+    ignored_enable = arrival_on_ready = 0;
     corrupt_count = corrupt_tail = 0;
     fscal = 0xfc; corrupt_mask = 1; ready_active = 1;
     ticks = latched = 0; tick_step = 1; step_count = 0;
@@ -319,7 +330,8 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
     }
     if (operation == 0) result = radio_autoack_acquire(config_address ? &config.value : NULL, timeout, limit);
     else if (operation == 1) result = radio_autoack_receive(timeout, limit, output_address ? &frame.value : NULL);
-    else result = radio_autoack_stop(timeout, limit);
+    else if (operation == 2) result = radio_autoack_stop(timeout, limit);
+    else result = radio_autoack_resume(timeout, limit);
     if (result != expected)
         fprintf(stderr, "case%u step%u op%u expected%u got%u phase%u polls%u\n",
                 scenario_id, step_count, operation, expected, result,
@@ -351,6 +363,11 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
     if (result == RADIO_AUTOACK_STOPPED)
         assert(mode == 5 && !count && !packets && !(XR(0x6193) & 0xe7) &&
                !XR(0x618b) && XR(0x6189) == 0x60);
+    if (operation == 3 && result == RADIO_AUTOACK_READY)
+        assert(radio_autoack_state == RADIO_AUTOACK_RX && mode == 2 &&
+               config_writes == 25 && radio_autoack_diagnostic()->phase == 10 &&
+               radio_autoack_diagnostic()->writes == 1 &&
+               !radio_autoack_diagnostic()->verified);
     if (printing) {
         printf("],\"result\":%u,\"fault\":%u,\"state\":%u,\"frame\":\"",
                result, radio_autoack_fault, radio_autoack_state);
@@ -365,7 +382,98 @@ static void scenario(unsigned n)
     unsigned i;
     scenario_id = n; cases++; reset();
     if (printing) printf("{\"case\":%u,\"steps\":[", n);
-    if (n >= 114) {
+    if (n >= 125) {
+        CALL(3, RADIO_AUTOACK_STATE);
+        CALL(0, RADIO_AUTOACK_READY);
+        CALL(3, RADIO_AUTOACK_STATE);
+        if (n == 126 || n == 128) {
+            head = tail = 119; signals();
+            enqueue(n == 128 ? 127 : 11, 128, 0x38);
+            CALL(2, RADIO_AUTOACK_DRAIN);
+            CALL(3, RADIO_AUTOACK_STATE);
+            CALL(1, RADIO_AUTOACK_FRAME);
+        }
+        if (n == 129) {
+            stop_ack = 1; ack_delay = 3; XR(0x6193) = 0x26;
+        }
+        if (n == 148) SOC_RFIRQF1 = 7;
+        CALL(2, RADIO_AUTOACK_STOPPED);
+        CALL(0, RADIO_AUTOACK_STATE);
+        CALL(1, RADIO_AUTOACK_STATE);
+        CALL(2, RADIO_AUTOACK_STATE);
+        if (n == 125) {
+            call(3, 0, 1, RADIO_AUTOACK_INVALID_ARGUMENT);
+            call(3, 0x800000, 1, RADIO_AUTOACK_INVALID_ARGUMENT);
+            call(3, 0xffffffff, 1, RADIO_AUTOACK_INVALID_ARGUMENT);
+            call(3, 1000, 0, RADIO_AUTOACK_INVALID_ARGUMENT);
+        }
+        if (n == 130) {
+            count = tail = 3; signals();
+            CALL(3, RADIO_AUTOACK_FIFO_ERROR);
+        } else if (n == 131 || n == 137 || n == 138) {
+            cal_delay = 3;
+            if (n == 137) tick_step = 0;
+            call(3, 10000, n == 138 ? 4 : 5,
+                 n == 138 ? RADIO_AUTOACK_WORK_LIMIT : RADIO_AUTOACK_READY);
+        } else if (n == 132 || n == 133 || n == 134) {
+            if (n == 134) { ready_active = 0; tick_step = 0; }
+            call(3, 10000, n == 132 ? 1 : n == 133 ? 2 : 7,
+                 n == 133 ? RADIO_AUTOACK_READY : RADIO_AUTOACK_WORK_LIMIT);
+        } else if (n == 135 || n == 136) {
+            call(3, n - 134, 1000, RADIO_AUTOACK_TIMEOUT);
+        } else if (n == 139) {
+            ignored_enable = 1; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 140) {
+            XR(0x6180) ^= 1; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 141) {
+            SOC_CLKCONCMD = SOC_CLKCONSTA = 8; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 142) {
+            SOC_DMAARM = 1; CALL(3, RADIO_AUTOACK_UNSUPPORTED_STATE);
+        } else if (n == 143) {
+            XR(0x6193) = 0x26; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 144) {
+            enqueue(5, 128, 0x44); CALL(3, RADIO_AUTOACK_FIFO_ERROR);
+        } else if (n == 145) {
+            SOC_RFIRQF1 &= 0xfb; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 146) {
+            SOC_RFERRF = 8; CALL(3, RADIO_AUTOACK_CONTROLLER_ERROR);
+        } else if (n == 147) {
+            XR(0x619b) = 129; CALL(3, RADIO_AUTOACK_FIFO_ERROR);
+        } else if (n == 151) {
+            tick_step = 0x800000; CALL(3, RADIO_AUTOACK_TIME_ERROR);
+        } else if (n == 152) {
+            call(3, 3, 2, RADIO_AUTOACK_READY);
+        } else if (n == 153) {
+            XR(0x619e) ^= 1; CALL(3, RADIO_AUTOACK_FIFO_ERROR);
+        } else if (n == 154) {
+            XR(0x6193) = 5; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 155) {
+            XR(0x618b) = 2; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else if (n == 156) {
+            XR(0x6192) = 0x40; CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+        } else {
+            if (n == 127) arrival_on_ready = 1;
+            if (n == 149) { ticks = 0xfffffe; cal_delay = 2; }
+            CALL(3, RADIO_AUTOACK_READY);
+        }
+        if (!radio_autoack_fault) {
+            CALL(3, RADIO_AUTOACK_STATE);
+            if (n == 127) CALL(1, RADIO_AUTOACK_FRAME);
+            else CALL(1, RADIO_AUTOACK_EMPTY);
+            if (n == 148) assert(SOC_RFIRQF1 == 7);
+            for (i = 0; i < (n == 150 ? 4u : 1u); i++) {
+                enqueue(11, 128, 0x38);
+                CALL(2, RADIO_AUTOACK_DRAIN);
+                CALL(3, RADIO_AUTOACK_STATE);
+                CALL(1, RADIO_AUTOACK_FRAME);
+                CALL(2, RADIO_AUTOACK_STOPPED);
+                CALL(3, RADIO_AUTOACK_READY);
+            }
+            CALL(2, RADIO_AUTOACK_STOPPED);
+        }
+        goto end;
+    }
+    if (n >= 114 && n < 125) {
         unsigned output = n >= 116;
         unsigned first = (n - (output ? 116u : 114u)) * 16u;
         unsigned last = output ? 139u : 25u;
@@ -536,6 +644,7 @@ end:
         radio_autoack_result_t fault = (radio_autoack_result_t)radio_autoack_fault;
         config_address = output_address = 0;
         call(0, 0, 0, fault); call(1, 0, 0, fault); call(2, 0, 0, fault);
+        if (n >= 125) call(3, 0, 0, fault);
     }
     if (printing) puts("]}");
 }
@@ -617,8 +726,16 @@ int main(int argc, char **argv)
     }
     reset(); call(0, 0x800000, 1000, RADIO_AUTOACK_INVALID_ARGUMENT);
     reset(); call(0, 0xffffffff, 1000, RADIO_AUTOACK_INVALID_ARGUMENT);
+    for (i = 0; i < 25; i++) for (value = 0; value < 8; value++) {
+        reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
+        XR(i < 12 ? 0x616a + i : settings[i - 12]) ^= (uint8_t)(1u << value);
+        CALL(3, i == 21 && value >= 2 ? RADIO_AUTOACK_READY : RADIO_AUTOACK_STATE_CHANGED);
+    }
+    reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
+    ready_active = 0; tick_step = 0;
+    call(3, 10000, 65535, RADIO_AUTOACK_WORK_LIMIT);
     printf("AUTOACK: %u linked scenarios / %u native API calls; all lengths/CRC bytes, "
-           "address/profile bits, FIFO/stop/failure/atomic guards PASS (synthetic only).\n", cases, calls);
+           "address/profile bits, FIFO/stop/rearm/failure/atomic guards PASS (synthetic only).\n", cases, calls);
     return 0;
 }
 #endif

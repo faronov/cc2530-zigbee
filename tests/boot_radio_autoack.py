@@ -19,40 +19,42 @@ from boot_timebase import READ_OFFSETS, READER_BYTES
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 MODULES = ("timebase", "radio_autoack", "radio_autoack_test")
-SIZE, XDATA, PRIVATE_END, CASES = 4410, 427, 259, 125
+SIZE, XDATA, PRIVATE_END, CASES = 4692, 433, 265, 157
 CODE_BUDGET, XDATA_BUDGET = 24576, 1536
-DIGEST = "e814c6d33bb20b74d826fec630d906858dfeaf346fa7e46e6212db9aa7e9ba6b"
-MAP_DIGEST = "10fc35f83b665d82f6ddcb71b118f2afe7938bdde1aff6997ceaa75127965772"
+DIGEST = "cabe17e30c290558986122aaccd7cfa3b789387389d7cbc6c970a2c1db92f599"
+MAP_DIGEST = "68dbec974772d742dfc09a3fe7c5aa702b97aab40d080dbf28cc07af88e370cd"
+RAW_CDB_DIGEST = "91cec079cbf6b52221642c5ec85fb229af5aa7facb3bab306d09521dcc90667d"
+LEGACY_DIGEST = "d15ba16889fcb03932468342741390d9807a7ff652aa342aa6b2accdd87d0a32"
 METADATA = {
     r"^[FSLT]:(?:X?F|L)(?:timebase|radio_autoack)[.$][^\n]+$":
-        "f45a542e191e3272a447d9525669836ebb673c83939e07bb36bea2fb47931020",
+        "019b0139c655e0597dff1147c95355e581d06b64e01fbe98787abe307411ee0f",
     r"^[FSLT]:(?:X?F|L)test_radio_autoack[.$][^\n]+$":
         "0393c2e5b08a40d9b3ced9f7da7a983e22fdddf7c350593dd9060ce47145ff12",
     r"^[FSL]:(?:X?G)\$[^\n]+$":
-        "165a9a1f8b86a2eb0cdfd64610b7cabdc04341525de20b3d9b782b1d9c2b7b84",
+        "748b4fd780767f70a6f40076d635880c10578c031e00891a211d4e5cb714fdde",
 }
 LISTINGS = {
-    "timebase": (265, 404, "c06e190b95cf1401108516727b1d91cc45614786fccff77cd42f485c77abde93"),
-    "radio_autoack": (1984, 3391, "e50690b45f75f424076dde47ef8b4cbc106c4bb00882064ce87acd53140cc159"),
-    "radio_autoack_test": (175, 272, "94708beeede09342a2d94b87d21cb21a12d907e43d78d94ac4ec9c2635412be7"),
+    "timebase": (265, 404, "e1c16383cd52fa800047d6345ff7e40fa9e2662b7d205606aa1ecb2e1be2f418"),
+    "radio_autoack": (2117, 3618, "41c00eae5a9ab360b716580d55337066a95635e2bc7fc7374ba87beb1e39720e"),
+    "radio_autoack_test": (208, 327, "563576fd9dc4d122596da94c3183802851729150efa74f1bbc227b42883f438c"),
 }
 STORAGE = {
     "timebase": ("b7392a26f0ef36df18a6c0c19dc94bb30f830cc4a0b59c901dd57224c39ae342",
                  "5ad1a113cd16fd5197435af8db34e66d62715c469fe12c16bca97aec0a4eeaa0"),
-    "radio_autoack": ("e142f69523a3f4cccbeb26615c7dc215093fb9ca24f2f8472b01a75f869b36ca",
-                      "0958b448d3885e75cd2cbaa6de2532357b9a1ff0eabbec275a72d4fe9f18a213"),
-    "radio_autoack_test": ("7548a2623a56c24e24ea81e12cb629797794b21a6371eb720874f40f5b99908a",
-                           "b9df5bdb3a40b1dce75ebec1bd4914fc2158dd02c16a0e0df946da51b96e45b0"),
+    "radio_autoack": ("060996b126012253aa7f690f361b2b40cd78f5f55474b9dfbcd588727b076158",
+                      "e1f7b3e637667a99a30ee9b5700e6432fe7890f8c3d682ee3d0fd888cf759f30"),
+    "radio_autoack_test": ("25eab133a08ab5f6ee5377d3d22368f968a91f8d6c1fd2277432692a5839d71c",
+                           "1889e75a0d213558a5a78a30a23829d4b68a7778598037499b36fde8dcd25db2"),
 }
 OBJECTS = {
     "timebase": ((404, 25, 0, 3), "0f110e21445dc0b93ebdf51b98af4e96f29d208abff27d604bc67c01c334d968"),
-    "radio_autoack": ((3430, 234, 3, 2), "415bbd4fdc3a6b71019901996a29405115b036b44c8067d68d3e4957099839ed"),
-    "radio_autoack_test": ((272, 156, 2, 0), "cd5ac2a3b4e848aa57823db6c74571cd43e355a547e73333eccd6301c6cfcc23"),
+    "radio_autoack": ((3657, 240, 3, 2), "373d1e6f0ee2115474e013c2a5585c9206e5e886a807046ad73307f06077d806"),
+    "radio_autoack_test": ((327, 156, 2, 0), "debee2be691dd0491299dc3bfee6d5c0302d09c6f214cea2842f9d16b1999dcc"),
 }
 CALLER = {
-    "config": (0x103, 14), "frame": (0x111, 128), "operation": (0x191, 1),
-    "return": (0x192, 1), "config_ptr": (0x193, 2), "output_ptr": (0x195, 2),
-    "timeout": (0x197, 4), "limit": (0x19b, 2), "diag": (0x19d, 2),
+    "config": (0x109, 14), "frame": (0x117, 128), "operation": (0x197, 1),
+    "return": (0x198, 1), "config_ptr": (0x199, 2), "output_ptr": (0x19b, 2),
+    "timeout": (0x19d, 4), "limit": (0x1a1, 2), "diag": (0x1a3, 2),
 }
 SETTINGS = (0x6180, 0x6181, 0x6182, 0x6189, 0x618a, 0x6194, 0x6195,
             0x61b2, 0x61fa, 0x61ae, 0x618f, 0x6190, 0x6191)
@@ -79,7 +81,9 @@ def validate_cdb(debug):
 
 
 def read_cdb(path):
-    debug = path.read_bytes().decode("utf-8")
+    raw = path.read_bytes()
+    require(hashlib.sha256(raw).hexdigest() == RAW_CDB_DIGEST, "Complete raw CDB identity changed")
+    debug = raw.decode("utf-8")
     validate_cdb(debug)
     return debug
 
@@ -109,6 +113,8 @@ def mask_proof(code):
 
 def verify(image, symbols, debug, memory, listings, objects):
     validate_cdb(debug)
+    require(hashlib.sha256(debug.encode("utf-8")).hexdigest() == RAW_CDB_DIGEST,
+            "Complete CDB metadata changed")
     raw = code_bytes(image, SIZE)
     require(SIZE <= CODE_BUDGET and hashlib.sha256(raw).hexdigest() == DIGEST,
             "Whole CODE/constants/runtime changed")
@@ -165,15 +171,16 @@ def verify(image, symbols, debug, memory, listings, objects):
                 set(range(address, address + size)) <= allocated - private - caller,
                 "Caller object overlaps private/runtime/status/other output")
         caller.update(range(address, address + size))
-    require(caller == set(range(PRIVATE_END, 0x19f)) and symbols["__gptrput_PARM_2"] == 0x1aa,
+    require(caller == set(range(PRIVATE_END, 0x1a5)) and symbols["__gptrput_PARM_2"] == 0x1b0,
             "Caller/runtime scratch boundary changed")
     require({name: symbols[name] for name in (
         "___memcpy_PARM_2", "___memcpy_PARM_3", "_memset_PARM_2", "_memset_PARM_3",
-    )} == {"___memcpy_PARM_2": 0x19f, "___memcpy_PARM_3": 0x1a2,
-           "_memset_PARM_2": 0x1a7, "_memset_PARM_3": 0x1a8} and
-        allocated - private - caller - set(range(0x1e00, 0x1e08)) == set(range(0x19f, 0x1ab)),
+    )} == {"___memcpy_PARM_2": 0x1a5, "___memcpy_PARM_3": 0x1a8,
+           "_memset_PARM_2": 0x1ad, "_memset_PARM_3": 0x1ae} and
+        allocated - private - caller - set(range(0x1e00, 0x1e08)) == set(range(0x1a5, 0x1b1)),
         "Entire memcpy/memset/generic-store scratch suffix escaped ownership guards")
     for symbol in ("_radio_autoack_acquire", "_radio_autoack_receive", "_radio_autoack_stop",
+                   "_radio_autoack_resume",
                    "_radio_autoack_diagnostic", "_radio_autoack_test_cycle",
                    "_radio_autoack_test_before", "_radio_autoack_test_done", "_main",
                    "_timebase_read_awake_ticks24", "_timebase_deadline_after", "_timebase_expired"):
@@ -200,10 +207,9 @@ def verify(image, symbols, debug, memory, listings, objects):
             continue
         address = int.from_bytes(data[1:], "big")
         if address == 0x618c:
-            require(code.get(pc - 3) == b"\x74\x02" and code.get(pc - 1) == b"\xf0" and
-                    code.get(pc + 3) == b"\x14" and code.get(pc + 4) == b"\xf0",
+            require(code.get(pc + 3) == b"\x74\x01" and code.get(pc + 5) == b"\xf0",
                     "RXMASKSET lost exact one-bit write")
-            sites[pc + 4] = ("w", address, address)
+            sites[pc + 5] = ("w", address, address)
         elif address == 0x618d:
             require(code.get(pc + 3) == b"\x74\x01" and code.get(pc + 5) == b"\xf0",
                     "Soft stop lost exact one-bit mask clear")
@@ -212,8 +218,8 @@ def verify(image, symbols, debug, memory, listings, objects):
             require(code.get(pc + 3) == b"\xe0", "Unexpected static MMIO operand")
             sites[pc + 3] = ("r", address, 0xe0); static.append(address)
     require(tuple(static) == XREADS, "Static MMIO/address whitelist changed")
-    require(code.get(0x3e0) == b"\xe0" and code.get(0xa0f) == b"\xf0", "Indexed MMIO changed")
-    sites[0x3e0] = ("r", None, 0xe0); sites[0xa0f] = ("w", None, None)
+    require(code.get(0x3e0) == b"\xe0" and code.get(0xa31) == b"\xf0", "Indexed MMIO changed")
+    sites[0x3e0] = ("r", None, 0xe0); sites[0xa31] = ("w", None, None)
     mask_proof(code)
     for name, expected in (("settings", b"".join(a.to_bytes(2, "little") for a in SETTINGS)),
                            ("values", VALUES)):
@@ -236,6 +242,18 @@ def rejected(function, name):
     except ValueError:
         return
     raise ValueError("Negative control accepted: " + name)
+
+
+def check_legacy_native(executable):
+    vectors = [
+        json.loads(subprocess.check_output(
+            [str(executable), "--vector", str(n), "1536", "1792", "1280", "7424"],
+            text=True, timeout=15,
+        )) for n in range(125)
+    ]
+    raw = json.dumps(vectors, sort_keys=True, separators=(",", ":")).encode("ascii")
+    require(hashlib.sha256(raw).hexdigest() == LEGACY_DIGEST,
+            "Original125 scenarios changed result/frame/diagnostic/MMIO behavior")
 
 
 def negatives(image, symbols, debug, memory, listings, objects, directory):
@@ -270,8 +288,15 @@ def negatives(image, symbols, debug, memory, listings, objects, directory):
         if record.startswith("S:Lradio_autoack.") and "({2}DX," in record:
             reject("conflicting XDATA parameter appended",
                    debug=debug + "\n" + record.replace("({2}DX,", "({3}DG,", 1) + "\n")
+    reject("raw trailing blank line", debug=debug + "\n")
+    reject("raw CRLF metadata", debug=debug.replace("\n", "\r\n"))
     with TemporaryDirectory(prefix="raw-cdb-", dir=directory) as temporary:
         path = Path(temporary) / "artifact.cdb"
+        for raw in (debug.replace("\n", "\r\n").encode("utf-8"),
+                    debug.encode("utf-8") + b"\n"):
+            path.write_bytes(raw)
+            rejected(lambda: read_cdb(path), "raw CDB loader must not normalize line endings")
+            count += 1
         helper = next(r for r in selected if r.startswith("F:Fradio_autoack$consume$"))
         for separator in ("\0", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x1f",
                           "\x7f", "\x85", "\u2028", "\u2029"):
@@ -437,6 +462,7 @@ def main():
     listings = {m: (args.output / f"radio_autoack_test.{m}.rst").read_text() for m in MODULES}
     objects = {m: (args.output / f"{m}.rel").read_text() for m in MODULES}
     allocated, sites = verify(image, symbols, debug, memory, listings, objects)
+    check_legacy_native(args.output / "host-radio-autoack-tests")
     count = negatives(image, symbols, debug, memory, listings, objects, args.output)
     started = perf_counter()
     check_alias(args.simulator)
@@ -454,7 +480,7 @@ def main():
         )
         vector = json.loads(process.stdout)
         require(vector["case"] == n and vector["steps"], "Missing compiled native scenario")
-        if n >= 114:
+        if 114 <= n < 125:
             operation = int(n >= 116)
             invalid = [step for step in vector["steps"] if step["result"] == 8]
             require(1 <= len(invalid) <= 16 and all(
@@ -475,11 +501,12 @@ def main():
     require(overlaps == [(0, a) for a in range(helper - 24, helper + 1)] +
             [(1, a) for a in range(helper - 138, helper + 1)],
             "Every original libc overlap must execute exactly once across the fresh partitions")
-    require((calls, rfd, sampled, full, count) == (759, 549, 0x2d, 0x33, 6248),
+    require((calls, rfd, sampled, full, count) == (1216, 881, 0x2d, 0x33, 6568),
             "Complete corpus, negative inventory or measured stack high-water changed")
     print(f"AUTOACK: {CASES} sequences/{calls} genuine API calls/{rfd} exactly-once RFD reads; "
           f"{SIZE} CODE SHA256={DIGEST}; {XDATA}+64/{XDATA_BUDGET} XDATA; "
           f"MMIO SP={sampled:02X}, whole-run SP={full:02X}; {count}+1 artifact/alias negatives PASS. "
+          "Original125 native result/frame/diagnostic/MMIO identities unchanged. "
           "Synthetic controller only; no silicon, ACK timing or MAC/POLL acceptance.")
     seconds, name = max(timings)
     whole, case = max(vector_timings)

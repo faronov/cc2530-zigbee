@@ -793,21 +793,28 @@ preconditions. Neither executable is board firmware or a CI-uploaded image.
 
 `make test-radio-autoack` composes the unchanged real timebase, the
 [receiver/AUTOACK owner](RADIO_AUTOACK.md) and its genuine caller in that order.
-Both-board strict native and ASan/UBSan corpora cover155490 API calls, including
+Both-board strict native and ASan/UBSan corpora cover156550 API calls, including
 all bounded lengths/CRC bytes, address/profile values, exact storage ownership,
 atomic publication, inactive tails and retained faults.
 
-Both boards produce4410 CODE bytes and427 ordinary XDATA +64 reserved, with
+Both boards produce4692 CODE bytes and433 ordinary XDATA +64 reserved, with
 initial SP20, MMIO-sampled peak2D and whole-run peak33. The separate24-KiB CODE,
 1536-byte reservation and SP7C limits leave older budgets unchanged.
-The125 genuine sequences execute759 API calls and549 exactly-once RFD reads.
+The157 genuine sequences execute1216 API calls and881 exactly-once RFD reads.
 They cover multiple/circular/full FIFO, concurrent arrival, delayed calibration,
 receive/ACK soft stop, stale flags, partial/overflow/underflow/pointer faults,
 equality/work exhaustion, and no-MMIO/error-output preservation.
+The32 rearm sequences add repeated same-reset stop/drain/resume, nonzero
+empty cursors, arrivals during enable, pending-drain rejection, last-allowed
+readiness and exact timeout/work boundaries. Host checks add the full65535
+work cap and every configured bit while OFF. A saved pre-extension canonical
+digest also pins every result/frame/diagnostic/input/MMIO record of all125
+old native scenarios; no original behavior or case is replaced.
 
 Complete CODE/constants/runtime, public/private/helper/caller/field metadata
-multisets, storage and all three immediate listing snapshots are pinned.
-All6248 artifact negatives and the genuine missing-alias negative pass.
+multisets, complete raw CDB before decoding, storage and all three immediate
+listing snapshots are pinned.
+All6568 artifact negatives and the genuine missing-alias negative pass.
 Entire libc scratch, unused RAM, full status tail, upper IRAM and stack unwind
 remain guarded, with the unchanged15-second limit per simulator process.
 The164 exhaustive libc-overlap rejections run in11 fresh sequences of at most

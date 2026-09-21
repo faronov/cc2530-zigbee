@@ -4,7 +4,7 @@
 hardware acceptance record.** [radio_autoack.h](../include/radio_autoack.h) and
 [radio_autoack.c](../src/radio_autoack.c) establish one reset-exclusive filtered
 receiver with hardware-generated acknowledgments, bounded foreground FIFO
-servicing, and explicit non-aborting stop/drain.
+servicing, explicit non-aborting stop/drain and same-owner rearm (#72).
 
 AUTOACK **transmits RF without CPU intervention**. Actual use requires separately
 authorized RF-transmitting ownership and CPU progress. This change adds no board
@@ -108,9 +108,10 @@ publish a partial body. No heap or software packet queue is introduced.
 | Receive -> `BAD_CRC` | Also publish that body's raw bytes/metadata, explicitly marked invalid CRC. It is not MAC input acceptance. |
 | Receive -> `EMPTY` | No complete head frame observed at the initial check; partial reception may still be active. Not silence, drainage or window closure. |
 | Stop -> `DRAIN` | Physical stop is established, but queued bytes remain. Explicitly consume complete frames using receive, then call stop again. |
-| Stop -> `STOPPED` | Physical idle and empty hardware FIFO after explicit servicing, with consistent stopped ring pointers. Enter terminal OFF; no reacquisition. |
+| Stop -> `STOPPED` | Physical idle and empty hardware FIFO after explicit servicing, with consistent stopped ring pointers. Enter OFF; acquire/receive/stop still reject. |
+| Resume -> `READY` | Only from this owner's OFF after STOPPED: recheck the retained profile/idle/empty FIFO, then enable and confirm another RX episode. Not continuous reception or ownership transfer. |
 | Invalid argument/range/storage/state | No MMIO, output or diagnostic mutation. |
-| Operational error | Enter terminal FAULT and retain the first error and ownership. Later acquire/receive/stop calls return it with no MMIO, output or diagnostic mutation, even with invalid arguments. |
+| Operational error | Enter terminal FAULT and retain the first error and ownership. Later acquire/receive/stop/resume calls return it with no MMIO, output or diagnostic mutation, even with invalid arguments. |
 
 Receive masks only the PHR's documented high bit, bounds length 5..127, and
 returns `length=PHR-2` with 3..125 body bytes. `rssi_raw` is the uninterpreted
@@ -167,6 +168,34 @@ completion, ordinary-TX permission, captured time or release to another
 init-time API. Filter-rejected traffic is not delivered. Any later software
 queue loss also prevents a future adapter from claiming loss-free closure.
 
+### Explicit same-owner rearm
+
+`radio_autoack_resume(timeout, limit)` starts another receive episode only
+from this owner's OFF state. It does not acquire another owner's stopped
+radio, consume pending DRAIN frames or recover a fault. No caller may use
+another RF/FIFO API, modify configuration or reset hardware between calls.
+The ordinary acquire/receive/stop state errors remain unchanged.
+
+The same complete observation revalidates clock/profile, masks, errors,
+physical idle and stopped ring consistency. The previous stop's RFIDLE bit
+must still be present; it is **not a new capture or fresh event identity**.
+Count and FIFO/FIFOP indications must be empty before enabling. Equal,
+nonzero ring cursors are valid; the original configuration and FIFO history
+are retained, not reset to resemble cold acquisition.
+
+With remaining confirmation work, resume writes only `RXMASKSET=01`, then
+uses the original calibration/RX_ACTIVE/PLL/no-TX_ACTIVE/RSSI_VALID readiness
+checks. No configuration, flag acknowledgment, RFST, FIFO or GPIO write is
+added. New frames may arrive and eligible AUTOACKs may transmit after the
+enable, including before READY returns. Timeout/fault may leave RX active;
+there is no rollback or success-shaped cleanup.
+
+This follows SWRU191F23.9.1-2 pp222-223 and RXENABLE/RXMASKSET p260 directly.
+It deliberately creates an **RX gap** between episodes, including turnaround.
+It establishes neither the safety of ordinary TX during live AUTOACK nor
+permission to bridge an active POLL window with stop/resume. Captured timing,
+IFS, window continuity and ordinary-TX ownership remain separate.
+
 ### Bounds and diagnostics
 
 Each call uses the real unchanged timebase reader/deadline/expiry functions:
@@ -187,7 +216,8 @@ Only a separately authorized genuine full reset can recover.
 `radio_autoack_diagnostic()` returns read-only private storage. Diagnostics are
 partial observations, not an atomic peripheral snapshot. Phase 0 means no
 operation yet; phases 1..7 mean configuration, enable, ready, frame service,
-soft stop, drain and off. `sample_valid` marks a complete observation;
+soft stop, drain and off; phases8..10 mean rearm preflight, enable and ready.
+`sample_valid` marks a complete observation;
 `writes` counts issued configuration/control writes and `verified` counts
 confirmed configuration bytes. Polls, consumed bytes and raw elapsed ticks
 are per-call. Invalid calls preserve the preceding diagnostic; retained fault
@@ -208,18 +238,18 @@ and unbanked linker flags produce byte-identical generic/LG images:
 | Object | CODE, including constants/startup | Ordinary XDATA | Permanent DATA | OSEG |
 | --- | ---: | ---: | ---: | ---: |
 | timebase | 404 | 25 | 0 | 3 |
-| radio_autoack | 3430 | 234 | 3 | 2 |
-| test caller | 272 | 156 | 2 | 0 |
+| radio_autoack | 3657 | 240 | 3 | 2 |
+| test caller | 327 | 156 | 2 | 0 |
 
-Whole image: **4410/24576 CODE**, **427 ordinary XDATA + the entire 64-byte
-status reservation = 491/1536 bytes**. Runtime/startup adds 304 CODE and 12
+Whole image: **4692/24576 CODE**, **433 ordinary XDATA + the entire 64-byte
+status reservation = 497/1536 bytes**. Runtime/startup adds 304 CODE and 12
 XDATA beyond those object totals. The separate 24 KiB/1536-byte budget covers
 the real timebase, one staged frame, copied configuration, diagnostics,
 compiler parameters, caller buffers and runtime; it changes no old service
 budget and establishes no full-stack/POLL fit.
 
-The entire private prefix is `0000..0102`, caller allocation `0103..019E`,
-and libc scratch `019F..01AA`. The latter includes memcpy parameters **and
+The entire private prefix is `0000..0108`, caller allocation `0109..01A4`,
+and libc scratch `01A5..01B0`. The latter includes memcpy parameters **and
 its private temporary**, memset parameters and generic-store scratch. Both
 input and output ranges exclude that whole suffix; only excluding
 `__gptrput_PARM_2` would be insufficient. The proof binds its actual map,
@@ -236,10 +266,10 @@ RAM are guarded.
 Whole emitted CODE SHA-256:
 
 ```text
-e814c6d33bb20b74d826fec630d906858dfeaf346fa7e46e6212db9aa7e9ba6b
+cabe17e30c290558986122aaccd7cfa3b789387389d7cbc6c970a2c1db92f599
 ```
 
-**Host-tested:** 155490 API calls per board, both strict native and ASan/UBSan.
+**Host-tested:** 156550 API calls per board, both strict native and ASan/UBSan.
 Coverage includes all bounded lengths/CRC bytes, address/profile bits,
 every value of each caller address byte, copied-configuration independence,
 configuration/output ownership including every libc-scratch overlap, native
@@ -250,21 +280,28 @@ implement over-air filtering, FCS calculation or ACK generation. Lengths
 6..8 deliberately overapproximate the configured filter's possible frames
 to exercise byte bounds, not claim those are eligible over-air packets.
 
-**Image-checked/simulated:** 125 persistent sequences, 759 genuine API calls,
-549 exactly-once RFD reads, and 6248 artifact negatives plus one genuine
+**Image-checked/simulated:** 157 persistent sequences, 1216 genuine API calls,
+881 exactly-once RFD reads, and 6568 artifact negatives plus one genuine
 missing-alias negative per board. Coverage includes delayed readiness/
 calibration, active receive/ACK soft stop, 21 queued frames, max-length circular
 FIFO, concurrent arrival, CRC classification, stale flags, partial/count/
 head/tail/overflow/underflow faults, equality/work boundaries and terminal
-no-MMIO/error-output preservation.
+no-MMIO/error-output preservation. Rearm additionally covers repeated episodes,
+nonzero/wrapped empty cursors, pending-drain rejection, arrivals during enable,
+last-allowed timely confirmation, timeout equality, ignored mask writes,
+profile/clock/idle/FIFO/flag faults and retained re-entry. Native checks add
+every configured bit during OFF and the full65535 work cap with stalled time.
 
 The proof binds all CODE/constants/runtime bytes, complete public/private/
 helper/caller/field F/S/L/T record multisets with original duplicate
 multiplicity, source/storage associations, every map symbol, all-area
 allocations, entry/end/storage labels, and all three ordered instruction
 inventories. Missing, conflicting, malformed and duplicate records reject.
-CDB is read as raw UTF-8 bytes without newline normalization; control/
-non-LF-separator negatives also pass through the real file loader. An
+CDB is hashed as complete raw bytes **before decoding**, retaining source-line
+records as well as the detailed metadata multisets. Raw SHA-256 is
+`91cec079cbf6b52221642c5ec85fb229af5aa7facb3bab306d09521dcc90667d`.
+Control/non-LF-separator, CRLF and appended-blank-line negatives also pass
+through the real file loader. An
 independent FSCAL1 instruction check rejects masking changes without relying
 on the whole-image hash.
 
@@ -275,6 +312,22 @@ Every dynamic MMIO operand and destructive read is checked. Alias, unused RAM,
 status tail, upper IRAM, GPIO/IRQ/clock guards, stack unwind and simulator
 whole-run high-water remain enforced. Each simulator process retains its
 **15-second** limit.
+
+The original125 scenarios are also pinned independently to their pre-rearm
+native results, frame/diagnostic/input snapshots and complete ordered MMIO.
+Their canonical JSON digest is
+`d15ba16889fcb03932468342741390d9807a7ff652aa342aa6b2accdd87d0a32`.
+The verifier runs the same fixed synthetic-address corpus and requires exact
+identity, not only the same final return values. The32 added scenarios do not
+replace old ones. Current canonical simulator-call envelopes were3.464s
+(generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
+These are local observations, not portable timing guarantees.
+
+### Historical overlap-partition acceptance before rearm
+
+The following measurements concern the earlier4410-byte image,
+SHA-256 `e814c6d33bb20b74d826fec630d906858dfeaf346fa7e46e6212db9aa7e9ba6b`,
+not the current rearm composition above.
 
 Case 94 previously combined 25 configuration and 139 output libc-overlap
 rejections with its lifecycle, producing a marginal simulator process that
@@ -324,29 +377,13 @@ From the repository root, with the existing toolchain:
 
 ```sh
 make --no-print-directory -j1 BOARD=generic \
-  BUILD=build/radio-autoack-dev/generic test-radio-autoack
+  BUILD=build/radio-rearm/generic test-radio-autoack
 make --no-print-directory -j1 BOARD=lg_esl29_rev03 \
-  BUILD=build/radio-autoack-dev/lg_esl29_rev03 test-radio-autoack
+  BUILD=build/radio-rearm/lg_esl29_rev03 test-radio-autoack
 ```
 
-The complete native corpus under both sanitizers:
-
-```sh
-(
-  set -e
-  for board in generic lg_esl29_rev03; do
-    case "$board" in generic) id=0;; lg_esl29_rev03) id=1;; esac
-    cc -std=c99 -O1 -g -Wall -Wextra -Werror -pedantic \
-      -fsanitize=address,undefined -fno-omit-frame-pointer \
-      -DCC2530_HOST_TEST -DCC2530_BOARD="$id" -Iinclude -Itests \
-      tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c \
-      tests/host_mmio.c \
-      -o "build/radio-autoack-dev/$board/host-radio-autoack-sanitized"
-    ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
-      "build/radio-autoack-dev/$board/host-radio-autoack-sanitized"
-  done
-)
-```
+The canonical target now includes the complete native corpus under ASan/UBSan
+with recovery disabled; no separate manual sanitizer compilation is required.
 
 ## Remaining gates
 
@@ -391,3 +428,9 @@ and physical inactivity, then explicitly drain complete frames. None supplies
 IFS, timestamps or POLL closure. Further vendor clarification or separately
 scoped controlled hardware evidence is needed for the unresolved transitions;
 no such hardware experiment was performed by this review.
+
+The later #72 extension implements only the independently documented
+same-owner soft RX rearm after STOPPED. It neither exercises nor resolves the
+three ordinary-TX transitions above. It is the first reusable ownership
+transition toward a combined service, not permission to chain the old
+reset-exclusive TX/FIFO APIs into the gap.

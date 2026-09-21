@@ -135,19 +135,19 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))
 
-    def test_basic_sanitizer_and_no_board_linkage(self):
-        for board in BOARDS:
-            commands = self.dry_run("test-zcl-basic", include_build=True, BOARD=board)
+    def test_bounded_sanitizers_and_no_board_linkage(self):
+        for board, service in ((b, s) for b in BOARDS for s in ("zcl-basic", "radio-autoack")):
+            commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)
             self.assertIn("-fno-sanitize-recover=all", sanitize)
-            self.assertEqual(Path(sanitize[-1]).name, "host-zcl-basic-tests-sanitize")
+            self.assertEqual(Path(sanitize[-1]).name, "host-" + service + "-tests-sanitize")
             native = [Path(args[0]).name for args in commands]
-            self.assertEqual(native.count("host-zcl-basic-tests"), 1)
-            self.assertEqual(native.count("host-zcl-basic-tests-sanitize"), 1)
+            self.assertEqual(native.count("host-" + service + "-tests"), 1)
+            self.assertEqual(native.count("host-" + service + "-tests-sanitize"), 1)
             for image in IMAGES:
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
-                self.assertFalse(any("zcl_basic" in arg for args in commands for arg in args))
+                self.assertFalse(any(service.replace("-", "_") in arg for args in commands for arg in args))
 
     def test_noise_health_standalone_and_only_explicit_noise_board_linkage(self):
         for board in BOARDS:

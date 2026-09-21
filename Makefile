@@ -567,8 +567,12 @@ $(BUILD)/radio_autoack_test.ihx: $(BUILD)/timebase.rel $(BUILD)/radio_autoack.re
 $(BUILD)/host-radio-autoack-tests: tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c -o $@
 
-test-radio-autoack: $(BUILD)/host-radio-autoack-tests $(BUILD)/radio_autoack_test.ihx
+$(BUILD)/host-radio-autoack-tests-sanitize: tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c -o $@
+
+test-radio-autoack: $(BUILD)/host-radio-autoack-tests $(BUILD)/host-radio-autoack-tests-sanitize $(BUILD)/radio_autoack_test.ihx
 	$(BUILD)/host-radio-autoack-tests
+	$(BUILD)/host-radio-autoack-tests-sanitize
 	$(PYTHON) -B tests/boot_radio_autoack.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/prng_test.rel: tests/test_prng.c $(HEADERS) Makefile | $(BUILD)

@@ -839,10 +839,16 @@ Soft stop clears only this owner's RX mask after separately clearing/verifying
 old RFIDLE. It preserves AUTOACK while reception/ACK finishes, confirms fresh
 RFIDLE and physical idle, then retains complete FIFO frames for explicit reads.
 Partial/inconsistent FIFO or any RF error cannot become drained success.
-STOPPED is terminal physical stop/drain, not receiver-on POLL CLOSED, IFS,
+STOPPED is physical stop/drain, not receiver-on POLL CLOSED, IFS,
 ordinary-TX permission or release to a reset-exclusive service.
+Explicit `radio_autoack_resume` revalidates the retained profile, physical
+idle and empty ring, sets only the owned mask bit and confirms RX/RSSI
+readiness. Only this owner's OFF is eligible; pending drainage, foreign RF
+history and retained faults cannot be adopted. Nonzero empty cursors remain
+valid, and no reset/reconfiguration/flush conceals an RX gap. Acquire,
+receive and stop still reject OFF as before.
 
-Both-board host/image/alias-aware evidence covers4410 CODE,427+64 reserved
+Both-board host/image/alias-aware evidence covers4692 CODE,433+64 reserved
 XDATA and whole-run SP33 within separate24576/1536/SP7C limits. No board image
 links this synthetic test composition. Broadcast-AR behavior, global ACK-FCF
 compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration

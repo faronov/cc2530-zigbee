@@ -689,6 +689,17 @@ reverse TX-flush-to-ACK guarantee. SWRZ031 pp2-3 adds no clarification.
 These are explicit evidence gaps, not assertions of unsupported silicon or
 permission to invent a successful concurrent model.
 
+The #72 same-owner rearm extension reread SWRU191F23.9.1-2 pp222-223,
+Fig23-20/Table23-3 pp235-236 and RXENABLE/RXMASKSET/RXMASKCLR p260 from the
+same PDF, SHA-256
+`a8fe8e92db33ad79c7f371075b0a464602a6db747614625d9f8d3e6be990b877`.
+These explicitly support enabling RX from idle with the mask; no inference
+about ordinary-TX/ACK arbitration is needed for this limited operation.
+The original stop/drain proof establishes its OFF precondition. The old
+RFIDLE bit is retained evidence of that stop, not a newly captured event.
+Tests use original synthetic controller inputs; no hardware observation,
+SDK implementation, private material or manual redistribution is added.
+
 ### Nordic laboratory stimulus sources
 
 The separate [NS51 source/provenance ledger](../tools/nrf_stimulus/PROVENANCE.md)

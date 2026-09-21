@@ -251,6 +251,10 @@ explicitly and must not equate syntactic decoding with authenticated input.
 
 The isolated [filtered receiver/AUTOACK owner](docs/RADIO_AUTOACK.md) has
 `make BUILD=build/radio-autoack-check test-radio-autoack`, also in `test-common`.
+The canonical target includes nonrecovering ASan/UBSan as well as native
+and linked replay. Retain the pre-rearm125-scenario behavior digest and the
+new explicit rearm cases; only this owner's fully drained OFF may resume,
+with the RX gap documented rather than hidden.
 Preserve the real timebase/service/caller link, all three immediate snapshots,
 complete libc-scratch exclusions, atomic frame publication and exactly-once
 destructive RFD reads. Its separate 24-KiB CODE/1536-byte XDATA reservation

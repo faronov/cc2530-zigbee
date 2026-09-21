@@ -70,8 +70,9 @@ typedef struct {
  * Invalid arguments/storage/state have no MMIO or diagnostic effects. The
  * first operational fault retains ownership and its original result; later
  * operations perform no MMIO or diagnostic/output writes. No abort, flush,
- * retry, RF-off promise or recovery API exists. OFF cannot be reacquired:
- * genuine full reset is required. See docs/RADIO_AUTOACK.md.
+ * retry, RF-off promise or recovery API exists. Acquire still rejects OFF;
+ * only explicit same-owner resume may rearm it. FAULT requires genuine full
+ * reset. No other RF API may intervene. See docs/RADIO_AUTOACK.md.
  */
 radio_autoack_result_t radio_autoack_acquire(
     const radio_autoack_config_t MCU_XDATA *configuration, uint32_t timeout, uint16_t limit);
@@ -96,6 +97,16 @@ radio_autoack_result_t radio_autoack_receive(
  * ordinary-TX permission, or release to another init-time hardware API.
  */
 radio_autoack_result_t radio_autoack_stop(uint32_t timeout, uint16_t limit);
+
+/* OFF only, after this owner's STOPPED and explicit complete-frame drain.
+ * Revalidate the retained profile, physical idle and empty consistent FIFO,
+ * set only the owned RX mask bit, and confirm RX/RSSI readiness. Preserve
+ * nonzero empty ring cursors; no reconfiguration, flush, reset or fault clear.
+ * READY begins another RX episode with an explicit reception gap, NOT a
+ * continuous/loss-free window, POLL PREPARED or handoff from an ordinary TX API.
+ * Eligible frames may again be autoacknowledged before this call returns.
+ */
+radio_autoack_result_t radio_autoack_resume(uint32_t timeout, uint16_t limit);
 const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void);
 
 #endif
