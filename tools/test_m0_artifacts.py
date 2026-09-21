@@ -194,6 +194,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "NWK candidate"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_nwk_parent_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_nwk_parent_select", "_nwk_parent_test_result", "_nwk_parent_test_done"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "NWK parent"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("nwk_parent.c", "test_nwk_parent.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "NWK parent"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_tx_init", "_mac_tx_submit", "_mac_tx_step", "_mac_tx_result"):

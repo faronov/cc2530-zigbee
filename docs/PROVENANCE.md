@@ -1496,6 +1496,19 @@ implement complete discovery, link quality, update freshness, authentication
 or BDB procedures. All addresses/payloads are synthetic; no SDK, private capture,
 identity, key or third-party implementation is imported or uploaded.
 
+### Offline parent-choice sources
+
+The intervening [bounded parent-choice step](NWK_PARENT.md), #69, is original
+BSD-3-Clause code over the unchanged collector/getter. The same raw-byte-pinned
+R22 primary PDF was read directly:3.6.1.4.1 printed336/338 for selected network,
+cost/capacity/potential-parent/Update ID requirements and profile2 depth exclusion;
+3.6.3.1 printed367 for link-cost bounds and the permitted constant7.
+The optional explicit watermark, strict modulo256 half-range/ambiguity rule,
+all-candidate dominance, and cost/index tie-break are documented project
+policies, not asserted normative formulas or authenticated freshness.
+Synthetic Beacons and an independent linear-window test oracle are original.
+No external implementation, PDF, private RF data, identity or key is imported.
+
 ### Offline active-scan controller sources
 
 The [bounded controller and original synthetic corpus](MAC_SCAN.md) compose

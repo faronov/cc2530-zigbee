@@ -96,6 +96,13 @@ The build writes to `build/`. Generated firmware, captures and logs must not
 be committed. Do not add a dependency solely to avoid a small standard-library
 check; new dependencies need a purpose and license review.
 
+The [bounded parent selector](docs/NWK_PARENT.md) has focused
+`make BOARD=... BUILD=... test-nwk-parent test-nwk-parent-sanitize` checks.
+Its real collector/codec composition is included once per board in
+`test-common`; preserve all five immediate listing snapshots, complete raw
+CDB/map/CODE identities and half-range ambiguity/error cases. It has no board
+image linkage or hardware operator; never flash `nwk_parent_test.ihx`.
+
 The hardware-independent [binary noise health tests](docs/ARCHITECTURE.md#binary-raw-noise-health-test-foundation)
 have `make BUILD=build/noise-health-check test-noise-health`, also in
 `test-common` for both boards. Preserve startup/window/terminal boundaries,

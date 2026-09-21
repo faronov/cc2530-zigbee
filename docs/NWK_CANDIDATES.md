@@ -54,6 +54,11 @@ comparison or potential-parent/neighbor table. R22 section 3.6.1.4.1 excludes de
 selection for profiles other than1; its later depth-selection sentence is
 not used to invent a profile2 ranking rule.
 
+The separate [parent-choice function](NWK_PARENT.md) now consumes a stable
+snapshot of this table. It adds explicit target/link-cost/eligibility inputs
+and conservative Update ID ordering without changing collection behavior.
+It does not derive link quality or turn this table into authenticated state.
+
 ### Byte layouts and inherited exclusions
 
 An input is one complete **FCS-free legacy MAC body**, without PHR, RSSI/LQI,

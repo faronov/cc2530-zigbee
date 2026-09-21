@@ -601,6 +601,13 @@ is **host-tested, image-checked and simulated**. This is not active scanning,
 ranked parent selection, freshness, association or authenticated membership.
 Its standalone executable is excluded from board firmware and uploads.
 
+The separate [bounded parent selector](docs/NWK_PARENT.md) now chooses from
+that immutable table using an explicit target network, supplied link costs
+and eligibility, and conservative wrap-aware Update ID ordering. Ambiguous
+or cyclic IDs fail instead of selecting by arrival order; profile2 depth is
+not ranked. `make test-nwk-parent` is **host-tested, image-checked and simulated**,
+not a join procedure or calibrated link-quality source.
+
 The [offline active-scan controller](docs/MAC_SCAN.md) adds ascending channel
 walking, real Beacon Request/DSN/CCA state, confirmed receive-window handling
 and copied candidate collection. It preserves separate sent/unscanned masks

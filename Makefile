@@ -85,7 +85,7 @@ endif
 .PHONY: test-protocol-budget
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
-.PHONY: test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
+.PHONY: test-nwk-candidates test-nwk-parent test-nwk-parent-sanitize test-mac-time test-mac-scan test-mac-association test-mac-poll
 .PHONY: test-common test-tools test-board test-local
 .PHONY: test-noise-health test-radio-noise
 .PHONY: test-radio-noise-fixture test-radio-noise-fixture-sanitize
@@ -712,6 +712,33 @@ test-nwk-candidates: $(BUILD)/host-nwk-candidates-tests $(BUILD)/nwk_candidates_
 	$(BUILD)/host-nwk-candidates-tests
 	$(PYTHON) -B tests/boot_nwk_candidates.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/nwk_parent.rel: src/nwk_parent.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/nwk_parent_test.rel: tests/test_nwk_parent.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/nwk_parent_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_candidates.rel $(BUILD)/nwk_parent.rel $(BUILD)/nwk_parent_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/nwk_beacon.rel $(BUILD)/nwk_candidates.rel $(BUILD)/nwk_parent.rel $(BUILD)/nwk_parent_test.rel
+	cp $(BUILD)/mac_frame.rst $(BUILD)/nwk_parent_test.mac_frame.rst
+	cp $(BUILD)/nwk_beacon.rst $(BUILD)/nwk_parent_test.nwk_beacon.rst
+	cp $(BUILD)/nwk_candidates.rst $(BUILD)/nwk_parent_test.nwk_candidates.rst
+	cp $(BUILD)/nwk_parent.rst $(BUILD)/nwk_parent_test.nwk_parent.rst
+	cp $(BUILD)/nwk_parent_test.rst $(BUILD)/nwk_parent_test.nwk_parent_test.rst
+
+$(BUILD)/host-nwk-parent-tests: tests/test_nwk_parent.c src/nwk_parent.c src/nwk_candidates.c src/nwk_beacon.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_nwk_parent.c src/nwk_parent.c src/nwk_candidates.c src/nwk_beacon.c src/mac_frame.c -o $@
+
+$(BUILD)/host-nwk-parent-sanitize: tests/test_nwk_parent.c src/nwk_parent.c src/nwk_candidates.c src/nwk_beacon.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-pie -no-pie tests/test_nwk_parent.c src/nwk_parent.c src/nwk_candidates.c src/nwk_beacon.c src/mac_frame.c -o $@
+
+test-nwk-parent-sanitize: $(BUILD)/host-nwk-parent-sanitize
+	$(BUILD)/host-nwk-parent-sanitize
+
+test-nwk-parent: $(BUILD)/host-nwk-parent-tests $(BUILD)/nwk_parent_test.ihx
+	$(BUILD)/host-nwk-parent-tests
+	$(PYTHON) -B tests/boot_nwk_parent.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/mac_time.rel: src/mac_time.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -831,7 +858,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
-test-common: test-mac-tx test-nwk-candidates test-mac-time test-mac-scan test-mac-association test-mac-poll
+test-common: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-scan test-mac-association test-mac-poll
 test-common: test-noise-health test-radio-noise
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests

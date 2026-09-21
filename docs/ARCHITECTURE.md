@@ -155,6 +155,16 @@ This is not a MAC PAN-descriptor list, channel scan, ranked/fresh parent choice,
 association or membership state. No radio, timer, key or board dependency is
 introduced. Different Extended PAN identities remain distinct, without aging.
 
+The separate [parent selector](NWK_PARENT.md) consumes one immutable table
+snapshot plus a15-byte caller policy. It filters the selected network,
+supplied1..7 link costs and potential-parent mask, then requires one Update ID
+to dominate every eligible ID under an explicit modulo256 half-range policy.
+Known selected-network watermarks are optional explicit inputs, not inferred
+NIB state. Ambiguous/cyclic order returns an error with output unchanged;
+equal newest IDs use cost/index, never profile2 depth. Success copies a37-byte
+choice. No neighbor/NIB update, scan freshness, radio, association, security or
+membership is supplied. Table compaction requires rebinding caller metadata.
+
 The [offline active-scan controller](MAC_SCAN.md) leases the caller's existing
 device-wide transmitter and owns a 212-byte SDCC context, including the copied
 candidate table. It walks requested page0 channels11-26 in ascending order,

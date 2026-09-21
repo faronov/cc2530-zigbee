@@ -599,6 +599,18 @@ scan completion, link quality, freshness, compatible-parent selection,
 association or membership. No board image links or uploads the executable;
 no earlier memory limit or 15-second simulator deadline was enlarged.
 
+## Offline parent-choice composition coverage
+
+The separate [#69 parent-selector composition](NWK_PARENT.md#evidence-and-resources)
+adds both-board134,378 counted native cases with sanitizers, all ID/watermark
+pairs and an independent1,728-case linear-window oracle. Its genuine linked
+corpus runs42 shared outcomes plus direct checks through real collector/codecs:
+15,580 CODE,875 ordinary XDATA +64 reserved, full-run SP4D below cap7C.
+Complete raw CDB/map/CODE and five immediate instruction snapshots are pinned;
+53 artifact,8 result and1 alias negatives pass. Existing collector/scan behavior,
+budgets and corpora are unchanged; this is neither a hardware parent observation
+nor association, NIB/neighbor management or security acceptance.
+
 ## Offline active-scan composition coverage
 
 The figures here record the earlier control-staging baseline; the

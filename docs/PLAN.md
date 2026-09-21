@@ -598,6 +598,14 @@ active scan completion or complete normative parent selection: target-network
 choice, link cost, freshness/update-ID policy, actual receive windows and
 association remain open. The record/table are metadata, never membership.
 
+The separate [#69 parent-choice step](NWK_PARENT.md) now consumes that copied
+table with caller-supplied selected-network, link-cost and eligibility facts.
+It rejects ambiguous/cyclic Update IDs under an explicit conservative
+half-range policy and never uses profile2 depth. Both boards have native,
+sanitizer, complete-image and genuine linked evidence. This supplies a bounded
+selection function, not live neighbor/link-quality management, NIB state,
+the association procedure or BDB/security acceptance.
+
 The [offline active-scan controller](MAC_SCAN.md) now adds bounded ascending
 channel walking, real Beacon Request admission and serialized transmitter
 pumping, explicitly confirmed receive windows, copied candidate ingestion and
