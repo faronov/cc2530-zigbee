@@ -160,6 +160,25 @@ capture overwrite/delivery order, raw epoch extension, fine-phase/rounding
 policy and the abstract scheduler's time API. Independently observe physical
 timing under a separate authorization. This work closes none of those gates.
 
+### Additional TI support evidence: estimates are not bounds
+
+MaMoe's reply in [TI E2E thread90922, CC2530 Timer 2 Capture Function](https://e2e.ti.com/support/wireless-connectivity/other-wireless-group/other-wireless/f/other-wireless-technologies-forum/90922/cc2530-timer-2-capture-function)
+describes estimated TX analog delay below0.5us and RX SFD-detection delay
+around3us, varying with temperature, voltage and process. It also describes
+clock-domain-crossing jitter, but expressly says worst-case and RMS jitter
+have not been evaluated. These are support estimates, **not guaranteed
+offsets or worst-case bounds**. They do not justify subtracting3us, assuming
+zero delay, rounding away the fine phase or transferring one board's
+measurement to every device.
+
+The reply does not supply a CC2530 trailing-edge selection procedure,
+capture-register freeze/freshness mechanism or frame-end conversion contract.
+It therefore narrows the physical questions for #40 without closing them.
+The separate [CC2530-2591 follow-up](https://e2e.ti.com/support/wireless-connectivity/other-wireless-group/other-wireless/f/other-wireless-technologies-forum/159361/cc2530-2591-module-timer-2-capture-function)
+asks whether the delay transfers to that front end; the retrieved question
+does not establish that it does. No driver, timestamp correction or hardware
+observation is added by this source review.
+
 ## Offline evidence, ABI and resources
 
 Baseline **SDCC4.2.0** canonical large-model flags and unchanged linker bounds:

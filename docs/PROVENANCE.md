@@ -1478,6 +1478,14 @@ capture, identity or recovery material was imported; manuals remain linked
 references, not redistributed artifacts. Offline models do not establish
 physical capture semantics, calibration or PM/debugger continuity.
 
+The additional [TI E2E thread90922](https://e2e.ti.com/support/wireless-connectivity/other-wireless-group/other-wireless/f/other-wireless-technologies-forum/90922/cc2530-timer-2-capture-function)
+was read directly, including MaMoe's reply316742. Its analog/SFD delays are
+estimates; its explicit absence of evaluated worst-case/RMS jitter prevents
+treating them as guaranteed timing corrections. The [MAC Timer source
+assessment](MAC_TIME.md#additional-ti-support-evidence-estimates-are-not-bounds)
+records that limitation and the still-open capture contract. No forum code,
+SDK implementation or physical measurement is imported.
+
 ### Offline ED Beacon candidate sources
 
 The [four-entry collector](NWK_CANDIDATES.md), its copied-record policy and
