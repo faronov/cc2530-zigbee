@@ -21,8 +21,16 @@ The separate [read-only Basic provider](ZCL_LAB.md) now constructs six
 primary-backed attributes in caller-owned storage and uses these same
 Read/Discover handlers. Its synthetic lab configuration assigns no
 manufacturer code, endpoint, profile or device ID. Basic writes/reset,
-Identify, measurement/reporting and authenticated application integration
+measurement/reporting and authenticated application integration
 remain unsupported; a Basic table is not full cluster conformance.
+
+The separate [Identify procedure](ZCL_IDENTIFY.md) adds a caller-owned
+logical-time countdown, unicast Identify/Query and fresh IdentifyTime/
+ClusterRevision views through these same Read/Discover handlers. It provides
+explicit response/silence and atomic local failures, not physical indication,
+client/group/broadcast handling, network sends or an authenticated endpoint.
+IdentifyTime is specified RW; unsupported global writes remain a conformance
+gap, not a redefinition as a read-only attribute.
 
 ## Frame header
 
@@ -324,6 +332,8 @@ make test-zcl-frame
 make test-zcl-value
 make test-zcl-attributes
 make test-zcl-dispatch
+make test-zcl-basic
+make test-zcl-identify
 make test-protocol-frame
 ```
 

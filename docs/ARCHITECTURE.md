@@ -296,6 +296,16 @@ protocol-budget image or board firmware and does not establish whole-stack
 fit. There is no endpoint registration, manufacturer assignment, factory
 reset, Identify, reporting, persistence, physical sensor or network send.
 
+The separate [Identify procedure](ZCL_IDENTIFY.md) owns an eight-byte caller
+context without retained pointers. Explicit monotonic modulo32 millisecond
+inputs drive its seconds/fractional-phase countdown; Identify resets the phase,
+Query/Read/Discover do not. It stages timer changes until real serialization
+succeeds and delegates foundation processing through a transient two-attribute
+view. It has no board clock, physical indicator, client/group/broadcast path,
+network send or authenticated endpoint. IdentifyTime's required global writes
+remain missing, not permanently read-only. Its isolated proof does not extend
+the integrated protocol resource image or establish complete-stack fit.
+
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
 NWK/APS/security services rather than inside codecs or board code.

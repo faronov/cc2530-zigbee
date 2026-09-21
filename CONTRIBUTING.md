@@ -47,6 +47,16 @@ working firmware features or changes the project's support claims.
 
 ## Development checks
 
+**GitHub Actions is the normal full acceptance gate.** Do not routinely run
+the full host/sanitizer/image/simulator matrix locally and then repeat it in
+CI. Locally, do only the compilation/artifact inspection needed to prepare
+the change, or a narrow check needed to reproduce and fix a failure.
+After publication, use the CI result for complete acceptance; do not claim
+it passed before the workflow finishes. Keep every existing CI case, strict
+linked-image/ABI/alias guard and simulator deadline.
+
+The commands below are available for offline reproduction or targeted
+debugging, not a mandatory duplicate before every push.
 With SDCC 4.2.0, `s51`, Python 3.9 or newer, Tcl 8.6 (`tclsh8.6`), GNU Make and
 a host C compiler on `PATH`:
 
@@ -544,6 +554,16 @@ CDB/map/CODE identities, caller/libc boundaries and alias/stack negatives.
 Its24,576-CODE/1,536-reserved-XDATA budget changes no older component limit.
 No board image may link it; **never flash `zcl_basic_test.ihx`**.
 Identify, writes, reporting and application advertisement remain separate.
+
+`make BOARD=... BUILD=... test-zcl-identify`, also once per board in
+`test-common`, checks the [logical-time Identify procedure](docs/ZCL_IDENTIFY.md),
+native nonrecovering ASan/UBSan and genuine linked execution. Preserve the exact
+six-module link order, immediate snapshots, full raw CDB/CODE/map and ABI proof,
+24,576-CODE/1,536-reserved-XDATA/SP7C caps and15-second simulator deadline.
+The real `zcl_id_` service/test symbols and source/CDB records must remain
+excluded from every board image. **Never flash `zcl_identify_test.ihx`.**
+No physical indication, client/group/broadcast handling, global writes or
+authenticated endpoint is provided. Use CI for full acceptance as described above.
 
 `make test-protocol-budget`, included in the default test suite, additionally
 links **all seven** MAC/NWK Data/APS/ZCL/Read/Discover modules into one compact

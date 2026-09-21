@@ -823,10 +823,15 @@ six-attribute R8 model over those existing handlers, with copied bounded
 strings, explicit validation and synthetic lab vectors. It is host-tested,
 image-checked and simulated for both boards, not linked into firmware.
 The same contract records primary Basic/Identify/Temperature requirements
-and BDB binding/group/reporting dependencies. Identify and measurement remain
-unimplemented; an applicable primary device/profile definition has not been
-established, so advertisement stays unselected. This parallel M6 preparation
-does not change the main MAC-before-security order or waive M3-M5 gates.
+and BDB binding/group/reporting dependencies. The independent
+[Identify procedure (#71)](ZCL_IDENTIFY.md) now provides a logical-time
+countdown, unicast Identify/Query and real Read/Discover handling, with
+both-board native/sanitizer/image/simulator evidence. Physical indication,
+Identify client/group/broadcast handling, required global writes and
+measurement/reporting remain unimplemented. An applicable primary device/profile
+definition has not been established, so advertisement stays unselected.
+This parallel M6 preparation does not change the main MAC-before-security
+order or waive M3-M5 gates.
 
 Deliver:
 

@@ -130,6 +130,11 @@ revision value identifies its base-text schema, not a conformance certificate.
 
 ## Identify and synthetic temperature: requirements, not implementations
 
+This section records requirements beyond the Basic provider. The separate
+[bounded Identify procedure](ZCL_IDENTIFY.md) now implements logical-time
+countdown and unicast command/Read/Discover handling, not the full cluster or
+a physical indicator. Temperature remains unimplemented.
+
 Identify is cluster `0003`, Utility, revision **2** (R8 3.5.1,
 printed 3-30..3-31 / PDF140-141). There are no server cluster dependencies.
 Table 3-31/3.5.2.2, 3-31 / PDF141 mandates `0000 IdentifyTime`, uint16,
@@ -200,8 +205,8 @@ One endpoint is **not a BDB exemption**. BDB3.0.1:
   bindings and groups in persistence requirements.
 
 Endpoint registry, exact profile/device/ZDO descriptors, authorized APS delivery,
-full foundation Write behavior, actual Identify and its client role, binding/
-group management as applicable, reports/configuration/defaults/persistence and
+full foundation Write behavior, physical Identify and its client/group/broadcast
+roles, binding/group management as applicable, reports/configuration/defaults/persistence and
 application interoperability remain gates. Join/rejoin/leave, ED Timeout,
 parent keepalive, endpoint-0 responses and durable counters in
 [the conformance ledger](CONFORMANCE.md) are neither removed nor implemented

@@ -741,7 +741,12 @@ The separate [read-only Basic provider](docs/ZCL_LAB.md) supplies six
 primary-backed attributes through those handlers, with caller-owned copied
 strings and synthetic lab vectors. Its both-board host/image/simulator
 evidence is not an advertised endpoint: profile/device selection, required
-writes, Identify and measurement/reporting remain open.
+writes and measurement/reporting remain open.
+The independent [Identify procedure](docs/ZCL_IDENTIFY.md) now supplies a
+caller-owned logical-time countdown, unicast Identify/Query and real
+Read/Discover handling. It has no physical indication, client/group/broadcast
+handling, network send or authenticated endpoint; IdentifyTime is normatively
+RW and missing global writes remain a conformance gap.
 This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. The separate passive receiver does not provide a transmit
 driver, functioning MAC, association or Zigbee join.

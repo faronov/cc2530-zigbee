@@ -1755,7 +1755,7 @@ chapter14-0128-12. Sections3.2.1-3/Tables3-7/8/16 (printed3-6..3-17)
 supply Basic IDs, mandatory/optional access, lengths, valid power-source
 values and revision3; section2.3.4.5/Table2-1 supplies mandatory
 ClusterRevision. Sections3.5 (3-30..3-34) and4.4/Table4-13 (4-10..4-12)
-establish future Identify and Temperature requirements, not implementations.
+establish Identify and Temperature requirements; the Basic change implemented neither.
 The pinned BDB3.0.1 sections6.5-7 remain binding/group/reporting requirements.
 An applicable primary device/profile definition was not established;
 no advertisement or ID was inferred from a newer document or SDK.
@@ -1765,6 +1765,20 @@ resolved against those primary tables, not imported. The provider, synthetic
 test identities and complete SDCC/alias proof are original BSD-3-Clause work.
 No manufacturer code, physical reading, external implementation or SDK was
 adopted. Errata and full application conformance gates remain unchanged.
+
+### Bounded Identify procedure
+
+The [Identify contract](ZCL_IDENTIFY.md#primary-requirements-and-wire-decisions)
+uses the same pinned R8 primary, sections3.5/Tables3-31..35
+(printed3-30..3-34 / PDF140-144), plus2.3.2,2.4.1 and2.5.12 for
+reception, response framing and idle-Query silence. IdentifyTime is mandatory
+RW, not the secondary catalog's optional attribute; Matter IdentifyType is
+not imported. Restart's subsecond phase and caller clock continuity are
+explicit project policies, not hardware or normative timing measurements.
+Original code reuses the repository's real foundation handlers and proof
+helpers. No external implementation, identity, SDK or private capture was
+imported. Logical command processing does not establish physical indication,
+global writes, application advertisement or errata-aware conformance.
 
 ## Specialist-agent reference
 

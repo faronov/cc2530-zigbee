@@ -735,8 +735,14 @@ APS security, broadcast/group delivery и расширенные заголов�
 [Read-only модель Basic](docs/ZCL_LAB.md) теперь предоставляет шесть атрибутов
 через эти же обработчики, с копированием строк и явно синтетическими
 лабораторными значениями. Есть host/image/simulator-проверки для обеих плат,
-но нет зарегистрированного endpoint: выбор profile/device, запись, Identify,
-измерения и reporting остаются открытыми. Прошивки плат эти модули не вызывают.
+но нет зарегистрированного endpoint: выбор profile/device, запись,
+измерения и reporting остаются открытыми.
+Отдельная [процедура Identify](docs/ZCL_IDENTIFY.md) реализует countdown на
+логическом времени вызывающего кода, unicast Identify/Query и настоящие
+Read/Discover. Нет физической индикации, клиентской стороны, group/broadcast,
+сетевой отправки или аутентифицированного endpoint. IdentifyTime нормативно
+остаётся RW; отсутствие global writes — conformance gap.
+Прошивки плат эти модули не вызывают.
 Errata остаётся риском conformance, а не запретом на работу по базовому тексту.
 Эти кодеки не реализуют передачу RF, работающий MAC, ассоциацию или Zigbee join.
 

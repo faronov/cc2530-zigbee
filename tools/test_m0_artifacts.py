@@ -213,6 +213,29 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "ZCL Basic"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_zcl_identify_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_zcl_id_init", "_zcl_id_tick", "_zcl_id_rx",
+                         "_zcl_id_result", "_zcl_id_done", "_zcl_identify_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "ZCL Identify"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in (
+                "M:zcl_identify", "M:test_zcl_identify",
+                "L:C$zcl_identify.c$1$0_0$0:123",
+                "L:C$test_zcl_identify.c$1$0_0$0:123",
+                "F:G$zcl_id_rx$0_0$0({2}DF,SC:U),Z,0,0,0,0,0",
+                "S:G$zcl_id_result$0_0$0({8}DA8d,SC:U),F,0,0",
+                "L:G$zcl_id_done$0$0:123",
+                "F:Fzcl_identify$advance$0_0$0({2}DF,SC:U),C,0,0,0,0,0",
+                "S:Lzcl_identify.zcl_id_rx$ctx$1_0$50({3}DG,STtest:S),F,0,0",
+                "T:Fzcl_identify$__00000008[]",
+                "L:Ftest_zcl_identify$ctx$0_0$0:123",
+                "S:Ltest_zcl_identify.clock_cases$now$1_0$0({4}SL:U),F,0,0",
+                "L:G$zcl_identify_test_result$0_0$0:123",
+            ):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZCL Identify"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_isolated_mac_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_tx_init", "_mac_tx_submit", "_mac_tx_step", "_mac_tx_result"):

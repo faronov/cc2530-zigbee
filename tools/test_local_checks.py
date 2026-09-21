@@ -60,7 +60,7 @@ class LocalChecksTests(unittest.TestCase):
             "flash", "flash_exec", "flash_write", "nv_record",
             "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
-            "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
+            "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic", "zcl_identify",
         }
         components = Counter()
         images = Counter()
@@ -110,6 +110,9 @@ class LocalChecksTests(unittest.TestCase):
             ("zcl_basic", (("zcl_basic", "zcl_basic"), ("zcl_dispatch", "zcl_dispatch"),
                            ("zcl_attributes", "zcl_attributes"), ("zcl_frame", "zcl_frame"),
                            ("zcl_value", "zcl_value"), ("zcl_basic_test", "zcl_basic_test"))),
+            ("zcl_identify", (("zcl_identify", "zcl_identify"), ("zcl_dispatch", "zcl_dispatch"),
+                              ("zcl_attributes", "zcl_attributes"), ("zcl_frame", "zcl_frame"),
+                              ("zcl_value", "zcl_value"), ("zcl_identify_test", "zcl_identify_test"))),
         )
         for board, service, modules in ((b, s, m) for b in BOARDS for s, m in cases):
             commands = self.dry_run("test-" + service.replace("_", "-"), include_build=True, BOARD=board)
@@ -136,7 +139,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertLess(commands.index(native[0]), commands.index(simulation))
 
     def test_bounded_sanitizers_and_no_board_linkage(self):
-        for board, service in ((b, s) for b in BOARDS for s in ("zcl-basic", "radio-autoack")):
+        for board, service in ((b, s) for b in BOARDS for s in ("zcl-basic", "zcl-identify", "radio-autoack")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)

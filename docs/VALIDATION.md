@@ -3167,6 +3167,20 @@ build directory. No existing source/budget or board image is changed; the
 Basic model is not part of the seven-module resource image below and is not
 hardware, authenticated endpoint or complete Basic acceptance.
 
+The independent [Identify composition](ZCL_IDENTIFY.md#tests-image-proof-and-resources)
+adds73 counted common scenarios/groups, exact native allocations, a full
+maximum-duration countdown corpus and an independent absolute-deadline oracle.
+Both-board isolated native/nonrecovering sanitizer and genuine image/simulator
+checks passed before shared integration; they are not repeated locally merely
+to duplicate CI. Full integrated acceptance uses GitHub Actions under the
+[CI-first policy](../CONTRIBUTING.md#development-checks).
+The dedicated contract records complete pins/ABI/negative controls:
+21,792/24,576 CODE,836+64/1,536 reserved XDATA, uninterrupted peak SP70
+versus checkpoint SP53, with cap7C and the15-second deadline unchanged.
+Actual countdown/Identify/Query/Read/Discover behavior is not physical
+indication, authenticated application or full Identify conformance.
+No board image or existing protocol-budget composition includes this module.
+
 The additional `protocol_budget_test.ihx` runs **all seven implemented
 protocol modules together**, not only the three-layer target above.
 Ten exchanges cover Discover-then-Read using the returned ID, both ZCL
