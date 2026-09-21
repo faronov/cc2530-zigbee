@@ -3144,6 +3144,22 @@ is unchanged and remains three-layer; radio/platform code and board images
 are unaffected. This is not network admission, transaction matching or
 full-cluster conformance.
 
+The independent [Basic model composition](ZCL_LAB.md#evidence-and-resource-boundary)
+adds312 common target scenarios plus native exact-allocation matrices.
+Both boards pass actual Read/Discover/framing/value calls, independent golden
+bytes, every power-source byte, bounded/copied/empty strings, malformed and
+unsupported requests, capacities and unchanged failure outputs, including
+ASan/UBSan. Six immediate listing snapshots, complete CODE/raw-CDB/parsed-map
+identities and exact module/caller/libc bounds are verified;95 artifact,
+9 result/guard,3 peak and1 missing-alias negatives must reject.
+The isolated image uses17,978/24,576 CODE and996+64/1,536 reserved XDATA.
+An uninterrupted reset-to-checkpoint run measures peak SP5A, distinct from
+checkpoint SP45, retaining cap7C and the15-second simulator deadline.
+The proof also passes after the unchanged dispatch suite relinks in the same
+build directory. No existing source/budget or board image is changed; the
+Basic model is not part of the seven-module resource image below and is not
+hardware, authenticated endpoint or complete Basic acceptance.
+
 The additional `protocol_budget_test.ihx` runs **all seven implemented
 protocol modules together**, not only the three-layer target above.
 Ten exchanges cover Discover-then-Read using the returned ID, both ZCL

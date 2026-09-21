@@ -734,6 +734,11 @@ Unreviewed ZCL errata remains a conformance risk, not a development stop.
 APS/ZCL composition and the read handler are target-tested; the complete
 MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested and
 also runs in a single SDCC resource image.
+The separate [read-only Basic provider](docs/ZCL_LAB.md) supplies six
+primary-backed attributes through those handlers, with caller-owned copied
+strings and synthetic lab vectors. Its both-board host/image/simulator
+evidence is not an advertised endpoint: profile/device selection, required
+writes, Identify and measurement/reporting remain open.
 This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. The separate passive receiver does not provide a transmit
 driver, functioning MAC, association or Zigbee join.

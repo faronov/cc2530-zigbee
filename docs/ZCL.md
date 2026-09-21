@@ -17,6 +17,13 @@ model, Read/Discover Attributes handlers and one-cluster unicast command
 dispatcher are implemented below.
 No module is linked into board firmware.
 
+The separate [read-only Basic provider](ZCL_LAB.md) now constructs six
+primary-backed attributes in caller-owned storage and uses these same
+Read/Discover handlers. Its synthetic lab configuration assigns no
+manufacturer code, endpoint, profile or device ID. Basic writes/reset,
+Identify, measurement/reporting and authenticated application integration
+remain unsupported; a Basic table is not full cluster conformance.
+
 ## Frame header
 
 Offsets start at the ZCL frame, not APS/NWK/MAC:

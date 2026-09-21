@@ -81,7 +81,7 @@ OBJECTS := $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/noise_health.rel $(
 endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
-.PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch
+.PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic
 .PHONY: test-protocol-budget
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
@@ -397,6 +397,32 @@ $(BUILD)/zcl_dispatch_test.ihx: $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attribute
 test-zcl-dispatch: $(BUILD)/host-zcl-dispatch-tests $(BUILD)/zcl_dispatch_test.ihx
 	$(BUILD)/host-zcl-dispatch-tests
 	$(PYTHON) -B tests/boot_zcl_dispatch.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/zcl_basic.rel: src/zcl_basic.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_basic_test.rel: tests/test_zcl_basic.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_basic_test.ihx: $(BUILD)/zcl_basic.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_basic_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_basic.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_basic_test.rel
+	cp $(BUILD)/zcl_basic.rst $(BUILD)/zcl_basic_test.zcl_basic.rst
+	cp $(BUILD)/zcl_dispatch.rst $(BUILD)/zcl_basic_test.zcl_dispatch.rst
+	cp $(BUILD)/zcl_attributes.rst $(BUILD)/zcl_basic_test.zcl_attributes.rst
+	cp $(BUILD)/zcl_frame.rst $(BUILD)/zcl_basic_test.zcl_frame.rst
+	cp $(BUILD)/zcl_value.rst $(BUILD)/zcl_basic_test.zcl_value.rst
+	cp $(BUILD)/zcl_basic_test.rst $(BUILD)/zcl_basic_test.zcl_basic_test.rst
+
+$(BUILD)/host-zcl-basic-tests: tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+
+$(BUILD)/host-zcl-basic-tests-sanitize: tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+
+test-zcl-basic: $(BUILD)/host-zcl-basic-tests $(BUILD)/host-zcl-basic-tests-sanitize $(BUILD)/zcl_basic_test.ihx
+	$(BUILD)/host-zcl-basic-tests
+	$(BUILD)/host-zcl-basic-tests-sanitize
+	$(PYTHON) -B tests/boot_zcl_basic.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-timebase-tests: tests/test_timebase.c tests/host_mmio.c tests/host_mmio.h src/timebase.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase.c tests/host_mmio.c src/timebase.c -o $@
@@ -857,7 +883,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
+test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-scan test-mac-association test-mac-poll
 test-common: test-noise-health test-radio-noise
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx

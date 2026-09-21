@@ -1736,6 +1736,25 @@ cluster table, key, capture, SDK object or test-plan vector was imported.
 The PDF/extractor remain temporary research inputs, outside Git/CI artifacts;
 their original notices and licenses are not replaced by BSD-3-Clause.
 
+### Lab Basic model and cluster requirements
+
+The [read-only Basic provider and lab requirements](ZCL_LAB.md) use the
+same pinned R8 PDF: General chapter14-0127-21 and Measurement and Sensing
+chapter14-0128-12. Sections3.2.1-3/Tables3-7/8/16 (printed3-6..3-17)
+supply Basic IDs, mandatory/optional access, lengths, valid power-source
+values and revision3; section2.3.4.5/Table2-1 supplies mandatory
+ClusterRevision. Sections3.5 (3-30..3-34) and4.4/Table4-13 (4-10..4-12)
+establish future Identify and Temperature requirements, not implementations.
+The pinned BDB3.0.1 sections6.5-7 remain binding/group/reporting requirements.
+An applicable primary device/profile definition was not established;
+no advertisement or ID was inferred from a newer document or SDK.
+
+The secondary catalog's optionality/Identify payload/type discrepancies were
+resolved against those primary tables, not imported. The provider, synthetic
+test identities and complete SDCC/alias proof are original BSD-3-Clause work.
+No manufacturer code, physical reading, external implementation or SDK was
+adopted. Errata and full application conformance gates remain unchanged.
+
 ## Specialist-agent reference
 
 The repository's specialist profiles are original project instructions.

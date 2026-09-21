@@ -532,6 +532,15 @@ Discover-then-Read using the returned ID. Neither the new test image nor
 its outputs become board firmware or CI artifacts. See the
 [dispatch contract](docs/ZCL.md#discover-attributes-and-unicast-dispatch).
 
+`make BOARD=... BUILD=... test-zcl-basic`, included once per board in
+`test-common`, checks the [read-only Basic provider](docs/ZCL_LAB.md) through
+the real existing handlers, including native ASan/UBSan and genuine linked
+execution. Preserve all six immediate listing snapshots, complete raw
+CDB/map/CODE identities, caller/libc boundaries and alias/stack negatives.
+Its24,576-CODE/1,536-reserved-XDATA budget changes no older component limit.
+No board image may link it; **never flash `zcl_basic_test.ihx`**.
+Identify, writes, reporting and application advertisement remain separate.
+
 `make test-protocol-budget`, included in the default test suite, additionally
 links **all seven** MAC/NWK Data/APS/ZCL/Read/Discover modules into one compact
 SDCC harness. It executes complete Discover-then-Read exchanges and bounded

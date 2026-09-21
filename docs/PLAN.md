@@ -814,6 +814,16 @@ There is no board caller, endpoint/transport dispatcher, native
 numeric/charset conversion or advertised cluster. Application/device/profile
 selection and all M4/M5 networking/security gates remain open.
 
+A separate [read-only Basic provider (#70)](ZCL_LAB.md) now supplies the
+six-attribute R8 model over those existing handlers, with copied bounded
+strings, explicit validation and synthetic lab vectors. It is host-tested,
+image-checked and simulated for both boards, not linked into firmware.
+The same contract records primary Basic/Identify/Temperature requirements
+and BDB binding/group/reporting dependencies. Identify and measurement remain
+unimplemented; an applicable primary device/profile definition has not been
+established, so advertisement stays unselected. This parallel M6 preparation
+does not change the main MAC-before-security order or waive M3-M5 gates.
+
 Deliver:
 
 - Completion of required ZDO discovery clients/servers, retaining the generic

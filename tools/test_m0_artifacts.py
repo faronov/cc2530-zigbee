@@ -203,6 +203,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "NWK parent"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_zcl_basic_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_zcl_basic_init", "_zcl_basic_test_result", "_zcl_basic_test_done"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "ZCL Basic"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("zcl_basic.c", "test_zcl_basic.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "ZCL Basic"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_mac_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_tx_init", "_mac_tx_submit", "_mac_tx_step", "_mac_tx_result"):

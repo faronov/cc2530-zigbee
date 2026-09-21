@@ -283,6 +283,19 @@ state and actual sends remain outside this module. Its separate target
 image exercises real dispatch/read/discovery; full Discover-then-Read
 MAC/NWK/APS composition additionally runs in the integrated resource image.
 
+The separate [Basic attribute provider](ZCL_LAB.md) constructs a standard
+server table for ZCLVersion8, caller-supplied manufacturer/model/software
+strings, validated PowerSource and ClusterRevision3. It reuses these handlers
+without a new dispatcher. The caller owns152 target bytes, including copied
+strings; internal pointers require the initialized object to stay at its
+original address and remain read-only until explicit reinitialization.
+Invalid configuration leaves the complete model unchanged.
+Its own six-module proof uses17,978 CODE and996 ordinary XDATA plus64 reserved,
+with measured foreground peak SP5A. This is not added to the integrated
+protocol-budget image or board firmware and does not establish whole-stack
+fit. There is no endpoint registration, manufacturer assignment, factory
+reset, Identify, reporting, persistence, physical sensor or network send.
+
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
 NWK/APS/security services rather than inside codecs or board code.

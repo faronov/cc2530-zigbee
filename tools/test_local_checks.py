@@ -60,7 +60,7 @@ class LocalChecksTests(unittest.TestCase):
             "flash", "flash_exec", "flash_write", "nv_record",
             "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
-            "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch",
+            "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
         }
         components = Counter()
         images = Counter()
@@ -107,6 +107,9 @@ class LocalChecksTests(unittest.TestCase):
             ("nwk_parent", (("mac_frame", "mac_frame"), ("nwk_beacon", "nwk_beacon"),
                             ("nwk_candidates", "nwk_candidates"), ("nwk_parent", "nwk_parent"),
                             ("nwk_parent_test", "nwk_parent_test"))),
+            ("zcl_basic", (("zcl_basic", "zcl_basic"), ("zcl_dispatch", "zcl_dispatch"),
+                           ("zcl_attributes", "zcl_attributes"), ("zcl_frame", "zcl_frame"),
+                           ("zcl_value", "zcl_value"), ("zcl_basic_test", "zcl_basic_test"))),
         )
         for board, service, modules in ((b, s, m) for b in BOARDS for s, m in cases):
             commands = self.dry_run("test-" + service.replace("_", "-"), include_build=True, BOARD=board)
@@ -131,6 +134,20 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(len(native), 1)
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))
+
+    def test_basic_sanitizer_and_no_board_linkage(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-zcl-basic", include_build=True, BOARD=board)
+            sanitize = next(args for args in commands
+                            if args[0] == "cc" and "-fsanitize=address,undefined" in args)
+            self.assertIn("-fno-sanitize-recover=all", sanitize)
+            self.assertEqual(Path(sanitize[-1]).name, "host-zcl-basic-tests-sanitize")
+            native = [Path(args[0]).name for args in commands]
+            self.assertEqual(native.count("host-zcl-basic-tests"), 1)
+            self.assertEqual(native.count("host-zcl-basic-tests-sanitize"), 1)
+            for image in IMAGES:
+                commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
+                self.assertFalse(any("zcl_basic" in arg for args in commands for arg in args))
 
     def test_noise_health_standalone_and_only_explicit_noise_board_linkage(self):
         for board in BOARDS:
