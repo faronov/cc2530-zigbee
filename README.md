@@ -511,10 +511,14 @@ classified; operational faults retain ownership without hidden cleanup.
 Explicit same-owner rearm can now start another RX episode after complete
 stop/drain, preserving configuration and FIFO history. It does not recover
 a fault, transfer ownership or hide the reception gap.
+The same owner also supports one hardware-gated CCA/TX attempt from stopped,
+drained idle, retaining RX for subsequent response bodies. This explicit phase
+disables filtering/AUTOACK; another stop/drain and resume restores them.
+`TX_DONE` is PHY completion, not ACK receipt, delivery or a timed MAC window.
 
 `make test-radio-autoack` is **host-tested, image-checked and simulated only**,
-with both-board 4692 CODE bytes,433 ordinary XDATA +64 reserved and whole-run
-SP`0x33`. It runs once per board in `test-common`, but no board image links it.
+with CI binding both boards to7007 CODE bytes,450 ordinary XDATA +64 reserved
+and whole-run SP`0x34`. It runs once per board in `test-common`, but no board image links it.
 **Never flash `radio_autoack_test.ihx`.** AUTOACK is RF transmission, not passive
 reception; no hardware ACK/timing observation or finite over-air ACK-count
 guarantee is supplied. Broadcast-AR and ignored ACK-FCF compatibility remain

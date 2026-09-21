@@ -121,7 +121,7 @@ class LayoutTests(unittest.TestCase):
     def test_isolated_radio_autoack_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_radio_autoack_acquire", "_radio_autoack_receive",
-                         "_radio_autoack_stop", "_radio_autoack_resume",
+                         "_radio_autoack_stop", "_radio_autoack_resume", "_radio_autoack_send",
                          "_radio_autoack_diagnostic", "_radio_autoack_state",
                          "_radio_autoack_reserved_end", "_radio_autoack_test_result"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "receiver AUTOACK"):

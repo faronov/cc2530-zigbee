@@ -700,6 +700,19 @@ RFIDLE bit is retained evidence of that stop, not a newly captured event.
 Tests use original synthetic controller inputs; no hardware observation,
 SDK implementation, private material or manual redistribution is added.
 
+The #73 same-owner ordinary TX phase additionally uses the same SWRU191F:
+section23.8 pp218-222 for STXONCCA, retained TXFIFO contents, RFD preload and
+AUTOCRC length; p222 for RSSI_VALID plus four system clocks; pp253-254 for
+ISTXONCCA=EA and TX-only ISFLUSHTX=EE; p259 for AUTOACK disable; p260 for the
+persistent RX request; pp264-265 for CCACTRL0=F8, mode3/hysteresis2=1A and TX
+count/pointers. TXFIRST is the next byte to transmit, not a permanent zero.
+After PHY completion the test model advances it and preserves TXFIFO contents.
+Disabling AUTOACK/filtering only after verified stop/drain avoids, rather than
+settles, #50's three live-AUTOACK unknowns. The four-NOP helper, emitted MMIO,
+synthetic TX/response model and bounded fault behavior are original work.
+No RF measurement, captured timing, ACK acceptance, SDK code or private data
+is introduced; the public manual remains a reference, not a CI dependency.
+
 ### Nordic laboratory stimulus sources
 
 The separate [NS51 source/provenance ledger](../tools/nrf_stimulus/PROVENANCE.md)

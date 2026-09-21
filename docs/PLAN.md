@@ -450,8 +450,11 @@ The separate [filtered receiver/AUTOACK owner](RADIO_AUTOACK.md) implements
 cold address/profile verification, persistent RX request, atomic complete-frame
 servicing and non-aborting stop with explicit FIFO drainage. The #72 extension
 adds explicit same-owner rearm after STOPPED, without reset/flush, profile
-replacement or fault recovery. Both boards have host/image/alias-aware
-simulation evidence:4692 CODE,433+64 XDATA and SP33.
+replacement or fault recovery. The #73 extension adds one same-owner
+hardware-gated CCA/TX attempt and post-TX reception from stopped/drained idle.
+Its explicit response phase disables filtering/AUTOACK; stop/drain and resume
+restore them. TX_DONE is PHY completion, not ACK/delivery or timed MAC acceptance.
+Both-board host/image/alias-aware CI binds7007 CODE,450+64 XDATA and SP34.
 This is an RF-transmitting hardware-service foundation, not a board image or
 silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
 captured timing (#40), continuous ordinary-TX/RX arbitration, IFS and loss-aware
@@ -460,7 +463,8 @@ Rearm starts another RX episode across an explicit reception gap; it must
 not be represented as a continuous or loss-free window.
 The [#50 primary ownership review](RADIO_AUTOACK.md#ordinary-tx-admission-under-live-autoack)
 now identifies unresolved TX admission during ACK, completion attribution and
-concurrent TX-flush effects; no transmitting extension is inferred from it.
+concurrent TX-flush effects. #73 avoids those live-AUTOACK races through a
+verified idle boundary; it does not resolve them or close #50.
 
 **The controlled active Nordic test-node role is approved**, alongside
 passive sniffing. The #51/#55/#58 preparation branch has resumed after that

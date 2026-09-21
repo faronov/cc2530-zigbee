@@ -19,42 +19,43 @@ from boot_timebase import READ_OFFSETS, READER_BYTES
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 MODULES = ("timebase", "radio_autoack", "radio_autoack_test")
-SIZE, XDATA, PRIVATE_END, CASES = 4692, 433, 265, 157
+SIZE, XDATA, PRIVATE_END, CASES = 7007, 450, 281, 194
 CODE_BUDGET, XDATA_BUDGET = 24576, 1536
-DIGEST = "cabe17e30c290558986122aaccd7cfa3b789387389d7cbc6c970a2c1db92f599"
-MAP_DIGEST = "68dbec974772d742dfc09a3fe7c5aa702b97aab40d080dbf28cc07af88e370cd"
-RAW_CDB_DIGEST = "91cec079cbf6b52221642c5ec85fb229af5aa7facb3bab306d09521dcc90667d"
+DIGEST = "a06a14624e638adb49b87a23d7e2fe35711a32a23c53eaf53f74c6569a1bcde4"
+MAP_DIGEST = "1daeb9b51dbaaab5480fa77fa95690458d03ab746e714deabb8f53bbd70b8d81"
+RAW_CDB_DIGEST = "f36096a63e6868aa7ebdddb4b8b8c5bd58d507183867a7ab71f7fb3d9ec52610"
 LEGACY_DIGEST = "d15ba16889fcb03932468342741390d9807a7ff652aa342aa6b2accdd87d0a32"
+REARM_DIGEST = "c19e89572bc7398c799d9a9240f703e1ac5ae92b93f9d397aeefcbf3859e411a"
 METADATA = {
     r"^[FSLT]:(?:X?F|L)(?:timebase|radio_autoack)[.$][^\n]+$":
-        "019b0139c655e0597dff1147c95355e581d06b64e01fbe98787abe307411ee0f",
+        "270484dabbe7a80453a6d0c3ff964a411072ba9b97eec24a1bcbb35ed0d9a23b",
     r"^[FSLT]:(?:X?F|L)test_radio_autoack[.$][^\n]+$":
-        "0393c2e5b08a40d9b3ced9f7da7a983e22fdddf7c350593dd9060ce47145ff12",
+        "d79bc1826fbbf21fe78846ebcc7d3032b50ec6dee497f2c8b6a3a7032423f128",
     r"^[FSL]:(?:X?G)\$[^\n]+$":
-        "748b4fd780767f70a6f40076d635880c10578c031e00891a211d4e5cb714fdde",
+        "9e38460e11cd12b5390dd13f94190aaef96e34a2af5070f433b8dc3f5c9c8f0d",
 }
 LISTINGS = {
-    "timebase": (265, 404, "e1c16383cd52fa800047d6345ff7e40fa9e2662b7d205606aa1ecb2e1be2f418"),
-    "radio_autoack": (2117, 3618, "41c00eae5a9ab360b716580d55337066a95635e2bc7fc7374ba87beb1e39720e"),
-    "radio_autoack_test": (208, 327, "563576fd9dc4d122596da94c3183802851729150efa74f1bbc227b42883f438c"),
+    "timebase": (265, 404, "b5b3eefed3af6c9a7584687188094d974fb69fcd54a5db0da2034b57980f2712"),
+    "radio_autoack": (3356, 5849, "72f664290a409d5174a8455dd5ebfed01dbe99d5c98821ddf518b762f3cb0fb2"),
+    "radio_autoack_test": (264, 411, "1c282913bcdf82c92cb2de2742c4afc384539460df99b9fc1be62e1a7b60fd9f"),
 }
 STORAGE = {
-    "timebase": ("b7392a26f0ef36df18a6c0c19dc94bb30f830cc4a0b59c901dd57224c39ae342",
-                 "5ad1a113cd16fd5197435af8db34e66d62715c469fe12c16bca97aec0a4eeaa0"),
-    "radio_autoack": ("060996b126012253aa7f690f361b2b40cd78f5f55474b9dfbcd588727b076158",
-                      "e1f7b3e637667a99a30ee9b5700e6432fe7890f8c3d682ee3d0fd888cf759f30"),
-    "radio_autoack_test": ("25eab133a08ab5f6ee5377d3d22368f968a91f8d6c1fd2277432692a5839d71c",
-                           "1889e75a0d213558a5a78a30a23829d4b68a7778598037499b36fde8dcd25db2"),
+    "timebase": ("7e29643ee1d1225c20d5a4ee1beaee3319490ae992627c43c22b53b006c23580",
+                 "f812571971442e3efb76d6e35fc06f820d3ee3da014fbe453f6bd00509c13e80"),
+    "radio_autoack": ("cdbf2d272f8183fc1f0e9c29094f553cf60010b4549933af651aefd48d04e96a",
+                      "7de73352487114924d2eb8fbd81f8c6ee1052d395ac063a26c2f001859bd8b76"),
+    "radio_autoack_test": ("d93f2639ffb319fb000e73407db3a9c052301e7e1c34340b064d16879a12e153",
+                           "92f219f71484200af70b1ca4bcb5c3b6eb22666a6390491cf7518e71d40b66c4"),
 }
 OBJECTS = {
     "timebase": ((404, 25, 0, 3), "0f110e21445dc0b93ebdf51b98af4e96f29d208abff27d604bc67c01c334d968"),
-    "radio_autoack": ((3657, 240, 3, 2), "373d1e6f0ee2115474e013c2a5585c9206e5e886a807046ad73307f06077d806"),
-    "radio_autoack_test": ((327, 156, 2, 0), "debee2be691dd0491299dc3bfee6d5c0302d09c6f214cea2842f9d16b1999dcc"),
+    "radio_autoack": ((5888, 256, 4, 2), "71d7077749be3db10929a61710fe920583baae210cc5b04e012f413717c9e598"),
+    "radio_autoack_test": ((411, 157, 2, 0), "f739df4ed377ba272918e9173752237043d9d4ec7e5031f5688fd4d497ae0220"),
 }
 CALLER = {
-    "config": (0x109, 14), "frame": (0x117, 128), "operation": (0x197, 1),
-    "return": (0x198, 1), "config_ptr": (0x199, 2), "output_ptr": (0x19b, 2),
-    "timeout": (0x19d, 4), "limit": (0x1a1, 2), "diag": (0x1a3, 2),
+    "config": (0x119, 14), "frame": (0x127, 128), "operation": (0x1a7, 1),
+    "return": (0x1a8, 1), "config_ptr": (0x1a9, 2), "output_ptr": (0x1ab, 2),
+    "timeout": (0x1ad, 4), "limit": (0x1b1, 2), "diag": (0x1b3, 2), "length": (0x1b5, 1),
 }
 SETTINGS = (0x6180, 0x6181, 0x6182, 0x6189, 0x618a, 0x6194, 0x6195,
             0x61b2, 0x61fa, 0x61ae, 0x618f, 0x6190, 0x6191)
@@ -62,8 +63,15 @@ VALUES = bytes((1, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69))
 XREADS = (
     0x624a, 0x61e1, 0x61a3, 0x61a4, 0x61a5, 0x61a8, 0x61a9, 0x61b8, 0x61b9, 0x618e,
     0x618b, 0x6192, 0x6193, 0x619b, 0x619d, 0x619e, 0x619f, 0x6199,
+    0x6196, 0x6197, 0x619c, 0x61a1, 0x61a2,
     0x619b, 0x619d, 0x619c, 0x61a1, 0x61a2, 0x6189, 0x618a, 0x619a,
 )
+XWRITES = (
+    (0xbb4, 0x6180, 1), (0xc21, 0x6189, 0x60), (0xca3, 0x618c, 1),
+    (0xfad, 0x618d, 1), (0x140b, 0x6189, 0x40), (0x146a, 0x6180, 0x0c),
+    (0x14d2, 0x6196, 0xf8), (0x1531, 0x6197, 0x1a), (0x1751, 0x618c, 1),
+)
+SETTLE = 0x11d4
 STATUS_SIZES = (4, 2, 2) + (1,) * 18
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-F]{6})\s+((?:[0-9A-F]{2}\s+)+)\[\s*\d+\]\s+\d+\s+\S.*$", re.M,
@@ -105,9 +113,9 @@ def storage_records(text):
 
 
 def mask_proof(code):
-    require(b"".join(data for pc, data in sorted(code.items()) if 0x3e0 <= pc < 0x40b)
-            == bytes.fromhex("e0fe9000ddf0bf15079000dd74035ef08f82c00712022eae82"
-                             "d0079000dde0fdb50602800675820b0204ed"),
+    require(b"".join(data for pc, data in sorted(code.items()) if 0x40b <= pc < 0x436)
+            == bytes.fromhex("e0fe9000e2f0bf15079000e274035ef08f82c00712022eae82"
+                             "d0079000e2e0fdb50602800675820b020581"),
             "FSCAL1-only index/mask/readback changed")
 
 
@@ -171,16 +179,16 @@ def verify(image, symbols, debug, memory, listings, objects):
                 set(range(address, address + size)) <= allocated - private - caller,
                 "Caller object overlaps private/runtime/status/other output")
         caller.update(range(address, address + size))
-    require(caller == set(range(PRIVATE_END, 0x1a5)) and symbols["__gptrput_PARM_2"] == 0x1b0,
+    require(caller == set(range(PRIVATE_END, 0x1b6)) and symbols["__gptrput_PARM_2"] == 0x1c1,
             "Caller/runtime scratch boundary changed")
     require({name: symbols[name] for name in (
         "___memcpy_PARM_2", "___memcpy_PARM_3", "_memset_PARM_2", "_memset_PARM_3",
-    )} == {"___memcpy_PARM_2": 0x1a5, "___memcpy_PARM_3": 0x1a8,
-           "_memset_PARM_2": 0x1ad, "_memset_PARM_3": 0x1ae} and
-        allocated - private - caller - set(range(0x1e00, 0x1e08)) == set(range(0x1a5, 0x1b1)),
+    )} == {"___memcpy_PARM_2": 0x1b6, "___memcpy_PARM_3": 0x1b9,
+           "_memset_PARM_2": 0x1be, "_memset_PARM_3": 0x1bf} and
+        allocated - private - caller - set(range(0x1e00, 0x1e08)) == set(range(0x1b6, 0x1c2)),
         "Entire memcpy/memset/generic-store scratch suffix escaped ownership guards")
     for symbol in ("_radio_autoack_acquire", "_radio_autoack_receive", "_radio_autoack_stop",
-                   "_radio_autoack_resume",
+                   "_radio_autoack_resume", "_radio_autoack_send",
                    "_radio_autoack_diagnostic", "_radio_autoack_test_cycle",
                    "_radio_autoack_test_before", "_radio_autoack_test_done", "_main",
                    "_timebase_read_awake_ticks24", "_timebase_deadline_after", "_timebase_expired"):
@@ -191,35 +199,36 @@ def verify(image, symbols, debug, memory, listings, objects):
     require([b.hex() for _, b, _ in peripheral_accesses(code)] == [
         "e5a8", "e5b8", "e59a", "aebe", "e5d6", "e5d7", "e5c6", "b59e02",
         "e5bf", "e5e9", "e591", "85d982", "e5bf", "e5c6", "75913b",
+        "75e1ee", "8bd9", "75913d", "75e1ea",
     ], "Complete SFR inventory/exactly-once RFD leaf changed")
-    require(raw[0x695:0x699] == bytes.fromhex("85d98222") and
-            sum(b == b"\x12\x06\x95" for b in code.values()) == 1,
+    require(raw[0x729:0x72d] == bytes.fromhex("85d98222") and
+            sum(b == b"\x12\x07\x29" for b in code.values()) == 1,
             "Destructive RFD must have one read and one genuine call site")
     sites = {}
     for pc, data, reg in peripheral_accesses(code):
-        write = data[0] == 0x75
+        write = data[0] == 0x75 or 0x88 <= data[0] <= 0x8f
         observed = reg if write or data[0] == 0xb5 else (
             data[2] if data[0] == 0x85 else data[0] - 0xa8 if 0xa8 <= data[0] <= 0xaf else 0xe0)
         sites[pc] = ("w" if write else "r", reg, observed)
-    static = []
+    static, writes = [], []
     for pc, data in code.items():
         if data[0] != 0x90 or int.from_bytes(data[1:], "big") < 0x1e00:
             continue
         address = int.from_bytes(data[1:], "big")
-        if address == 0x618c:
-            require(code.get(pc + 3) == b"\x74\x01" and code.get(pc + 5) == b"\xf0",
-                    "RXMASKSET lost exact one-bit write")
-            sites[pc + 5] = ("w", address, address)
-        elif address == 0x618d:
-            require(code.get(pc + 3) == b"\x74\x01" and code.get(pc + 5) == b"\xf0",
-                    "Soft stop lost exact one-bit mask clear")
+        if code.get(pc + 3, b"")[0:1] == b"\x74":
+            require(code.get(pc + 5) == b"\xf0", "Static MMIO write changed")
+            writes.append((pc, address, code[pc + 3][1]))
             sites[pc + 5] = ("w", address, address)
         else:
             require(code.get(pc + 3) == b"\xe0", "Unexpected static MMIO operand")
             sites[pc + 3] = ("r", address, 0xe0); static.append(address)
-    require(tuple(static) == XREADS, "Static MMIO/address whitelist changed")
-    require(code.get(0x3e0) == b"\xe0" and code.get(0xa31) == b"\xf0", "Indexed MMIO changed")
-    sites[0x3e0] = ("r", None, 0xe0); sites[0xa31] = ("w", None, None)
+    require(tuple(static) == XREADS and tuple(writes) == XWRITES, "Static MMIO/address whitelist changed")
+    require(code.get(0x40b) == b"\xe0" and code.get(0xadc) == b"\xf0", "Indexed MMIO changed")
+    sites[0x40b] = ("r", None, 0xe0); sites[0xadc] = ("w", None, None)
+    require(raw[SETTLE:SETTLE + 5] == b"\0\0\0\0\x22" and
+            sum(data == b"\x12" + SETTLE.to_bytes(2, "big") for data in code.values()) == 1,
+            "CCA must execute four real NOPs through one genuine call")
+    sites[SETTLE] = ("c", 0, None)
     mask_proof(code)
     for name, expected in (("settings", b"".join(a.to_bytes(2, "little") for a in SETTINGS)),
                            ("values", VALUES)):
@@ -230,7 +239,7 @@ def verify(image, symbols, debug, memory, listings, objects):
             "Unchanged genuine timebase reader lost complete ABI/instructions")
     for index, offset in enumerate(READ_OFFSETS):
         sites[reader + offset] = ("r", 0x95 + index, 0xe0)
-    for name, count in (("read_awake_ticks24", 2), ("deadline_after", 1), ("expired", 1)):
+    for name, count in (("read_awake_ticks24", 3), ("deadline_after", 2), ("expired", 1)):
         call = b"\x12" + symbols["_timebase_" + name].to_bytes(2, "big")
         require(sum(data == call for data in code.values()) == count, "Missing real timebase call")
     return allocated, sites
@@ -249,11 +258,12 @@ def check_legacy_native(executable):
         json.loads(subprocess.check_output(
             [str(executable), "--vector", str(n), "1536", "1792", "1280", "7424"],
             text=True, timeout=15,
-        )) for n in range(125)
+        )) for n in range(157)
     ]
-    raw = json.dumps(vectors, sort_keys=True, separators=(",", ":")).encode("ascii")
-    require(hashlib.sha256(raw).hexdigest() == LEGACY_DIGEST,
-            "Original125 scenarios changed result/frame/diagnostic/MMIO behavior")
+    for count, expected in ((125, LEGACY_DIGEST), (157, REARM_DIGEST)):
+        raw = json.dumps(vectors[:count], sort_keys=True, separators=(",", ":")).encode("ascii")
+        require(hashlib.sha256(raw).hexdigest() == expected,
+                f"Original{count} scenarios changed result/frame/diagnostic/MMIO behavior")
 
 
 def negatives(image, symbols, debug, memory, listings, objects, directory):
@@ -328,7 +338,7 @@ def negatives(image, symbols, debug, memory, listings, objects, directory):
     reject("stack accounting", memory=memory.replace("223 bytes available", "222 bytes available"))
     reject("source association", debug=debug.replace("C$radio_autoack.c$", "C$missing.c$"))
     code = dict(records(listings["radio_autoack"]))
-    for pc in (pc for pc in code if 0x3e0 <= pc < 0x40b):
+    for pc in (pc for pc in code if 0x40b <= pc < 0x436):
         for offset in range(len(code[pc])):
             damaged = bytearray(code[pc]); damaged[offset] ^= 1
             rejected(lambda: mask_proof({**code, pc: bytes(damaged)}), "independent FSCAL1 mask")
@@ -349,7 +359,8 @@ def run_vector(simulator, path, symbols, debug, allocated, sites, vector):
         for address, value in current.items():
             commands.append(f"set memory {'sfr' if address < 256 else 'xram'} {address:#x} {value:#x}")
         inputs = {"operation": step["operation"], "timeout": step["timeout"], "limit": step["limit"],
-                  "config_ptr": step["config_address"], "output_ptr": step["output_address"]}
+                  "config_ptr": step["config_address"], "output_ptr": step["output_address"],
+                  "length": step.get("length", 0)}
         for name, value in inputs.items():
             address, size = CALLER[name]
             commands.append(f"set memory xram {address:#x} " +
@@ -359,20 +370,28 @@ def run_vector(simulator, path, symbols, debug, allocated, sites, vector):
         commands.append("step 1")
         events = []
         for kind, address, value in step["events"]:
-            require(not (kind == "w" and address in (0xe1, 0xd9)),
-                    "Model attempted ordinary TX/ACK strobe, flush or FIFO preload")
+            if kind == "w" and address in (0xe1, 0xd9):
+                require(step["operation"] == 4 and (address == 0xd9 or value in (0xee, 0xea)),
+                        "Unpermitted FIFO write, RX flush, unconditional TX or ACK strobe")
+            if kind == "c":
+                require(step["operation"] == 4 and address == 0 and value == 4,
+                        "Unpermitted CCA settling operation")
             commands += ["run", marker(number), "state", "dump /h sfr 0x81 0x83"]
             if kind == "r":
                 commands.append(f"set memory {'sfr' if address < 256 else 'xram'} {address:#x} {value:#x}")
-            commands += [marker(number + 1), "step 1"]
-            if kind == "r":
+            commands += [marker(number + 1), "step 4" if kind == "c" else "step 1"]
+            if kind == "c":
+                commands.append("state")
+            elif kind == "r":
                 commands += ["dump /h sfr 0x82 0x83", "dump /h sfr 0xe0 0xe0", "dump /h iram 0 7"]
                 if address < 256:
                     commands.append(f"dump /h sfr {address:#x} {address:#x}")
             else:
                 commands.append(f"dump /h {'sfr' if address < 256 else 'xram'} {address:#x} {address:#x}")
             commands.append(marker(number + 2))
-            events.append((number, kind, address, value)); current[address] = value
+            events.append((number, kind, address, value))
+            if kind != "c":
+                current[address] = value
             number += 3
         final = number
         commands += ["run"] + snapshot_commands(final)
@@ -398,13 +417,16 @@ def run_vector(simulator, path, symbols, debug, allocated, sites, vector):
             expected_kind, expected_address, observed = sites[pc]
             require(kind == expected_kind and expected_address in (None, address), "Wrong MMIO operation/operand")
             regs = memory_dump(blocks[n], 0x81, 3); sampled_peak = max(sampled_peak, regs[0])
+            if kind == "c":
+                check_pc(blocks[n + 1], SETTLE + 4)
+                continue
             if address >= 256:
                 require(regs[1:] == address.to_bytes(2, "little"), "Wrong actual MOVX DPTR operand")
                 if expected_address is None:
                     require(address in SETTINGS or 0x616a <= address <= 0x6175, "Indexed MMIO escaped whitelist")
             observed = address if observed is None else observed
             require(memory_dump(blocks[n + 1], observed, 1)[0] == value, "Wrong genuine MMIO result/write")
-            observed_rfd += address == 0xd9
+            observed_rfd += kind == "r" and address == 0xd9
         inert = previous_fault or 6 <= step["result"] <= 9
         require(not inert or not events, "Rejected/retained call accessed hardware")
         require(observed_rfd == (0 if inert else step["diagnostics"][2]),
@@ -430,9 +452,10 @@ def run_vector(simulator, path, symbols, debug, allocated, sites, vector):
         require(ram[CALLER["config"][0]:CALLER["config"][0] + 14] == bytes.fromhex(step["configuration"]),
                 "Configuration input changed")
         for name, key in (("operation", "operation"), ("config_ptr", "config_address"),
-                          ("output_ptr", "output_address"), ("timeout", "timeout"), ("limit", "limit")):
+                          ("output_ptr", "output_address"), ("timeout", "timeout"), ("limit", "limit"),
+                          ("length", "length")):
             address, size = CALLER[name]
-            require(ram[address:address + size] == step[key].to_bytes(size, "little"), "Caller argument changed")
+            require(ram[address:address + size] == step.get(key, 0).to_bytes(size, "little"), "Caller argument changed")
         require(all(value == 0xa5 for a, value in enumerate(ram) if a not in allocated),
                 "Unused/status-tail/alias write")
         require(iram[128:] == b"\xc7" * 128 and sfr[1] == symbols["s_SSEG"] + 1,
@@ -470,7 +493,7 @@ def main():
     started = perf_counter()
     rejected(lambda: check_alias(args.simulator, alias=False), "missing genuine IRAM alias")
     timings.append((perf_counter() - started, "missing-alias"))
-    sampled = full = rfd = calls = 0
+    sampled = full = rfd = calls = tx_bytes = attempts = flushes = settles = 0
     overlaps, vector_timings = [], []
     for n in range(CASES):
         process = subprocess.run(
@@ -497,16 +520,25 @@ def main():
         vector_timings.append((perf_counter() - started, n))
         timings.append((seconds, f"case{n}"))
         sampled = max(sampled, a); full = max(full, b); rfd += c; calls += len(vector["steps"])
+        for step in vector["steps"]:
+            for kind, address, value in step["events"]:
+                tx_bytes += kind == "w" and address == 0xd9
+                attempts += kind == "w" and address == 0xe1 and value == 0xea
+                flushes += kind == "w" and address == 0xe1 and value == 0xee
+                settles += kind == "c"
     helper = symbols["__gptrput_PARM_2"]
     require(overlaps == [(0, a) for a in range(helper - 24, helper + 1)] +
             [(1, a) for a in range(helper - 138, helper + 1)],
             "Every original libc overlap must execute exactly once across the fresh partitions")
-    require((calls, rfd, sampled, full, count) == (1216, 881, 0x2d, 0x33, 6568),
-            "Complete corpus, negative inventory or measured stack high-water changed")
+    inventory = (calls, rfd, sampled, full, count, tx_bytes, attempts, flushes, settles)
+    require(inventory == (1732, 1157, 0x2e, 0x34, 9017, 419, 22, 29, 22),
+            f"Complete corpus, negative inventory or measured stack high-water changed: {inventory}")
     print(f"AUTOACK: {CASES} sequences/{calls} genuine API calls/{rfd} exactly-once RFD reads; "
           f"{SIZE} CODE SHA256={DIGEST}; {XDATA}+64/{XDATA_BUDGET} XDATA; "
           f"MMIO SP={sampled:02X}, whole-run SP={full:02X}; {count}+1 artifact/alias negatives PASS. "
-          "Original125 native result/frame/diagnostic/MMIO identities unchanged. "
+          f"{tx_bytes} TXFIFO writes/{attempts} CCA attempts/{flushes} TX-only flushes/"
+          f"{settles} genuine four-NOP settling calls. "
+          "Original125 and pre-TX157 native result/frame/diagnostic/MMIO identities unchanged. "
           "Synthetic controller only; no silicon, ACK timing or MAC/POLL acceptance.")
     seconds, name = max(timings)
     whole, case = max(vector_timings)

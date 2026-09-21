@@ -16,12 +16,14 @@ typedef enum {
     RADIO_AUTOACK_BUFFER_OWNERSHIP, RADIO_AUTOACK_STATE,
     RADIO_AUTOACK_UNSUPPORTED_STATE, RADIO_AUTOACK_STATE_CHANGED,
     RADIO_AUTOACK_CONTROLLER_ERROR, RADIO_AUTOACK_FIFO_ERROR,
-    RADIO_AUTOACK_TIMEOUT, RADIO_AUTOACK_WORK_LIMIT, RADIO_AUTOACK_TIME_ERROR
+    RADIO_AUTOACK_TIMEOUT, RADIO_AUTOACK_WORK_LIMIT, RADIO_AUTOACK_TIME_ERROR,
+    RADIO_AUTOACK_TX_DONE, RADIO_AUTOACK_CCA_BUSY
 } radio_autoack_result_t;
 
 typedef enum {
     RADIO_AUTOACK_COLD = 0, RADIO_AUTOACK_RX, RADIO_AUTOACK_DRAINING,
-    RADIO_AUTOACK_OFF, RADIO_AUTOACK_FAULT
+    RADIO_AUTOACK_OFF, RADIO_AUTOACK_FAULT,
+    RADIO_AUTOACK_RX_NOACK, RADIO_AUTOACK_DRAIN_NOACK, RADIO_AUTOACK_OFF_NOACK
 } radio_autoack_state_t;
 
 typedef struct {
@@ -53,7 +55,7 @@ typedef struct {
  *
  * Cold acquisition copies the configuration; no pointer is retained. All PAN,
  * short and IEEE values are raw caller-owned filter configuration, not identity
- * validation or security. Channel11..26; only raw power05. The fixed profile is
+ * validation or security. Channel11..26; only raw power05. The normal profile is
  * version<=0, reserved-FCF mask0, non-coordinator, DATA/ACK/command accepted,
  * filtering/AUTOCRC/AUTOACK on, unslotted, RX-to-RX timeout off, Pending0 and
  * source matching/AUTOPEND off. Security-enabled bodies are NOT excluded.
@@ -69,9 +71,9 @@ typedef struct {
  *
  * Invalid arguments/storage/state have no MMIO or diagnostic effects. The
  * first operational fault retains ownership and its original result; later
- * operations perform no MMIO or diagnostic/output writes. No abort, flush,
+ * operations perform no MMIO or diagnostic/output writes. No abort, RX flush,
  * retry, RF-off promise or recovery API exists. Acquire still rejects OFF;
- * only explicit same-owner resume may rearm it. FAULT requires genuine full
+ * only explicit same-owner resume/send may rearm it. FAULT requires genuine full
  * reset. No other RF API may intervene. See docs/RADIO_AUTOACK.md.
  */
 radio_autoack_result_t radio_autoack_acquire(
@@ -88,7 +90,7 @@ radio_autoack_result_t radio_autoack_acquire(
 radio_autoack_result_t radio_autoack_receive(
     uint32_t timeout, uint16_t limit, radio_autoack_frame_t MCU_XDATA *output);
 
-/* Clear only this owner's RXMASK bit, preserving AUTOACK while reception/ACK
+/* Clear only this owner's RXMASK bit, preserving its profile while reception/ACK
  * finishes; wait for verified physical idle. DRAIN retains queued frames:
  * call receive until consumed, then stop again to confirm STOPPED. No hidden
  * flush or output loss. A stopped partial FIFO is a fault, never drained.
@@ -98,15 +100,36 @@ radio_autoack_result_t radio_autoack_receive(
  */
 radio_autoack_result_t radio_autoack_stop(uint32_t timeout, uint16_t limit);
 
-/* OFF only, after this owner's STOPPED and explicit complete-frame drain.
+/* OFF/OFF_NOACK only, after this owner's STOPPED and complete-frame drain.
  * Revalidate the retained profile, physical idle and empty consistent FIFO,
  * set only the owned RX mask bit, and confirm RX/RSSI readiness. Preserve
- * nonzero empty ring cursors; no reconfiguration, flush, reset or fault clear.
+ * nonzero empty ring cursors; no flush, reset or fault clear. OFF_NOACK first
+ * restores the normal filter/AUTOACK profile while idle. Ordinary OFF retains
+ * the original one-mask-write behavior. CCA settings, once owned, stay checked.
  * READY begins another RX episode with an explicit reception gap, NOT a
  * continuous/loss-free window, POLL PREPARED or handoff from an ordinary TX API.
  * Eligible frames may again be autoacknowledged before this call returns.
  */
 radio_autoack_result_t radio_autoack_resume(uint32_t timeout, uint16_t limit);
+
+/* OFF/OFF_NOACK only. One explicit ordinary CCA/TX attempt, not MAC scheduling.
+ * Body is immutable, caller-owned XDATA, 1..125 FCS-free bytes; no MAC parsing.
+ * At verified idle, disable AUTOACK/filtering, establish mode3 CCA (F8/1A),
+ * flush/reload ONLY TXFIFO, and clear/verify TXDONE. Keep the owned RX request
+ * through ISTXONCCA and automatic post-TX reception. No software-CCA-then-TX,
+ * unconditional TX, retry, RX flush, abort or cleanup-on-fault.
+ *
+ * TX_DONE means fresh ordinary TXDONE plus inactive TX, not ACK/delivery or
+ * captured time. CCA_BUSY means that one hardware-gated attempt did not TX.
+ * Both enter RX_NOACK: receive/stop work, but filtering/AUTOACK are disabled.
+ * Received bodies may be unrelated; neither call supplies a timed ACK window.
+ * Stop/drain -> OFF_NOACK -> explicit resume restores normal filtered RX.
+ * The RX gap and no-AUTOACK interval MUST NOT be hidden as continuous MAC/POLL.
+ * TXFIFO remains owned; a later explicit send replaces it only while idle.
+ * Existing timeout/work/storage/retained-fault rules apply to this whole call.
+ */
+radio_autoack_result_t radio_autoack_send(
+    const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit);
 const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void);
 
 #endif

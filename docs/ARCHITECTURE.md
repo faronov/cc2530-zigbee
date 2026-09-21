@@ -834,7 +834,7 @@ foreground hardware service, not a composition of the old RX/TX/FIFO/queue
 or MAC Timer owners. It verifies all12 local-address RAM bytes and a fixed
 version-0 DATA/ACK/command filter, AUTOCRC/AUTOACK, unslotted/Pending0 profile
 and reviewed raw-power settings before requesting RX. It excludes source
-matching/AUTOPEND, ordinary TX, TXFIFO reuse, CSP programs, DMA and IRQs.
+matching/AUTOPEND, CSP programs, DMA and IRQs.
 READY additionally requires completed calibration, actual RX, PLL lock and
 RSSI_VALID. Hardware ACK can transmit independently of CPU progress.
 
@@ -858,8 +858,19 @@ history and retained faults cannot be adopted. Nonzero empty cursors remain
 valid, and no reset/reconfiguration/flush conceals an RX gap. Acquire,
 receive and stop still reject OFF as before.
 
-Both-board host/image/alias-aware evidence covers4692 CODE,433+64 reserved
-XDATA and whole-run SP33 within separate24576/1536/SP7C limits. No board image
+The #73 `radio_autoack_send` phase admits one ordinary hardware-gated CCA/TX
+only after this owner's stop/drain. At verified idle it disables AUTOACK and
+filtering, checks mode3 CCA settings, flushes/reloads only TXFIFO and
+clears/verifies TXDONE. RSSI readiness plus four real CPU NOPs precede
+ISTXONCCA; the owned RX mask stays set through post-TX reception.
+TX_DONE is fresh ordinary PHY completion, not delivery; CCA_BUSY performs no
+retry. RX_NOACK/DRAIN_NOACK/OFF_NOACK preserve the explicit different profile.
+Receive/stop retain existing bounded publication/drain semantics; resume
+restores filtering then AUTOACK only while stopped and empty. There is no
+concurrent live-AUTOACK admission claim or hidden RX gap.
+
+Both-board host/image/alias-aware CI binds7007 CODE,450+64 reserved
+XDATA and whole-run SP34 within separate24576/1536/SP7C limits. No board image
 links this synthetic test composition. Broadcast-AR behavior, global ACK-FCF
 compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration
 and IFS/loss-aware handoff remain full-adapter gates. No silicon AUTOACK or

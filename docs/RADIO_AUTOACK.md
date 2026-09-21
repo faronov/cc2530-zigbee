@@ -5,10 +5,12 @@ hardware acceptance record.** [radio_autoack.h](../include/radio_autoack.h) and
 [radio_autoack.c](../src/radio_autoack.c) establish one reset-exclusive filtered
 receiver with hardware-generated acknowledgments, bounded foreground FIFO
 servicing, explicit non-aborting stop/drain and same-owner rearm (#72).
+The #73 extension adds one ordinary hardware-gated CCA/TX attempt from
+stopped/drained idle, followed by reception under the same owner.
 
 AUTOACK **transmits RF without CPU intervention**. Actual use requires separately
 authorized RF-transmitting ownership and CPU progress. This change adds no board
-image, hardware runner, RF authorization, ordinary TX submission, TXFIFO reuse,
+image, hardware runner, RF authorization,
 CSP program, DMA/ISR, GPIO policy, MAC Timer composition, MAC/security acceptance
 or membership. `radio_autoack_test.ihx` is a standalone synthetic executable:
 **never flash it or distribute it as a board firmware artifact**.
@@ -36,6 +38,9 @@ is imported.
 | Section 23.10, pp.232-233; FSMSTAT1/FIFOPCTRL, p.263; FIFO registers, pp.264-265 | The 128-byte FIFO can contain multiple frames. RFD advances its read pointer; direct RAM access does not. Use the complete-frame indication with threshold 127, bounded count and head progression. RFIRQF0.FIFOP also documents notification when reading a complete packet leaves another complete packet. No one-frame/one-edge assumption is used. |
 | Section 23.10.2, p.233 | Overflow, underflow and abort are errors, not permission to flush and claim drainage. Filtering can overflow before rejecting a frame. |
 | Table 23-6, p.256; FSCAL1, p.267; TXPOWER/TXCTRL, p.262 | Apply the recommended AGC/TX filter/VCO settings. Read back only FSCAL1's known VCO_CURR bits; its upper bits are R/W0, not read-as-zero. All other configured bytes require full readback. |
+| Section 23.8, pp.218-222; immediate instructions, pp.253-254 | With AUTOACK disabled at idle, replace TXFIFO using only ISFLUSHTX=EE and RFD writes. AUTOCRC PHR includes two FCS bytes; software supplies only the body. Use ISTXONCCA=EA, never unconditional TX. Successful TX retains FIFO contents. |
+| CCA, p.222; CCACTRL0/1, p.264 | Require actual RX/RSSI readiness and four additional system clocks before hardware-gated TX; use recommended threshold F8, mode3 and hysteresis2 (1A). |
+| TX count/pointers, pp.264-265 | Verify the prepared buffer before admission; TXFIRST is the next byte to transmit, not a constant zero after TX. Post-TX pointer/count need not equal the preloaded tuple. |
 
 TI **SWRS081B, April 2009, revised February 2011**, Table 2 p.24
 ([CC2530 datasheet](https://www.ti.com/lit/pdf/swrs081)), characterizes raw
@@ -88,8 +93,8 @@ Channels 11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` are supported.
 | FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / 05 / 69` |
 
 Require unchanged MDMCTRL0/1 `85/14`, MDMTEST0/1 `75/08`, FREQTUNE `0F`,
-standard modem control and an idle CSP. The owner changes no CCA setting and
-offers no CCA decision. It writes no source-match table, TXFIFO, RFST or GPIO.
+standard modem control and an idle CSP. Acquisition changes no CCA setting
+and writes no source-match table, TXFIFO, RFST or GPIO.
 After configuration/readback it writes `RXMASKSET=01`. `READY` additionally
 requires the owned mask, calibration complete, RX_ACTIVE, PLL lock, no
 TX_ACTIVE, and RSSI_VALID. A request echo or RX_ACTIVE alone is insufficient.
@@ -108,10 +113,12 @@ publish a partial body. No heap or software packet queue is introduced.
 | Receive -> `BAD_CRC` | Also publish that body's raw bytes/metadata, explicitly marked invalid CRC. It is not MAC input acceptance. |
 | Receive -> `EMPTY` | No complete head frame observed at the initial check; partial reception may still be active. Not silence, drainage or window closure. |
 | Stop -> `DRAIN` | Physical stop is established, but queued bytes remain. Explicitly consume complete frames using receive, then call stop again. |
-| Stop -> `STOPPED` | Physical idle and empty hardware FIFO after explicit servicing, with consistent stopped ring pointers. Enter OFF; acquire/receive/stop still reject. |
-| Resume -> `READY` | Only from this owner's OFF after STOPPED: recheck the retained profile/idle/empty FIFO, then enable and confirm another RX episode. Not continuous reception or ownership transfer. |
+| Stop -> `STOPPED` | Physical idle and empty hardware FIFO after explicit servicing, with consistent stopped ring pointers. Enter OFF or OFF_NOACK; acquire/receive/stop still reject. |
+| Resume -> `READY` | Only from this owner's OFF/OFF_NOACK after STOPPED: recheck the retained profile/idle/empty FIFO, restore the normal profile if needed, then enable and confirm RX. Not continuous reception or ownership transfer. |
+| Send -> `TX_DONE` | From OFF/OFF_NOACK only; fresh ordinary PHY completion with TX inactive. Keep the RX request, enter RX_NOACK. Not ACK/delivery or captured timing. |
+| Send -> `CCA_BUSY` | One hardware-gated attempt did not transmit. Keep RX enabled in RX_NOACK; no automatic retry. |
 | Invalid argument/range/storage/state | No MMIO, output or diagnostic mutation. |
-| Operational error | Enter terminal FAULT and retain the first error and ownership. Later acquire/receive/stop/resume calls return it with no MMIO, output or diagnostic mutation, even with invalid arguments. |
+| Operational error | Enter terminal FAULT and retain the first error and ownership. All later operations return it with no MMIO, output or diagnostic mutation, even with invalid arguments. |
 
 Receive masks only the PHR's documented high bit, bounds length 5..127, and
 returns `length=PHR-2` with 3..125 body bytes. `rssi_raw` is the uninterpreted
@@ -136,13 +143,13 @@ may arrive or be rejected at its tail. Multiple queued frames, full capacity
 and circular wrap are supported one explicit receive call at a time.
 
 Stop clears/verifies only old RFIDLE (`RFIRQF1=3B`), then clears the owned mask
-bit with `RXMASKCLR=01`. AUTOACK stays enabled throughout reception/ACK
-completion. Require fresh RFIDLE, RXENABLE zero, calibration inactive, PLL
+bit with `RXMASKCLR=01`. The current profile stays unchanged throughout
+reception/ACK completion, including AUTOACK when enabled. Require fresh RFIDLE, RXENABLE zero, calibration inactive, PLL
 unlocked, SFD low and RX_ACTIVE/TX_ACTIVE both low. Once stopped, also require
 `(RXFIRST_PTR+RXFIFOCNT) mod 128 == RXLAST_PTR`; a full 128-byte FIFO is distinct
 from empty despite identical pointers. Complete frames remain available.
 An unexplained partial FIFO, pointer/count contradiction or RF error is a
-fault, never drained success. There is no abort, SRXON, flush, hidden discard,
+fault, never drained success. There is no abort, SRXON, RX flush, hidden discard,
 automatic retry or recovery operation.
 
 The ring identity follows the exact SWRU191F p.265 register definitions:
@@ -164,14 +171,14 @@ the modulo equation or promise an atomic snapshot/pointer freeze merely upon
 the mask write. The implementation waits for completion first.
 
 `STOPPED` is **not** a loss-free/continuous RX lease, MAC/POLL `CLOSED`, IFS
-completion, ordinary-TX permission, captured time or release to another
+completion, ordinary-TX handoff, captured time or release to another
 init-time API. Filter-rejected traffic is not delivered. Any later software
 queue loss also prevents a future adapter from claiming loss-free closure.
 
 ### Explicit same-owner rearm
 
 `radio_autoack_resume(timeout, limit)` starts another receive episode only
-from this owner's OFF state. It does not acquire another owner's stopped
+from this owner's OFF or OFF_NOACK state. It does not acquire another owner's stopped
 radio, consume pending DRAIN frames or recover a fault. No caller may use
 another RF/FIFO API, modify configuration or reset hardware between calls.
 The ordinary acquire/receive/stop state errors remain unchanged.
@@ -183,7 +190,7 @@ Count and FIFO/FIFOP indications must be empty before enabling. Equal,
 nonzero ring cursors are valid; the original configuration and FIFO history
 are retained, not reset to resemble cold acquisition.
 
-With remaining confirmation work, resume writes only `RXMASKSET=01`, then
+From ordinary OFF, with remaining confirmation work, resume writes only `RXMASKSET=01`, then
 uses the original calibration/RX_ACTIVE/PLL/no-TX_ACTIVE/RSSI_VALID readiness
 checks. No configuration, flag acknowledgment, RFST, FIFO or GPIO write is
 added. New frames may arrive and eligible AUTOACKs may transmit after the
@@ -194,7 +201,56 @@ This follows SWRU191F23.9.1-2 pp222-223 and RXENABLE/RXMASKSET p260 directly.
 It deliberately creates an **RX gap** between episodes, including turnaround.
 It establishes neither the safety of ordinary TX during live AUTOACK nor
 permission to bridge an active POLL window with stop/resume. Captured timing,
-IFS, window continuity and ordinary-TX ownership remain separate.
+IFS and window continuity remain separate.
+
+### Explicit ordinary TX and response reception
+
+`radio_autoack_send(body, length, timeout, limit)` accepts immutable caller
+XDATA containing1..125 FCS-free bytes, without MAC parsing. It requires this
+owner's OFF or OFF_NOACK after actual stop/drain; live RX or pending drainage
+is rejected without MMIO. This is not a call into the old reset-exclusive TX
+driver, a software clear-channel check followed by unconditional TX, or a MAC
+backoff/retry scheduler.
+
+Recheck physical idle, empty consistent RXFIFO, the retained RFIDLE indication,
+clock and configuration. While still idle, disable AUTOACK (`FRMCTRL0=40`),
+then filtering (`FRMFILT0=0C`), verifying each transition. Establish and verify
+CCA threshold/mode (`F8/1A`) once; all later observations retain those checks.
+No filter change occurs during live reception.
+
+Issue only the TX flush `EE`, verify empty TXFIFO, and load PHR=`length+2`
+plus the body through RFD. Each write has bounded confirmation of TX count and
+both pointers while idle with empty RXFIFO. Clear and verify old TXDONE
+(`RFIRQF1=3D`), preserving other flags. Enable the owned RX mask and wait for
+calibration completion, RX_ACTIVE, PLL lock, inactive TX and RSSI_VALID.
+Execute four actual NOPs and recheck readiness before issuing `EA`.
+
+SAMPLED_CCA=0 requires no TX activity/TXDONE and an unchanged prepared buffer;
+return CCA_BUSY. Otherwise wait within the same deadline/work allowance for
+fresh TXDONE and inactive TX, retaining the sampled admission result.
+The ordinary TX cannot be confused with a new autonomous ACK in this phase:
+AUTOACK was disabled before enabling RX. Nothing is inferred about #50's
+live-AUTOACK arbitration.
+
+Both results enter RX_NOACK with RXMASK bit0 still set. Hardware can return
+to RX after TX without a software re-enable; TX_DONE does not promise that
+post-TX calibration or RSSI readiness has already finished. Receive exposes
+complete CRC-good/bad bodies unchanged, including unrelated frames, without
+discarding a frame that arrived during CCA preparation. No DSN matching,
+ACK receipt, captured TX/ACK-end time or timed response window is supplied.
+The existing receive body lower bound remains3 bytes.
+
+Stop/drain enters DRAIN_NOACK or OFF_NOACK without changing this profile.
+Another explicit send may replace the retained TXFIFO only at idle.
+Resume from OFF_NOACK first restores filtering (`01`), then AUTOACK (`60`),
+verifying each at idle before the normal RX enable. Ordinary OFF rearm keeps
+its previous one-mask-write behavior. An operational fault never flushes,
+aborts, retries or restores the profile; TX or RX may already have occurred.
+
+The RX gap and explicit no-AUTOACK interval are **not continuous MAC/POLL
+service**. #40 captured timing, #45 Association deadline, IFS, full #50
+arbitration and the MAC scheduler adapter remain open. This step neither
+implements join nor grants hardware/RF permission.
 
 ### Bounds and diagnostics
 
@@ -217,6 +273,8 @@ Only a separately authorized genuine full reset can recover.
 partial observations, not an atomic peripheral snapshot. Phase 0 means no
 operation yet; phases 1..7 mean configuration, enable, ready, frame service,
 soft stop, drain and off; phases8..10 mean rearm preflight, enable and ready.
+Phases11..16 mean TX preflight/profile, preload, TXDONE-clear/RX readiness,
+CCA attempt, completion wait and response-RX ownership.
 `sample_valid` marks a complete observation;
 `writes` counts issued configuration/control writes and `verified` counts
 confirmed configuration bytes. Polls, consumed bytes and raw elapsed ticks
@@ -238,18 +296,18 @@ and unbanked linker flags produce byte-identical generic/LG images:
 | Object | CODE, including constants/startup | Ordinary XDATA | Permanent DATA | OSEG |
 | --- | ---: | ---: | ---: | ---: |
 | timebase | 404 | 25 | 0 | 3 |
-| radio_autoack | 3657 | 240 | 3 | 2 |
-| test caller | 327 | 156 | 2 | 0 |
+| radio_autoack | 5888 | 256 | 4 | 2 |
+| test caller | 411 | 157 | 2 | 0 |
 
-Whole image: **4692/24576 CODE**, **433 ordinary XDATA + the entire 64-byte
-status reservation = 497/1536 bytes**. Runtime/startup adds 304 CODE and 12
+Whole image: **7007/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
+status reservation = 514/1536 bytes**. Runtime/startup adds 304 CODE and 12
 XDATA beyond those object totals. The separate 24 KiB/1536-byte budget covers
 the real timebase, one staged frame, copied configuration, diagnostics,
 compiler parameters, caller buffers and runtime; it changes no old service
 budget and establishes no full-stack/POLL fit.
 
-The entire private prefix is `0000..0108`, caller allocation `0109..01A4`,
-and libc scratch `01A5..01B0`. The latter includes memcpy parameters **and
+The entire private prefix is `0000..0118`, caller allocation `0119..01B5`,
+and libc scratch `01B6..01C1`. The latter includes memcpy parameters **and
 its private temporary**, memset parameters and generic-store scratch. Both
 input and output ranges exclude that whole suffix; only excluding
 `__gptrput_PARM_2` would be insufficient. The proof binds its actual map,
@@ -257,8 +315,8 @@ allocation and emitted runtime layout. A different composition needs its own
 complete ownership/layout proof, not an assumed library ordering.
 
 Stack starts at `21`, initial SP `20`; caller checkpoints unwind to SP `22`.
-The genuine whole-run maximum is **SP `33`** (19 bytes above initial SP),
-separate from MMIO-sampled maximum **`2D`**. The selected bound remains `7C`;
+The CI-pinned whole-run maximum is **SP `34`** (20 bytes above initial SP),
+separate from MMIO-sampled maximum **`2E`**. The selected bound remains `7C`;
 upper IRAM `80..FF` stays intact. No separate RAM is allocated at the
 `1F00..1FFF` IRAM alias. All 56 unused status-tail bytes and other unallocated
 RAM are guarded.
@@ -266,10 +324,10 @@ RAM are guarded.
 Whole emitted CODE SHA-256:
 
 ```text
-cabe17e30c290558986122aaccd7cfa3b789387389d7cbc6c970a2c1db92f599
+a06a14624e638adb49b87a23d7e2fe35711a32a23c53eaf53f74c6569a1bcde4
 ```
 
-**Host-tested:** 156550 API calls per board, both strict native and ASan/UBSan.
+**Host-test corpus:** 158362 API calls per board, both strict native and ASan/UBSan.
 Coverage includes all bounded lengths/CRC bytes, address/profile bits,
 every value of each caller address byte, copied-configuration independence,
 configuration/output ownership including every libc-scratch overlap, native
@@ -280,8 +338,8 @@ implement over-air filtering, FCS calculation or ACK generation. Lengths
 6..8 deliberately overapproximate the configured filter's possible frames
 to exercise byte bounds, not claim those are eligible over-air packets.
 
-**Image-checked/simulated:** 157 persistent sequences, 1216 genuine API calls,
-881 exactly-once RFD reads, and 6568 artifact negatives plus one genuine
+**Image/simulator corpus:** 194 persistent sequences, 1732 genuine API calls,
+1157 exactly-once RFD reads, and 9017 artifact negatives plus one genuine
 missing-alias negative per board. Coverage includes delayed readiness/
 calibration, active receive/ACK soft stop, 21 queued frames, max-length circular
 FIFO, concurrent arrival, CRC classification, stale flags, partial/count/
@@ -291,6 +349,16 @@ nonzero/wrapped empty cursors, pending-drain rejection, arrivals during enable,
 last-allowed timely confirmation, timeout equality, ignored mask writes,
 profile/clock/idle/FIFO/flag faults and retained re-entry. Native checks add
 every configured bit during OFF and the full65535 work cap with stalled time.
+The37 new sequences include419 TXFIFO writes,22 CCA attempts,29 TX-only
+flushes and22 genuine four-NOP settling calls. They cover clear/busy outcomes,
+post-TX calibration/ACK-shaped reception, bad CRC, unrelated queued traffic,
+explicit profile restoration and repeated TX without reset. Ignored
+flush/flag/mask writes, preload/profile/CCA faults, active/stuck/underflow TX,
+stale completion, deadline equality, work exhaustion and retained send
+re-entry cannot produce successful completion. Native tests additionally
+cover every length byte, each preload-byte failure and every call-budget
+boundary for the reference11-byte attempt. Full acceptance runs in
+GitHub Actions, not a duplicate local matrix; no hardware evidence is implied.
 
 The proof binds all CODE/constants/runtime bytes, complete public/private/
 helper/caller/field F/S/L/T record multisets with original duplicate
@@ -299,7 +367,7 @@ allocations, entry/end/storage labels, and all three ordered instruction
 inventories. Missing, conflicting, malformed and duplicate records reject.
 CDB is hashed as complete raw bytes **before decoding**, retaining source-line
 records as well as the detailed metadata multisets. Raw SHA-256 is
-`91cec079cbf6b52221642c5ec85fb229af5aa7facb3bab306d09521dcc90667d`.
+`f36096a63e6868aa7ebdddb4b8b8c5bd58d507183867a7ab71f7fb3d9ec52610`.
 Control/non-LF-separator, CRLF and appended-blank-line negatives also pass
 through the real file loader. An
 independent FSCAL1 instruction check rejects masking changes without relying
@@ -308,7 +376,10 @@ on the whole-image hash.
 Replay executes genuine linked instructions and real timebase calls, including
 the diagnostic pointer return. It supplies synthetic external peripheral values,
 never patched successful returns, skipped branches or private-driver state.
-Every dynamic MMIO operand and destructive read is checked. Alias, unused RAM,
+Every dynamic MMIO operand, destructive read, TXFIFO write and permitted
+strobe is checked; RX flush/unconditional TX/manual ACK strobes remain denied.
+The four settling NOPs execute through their genuine call before admission.
+Alias, unused RAM,
 status tail, upper IRAM, GPIO/IRQ/clock guards, stack unwind and simulator
 whole-run high-water remain enforced. Each simulator process retains its
 **15-second** limit.
@@ -318,10 +389,13 @@ native results, frame/diagnostic/input snapshots and complete ordered MMIO.
 Their canonical JSON digest is
 `d15ba16889fcb03932468342741390d9807a7ff652aa342aa6b2accdd87d0a32`.
 The verifier runs the same fixed synthetic-address corpus and requires exact
-identity, not only the same final return values. The32 added scenarios do not
-replace old ones. Current canonical simulator-call envelopes were3.464s
-(generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
-These are local observations, not portable timing guarantees.
+identity, not only the same final return values. All157 pre-TX scenarios,
+including the32 rearm cases, also retain their complete native identity:
+`c19e89572bc7398c799d9a9240f703e1ac5ae92b93f9d397aeefcbf3859e411a`.
+New cases never replace old ones. Historical pre-TX simulator-call envelopes
+were3.464s (generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
+Those measured the4692-byte rearm image, not this7007-byte extension; they
+are local observations, not portable timing guarantees.
 
 ### Historical overlap-partition acceptance before rearm
 

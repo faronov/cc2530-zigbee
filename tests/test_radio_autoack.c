@@ -15,6 +15,7 @@ MCU_XDATA uint16_t radio_autoack_test_config_ptr, radio_autoack_test_output_ptr;
 MCU_XDATA uint32_t radio_autoack_test_timeout;
 MCU_XDATA uint16_t radio_autoack_test_limit;
 MCU_XDATA uint16_t radio_autoack_test_diag;
+MCU_XDATA uint8_t radio_autoack_test_length;
 
 void radio_autoack_test_cycle(void)
 {
@@ -34,7 +35,11 @@ void radio_autoack_test_cycle(void)
     else if (radio_autoack_test_operation == 2)
         radio_autoack_test_return = radio_autoack_stop(
             radio_autoack_test_timeout, radio_autoack_test_limit);
-    else radio_autoack_test_return = radio_autoack_resume(
+    else if (radio_autoack_test_operation == 3)
+        radio_autoack_test_return = radio_autoack_resume(
+            radio_autoack_test_timeout, radio_autoack_test_limit);
+    else radio_autoack_test_return = radio_autoack_send(
+        (const uint8_t MCU_XDATA *)radio_autoack_test_output_ptr, radio_autoack_test_length,
         radio_autoack_test_timeout, radio_autoack_test_limit);
     radio_autoack_test_diag = MMIO_XADDRESS(radio_autoack_diagnostic());
     __asm
@@ -65,6 +70,11 @@ uint8_t __memcpy_PARM_2[3];
 static struct { uint8_t before[4]; radio_autoack_config_t value; uint8_t after[4]; } config;
 static struct { uint8_t before[4]; radio_autoack_frame_t value; uint8_t after[4]; } frame;
 static uint8_t xregs[0x300], fifo[128], lengths[24];
+static uint8_t tx_fifo[128], body_length;
+static unsigned tx_count, tx_attempts, tx_started, tx_flushes, tx_delay, rx_delay, cca_clear, cca_cycles;
+static unsigned hold_tx, lost_tx, reply_after_tx, bad_reply, ignored_tx_clear, ignored_flush;
+static unsigned tx_write_fault, phase_write_fault, tx_error, late_cca_loss;
+static unsigned unexpected_rx;
 static unsigned head, tail, count, packets, packet_head, packet_tail, remaining;
 static unsigned mode, phase, samples, rfd_reads, accesses, calls, cases;
 static unsigned cal_delay, stop_delay, ack_delay, stop_receive, stop_ack;
@@ -82,7 +92,7 @@ static const uint16_t settings[] = {
 };
 static const uint8_t values[] = {1, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69};
 #define XR(a) xregs[(a) - 0x6100u]
-#define CASE_COUNT 157u
+#define CASE_COUNT 194u
 
 static void logs(void)
 {
@@ -137,7 +147,7 @@ static void advance(void)
 {
     samples++; phase++;
     if (mode == 1 && phase > cal_delay) {
-        XR(0x6192) = 0; XR(0x6193) = (XR(0x6193) & 0xc0) | 4 | (ready_active ? 1 : 0);
+        XR(0x6192) = 0; XR(0x6193) = (XR(0x6193) & 0xc8) | 4 | (ready_active ? 1 : 0);
         XR(0x6199) = 1; XR(0x61ae) = fscal; mode = 2;
         if (arrival_on_ready) {
             arrival_on_ready = 0;
@@ -146,21 +156,49 @@ static void advance(void)
     } else if (mode == 3 && !hold_stop && phase > stop_delay) {
         if (stop_receive) {
             enqueue(11, 0xe9, 0x38);
-            mode = 4; phase = 0; XR(0x6192) = 0x40;
-            XR(0x6193) = (XR(0x6193) & 0xc0) | 6;
+            if (XR(0x6189) == 0x60) {
+                mode = 4; phase = 0; XR(0x6192) = 0x40;
+                XR(0x6193) = (XR(0x6193) & 0xc8) | 6;
+            } else {
+                mode = 5; XR(0x6192) = 0; XR(0x6193) &= 0xc8;
+                if (!suppress_idle) SOC_RFIRQF1 |= 4;
+            }
         } else if (stop_ack) {
             mode = 4; phase = 0; XR(0x6192) = 0x40;
             XR(0x6193) = (XR(0x6193) & 0xc0) | 6;
         } else {
-            mode = 5; XR(0x6192) = 0; XR(0x6193) &= 0xc0;
+            mode = 5; XR(0x6192) = 0; XR(0x6193) &= 0xc8;
             if (!suppress_idle) SOC_RFIRQF1 |= 4;
         }
     } else if (mode == 4 && !hold_stop && phase > ack_delay) {
         assert(XR(0x6189) == 0x60);
-        mode = 5; XR(0x6192) = 0; XR(0x6193) &= 0xc0;
+        mode = 5; XR(0x6192) = 0; XR(0x6193) &= 0xc8;
         SOC_RFIRQF1 |= 1;
         if (!suppress_idle) SOC_RFIRQF1 |= 4;
+    } else if (mode == 6) {
+        if (tx_error) SOC_RFERRF = 4;
+        if (late_cca_loss) XR(0x6193) &= 0xf7;
+        if (!hold_tx && phase > tx_delay) {
+            mode = 7; phase = 0; XR(0x6192) = 0x40;
+            XR(0x6193) = (XR(0x6193) & 0xc8) | 1;
+            XR(0x6199) = 0; XR(0x61a1) = (uint8_t)tx_count;
+            SOC_RFIRQF1 |= 2;
+        }
+    } else if (mode == 7 && phase > rx_delay) {
+        mode = 2; XR(0x6192) = 0; XR(0x6193) = (XR(0x6193) & 0xc8) | 5;
+        XR(0x6199) = 1;
+        if (reply_after_tx) {
+            reply_after_tx = 0;
+            enqueue(5, bad_reply ? 0x69 : 0xe9, 0x5a);
+        }
     }
+}
+
+static void cycles(uint8_t count)
+{
+    assert(count == 4 && mode == 2 && XR(0x6199) == 1);
+    cca_cycles += count;
+    trace('c', 0, count);
 }
 
 static uint8_t xload(uint16_t address)
@@ -203,9 +241,39 @@ static void store(uint8_t address, uint8_t before, uint8_t value)
     assert(write_count == 1 && writes[0].address == address &&
            writes[0].before == before && writes[0].after == value);
     write_count = 0; logs();
-    assert(address == SOC_RFIRQF1_ADDRESS && value == 0x3b && mode == 2);
-    SOC_RFIRQF1 = ignored_clear ? before : before & value;
     trace('w', address, value);
+    if (address == SOC_RFIRQF1_ADDRESS) {
+        assert((value == 0x3b && (mode == 2 || mode == 7)) || (value == 0x3d && mode == 5));
+        SOC_RFIRQF1 = (value == 0x3b ? ignored_clear : ignored_tx_clear) ? before : before & value;
+    } else if (address == SOC_RFD_ADDRESS) {
+        assert(mode == 5 && !XR(0x618b) && XR(0x6189) == 0x40 && XR(0x6180) == 0x0c);
+        assert(tx_count < 128);
+        tx_fifo[tx_count++] = value;
+        XR(0x619c) = XR(0x61a2) = (uint8_t)tx_count;
+        if (tx_write_fault == tx_count) XR(0x619c) ^= 1;
+    } else {
+        assert(address == SOC_RFST_ADDRESS && (value == 0xee || value == 0xea));
+        assert(XR(0x6189) == 0x40 && XR(0x6180) == 0x0c && !SOC_RFERRF);
+        if (value == 0xee) {
+            assert(mode == 5 && !XR(0x618b));
+            tx_flushes++;
+            if (!ignored_flush) {
+                tx_count = 0; XR(0x619c) = XR(0x61a1) = XR(0x61a2) = 0;
+            }
+        } else {
+            assert(mode == 2 && XR(0x618b) == 1 && XR(0x6199) == 1 && cca_cycles >= 4);
+            assert(XR(0x6196) == 0xf8 && XR(0x6197) == 0x1a && !(SOC_RFIRQF1 & 2));
+            assert(tx_count >= 2 && tx_fifo[0] == tx_count + 1);
+            cca_cycles = 0; tx_attempts++;
+            if (cca_clear) {
+                XR(0x6193) |= 8;
+                if (!lost_tx) {
+                    tx_started++; mode = 6; phase = 0;
+                    XR(0x6192) = 0x40; XR(0x6193) = (XR(0x6193) & 0xc8) | 6;
+                }
+            } else XR(0x6193) &= 0xf7;
+        }
+    }
 }
 
 static void xstore(uint16_t address, uint8_t value)
@@ -216,13 +284,23 @@ static void xstore(uint16_t address, uint8_t value)
     if (address == 0x618c) {
         assert(value == 1 && (mode == 0 || mode == 5) &&
                config_writes == 25 && !XR(0x618b) && !count && !packets);
-        assert(XR(0x6189) == 0x60 && !XR(0x618a) && !XR(0x6182) && !XR(0x6195));
+        assert((XR(0x6189) == 0x60 || XR(0x6189) == 0x40) &&
+               !XR(0x618a) && !XR(0x6182) && !XR(0x6195));
         if (ignored_enable) return;
-        XR(0x618b) = 1; XR(0x6192) = 0x40; XR(0x6193) = 1; XR(0x6199) = 0;
+        XR(0x618b) = 1; XR(0x6192) = 0x40; XR(0x6193) = (XR(0x6193) & 8) | 1; XR(0x6199) = 0;
         mode = 1; phase = 0;
     } else if (address == 0x618d) {
-        assert(value == 1 && mode == 2 && XR(0x618b) == 1 && XR(0x6189) == 0x60);
+        assert(value == 1 && (mode == 2 || mode == 7) && XR(0x618b) == 1 &&
+               (XR(0x6189) == 0x60 || XR(0x6189) == 0x40));
         XR(0x618b) = 0; SOC_RFIRQF0 |= 0x80; mode = 3; phase = 0;
+    } else if (mode == 5) {
+        assert(!count && !packets && !XR(0x618b) && !(XR(0x6193) & 0x27));
+        assert((address == 0x6189 && (value == 0x40 || value == 0x60)) ||
+               (address == 0x6180 && (value == 0x0c || value == 1)) ||
+               (address == 0x6196 && value == 0xf8) || (address == 0x6197 && value == 0x1a));
+        XR(address) = value ^ (address == phase_write_fault ? 1u : 0u);
+        if (unexpected_rx && address == 0x6189 && value == 0x40)
+            enqueue(5, 128, 0x55);
     } else {
         assert(!mode);
         index = config_writes++;
@@ -254,6 +332,12 @@ static void reset(void)
     /* Synthetic full-reset RAM initialization only, never between API calls. */
     memset((void *)radio_autoack_diagnostic(), 0, sizeof(radio_autoack_diagnostics_t));
     memset(xregs, 0, sizeof(xregs)); memset(fifo, 0, sizeof(fifo)); memset(lengths, 0, sizeof(lengths));
+    memset(tx_fifo, 0, sizeof(tx_fifo));
+    body_length = 11; tx_count = tx_attempts = tx_started = tx_flushes = cca_cycles = 0;
+    tx_delay = 2; rx_delay = 1; cca_clear = 1;
+    hold_tx = lost_tx = reply_after_tx = bad_reply = ignored_tx_clear = ignored_flush = 0;
+    tx_write_fault = phase_write_fault = tx_error = late_cca_loss = 0;
+    unexpected_rx = 0;
     memset(&config, 0xa5, sizeof(config)); memset(&frame, 0x69, sizeof(frame));
     for (i = 0; i < 8; i++) config.value.ieee[i] = (uint8_t)(0x10 + i);
     config.value.pan = 0x1234; config.value.short_address = 0x5678;
@@ -274,6 +358,7 @@ static void reset(void)
     XR(0x618e) = 0x0f; XR(0x61ae) = 0x2b;
     host_mmio_read_hook = load; host_mmio_write_hook = store;
     host_mmio_xread_hook = xload; host_mmio_xwrite_hook = xstore; host_mmio_xaddress_hook = xaddress;
+    host_mmio_cycles_hook = cycles;
 }
 
 static void hex(const void *data, unsigned size)
@@ -315,12 +400,19 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
     for (i = 0; i < 125; i++) expected_body[i] = fifo[(head + 1 + i) & 127];
     expected_rssi = fifo[(head + expected_length - 1) & 127];
     expected_crc = fifo[(head + expected_length) & 127];
+    if (operation == 1 && mode == 7 && phase + 1 > rx_delay && !packets && reply_after_tx) {
+        expected_length = 5;
+        expected_body[0] = 2; expected_body[1] = 0; expected_body[2] = 0x5a;
+        expected_rssi = 0x81; expected_crc = bad_reply ? 0x69 : 0xe9;
+    }
     memcpy(&diagnostic, radio_autoack_diagnostic(), sizeof(diagnostic));
     if (printing) {
         printf("%s{\"operation\":%u,\"timeout\":%lu,\"limit\":%u,\"config_address\":%u,"
                "\"output_address\":%u,\"configuration\":\"", step_count ? "," : "", operation,
                (unsigned long)timeout, limit, config_address, output_address);
-        emit_configuration(); printf("\",\"initial\":{");
+        emit_configuration(); printf("\"");
+        if (operation == 4) printf(",\"length\":%u", body_length);
+        printf(",\"initial\":{");
 #define EMIT_SFR(n, a) printf("\"%u\":%u,", a, n);
         CC2530_REGISTER_LIST(EMIT_SFR)
 #undef EMIT_SFR
@@ -331,7 +423,9 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
     if (operation == 0) result = radio_autoack_acquire(config_address ? &config.value : NULL, timeout, limit);
     else if (operation == 1) result = radio_autoack_receive(timeout, limit, output_address ? &frame.value : NULL);
     else if (operation == 2) result = radio_autoack_stop(timeout, limit);
-    else result = radio_autoack_resume(timeout, limit);
+    else if (operation == 3) result = radio_autoack_resume(timeout, limit);
+    else result = radio_autoack_send(output_address ? (const uint8_t *)&frame.value : NULL,
+                                    body_length, timeout, limit);
     if (result != expected)
         fprintf(stderr, "case%u step%u op%u expected%u got%u phase%u polls%u\n",
                 scenario_id, step_count, operation, expected, result,
@@ -358,16 +452,26 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
         assert(radio_autoack_diagnostic()->polls <= limit);
         assert(radio_autoack_diagnostic()->result == result);
     }
-    if (result >= RADIO_AUTOACK_UNSUPPORTED_STATE)
+    if (result >= RADIO_AUTOACK_UNSUPPORTED_STATE && result <= RADIO_AUTOACK_TIME_ERROR)
         assert(radio_autoack_state == RADIO_AUTOACK_FAULT && radio_autoack_fault == result);
     if (result == RADIO_AUTOACK_STOPPED)
         assert(mode == 5 && !count && !packets && !(XR(0x6193) & 0xe7) &&
-               !XR(0x618b) && XR(0x6189) == 0x60);
+               !XR(0x618b) && XR(0x6189) ==
+               (radio_autoack_state == RADIO_AUTOACK_OFF_NOACK ? 0x40 : 0x60));
     if (operation == 3 && result == RADIO_AUTOACK_READY)
         assert(radio_autoack_state == RADIO_AUTOACK_RX && mode == 2 &&
                config_writes == 25 && radio_autoack_diagnostic()->phase == 10 &&
-               radio_autoack_diagnostic()->writes == 1 &&
+               radio_autoack_diagnostic()->writes ==
+                   (previous_state == RADIO_AUTOACK_OFF_NOACK ? 3u : 1u) &&
                !radio_autoack_diagnostic()->verified);
+    if (result == RADIO_AUTOACK_TX_DONE || result == RADIO_AUTOACK_CCA_BUSY) {
+        assert(operation == 4 && radio_autoack_state == RADIO_AUTOACK_RX_NOACK &&
+               XR(0x618b) == 1 && XR(0x6189) == 0x40 && XR(0x6180) == 0x0c &&
+               tx_count == body_length + 1u && tx_fifo[0] == body_length + 2u &&
+               !memcmp(tx_fifo + 1, &saved, body_length));
+        assert((result == RADIO_AUTOACK_TX_DONE) == !!(SOC_RFIRQF1 & 2));
+        assert(!(XR(0x6193) & 2));
+    }
     if (printing) {
         printf("],\"result\":%u,\"fault\":%u,\"state\":%u,\"frame\":\"",
                result, radio_autoack_fault, radio_autoack_state);
@@ -382,6 +486,116 @@ static void scenario(unsigned n)
     unsigned i;
     scenario_id = n; cases++; reset();
     if (printing) printf("{\"case\":%u,\"steps\":[", n);
+    if (n >= 157) {
+        radio_autoack_result_t expected = RADIO_AUTOACK_TX_DONE;
+        CALL(4, RADIO_AUTOACK_STATE);
+        CALL(0, RADIO_AUTOACK_READY);
+        CALL(4, RADIO_AUTOACK_STATE);
+        enqueue(5, 128, 0x33);
+        CALL(2, RADIO_AUTOACK_DRAIN);
+        CALL(4, RADIO_AUTOACK_STATE);
+        CALL(1, RADIO_AUTOACK_FRAME);
+        CALL(2, RADIO_AUTOACK_STOPPED);
+        if (n == 161) {
+            body_length = 0; CALL(4, RADIO_AUTOACK_INVALID_ARGUMENT);
+            body_length = 126; CALL(4, RADIO_AUTOACK_INVALID_ARGUMENT);
+            body_length = 255; CALL(4, RADIO_AUTOACK_INVALID_ARGUMENT);
+            body_length = 11;
+            call(4, 0, 1, RADIO_AUTOACK_INVALID_ARGUMENT);
+            call(4, 0x800000, 1, RADIO_AUTOACK_INVALID_ARGUMENT);
+            call(4, 1000, 0, RADIO_AUTOACK_INVALID_ARGUMENT);
+            output_address = 0; CALL(4, RADIO_AUTOACK_INVALID_ARGUMENT);
+            output_address = reserved; CALL(4, RADIO_AUTOACK_BUFFER_OWNERSHIP);
+            output_address = helper; CALL(4, RADIO_AUTOACK_BUFFER_OWNERSHIP);
+            output_address = 0x1dfa; CALL(4, RADIO_AUTOACK_INVALID_RANGE);
+            output_address = normal_output;
+        }
+        if (n == 158) { cca_clear = 0; expected = RADIO_AUTOACK_CCA_BUSY; }
+        if (n == 159) body_length = 125;
+        if (n == 160) body_length = 1;
+        if (n >= 162 && n <= 165) {
+            static const uint16_t phase_registers[] = {0x6189, 0x6180, 0x6196, 0x6197};
+            phase_write_fault = phase_registers[n - 162]; expected = RADIO_AUTOACK_STATE_CHANGED;
+        }
+        if (n == 166) {
+            cca_clear = 0; CALL(4, RADIO_AUTOACK_CCA_BUSY); CALL(2, RADIO_AUTOACK_STOPPED);
+            ignored_flush = 1; expected = RADIO_AUTOACK_FIFO_ERROR;
+        }
+        if (n == 167 || n == 168 || n == 183) {
+            tx_write_fault = n == 167 ? 1 : n == 168 ? 8 : 12;
+            expected = RADIO_AUTOACK_FIFO_ERROR;
+        }
+        if (n == 169) { ignored_tx_clear = 1; SOC_RFIRQF1 = 7; expected = RADIO_AUTOACK_STATE_CHANGED; }
+        if (n == 170) { ignored_enable = 1; expected = RADIO_AUTOACK_STATE_CHANGED; }
+        if (n == 171) ready_active = 0;
+        if (n == 172) lost_tx = 1;
+        if (n == 173) hold_tx = 1;
+        if (n == 174) { tx_error = 1; expected = RADIO_AUTOACK_CONTROLLER_ERROR; }
+        if (n == 175) { late_cca_loss = 1; expected = RADIO_AUTOACK_STATE_CHANGED; }
+        if (n == 180) rx_delay = stop_delay = 10;
+        if (n == 182) { unexpected_rx = 1; expected = RADIO_AUTOACK_FIFO_ERROR; }
+        if (n == 184) { SOC_RFERRF = 4; expected = RADIO_AUTOACK_CONTROLLER_ERROR; }
+        if (n == 185) { count = 3; tail = (head + count) & 127; signals(); expected = RADIO_AUTOACK_FIFO_ERROR; }
+        if (n == 189) { tick_step = 0x800000; expected = RADIO_AUTOACK_TIME_ERROR; }
+        if (n == 157 || n == 177 || n == 181) reply_after_tx = 1;
+        if (n == 177) bad_reply = 1;
+        if (n == 181) arrival_on_ready = 1;
+        if (n >= 171 && n <= 173) call(4, 10000, 64, RADIO_AUTOACK_WORK_LIMIT);
+        else if (n == 190) call(4, 10000, 1, RADIO_AUTOACK_WORK_LIMIT);
+        else if (n == 191) call(4, 1, 1000, RADIO_AUTOACK_TIMEOUT);
+        else if (n == 192) call(4, 24, 24, RADIO_AUTOACK_TIMEOUT);
+        else if (n == 193) call(4, 25, 24, RADIO_AUTOACK_TX_DONE);
+        else CALL(4, expected);
+        if (n == 176) {
+            XR(0x6197) ^= 1;
+            CALL(1, RADIO_AUTOACK_STATE_CHANGED);
+        }
+        if (!radio_autoack_fault) {
+            CALL(4, RADIO_AUTOACK_STATE);
+            CALL(3, RADIO_AUTOACK_STATE);
+            if (n == 157 || n == 177) {
+                CALL(1, RADIO_AUTOACK_EMPTY);
+                CALL(1, n == 177 ? RADIO_AUTOACK_BAD_CRC : RADIO_AUTOACK_FRAME);
+                assert(frame.value.length == 3 && frame.value.body[0] == 2 &&
+                       frame.value.body[1] == 0 && frame.value.body[2] == 0x5a);
+            }
+            if (n == 181) {
+                CALL(1, RADIO_AUTOACK_FRAME);
+                assert(frame.value.length == 9);
+                CALL(1, RADIO_AUTOACK_FRAME);
+                assert(frame.value.length == 3);
+            }
+            if (n == 186) {
+                enqueue(11, 0x69, 0x38);
+                CALL(2, RADIO_AUTOACK_DRAIN);
+                CALL(4, RADIO_AUTOACK_STATE); CALL(3, RADIO_AUTOACK_STATE);
+                CALL(1, RADIO_AUTOACK_BAD_CRC);
+            }
+            CALL(2, RADIO_AUTOACK_STOPPED);
+            assert(radio_autoack_state == RADIO_AUTOACK_OFF_NOACK);
+            if (n == 187) {
+                body_length = 5;
+                CALL(4, RADIO_AUTOACK_TX_DONE);
+                CALL(2, RADIO_AUTOACK_STOPPED);
+                assert(tx_flushes == 2 && tx_attempts == 2 && tx_started == 2);
+            }
+            if (n == 178 || n == 179) {
+                phase_write_fault = n == 178 ? 0x6180 : 0x6189;
+                CALL(3, RADIO_AUTOACK_STATE_CHANGED);
+            } else {
+                CALL(3, RADIO_AUTOACK_READY);
+                assert(XR(0x6180) == 1 && XR(0x6189) == 0x60 &&
+                       XR(0x6196) == 0xf8 && XR(0x6197) == 0x1a && config_writes == 25);
+                if (n == 188) {
+                    stop_receive = 1; stop_delay = 2; ack_delay = 3;
+                    CALL(2, RADIO_AUTOACK_DRAIN);
+                    CALL(1, RADIO_AUTOACK_FRAME);
+                }
+                CALL(2, RADIO_AUTOACK_STOPPED);
+            }
+        }
+        goto end;
+    }
     if (n >= 125) {
         CALL(3, RADIO_AUTOACK_STATE);
         CALL(0, RADIO_AUTOACK_READY);
@@ -645,6 +859,7 @@ end:
         config_address = output_address = 0;
         call(0, 0, 0, fault); call(1, 0, 0, fault); call(2, 0, 0, fault);
         if (n >= 125) call(3, 0, 0, fault);
+        if (n >= 157) call(4, 0, 0, fault);
     }
     if (printing) puts("]}");
 }
@@ -734,8 +949,25 @@ int main(int argc, char **argv)
     reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
     ready_active = 0; tick_step = 0;
     call(3, 10000, 65535, RADIO_AUTOACK_WORK_LIMIT);
+    for (length = 0; length < 256; length++) {
+        reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
+        body_length = (uint8_t)length;
+        CALL(4, length && length <= 125 ? RADIO_AUTOACK_TX_DONE : RADIO_AUTOACK_INVALID_ARGUMENT);
+    }
+    for (i = 0; i <= 24; i++) {
+        reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
+        call(4, 10000, (uint16_t)i, !i ? RADIO_AUTOACK_INVALID_ARGUMENT :
+             i == 24 ? RADIO_AUTOACK_TX_DONE : RADIO_AUTOACK_WORK_LIMIT);
+        reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
+        call(4, i, 1000, !i ? RADIO_AUTOACK_INVALID_ARGUMENT : RADIO_AUTOACK_TIMEOUT);
+    }
+    for (i = 1; i <= 126; i++) {
+        reset(); CALL(0, RADIO_AUTOACK_READY); CALL(2, RADIO_AUTOACK_STOPPED);
+        body_length = 125; tx_write_fault = i;
+        CALL(4, RADIO_AUTOACK_FIFO_ERROR);
+    }
     printf("AUTOACK: %u linked scenarios / %u native API calls; all lengths/CRC bytes, "
-           "address/profile bits, FIFO/stop/rearm/failure/atomic guards PASS (synthetic only).\n", cases, calls);
+           "address/profile bits, FIFO/stop/rearm/CCA/TX/failure/atomic guards PASS (synthetic only).\n", cases, calls);
     return 0;
 }
 #endif
