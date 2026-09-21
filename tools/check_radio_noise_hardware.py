@@ -74,7 +74,7 @@ def validate_program(image, program, sha256, permission):
 
 def inspect(debugger, image, pc, capture, stage):
     registers = debugger.read_registers()
-    require(registers.pc == pc and registers.bank == 0 and registers.dps == 0 and not registers.psw & 0x18 and
+    require(registers.pc == pc and registers.dps == 0 and not registers.psw & 0x18 and
             registers.sp == image.metrics["iram_stack_start"] + 1, "IRND checkpoint PC/bank/DPS/SP mismatch")
     proof = image.radio_noise_proof
     raw = {name: debugger.read_xdata(proof[name], size) for name, size in

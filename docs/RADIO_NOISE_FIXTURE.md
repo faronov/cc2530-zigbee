@@ -109,6 +109,9 @@ LG addresses are `1ED8/1EDA/1EDD`. WAIT is naked `NOP; RET`; each terminal
 is naked `NOP; SJMP self`. At all three checkpoints require
 **SP=stack_start+1=`30`, DPS=0**, ordinary register-bank0 and unbanked CODE.
 `proof["stack_start"]` and `image.metrics["iram_stack_start"]` are `2F`.
+GET_BM reports FMAP.MAP, not the bank containing the current PC. FMAP1 at
+unbanked PC0 is valid; preserve it with the complete CPU context, never
+require FMAP0 merely because the linked CODE is below8000.
 
 Keep WAIT's breakpoint installed: at a verified WAIT only, write/readback
 exact ARM or RUN, step the NOP, then resume. ARM must return to WAIT with

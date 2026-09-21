@@ -34,7 +34,7 @@ class Registers:
     sp: int = 0x51
     dps: int = 0
     psw: int = 0
-    bank: int = 0
+    bank: int = 1
     a: int = 0x69
     b: int = 0x96
     dptr0: int = 0x1234
@@ -244,7 +244,7 @@ class OperatorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CODE"):
             self.run_fake(fake)
         self.assertNotIn("resume", fake.calls)
-        for field, value in (("sp", 128), ("dps", 1), ("psw", 8), ("bank", 1)):
+        for field, value in (("sp", 128), ("dps", 1), ("psw", 8)):
             fake = Synthetic()
             fake.registers = replace(fake.registers, **{field: value})
             with self.assertRaisesRegex(ValueError, "PC/bank/DPS/SP"):
