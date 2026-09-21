@@ -265,7 +265,9 @@ def check_result(ram, iram, sfr, allocated):
 
 def check_peak(text):
     found = re.findall(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", text)
-    require(len(found) == 1 and int(found[0], 16) == 0x70 <= 0x7c, f"Identify full-run SP peak changed: {found}")
+    # Both-board CI 35657733337 observed 6E with all 102 cases and guards
+    # passing; compact real-call staging and its immediate listing reviewed.
+    require(len(found) == 1 and int(found[0], 16) == 0x6e <= 0x7c, f"Identify full-run SP peak changed: {found}")
 
 
 def main():
@@ -307,7 +309,7 @@ def main():
         with unittest.TestCase().assertRaises(ValueError):
             check_peak(bad)
     print(f"Identify: {CODE_SIZE}/{CODE_BUDGET} CODE, 1006+64/{XDATA_BUDGET} reserved XDATA; "
-          f"102 common scenarios, full-run SP70/cap7C, checkpoint SP53; complete raw CDB/map/CODE, "
+          f"102 common scenarios, full-run SP6E/cap7C, checkpoint SP53; complete raw CDB/map/CODE, "
           f"7 immediate snapshots, {negatives} artifact +9 guard +3 peak +1 alias negatives PASS "
           "(simulation only; no indicator, network or hardware time).")
 
