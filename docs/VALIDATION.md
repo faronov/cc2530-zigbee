@@ -3151,7 +3151,7 @@ is unchanged and remains three-layer; radio/platform code and board images
 are unaffected. This is not network admission, transaction matching or
 full-cluster conformance.
 
-The independent [Basic model composition](ZCL_LAB.md#evidence-and-resource-boundary)
+The original #70 [Basic model composition](ZCL_LAB.md#evidence-and-resource-boundary)
 adds312 common target scenarios plus native exact-allocation matrices.
 Both boards pass actual Read/Discover/framing/value calls, independent golden
 bytes, every power-source byte, bounded/copied/empty strings, malformed and
@@ -3167,7 +3167,7 @@ build directory. No existing source/budget or board image is changed; the
 Basic model is not part of the seven-module resource image below and is not
 hardware, authenticated endpoint or complete Basic acceptance.
 
-The independent [Identify composition](ZCL_IDENTIFY.md#tests-image-proof-and-resources)
+The original #71 [Identify composition](ZCL_IDENTIFY.md#tests-image-proof-and-resources)
 adds73 counted common scenarios/groups, exact native allocations, a full
 maximum-duration countdown corpus and an independent absolute-deadline oracle.
 Both-board isolated native/nonrecovering sanitizer and genuine image/simulator
@@ -3181,18 +3181,26 @@ Actual countdown/Identify/Query/Read/Discover behavior is not physical
 indication, authenticated application or full Identify conformance.
 No board image or existing protocol-budget composition includes this module.
 
-The additional `protocol_budget_test.ihx` runs **all seven implemented
+The subsequent [write-family integration](ZCL_WRITE.md) preserves those cases
+and extends Basic/Identify to370/102 common cases, including actual mutation,
+error precedence, Undivided and silent processing. Full acceptance is CI-only,
+with unchanged budgets/deadlines, complete raw-byte metadata/link identities,
+immediate listings, write ABI/call evidence and alias-aware execution.
+Current compiled totals and the one-byte integrated CODE margin are recorded
+in that dedicated contract; the earlier numerical ledgers are historical.
+
+The additional `protocol_budget_test.ihx` now runs **all eight implemented
 protocol modules together**, not only the three-layer target above.
 Ten exchanges cover Discover-then-Read using the returned ID, both ZCL
 manufacturer layouts, independent standard golden response frames, the
 exact 125-byte MAC body, space-error replies and negative Read echo of absent
-`FFFF`. Unsupported Write No Response leaves the reply untouched.
+`FFFF`. Malformed Write No Response leaves the reply untouched.
 Two further full-chain requests check atomic Read/Discover rejection of a
 CODE table declaring standard `FFFF`. The shared native harness
 also runs under ASan/UBSan, alongside the existing exhaustive MAC/NWK/APS,
 Read/Discover and host protocol suites after the IRAM-storage refactor.
 
-The image uses 22,829 CODE and 1,500 ordinary XDATA bytes, 1,564 including
+Before the write-family addition the image used22,829 CODE and1,500 ordinary XDATA,1,564 including
 the 64-byte reservation. Its explicit 2,048-byte budget preserves the
 unchanged component layout/source/CODE, alias, untouched-XDATA/upper-IRAM,
 unwind, disabled-interrupt and 15-second guards. The eight-byte result ABI

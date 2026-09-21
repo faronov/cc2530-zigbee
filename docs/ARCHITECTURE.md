@@ -273,8 +273,10 @@ Complete ZCL/application support remains planned.
 cluster side/namespace. Discover scans the bounded, possibly unsorted table
 without mutation or value access and emits ascending ID/type pages with an
 explicit completion bit. The dispatcher builds unsupported-command errors,
-delivers received Default Response metadata without replying, and rejects
-unsupported Write No Response without an output frame or mutation.
+delivers received Default Response metadata without replying, and shares the
+[bounded write parser](ZCL_WRITE.md) for read-only per-attribute errors and
+silent No Response processing. Namespace-mismatched No Response still fails
+explicitly without output or mutation.
 It shares structural table validation and supported-type classification,
 not network state. Local failures preserve outputs; the explicit result kind
 distinguishes a constructed response from a received default notification.
@@ -290,8 +292,9 @@ without a new dispatcher. The caller owns152 target bytes, including copied
 strings; internal pointers require the initialized object to stay at its
 original address and remain read-only until explicit reinitialization.
 Invalid configuration leaves the complete model unchanged.
-Its own six-module proof uses17,978 CODE and996 ordinary XDATA plus64 reserved,
-with measured foreground peak SP5A. This is not added to the integrated
+Its original #70 six-module proof used17,978 CODE and996 ordinary XDATA plus64
+reserved, with peak SP5A; [current write-enabled evidence](ZCL_WRITE.md) is separate.
+The Basic model is not added to the integrated
 protocol-budget image or board firmware and does not establish whole-stack
 fit. There is no endpoint registration, manufacturer assignment, factory
 reset, Identify, reporting, persistence, physical sensor or network send.
@@ -302,8 +305,9 @@ inputs drive its seconds/fractional-phase countdown; Identify resets the phase,
 Query/Read/Discover do not. It stages timer changes until real serialization
 succeeds and delegates foundation processing through a transient two-attribute
 view. It has no board clock, physical indicator, client/group/broadcast path,
-network send or authenticated endpoint. IdentifyTime's required global writes
-remain missing, not permanently read-only. Its isolated proof does not extend
+network send or authenticated endpoint. Its internal five-byte write intent
+permits full-range uint16 IdentifyTime updates through that shared parser;
+serialization failure cannot half-apply the timer. Its isolated proof does not extend
 the integrated protocol resource image or establish complete-stack fit.
 
 The planned BDB commissioning policy uses
@@ -1531,11 +1535,11 @@ C rules:
 ## Integrated protocol resource budget
 
 `make test-protocol-budget` links **one** unbanked SDCC image containing
-MAC, NWK Data, APS, ZCL frame/value codecs and Read/Discover dispatch, plus
+MAC, NWK Data, APS, ZCL frame/value codecs and Read/Discover/write dispatch, plus
 a synthetic two-peer caller. It executes Discover, uses the returned ID in
 Read, serializes/decodes both replies and checks independent whole-frame
 golden vectors. Both manufacturer layouts, a maximum 125-byte MAC body,
-space-error responses and unsupported no-response writes are exercised.
+space-error responses and malformed no-response writes are exercised.
 Reserved standard declarations fail atomically for Read/Discover; absent
 received IDs still produce negative Read records with the original ID.
 No board image, radio operation or fabricated successful service is added.
@@ -1546,8 +1550,13 @@ hashes and simulator-observed SP. Run the target successfully before using
 the report; its hashes identify the exact artifacts, not an arbitrary later
 build. It is excluded from the unchanged CI board-artifact whitelist.
 
-These measurements use SDCC 4.2.0 #13081 (Mac OS X x86_64) and match on both
-`generic` and `lg_esl29_rev03`.
+The following table is the historical seven-module measurement with SDCC
+4.2.0 #13081 (Mac OS X x86_64), matching both board definitions. The current
+eight-module write-enabled image is recorded in [ZCL_WRITE.md](ZCL_WRITE.md):
+24,575 CODE and1,654 ordinary XDATA plus64 reserved, with unchanged caps.
+The write module contributes1,552 CODE/144 XDATA/zero persistent IRAM;
+the synthetic caller's equivalent header representation was compacted.
+Only one CODE-budget byte remains; this is not full-stack headroom.
 
 | Object / subsystem | CODE bytes | Ordinary XDATA bytes | Persistent IRAM bytes | Overlay IRAM bytes |
 | --- | ---: | ---: | ---: | ---: |

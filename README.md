@@ -732,7 +732,7 @@ adds bounded lookup, access/space-error records and response construction.
 The [one-cluster unicast dispatcher](docs/ZCL.md#discover-attributes-and-unicast-dispatch)
 adds sorted Discover Attributes pages, routes Read requests, reports received
 Default Responses and builds unsupported-command errors without response loops.
-It adds no registered cluster, writes, reporting or network dispatcher.
+It adds no registered cluster, reporting or network dispatcher.
 Unreviewed ZCL errata remains a conformance risk, not a development stop.
 APS/ZCL composition and the read handler are target-tested; the complete
 MAC/NWK/APS/ZCL Discover-then-Read request/response chain is host-tested and
@@ -740,13 +740,16 @@ also runs in a single SDCC resource image.
 The separate [read-only Basic provider](docs/ZCL_LAB.md) supplies six
 primary-backed attributes through those handlers, with caller-owned copied
 strings and synthetic lab vectors. Its both-board host/image/simulator
-evidence is not an advertised endpoint: profile/device selection, required
-writes and measurement/reporting remain open.
+evidence is not an advertised endpoint: profile/device selection and
+measurement/reporting remain open.
 The independent [Identify procedure](docs/ZCL_IDENTIFY.md) now supplies a
 caller-owned logical-time countdown, unicast Identify/Query and real
 Read/Discover handling. It has no physical indication, client/group/broadcast
-handling, network send or authenticated endpoint; IdentifyTime is normatively
-RW and missing global writes remain a conformance gap.
+handling, network send or authenticated endpoint. The bounded
+[foundation write family](docs/ZCL_WRITE.md) now returns proper Basic
+read-only/type/missing-attribute errors and actually updates RW IdentifyTime,
+including Undivided rollback and No Response silence. Unsupported value
+extents and complete application/cluster conformance remain explicit.
 This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. The separate passive receiver does not provide a transmit
 driver, functioning MAC, association or Zigbee join.

@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zcl_identify.h"
+#include "zcl_write.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -55,14 +56,16 @@ zcl_codec_result_t zcl_id_tick(zcl_id_t *ctx, uint32_t now)
 /* Only a two-attribute transient view, not a copied frame or endpoint registry.
  * The existing read/dispatch path owns all global command/status semantics.
  */
-static zcl_codec_result_t global(const zcl_id_t * volatile next,
-                                 const uint8_t * volatile request, uint16_t length,
+static zcl_codec_result_t global(zcl_id_t * volatile next,
+                                 const uint8_t * volatile request, const zcl_frame_info_t * volatile frame,
                                  uint8_t * volatile response, uint16_t capacity,
                                  zcl_dispatch_info_t * volatile info)
 {
     zcl_attribute_set_t set;
     zcl_attribute_t attributes[2];
     zcl_attribute_t * volatile attribute = attributes;
+    zcl_wr_t edit;
+    zcl_codec_result_t rc;
     uint8_t values[4], i;
     memset(&set, 0, sizeof(set));
     memset(attributes, 0, sizeof(attributes));
@@ -80,7 +83,23 @@ static zcl_codec_result_t global(const zcl_id_t * volatile next,
         attribute->value.data_length = 2;
         attribute++;
     }
-    return zcl_dispatch_unicast(&set, request, length, response, capacity, info);
+    if (frame->header.type == ZCL_FRAME_GLOBAL
+            && !(frame->header.flags & ZCL_FLAG_MANUFACTURER_SPECIFIC)
+            && (frame->header.command_id == ZCL_COMMAND_WRITE_ATTRIBUTES
+                || frame->header.command_id == ZCL_COMMAND_WRITE_UNDIVIDED
+                || frame->header.command_id == ZCL_COMMAND_WRITE_NO_RESPONSE)) {
+        edit.id = 0; /* The one writable, full-range uint16 is IdentifyTime. */
+        memset(info, 0, sizeof(*info));
+        rc = zcl_wr_handle(&set, frame, request + frame->payload_offset,
+                           response, capacity, info, &edit);
+        if (rc == ZCL_CODEC_OK && edit.written) {
+            next->remaining = edit.value;
+            next->phase = 0; /* Same explicit logical-time policy as Identify. */
+        }
+        return rc;
+    }
+    return zcl_dispatch_unicast(&set, request, (uint16_t)(frame->payload_offset + frame->payload_length),
+                                 response, capacity, info);
 }
 
 zcl_codec_result_t zcl_id_rx(zcl_id_t * volatile ctx, uint32_t now,
@@ -108,7 +127,7 @@ zcl_codec_result_t zcl_id_rx(zcl_id_t * volatile ctx, uint32_t now,
     if (frame.header.type != ZCL_FRAME_CLUSTER_SPECIFIC
             || (frame.header.flags & ZCL_FLAG_MANUFACTURER_SPECIFIC)
             || frame.header.command_id > 1u) {
-        rc = global(&next, request, length, response, capacity, &candidate);
+        rc = global(&next, request, &frame, response, capacity, &candidate);
         if (rc != ZCL_CODEC_OK)
             return rc;
     } else {

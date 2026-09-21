@@ -14,6 +14,7 @@ MODULE_BUDGETS = {
     "zcl_value": (2048, 64, 16),
     "zcl_attributes": (2304, 192, 8),
     "zcl_dispatch": (3328, 160, 16),
+    "zcl_write": (1792, 160, 0),
     "protocol_budget_test": (4096, 896, 0),
 }
 CODE_BUDGET = 24576
@@ -89,7 +90,7 @@ def build_report(image, symbols, objects, peak_sp):
     require(0 <= padding <= 7, "Unaccounted IRAM allocation or excessive packing gap")
     return {
         "schema": 1,
-        "scope": "Offline MAC/NWK/APS/ZCL codecs and read/discovery dispatch; not a full Zigbee stack",
+        "scope": "Offline MAC/NWK/APS/ZCL codecs and read/discovery/write dispatch; not a full Zigbee stack",
         "hardware_tested": False,
         "modules": rows,
         "shared_runtime": {"code": shared_code, "xdata": shared_xdata},

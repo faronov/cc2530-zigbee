@@ -236,6 +236,17 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZCL Identify"):
                     verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
 
+    def test_isolated_zcl_write_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_zcl_wr_handle", "_zcl_write_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "ZCL write"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in ("C$zcl_write.c$1", "C$test_zcl_write.c$1", "M:zcl_write",
+                             "F:G$zcl_wr_handle$0_0$0", "T:Fzcl_write$__00000008[]",
+                             "S:Lzcl_write.zcl_wr_handle$body$1_0$0"):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZCL write"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_isolated_mac_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_mac_tx_init", "_mac_tx_submit", "_mac_tx_step", "_mac_tx_result"):

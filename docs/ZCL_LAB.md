@@ -112,7 +112,8 @@ The `1234` manufacturer namespace in negative requests is synthetic input only.
   status `81`, not fake success. Wrong manufacturer namespace never executes
   the Basic handler. Received Default Response only publishes a notification,
   never a reply. R8 2.5.6.3, 2-18 / PDF70 forbids replies to Write No Response;
-  the existing explicit `UNSUPPORTED_NO_RESPONSE` local failure is retained.
+  the [write-family path](ZCL_WRITE.md) now processes supported records silently;
+  mismatched namespaces and unsupported extents retain explicit local failures.
 
 For example, Read `FFFD`: `00 5A 00 FD FF` responds
 `18 5A 01 FD FF 00 21 03 00`. The complete six-attribute response is 74 bytes
@@ -121,11 +122,11 @@ and complete Discover response is 22 bytes; independent literals live in
 
 **This is not full Basic/ZCL conformance.** R8 2.5, printed 2-10 / PDF62
 requires more foundation behavior for attribute-bearing clusters, including
-writes even when only read-only attributes are exposed. The existing dispatcher
-still returns unsupported-command errors for ordinary Write/Undivided rather
-than per-attribute READ_ONLY responses. No generic Write/Report implementation
-was added or silently treated as complete. Attribute-bearing/reporting
-requirements must be closed before exposing a conformant endpoint. The model's
+writes even when only read-only attributes are exposed. The
+[bounded write family](ZCL_WRITE.md) now returns per-attribute errors with
+the required existence/type/read-only precedence and silent No Response
+processing. Unsupported value extents and applicable application/reporting
+requirements remain explicit before exposing a conformant endpoint. The model's
 revision value identifies its base-text schema, not a conformance certificate.
 
 ## Identify and synthetic temperature: requirements, not implementations
@@ -205,7 +206,7 @@ One endpoint is **not a BDB exemption**. BDB3.0.1:
   bindings and groups in persistence requirements.
 
 Endpoint registry, exact profile/device/ZDO descriptors, authorized APS delivery,
-full foundation Write behavior, physical Identify and its client/group/broadcast
+remaining foundation behavior, physical Identify and its client/group/broadcast
 roles, binding/group management as applicable, reports/configuration/defaults/persistence and
 application interoperability remain gates. Join/rejoin/leave, ED Timeout,
 parent keepalive, endpoint-0 responses and durable counters in
@@ -241,6 +242,10 @@ protocol-error responses and received-default notifications retain their
 existing explicit result kinds.
 
 ## Evidence and resource boundary
+
+The numerical measurements/pins below are the original #70 six-module
+baseline. Current seven-module write-family integration, expanded cases and
+resource evidence are recorded in [ZCL_WRITE.md](ZCL_WRITE.md).
 
 Both `CC2530_BOARD=0` and `=1`, SDCC 4.2.0, unchanged model-large flags:
 

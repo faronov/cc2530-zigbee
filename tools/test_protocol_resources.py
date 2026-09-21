@@ -54,10 +54,10 @@ class ObjectTests(unittest.TestCase):
 
 class ReportTests(unittest.TestCase):
     def setUp(self):
-        self.objects = {name: obj(name, dseg=0 if name == "protocol_budget_test" else 2)
+        self.objects = {name: obj(name, dseg=0 if name in ("protocol_budget_test", "zcl_write") else 2)
                         for name in MODULE_BUDGETS}
-        self.image = dict.fromkeys(range(900), 0)
-        self.symbols = {"s_XSEG": 0, "l_XSEG": 90, "s_XISEG": 0, "l_XISEG": 0,
+        self.image = dict.fromkeys(range(1000), 0)
+        self.symbols = {"s_XSEG": 0, "l_XSEG": 100, "s_XISEG": 0, "l_XISEG": 0,
                         "s_PSEG": 0, "l_PSEG": 0, "s_SSEG": 25, "l_OSEG": 3, "l_BSEG": 0}
 
     def report(self):
@@ -107,7 +107,7 @@ class ReportTests(unittest.TestCase):
 
     def test_link_disagreements_and_limits(self):
         for field, value in (("l_OSEG", 2), ("l_BSEG", 1), ("l_XSEG", 79),
-                             ("l_XSEG", 2048), ("l_XSEG", 209), ("s_SSEG", 0x69),
+                             ("l_XSEG", 2048), ("l_XSEG", 219), ("s_SSEG", 0x69),
                              ("s_SSEG", 34), ("s_SSEG", 24)):
             symbols = dict(self.symbols, **{field: value})
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
@@ -115,7 +115,7 @@ class ReportTests(unittest.TestCase):
         for peak in (24, 128):
             with self.subTest(peak=peak), self.assertRaises(ValueError):
                 build_report(self.image, self.symbols, self.objects, peak)
-        for size in (799, 1825, 24577, 32769):
+        for size in (899, 1925, 24577, 32769):
             with self.subTest(size=size), self.assertRaises(ValueError):
                 build_report(dict.fromkeys(range(size), 0), self.symbols, self.objects, 32)
         self.image.pop(42)
@@ -124,11 +124,14 @@ class ReportTests(unittest.TestCase):
 
     def test_exact_total_budget_edges(self):
         remaining = 24576
+        remaining_xdata = 2048 - 64
         for name, budgets in MODULE_BUDGETS.items():
             size = min(remaining, budgets[0])
-            self.objects[name] = obj(name, code=size, xdata=budgets[1],
-                                     dseg=0 if name == "protocol_budget_test" else 2)
+            xdata = min(remaining_xdata, budgets[1])
+            self.objects[name] = obj(name, code=size, xdata=xdata,
+                                     dseg=0 if name in ("protocol_budget_test", "zcl_write") else 2)
             remaining -= size
+            remaining_xdata -= xdata
         self.assertEqual(remaining, 0)
         self.symbols["l_XSEG"] = 2048 - 64
         report = build_report(dict.fromkeys(range(24576), 0), self.symbols, self.objects, 127)

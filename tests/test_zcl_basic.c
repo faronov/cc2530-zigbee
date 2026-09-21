@@ -263,14 +263,14 @@ static uint16_t receive_cases(void)
 static uint16_t unsupported_cases(void)
 {
     uint8_t i;
-    /* Unknown, Write, Undivided, Configure Reporting, Read Reporting, Report. */
+    /* Unknown/reporting remain unsupported; Write/Undivided lack the type. */
     static const MCU_CODE uint8_t commands[] = {0xff, 2, 3, 6, 8, 10};
     memcpy(request, read_all, sizeof(read_all));
     for (i = 0; i < sizeof(commands); i++) {
         request[2] = commands[i];
         CHECK(zcl_dispatch_unicast(&basic.set, request, 5, response, 5, &info) == ZCL_CODEC_OK);
         CHECK(info.length == 5 && response[0] == 0x18 && response[1] == 0x5a && response[2] == 0x0b);
-        CHECK(response[3] == commands[i] && response[4] == 0x81);
+        CHECK(response[3] == commands[i] && response[4] == (i == 1 || i == 2 ? 0x80 : 0x81));
         CHECK(memcmp(&basic, &saved, sizeof(basic)) == 0);
         cases++;
     }
@@ -278,7 +278,7 @@ static uint16_t unsupported_cases(void)
     CHECK(zcl_dispatch_unicast(&basic.set, request, 3, response, 5, &info) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x18\x5a\x0b\x00\x81", 5) == 0);
     request[0] = 0; request[2] = 5;
-    CHECK(failure(5, 100, ZCL_CODEC_UNSUPPORTED_NO_RESPONSE) == 0);
+    CHECK(failure(5, 100, ZCL_CODEC_TRUNCATED) == 0);
     /* Synthetic input namespace only: never an assigned project manufacturer. */
     memcpy(request, "\x04\x34\x12\x5a\x00\x00\x00", 7);
     CHECK(zcl_dispatch_unicast(&basic.set, request, 7, response, 7, &info) == ZCL_CODEC_OK);
@@ -298,6 +298,60 @@ static uint16_t unsupported_cases(void)
     return 0;
 }
 
+static uint16_t write_cases(void)
+{
+    static const MCU_CODE uint8_t input[] = {
+        0,0x5a,2, 0,0,0x20,255, 4,0,0x42,0, 5,0,0x42,1,0xee,
+        7,0,0x30,255, 0,0x40,0x42,255, 0xfd,255,0x21,255,255,
+        0x66,0,0, 0,0,0x10,5
+    };
+    static const MCU_CODE uint8_t expected[] = {
+        0x18,0x5a,4, 0x88,0,0, 0x88,4,0, 0x88,5,0, 0x88,7,0,
+        0x88,0,0x40, 0x88,0xfd,255, 0x86,0x66,0, 0x8d,0,0
+    };
+    uint8_t command, cap, i;
+    memcpy(request, input, sizeof(input));
+    for (command = 2; command <= 3; command++) {
+        request[2] = command;
+        for (cap = 0; cap <= sizeof(expected); cap++) {
+            if (cap < sizeof(expected)) CHECK(failure(sizeof(input), cap, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
+            else {
+                outputs();
+                CHECK(zcl_dispatch_unicast(&basic.set, request, sizeof(input), response + 1, cap, &info) == ZCL_CODEC_OK);
+                CHECK(info.length == sizeof(expected) && info.requested_count == 8 && info.returned_count == 8);
+                CHECK(memcmp(response + 1, expected, sizeof(expected)) == 0
+                      && response[0] == 0xc7 && filled(response + 1 + cap, 101u - cap, 0xc7));
+                cases++;
+            }
+            CHECK(memcmp(&basic, &saved, sizeof(basic)) == 0);
+        }
+    }
+    request[2] = 5;
+    outputs();
+    CHECK(zcl_dispatch_unicast(&basic.set, request, sizeof(input), response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(memcmp(&info, "\x02\x00\x00\x5a\x00\x00\x00\x00\x00\x00", 10) == 0);
+    CHECK(filled(response, sizeof(response), 0xc7) && memcmp(&basic, &saved, sizeof(basic)) == 0);
+    /* Complete but out-of-range denied value: permission precedes range. */
+    memcpy(request, "\x00\x5a\x02\x04\x00\x42\x21", 7);
+    memset(request + 7, 0xff, 33);
+    CHECK(zcl_dispatch_unicast(&basic.set, request, 40, response, 6, &info) == ZCL_CODEC_OK);
+    CHECK(memcmp(response, "\x18\x5a\x04\x88\x04\x00", 6) == 0);
+    /* Maximum error list, repeated missing IDs and zero-width No Data. */
+    for (i = 3; i < 99; i += 3) {
+        request[i] = request[i+1u] = 255;
+        request[i+2u] = 0;
+    }
+    CHECK(failure(99, 98, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
+    CHECK(zcl_dispatch_unicast(&basic.set, request, 99, response, 99, &info) == ZCL_CODEC_OK);
+    CHECK(info.length == 99 && info.requested_count == 32 && info.returned_count == 32);
+    CHECK(memcmp(response, "\x18\x5a\x04", 3) == 0);
+    for (i = 3; i < 99; i += 3)
+        CHECK(response[i] == 0x86 && response[i+1u] == 255 && response[i+2u] == 255);
+    CHECK(memcmp(&basic, &saved, sizeof(basic)) == 0);
+    cases++;
+    return 0;
+}
+
 static uint16_t run_tests(void)
 {
     uint16_t rc;
@@ -305,7 +359,8 @@ static uint16_t run_tests(void)
     rc = golden_cases(); if (rc != 0) return rc;
     rc = config_cases(); if (rc != 0) return rc;
     rc = receive_cases(); if (rc != 0) return rc;
-    return unsupported_cases();
+    rc = unsupported_cases(); if (rc != 0) return rc;
+    return write_cases();
 }
 
 #if defined(__SDCC)
@@ -452,11 +507,67 @@ static uint16_t exact_reads(void)
     return 0;
 }
 
+static uint16_t exact_writes(void)
+{
+    static const uint8_t bytes[] = {0,0x5a,2,0,0,0x20,8,0xee};
+    zcl_basic_t *model = malloc(sizeof(*model)), *before = malloc(sizeof(*before));
+    zcl_dispatch_info_t *out = malloc(sizeof(*out));
+    uint8_t *input, *output, expected[6];
+    unsigned n, cap, command;
+    zcl_codec_result_t rc, want;
+    uint8_t used;
+    CHECK(model != NULL && before != NULL && out != NULL);
+    CHECK(zcl_basic_init(model, &lab) == ZCL_CODEC_OK);
+    memcpy(before, model, sizeof(*model)); /* comparison only; do not use relocated self pointers */
+    for (command = 2; command <= 5; command++) {
+        if (command == 4) continue;
+        for (n = 0; n <= sizeof(bytes); n++) {
+            input = malloc(n ? n : 1);
+            CHECK(input != NULL);
+            memcpy(input, bytes, n);
+            if (n > 2) input[2] = (uint8_t)command;
+            for (cap = 0; cap <= 7; cap++) {
+                output = malloc(cap ? cap : 1);
+                CHECK(output != NULL);
+                memset(output, 0xc7, cap ? cap : 1);
+                memset(out, 0xa5, sizeof(*out));
+                used = command == 5 ? 0 : n == 7 ? 6 : 5;
+                want = n < 3 || (command == 5 && n != 7) ? ZCL_CODEC_TRUNCATED
+                    : cap < used ? ZCL_CODEC_BUFFER_TOO_SMALL : ZCL_CODEC_OK;
+                rc = zcl_dispatch_unicast(&model->set, input, (uint16_t)n, output, (uint16_t)cap, out);
+                CHECK(rc == want && memcmp(model, before, sizeof(*model)) == 0);
+                CHECK(memcmp(input, bytes, n < 2 ? n : 2) == 0);
+                if (n > 2) CHECK(input[2] == command);
+                if (n > 3) CHECK(memcmp(input + 3, bytes + 3, n - 3) == 0);
+                if (rc != ZCL_CODEC_OK) {
+                    CHECK(filled(output, (uint16_t)(cap ? cap : 1), 0xc7) && filled(out, sizeof(*out), 0xa5));
+                } else {
+                    CHECK(out->length == used && out->sequence == 0x5a);
+                    if (command == 5) CHECK(memcmp(out, "\x02\x00\x00\x5a\x00\x00\x00\x00\x00\x00", 10) == 0);
+                    else {
+                        expected[0] = 0x18; expected[1] = 0x5a;
+                        expected[2] = n == 7 ? 4 : 0x0b;
+                        expected[3] = n == 7 ? 0x88 : (uint8_t)command;
+                        expected[4] = n == 7 ? 0 : 0x80; expected[5] = 0;
+                        CHECK(memcmp(output, expected, used) == 0 && out->kind == 0);
+                    }
+                    CHECK(filled(output + used, (uint16_t)((cap ? cap : 1) - used), 0xc7));
+                }
+                free(output);
+            }
+            free(input);
+        }
+    }
+    free(out); free(before); free(model);
+    return 0;
+}
+
 int main(void)
 {
     uint16_t rc = run_tests();
     if (rc == 0) rc = exact_native();
     if (rc == 0) rc = exact_reads();
+    if (rc == 0) rc = exact_writes();
     if (rc != 0) {
         fprintf(stderr, "Basic test failed at C line %u\n", rc);
         return 1;

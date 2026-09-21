@@ -1778,7 +1778,21 @@ explicit project policies, not hardware or normative timing measurements.
 Original code reuses the repository's real foundation handlers and proof
 helpers. No external implementation, identity, SDK or private capture was
 imported. Logical command processing does not establish physical indication,
-global writes, application advertisement or errata-aware conformance.
+generalized mutable attributes, application advertisement or errata-aware conformance.
+
+### Foundation write-family source review
+
+The [bounded write contract](ZCL_WRITE.md) directly reviews the same pinned
+ZCL R8 primary, Foundation14-0126-17 sections2.5.3–6/Figures2-10..14
+(printed2-14..18 / PDF66–70),2.4.1 (2-8..9 / PDF60–61),
+2.3.2 (2-4 / PDF56),2.5.12 and Table2-12 (2-28..29,2-55..56 /
+PDF80–81,107–108). Existence/type/read-only checks precede value validation;
+Undivided prohibits all requested mutations after any record error; No Response
+forbids every reply. IdentifyTime's actual write effect comes from3.5.2.2.1/
+Table3-31 (3-31 / PDF141); subsecond restart remains explicit project policy.
+Unknown wire extents are not inferred from the mixed secondary catalog.
+Original parser, synthetic vectors and proof adaptations import no external
+implementation or private material. No new primary revision is substituted.
 
 ## Specialist-agent reference
 

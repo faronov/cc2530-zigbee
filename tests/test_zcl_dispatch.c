@@ -182,12 +182,10 @@ static uint16_t dispatch_cases(void)
         CHECK(zcl_dispatch_unicast(&set, request, 4, response, 5, &info) == ZCL_CODEC_OK);
         CHECK(info.command_id == 0x0b && info.default_command == 0 && info.default_status == 0x80);
         request[2] = 0x02;
-        CHECK(zcl_dispatch_unicast(&set, request, 6, response, 5, &info) == ZCL_CODEC_OK);
-        CHECK(info.command_id == 0x0b && info.default_command == 2 && info.default_status == 0x81);
-        CHECK(response[3] == 2 && response[4] == 0x81);
+        CHECK(failure(6, 5, ZCL_CODEC_UNSUPPORTED_DATA_TYPE) == 0); /* received type FF */
         request[2] = 5;
-        CHECK(failure(3, 0, ZCL_CODEC_UNSUPPORTED_NO_RESPONSE) == 0);
-        CHECK(failure(100, 100, ZCL_CODEC_UNSUPPORTED_NO_RESPONSE) == 0);
+        CHECK(failure(3, 0, ZCL_CODEC_TRUNCATED) == 0);
+        CHECK(failure(100, 100, ZCL_CODEC_UNSUPPORTED_DATA_TYPE) == 0);
         request[2] = 0x0b;
         CHECK(failure(3, 100, ZCL_CODEC_TRUNCATED) == 0);
         CHECK(failure(4, 100, ZCL_CODEC_TRUNCATED) == 0);
@@ -235,6 +233,18 @@ static uint16_t dispatch_cases(void)
     set.manufacturer_code ^= 1u;
     CHECK(zcl_dispatch_unicast(&set, request, 8, response, 7, &info) == ZCL_CODEC_OK);
     CHECK(info.default_status == 0x81 && response[1] == 0x78 && response[2] == 0x56);
+    base();
+    attributes[1].value.type = ZCL_TYPE_BOOLEAN; /* denied entry has no valid backing storage */
+    memcpy(request, "\x00\x5a\x02\x34\x12\x10\x05", 7);
+    CHECK(failure(7, 5, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
+    CHECK(zcl_dispatch_unicast(&set, request, 7, response, 6, &info) == ZCL_CODEC_OK);
+    CHECK(memcmp(response, "\x18\x5a\x04\x88\x34\x12", 6) == 0); /* permission before invalid value */
+    attributes[1].value.type = ZCL_TYPE_UINT8;
+    CHECK(zcl_dispatch_unicast(&set, request, 7, response, 6, &info) == ZCL_CODEC_OK);
+    CHECK(memcmp(response, "\x18\x5a\x04\x8d\x34\x12", 6) == 0); /* type before permission */
+    request[4] = 0x13;
+    CHECK(zcl_dispatch_unicast(&set, request, 7, response, 6, &info) == ZCL_CODEC_OK);
+    CHECK(memcmp(response, "\x18\x5a\x04\x86\x34\x13", 6) == 0); /* absence before type */
     return 0;
 }
 
@@ -453,8 +463,8 @@ static uint16_t exhaustive_cases(void)
             if ((control & 3u) > 1u || (control & 4u && control & 0xe0u)) {
                 CHECK(rc != ZCL_CODEC_OK && filled(response, sizeof(response), 0xc7));
                 CHECK(filled((const uint8_t *)&info, sizeof(info), 0xa5));
-            } else if ((control & 3u) == 0 && command == 5) {
-                CHECK(rc == ZCL_CODEC_UNSUPPORTED_NO_RESPONSE && filled(response, sizeof(response), 0xc7));
+            } else if ((control & 3u) == 0 && (command == 2 || command == 3 || command == 5)) {
+                CHECK(rc == ZCL_CODEC_UNSUPPORTED_DATA_TYPE && filled(response, sizeof(response), 0xc7));
                 CHECK(filled((const uint8_t *)&info, sizeof(info), 0xa5));
             } else {
                 CHECK(rc == ZCL_CODEC_OK);

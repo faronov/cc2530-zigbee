@@ -13,6 +13,7 @@ from boot_image import (
 )
 from protocol_resources import MODULE_BUDGETS, XDATA_BUDGET, build_report
 from verify_firmware import STATUS_ADDRESS, parse_ihex, parse_symbols, require
+from zcl_write_proof import load_and_verify
 
 
 def main():
@@ -25,9 +26,10 @@ def main():
     report_path.unlink(missing_ok=True)
     image = parse_ihex(path.read_text(encoding="ascii"))
     symbols = parse_symbols(path.with_suffix(".map").read_text())
+    debug = load_and_verify(args.output, "protocol_budget_test", image, symbols)
     sources = tuple(name + ".c" for name in MODULE_BUDGETS if name != "protocol_budget_test") + ("test_protocol_budget.c",)
     allocated = verify_component_layout(
-        image, symbols, path.with_suffix(".cdb").read_text(), path.with_suffix(".mem").read_text(),
+        image, symbols, debug, path.with_suffix(".mem").read_text(),
         "protocol_budget_result", sources, xdata_budget=XDATA_BUDGET,
     )
     stop = symbols["_protocol_budget_done"]
@@ -35,6 +37,7 @@ def main():
         "_mac_frame_encode", "_mac_frame_decode", "_nwk_frame_encode", "_nwk_frame_decode",
         "_aps_frame_encode", "_aps_frame_decode", "_zcl_frame_encode", "_zcl_frame_decode",
         "_zcl_value_encode", "_zcl_value_decode", "_zcl_read_attrs_unicast", "_zcl_dispatch_unicast",
+        "_zcl_wr_handle",
     )), "Integrated protocol symbol/checkpoint absent or changed")
     objects = {name: (args.output / (name + ".rel")).read_text(encoding="ascii") for name in MODULE_BUDGETS}
     text = simulate(args.simulator, [
@@ -53,7 +56,11 @@ def main():
             "Integrated protocol crossed upper IRAM or failed to unwind")
     require(all(sfr[address - 0x80] == 0 for address in (0xa8, 0xb8, 0x9a)),
             "Integrated protocol enabled interrupts")
-    peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", section(text, 1))
+    full = simulate(args.simulator, [
+        ALIAS, "fill xram 0 0x1eff 0xa5", f"run 0 {stop:#x}",
+    ] + snapshot_commands(1), path)
+    check_pc(section(full, 1), stop)
+    peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", section(full, 1))
     require(len(peaks) == 1, "Missing or ambiguous simulator stack-peak evidence")
     report = build_report(image, symbols, objects, int(peaks[0], 16))
     report["artifacts_sha256"] = {

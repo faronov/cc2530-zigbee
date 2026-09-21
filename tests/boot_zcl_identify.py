@@ -12,71 +12,75 @@ from boot_image import (
     verify_component_layout,
 )
 from boot_nwk_candidates import label, listing_metrics, records
-from boot_zcl_basic import canonical, private_span, sha
+from boot_zcl_basic import canonical, private_span, sha, verify_write_abi
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, require
 
 
-MODULES = ("zcl_identify", "zcl_dispatch", "zcl_attributes", "zcl_frame", "zcl_value", "zcl_identify_test")
+MODULES = ("zcl_identify", "zcl_dispatch", "zcl_write", "zcl_attributes", "zcl_frame", "zcl_value", "zcl_identify_test")
 SOURCES = tuple(m + ".c" for m in MODULES[:-1]) + ("test_zcl_identify.c",)
-CODE_SIZE, CODE_BUDGET, XDATA_BUDGET = 21792, 24576, 1536
-CODE_SHA = "d9b2bf29d2edf7c7994c28bf952b0707bbdda6bbd25d8ef2e0ff9dd22e3539fe"
-CDB_SHA = "7b74474d63e1a0bd6786b0cb5fdbbc850e9e05398eb1bb7d4700411b305e6f2e"
-MAP_SHA = "c60ca2fcd564c0db1c36155d1bd2a79210883c6c1ce3edbb5ca92754f1552552"
+CODE_SIZE, CODE_BUDGET, XDATA_BUDGET = 24340, 24576, 1536
+CODE_SHA = "54b291f43bf19a306b0314722553d2f5e089472072072db1de91654d0e6fee25"
+CDB_SHA = "ef854655c9db54eb9c8003eb72de73568742f51a38e254ac176bfb558f9d2fc7"
+MAP_SHA = "33f9d6aeace45c227ac0e097f4080e8489e498aa7d709ce0ef0475d9f27c6f5d"
 # Complete ordered instruction records and complete raw immediate snapshots.
 LISTINGS = {
-    "zcl_identify": (1617, 2487, "db4679b2ee83d4b1bb9eef6d68d3d71931198b8b8947033fcb944dafcfbfccf0"),
-    "zcl_dispatch": (1800, 2864, "33af38cbd8b389d8fb0ebd4411cb36bbf73cf2a4f9c2bca6a0a662e5107dee21"),
-    "zcl_attributes": (1284, 2086, "0523515a0c0ae0084e3f1b97f20ae6a43b5f567c75d4b382d8d200b893c9a171"),
-    "zcl_frame": (663, 1173, "04885531b362fa26cc7aaa60e32a1db7cf52c0beec959bf7130f990cdf286b91"),
-    "zcl_value": (1006, 1710, "ea0b9d01c41d2cc87ed183b93f9725b3839281f50147038f5509126f820718a0"),
-    "zcl_identify_test": (5929, 10225, "a399ea9336016357f1527d8e8d2c7076307ee31c0bef49472d6c589f0d58a66d"),
+    "zcl_identify": (1967, 3001, "2b45a55114162da1f835a3692925da35b06d2f28049f1999e8c1b0763fbfedd9"),
+    "zcl_dispatch": (1942, 3093, "925b03b609154a47ec5fd1c73e682785ed664d6beb4e70689ff2ab50ac40e164"),
+    "zcl_write": (1016, 1552, "f80d82a2cd99a1ad7692e8734ebb2b623ac23a45bd9f897fa80d67e45b861f0d"),
+    "zcl_attributes": (1284, 2086, "c53c1837ebb5d026261ec4512fc685f9084919d94a716acf20b8ab2462cf3fa1"),
+    "zcl_frame": (663, 1173, "c1ebe6ba035ab2659d99d716a646466ea7d5218c553c7b16da58651577574d7e"),
+    "zcl_value": (1006, 1710, "a93dac05e24a953813abebb61895e38702c56d8ec317d7aee35e37e6032995d4"),
+    "zcl_identify_test": (5556, 9864, "f02615fa4708d9308b39e2a508410d23f227eb9d90b7c31e0402f110232b661b"),
 }
 LISTING_SHA = {
-    "zcl_identify": "f1ecdfd9f7d97c1770d0a41022e0db712adcee6842f9f5200864cc2a3b2484a2",
-    "zcl_dispatch": "240d4690a5da6bf0b59a1a4c798580c2668a03903a2d0c36613d71c4f741304b",
-    "zcl_attributes": "656f95b358d058ba266f7f4d9dc9c24389adfb5d90856ff686e8756cb8c5e76f",
-    "zcl_frame": "a4f1a0bdc5167217c529191c68abf022e56ad69058a12f975c1070f414d6363e",
-    "zcl_value": "7d9da99ed59cf2ab3872463e22c387ebbb42107021f5005bc3ce41db931ca6ff",
-    "zcl_identify_test": "1bfd11bf0e1377358b4718b1e2e59608ecfed7280f2bb6029e5949f3db935771",
+    "zcl_identify": "e1330c368b78cac650f12f37a127a4a6e526987ff5ff7a2956f64baf108ac588",
+    "zcl_dispatch": "545ce18ea22df45db8ea9b841c1c27ad8bf053a9fddd5819801b44a699742ef6",
+    "zcl_write": "e06ff3a9215eb168120b80504bf4c1b113b099ec3b66d4522cad3427c6718448",
+    "zcl_attributes": "8ee98f4aef1535b2a1d1448a9c1de7e4571059946d95934d5cf8e9c0a416051a",
+    "zcl_frame": "396b6a5623aefbd35b68f0a0984cd5cc005c79f1a6008c77de485ad0cb32a5f8",
+    "zcl_value": "3bfebdcfb5079b2f39f01b5a1986d9d6aa549ddec18a76d4c583859f3b6d1d2d",
+    "zcl_identify_test": "60f3626b6367c421fd77f00a7d97c42f4a2d3a81649427aab54d9ed887dbb1b8",
 }
 # All area records, including zero areas, flags, addresses and ordering.
 AREAS_SHA = {
-    "zcl_identify": "9cab1af72f9aa5d7204675dfefdcd50b7e8fa2137027d0887ffa9a004fca05d8",
-    "zcl_dispatch": "f1bdc58b1979b2daeccfc17c1518d80eab7a7700885f6cc5ed5ffc6ffb287bc1",
+    "zcl_identify": "7595499c488219c8f0ba3273b6ad21d068c82e40097b3ad67f32693a77715f4d",
+    "zcl_dispatch": "0c44f299eab89d9a8cf66c129d2093b09b4238ae39dbe7e43004940ad8b93590",
+    "zcl_write": "8ae20fa1fb009f575b1e70ac88d52ccf08397ef524b76eb3c6825796d8849d70",
     "zcl_attributes": "c8a8963ce9e7fc1f3888df44194b6239379b0b04f44ed495dbe06d505632f11e",
     "zcl_frame": "0ce8e9216057ea5573059399bbdc0216189aaa8132365c419e209d01ac591177",
     "zcl_value": "29c2bbdac508133f443c8524a9afca7c7148c2a16e05b1e0a983a95629af03e8",
-    "zcl_identify_test": "3018d404ee721bcdaaa8db3ac2dca9917665834b697cdd936b1c78a23fb5a3e1",
+    "zcl_identify_test": "ed2f8a20faa9960150879844fbb917f8831b49725389502ab51564f32b4d2e1f",
 }
 CALLER = {
-    "ctx": (505, 8), "saved": (513, 8), "other": (521, 8), "info": (529, 10),
-    "frame": (539, 9), "value": (548, 5), "request": (553, 102),
-    "response": (655, 102), "encoded": (757, 1), "cases": (758, 2),
+    "ctx": (656, 8), "saved": (664, 8), "other": (672, 8), "info": (680, 10),
+    "frame": (690, 9), "value": (699, 5), "request": (704, 102),
+    "response": (806, 102), "encoded": (908, 1), "cases": (909, 2),
 }
 RUNTIME = {
-    "__divuint_PARM_2": 790, "__divulong_PARM_2": 797,
-    "___memcpy_PARM_2": 810, "___memcpy_PARM_3": 813,
-    "_memset_PARM_2": 818, "_memset_PARM_3": 819, "__gptrput_PARM_2": 821,
-    "__mulint_PARM_2": 822, "__mullong_PARM_2": 824,
-    "_memcmp_PARM_2": 828, "_memcmp_PARM_3": 831,
+    "__divuint_PARM_2": 960, "__divulong_PARM_2": 967,
+    "___memcpy_PARM_2": 980, "___memcpy_PARM_3": 983,
+    "_memset_PARM_2": 988, "_memset_PARM_3": 989, "__gptrput_PARM_2": 991,
+    "__mulint_PARM_2": 992, "__mullong_PARM_2": 994,
+    "_memcmp_PARM_2": 998, "_memcmp_PARM_3": 1001,
 }
 PUBLIC = {
-    "zcl_id_init": ("zcl_identify", 0x395),
-    "zcl_id_tick": ("zcl_identify", 0x40d),
-    "zcl_id_rx": ("zcl_identify", 0x699),
-    "zcl_dispatch_unicast": ("zcl_dispatch", 0xf82),
-    "zcl_attr_set_check": ("zcl_attributes", 0x1549),
-    "zcl_read_attrs_unicast": ("zcl_attributes", 0x1793),
-    "zcl_frame_decode": ("zcl_frame", 0x1d6f),
-    "zcl_frame_encode": ("zcl_frame", 0x1f6f),
-    "zcl_value_type_supported": ("zcl_value", 0x2342),
-    "zcl_value_decode": ("zcl_value", 0x2426),
-    "zcl_value_encode": ("zcl_value", 0x25c7),
+    "zcl_id_init": ("zcl_identify", 963),
+    "zcl_id_tick": ("zcl_identify", 1083),
+    "zcl_id_rx": ("zcl_identify", 2258),
+    "zcl_dispatch_unicast": ("zcl_dispatch", 4530),
+    "zcl_wr_handle": ("zcl_write", 6238),
+    "zcl_attr_set_check": ("zcl_attributes", 7790),
+    "zcl_read_attrs_unicast": ("zcl_attributes", 8376),
+    "zcl_frame_decode": ("zcl_frame", 9876),
+    "zcl_frame_encode": ("zcl_frame", 10388),
+    "zcl_value_type_supported": ("zcl_value", 11367),
+    "zcl_value_decode": ("zcl_value", 11595),
+    "zcl_value_encode": ("zcl_value", 12012),
 }
 PARAMS = {
     "_zcl_id_init_PARM_2": 10, "_zcl_id_tick_PARM_2": 17,
-    "_zcl_id_rx_PARM_2": 83, "_zcl_id_rx_PARM_3": 87, "_zcl_id_rx_PARM_4": 90,
-    "_zcl_id_rx_PARM_5": 92, "_zcl_id_rx_PARM_6": 95, "_zcl_id_rx_PARM_7": 97,
+    "_zcl_id_rx_PARM_2": 89, "_zcl_id_rx_PARM_3": 93, "_zcl_id_rx_PARM_4": 96,
+    "_zcl_id_rx_PARM_5": 98, "_zcl_id_rx_PARM_6": 101, "_zcl_id_rx_PARM_7": 103,
 }
 FIELDS = (
     ((0, "type", 1), (1, "flags", 1), (2, "manufacturer_code", 2), (4, "sequence", 1), (5, "command_id", 1)),
@@ -90,6 +94,7 @@ FIELDS = (
      (4, "requested_count", 1), (5, "returned_count", 1), (6, "discovery_complete", 1),
      (7, "default_command", 1), (8, "default_status", 1), (9, "default_raw_status", 1)),
     ((0, "stamp", 4), (4, "remaining", 2), (6, "phase", 2)),
+    ((0, "id", 2), (2, "value", 2), (4, "written", 1)),
 )
 
 
@@ -103,10 +108,10 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
     allocated = verify_component_layout(
         image, symbols, debug, memory, "zcl_id_result", SOURCES, xdata_budget=XDATA_BUDGET,
     )
-    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 836 and symbols["s_SSEG"] == 0x54,
+    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 1006 and symbols["s_SSEG"] == 0x54,
             "Identify ordinary storage/stack changed")
     require(re.findall(r"EXTERNAL RAM\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(\d+)\s+(\d+)",
-                       memory) == [("0x0000", "0x0343", "836", "7680")],
+                       memory) == [("0x0000", "0x03ed", "1006", "7680")],
             "Identify memory accounting changed")
     require(set(listings) == set(objects) == set(MODULES), "Identify composition changed")
     instructions, coverage = {}, set()
@@ -138,7 +143,8 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
                 f"Identify argument/staging ABI changed: {name}")
     require(len({n[:32] for n in PARAMS}) == len(PARAMS)
             and all(symbols.get(k) == v for k, v in PARAMS.items()), "Identify parameter map ABI changed")
-    require(private_span(debug, "|".join(MODULES[:-1])) == set(range(505)),
+    verify_write_abi(debug, symbols, instructions)
+    require(private_span(debug, "|".join(MODULES[:-1])) == set(range(656)),
             "Identify compiler-private prefix changed")
     caller = set()
     for name, (address, size) in CALLER.items():
@@ -148,11 +154,11 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         span = set(range(address, address + size))
         require(not caller & span and span <= allocated, "Identify caller objects overlap")
         caller.update(span)
-    require(caller == set(range(505, 760)) and private_span(debug, "test_zcl_identify") == set(range(760, 790)),
+    require(caller == set(range(656, 911)) and private_span(debug, "test_zcl_identify") == set(range(911, 960)),
             "Identify caller/local/runtime boundaries changed")
     require(all(symbols.get(k) == v for k, v in RUNTIME.items()),
             "Identify libc/compiler scratch moved into caller storage")
-    require(allocated == set(range(836)) | set(range(0x1e00, 0x1e08)),
+    require(allocated == set(range(1006)) | set(range(0x1e00, 0x1e08)),
             "Identify unaccounted ordinary/runtime/status allocation")
     for name, (m, address) in PUBLIC.items():
         require(symbols["_" + name] == cdb_address(debug, f"L:G${name}$0$0") == address
@@ -160,10 +166,10 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
                 "Identify function address ABI changed")
         require(f"F:G${name}$0_0$0({{2}}DF,SC:U),Z,0,0,0,0,0\n" in debug,
                 "Identify result return ABI changed")
-    require(symbols["_main"] == 0x505d and symbols["_zcl_id_done"] == 0x5096
-            and code_bytes(image, CODE_SIZE)[0x5096:0x5099] == b"\0\x80\xfe"
-            and cdb_address(debug, "L:XG$main$0$0") == 0x5099
-            and instructions.get(0x5096) == b"\0", "Identify exact checkpoint changed")
+    require(symbols["_main"] == 22553 and symbols["_zcl_id_done"] == 22610
+            and code_bytes(image, CODE_SIZE)[22610:22613] == b"\0\x80\xfe"
+            and cdb_address(debug, "L:XG$main$0$0") == 22613
+            and instructions.get(22610) == b"\0", "Identify exact checkpoint changed")
 
     def calls(prefix):
         lo = cdb_address(debug, "L:" + prefix + "$0$0")
@@ -174,14 +180,15 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
     for prefix, targets in (
         ("Fzcl_identify$advance", ("__divulong",)),
         ("G$zcl_id_init", ("_memset",)),
-        ("Fzcl_identify$global", ("_zcl_dispatch_unicast",)),
+        ("Fzcl_identify$global", ("_zcl_dispatch_unicast", "_zcl_wr_handle")),
         ("G$zcl_id_rx", ("_zcl_frame_decode", "_zcl_frame_encode")),
-        ("G$zcl_dispatch_unicast", ("_zcl_attr_set_check", "_zcl_frame_decode", "_zcl_read_attrs_unicast", "_zcl_frame_encode")),
+        ("G$zcl_dispatch_unicast", ("_zcl_attr_set_check", "_zcl_frame_decode", "_zcl_read_attrs_unicast", "_zcl_frame_encode", "_zcl_wr_handle")),
         ("G$zcl_read_attrs_unicast", ("_zcl_value_encode", "_zcl_frame_encode", "_zcl_frame_decode")),
         ("Fzcl_dispatch$discover", ("_zcl_value_type_supported", "_zcl_frame_encode")),
+        ("Ftest_zcl_identify$rx", ("_zcl_id_rx",)),
     ):
         require(all(symbols[t] in calls(prefix) for t in targets), f"Identify bypasses actual calls in {prefix}")
-    require(0x62 in calls("G$zcl_id_tick") and {0x62, 0x4a1} <= calls("G$zcl_id_rx"),
+    require(0x90 in calls("G$zcl_id_tick") and {0x90, 0x4cf} <= calls("G$zcl_id_rx"),
             "Identify bypasses real countdown/global view")
     require(all(symbols["_" + n] in calls("Ftest_zcl_identify$golden_cases")
                 for n in ("zcl_id_init", "zcl_id_rx", "zcl_id_tick",
@@ -203,7 +210,7 @@ def artifact_negatives(image, symbols, debug_raw, memory, listings, objects):
             verify(**args)
         count += 1
 
-    for a in (0, CODE_SIZE-1, 0x62, 0x4a1, 0x5096, symbols["__divulong"],
+    for a in (0, CODE_SIZE-1, 0x90, 0x4cf, 22610, symbols["__divulong"],
               symbols["___memcpy"], *(v[1] for v in PUBLIC.values())):
         reject(image=image | {a: image[a] ^ 1})
     reject(image={a: b for a, b in image.items() if a != CODE_SIZE-1})
@@ -213,7 +220,8 @@ def artifact_negatives(image, symbols, debug_raw, memory, listings, objects):
     reject(symbols=symbols | {"unreviewed_extra_symbol": 0})
     for prefix in (b"F:", b"S:", b"L:", b"T:", b"F:Fzcl_identify", b"S:Lzcl_identify",
                    b"L:Lzcl_identify", b"S:Ftest_zcl_identify", b"L:C$test_zcl_identify",
-                   b"F:Fzcl_dispatch", b"S:Lzcl_value"):
+                   b"F:Fzcl_dispatch", b"S:Lzcl_value",
+                   b"F:G$zcl_wr_handle", b"S:Lzcl_write", b"T:Fzcl_write"):
         found = [line for line in debug_raw.splitlines(keepends=True) if line.startswith(prefix)]
         require(found, f"Missing CDB negative prerequisite: {prefix!r}")
         reject(debug_raw=debug_raw.replace(found[0], b"", 1))
@@ -222,7 +230,7 @@ def artifact_negatives(image, symbols, debug_raw, memory, listings, objects):
     reject(debug_raw=debug_raw + b"\xff")
     reject(debug_raw=debug_raw.replace(b"{4}S:S$remaining", b"{3}S:S$remaining", 1))
     reject(memory=memory.replace("172 bytes available", "171 bytes available"))
-    reject(memory=memory.replace("836", "837"))
+    reject(memory=memory.replace("1006", "1007"))
     for m in MODULES:
         reject(listings=listings | {m: b""})
         lines = listings[m].splitlines(keepends=True)
@@ -246,8 +254,8 @@ def artifact_negatives(image, symbols, debug_raw, memory, listings, objects):
 
 def check_result(ram, iram, sfr, allocated):
     require(ram[0x1e00:0x1e08] == b"ZID1\x01\x08\0\0",
-            "Identify target corpus failed/result ABI changed")
-    require(ram[758:760] == b"\x49\0", "Identify skipped common scenarios")
+            f"Identify target result: {ram[0x1e00:0x1e08].hex()}")
+    require(ram[909:911] == b"\x66\0", f"Identify skipped common scenarios: {ram[909:911].hex()}")
     require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated),
             "Identify writes outside ordinary allocation/eight-byte result/status-tail guard")
     require(iram[0x7d:] == b"\xc7" * 131 and sfr[1] == 0x53,
@@ -257,7 +265,7 @@ def check_result(ram, iram, sfr, allocated):
 
 def check_peak(text):
     found = re.findall(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", text)
-    require(len(found) == 1 and int(found[0], 16) == 0x70 <= 0x7c, "Identify full-run SP peak changed")
+    require(len(found) == 1 and int(found[0], 16) == 0x70 <= 0x7c, f"Identify full-run SP peak changed: {found}")
 
 
 def main():
@@ -289,7 +297,7 @@ def main():
     full = simulate(args.simulator, setup + [f"run 0 {stop:#x}"] + snapshot_commands(1), path)
     check_pc(section(full, 1), stop)
     check_peak(section(full, 1))  # independent uninterrupted reset-to-checkpoint run
-    for region, address in ((0, 0x1e00), (0, 0x1e06), (0, 758), (0, 836),
+    for region, address in ((0, 0x1e00), (0, 0x1e06), (0, 909), (0, 1006),
                             (0, 0x1dff), (0, 0x1e3f), (1, 0x7d), (2, 1), (2, 0xa8-0x80)):
         bad = [bytearray(ram), bytearray(iram), bytearray(sfr)]
         bad[region][address] ^= 1
@@ -298,9 +306,9 @@ def main():
     for bad in ("", "Max value of stack pointer= 0x7d", "Max value of stack pointer= 0x53"):
         with unittest.TestCase().assertRaises(ValueError):
             check_peak(bad)
-    print(f"Identify: {CODE_SIZE}/{CODE_BUDGET} CODE, 836+64/{XDATA_BUDGET} reserved XDATA; "
-          f"73 common scenarios, full-run SP70/cap7C, checkpoint SP53; complete raw CDB/map/CODE, "
-          f"6 immediate snapshots, {negatives} artifact +9 guard +3 peak +1 alias negatives PASS "
+    print(f"Identify: {CODE_SIZE}/{CODE_BUDGET} CODE, 1006+64/{XDATA_BUDGET} reserved XDATA; "
+          f"102 common scenarios, full-run SP70/cap7C, checkpoint SP53; complete raw CDB/map/CODE, "
+          f"7 immediate snapshots, {negatives} artifact +9 guard +3 peak +1 alias negatives PASS "
           "(simulation only; no indicator, network or hardware time).")
 
 
