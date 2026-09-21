@@ -10,6 +10,8 @@ This is preparatory ZCL work, not an authenticated endpoint or full Identify
 cluster. There is no physical indicator, GPIO policy, hardware clock, radio,
 network send, persistence, factory reset, reporting, client-side discovery or
 binding procedure. The separate MAC/radio-before-security order is unchanged.
+The subsequent [foundation write family](ZCL_WRITE.md) also implements actual
+IdentifyTime updates; this is no longer a command-only/read-only preparation.
 
 ## Primary requirements and wire decisions
 
@@ -32,7 +34,7 @@ numbers are distinguished.
 | 2.4, 2.4.1/Figures 2-2..4; 2-7..2-9 / 59-61 | LE multibyte values, standard three-byte header, direction bit, TSN echo. Immediate response frames set Disable Default Response. |
 | 2.3.1-2; 2-3..2-4 / 55-56 | Standard RX reserved bits and appended octets are ignored. TX reserved bits are zero. Manufacturer extensions must not execute standard Identify. |
 | 2.5.12/Figure 2-25; 2-28..2-29 / 80-81 | Unicast Identify success produces Default Response SUCCESS unless disabled. Errors still produce Default Response when disabled. A specific receipt rule overrides the general default rule: idle Query is silent. Never reply to a received Default Response. |
-| 2.5, 2.5.6.3; 2-10,2-18 / 62,70 | Attribute-bearing clusters require foundation writes; Write No Response forbids replies, including errors. Existing unsupported contracts are retained, not treated as conformance. |
+| 2.5, 2.5.3-6; 2-10,2-14..18 / 62,66–70 | The shared write family now changes IdentifyTime, with atomic Undivided and silent No Response; [precise scope and type limits](ZCL_WRITE.md). |
 | 2.5.1-2, 2.5.13-14; 2-11..2-14,2-29..2-31 / 63-66,81-83 | Actual Read/Discover handlers read the current staged IdentifyTime and ClusterRevision; no duplicated foundation parser. |
 | Table 2-11, Table 2-12; 2-46..2-47,2-55..2-57 / 98-99,107-109 | uint16 wire type **21**; SUCCESS **00**, MALFORMED_COMMAND **80**, UNSUP_COMMAND **81**, UNSUPPORTED_ATTRIBUTE **86**, INSUFFICIENT_SPACE **89**. Existing deprecated Default Response status normalization is reused. |
 
@@ -145,7 +147,7 @@ There is no copied 100-byte input frame or persistent/self-referencing model.
 Serialization must succeed before the timer/action and metadata are committed.
 **Every local failure preserves the entire context, response storage and info**:
 including stale time, malformed header, wrong direction, unsupported layout,
-insufficient capacity and unsupported Write No Response. A later retry computes
+insufficient capacity and unsupported/malformed No Response input. A later retry computes
 elapsed time from the last successful stamp; failures do not freeze the
 abstract clock or secretly accept an Identify action.
 
@@ -168,12 +170,11 @@ running countdown. An error response capacity failure commits neither.
 
 ## Explicit unsupported boundaries and conformance gaps
 
-- **IdentifyTime remains specified RW.** Ordinary global Write Attributes,
-  Write Undivided and Write No Response are not implemented by this addition.
-  A well-formed Write IdentifyTime=0 does not stop the procedure: ordinary
-  Write gets UNSUP_COMMAND; Write No Response returns the existing explicit
-  local unsupported result with no reply. This is a missing mandatory
-  foundation function, **not permission to redefine IdentifyTime as read-only**.
+- **IdentifyTime is RW and writable through the shared foundation path.**
+  Ordinary/No Response writes apply valid records; Undivided applies none
+  if any record fails. Accepted writes reset the phase at `now`, including
+  repeated TSNs/values, and zero stops the timer. ClusterRevision stays
+  read-only. [Unsupported formats and exact atomicity](ZCL_WRITE.md) remain explicit.
 - Trigger Effect is optional and unsupported; no visual-effect success.
   No Matter IdentifyType, reportable flag, physical reading or factory-reset
   function is invented. Only IDs0000 and FFFD are discoverable/readable.
@@ -201,6 +202,10 @@ The component is not linked into board firmware or the full protocol budget
 image and does not establish complete-stack fit.
 
 ## Tests, image proof and resources
+
+The numerical measurements/pins below record the original #71 (`bc25c8d`)
+six-module baseline. The current write-enabled seven-module composition,
+expanded cases, resources and CI evidence are recorded in [ZCL_WRITE.md](ZCL_WRITE.md).
 
 Focused canonical target: **`test-zcl-identify`**. Native executables:
 **`host-zcl-identify-tests`**, **`host-zcl-identify-tests-sanitize`**.

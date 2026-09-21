@@ -30,10 +30,13 @@ static const MCU_CODE uint8_t read_golden[] = {
     0x40, 0x31, 0x78, 0x56, 0x34, 0x12, 0x21, 0xe8,
     0x18, 0x4d, 0x01, 0x22, 0x11, 0, 0x21, 0x78, 0x56
 };
-static mac_header_t mac;
-static nwk_header_t nwk;
-static aps_header_t aps;
-static zcl_header_t zcl;
+typedef struct {
+    mac_header_t mac;
+    nwk_header_t nwk;
+    aps_header_t aps;
+    zcl_header_t zcl;
+} test_headers_t;
+static test_headers_t heads;
 static mac_frame_info_t frame;
 static nwk_frame_info_t network;
 static aps_frame_info_t transport;
@@ -44,35 +47,33 @@ static zcl_dispatch_info_t dispatch;
 static uint8_t body[125], npdu[116], apdu[108], command[100], reply[100], ids[3];
 static uint8_t mac_length, nwk_length, aps_length, zcl_length, offset;
 
+/* Same synthetic headers, compact representation; no exchange/check removed. */
+static const MCU_CODE test_headers_t header_template = {
+  .mac = {
+    .type = MAC_FRAME_DATA, .version = 1,
+    .flags = MAC_FLAG_PAN_COMPRESSION | MAC_FLAG_ACK_REQUEST, .sequence = 0x5a,
+    .destination_pan = 0x1234, .source_pan = 0x1234,
+    .destination_mode = MAC_ADDRESS_SHORT, .source_mode = MAC_ADDRESS_SHORT,
+    .destination = {0x78, 0x56}, .source = {0x34, 0x12}
+  },
+  .nwk = {
+    .version = NWK_FRAME_PROTOCOL_VERSION, .destination = 0x5678, .source = 0x1234,
+    .radius = 0x1e, .sequence = 0xa5
+  },
+  .aps = {
+    .flags = APS_FLAG_ACK_REQUEST, .destination_endpoint = 0x21, .source_endpoint = 0x31,
+    .cluster_id = 0x5678, .profile_id = 0x1234, .counter = 0xe7
+  },
+  .zcl = {.sequence = 0x4d, .manufacturer_code = 0x9abc}
+};
+#define mac heads.mac
+#define nwk heads.nwk
+#define aps heads.aps
+#define zcl heads.zcl
+
 static void headers(uint8_t manufacturer)
 {
-    memset(&mac, 0, sizeof(mac));
-    mac.type = MAC_FRAME_DATA;
-    mac.version = 1;
-    mac.flags = MAC_FLAG_PAN_COMPRESSION | MAC_FLAG_ACK_REQUEST;
-    mac.sequence = 0x5a;
-    mac.destination_pan = mac.source_pan = 0x1234;
-    mac.destination_mode = mac.source_mode = MAC_ADDRESS_SHORT;
-    mac.destination[0] = 0x78;
-    mac.destination[1] = 0x56;
-    mac.source[0] = 0x34;
-    mac.source[1] = 0x12;
-    memset(&nwk, 0, sizeof(nwk));
-    nwk.version = NWK_FRAME_PROTOCOL_VERSION;
-    nwk.destination = 0x5678;
-    nwk.source = 0x1234;
-    nwk.radius = 0x1e;
-    nwk.sequence = 0xa5;
-    memset(&aps, 0, sizeof(aps));
-    aps.flags = APS_FLAG_ACK_REQUEST;
-    aps.destination_endpoint = 0x21;
-    aps.source_endpoint = 0x31;
-    aps.cluster_id = 0x5678;
-    aps.profile_id = 0x1234;
-    aps.counter = 0xe7;
-    memset(&zcl, 0, sizeof(zcl));
-    zcl.sequence = 0x4d;
-    zcl.manufacturer_code = 0x9abc;
+    heads = header_template;
     zcl.flags = manufacturer ? ZCL_FLAG_MANUFACTURER_SPECIFIC : 0;
     table.attributes = code_attributes;
     table.count = 2;
@@ -176,7 +177,7 @@ static uint16_t run_tests(void)
     CHECK(encode_layers(command, 3) == 0 && decode_layers() == 0);
     memset(reply, 0xa5, sizeof(reply));
     CHECK(zcl_dispatch_unicast(&table, body + offset, transport.payload_length,
-                               reply, sizeof(reply), &dispatch) == ZCL_CODEC_UNSUPPORTED_NO_RESPONSE);
+                               reply, sizeof(reply), &dispatch) == ZCL_CODEC_TRUNCATED);
     for (step = 0; step < sizeof(reply); step++)
         CHECK(reply[step] == 0xa5);
     table.attributes = &reserved_attribute;

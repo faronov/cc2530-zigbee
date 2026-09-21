@@ -89,7 +89,8 @@ endif
 .PHONY: test-common test-tools test-board test-local
 .PHONY: test-noise-health test-radio-noise
 .PHONY: test-radio-noise-fixture test-radio-noise-fixture-sanitize
-PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch
+PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch zcl_write
+ZCL_DISPATCH_SRC := src/zcl_dispatch.c src/zcl_write.c
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
@@ -308,8 +309,8 @@ test-aps-frame: $(BUILD)/host-aps-frame-tests $(BUILD)/aps_frame_test.ihx
 	$(BUILD)/host-aps-frame-tests
 	$(PYTHON) -B tests/boot_aps_frame.py --output $(BUILD) --simulator "$(S51)"
 
-$(BUILD)/host-protocol-frame-tests: tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c src/zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c src/zcl_dispatch.c -o $@
+$(BUILD)/host-protocol-frame-tests: tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c $(ZCL_DISPATCH_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c $(ZCL_DISPATCH_SRC) -o $@
 
 $(BUILD)/protocol_frame_test.rel: tests/test_protocol_frame.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -329,6 +330,15 @@ $(BUILD)/protocol_budget_test.rel: tests/test_protocol_budget.c $(HEADERS) Makef
 
 $(BUILD)/protocol_budget_test.ihx: $(addprefix $(BUILD)/,$(addsuffix .rel,$(PROTOCOL_MODULES))) $(BUILD)/protocol_budget_test.rel force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(addprefix $(BUILD)/,$(addsuffix .rel,$(PROTOCOL_MODULES))) $(BUILD)/protocol_budget_test.rel
+	cp $(BUILD)/mac_frame.rst $(BUILD)/protocol_budget_test.mac_frame.rst
+	cp $(BUILD)/nwk_frame.rst $(BUILD)/protocol_budget_test.nwk_frame.rst
+	cp $(BUILD)/aps_frame.rst $(BUILD)/protocol_budget_test.aps_frame.rst
+	cp $(BUILD)/zcl_frame.rst $(BUILD)/protocol_budget_test.zcl_frame.rst
+	cp $(BUILD)/zcl_value.rst $(BUILD)/protocol_budget_test.zcl_value.rst
+	cp $(BUILD)/zcl_attributes.rst $(BUILD)/protocol_budget_test.zcl_attributes.rst
+	cp $(BUILD)/zcl_dispatch.rst $(BUILD)/protocol_budget_test.zcl_dispatch.rst
+	cp $(BUILD)/zcl_write.rst $(BUILD)/protocol_budget_test.zcl_write.rst
+	cp $(BUILD)/protocol_budget_test.rst $(BUILD)/protocol_budget_test.protocol_budget_test.rst
 
 test-protocol-budget: $(BUILD)/host-protocol-budget-tests $(BUILD)/protocol_budget_test.ihx
 	$(BUILD)/host-protocol-budget-tests
@@ -382,17 +392,26 @@ test-zcl-attributes: $(BUILD)/host-zcl-attributes-tests $(BUILD)/zcl_attributes_
 	$(BUILD)/host-zcl-attributes-tests
 	$(PYTHON) -B tests/boot_zcl_attributes.py --output $(BUILD) --simulator "$(S51)"
 
-$(BUILD)/host-zcl-dispatch-tests: tests/test_zcl_dispatch.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_dispatch.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+$(BUILD)/host-zcl-dispatch-tests: tests/test_zcl_dispatch.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_dispatch.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
 
-$(BUILD)/zcl_dispatch.rel: src/zcl_dispatch.c include/zcl_dispatch.h include/zcl_attributes.h include/zcl_wire.h Makefile | $(BUILD)
+$(BUILD)/zcl_dispatch.rel: src/zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_write.rel: src/zcl_write.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
 $(BUILD)/zcl_dispatch_test.rel: tests/test_zcl_dispatch.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
-$(BUILD)/zcl_dispatch_test.ihx: $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel force-link
-	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel
+$(BUILD)/zcl_dispatch_test.ihx: $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_write.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_write.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_dispatch_test.rel
+	cp $(BUILD)/zcl_dispatch.rst $(BUILD)/zcl_dispatch_test.zcl_dispatch.rst
+	cp $(BUILD)/zcl_write.rst $(BUILD)/zcl_dispatch_test.zcl_write.rst
+	cp $(BUILD)/zcl_attributes.rst $(BUILD)/zcl_dispatch_test.zcl_attributes.rst
+	cp $(BUILD)/zcl_frame.rst $(BUILD)/zcl_dispatch_test.zcl_frame.rst
+	cp $(BUILD)/zcl_value.rst $(BUILD)/zcl_dispatch_test.zcl_value.rst
+	cp $(BUILD)/zcl_dispatch_test.rst $(BUILD)/zcl_dispatch_test.zcl_dispatch_test.rst
 
 test-zcl-dispatch: $(BUILD)/host-zcl-dispatch-tests $(BUILD)/zcl_dispatch_test.ihx
 	$(BUILD)/host-zcl-dispatch-tests
@@ -404,20 +423,21 @@ $(BUILD)/zcl_basic.rel: src/zcl_basic.c $(HEADERS) Makefile | $(BUILD)
 $(BUILD)/zcl_basic_test.rel: tests/test_zcl_basic.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
-$(BUILD)/zcl_basic_test.ihx: $(BUILD)/zcl_basic.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_basic_test.rel force-link
-	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_basic.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_basic_test.rel
+$(BUILD)/zcl_basic_test.ihx: $(BUILD)/zcl_basic.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_write.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_basic_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_basic.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_write.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_basic_test.rel
 	cp $(BUILD)/zcl_basic.rst $(BUILD)/zcl_basic_test.zcl_basic.rst
 	cp $(BUILD)/zcl_dispatch.rst $(BUILD)/zcl_basic_test.zcl_dispatch.rst
+	cp $(BUILD)/zcl_write.rst $(BUILD)/zcl_basic_test.zcl_write.rst
 	cp $(BUILD)/zcl_attributes.rst $(BUILD)/zcl_basic_test.zcl_attributes.rst
 	cp $(BUILD)/zcl_frame.rst $(BUILD)/zcl_basic_test.zcl_frame.rst
 	cp $(BUILD)/zcl_value.rst $(BUILD)/zcl_basic_test.zcl_value.rst
 	cp $(BUILD)/zcl_basic_test.rst $(BUILD)/zcl_basic_test.zcl_basic_test.rst
 
-$(BUILD)/host-zcl-basic-tests: tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+$(BUILD)/host-zcl-basic-tests: tests/test_zcl_basic.c src/zcl_basic.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_basic.c src/zcl_basic.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
 
-$(BUILD)/host-zcl-basic-tests-sanitize: tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_basic.c src/zcl_basic.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+$(BUILD)/host-zcl-basic-tests-sanitize: tests/test_zcl_basic.c src/zcl_basic.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_basic.c src/zcl_basic.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
 
 test-zcl-basic: $(BUILD)/host-zcl-basic-tests $(BUILD)/host-zcl-basic-tests-sanitize $(BUILD)/zcl_basic_test.ihx
 	$(BUILD)/host-zcl-basic-tests
@@ -430,20 +450,21 @@ $(BUILD)/zcl_identify.rel: src/zcl_identify.c $(HEADERS) Makefile | $(BUILD)
 $(BUILD)/zcl_identify_test.rel: tests/test_zcl_identify.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
-$(BUILD)/zcl_identify_test.ihx: $(BUILD)/zcl_identify.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_identify_test.rel force-link
-	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_identify.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_identify_test.rel
+$(BUILD)/zcl_identify_test.ihx: $(BUILD)/zcl_identify.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_write.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_identify_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zcl_identify.rel $(BUILD)/zcl_dispatch.rel $(BUILD)/zcl_write.rel $(BUILD)/zcl_attributes.rel $(BUILD)/zcl_frame.rel $(BUILD)/zcl_value.rel $(BUILD)/zcl_identify_test.rel
 	cp $(BUILD)/zcl_identify.rst $(BUILD)/zcl_identify_test.zcl_identify.rst
 	cp $(BUILD)/zcl_dispatch.rst $(BUILD)/zcl_identify_test.zcl_dispatch.rst
+	cp $(BUILD)/zcl_write.rst $(BUILD)/zcl_identify_test.zcl_write.rst
 	cp $(BUILD)/zcl_attributes.rst $(BUILD)/zcl_identify_test.zcl_attributes.rst
 	cp $(BUILD)/zcl_frame.rst $(BUILD)/zcl_identify_test.zcl_frame.rst
 	cp $(BUILD)/zcl_value.rst $(BUILD)/zcl_identify_test.zcl_value.rst
 	cp $(BUILD)/zcl_identify_test.rst $(BUILD)/zcl_identify_test.zcl_identify_test.rst
 
-$(BUILD)/host-zcl-identify-tests: tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+$(BUILD)/host-zcl-identify-tests: tests/test_zcl_identify.c src/zcl_identify.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_identify.c src/zcl_identify.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
 
-$(BUILD)/host-zcl-identify-tests-sanitize: tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
+$(BUILD)/host-zcl-identify-tests-sanitize: tests/test_zcl_identify.c src/zcl_identify.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_identify.c src/zcl_identify.c $(ZCL_DISPATCH_SRC) src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $@
 
 test-zcl-identify: $(BUILD)/host-zcl-identify-tests $(BUILD)/host-zcl-identify-tests-sanitize $(BUILD)/zcl_identify_test.ihx
 	$(BUILD)/host-zcl-identify-tests

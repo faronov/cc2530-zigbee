@@ -7,7 +7,7 @@
 #include "zcl_dispatch.h"
 
 #define ZCL_ID_CLUSTER 0x0003u
-#define ZCL_ID_SILENT 2u
+#define ZCL_ID_SILENT ZCL_DISPATCH_SILENT
 
 /* Caller-owned state, no retained pointers; may be relocated. Observe but do
  * not edit fields. remaining is IdentifyTime (seconds); phase is elapsed
@@ -42,15 +42,18 @@ zcl_codec_result_t zcl_id_tick(zcl_id_t *ctx, uint32_t now);
  * bits follow existing R8 RX rules. Trigger Effect is unsupported.
  *
  * Global commands use the real existing dispatcher over a fresh two-attribute
- * view: IdentifyTime and ClusterRevision=2. Write Attributes (including
- * IdentifyTime) is STILL unsupported, not a permanent read-only permission.
- * See docs/ZCL_IDENTIFY.md for this full-cluster conformance gap.
+ * view: IdentifyTime and ClusterRevision=2. The shared write path accepts
+ * full-range uint16 IdentifyTime, including FFFF, with the same phase restart
+ * policy as Identify. Ordinary/No Response apply valid records in order;
+ * Undivided applies none if any record fails. Malformed lists apply none.
+ * No Response never replies, including to errors. See docs/ZCL_WRITE.md for
+ * explicit unsupported value extents, local atomicity and conformance limits.
  *
  * OK: info.kind is RESPONSE, DEFAULT_RECEIVED, or ZCL_ID_SILENT.
  * SILENT: only kind and sequence are nonzero; response is untouched, length=0.
  * DEFAULT_RECEIVED uses the existing notification contract, no response bytes.
  * Protocol-error replies may return OK: they age the clock but do not apply
- * Identify. Check info, not just return status. All other local failures leave
+ * a rejected action. Check info, not just return status. All other local failures leave
  * COMPLETE ctx/response/info unchanged (also no time advancement).
  * Response storage must be nonnull even at capacity=0. Inputs/outputs/ctx must
  * not overlap and have truthful accessible extents. No pointers are retained.

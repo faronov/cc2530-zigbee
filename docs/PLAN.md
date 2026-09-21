@@ -811,7 +811,9 @@ lookup, read-access checks, protocol status records, explicit partial counts
 and atomic response construction, without registering a cluster.
 A one-cluster unicast dispatcher adds sorted Discover Attributes pages,
 Read selection, unsupported-command responses and explicit no-reply handling
-for received Default Responses and unsupported Write No Response.
+for received Default Responses. The shared [write family](ZCL_WRITE.md) now
+adds ordered Basic errors, real RW IdentifyTime updates, Undivided rollback
+and silent No Response processing, with explicit unsupported value extents.
 The primary PDF and Foundation 14-0126-17 are pinned; approved errata 19-2019
 remains an open follow-up risk, not a stop on base-text development. Review
 applicable corrections before conformance claims. Header/value, APS/ZCL and
@@ -831,7 +833,7 @@ and BDB binding/group/reporting dependencies. The independent
 [Identify procedure (#71)](ZCL_IDENTIFY.md) now provides a logical-time
 countdown, unicast Identify/Query and real Read/Discover handling, with
 both-board native/sanitizer/image/simulator evidence. Physical indication,
-Identify client/group/broadcast handling, required global writes and
+Identify client/group/broadcast handling and
 measurement/reporting remain unimplemented. An applicable primary device/profile
 definition has not been established, so advertisement stays unselected.
 This parallel M6 preparation does not change the main MAC-before-security
@@ -849,8 +851,8 @@ Deliver:
 - Pin the application/device class and its BDB finding/binding, Identify,
   binding/group-capacity and default-reporting requirements. A single endpoint
   does not by itself make finding/binding optional.
-- Integrate the generic read-only attribute model with the selected device's
-  real types/access/range requirements and transport; writes remain separate.
+- Integrate the attribute model and bounded write path with the selected
+  device's actual types/access/ranges and authorized transport.
 - A clearly identified **lab-only synthetic measurement application**, with
   Basic/Identify and a deterministic test-controlled measurement source.
   It must identify itself as synthetic and must not be released as physical

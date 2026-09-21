@@ -108,11 +108,19 @@ class LocalChecksTests(unittest.TestCase):
                             ("nwk_candidates", "nwk_candidates"), ("nwk_parent", "nwk_parent"),
                             ("nwk_parent_test", "nwk_parent_test"))),
             ("zcl_basic", (("zcl_basic", "zcl_basic"), ("zcl_dispatch", "zcl_dispatch"),
+                           ("zcl_write", "zcl_write"),
                            ("zcl_attributes", "zcl_attributes"), ("zcl_frame", "zcl_frame"),
                            ("zcl_value", "zcl_value"), ("zcl_basic_test", "zcl_basic_test"))),
             ("zcl_identify", (("zcl_identify", "zcl_identify"), ("zcl_dispatch", "zcl_dispatch"),
+                              ("zcl_write", "zcl_write"),
                               ("zcl_attributes", "zcl_attributes"), ("zcl_frame", "zcl_frame"),
                               ("zcl_value", "zcl_value"), ("zcl_identify_test", "zcl_identify_test"))),
+            ("zcl_dispatch", (("zcl_dispatch", "zcl_dispatch"), ("zcl_write", "zcl_write"),
+                              ("zcl_attributes", "zcl_attributes"), ("zcl_frame", "zcl_frame"),
+                              ("zcl_value", "zcl_value"), ("zcl_dispatch_test", "zcl_dispatch_test"))),
+            ("protocol_budget", tuple((m, m) for m in (
+                "mac_frame", "nwk_frame", "aps_frame", "zcl_frame", "zcl_value",
+                "zcl_attributes", "zcl_dispatch", "zcl_write", "protocol_budget_test"))),
         )
         for board, service, modules in ((b, s, m) for b in BOARDS for s, m in cases):
             commands = self.dry_run("test-" + service.replace("_", "-"), include_build=True, BOARD=board)

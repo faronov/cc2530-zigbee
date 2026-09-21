@@ -268,6 +268,12 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
                 "M:zcl_identify", "M:test_zcl_identify",
             )),
             "Board image must not link the isolated ZCL Identify procedure")
+    require(not any(name.startswith(("_zcl_wr_", "_zcl_write_")) for name in symbols) and
+            not any(token in debug for token in (
+                "C$zcl_write.c$", "C$test_zcl_write.c$", "G$zcl_wr_", "G$zcl_write_",
+                "Fzcl_write$", "Lzcl_write.", "M:zcl_write",
+            )),
+            "Board image must not link the isolated ZCL write path")
     require(not any(name.startswith("_mac_tx_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_tx.c", "test_mac_tx.c")),
             "Board image must not link the isolated MAC TX scheduler")

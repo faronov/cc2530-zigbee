@@ -549,24 +549,25 @@ its outputs become board firmware or CI artifacts. See the
 `make BOARD=... BUILD=... test-zcl-basic`, included once per board in
 `test-common`, checks the [read-only Basic provider](docs/ZCL_LAB.md) through
 the real existing handlers, including native ASan/UBSan and genuine linked
-execution. Preserve all six immediate listing snapshots, complete raw
+execution. Preserve all seven immediate listing snapshots, complete raw
 CDB/map/CODE identities, caller/libc boundaries and alias/stack negatives.
 Its24,576-CODE/1,536-reserved-XDATA budget changes no older component limit.
 No board image may link it; **never flash `zcl_basic_test.ihx`**.
-Identify, writes, reporting and application advertisement remain separate.
+The [write family](docs/ZCL_WRITE.md) now verifies Basic read-only/type/missing
+errors and real IdentifyTime mutations; reporting/advertisement remain separate.
 
 `make BOARD=... BUILD=... test-zcl-identify`, also once per board in
 `test-common`, checks the [logical-time Identify procedure](docs/ZCL_IDENTIFY.md),
 native nonrecovering ASan/UBSan and genuine linked execution. Preserve the exact
-six-module link order, immediate snapshots, full raw CDB/CODE/map and ABI proof,
+seven-module link order, immediate snapshots, full raw CDB/CODE/map and ABI proof,
 24,576-CODE/1,536-reserved-XDATA/SP7C caps and15-second simulator deadline.
 The real `zcl_id_` service/test symbols and source/CDB records must remain
 excluded from every board image. **Never flash `zcl_identify_test.ihx`.**
-No physical indication, client/group/broadcast handling, global writes or
+No physical indication, client/group/broadcast handling or
 authenticated endpoint is provided. Use CI for full acceptance as described above.
 
 `make test-protocol-budget`, included in the default test suite, additionally
-links **all seven** MAC/NWK Data/APS/ZCL/Read/Discover modules into one compact
+links **all eight** MAC/NWK Data/APS/ZCL/Read/Discover/write modules into one compact
 SDCC harness. It executes complete Discover-then-Read exchanges and bounded
 errors, then writes `build/<board>/protocol-resources.json` (or the chosen
 `BUILD`). The ledger checks per-module/linked CODE, XDATA and IRAM budgets,

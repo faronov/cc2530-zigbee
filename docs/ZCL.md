@@ -11,7 +11,7 @@ base-text implementation may proceed, with possible later corrections.
 
 This is preparatory M6 work alongside Core R22/BDB 3.0.1, not a claim that
 R22 universally mandates this ZCL revision. Application/device definitions,
-profile requirements, complete clusters, writes, reporting and persistence
+profile requirements, complete clusters, reporting and persistence
 are not implemented or advertised. A bounded generic read-only attribute
 model, Read/Discover Attributes handlers and one-cluster unicast command
 dispatcher are implemented below.
@@ -20,7 +20,7 @@ No module is linked into board firmware.
 The separate [read-only Basic provider](ZCL_LAB.md) now constructs six
 primary-backed attributes in caller-owned storage and uses these same
 Read/Discover handlers. Its synthetic lab configuration assigns no
-manufacturer code, endpoint, profile or device ID. Basic writes/reset,
+manufacturer code, endpoint, profile or device ID. Basic reset,
 measurement/reporting and authenticated application integration
 remain unsupported; a Basic table is not full cluster conformance.
 
@@ -29,8 +29,9 @@ logical-time countdown, unicast Identify/Query and fresh IdentifyTime/
 ClusterRevision views through these same Read/Discover handlers. It provides
 explicit response/silence and atomic local failures, not physical indication,
 client/group/broadcast handling, network sends or an authenticated endpoint.
-IdentifyTime is specified RW; unsupported global writes remain a conformance
-gap, not a redefinition as a read-only attribute.
+IdentifyTime is specified RW. The bounded [shared write path](ZCL_WRITE.md)
+now applies its writes and distinguishes Basic read-only, incorrect-type and
+missing-attribute errors. Unknown value extents remain explicitly unsupported.
 
 ## Frame header
 
@@ -249,9 +250,10 @@ unknown-cluster service, transaction engine or permission to transmit.
 | Global Read Attributes `00`, matching namespace | Existing Read handler, unchanged semantics |
 | Global Discover Attributes `0C`, matching namespace | Sorted ID/type page in Discover Attributes Response `0D` |
 | Global Default Response `0B`, matching namespace | Received command/status notification; **no reply** |
-| Global Write Attributes No Response `05` | Explicit local `ZCL_CODEC_UNSUPPORTED_NO_RESPONSE`; no write and **no reply**, even for errors |
+| Global Write `02` / Undivided `03`, matching namespace | Shared record parser and Write Response `04`; this generic table is read-only |
+| Global Write Attributes No Response `05`, matching namespace | Process records; `SILENT` on supported processing, **no reply** even for errors; [local failure contract](ZCL_WRITE.md) |
 | Other global or cluster-specific command | Default Response `0B` with original command ID and `UNSUP_COMMAND 81` |
-| Standard/manufacturer namespace or manufacturer-code mismatch | No handler execution; `UNSUP_COMMAND 81`, except the two no-reply cases above |
+| Standard/manufacturer namespace or manufacturer-code mismatch | No handler execution; `UNSUP_COMMAND 81`, except Default Response and No Response (the latter returns `UNSUPPORTED_NO_RESPONSE`) |
 
 Direction must match the selected side; a mismatch is local
 `UNSUPPORTED_CONTEXT`, not table reselection. An unrecognized Default
@@ -305,6 +307,8 @@ there is no retained cursor, automatic request or fragmentation.
 zero, but the pointer remains required). The latter is a notification of
 the received `sequence`, `default_command`, `default_raw_status` and
 normalized `default_status`, **not successful transaction matching**.
+`kind = ZCL_DISPATCH_SILENT` is supported Write No Response processing;
+only kind/sequence are populated, not an assertion that every record wrote.
 Deprecated statuses are mapped as required by R8 Table 2-12:
 `82..84 -> 81`, `8A/C4 -> 00`, `8F -> 7E`,
 `90/91/93/C0/C1 -> 01`. Other status bytes are retained as metadata,
@@ -316,13 +320,13 @@ is echoed, and read/discovery counts retain their respective meanings.
 Discovery's `requested_count` is the request maximum, not a total table size.
 `discovery_complete` is meaningful only for `0D`; default fields are
 meaningful for `0B`. Unused metadata is zeroed. Every local error, including
-unsupported no-response writes and invalid metadata after a valid prefix,
+namespace-mismatched no-response writes and invalid metadata after a valid prefix,
 leaves both outputs unchanged. No successful write/security/NV stubs exist.
 All prior stable-storage, non-overlap and foreground-only contracts apply.
 
 This bounded dispatcher is **not a conforming complete cluster**: R8 2.5
-requires more foundation behavior for attribute-bearing clusters, including
-writes. Device/profile selection, complete command support and errata review
+requires complete applicable foundation behavior. Bounded writes now exist,
+but unsupported value extents, device/profile selection and errata review
 remain necessary before conformance claims.
 
 ## Offline evidence

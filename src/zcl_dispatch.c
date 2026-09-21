@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zcl_dispatch.h"
+#include "zcl_write.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -96,7 +97,8 @@ zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set
     zcl_dispatch_info_t candidate;
     zcl_codec_result_t status;
     const uint8_t * volatile payload;
-    uint8_t error[2], context_matches;
+    uint8_t error[2];
+    volatile uint8_t context_matches;
 
     if (set == NULL || request == NULL || response == NULL || info == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
@@ -127,6 +129,15 @@ zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set
         candidate.default_status = normalized_status(payload[1]);
         *info = candidate;
         return ZCL_CODEC_OK;
+    }
+    if (context_matches && frame.header.type == ZCL_FRAME_GLOBAL
+            && (frame.header.command_id == ZCL_COMMAND_WRITE_ATTRIBUTES
+                || frame.header.command_id == ZCL_COMMAND_WRITE_UNDIVIDED
+                || frame.header.command_id == ZCL_COMMAND_WRITE_NO_RESPONSE)) {
+        status = zcl_wr_handle(set, &frame, payload, response, capacity, &candidate, NULL);
+        if (status == ZCL_CODEC_OK)
+            *info = candidate;
+        return status;
     }
     if (frame.header.type == ZCL_FRAME_GLOBAL && frame.header.command_id == ZCL_COMMAND_WRITE_NO_RESPONSE)
         return ZCL_CODEC_UNSUPPORTED_NO_RESPONSE;

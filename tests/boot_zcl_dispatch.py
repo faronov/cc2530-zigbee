@@ -9,6 +9,7 @@ from boot_image import (
     ALIAS, check_pc, section, simulate, snapshot, snapshot_commands, verify_component_layout,
 )
 from verify_firmware import STATUS_ADDRESS, parse_ihex, parse_symbols, require
+from zcl_write_proof import load_and_verify
 
 
 def main():
@@ -19,10 +20,11 @@ def main():
     path = args.output / "zcl_dispatch_test.ihx"
     image = parse_ihex(path.read_text(encoding="ascii"))
     symbols = parse_symbols(path.with_suffix(".map").read_text())
+    debug = load_and_verify(args.output, "zcl_dispatch_test", image, symbols)
     allocated = verify_component_layout(
-        image, symbols, path.with_suffix(".cdb").read_text(), path.with_suffix(".mem").read_text(),
+        image, symbols, debug, path.with_suffix(".mem").read_text(),
         "zcl_dispatch_test_result",
-        ("zcl_dispatch.c", "zcl_attributes.c", "zcl_frame.c", "zcl_value.c", "test_zcl_dispatch.c"),
+        ("zcl_dispatch.c", "zcl_write.c", "zcl_attributes.c", "zcl_frame.c", "zcl_value.c", "test_zcl_dispatch.c"),
         xdata_budget=1024,
     )
     stop = symbols["_zcl_dispatch_test_done"]

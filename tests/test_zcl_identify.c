@@ -26,6 +26,12 @@ static zcl_value_info_t value;
 static uint8_t request[102], response[102], encoded;
 static uint16_t cases;
 
+/* Compact repeated constant argument staging, not a service/codec mock. */
+static zcl_codec_result_t rx(uint32_t now, const uint8_t *input, uint8_t length, uint8_t capacity)
+{
+    return zcl_id_rx(&ctx, now, input, length, response, capacity, &info);
+}
+
 static uint8_t filled(const void *p, uint16_t n, uint8_t v)
 {
     const uint8_t *b = p;
@@ -64,13 +70,13 @@ static uint16_t golden_cases(void)
     CHECK(zcl_id_init(&ctx, 100) == ZCL_CODEC_OK);
     CHECK(ctx.stamp == 100 && ctx.remaining == 0 && ctx.phase == 0);
     outputs();
-    CHECK(zcl_id_rx(&ctx, 100, query, 3, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(100, query, 3, 0) == ZCL_CODEC_OK);
     CHECK(info.kind == 2 && info.length == 0 && info.sequence == 0x5a);
     CHECK(info.command_id == 0 && info.requested_count == 0 && info.returned_count == 0
           && info.discovery_complete == 0 && info.default_command == 0
           && info.default_status == 0 && info.default_raw_status == 0);
     CHECK(filled(response, sizeof(response), 0xc7));
-    CHECK(zcl_id_rx(&ctx, 100, read, 5, response, 9, &info) == ZCL_CODEC_OK);
+    CHECK(rx(100, read, 5, 9) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x18\x5a\x01\x00\x00\x00\x21\x00\x00", 9) == 0);
     outputs();
     CHECK(zcl_id_rx(&ctx, 100, start, 5, response + 1, 5, &info) == ZCL_CODEC_OK);
@@ -78,7 +84,7 @@ static uint16_t golden_cases(void)
     CHECK(info.kind == 0 && info.command_id == 0x0b && info.length == 5);
     CHECK(info.default_command == 0 && info.default_status == 0 && info.sequence == 0x5a);
     CHECK(memcmp(response + 1, ack, 5) == 0 && response[0] == 0xc7 && filled(response + 6, 96, 0xc7));
-    CHECK(zcl_id_rx(&ctx, 1099, query, 3, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1099, query, 3, 5) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 3 && ctx.phase == 999);
     CHECK(info.kind == 0 && info.command_id == 0 && info.length == 5);
     CHECK(memcmp(response, "\x19\x5a\x00\x03\x00", 5) == 0);
@@ -88,18 +94,18 @@ static uint16_t golden_cases(void)
     CHECK(value.encoded_length == 2 && value.data_length == 2 && value.non_value_pattern == 0);
     CHECK(zcl_frame_encode(&frame.header, response + 3, 2, request, 5, &encoded) == ZCL_CODEC_OK);
     CHECK(encoded == 5 && memcmp(request, "\x19\x5a\x00\x03\x00", 5) == 0);
-    CHECK(zcl_id_rx(&ctx, 1100, read, 7, response, 15, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1100, read, 7, 15) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 2 && ctx.phase == 0 && ctx.stamp == 1100);
     CHECK(info.length == 15 && info.requested_count == 2 && info.returned_count == 2);
     CHECK(memcmp(response, read_two, 15) == 0);
-    CHECK(zcl_id_rx(&ctx, 1101, discover, 6, response, 10, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1101, discover, 6, 10) == ZCL_CODEC_OK);
     CHECK(info.length == 10 && info.returned_count == 2 && info.discovery_complete == 1);
     CHECK(memcmp(response, discover_two, 10) == 0 && ctx.phase == 1);
     /* Relocation is valid: there are no borrowed/self-referencing pointers. */
     other = ctx;
     CHECK(zcl_id_tick(&other, 2100) == ZCL_CODEC_OK && other.remaining == 1 && other.phase == 0);
     CHECK(ctx.remaining == 2 && ctx.phase == 1);
-    CHECK(zcl_id_rx(&ctx, 3100, query, 3, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(3100, query, 3, 0) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 0 && ctx.phase == 0 && info.kind == 2 && info.length == 0);
     CHECK(zcl_id_init(&ctx, 500) == ZCL_CODEC_OK && ctx.remaining == 0 && ctx.phase == 0);
     cases++;
@@ -114,7 +120,7 @@ static uint16_t clock_cases(void)
     for (i = 0; i < 2; i++) {
         base = i ? 0xffffff00UL : 77UL;
         CHECK(zcl_id_init(&ctx, base) == ZCL_CODEC_OK);
-        CHECK(zcl_id_rx(&ctx, base, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+        CHECK(rx(base, start, 5, 5) == ZCL_CODEC_OK);
         for (j = 0; j < 3; j++) {
             volatile uint8_t k;
             for (k = 0; k < 3; k++) {
@@ -131,10 +137,10 @@ static uint16_t clock_cases(void)
         CHECK(zcl_id_tick(&ctx, base + 3001UL) == ZCL_CODEC_OK && ctx.phase == 0);
     }
     CHECK(zcl_id_init(&ctx, 0) == ZCL_CODEC_OK);
-    CHECK(zcl_id_rx(&ctx, 0, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(0, start, 5, 5) == ZCL_CODEC_OK);
     CHECK(zcl_id_tick(&ctx, 1999) == ZCL_CODEC_OK && ctx.remaining == 2 && ctx.phase == 999);
     /* Repeated Identify command/TSN/value restarts its own second phase. */
-    CHECK(zcl_id_rx(&ctx, 1999, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1999, start, 5, 5) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 3 && ctx.phase == 0);
     CHECK(zcl_id_tick(&ctx, 2000) == ZCL_CODEC_OK && ctx.remaining == 3 && ctx.phase == 1);
     CHECK(fail_tick(1999) == 0);
@@ -143,19 +149,19 @@ static uint16_t clock_cases(void)
     memcpy(request, start, 5);
     CHECK(fail_rx(1999, 5, 100, ZCL_CODEC_INVALID_VALUE) == 0);
     request[3] = request[4] = 0xff;
-    CHECK(zcl_id_rx(&ctx, 2000, request, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2000, request, 5, 5) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 65535u && ctx.phase == 0);
-    CHECK(zcl_id_rx(&ctx, 2000, query, 3, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2000, query, 3, 5) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x19\x5a\x00\xff\xff", 5) == 0); /* FFFF is valid IdentifyTime */
-    CHECK(zcl_id_rx(&ctx, 2000, read, 5, response, 9, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2000, read, 5, 9) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x18\x5a\x01\x00\x00\x00\x21\xff\xff", 9) == 0);
     CHECK(zcl_id_tick(&ctx, 2000UL + 65534999UL) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 1 && ctx.phase == 999);
-    CHECK(zcl_id_rx(&ctx, 2000UL + 65535000UL, query, 3, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2000UL + 65535000UL, query, 3, 0) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 0 && ctx.phase == 0 && info.kind == 2);
     CHECK(zcl_id_tick(&ctx, ctx.stamp + 0x7fffffffUL) == ZCL_CODEC_OK); /* largest admitted delta */
     CHECK(ctx.remaining == 0 && ctx.phase == 0);
-    CHECK(zcl_id_rx(&ctx, ctx.stamp, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(ctx.stamp, start, 5, 5) == ZCL_CODEC_OK);
     CHECK(zcl_id_tick(&ctx, ctx.stamp + 999UL) == ZCL_CODEC_OK);
     CHECK(zcl_id_tick(&ctx, ctx.stamp + 0x7fffffffUL) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 0 && ctx.phase == 0); /* wide addition with nonzero phase */
@@ -177,25 +183,25 @@ static uint16_t capacity_cases(void)
     for (cap = 0; cap < 5; cap++) CHECK(fail_rx(100, 5, cap, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
     request[0] = 0x11;
     outputs();
-    CHECK(zcl_id_rx(&ctx, 100, request, 5, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(100, request, 5, 0) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 3 && ctx.phase == 0 && info.kind == 2 && info.length == 0);
     CHECK(filled(response, sizeof(response), 0xc7));
     memcpy(request, query, 3);
     for (cap = 0; cap < 5; cap++) CHECK(fail_rx(1100, 3, cap, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
     CHECK(ctx.remaining == 3 && ctx.stamp == 100 && ctx.phase == 0);
-    CHECK(zcl_id_rx(&ctx, 1100, query, 3, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1100, query, 3, 5) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x19\x5a\x00\x02\x00", 5) == 0 && ctx.remaining == 2);
     memcpy(request, start, 5); request[3] = request[4] = 0;
     CHECK(fail_rx(2100, 5, 4, ZCL_CODEC_BUFFER_TOO_SMALL) == 0); /* failed stop is atomic */
     CHECK(ctx.remaining == 2 && ctx.stamp == 1100);
-    CHECK(zcl_id_rx(&ctx, 2100, request, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2100, request, 5, 5) == ZCL_CODEC_OK);
     CHECK(ctx.remaining == 0 && ctx.phase == 0 && memcmp(response, ack, 5) == 0);
     request[0] = 0x11;
     outputs();
-    CHECK(zcl_id_rx(&ctx, 2101, request, 5, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2101, request, 5, 0) == ZCL_CODEC_OK);
     CHECK(info.kind == 2 && filled(response, sizeof(response), 0xc7));
     /* Real Read capacity errors must not commit elapsed state either. */
-    CHECK(zcl_id_rx(&ctx, 2200, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(2200, start, 5, 5) == ZCL_CODEC_OK);
     memcpy(request, read, 7);
     for (cap = 0; cap < 6; cap++) CHECK(fail_rx(3200, 7, cap, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
     outputs();
@@ -205,7 +211,7 @@ static uint16_t capacity_cases(void)
     CHECK(ctx.remaining == 2 && ctx.phase == 0 && filled(response + 7, 95, 0xc7));
     memcpy(request, discover, 6);
     for (cap = 0; cap < 7; cap++) CHECK(fail_rx(4200, 6, cap, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
-    CHECK(zcl_id_rx(&ctx, 4200, discover, 6, response, 7, &info) == ZCL_CODEC_OK);
+    CHECK(rx(4200, discover, 6, 7) == ZCL_CODEC_OK);
     CHECK(info.length == 7 && info.returned_count == 1 && info.discovery_complete == 0);
     CHECK(memcmp(response, "\x18\x5a\x0d\x00\x00\x00\x21", 7) == 0);
     cases++;
@@ -216,13 +222,13 @@ static uint16_t receive_cases(void)
 {
     uint8_t n;
     CHECK(zcl_id_init(&ctx, 0) == ZCL_CODEC_OK);
-    CHECK(zcl_id_rx(&ctx, 0, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(0, start, 5, 5) == ZCL_CODEC_OK);
     memcpy(request, start, 5);
     for (n = 0; n < 3; n++) CHECK(fail_rx(1000, n, 100, ZCL_CODEC_TRUNCATED) == 0);
     for (n = 3; n < 5; n++) {
         CHECK(fail_rx(1000, n, 4, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
         request[0] = 0x11; /* errors still respond with default disabled */
-        CHECK(zcl_id_rx(&ctx, 1000, request, n, response, 5, &info) == ZCL_CODEC_OK);
+        CHECK(rx(1000, request, n, 5) == ZCL_CODEC_OK);
         CHECK(info.default_status == 0x80 && info.kind == 0);
         CHECK(memcmp(response, "\x18\x5a\x0b\x00\x80", 5) == 0);
         CHECK(ctx.remaining == 2 && ctx.phase == 0); /* ages, never applies malformed Identify */
@@ -230,18 +236,18 @@ static uint16_t receive_cases(void)
     }
     request[0] = 0xe1;
     memset(request + 5, 0xee, 97);
-    CHECK(zcl_id_rx(&ctx, 1000, request, 100, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1000, request, 100, 5) == ZCL_CODEC_OK);
     CHECK(memcmp(response, ack, 5) == 0 && ctx.remaining == 3);
     CHECK(fail_rx(1001, 101, 100, ZCL_CODEC_TOO_LONG) == 0);
     request[2] = 1; /* Query defined length zero; trailing data ignored */
-    CHECK(zcl_id_rx(&ctx, 1001, request, 100, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(1001, request, 100, 5) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x19\x5a\x00\x03\x00", 5) == 0 && ctx.phase == 1);
     request[0] = 0x11;
     outputs();
-    CHECK(zcl_id_rx(&ctx, 4000, request, 100, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(4000, request, 100, 0) == ZCL_CODEC_OK);
     CHECK(info.kind == 2 && ctx.remaining == 0 && filled(response, sizeof(response), 0xc7));
     request[0] = 1;
-    CHECK(zcl_id_rx(&ctx, 4000, request, 3, response, 0, &info) == ZCL_CODEC_OK && info.kind == 2);
+    CHECK(rx(4000, request, 3, 0) == ZCL_CODEC_OK && info.kind == 2);
     request[0] = 9; request[2] = 0; /* Query Response is for a client, not this server */
     CHECK(fail_rx(4001, 5, 100, ZCL_CODEC_UNSUPPORTED_CONTEXT) == 0);
     request[0] = 2;
@@ -249,32 +255,32 @@ static uint16_t receive_cases(void)
     memcpy(request, "\x05\x34\x12\x5a\x00\xff\xff", 7);
     for (n = 0; n < 5; n++) CHECK(fail_rx(4001, n, 100, ZCL_CODEC_TRUNCATED) == 0);
     CHECK(fail_rx(4001, 7, 6, ZCL_CODEC_BUFFER_TOO_SMALL) == 0);
-    CHECK(zcl_id_rx(&ctx, 4001, request, 7, response, 7, &info) == ZCL_CODEC_OK);
+    CHECK(rx(4001, request, 7, 7) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x1c\x34\x12\x5a\x0b\x00\x81", 7) == 0 && ctx.remaining == 0);
     request[0] = 0xe5;
     CHECK(fail_rx(4002, 7, 100, ZCL_CODEC_UNSUPPORTED_LAYOUT) == 0);
     request[0] = 0x0d;
     CHECK(fail_rx(4002, 7, 100, ZCL_CODEC_UNSUPPORTED_CONTEXT) == 0);
-    CHECK(zcl_id_rx(&ctx, 4002, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(4002, start, 5, 5) == ZCL_CODEC_OK);
     memcpy(request, "\x01\x5a\x40\x00\x00", 5); /* Trigger Effect remains unsupported */
-    CHECK(zcl_id_rx(&ctx, 5002, request, 5, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(5002, request, 5, 5) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x18\x5a\x0b\x40\x81", 5) == 0 && ctx.remaining == 2);
     request[2] = 0xff;
-    CHECK(zcl_id_rx(&ctx, 5002, request, 3, response, 5, &info) == ZCL_CODEC_OK);
+    CHECK(rx(5002, request, 3, 5) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x18\x5a\x0b\xff\x81", 5) == 0);
     memcpy(request, "\x00\x5a\x02\x00\x00\x21\x00\x00", 8); /* well-formed Write IdentifyTime=0 */
-    CHECK(zcl_id_rx(&ctx, 5002, request, 8, response, 5, &info) == ZCL_CODEC_OK);
-    CHECK(memcmp(response, "\x18\x5a\x0b\x02\x81", 5) == 0 && ctx.remaining == 2);
+    CHECK(rx(5002, request, 8, 5) == ZCL_CODEC_OK);
+    CHECK(info.length == 4 && memcmp(response, "\x18\x5a\x04\x00", 4) == 0 && ctx.remaining == 0);
     request[2] = 5;
-    CHECK(fail_rx(6002, 5, 100, ZCL_CODEC_UNSUPPORTED_NO_RESPONSE) == 0);
+    CHECK(fail_rx(6002, 5, 100, ZCL_CODEC_TRUNCATED) == 0);
     memcpy(request, "\x00\x5a\x0b\x00\x82\xee", 6);
     outputs();
-    CHECK(zcl_id_rx(&ctx, 6002, request, 6, response, 0, &info) == ZCL_CODEC_OK);
+    CHECK(rx(6002, request, 6, 0) == ZCL_CODEC_OK);
     CHECK(info.kind == 1 && info.default_raw_status == 0x82 && info.default_status == 0x81);
-    CHECK(info.length == 0 && ctx.remaining == 1 && filled(response, sizeof(response), 0xc7));
+    CHECK(info.length == 0 && ctx.remaining == 0 && filled(response, sizeof(response), 0xc7));
     CHECK(fail_rx(6003, 4, 100, ZCL_CODEC_TRUNCATED) == 0);
     memcpy(request, "\x00\x5a\x00\x01\x00\xfe\xff\xff\xff", 9);
-    CHECK(zcl_id_rx(&ctx, 6003, request, 9, response, 12, &info) == ZCL_CODEC_OK);
+    CHECK(rx(6003, request, 9, 12) == ZCL_CODEC_OK);
     CHECK(memcmp(response, "\x18\x5a\x01\x01\x00\x86\xfe\xff\x86\xff\xff\x86", 12) == 0);
     memcpy(&saved, &ctx, sizeof(ctx));
     outputs();
@@ -290,6 +296,73 @@ static uint16_t receive_cases(void)
     return 0;
 }
 
+/* Packed independent vectors: request length, reply length, capacity, local
+ * result, remaining LE16, phase-is-999; then request and exact reply octets.
+ * Every case starts Identify(3) at 0 and processes its write at 999ms.
+ */
+static const MCU_CODE uint8_t writes[] = {
+    8,4,4,0,3,0,0,  0,0x5a,2,0,0,0x21,3,0,  0x18,0x5a,4,0,
+    8,4,4,0,0,0,0,  0,0x5a,2,0,0,0x21,0,0,  0x18,0x5a,4,0,
+    8,4,4,0,255,255,0,  0xf0,0x5a,3,0,0,0x21,255,255,  0x18,0x5a,4,0,
+    8,0,0,0,7,0,0,  0,0x5a,5,0,0,0x21,7,0,
+    11,6,6,0,7,0,0,  0,0x5a,2,0,0,0x21,7,0,1,0,0,  0x18,0x5a,4,0x86,1,0,
+    11,6,6,0,3,0,1,  0,0x5a,3,0,0,0x21,7,0,1,0,0,  0x18,0x5a,4,0x86,1,0,
+    11,0,0,0,7,0,0,  0,0x5a,5,0,0,0x21,7,0,1,0,0,
+    11,6,6,0,9,0,0,  0,0x5a,2,1,0,0,0,0,0x21,9,0,  0x18,0x5a,4,0x86,1,0,
+    11,0,0,0,9,0,0,  0,0x5a,5,1,0,0,0,0,0x21,9,0,
+    12,6,6,0,9,0,0,  0,0x5a,2,0,0,0x10,5,0,0,0x21,9,0,  0x18,0x5a,4,0x8d,0,0,
+    13,4,4,0,9,0,0,  0,0x5a,2,0,0,0x21,7,0,0,0,0x21,9,0,  0x18,0x5a,4,0,
+    13,4,4,0,9,0,0,  0,0x5a,3,0,0,0x21,7,0,0,0,0x21,9,0,  0x18,0x5a,4,0,
+    12,6,6,0,7,0,0,  0,0x5a,2,0,0,0x21,7,0,0,0,0x20,9,  0x18,0x5a,4,0x8d,0,0,
+    12,6,6,0,3,0,1,  0,0x5a,3,0,0,0x21,7,0,0,0,0x20,9,  0x18,0x5a,4,0x8d,0,0,
+    12,0,0,0,7,0,0,  0,0x5a,5,0,0,0x21,7,0,0,0,0x20,9,
+    8,6,6,0,3,0,1,  0,0x5a,2,0xfd,255,0x21,2,0,  0x18,0x5a,4,0x88,0xfd,255,
+    7,6,6,0,3,0,1,  0,0x5a,2,0xfd,255,0x10,5,  0x18,0x5a,4,0x8d,0xfd,255,
+    7,6,6,0,3,0,1,  0,0x5a,2,255,255,0x10,5,  0x18,0x5a,4,0x86,255,255,
+    9,5,5,0,3,0,1,  0x10,0x5a,2,0,0,0x21,7,0,0xee,  0x18,0x5a,0x0b,2,0x80,
+    7,5,5,0,3,0,1,  0,0x5a,3,0,0,0x21,7,  0x18,0x5a,0x0b,3,0x80,
+    3,5,5,0,3,0,1,  0,0x5a,2,  0x18,0x5a,0x0b,2,0x80,
+    8,0,3,ZCL_CODEC_BUFFER_TOO_SMALL,0,0,0,  0,0x5a,2,0,0,0x21,7,0,
+    11,0,5,ZCL_CODEC_BUFFER_TOO_SMALL,0,0,0,  0,0x5a,2,0,0,0x21,7,0,1,0,0,
+    7,0,4,ZCL_CODEC_BUFFER_TOO_SMALL,0,0,0,  0,0x5a,3,0,0,0x21,7,
+    3,0,0,ZCL_CODEC_TRUNCATED,0,0,0,  0,0x5a,5,
+    11,0,100,ZCL_CODEC_UNSUPPORTED_DATA_TYPE,0,0,0,  0,0x5a,2,0,0,0x21,7,0,0,0,0xff,
+    8,0,100,ZCL_CODEC_UNSUPPORTED_CONTEXT,0,0,0,  8,0x5a,2,0,0,0x21,7,0,
+    10,7,7,0,3,0,1,  4,0x34,0x12,0x5a,2,0,0,0x21,7,0,  0x1c,0x34,0x12,0x5a,0x0b,2,0x81,
+    10,0,0,ZCL_CODEC_UNSUPPORTED_NO_RESPONSE,0,0,0,  4,0x34,0x12,0x5a,5,0,0,0x21,7,0,
+};
+
+static uint16_t write_cases(void)
+{
+    const uint8_t * volatile p = writes;
+    volatile uint8_t n, out, cap, expected, fractional;
+    volatile uint16_t remaining;
+    while (p < writes + sizeof(writes)) {
+        n = *p++; out = *p++; cap = *p++; expected = *p++;
+        remaining = *p++; remaining |= (uint16_t)*p++ << 8;
+        fractional = *p++;
+        CHECK(zcl_id_init(&ctx, 0) == ZCL_CODEC_OK && rx(0, start, 5, 5) == ZCL_CODEC_OK);
+        saved = ctx;
+        outputs();
+        CHECK(rx(999, p, n, cap) == expected);
+        if (expected) {
+            CHECK(memcmp(&ctx, &saved, sizeof(ctx)) == 0 && filled(&info, sizeof(info), 0xa5));
+        } else {
+            CHECK(ctx.stamp == 999 && ctx.remaining == remaining && ctx.phase == (fractional ? 999 : 0));
+            CHECK(info.sequence == 0x5a && info.length == out && info.kind == (out ? 0 : 2));
+        }
+        CHECK(memcmp(response, p + n, out) == 0 && filled(response + out, (uint16_t)(sizeof(response) - out), 0xc7));
+        if (!expected) {
+            CHECK(rx(999, read, 5, 9) == ZCL_CODEC_OK);
+            CHECK(info.length == 9 && response[6] == 0x21
+                  && response[7] == (uint8_t)remaining && response[8] == (uint8_t)(remaining >> 8));
+        }
+        p += n + out;
+        cases++;
+    }
+    return 0;
+}
+
 static uint16_t run_tests(void)
 {
     uint16_t rc;
@@ -297,7 +370,8 @@ static uint16_t run_tests(void)
     rc = golden_cases(); if (rc) return rc;
     rc = clock_cases(); if (rc) return rc;
     rc = capacity_cases(); if (rc) return rc;
-    return receive_cases();
+    rc = receive_cases(); if (rc) return rc;
+    return write_cases();
 }
 
 #if defined(__SDCC)
@@ -492,12 +566,106 @@ static uint16_t native_globals(void)
     return 0;
 }
 
+static uint16_t native_writes(void)
+{
+    static const uint8_t bytes[] = {0,0x5a,2,0,0,0x21,7,0,1,0,0,0xee};
+    zcl_id_t *c = malloc(sizeof(*c)), before;
+    zcl_dispatch_info_t *result = malloc(sizeof(*result)), expected;
+    unsigned command, n, cap, mode;
+    uint8_t *in, *out, golden[6], used, value;
+    zcl_codec_result_t rc, want;
+    CHECK(c != NULL && result != NULL);
+    for (command = 2; command <= 5; command++) {
+        if (command == 4) continue;
+        for (mode = 0; mode < 4; mode++) {
+            for (n = 0; n <= sizeof(bytes); n++) {
+                in = malloc(n ? n : 1);
+                CHECK(in != NULL);
+                memcpy(in, bytes, n);
+                if (n) in[0] = (uint8_t)((mode & 1u ? 0x10 : 0) | (mode & 2u ? 0xe0 : 0));
+                if (n > 2) in[2] = (uint8_t)command;
+                for (cap = 0; cap <= 7; cap++) {
+                    out = malloc(cap ? cap : 1);
+                    CHECK(out != NULL);
+                    memset(out, 0xc7, cap ? cap : 1);
+                    memset(result, 0xa5, sizeof(*result));
+                    CHECK(zcl_id_init(c, 0) == ZCL_CODEC_OK);
+                    CHECK(zcl_id_rx(c, 0, start, 5, response, 5, &info) == ZCL_CODEC_OK);
+                    before = *c;
+                    used = command == 5 ? 0 : n == 8 ? 4 : n == 11 ? 6 : 5;
+                    want = n < 3 || (command == 5 && n != 8 && n != 11) ? ZCL_CODEC_TRUNCATED
+                        : cap < used ? ZCL_CODEC_BUFFER_TOO_SMALL : ZCL_CODEC_OK;
+                    rc = zcl_id_rx(c, 999, in, (uint16_t)n, out, (uint16_t)cap, result);
+                    CHECK(rc == want);
+                    if (n > 2) CHECK(in[2] == command);
+                    if (n > 3) CHECK(memcmp(in + 3, bytes + 3, n - 3) == 0);
+                    if (rc != ZCL_CODEC_OK) {
+                        CHECK(memcmp(c, &before, sizeof(before)) == 0);
+                        CHECK(filled(result, sizeof(*result), 0xa5) && filled(out, (uint16_t)(cap ? cap : 1), 0xc7));
+                    } else {
+                        value = n == 8 || (n == 11 && command != 3) ? 7 : 3;
+                        CHECK(c->stamp == 999 && c->remaining == value && c->phase == (value == 7 ? 0 : 999));
+                        memset(&expected, 0, sizeof(expected));
+                        expected.sequence = 0x5a; expected.length = used;
+                        expected.kind = command == 5 ? 2 : 0;
+                        if (command != 5) {
+                            golden[0] = 0x18; golden[1] = 0x5a;
+                            if (n == 8 || n == 11) {
+                                expected.command_id = golden[2] = 4;
+                                expected.requested_count = n == 8 ? 1 : 2;
+                                expected.returned_count = 1;
+                                golden[3] = n == 8 ? 0 : 0x86;
+                                golden[4] = 1; golden[5] = 0;
+                            } else {
+                                expected.command_id = golden[2] = 0x0b;
+                                expected.default_command = golden[3] = (uint8_t)command;
+                                expected.default_status = expected.default_raw_status = golden[4] = 0x80;
+                            }
+                        }
+                        CHECK(memcmp(result, &expected, sizeof(expected)) == 0);
+                        CHECK(memcmp(out, golden, used) == 0);
+                        CHECK(filled(out + used, (uint16_t)((cap ? cap : 1) - used), 0xc7));
+                    }
+                    free(out);
+                }
+                free(in);
+            }
+        }
+    }
+    /* Every uint16 value is valid, including FFFF. Repeated same-TSN writes
+     * restart the phase; exact expiry uses an independent absolute deadline. */
+    {
+        uint32_t duration, base = 0xffffff00UL;
+        uint8_t input[] = {0,0x5a,2,0,0,0x21,0,0};
+        uint64_t deadline;
+        for (duration = 0; duration <= 65535UL; duration++) {
+            CHECK(zcl_id_init(c, base) == ZCL_CODEC_OK);
+            input[2] = 2; input[6] = (uint8_t)duration; input[7] = (uint8_t)(duration >> 8);
+            CHECK(zcl_id_rx(c, base, input, 8, response, 4, result) == ZCL_CODEC_OK);
+            CHECK(c->remaining == duration && c->phase == 0);
+            CHECK(zcl_id_tick(c, base + 999u) == ZCL_CODEC_OK && c->phase == (duration ? 999 : 0));
+            input[2] = 5;
+            CHECK(zcl_id_rx(c, base + 999u, input, 8, response, 0, result) == ZCL_CODEC_OK);
+            CHECK(c->remaining == duration && c->phase == 0 && result->kind == 2);
+            deadline = (uint64_t)base + 999u + (uint64_t)duration * 1000u;
+            if (duration) {
+                CHECK(zcl_id_tick(c, (uint32_t)(deadline - 1u)) == ZCL_CODEC_OK);
+                CHECK(c->remaining == 1 && c->phase == 999);
+            }
+            CHECK(zcl_id_tick(c, (uint32_t)deadline) == ZCL_CODEC_OK && c->remaining == 0 && c->phase == 0);
+        }
+    }
+    free(result); free(c);
+    return 0;
+}
+
 int main(void)
 {
     uint16_t rc = run_tests();
     if (!rc) rc = native_clock();
     if (!rc) rc = exact_native();
     if (!rc) rc = native_globals();
+    if (!rc) rc = native_writes();
     if (rc) {
         fprintf(stderr, "Identify test failed at C line %u\n", rc);
         return 1;
