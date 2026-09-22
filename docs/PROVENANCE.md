@@ -1510,6 +1510,16 @@ assessment](MAC_TIME.md#additional-ti-support-evidence-estimates-are-not-bounds)
 records that limitation and the still-open capture contract. No forum code,
 SDK implementation or physical measurement is imported.
 
+The [#75 fractional epoch extension](MAC_EPOCH.md) uses only the already
+reviewed positive-period replacement rule in SWRU191F22.1.3/.8 and T2IRQF,
+pp198-199,204. ModuloFFFFFF coarse subtraction, fine borrowing and the
+7FFFFF-period-plus256-fine half-range threshold are original arithmetic
+derivations, not an additional timing guarantee from TI. The independent
+host oracle uses complete64-bit coordinates; production uses bounded
+32/16-bit operations. No captured-edge selection, offset correction,
+freshness claim, foreign implementation, new dependency or hardware access
+is introduced. The original timer and radio ownership contracts are unchanged.
+
 ### Offline ED Beacon candidate sources
 
 The [four-entry collector](NWK_CANDIDATES.md), its copied-record policy and

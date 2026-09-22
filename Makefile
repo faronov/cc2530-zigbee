@@ -819,6 +819,29 @@ test-nwk-parent: $(BUILD)/host-nwk-parent-tests $(BUILD)/nwk_parent_test.ihx
 $(BUILD)/mac_time.rel: src/mac_time.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
+.PHONY: test-mac-epoch
+$(BUILD)/mac_epoch.rel: src/mac_epoch.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_epoch_test.rel: tests/test_mac_epoch.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_epoch_test.ihx: $(BUILD)/mac_epoch.rel $(BUILD)/mac_epoch_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_epoch.rel $(BUILD)/mac_epoch_test.rel
+	cp $(BUILD)/mac_epoch.rst $(BUILD)/mac_epoch_test.mac_epoch.rst
+	cp $(BUILD)/mac_epoch_test.rst $(BUILD)/mac_epoch_test.mac_epoch_test.rst
+
+$(BUILD)/host-mac-epoch-tests: tests/test_mac_epoch.c src/mac_epoch.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_epoch.c src/mac_epoch.c -o $@
+
+$(BUILD)/host-mac-epoch-tests-sanitize: tests/test_mac_epoch.c src/mac_epoch.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_epoch.c src/mac_epoch.c -o $@
+
+test-mac-epoch: $(BUILD)/host-mac-epoch-tests $(BUILD)/host-mac-epoch-tests-sanitize $(BUILD)/mac_epoch_test.ihx
+	$(BUILD)/host-mac-epoch-tests
+	$(BUILD)/host-mac-epoch-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_epoch.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/mac_time_test.rel: tests/test_mac_time.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -935,7 +958,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
-test-common: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-scan test-mac-association test-mac-poll
+test-common: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common: test-noise-health test-radio-noise
 test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests

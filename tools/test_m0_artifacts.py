@@ -265,6 +265,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "NV record"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_epoch_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_epoch_start", "_mac_epoch_step", "_mac_epoch_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "MAC epoch"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("mac_epoch.c", "test_mac_epoch.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC epoch"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_radio_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             if image == "radio_tx_fixture":

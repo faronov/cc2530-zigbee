@@ -575,8 +575,9 @@ matching, finite retries and lifetime/work bounds. It reuses the actual codec,
 retains the DSN/body across retries and requires confirmed quiescence before
 radio ownership can be released. Host, genuine linked-image and alias-aware
 simulator evidence cover synthetic symbol-time events, not RF timing.
-There is no real adapter or post-TX ACK receiver: the existing reset-exclusive
-TX/RX owners cannot fulfill that contract by simple composition. #13's
+There is no real adapter with captured TX/ACK timing. The same-owner raw
+TX/RX phase in #73 is a prerequisite, not that complete contract; old
+reset-exclusive owners cannot fulfill it by simple composition. #13's
 physical/integration gate remains open, and the standalone image's narrow
 IRAM headroom is not complete-stack or interrupt-nesting acceptance.
 
@@ -590,6 +591,11 @@ owner. The primary sources' SFD-rise versus TX-end capture discrepancy,
 capture freshness/overwrite, epoch/fine-phase conversion and physical timing
 remain prerequisites for the real adapter, tracked separately in #40.
 Neither a live sample nor raw Sleep Timer ticks may replace captured TX/ACK end.
+The separate [#75 fractional epoch arithmetic](MAC_EPOCH.md) now handles the
+actual coarse modulus, preserves fine phase and retains ambiguous-progress
+faults under an explicit true half-range continuity precondition. It supplies
+no captured edge, freshness or event-time rounding policy and does not close
+#40. Its standalone CI composition adds no board linkage or ZCL-budget usage.
 
 Initial #14 preparation additionally admits canonical unsecured Beacon
 Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.

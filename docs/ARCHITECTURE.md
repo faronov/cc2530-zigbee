@@ -116,8 +116,8 @@ Transaction lifetime, foreground work and cleanup each have finite bounds.
 The 54-symbol ACK window starts at captured TX end; no-ACK retries preserve
 that window plus IFS, including after an early wrong-DSN ACK. Logical results
 do not release active radio ownership without a QUIESCED event.
-There is no CC2530 adapter, same-reset TX/RX owner, ACK receive path or
-physical timing evidence. No MMIO, board GPIO, security or network membership
+There is no CC2530 adapter with captured TX/ACK timing; the separate same-owner
+raw TX/RX phase does not yet provide that contract. No MMIO, board GPIO, security or network membership
 is introduced; the isolated SDCC resource proof does not establish complete
 stack fit or IRQ nesting.
 
@@ -136,6 +136,16 @@ neither an extended `mac_tx` symbol epoch nor a captured PHY end; the
 quiescent-radio requirement prohibits silently chaining it with RX/TX.
 Primary capture selection/freshness, fine phase, delivery order, unified
 ownership and physical timing remain separate gates.
+
+The separate [fractional epoch extension](MAC_EPOCH.md) performs arithmetic on
+coherent raw Timer2 tuples without accessing hardware. Its11-byte context
+extends coarse periods modulo2^32 while retaining fine0..511 in a6-byte
+result. The actual raw modulus isFFFFFF periods, with a half-range boundary
+of7FFFFF periods plus256 fine increments. Ambiguous progress retains a fault;
+missed wraps/reset remain caller continuity obligations. No integer event-time
+rounding, captured-edge identity, radio handoff or original driver relaxation
+is inferred from this arithmetic. Its separate resource proof is not included
+in the integrated protocol budget or board firmware.
 
 The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC

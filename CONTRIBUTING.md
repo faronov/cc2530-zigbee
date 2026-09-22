@@ -285,6 +285,13 @@ clock or captured TX/ACK end. Faults retain ownership; do not add implicit
 recovery or silently compose its quiescent-radio contract with RX/TX.
 **Never flash or upload `mac_time_test.ihx`; no board image may link it.**
 
+The companion [fractional epoch arithmetic](docs/MAC_EPOCH.md) has
+`make BOARD=... BUILD=... test-mac-epoch`, covering strict native/nonrecovering
+sanitizer, full linked metadata and alias-aware target checks. Both relocated
+listings are snapshotted immediately after link. This pure arithmetic proof
+does not read a timer, supply event captures or relax radio ownership.
+**Never flash or upload `mac_epoch_test.ihx`.**
+
 The separate [offline MAC transmission scheduler](docs/MAC_TX.md) has
 `make BUILD=build/mac-tx-check test-mac-tx`, also in `test-common`.
 It composes the actual MAC codec with one owned frame copy and abstract

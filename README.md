@@ -576,6 +576,12 @@ It requires reset-exclusive timer ownership and a quiescent radio; it is not
 captured TX/ACK end, a calibrated symbol clock or a real MAC adapter.
 No board image links it; never flash `mac_time_test.ihx`.
 
+The separate [fractional epoch arithmetic](docs/MAC_EPOCH.md) extends those
+raw coordinates across the actual `FFFFFF` coarse wrap, preserving fine
+phase and faulting ambiguous progress. Its independent wide-integer oracle
+and target proof do not establish captured TX/ACK ends or a radio adapter.
+No board image links it; never flash `mac_epoch_test.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy
@@ -594,8 +600,9 @@ that the peer received nothing.
 
 `make test-mac-tx` is **host-tested, image-checked and simulated**. Its clock
 is abstract 32-bit symbols, not the raw Sleep Timer. There is no real radio
-adapter, post-TX ACK receiver or calibrated timing evidence; the existing
-reset-exclusive TX/RX services cannot simply be chained. The isolated image's
+adapter with captured TX/ACK timing. The new same-owner raw TX/RX phase does
+not yet fulfill that contract; old reset-exclusive services cannot simply
+be chained. The isolated image's
 measured IRAM headroom is not full-stack or ISR-nesting acceptance.
 No board image links this scheduler; never flash `mac_tx_test.ihx`.
 

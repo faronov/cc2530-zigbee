@@ -49,7 +49,10 @@ implementation was changed.
 The tuple belongs to the accepted **T2M0 read instant**, not function return.
 The counter continues during subsequent byte reads and validation; its captured
 latch does not. There is no rounding, elapsed-time helper, epoch-extension API,
-or conversion to [mac_tx](MAC_TX.md)'s abstract modulo-`2^32` symbol domain.
+or conversion to [mac_tx](MAC_TX.md)'s abstract modulo-`2^32` symbol domain
+inside this driver. The separate [fractional epoch arithmetic](MAC_EPOCH.md)
+extends coherent raw tuples without dropping fine; it is not an event capture
+or a direct integer-timestamp bridge.
 Matching nominal 16-us periods does not align the timer's origin/fine phase
 with a PHY event, preserve a multiwrap epoch, or justify dropping fine bits.
 

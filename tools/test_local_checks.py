@@ -58,7 +58,7 @@ class LocalChecksTests(unittest.TestCase):
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_time", "mac_scan", "mac_association", "mac_poll",
+            "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic", "zcl_identify",
         }
@@ -93,6 +93,7 @@ class LocalChecksTests(unittest.TestCase):
                         ("mac_tx_test", "mac_tx_test"))),
             ("mac_time", (("timebase", "timebase"), ("mac_time", "mac_time"),
                           ("mac_time_test", "test_mac_time"))),
+            ("mac_epoch", (("mac_epoch", "mac_epoch"), ("mac_epoch_test", "mac_epoch_test"))),
             ("mac_scan", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
                           ("nwk_beacon", "nwk_beacon"), ("nwk_candidates", "nwk_candidates"),
                           ("mac_scan", "mac_scan"), ("mac_scan_test", "mac_scan_test"))),
@@ -147,7 +148,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertLess(commands.index(native[0]), commands.index(simulation))
 
     def test_bounded_sanitizers_and_no_board_linkage(self):
-        for board, service in ((b, s) for b in BOARDS for s in ("zcl-basic", "zcl-identify", "radio-autoack")):
+        for board, service in ((b, s) for b in BOARDS for s in ("zcl-basic", "zcl-identify", "radio-autoack", "mac-epoch")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)
