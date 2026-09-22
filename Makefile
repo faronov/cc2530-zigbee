@@ -88,6 +88,7 @@ endif
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
+.PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
 .PHONY: test-nwk-candidates test-nwk-parent test-nwk-parent-sanitize test-mac-time test-mac-scan test-mac-association test-mac-poll
@@ -890,6 +891,30 @@ test-mac-epoch: $(BUILD)/host-mac-epoch-tests $(BUILD)/host-mac-epoch-tests-sani
 	$(BUILD)/host-mac-epoch-tests-sanitize
 	$(PYTHON) -B tests/boot_mac_epoch.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/mac_stamp.rel: src/mac_stamp.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_stamp_test.rel: tests/test_mac_stamp.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/mac_stamp_test.ihx: $(BUILD)/mac_epoch.rel $(BUILD)/mac_stamp.rel $(BUILD)/mac_stamp_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_epoch.rel $(BUILD)/mac_stamp.rel $(BUILD)/mac_stamp_test.rel
+	cp $(BUILD)/mac_epoch.rst $(BUILD)/mac_stamp_test.mac_epoch.rst
+	cp $(BUILD)/mac_stamp.rst $(BUILD)/mac_stamp_test.mac_stamp.rst
+	cp $(BUILD)/mac_stamp_test.rst $(BUILD)/mac_stamp_test.mac_stamp_test.rst
+
+MAC_STAMP_SRC := src/mac_epoch.c src/mac_stamp.c
+$(BUILD)/host-mac-stamp-tests: tests/test_mac_stamp.c $(MAC_STAMP_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_stamp.c $(MAC_STAMP_SRC) -o $@
+
+$(BUILD)/host-mac-stamp-tests-sanitize: tests/test_mac_stamp.c $(MAC_STAMP_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_stamp.c $(MAC_STAMP_SRC) -o $@
+
+test-mac-stamp: $(BUILD)/host-mac-stamp-tests $(BUILD)/host-mac-stamp-tests-sanitize $(BUILD)/mac_stamp_test.ihx
+	$(BUILD)/host-mac-stamp-tests
+	$(BUILD)/host-mac-stamp-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_stamp.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/mac_time_test.rel: tests/test_mac_time.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -1011,7 +1036,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio
+test-common: test-common-core test-mac-radio test-mac-stamp
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

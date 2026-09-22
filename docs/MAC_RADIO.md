@@ -139,3 +139,8 @@ freshness/overwrite, event correlation, PHY offsets and event-time quantization
 remain #40. Full continuous AUTOACK/POLL is still #50. The optional controlled
 post-TX reply experiment #79 remains separate. Nothing here feeds live time
 into `mac_tx` as captured TX/ACK end or claims Zigbee interoperability.
+
+The subsequent [delayed raw-sample projection](MAC_STAMP.md) handles bounded
+temporal placement only. It is deliberately not wired into this owner until
+coherent captured-event identity is established; accepting a number inside a
+window is not permission to call it the timestamp of a received frame.

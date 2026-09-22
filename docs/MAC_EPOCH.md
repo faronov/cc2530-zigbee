@@ -79,6 +79,12 @@ same arithmetic with real Timer2 and radio calls under a distinct explicit
 ownership profile. It does not change these arithmetic APIs or reinterpret
 live coordinates as captured events.
 
+The [#81 delayed-sample projection](MAC_STAMP.md) reuses the unchanged epoch
+operations to place a coherent raw tuple inside an independently established
+closed window. It advances private temporary copies, never rewinds the live
+context, and preserves fine phase. Temporal membership does not establish
+capture freshness, event identity or hardware coherence.
+
 ## Offline evidence and resources
 
 `make test-mac-epoch` runs the strict native corpus, nonrecovering ASan/UBSan,

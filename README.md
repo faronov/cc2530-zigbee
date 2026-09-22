@@ -604,6 +604,12 @@ RX/AUTOACK and stop/drain/send/rearm phases; original quiescent-only entrypoints
 remain strict. This is **not captured PHY-event timing**, ACK/retry scheduling
 or Zigbee membership. No board image links it; never flash `mac_radio_test.ihx`.
 
+The [delayed raw-sample projection](docs/MAC_STAMP.md) (#81) maps a known
+coherent sample into a closed epoch window without rewinding live time,
+preserving fine phase and rejecting ambiguous/outside values. It is arithmetic
+only: temporal membership does not prove hardware capture freshness or frame
+identity. No board image links it; never flash `mac_stamp_test.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

@@ -291,6 +291,15 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC radio"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_stamp_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_stamp_project", "_mac_stamp_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "MAC stamp"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for source in ("mac_stamp.c", "test_mac_stamp.c"):
+                with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "MAC stamp"):
+                    verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
+
     def test_isolated_radio_tx_cannot_enter_board_images(self):
         for image in IMAGES:
             if image == "radio_tx_fixture":

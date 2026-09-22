@@ -620,6 +620,15 @@ remain open. The controlled post-TX incoming-frame experiment #79 is a
 nonblocking follow-up; separate real TX and passive RX evidence suffice to
 continue software integration, not to claim controlled bidirectional RF.
 
+The [#81 delayed raw-sample projection](MAC_STAMP.md) implements the supported
+temporal-placement part of #40: reuse the genuine epoch arithmetic to map a
+coherent tuple within a same-epoch closed window without rewinding live time.
+Strict half-range bounds, endpoint checks, fractional phase, software wrap
+and input/error-output preservation are proved independently. Numeric window
+membership is not capture freshness or frame identity; the physical edge,
+coherency/overwrite and offset evidence still blocks the real event adapter.
+No new hardware facts or RF observations close that gate.
+
 Initial #14 preparation additionally admits canonical unsecured Beacon
 Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.
 They require neither ACK nor frame retries. This does not yet implement

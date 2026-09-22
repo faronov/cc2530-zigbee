@@ -81,7 +81,7 @@ The existing `make BOARD=... IMAGE=... all test` command remains a full
 single-configuration check. The twenty-eight-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common-core` in the two
-debug-fixture jobs. The additional clock/radio composition runs in two dedicated
+debug-fixture jobs. The additional clock/radio and delayed-stamp compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The exact union is still `test-common`; thirty jobs retain all twenty-eight
 board/image checks and the unchanged simulator deadlines. The tool suite itself includes both-board image profiles;
@@ -96,6 +96,7 @@ make BOARD=generic test-common
 make BOARD=generic IMAGE=radio_rx_fixture test-board
 make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board
 make BOARD=generic test-mac-radio
+make BOARD=generic test-mac-stamp
 ```
 
 `test-mac-radio` uses separately named `mr_*.rel` objects with the explicit
@@ -103,6 +104,12 @@ make BOARD=generic test-mac-radio
 real clock/timer/epoch/radio services against a combined synthetic controller,
 not successful service mocks. The standalone image must never be flashed;
 live samples are not captured PHY-event timestamps. See [MAC_RADIO](docs/MAC_RADIO.md).
+
+`test-mac-stamp` separately links the unchanged fractional epoch module and
+the bounded delayed-sample projection, with three immediate listing snapshots.
+It is also included once per board through `test-common` and those dedicated
+CI jobs. See [MAC_STAMP](docs/MAC_STAMP.md); numeric window membership does not
+establish hardware capture freshness or frame identity.
 
 `test-common` covers standalone components, not a board fixture;
 `test-board` builds and checks the selected board image, not the standalone

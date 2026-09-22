@@ -58,7 +58,7 @@ class LocalChecksTests(unittest.TestCase):
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_radio", "mac_scan", "mac_association", "mac_poll",
+            "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic", "zcl_identify",
         }
@@ -89,9 +89,10 @@ class LocalChecksTests(unittest.TestCase):
                                      if i or arg == "python3" else Path(arg).name
                                      for i, arg in enumerate(args)) for args in commands)
             self.assertEqual(normalized(("test-common",)),
-                             normalized(("test-common-core", "test-mac-radio")))
+                             normalized(("test-common-core", "test-mac-radio", "test-mac-stamp")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
+            self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
@@ -106,6 +107,8 @@ class LocalChecksTests(unittest.TestCase):
             ("mac_time", (("timebase", "timebase"), ("mac_time", "mac_time"),
                           ("mac_time_test", "test_mac_time"))),
             ("mac_epoch", (("mac_epoch", "mac_epoch"), ("mac_epoch_test", "mac_epoch_test"))),
+            ("mac_stamp", (("mac_epoch", "mac_epoch"), ("mac_stamp", "mac_stamp"),
+                           ("mac_stamp_test", "mac_stamp_test"))),
             ("mac_radio", (("mr_timebase", "timebase"), ("mr_clock", "clock"),
                            ("mr_mac_time", "mac_time"), ("mr_radio_autoack", "radio_autoack"),
                            ("mr_mac_epoch", "mac_epoch"), ("mr_mac_radio", "mac_radio"),
@@ -165,7 +168,7 @@ class LocalChecksTests(unittest.TestCase):
 
     def test_bounded_sanitizers_and_no_board_linkage(self):
         for board, service in ((b, s) for b in BOARDS for s in
-                               ("zcl-basic", "zcl-identify", "radio-autoack", "mac-epoch", "mac-radio")):
+                               ("zcl-basic", "zcl-identify", "radio-autoack", "mac-epoch", "mac-radio", "mac-stamp")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)

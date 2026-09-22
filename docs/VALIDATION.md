@@ -26,7 +26,7 @@ CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
 the two debug-fixture jobs run `test-common-core`, and two dedicated MAC
-clock/radio jobs run `test-mac-radio`. Their exact union is the complete
+clock/radio jobs run `test-mac-radio test-mac-stamp`. Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
 This thirty-job partition preserves all28 board/image jobs without adding the
 new composed replay to debug-fixture jobs already taking about13 minutes.
@@ -87,6 +87,15 @@ The complete CODE/raw metadata/object/listing identities, shared/private/libc
 storage boundaries, exact caller publication, MMIO instruction/DPTR operands
 and full-run SP55/7C remain guarded. The legacy timer, owner and installed
 board-fixture CODE is unchanged. No new hardware result is implied.
+
+The separate [#81 delayed-stamp composition](MAC_STAMP.md) adds23,769 genuine
+target checks and33,461,984 native/nonrecovering sanitizer checks using the
+actual unchanged epoch arithmetic. An independent64-bit oracle checks closed
+window membership without equating it to capture freshness. Complete artifact
+identities,15,644 artifact negatives, seven snapshot negatives and one
+missing-alias negative bind5169 CODE bytes,167+64/256 XDATA and full-run
+SP3A/7C. Existing component/image CODE, budgets and simulator deadlines remain
+unchanged; there is no hardware result or event adapter.
 
 ### Scan-proof artifact parsing
 

@@ -159,6 +159,14 @@ there is no recovery, implicit stop or successful placeholder. This profile's
 new active-radio reader is distinct from the unchanged quiescent-only reader.
 It supplies neither physical event timestamps nor a `mac_tx` event adapter.
 
+The separate [delayed-sample projection](MAC_STAMP.md) uses three real epoch
+advances on private temporary state to validate a closed window and place an
+independently coherent raw sample within it. It preserves the live epoch,
+fine phase and software wrap, publishing only after all bounds succeed.
+It supplies no capture-valid/overrun flag, freshness proof, frame identity,
+PHY offset or integer event-time rounding. It is not linked into the radio
+owner or board images before those hardware/event contracts are established.
+
 The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC
 headers or platform code. The [NWK codec contract](NWK.md) preserves raw

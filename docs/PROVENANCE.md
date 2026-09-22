@@ -1550,6 +1550,14 @@ can prove. Ordinary quiescent-only timer APIs remain strict. No foreign
 implementation, captured-event guarantee, new dependency or hardware access
 is introduced.
 
+The [#81 delayed-sample projection](MAC_STAMP.md) is original BSD-3-Clause
+arithmetic using the same already-reviewed positive-period modulus and
+half-range rule. It reuses this repository's actual `mac_epoch_step`, with an
+independent64-bit host oracle and genuine SDCC execution. The closed-window
+membership argument is a mathematical derivation, not a new TI statement or
+capture guarantee. No external implementation, new normative revision,
+hardware measurement, device access or dependency is introduced.
+
 ### Offline ED Beacon candidate sources
 
 The [four-entry collector](NWK_CANDIDATES.md), its copied-record policy and

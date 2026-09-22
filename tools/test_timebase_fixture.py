@@ -171,6 +171,7 @@ class TimebaseCodeTests(unittest.TestCase):
         self.assertIn("timeout-minutes: 15", composed)
         self.assertIn("board: [generic, lg_esl29_rev03]", composed)
         self.assertEqual(composed.count('test-mac-radio'), 1)
+        self.assertEqual(composed.count('test-mac-stamp'), 1)
         self.assertNotIn("upload-artifact", composed)
         uploads = workflow.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
