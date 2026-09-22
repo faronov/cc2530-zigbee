@@ -780,7 +780,7 @@ The separate [read-only Basic provider](docs/ZCL_LAB.md) supplies six
 primary-backed attributes through those handlers, with caller-owned copied
 strings and synthetic lab vectors. Its both-board host/image/simulator
 evidence is not an advertised endpoint: profile/device selection and
-measurement/reporting remain open.
+networked reporting remain open.
 The independent [Identify procedure](docs/ZCL_IDENTIFY.md) now supplies a
 caller-owned logical-time countdown, unicast Identify/Query and real
 Read/Discover handling. It has no physical indication, client/group/broadcast
@@ -789,6 +789,14 @@ handling, network send or authenticated endpoint. The bounded
 read-only/type/missing-attribute errors and actually updates RW IdentifyTime,
 including Undivided rollback and No Response silence. Unsupported value
 extents and complete application/cluster conformance remain explicit.
+The separate [synthetic Temperature Measurement model](docs/ZCL_TEMPERATURE.md)
+adds caller-fed values, Read/Discover/read-only Write handling, Configure/Read
+Reporting Configuration and bounded interval/change-threshold reporting.
+Preparing Report Attributes only leases bytes; the baseline advances after
+the caller confirms their issuance, not merely after serialization.
+No physical sensor, destination resolution, transport, persistence or
+advertised endpoint is supplied. Three isolated SDCC compositions retain the
+complete wire/configuration/reporting corpus without enlarging older budgets.
 This foundation is host-tested, image-checked and simulated, not linked into
 board firmware. The separate passive receiver does not provide a transmit
 driver, functioning MAC, association or Zigbee join.

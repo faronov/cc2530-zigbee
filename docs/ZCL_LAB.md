@@ -129,12 +129,14 @@ processing. Unsupported value extents and applicable application/reporting
 requirements remain explicit before exposing a conformant endpoint. The model's
 revision value identifies its base-text schema, not a conformance certificate.
 
-## Identify and synthetic temperature: requirements, not implementations
+## Identify and synthetic temperature requirements
 
 This section records requirements beyond the Basic provider. The separate
 [bounded Identify procedure](ZCL_IDENTIFY.md) now implements logical-time
 countdown and unicast command/Read/Discover handling, not the full cluster or
-a physical indicator. Temperature remains unimplemented.
+a physical indicator. The separate [synthetic Temperature model](ZCL_TEMPERATURE.md)
+now implements caller-fed values, foundation handling, bounded reporting
+configuration and prepared reports, not a physical sensor or network delivery.
 
 Identify is cluster `0003`, Utility, revision **2** (R8 3.5.1,
 printed 3-30..3-31 / PDF140-141). There are no server cluster dependencies.
@@ -157,7 +159,7 @@ discrepancy does not justify copying the secondary Query payload error.
 Identify client has no cluster-specific attributes, but mandatory global
 ClusterRevision still applies (3.5.3 and 2.3.4.5).
 
-**Preferred future lab candidate:** deliberately synthetic Temperature
+**Lab candidate, implemented only as an isolated model:** deliberately synthetic Temperature
 Measurement server, never described as physical sensor output:
 
 - R8 4.4.1, printed 4-10 / PDF324: cluster `0402`, revision **3**,
@@ -207,7 +209,8 @@ One endpoint is **not a BDB exemption**. BDB3.0.1:
 
 Endpoint registry, exact profile/device/ZDO descriptors, authorized APS delivery,
 remaining foundation behavior, physical Identify and its client/group/broadcast
-roles, binding/group management as applicable, reports/configuration/defaults/persistence and
+roles, binding/group management as applicable, transported reports,
+profile-selected defaults, durable configuration/persistence and
 application interoperability remain gates. Join/rejoin/leave, ED Timeout,
 parent keepalive, endpoint-0 responses and durable counters in
 [the conformance ledger](CONFORMANCE.md) are neither removed nor implemented

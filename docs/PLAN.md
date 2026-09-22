@@ -874,8 +874,14 @@ and BDB binding/group/reporting dependencies. The independent
 [Identify procedure (#71)](ZCL_IDENTIFY.md) now provides a logical-time
 countdown, unicast Identify/Query and real Read/Discover handling, with
 both-board native/sanitizer/image/simulator evidence. Physical indication,
-Identify client/group/broadcast handling and
-measurement/reporting remain unimplemented. An applicable primary device/profile
+Identify client/group/broadcast handling remain unimplemented. The separate
+[synthetic Temperature Measurement/reporting model (#82)](ZCL_TEMPERATURE.md)
+now accepts caller-fed values, composes the real foundation handlers and
+implements bounded reporting configuration and interval/change state.
+Preparation and confirmed issuance are separate; cancellation does not advance
+the baseline. Its standalone host/sanitizer/image/simulator evidence is not
+physical sensing, network delivery, binding/default-profile integration or
+persistence. An applicable primary device/profile
 definition has not been established, so advertisement stays unselected.
 This parallel M6 preparation does not change the main MAC-before-security
 order or waive M3-M5 gates.

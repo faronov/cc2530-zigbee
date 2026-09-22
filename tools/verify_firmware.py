@@ -276,6 +276,13 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(not any(name.startswith("_zcl_basic_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("zcl_basic.c", "test_zcl_basic.c")),
             "Board image must not link the isolated ZCL Basic model")
+    require(not any(name.startswith(("_zcl_temp_", "_zcl_temperature_")) for name in symbols) and
+            not any(token in debug for token in (
+                "C$zcl_temperature.c$", "C$test_zcl_temperature.c$", "G$zcl_temp_", "G$zcl_temperature_",
+                "Fzcl_temperature$", "Lzcl_temperature.", "Ftest_zcl_temperature$", "Ltest_zcl_temperature.",
+                "M:zcl_temperature", "M:test_zcl_temperature",
+            )),
+            "Board image must not link the isolated ZCL Temperature model")
     require(not any(name.startswith(("_zcl_id_", "_zcl_identify_")) for name in symbols) and
             not any(token in debug for token in (
                 "C$zcl_identify.c$", "C$test_zcl_identify.c$", "G$zcl_id_", "G$zcl_identify_",

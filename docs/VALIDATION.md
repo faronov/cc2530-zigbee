@@ -25,8 +25,9 @@ board-image directories and serial, fail-fast submakes. The existing full
 CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
-the two debug-fixture jobs run `test-common-core`, and two dedicated MAC
-clock/radio jobs run `test-mac-radio test-mac-stamp`. Their exact union is the complete
+the two debug-fixture jobs run `test-common-core`, and two dedicated composition
+jobs run `test-mac-radio test-mac-stamp test-zcl-temperature`.
+Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
 This thirty-job partition preserves all28 board/image jobs without adding the
 new composed replay to debug-fixture jobs already taking about13 minutes.
@@ -3218,6 +3219,21 @@ including861 in production ZCL, with the C corpora unchanged. It records
 actual per-object before/after allocations and the additional1024/512-byte
 regression gates. Full host/sanitizer/linked/alias acceptance stays in Actions;
 earlier numerical ledgers above are historical.
+
+The separate #82 [synthetic Temperature/reporting composition](ZCL_TEMPERATURE.md)
+has focused strict native/nonrecovering sanitizer, complete image and generic
+alias-aware simulator evidence; full both-board acceptance runs in Actions.
+The same166 common case groups are partitioned into wire/config/report target
+callers, with all native exact-allocation/int16/interval/lease cases retained.
+Their CODE sizes are21513/22033/24278 against24576; ordinary XDATA is
+1223/1215/1235 plus64 against1536. Uninterrupted peaks are SP7C/75/7A,
+not their checkpoint values57/57/59. Each link has seven immediate snapshots,
+complete CODE/raw-CDB/map/object/ABI identities and114 artifact negatives,
+ten result/guard negatives and three peak negatives; the shared proof also
+rejects missing alias modeling and four non-CPU MMIO instruction controls.
+Real Read/Discover/Write and report serialization are not physical measurement,
+binding resolution, transmission, persistence or an authenticated endpoint.
+No earlier budget, corpus,15-second deadline or board-image linkage changes.
 
 The additional `protocol_budget_test.ihx` now runs **all eight implemented
 protocol modules together**, not only the three-layer target above.

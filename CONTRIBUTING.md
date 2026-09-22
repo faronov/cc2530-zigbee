@@ -81,7 +81,8 @@ The existing `make BOARD=... IMAGE=... all test` command remains a full
 single-configuration check. The twenty-eight-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common-core` in the two
-debug-fixture jobs. The additional clock/radio and delayed-stamp compositions run in two dedicated
+debug-fixture jobs. The clock/radio, delayed-stamp and synthetic-temperature
+compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The exact union is still `test-common`; thirty jobs retain all twenty-eight
 board/image checks and the unchanged simulator deadlines. The tool suite itself includes both-board image profiles;
@@ -97,6 +98,7 @@ make BOARD=generic IMAGE=radio_rx_fixture test-board
 make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board
 make BOARD=generic test-mac-radio
 make BOARD=generic test-mac-stamp
+make BOARD=generic test-zcl-temperature
 ```
 
 `test-mac-radio` uses separately named `mr_*.rel` objects with the explicit
@@ -598,6 +600,20 @@ The real `zcl_id_` service/test symbols and source/CDB records must remain
 excluded from every board image. **Never flash `zcl_identify_test.ihx`.**
 No physical indication, client/group/broadcast handling or
 authenticated endpoint is provided. Use CI for full acceptance as described above.
+
+`make BOARD=... BUILD=... test-zcl-temperature`, included once per board in
+`test-common` and the dedicated composition jobs, checks the synthetic
+[Temperature Measurement model](docs/ZCL_TEMPERATURE.md). It links the real
+dispatch/write/attribute/frame/value services and snapshots all seven relocated
+listings immediately after each of three links: wire, config and report.
+The same caller source uses `ZCL_TEMP_PART=1/2/3` only for SDCC; native and
+nonrecovering ASan/UBSan execute the complete corpus without that macro.
+Preserve each new composition's24576-CODE/1536-reserved-XDATA/SP7C limits,
+complete image/ABI/alias checks and the15-second simulator deadline.
+The `zcl_temp_` service and temperature caller/source/CDB records are excluded
+from board images. **Never flash any `zcl_temperature_*_test.ihx`.**
+Synthetic values and constructed reports are not physical measurements or
+successful network delivery.
 
 `make test-protocol-budget`, included in the default test suite, additionally
 links **all eight** MAC/NWK Data/APS/ZCL/Read/Discover/write modules into one compact

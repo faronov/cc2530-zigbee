@@ -33,6 +33,15 @@ IdentifyTime is specified RW. The bounded [shared write path](ZCL_WRITE.md)
 now applies its writes and distinguishes Basic read-only, incorrect-type and
 missing-attribute errors. Unknown value extents remain explicitly unsupported.
 
+The separate [synthetic Temperature model](ZCL_TEMPERATURE.md) adds four
+read-only attributes through the same handlers, caller-fed measurements and
+one bounded reportable value. Configure/Read Reporting Configuration and
+logical interval/change state produce real Report Attributes bytes.
+A pending snapshot is committed only on caller-confirmed issuance; preparing
+or cancelling it does not count as a send. Caller defaults, binding resolution,
+transport and authorization are explicit boundaries. No physical sensor,
+report reception engine, persistence, profile/endpoint or conformance is added.
+
 ## Frame header
 
 Offsets start at the ZCL frame, not APS/NWK/MAC:
@@ -338,6 +347,7 @@ make test-zcl-attributes
 make test-zcl-dispatch
 make test-zcl-basic
 make test-zcl-identify
+make test-zcl-temperature
 make test-protocol-frame
 ```
 

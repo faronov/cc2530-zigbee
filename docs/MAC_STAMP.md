@@ -79,7 +79,7 @@ queue or physical timestamp is invented.
 
 `make test-mac-stamp` runs strict native tests, nonrecovering ASan/UBSan and the
 actual linked SDCC/alias-aware target proof. It is part of `test-common` once
-per board; CI executes it in the existing two MAC clock/radio jobs, preserving
+per board; CI executes it in the existing two composition jobs, preserving
 the30-job partition and all28 board/image jobs. No new timeout, dependency,
 board IMAGE, hardware runner or artifact upload is added.
 

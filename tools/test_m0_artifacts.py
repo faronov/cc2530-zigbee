@@ -242,6 +242,26 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZCL Identify"):
                     verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
 
+    def test_isolated_zcl_temperature_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_zcl_temp_init", "_zcl_temp_sample", "_zcl_temp_rx",
+                         "_zcl_temp_prepare", "_zcl_temp_finish", "_zcl_temp_result",
+                         "_zcl_temp_done", "_zcl_temperature_test_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "ZCL Temperature"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in (
+                "M:zcl_temperature", "M:test_zcl_temperature",
+                "L:C$zcl_temperature.c$1$0_0$0:123",
+                "L:C$test_zcl_temperature.c$1$0_0$0:123",
+                "F:G$zcl_temp_init$0_0$0({2}DF,SC:U),Z,0,0,0,0,0",
+                "S:Lzcl_temperature.zcl_temp_init$ctx$1_0$0({3}DG,STtest:S),F,0,0",
+                "T:Fzcl_temperature$__00000008[]",
+                "L:Ftest_zcl_temperature$ctx$0_0$0:123",
+                "L:G$zcl_temperature_test_result$0_0$0:123",
+            ):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZCL Temperature"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_isolated_zcl_write_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_zcl_wr_handle", "_zcl_write_test_result"):

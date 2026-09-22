@@ -340,6 +340,25 @@ permits full-range uint16 IdentifyTime updates through that shared parser;
 serialization failure cannot half-apply the timer. Its isolated proof does not extend
 the integrated protocol resource image or establish complete-stack fit.
 
+The separate [synthetic Temperature model](ZCL_TEMPERATURE.md) owns a37-byte
+caller context without retained pointers. Caller-supplied signed hundredths
+and modular uint32 seconds drive four read-only attributes and one reportable
+MeasuredValue. A transient table reuses the genuine dispatcher/write/read
+services; bounded Configure/Read Reporting Configuration handlers stage full
+request syntax and response construction before changing configuration.
+Minimum/maximum intervals, signed change thresholds and unknown transitions
+are explicit; defaults are supplied by the caller, not inferred from a profile.
+One pending report leases a value snapshot with a non-reused16-bit token.
+Only truthful completion at a checked issuance time advances the baseline;
+cancellation, later samples and failed serialization cannot masquerade as a send.
+Clock ambiguity, excessive pending age and token exhaustion retain faults.
+Bindings/destinations, scheduling, transport and authorization remain caller
+responsibilities; physical sensing, persistence and endpoint registration are
+absent. Three isolated compositions fit separate24576-CODE/1536-reserved-XDATA
+limits; the wire caller reaches SP7C and report CODE has298 bytes remaining.
+The production modules alone use16905 CODE/864 XDATA. This is not added to the
+integrated protocol-budget image and does not prove full-stack fit.
+
 The planned BDB commissioning policy uses
 [BDB 3.0.1 with Core R22](CONFORMANCE.md#bdb-301-requirements), above the
 NWK/APS/security services rather than inside codecs or board code.

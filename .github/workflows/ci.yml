@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   mac-radio:
-    name: Offline MAC clock/radio (${{ matrix.board }})
+    name: Offline composed services (${{ matrix.board }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -34,10 +34,10 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             build-essential python3 sdcc=4.2.0+dfsg-1 sdcc-ucsim=4.2.0+dfsg-1
 
-      - name: Test genuine clock/radio and delayed timestamp compositions
+      - name: Test clock/radio, timestamps and synthetic measurement reporting
         env:
           BOARD: ${{ matrix.board }}
-        run: make BOARD="$BOARD" BUILD="build/$BOARD/mac-radio" test-mac-radio test-mac-stamp
+        run: make BOARD="$BOARD" BUILD="build/$BOARD/compositions" test-mac-radio test-mac-stamp test-zcl-temperature
 
   bootstrap:
     name: Offline board fixture (${{ matrix.board }}, ${{ matrix.image }})

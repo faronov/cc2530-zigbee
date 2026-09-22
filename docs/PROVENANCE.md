@@ -1767,7 +1767,7 @@ engineering baseline, not a claim of a universal mandatory pairing.
 | Sections 2.3.1-2, 2-3..2-4 / 55-56 | Zero reserved bits on TX; ignore reserved sub-fields for standard RX; manufacturer-defined handling for extensions |
 | Sections 2.3.3,2.3.4.4, 2-4..2-6 / 56-58 | Manufacturer context must not execute unrecognized commands; read/write access categories, separate from application authentication |
 | Section 2.4.1, Figures 2-2/3/4, 2-8..2-9 / 60-61 | Three/five-byte headers, FCF bits, manufacturer-code order, direction/default-response metadata and transaction/command fields |
-| Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Test-only Report Attributes ID and identifier/type/value record shape; no reporting handler imported or implemented |
+| Table 2-3, 2-10..2-11 / 62-63; section 2.5.11.1, 2-26 / 78 | Codec test Report Attributes ID and identifier/type/value record shape; the later synthetic reporting model is reviewed separately below |
 | Sections 2.5.1-2, Figures 2-5/6/7, 2-11..2-14 / 63-66 | One or more LE16 request IDs; ordered status records; type/value only on success; insufficient-space records, prefix termination and lack of fragmentation |
 | Section 2.3.2, 2-4 / 56; sections 2.5.13-14, Figures 2-26/27/28, 2-29..2-31 / 81-83 | Ignore appended standard-command octets; LE16 inclusive discovery start and byte maximum, ascending ID/type records and completion flag; follow-up at last ID plus one |
 | Section 2.5.6.3, 2-18 / 70; section 2.5.12, 2-28..2-29 / 80-81 | Write Attributes No Response forbids all replies including errors; never reply to Default Response; unsupported-command `81` errors and received command/status notification |
@@ -1854,6 +1854,26 @@ Table3-31 (3-31 / PDF141); subsecond restart remains explicit project policy.
 Unknown wire extents are not inferred from the mixed secondary catalog.
 Original parser, synthetic vectors and proof adaptations import no external
 implementation or private material. No new primary revision is substituted.
+
+### Synthetic Temperature Measurement and reporting
+
+The [temperature/reporting contract](ZCL_TEMPERATURE.md#primary-basis) uses
+the same pinned R8 PDF, Measurement/Sensing14-0128-12 sections4.4 and4.1.3.1
+(printed4-10..12,4-4 / PDF324..326,318), and Foundation14-0126-17
+sections2.5.7-11 (2-18..28 / PDF70..80).
+These establish ranges/unknown markers, mandatory MeasuredValue reporting,
+record extents and error precedence, interval special values, signed-change
+semantics and complete-record Read Reporting Configuration prefixes.
+Section2.5.11.2.3 explicitly establishes the analog baseline at configuration,
+then uses the previously reported value; the initial periodic phase remains
+unspecified by2.5.11.2.1. Logical first-report phase, unknown transitions,
+duplicate-record resolution and the finite preparation/completion lease are
+documented project policies, not physical timing or delivery observations.
+No optional Tolerance, endpoint/profile identity, bindings, persistence or
+receive-side reporting is invented. Caller-supplied defaults do not establish
+BDB-compliant default reporting. Original C, synthetic vectors and proof
+import no external implementation, sensor reading, SDK or private artifact.
+Errata19-2019, application selection and conformance gates remain open.
 
 ## Specialist-agent reference
 

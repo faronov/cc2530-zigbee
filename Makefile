@@ -86,6 +86,7 @@ endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
+.PHONY: test-zcl-temperature
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-stamp
@@ -489,6 +490,43 @@ test-zcl-identify: $(BUILD)/host-zcl-identify-tests $(BUILD)/host-zcl-identify-t
 	$(BUILD)/host-zcl-identify-tests
 	$(BUILD)/host-zcl-identify-tests-sanitize
 	$(PYTHON) -B tests/boot_zcl_identify.py --output $(BUILD) --simulator "$(S51)"
+
+ZCL_TEMPERATURE_MODULES := zcl_temperature zcl_dispatch zcl_write zcl_attributes zcl_frame zcl_value
+ZCL_TEMPERATURE_SRC := $(addprefix src/,$(addsuffix .c,$(ZCL_TEMPERATURE_MODULES)))
+ZCL_TEMPERATURE_OBJECTS := $(addprefix $(BUILD)/,$(addsuffix .rel,$(ZCL_TEMPERATURE_MODULES)))
+ZCL_TEMPERATURE_IMAGES := $(addprefix $(BUILD)/zcl_temperature_,$(addsuffix _test.ihx,wire config report))
+$(BUILD)/zcl_temperature.rel: src/zcl_temperature.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zcl_temperature_wire_test.rel: tests/test_zcl_temperature.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DZCL_TEMP_PART=1 -c $< -o $@
+
+$(BUILD)/zcl_temperature_config_test.rel: tests/test_zcl_temperature.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DZCL_TEMP_PART=2 -c $< -o $@
+
+$(BUILD)/zcl_temperature_report_test.rel: tests/test_zcl_temperature.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DZCL_TEMP_PART=3 -c $< -o $@
+
+$(BUILD)/zcl_temperature_%_test.ihx: $(ZCL_TEMPERATURE_OBJECTS) $(BUILD)/zcl_temperature_%_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(ZCL_TEMPERATURE_OBJECTS) $(@:.ihx=.rel)
+	cp $(BUILD)/zcl_temperature.rst $(@:.ihx=).zcl_temperature.rst
+	cp $(BUILD)/zcl_dispatch.rst $(@:.ihx=).zcl_dispatch.rst
+	cp $(BUILD)/zcl_write.rst $(@:.ihx=).zcl_write.rst
+	cp $(BUILD)/zcl_attributes.rst $(@:.ihx=).zcl_attributes.rst
+	cp $(BUILD)/zcl_frame.rst $(@:.ihx=).zcl_frame.rst
+	cp $(BUILD)/zcl_value.rst $(@:.ihx=).zcl_value.rst
+	cp $(@:.ihx=.rst) $(@:.ihx=).zcl_temperature_$*_test.rst
+
+$(BUILD)/host-zcl-temperature-tests: tests/test_zcl_temperature.c $(ZCL_TEMPERATURE_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_temperature.c $(ZCL_TEMPERATURE_SRC) -o $@
+
+$(BUILD)/host-zcl-temperature-tests-sanitize: tests/test_zcl_temperature.c $(ZCL_TEMPERATURE_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_temperature.c $(ZCL_TEMPERATURE_SRC) -o $@
+
+test-zcl-temperature: $(BUILD)/host-zcl-temperature-tests $(BUILD)/host-zcl-temperature-tests-sanitize $(ZCL_TEMPERATURE_IMAGES)
+	$(BUILD)/host-zcl-temperature-tests
+	$(BUILD)/host-zcl-temperature-tests-sanitize
+	$(PYTHON) -B tests/boot_zcl_temperature.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-timebase-tests: tests/test_timebase.c tests/host_mmio.c tests/host_mmio.h src/timebase.c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase.c tests/host_mmio.c src/timebase.c -o $@
@@ -1036,7 +1074,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
