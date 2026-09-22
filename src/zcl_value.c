@@ -7,60 +7,51 @@
 #include <string.h>
 
 #define KIND_RAW 0u
-#define KIND_UNSIGNED 1u
-#define KIND_SIGNED 2u
-#define KIND_BOOLEAN 3u
-#define KIND_STRING 4u
+#define KIND_UNSIGNED 0x10u
+#define KIND_SIGNED 0x20u
+#define KIND_BOOLEAN 0x30u
+#define KIND_STRING 0x40u
+#define SHAPE_UNSUPPORTED 0xffu
 
-static zcl_codec_result_t value_shape(uint8_t type, uint8_t *width, uint8_t *kind)
+/* High nibble is the kind; low nibble is the fixed width (zero for strings). */
+static uint8_t value_shape(uint8_t type)
 {
-    *kind = KIND_RAW;
-    if (type == ZCL_TYPE_NO_DATA) {
-        *width = 0;
-    } else if (type >= ZCL_TYPE_DATA8 && type <= ZCL_TYPE_DATA64) {
-        *width = (uint8_t)(type - ZCL_TYPE_DATA8 + 1u);
-    } else if (type >= ZCL_TYPE_BITMAP8 && type <= ZCL_TYPE_INT64) {
-        *width = (uint8_t)((type & 7u) + 1u);
+    uint8_t kind = KIND_RAW;
+    if (type == ZCL_TYPE_NO_DATA)
+        return KIND_RAW;
+    if ((type >= ZCL_TYPE_DATA8 && type <= ZCL_TYPE_DATA64)
+            || (type >= ZCL_TYPE_BITMAP8 && type <= ZCL_TYPE_INT64)) {
         if (type >= ZCL_TYPE_INT8)
-            *kind = KIND_SIGNED;
+            kind = KIND_SIGNED;
         else if (type >= ZCL_TYPE_UINT8)
-            *kind = KIND_UNSIGNED;
-    } else if (type == ZCL_TYPE_BOOLEAN) {
-        *width = 1;
-        *kind = KIND_BOOLEAN;
-    } else if (type == ZCL_TYPE_ENUM8 || type == ZCL_TYPE_ENUM16) {
-        *width = (uint8_t)(type - ZCL_TYPE_ENUM8 + 1u);
-        *kind = KIND_UNSIGNED;
-    } else if (type == ZCL_TYPE_OCTET_STRING || type == ZCL_TYPE_CHARACTER_STRING) {
-        *width = 0;
-        *kind = KIND_STRING;
-    } else {
-        return ZCL_CODEC_UNSUPPORTED_DATA_TYPE;
+            kind = KIND_UNSIGNED;
+        return (uint8_t)(kind | ((type & 7u) + 1u));
     }
-    return ZCL_CODEC_OK;
+    if (type == ZCL_TYPE_BOOLEAN)
+        return KIND_BOOLEAN | 1u;
+    if (type == ZCL_TYPE_ENUM8 || type == ZCL_TYPE_ENUM16)
+        return (uint8_t)(KIND_UNSIGNED | (type - ZCL_TYPE_ENUM8 + 1u));
+    if (type == ZCL_TYPE_OCTET_STRING || type == ZCL_TYPE_CHARACTER_STRING)
+        return KIND_STRING;
+    return SHAPE_UNSUPPORTED;
 }
 
 uint8_t zcl_value_type_supported(uint8_t type)
 {
-    uint8_t width, kind;
-    return value_shape(type, &width, &kind) == ZCL_CODEC_OK;
+    return value_shape(type) != SHAPE_UNSUPPORTED;
 }
 
 static uint8_t non_value_pattern(uint8_t kind, const uint8_t *data, uint8_t width)
 {
-    uint8_t i;
+    uint8_t expected = kind == KIND_SIGNED ? 0x80u : 0xffu;
     if (kind == KIND_RAW)
         return 0;
-    if (kind == KIND_SIGNED) {
-        if (data[width - 1u] != 0x80u)
+    while (width != 0) {
+        width--;
+        if (data[width] != expected)
             return 0;
-        for (i = 0; i < width - 1u; i++)
-            if (data[i] != 0)
-                return 0;
-    } else {
-        for (i = 0; i < width; i++)
-            if (data[i] != 0xffu)
-                return 0;
+        if (kind == KIND_SIGNED)
+            expected = 0;
     }
     return 1;
 }
@@ -69,14 +60,15 @@ zcl_codec_result_t zcl_value_decode(uint8_t type, const uint8_t *body, uint16_t 
                                     zcl_value_info_t *result)
 {
     zcl_value_info_t candidate;
-    zcl_codec_result_t status;
-    uint8_t width, kind;
+    uint8_t shape, width, kind;
 
     if (body == NULL || result == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
-    status = value_shape(type, &width, &kind);
-    if (status != ZCL_CODEC_OK)
-        return status;
+    shape = value_shape(type);
+    if (shape == SHAPE_UNSUPPORTED)
+        return ZCL_CODEC_UNSUPPORTED_DATA_TYPE;
+    width = shape & 0x0fu;
+    kind = shape & 0xf0u;
     memset(&candidate, 0, sizeof(candidate));
     candidate.type = type;
     if (kind == KIND_STRING) {
@@ -101,25 +93,32 @@ zcl_codec_result_t zcl_value_decode(uint8_t type, const uint8_t *body, uint16_t 
 zcl_codec_result_t zcl_value_encode(const zcl_value_t *value, uint8_t *body,
                                     uint16_t capacity, uint8_t *length)
 {
-    zcl_codec_result_t status;
-    uint8_t width, kind, size, position;
+    const uint8_t * volatile data;
+    uint16_t data_length;
+    uint8_t shape, width, kind, size, position, string_non_value;
 
-    if (value == NULL || body == NULL || length == NULL
-            || (value->data == NULL && value->data_length != 0u))
+    if (value == NULL || body == NULL || length == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
-    status = value_shape(value->type, &width, &kind);
-    if (status != ZCL_CODEC_OK)
-        return status;
+    data = value->data;
+    data_length = value->data_length;
+    if (data == NULL && data_length != 0u)
+        return ZCL_CODEC_INVALID_ARGUMENT;
+    shape = value_shape(value->type);
+    if (shape == SHAPE_UNSUPPORTED)
+        return ZCL_CODEC_UNSUPPORTED_DATA_TYPE;
+    width = shape & 0x0fu;
+    kind = shape & 0xf0u;
+    string_non_value = value->string_non_value;
     if (kind == KIND_STRING) {
-        if (value->string_non_value > 1u || (value->string_non_value && value->data_length != 0u))
+        if (string_non_value > 1u || (string_non_value && data_length != 0u))
             return ZCL_CODEC_INVALID_VALUE;
-        if (value->data_length > 254u)
+        if (data_length > 254u)
             return ZCL_CODEC_TOO_LONG;
-        size = (uint8_t)(1u + value->data_length);
+        size = (uint8_t)(1u + data_length);
     } else {
-        if (value->string_non_value || value->data_length != width)
+        if (string_non_value || data_length != width)
             return ZCL_CODEC_INVALID_VALUE;
-        if (kind == KIND_BOOLEAN && value->data[0] != 0 && value->data[0] != 1 && value->data[0] != 0xffu)
+        if (kind == KIND_BOOLEAN && data[0] != 0 && data[0] != 1 && data[0] != 0xffu)
             return ZCL_CODEC_INVALID_VALUE;
         size = width;
     }
@@ -127,9 +126,9 @@ zcl_codec_result_t zcl_value_encode(const zcl_value_t *value, uint8_t *body,
         return ZCL_CODEC_BUFFER_TOO_SMALL;
     position = 0;
     if (kind == KIND_STRING)
-        body[position++] = value->string_non_value ? 0xffu : (uint8_t)value->data_length;
+        body[position++] = string_non_value ? 0xffu : (uint8_t)data_length;
     if (size > position)
-        memcpy(body + position, value->data, (uint16_t)(size - position));
+        memcpy(body + position, data, (uint16_t)(size - position));
     *length = size;
     return ZCL_CODEC_OK;
 }

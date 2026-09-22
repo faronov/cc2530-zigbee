@@ -381,13 +381,85 @@ it is not claimed as a four-layer target run.
 
 The separate `zcl_attributes_test.ihx` exercises the real model, value codec,
 framer and read handler, with a **1,024-byte test-harness reservation budget**.
-With the declaration-range regression cases it has 13,579 CODE bytes and
-670 ordinary XDATA bytes (734 including the
+With the unchanged declaration-range regression cases and the refactoring
+below it has 13,082 CODE bytes and
+666 ordinary XDATA bytes (730 including the
 64-byte status reservation). Existing 512-byte images and the shared
 15-second timeout are unchanged; CODE/source/result, alias, unused-XDATA,
 upper-IRAM and unwind checks remain mandatory. Its eight-byte `ZCA1` result
 uses version 1, size 8 and a little-endian failure line. It is not a board
 `IMAGE`, flash target or CI artifact.
+
+## Production CODE headroom
+
+The #76 refactoring changes only production `zcl_value`, `zcl_attributes`
+and `zcl_dispatch` C. It adds no public API, type, command or behavior.
+Against accepted #74/main `2a7299a`, the real SDCC 4.2.0 integrated link saves
+**1,034 CODE bytes**, including **861 bytes in production ZCL objects**.
+The synthetic caller, vectors and all other production objects are unchanged:
+their relocatable contents match the baseline after the build-directory
+`;!FILE` annotation, not merely their sizes.
+
+| Object | CODE before / after | Ordinary XDATA before / after | Persistent IRAM before / after |
+| --- | ---: | ---: | ---: |
+| ZCL frame | 1,173 / 1,173 | 35 / 35 | 6 / 6 |
+| ZCL value | 1,710 / 1,345 | 46 / 40 | 15 / 10 |
+| ZCL attributes | 2,086 / 1,958 | 148 / 150 | 6 / 7 |
+| ZCL dispatch | 3,093 / 2,725 | 136 / 134 | 15 / 11 |
+| ZCL write | 1,552 / 1,552 | 144 / 144 | 0 / 0 |
+| Other production: MAC/NWK/APS | 11,056 / 11,056 | 381 / 381 | 35 / 35 |
+| Synthetic caller/constants | 3,205 / 3,205 | 735 / 735 | 0 / 0 |
+| Shared runtime remainder | 700 / 527 | 29 / 20 | Shared |
+| **Integrated total** | **24,575 / 23,541** | **1,654 / 1,639** | **77 / 69** |
+
+Object CODE includes constants, not only listed instructions. Shared overlay
+remains15 bytes; bit-addressable backing remains one byte. Integrated stack
+start moves from66 to5E (hex). The whole image uses1,703 XDATA bytes including
+the64-byte status reservation, below the unchanged2,048 cap. CODE headroom
+below the unchanged24,576 budget grows from1 to**1,035 bytes**.
+An additional ledger guard enforces **CODE <=23,551** and **production ZCL
+savings >=512 bytes** against the9,614-byte baseline; synthetic tests reject
+both one-byte threshold failures and caller-only savings. Older module,
+whole-image, SP, alias and15-second limits are unchanged.
+
+The implementation uses a byte-valued internal kind/width classifier instead
+of two generic-pointer outputs, one bounded non-value-pattern loop, cached
+stable value fields and pointer-walking attribute lookup. Discover subtracts
+three bytes per emitted record instead of dividing the response budget,
+preserving zero maximum, insufficient-space and completion rules. Dispatcher
+successes share one final metadata publication; local errors still publish
+nothing. Removing production division/multiplication references also removes
+173 runtime CODE bytes from the integrated link. Basic/dispatcher callers
+still need that runtime; their smaller total saving is not hidden.
+
+A frame-copy `memcpy` trial was rejected: it saved only30 CODE bytes and
+grew that object's persistent IRAM from6 to23, exceeding its existing cap.
+The original frame implementation is retained. No compiler flag, assembly,
+table permission, response precedence, write transaction or Identify phase
+policy changes are used to meet the target.
+
+| Isolated composition | CODE before / after | Ordinary XDATA before / after |
+| --- | ---: | ---: |
+| Basic | 21,098 / 20,237 | 1,142 / 1,136 |
+| Identify | 24,340 / 23,338 | 1,006 / 993 |
+| Dispatcher | 18,596 / 17,735 | 945 / 939 |
+
+These are compiled-image measurements; actual execution and full-run SP are
+checked in GitHub Actions, not inferred from allocation. Separate uninterrupted
+SP measurements in both-board CI observed72 for the integrated image
+(previously7A),5C for Basic (previously5E) and6A for Identify (previously6E),
+distinct from their5D/3F/4D checkpoint values. All original guards remain unchanged.
+Canonical targets and link order are unchanged. All earlier native/sanitizer and SDCC corpora,
+including370 Basic and102 Identify common cases, are retained without C test
+edits. Complete raw-CDB-before-decode, map, CODE, immediate ordered listings,
+field/pointer/return ABI, caller/runtime boundaries and negative controls
+remain mandatory. The compact private value helpers additionally have explicit
+ABI/actual-call and metadata-mutation checks. The standalone value image is
+6,459 CODE/371 ordinary XDATA and retains all five simulator phases.
+
+This remains offline component evidence, not hardware timing, RF, full-stack
+fit or increased ZCL/application conformance. Write-family limitations and
+the existing primary/errata/security gates are unchanged.
 
 Shared read tests cover independent golden records, CODE/XDATA tables and
 values, changed backing values, both namespace/header layouts and directions,

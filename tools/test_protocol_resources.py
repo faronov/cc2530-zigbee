@@ -8,7 +8,9 @@ import sys
 import tempfile
 import unittest
 
-from protocol_resources import MODULE_BUDGETS, build_report, object_resources
+from protocol_resources import (
+    MODULE_BUDGETS, ZCL_BASELINE_CODE, build_report, check_zcl_headroom, object_resources,
+)
 
 
 def obj(name, code=100, xdata=10, dseg=2, overlay=3, bits=0):
@@ -165,6 +167,33 @@ class ReportTests(unittest.TestCase):
         self.symbols["s_SSEG"] += 1
         with self.assertRaisesRegex(ValueError, "stack-start budget"):
             build_report(self.image, self.symbols, self.objects, 127)
+
+
+class HeadroomTests(unittest.TestCase):
+    def setUp(self):
+        self.report = {
+            "linked": {"code": 23551},
+            "modules": {name: {"code": code} for name, code in ZCL_BASELINE_CODE.items()},
+        }
+        self.report["modules"]["zcl_value"]["code"] -= 512
+
+    def test_exact_both_thresholds(self):
+        result = check_zcl_headroom(self.report)
+        self.assertEqual(result["code_saved"], 1024)
+        self.assertEqual(result["zcl_code_saved"], 512)
+        self.assertEqual(result["zcl_code"], 9102)
+        self.assertEqual(result["baseline_zcl_code"], 9614)
+
+    def test_integrated_one_byte_short(self):
+        self.report["linked"]["code"] += 1
+        with self.assertRaisesRegex(ValueError, "Integrated CODE headroom"):
+            check_zcl_headroom(self.report)
+
+    def test_caller_or_runtime_savings_cannot_replace_production(self):
+        self.report["linked"]["code"] = 22000
+        self.report["modules"]["zcl_value"]["code"] += 1
+        with self.assertRaisesRegex(ValueError, "Production ZCL CODE"):
+            check_zcl_headroom(self.report)
 
 
 if __name__ == "__main__":

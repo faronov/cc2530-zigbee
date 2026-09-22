@@ -20,6 +20,10 @@ ledger are original BSD-3-Clause work. Leaf serialization and pointer-storage
 changes refactor this repository's existing codecs, not an imported stack.
 Resource facts come from the local SDCC 4.2.0 objects/link output and uCsim
 execution; they are not hardware measurements or new normative wire rules.
+The #76 [ZCL headroom refactoring](ZCL.md#production-code-headroom) likewise
+uses only existing original C and compiler artifacts: compact private value
+classification, equivalent bounded lookup/discovery and shared publication.
+No external implementation, assembly or new normative behavior is imported.
 
 ## Reviewed reference candidates
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from boot_image import (
     ALIAS, check_pc, section, simulate, snapshot, snapshot_commands, verify_component_layout,
 )
-from protocol_resources import MODULE_BUDGETS, XDATA_BUDGET, build_report
+from protocol_resources import MODULE_BUDGETS, XDATA_BUDGET, build_report, check_zcl_headroom
 from verify_firmware import STATUS_ADDRESS, parse_ihex, parse_symbols, require
 from zcl_write_proof import load_and_verify
 
@@ -63,6 +63,7 @@ def main():
     peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", section(full, 1))
     require(len(peaks) == 1, "Missing or ambiguous simulator stack-peak evidence")
     report = build_report(image, symbols, objects, int(peaks[0], 16))
+    report["zcl_headroom"] = check_zcl_headroom(report)
     report["artifacts_sha256"] = {
         name: hashlib.sha256((args.output / name).read_bytes()).hexdigest()
         for name in ("protocol_budget_test.ihx", "protocol_budget_test.map", "protocol_budget_test.cdb",
@@ -75,6 +76,9 @@ def main():
           f"observed peak={totals['observed_peak_sp']:#x}, guard headroom={totals['observed_headroom_to_guard']}. "
           "Golden exchanges, per-module budgets and alias/XDATA/stack guards PASS (simulation only).")
     print(f"Resource ledger: {report_path} (not a board image, CI artifact or full-stack fit claim).")
+    print(f"CODE saved: {report['zcl_headroom']['code_saved']} integrated / "
+          f"{report['zcl_headroom']['zcl_code_saved']} production ZCL; "
+          "minimum 1024/512-byte savings PASS.")
 
 
 if __name__ == "__main__":

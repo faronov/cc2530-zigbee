@@ -124,15 +124,16 @@ capacity/truncation matrices, both reply policies, full failure preservation,
 and all65,536 IdentifyTime values with restart, wrap and exact expiry, retaining
 the earlier maximum-countdown and20,000-operation clock oracle.
 
-Prepared generic SDCC artifacts use21,098 CODE/1,142 ordinary XDATA (Basic),
+The accepted #74 baseline used21,098 CODE/1,142 ordinary XDATA (Basic),
 24,340/1,006 (Identify),18,596/945 (dispatcher), and24,575/1,654 (integrated).
-These are compiled-image measurements; execution is checked separately in CI.
+Current [production headroom measurements](ZCL.md#production-code-headroom)
+supersede these historical totals without changing write semantics.
 The respective total reserved-XDATA limits remain1,536/1,536/1,024/2,048;
 the64-byte status reservation is counted. Basic/Identify and integrated CODE
 caps stay24,576; every older module budget is unchanged. The new write module
 uses1,552 CODE/144 XDATA/**zero persistent IRAM**, bounded by1,792/160/0.
-The integrated image has only **one byte of CODE budget headroom**.
-Both-board CI observed uninterrupted peaks **SP5E** for Basic and **SP6E**
+That baseline had only **one byte of CODE budget headroom**.
+Its both-board CI observed uninterrupted peaks **SP5E** for Basic and **SP6E**
 for Identify, separately from checkpoints **SP45/SP53**, after all370/102
 target cases and allocation/alias guards passed. The former5A/70 identities
 were updated from those executions and reviewed caller staging, not by raising

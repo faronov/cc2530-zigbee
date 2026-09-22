@@ -826,6 +826,9 @@ applicable corrections before conformance claims. Header/value, APS/ZCL and
 read/dispatch target checks are host-tested, image-checked and simulated;
 full Discover-then-Read/ZCL/APS/NWK/MAC composition is host-tested and also
 image-checked/simulated in the integrated resource harness.
+The behavior-preserving [production headroom refactoring](ZCL.md#production-code-headroom)
+reduces that link to23,541 CODE, saving1,034 bytes including861 in production
+ZCL without reducing the caller or vector corpus. Resource caps remain unchanged.
 There is no board caller, endpoint/transport dispatcher, native
 numeric/charset conversion or advertised cluster. Application/device/profile
 selection and all M4/M5 networking/security gates remain open.
