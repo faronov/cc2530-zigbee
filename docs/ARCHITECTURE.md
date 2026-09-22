@@ -1563,11 +1563,14 @@ build. It is excluded from the unchanged CI board-artifact whitelist.
 
 The following table is the historical seven-module measurement with SDCC
 4.2.0 #13081 (Mac OS X x86_64), matching both board definitions. The current
-eight-module write-enabled image is recorded in [ZCL_WRITE.md](ZCL_WRITE.md):
-24,575 CODE and1,654 ordinary XDATA plus64 reserved, with unchanged caps.
+eight-module write-enabled image and its before/after objects are recorded in
+[production CODE headroom](ZCL.md#production-code-headroom):
+23,541 CODE and1,639 ordinary XDATA plus64 reserved, with unchanged caps.
 The write module contributes1,552 CODE/144 XDATA/zero persistent IRAM;
 the synthetic caller's equivalent header representation was compacted.
-Only one CODE-budget byte remains; this is not full-stack headroom.
+Production ZCL saves861 CODE bytes and the integrated link saves1,034,
+without changing the caller or vectors. The recovered1,035-byte CODE-budget
+margin is not full-stack headroom.
 
 | Object / subsystem | CODE bytes | Ordinary XDATA bytes | Persistent IRAM bytes | Overlay IRAM bytes |
 | --- | ---: | ---: | ---: | ---: |
@@ -1597,7 +1600,7 @@ raised; observed stack usage is unchanged.
 
 The checked limits are **24,576 CODE bytes**, **2,048 XDATA bytes including
 64 reserved status bytes**, per-object budgets in `tools/protocol_resources.py`,
-and stack start no higher than `0x68`. This build consumes 1,564 of that
+and stack start no higher than `0x68`. This historical build consumes 1,564 of that
 XDATA reservation. The 32-KiB window has 9,939 bytes remaining; ordinary
 allocation below `0x1E00` has 6,180 bytes remaining. These are address-space
 remainders, **not guaranteed capacity for the complete Zigbee stack**.

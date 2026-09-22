@@ -40,9 +40,8 @@ static zcl_codec_result_t discover(const zcl_attribute_set_t * volatile set, con
 {
     uint8_t payload[1u + 3u * ZCL_ATTRIBUTE_MAX_COUNT];
     const zcl_attribute_t * volatile attribute;
-    uint8_t * volatile out = payload + 1;
     uint16_t start;
-    uint8_t budget, header_size, limit, count = 0;
+    uint8_t budget, header_size, count = 0, used = 1;
     zcl_codec_result_t status;
 
     start = (uint16_t)((uint16_t)request[0] | ((uint16_t)request[1] << 8));
@@ -51,16 +50,14 @@ static zcl_codec_result_t discover(const zcl_attribute_set_t * volatile set, con
     budget = capacity < ZCL_FRAME_MAX_BODY ? (uint8_t)capacity : ZCL_FRAME_MAX_BODY;
     if (budget < header_size + 1u)
         return ZCL_CODEC_BUFFER_TOO_SMALL;
-    limit = (uint8_t)((budget - header_size - 1u) / 3u);
-    if (limit > request[2])
-        limit = request[2];
+    budget -= header_size + 1u;
     payload[0] = 1;
     for (;;) {
         attribute = next_attribute(set, start);
         if (attribute == NULL)
             break;
-        if (count == limit) {
-            if (limit == 0 && request[2] != 0)
+        if (count == request[2] || budget < 3u) {
+            if (count == 0 && request[2] != 0)
                 return ZCL_CODEC_BUFFER_TOO_SMALL;
             payload[0] = 0;
             break;
@@ -68,16 +65,17 @@ static zcl_codec_result_t discover(const zcl_attribute_set_t * volatile set, con
         if (!zcl_value_type_supported(attribute->value.type))
             return ZCL_CODEC_UNSUPPORTED_DATA_TYPE;
         start = attribute->id;
-        *out++ = (uint8_t)start;
-        *out++ = (uint8_t)(start >> 8);
-        *out++ = attribute->value.type;
+        payload[used++] = (uint8_t)start;
+        payload[used++] = (uint8_t)(start >> 8);
+        payload[used++] = attribute->value.type;
+        budget -= 3;
         count++;
         if (start == 0xffffu)
             break;
         start++;
     }
     reply->command_id = ZCL_COMMAND_DISCOVER_RESPONSE;
-    status = zcl_frame_encode(reply, payload, (uint16_t)(1u + 3u * count), response, capacity, &info->length);
+    status = zcl_frame_encode(reply, payload, used, response, capacity, &info->length);
     if (status != ZCL_CODEC_OK)
         return status;
     info->discovery_complete = payload[0];
@@ -127,17 +125,16 @@ zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set
         candidate.default_command = payload[0];
         candidate.default_raw_status = payload[1];
         candidate.default_status = normalized_status(payload[1]);
-        *info = candidate;
-        return ZCL_CODEC_OK;
+        goto publish;
     }
     if (context_matches && frame.header.type == ZCL_FRAME_GLOBAL
             && (frame.header.command_id == ZCL_COMMAND_WRITE_ATTRIBUTES
                 || frame.header.command_id == ZCL_COMMAND_WRITE_UNDIVIDED
                 || frame.header.command_id == ZCL_COMMAND_WRITE_NO_RESPONSE)) {
         status = zcl_wr_handle(set, &frame, payload, response, capacity, &candidate, NULL);
-        if (status == ZCL_CODEC_OK)
-            *info = candidate;
-        return status;
+        if (status != ZCL_CODEC_OK)
+            return status;
+        goto publish;
     }
     if (frame.header.type == ZCL_FRAME_GLOBAL && frame.header.command_id == ZCL_COMMAND_WRITE_NO_RESPONSE)
         return ZCL_CODEC_UNSUPPORTED_NO_RESPONSE;
@@ -159,8 +156,7 @@ zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set
                 candidate.default_command = ZCL_COMMAND_READ_ATTRIBUTES;
                 candidate.default_status = candidate.default_raw_status = ZCL_STATUS_MALFORMED_COMMAND;
             }
-            *info = candidate;
-            return ZCL_CODEC_OK;
+            goto publish;
         }
         if (frame.header.command_id == ZCL_COMMAND_DISCOVER_ATTRIBUTES) {
             if (frame.payload_length < 3u) {
@@ -171,8 +167,7 @@ zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set
                 status = discover(set, payload, &reply, response, capacity, &candidate);
                 if (status != ZCL_CODEC_OK)
                     return status;
-                *info = candidate;
-                return ZCL_CODEC_OK;
+                goto publish;
             }
         }
     }
@@ -183,6 +178,7 @@ zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set
     candidate.command_id = reply.command_id;
     candidate.default_command = error[0];
     candidate.default_status = candidate.default_raw_status = error[1];
+publish:
     *info = candidate;
     return ZCL_CODEC_OK;
 }

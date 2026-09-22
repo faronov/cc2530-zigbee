@@ -760,8 +760,10 @@ driver, functioning MAC, association or Zigbee join.
 
 `make test-protocol-budget` checks that integrated image and generates a
 [per-subsystem resource ledger](docs/ARCHITECTURE.md#integrated-protocol-resource-budget):
-22,829 CODE bytes and 1,500 ordinary XDATA bytes. Its exercised foreground
-stack peak leaves only five bytes before the existing upper-IRAM guard.
+23,541 CODE bytes and1,639 ordinary XDATA bytes plus64 reserved.
+The [production-only ZCL refactoring](docs/ZCL.md#production-code-headroom)
+saves1,034 linked CODE bytes, including861 in production objects, with every
+caller/vector retained and no raised budget.
 This is a measured baseline for the implemented protocol subset, **not a
 claim that radio, security/NV, ZDO and the final application already fit**.
 

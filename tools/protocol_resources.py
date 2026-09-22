@@ -20,12 +20,34 @@ MODULE_BUDGETS = {
 CODE_BUDGET = 24576
 XDATA_BUDGET = 2048
 STACK_START_LIMIT = 0x68
+HEADROOM_BASELINE_CODE = 24575
+MIN_CODE_SAVING = 1024
+MIN_ZCL_CODE_SAVING = 512
+ZCL_BASELINE_CODE = {
+    "zcl_frame": 1173, "zcl_value": 1710, "zcl_attributes": 2086,
+    "zcl_dispatch": 3093, "zcl_write": 1552,
+}
 CODE_AREAS = {"CSEG", "CONST", "HOME", "GSFINAL", "GSINIT", *(f"GSINIT{i}" for i in range(6))}
 FLAGS = {
     **{name: 0x20 for name in CODE_AREAS},
     "DSEG": 0, "OSEG": 4, "XSEG": 0x40, "BSEG": 0x80,
     "REG_BANK_0": 4, "SSEG": 0,
 }
+
+
+def check_zcl_headroom(report):
+    """Additional #76 regression gates, not replacements for the old budgets."""
+    saved = HEADROOM_BASELINE_CODE - report["linked"]["code"]
+    zcl_code = sum(report["modules"][name]["code"] for name in ZCL_BASELINE_CODE)
+    zcl_saved = sum(ZCL_BASELINE_CODE.values()) - zcl_code
+    require(saved >= MIN_CODE_SAVING, "Integrated CODE headroom saving is below 1024 bytes")
+    require(zcl_saved >= MIN_ZCL_CODE_SAVING, "Production ZCL CODE saving is below 512 bytes")
+    return {
+        "baseline_code": HEADROOM_BASELINE_CODE, "code_saved": saved,
+        "minimum_code_saving": MIN_CODE_SAVING,
+        "baseline_zcl_code": sum(ZCL_BASELINE_CODE.values()), "zcl_code": zcl_code,
+        "zcl_code_saved": zcl_saved, "minimum_zcl_code_saving": MIN_ZCL_CODE_SAVING,
+    }
 
 
 def object_resources(text, module):

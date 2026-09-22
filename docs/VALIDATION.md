@@ -3103,11 +3103,11 @@ denial without touching values, ordered status/value records, namespace/side
 guards, malformed-command responses, space errors and explicit prefix counts.
 Golden CODE/XDATA vectors, all data type IDs, unchanged local failures,
 capacity boundaries and a 16-entry table are executed on SDCC in
-`zcl_attributes_test.ihx`: with declaration-range regressions, 13,579 CODE
+`zcl_attributes_test.ihx`: at the original declaration-range revision, 13,579 CODE
 bytes and 670 ordinary XDATA bytes, 734 with the 64-byte status reservation.
 This harness uses an explicit
 1,024-byte limit; existing budgets and the 15-second timeout are unchanged.
-The exact reservation threshold passes at 734 and rejects 733 and the
+At that revision the exact reservation threshold passes at 734 and rejects 733 and the
 512-byte default, without weakening other layout/alias/stack checks.
 
 Host tests add exact table/value/request/response/result allocations,
@@ -3127,8 +3127,8 @@ Host dispatch additionally tests all 65,536 declaration IDs in each namespace:
 standard reserved ranges reject atomically, manufacturer-specific IDs remain
 valid across the full range.
 
-The isolated discovery/dispatch image exercises the real dispatcher,
-Read handler and frame/value codecs with CODE/XDATA tables. It uses
+The original isolated discovery/dispatch image exercises the real dispatcher,
+Read handler and frame/value codecs with CODE/XDATA tables. That revision uses
 16,428 CODE bytes and 800 ordinary XDATA bytes, 864 including the reserved
 status block, within an explicit 1,024-byte harness budget. The exact layout
 threshold passes at 864 and rejects 863 and the 512-byte default.
@@ -3186,8 +3186,12 @@ and extends Basic/Identify to370/102 common cases, including actual mutation,
 error precedence, Undivided and silent processing. Full acceptance is CI-only,
 with unchanged budgets/deadlines, complete raw-byte metadata/link identities,
 immediate listings, write ABI/call evidence and alias-aware execution.
-Current compiled totals and the one-byte integrated CODE margin are recorded
-in that dedicated contract; the earlier numerical ledgers are historical.
+The #76 [production headroom record](ZCL.md#production-code-headroom)
+supersedes its one-byte integrated CODE margin:23,541 CODE, saving1,034 bytes
+including861 in production ZCL, with the C corpora unchanged. It records
+actual per-object before/after allocations and the additional1024/512-byte
+regression gates. Full host/sanitizer/linked/alias acceptance stays in Actions;
+earlier numerical ledgers above are historical.
 
 The additional `protocol_budget_test.ihx` now runs **all eight implemented
 protocol modules together**, not only the three-layer target above.

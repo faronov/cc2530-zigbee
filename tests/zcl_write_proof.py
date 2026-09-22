@@ -5,7 +5,7 @@ import re
 import unittest
 
 from boot_nwk_candidates import listing_metrics, records
-from boot_zcl_basic import AREAS_SHA, canonical, sha, verify_write_abi
+from boot_zcl_basic import AREAS_SHA, canonical, sha, verify_value_abi, verify_write_abi
 from verify_firmware import cdb_address, code_bytes, require
 
 
@@ -14,32 +14,32 @@ from verify_firmware import cdb_address, code_bytes, require
 # complete raw immediate relocated listing SHA.
 PINS = {
     "zcl_dispatch_test": (
-        18596, "704809355f0314375f3ca9a87a21a57b5442cefb967afcec9013be0affabc4a0",
-        "b87fbb55b6df58664eac27a98e7306a738672e2455fa7504366d735998d9d61d",
-        "b5e797286dc0a7bb879b7c081ef29b00f3807d294063920e7166ef99f36cfcf0",
+        17735, "f875dc310610618466a4c5d808c29fabdc81c0846f7b05db7a02ec4fec33d776",
+        "d1728c911950d5730c4432520cabe99e0b29d9a4ecf48c0a3afc06cfb0244421",
+        "9ec6c13253931717d430e91d09dcc0dfa78f86bc94107ec608fe39b6c2f1e256",
         {
-            "zcl_dispatch": (1942, 3093, "dd4c74d59bf42ef696501965f116efcda23cce97e887489c5c3a028a9f0aaf0a", "56c291299c1df132b0aa551d47759ce12e312cf71d6f61ade2e4e78323a48e70"),
-            "zcl_write": (1016, 1552, "30da5da51a8d46be3a80e9587049f0d4756ceb533c83d07779874e57cf1dd114", "34d3f69b84b086761e258b9d407a8c2518e996ee15e6cd71a00a9e13835d897f"),
-            "zcl_attributes": (1284, 2086, "2cc4fd07e90cb429fe7a02a4175dbe06bc3ff5e825a8683765e78cf3366fa8dd", "11b18d9e361edf7610c88208abff49611553b5ddd20c444e2b06178bd8ec6d0f"),
-            "zcl_frame": (663, 1173, "4e3f4374df0fd713f260a0a1424dd708d6c67bf6b7d97ecdbc46f28cf37fcbe1", "c0778556738722b3a70028e5f7232f860b1713defa95d6404f1cc050ef40aed8"),
-            "zcl_value": (1006, 1710, "cf3e7af50ba375e5509f5b18dc54e441d9d4811fb0afb2881c5659779c43504a", "4fa341c2eb2d6d1372be94316734cba26ddf071373efa1652167cd0671607e8e"),
-            "zcl_dispatch_test": (4500, 8169, "1aeb75d1be0e663bd243c15d317a7c5ac2c5245713659241f7fa8f49b225d335", "f5073fc1dde8b6602c297e307430edb140351914ac418462c42bc9df73ff10f4"),
+            "zcl_dispatch": (1702, 2725, "9d82c8b11c3f56e6b6c66ead394fc3e3ed3108cdcee52272ee26c43d0b3e6a0c", "c7cd73f3615cec59aa0f4b1f518c6879176b01844c127fd819082569ed5c1cd2"),
+            "zcl_write": (1016, 1552, "da47879d71e1b352c02ecd4db4be138eda19fedb2beb61a978f7bb4ebd16a0d0", "a87c156b1ef043877ebed55499ced4ae2fa24830b57ef0bee4f6218d56726b8b"),
+            "zcl_attributes": (1217, 1958, "ca882a7d008264d8b004425d7819ef5803e8f3e2c1f04bb41f97d647e32c55fe", "b0710c6e40a6759ca3cebe0ffb7bc483d061835635f8a9451dc6e24f3523a415"),
+            "zcl_frame": (663, 1173, "986db5405087b7f91e087ddba7a14ef004e9ae66d5c939367f103110b86faca6", "5d8fd014105263f2c4fe0249b1a352ad8ef0c159ebc0f8d916235ae5c5f6d48e"),
+            "zcl_value": (768, 1345, "83d89315cc666e7b768846c9da7050a608770def643356078bd06dd22c17e1a8", "0f40b16a9e1fed1fb5cc3a7b03ce7696893ce0b4e6dc031a37aa1a36b14f6fbe"),
+            "zcl_dispatch_test": (4500, 8169, "c40da63bdf4965ed1fe60a349cd106804fe6cf747249a0d78379ba58f42b94ee", "30fd88f2ee21d89fd1517b6c0bde1ac8bdf6388349bdf9c5950dfa9425cd063d"),
         },
     ),
     "protocol_budget_test": (
-        24575, "a38512f1efff97979883e1392db3a35a97c9c207d5b364209852906b7398c209",
-        "3303148c4fb56fc0abdcd64f7e4e3f561cd74d19ad28f5217ecd364be4a170d7",
-        "d974046c31fc1fcb02b04b52a2df4ff685dbea0568d0b0dd285b84460b737c47",
+        23541, "069c28cf769b4102e7c9c9be17614b5eef5e40cc9855948262a2004e42f20fec",
+        "7ba8865ee201bde856b66b1e410e0f472a1020a21a6da49f190eddadcc0e87eb",
+        "0bfe7a073ff55909555e8a5fe1d9b56cd2198244c9ee8391be7f0818f1131f94",
         {
-            "mac_frame": (4253, 7136, "b0e431e85f6f3a34bed3629f1d42b6e827eae74ff22f79b30e6c8ce6ae6f13c2", "23e8cb77ea9496f85be1538bb99803413bd2903ff4b7e98d31b7b0a09783bc84"),
-            "nwk_frame": (1344, 2294, "6cc3aaee32ed144622b997343852a9797c901959bf52408bf3a463d2974a9396", "f7855eca0ea1b5390800a684df028cfa6d1d8c2a8fb8c8490475c390b88d4c97"),
-            "aps_frame": (939, 1626, "98d511c0a4d398c1f9090420080bf594d4699b3de0f2aafe69e45397d997d5b7", "5e01ea77e62d99ee3df0edf138c83da77b54883debfde41d7c087efa940375be"),
-            "zcl_frame": (663, 1173, "4ff8b03de7f0da06b3505e972781cd88fb460c26fb51456b117cfb9d199cbc9c", "5fde8ee3a60079fd7f3999ae28ad4020895ba67dc1902b06d20bef97f977ca63"),
-            "zcl_value": (1006, 1710, "6e10d94b93dd82b9d3ea2156b5cacf2706ae9730a14bb29939c5e8a1f2251354", "4d9872411e3ea0679cbc4f70364afad16e4f77efc238a31edf75416d286e2b14"),
-            "zcl_attributes": (1284, 2086, "d4b52eb72731f4f0c5c0e03e708883e087c4ec3408ec86d9615072cfc54ce6d7", "31b6b1ea32db2bc60a74af20a8b6a0889163bda28e5877858c2bd876d17d8172"),
-            "zcl_dispatch": (1942, 3093, "1015b4637ba0e6d13b92d4f48a2fe89d482f1fc8a2be415101db0f95a97638b2", "a07c41a3b2b60c0fd0a58accc788113bd9060cb8598e49300281c5f9bba3eb35"),
-            "zcl_write": (1016, 1552, "33c2596651f363ef71560be1a7eeb3a533e5dc30ac313f9980f66b69832ee5d2", "a334fe4d3d351202138146ccd910f6518759a8caf30d8bc29fd2cf6ccee554d6"),
-            "protocol_budget_test": (1637, 2946, "a05219f11246424a5b0012315442428bae3d7b3bcd8141e62fc693b9dabfce7b", "a51e0aba123691dfe25213aa3f33dbe30b5614a49bc06628a7c758d0cd958057"),
+            "mac_frame": (4253, 7136, "645aa254a949c4cab3fae1cb2a020da4ced39c58b184200992c6978698177236", "38e7d35fca29790c52cf6d80d73605a073e544774ff6f96b951f2abf7fef191d"),
+            "nwk_frame": (1344, 2294, "ac851c90cc185371a3c63423e99ab88b1404dd678f880e51fc70332963ffb59c", "6a1ec462fa361f74b96df643510821afd5aed3be1d87eb123a485c509c25495a"),
+            "aps_frame": (939, 1626, "fcd530ca7240bee705e7bd48191677b85d5aaabcbca8a8b1b03298b29f00c724", "948f1fe7b92ee66bfadf646dfc43303bde92b6554849141c01ca571f7912f5bb"),
+            "zcl_frame": (663, 1173, "25f8362fca81ccb0f92b9826c0c4f709198c2cc2c325b30d4f74ad7c6bf93b0f", "f837980f6adb7e3a899916cd5a8201f739f84fa221c23698b22ef8d25b93aae5"),
+            "zcl_value": (768, 1345, "cdf253131214b9c0614f8d603b004a7869d327584d1c6620224c74229ef020ed", "996d270d11918dac366a4de4026d70b1ba017dc5822cba17012fba7ca2b7e4b6"),
+            "zcl_attributes": (1217, 1958, "74761480dac22b85e59ea52709c4e6ccbc3e1950676fa4b903699a8bb5d0df1d", "d99d799854c7b7ff4e9071775d58b02c1dbfa7a3b8ec59376b490e049a3a9714"),
+            "zcl_dispatch": (1702, 2725, "37445a56824c1353f16869969d673f55be44d4a765529cff5b7d2a3ddd48378c", "bf65a805ca7453fc605fffa1a18e4a7795276d2738a931724fab542bef8f141e"),
+            "zcl_write": (1016, 1552, "b01651813ed1f82f9eae708ff697ff280add267b2dcee512b34fcdd02b3906e9", "6777f8713a868f7c71a6b87325dc126c807c1c8f5f9951b7525432483e2b1c99"),
+            "protocol_budget_test": (1637, 2946, "e5ba747fe49861a2f4b54b59003c1ce67c713d6dbbde102304bef9bc04e6a3be", "dc95c6bd4f3bc4adecd5c6f7c69339e12cef51e6a229e0556745552333d2fafb"),
         },
     ),
 }
@@ -73,6 +73,7 @@ def verify(stem, image, symbols, raw, listings, objects):
             coverage.update(span)
             instructions[address] = data
     verify_write_abi(debug, symbols, instructions)
+    verify_value_abi(debug, instructions)
     lo = cdb_address(debug, "L:G$zcl_dispatch_unicast$0$0")
     hi = cdb_address(debug, "L:XG$zcl_dispatch_unicast$0$0")
     require(any(lo <= a <= hi and data == b"\x12" + symbols["_zcl_wr_handle"].to_bytes(2, "big")
@@ -101,7 +102,8 @@ def load_and_verify(output, stem, image, symbols):
     reject(symbols=symbols | {"unreviewed": 1})
     for name in ("s_SSEG", "l_XSEG", "_zcl_wr_handle_PARM_7"):
         reject(symbols=symbols | {name: symbols[name]+1})
-    for prefix in (b"F:", b"S:", b"L:", b"T:", b"F:G$zcl_wr_handle", b"S:Lzcl_write", b"L:C$"):
+    for prefix in (b"F:", b"S:", b"L:", b"T:", b"F:G$zcl_wr_handle", b"S:Lzcl_write", b"L:C$",
+                   b"F:Fzcl_value$value_shape", b"S:Lzcl_value.non_value_pattern"):
         lines = [line for line in raw.splitlines(keepends=True) if line.startswith(prefix)]
         require(lines, f"Missing write metadata negative prerequisite: {prefix!r}")
         reject(raw=raw.replace(lines[0], b"", 1))

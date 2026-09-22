@@ -8,20 +8,24 @@
 
 zcl_codec_result_t zcl_attr_set_check(const zcl_attribute_set_t *set)
 {
+    const zcl_attribute_t *current, *prior;
+    uint16_t id;
     uint8_t i, j;
     if (set == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
     if (set->count > ZCL_ATTRIBUTE_MAX_COUNT || set->side > ZCL_ATTRIBUTE_CLIENT
             || set->manufacturer_specific > 1u || (set->attributes == NULL && set->count != 0u))
         return ZCL_CODEC_INVALID_TABLE;
-    for (i = 0; i < set->count; i++) {
-        if (set->attributes[i].readable > 1u
+    current = set->attributes;
+    for (i = 0; i < set->count; i++, current++) {
+        id = current->id;
+        if (current->readable > 1u
                 || (!set->manufacturer_specific
-                    && ((set->attributes[i].id >= 0x5000u && set->attributes[i].id < 0xf000u)
-                        || set->attributes[i].id == 0xffffu)))
+                    && ((id >= 0x5000u && id < 0xf000u) || id == 0xffffu)))
             return ZCL_CODEC_INVALID_TABLE;
-        for (j = 0; j < i; j++)
-            if (set->attributes[i].id == set->attributes[j].id)
+        prior = set->attributes;
+        for (j = 0; j < i; j++, prior++)
+            if (id == prior->id)
                 return ZCL_CODEC_INVALID_TABLE;
     }
     return ZCL_CODEC_OK;
@@ -78,16 +82,15 @@ zcl_codec_result_t zcl_read_attrs_unicast(const zcl_attribute_set_t * volatile s
             if (remaining < 3u)
                 break;
             id = (uint16_t)((uint16_t)ids[position] | ((uint16_t)ids[position + 1u] << 8));
-            attribute = NULL;
-            for (index = 0; index < set->count; index++) {
-                if (set->attributes[index].id == id) {
-                    attribute = &set->attributes[index];
-                    break;
-                }
+            attribute = set->attributes;
+            index = set->count;
+            while (index && attribute->id != id) {
+                attribute++;
+                index--;
             }
             wire_status = ZCL_STATUS_UNSUPPORTED_ATTRIBUTE;
             encoded = 0;
-            if (attribute != NULL) {
+            if (index) {
                 if (!attribute->readable) {
                     wire_status = ZCL_STATUS_NOT_AUTHORIZED;
                 } else {
