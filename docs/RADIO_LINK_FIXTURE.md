@@ -6,9 +6,10 @@ existing startup/status/board code, real clock/timebase and the
 controller, standalone harness, legacy reset-exclusive RX/TX/FIFO owners,
 MAC scheduler or MAC Timer. **Never flash `radio_autoack_test.ihx`.**
 
-Evidence is **host-tested, image-checked and alias-aware simulated**. The
-manual operator is prepared, but this document records **no hardware run**.
-It does not establish delivery, an ACK/response match, retries, a timed MAC
+Evidence is **host-tested, image-checked and alias-aware simulated**, with
+the later [2026-09-22 LG physical record](DEBUGGING.md#2026-09-22-lg-same-owner-txrx-sequence)
+covering ordinary TX, an empty receive window and final stop/drain.
+It does not establish received-body acceptance, delivery, an ACK/response match, retries, a timed MAC
 window, continuous receiver-on POLL closure, security or network membership.
 #40's captured-edge/freshness/timing gate and full #50 remain open.
 
@@ -184,3 +185,25 @@ all outcomes, retained faults, permission/identity preflight and cleanup.
 No physical board identity, private dump/capture or SDK binary is introduced.
 The [provenance ledger](PROVENANCE.md#filtered-receiverautoack-ownership-sources)
 records the original-code and primary-hardware basis.
+
+## First physical result
+
+#78 used the accepted `6c7f0c7` LG image after Actions35750120732 passed28/28
+jobs. A fresh single-use scope preserved the complete predecessor and factory
+page, installed10798 CODE bytes with guarded normal-run cleanup, and
+independently verified every new CODE byte before application execution.
+No Nordic firmware or coordinator configuration changed.
+
+The real uninterrupted sequence reached END212A, stage7/reason0, one
+ordinary TX_DONE and one completed experiment. The90-second independent
+channel26 capture contained exactly one complete record with the exact public
+`LNK1` body. The CC2530 receive interval made50 calls and expired at1043 raw
+ticks, retaining **zero frames**; final STOPPED/empty confirmation passed.
+This is a real TX and RX-window/stop observation, **not a received reply or
+controlled bidirectional exchange**. No automatic retry followed.
+
+The board remains halted at END with its RX request cleared and physical idle
+confirmed; the Nordic is sleep-commanded on26 with the port released.
+Checkpoint SP22 is not a hardware stack high-water measurement. Independent
+FCS, AUTOACK count/timing, positive RX, captured MAC timing and interoperability
+remain unestablished. Raw data and recovery material stay private.

@@ -3677,3 +3677,69 @@ RF and MAC/security/network acceptance remain open. Raw captures, actual
 received addresses/payloads, factory data and logs remain private outside
 Git/CI; no received-body hash is published. IRND acquisition remains deferred:
 the earlier IRND image was replaced without running its collector.
+
+### 2026-09-22 LG same-owner TX/RX sequence
+
+**Hardware-observed bounded #78 experiment, not bidirectional exchange or M3
+acceptance.** The real [same-owner board fixture](RADIO_LINK_FIXTURE.md) at
+`6c7f0c71164b552ab9a2df7c1e1abe36ea24cc8f` passed Actions35750120732,
+all28/28 jobs, before physical installation. Only LG Rev0.3 was exercised.
+The10798-byte image SHA256 is:
+`ccfad2a8149454ed7dcc225295261a8267171cf62d79708570a5f053ca9a3137`.
+
+A new private single-use plan, not the consumed earlier demonstration scope,
+first validated exact artifacts and the reviewed programmer/no-run guard.
+Fresh passive inspection matched the entire9183-byte predecessor at
+READY016A/status2B/config26/SP4A without reset/resume or CPU-context change.
+Before erase, a fresh complete262144-byte main-flash backup matched that
+predecessor plus its all-FF tail, and the2048-byte factory page matched the
+retained original. The original recovery files were preserved.
+
+Fresh help-only ELF binding confirmed the no-run interposer for the unchanged
+external programmer. Guarded erase/write/read-verification completed with its
+normal-run cleanup blocked. Independent halt checks, matching factory
+readback, explicit debug reset and comparison of **all10798 physical CODE
+bytes** established PC0/status22/config26 before the application ran.
+The full post-program main-flash tail was not reread; this is not NV/flash
+executor acceptance. The programming scope performed no application resume
+or RF attempt.
+
+The existing Nordic native serial interface was identified without selecting
+the SEGGER VCOM port. Its unchanged sniffer firmware read back channel26 and
+started a responsive90-second private capture with a valid header before RF.
+Header-only readiness did not pretend that a packet had already been received.
+Neither Nordic firmware nor the coordinator/network configuration changed.
+
+The separate RF operator reverified all physical CODE after its own reset,
+inspected DISARMED, a genuine empty poll, ARM and ADMITTED with zero service
+work, then removed WAIT and allowed one uninterrupted clock/acquire/
+stop-drain/CCA-TX/raw-RX/stop-drain sequence. Initial AUTOACK-capable acquisition
+was included in the explicit RF scope; the ordinary attempt cap is not a
+global over-air ACK-count guarantee.
+
+| Observation | Result |
+| --- | --- |
+| Profile | Channel26, raw TXPOWER05, fixed synthetic addresses |
+| Ordinary TX | One attempt, fresh TX_DONE17; no retry |
+| Public FCS-free body | `41 88 5A FF FF FF FF 34 12 4C 4E 4B 31` (`LNK1`) |
+| Independent completed capture | Exactly one PCAP/TAP record, exactly one complete public-body match |
+| CC2530 foreground RX |50 receive calls, timeout at1043 raw ticks; zero pre-TX or post-TX frames |
+| Completion | END212A, stage7/reason0, consumed1/completed1, owner STOPPED5/OFF_NOACK |
+| Final radio/context | Cleared RX request, physical idle and empty FIFO confirmed; full CPU context preserved during inspection, checkpoint SP22 |
+| Sniffer cleanup | Clean capture exit; sleep commanded, channel26 read back, port released |
+
+The experiment proves an ordinary transmission plus a real same-owner empty
+receive interval and stop path on this board. **No reply/body was received by
+the CC2530**, so positive RX, CRC-bad capture and controlled bidirectional
+exchange remain unobserved in this composition. Timeout is not RF silence.
+No additional attempt/reset/resume was used to turn that result into success.
+Independent FCS remains unverified because of the established Nordic
+serial-frame octet provenance limit. This adds no captured PHY-end timing,
+ACK matching/delivery/retry, calibrated power/CCA, physical fault recovery,
+generic-board acceptance, association or Zigbee membership.
+
+All recovery copies, factory data, captures and detailed reports remain
+private and outside Git/CI. **Final state: the same-owner image is halted at
+END212A with physical stop/empty confirmed; the Nordic is sleep-commanded
+on26 with its port released.** Checkpoint SP is not a hardware stack
+high-water measurement.

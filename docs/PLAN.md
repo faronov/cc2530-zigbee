@@ -472,9 +472,12 @@ one ordinary conditional TX and raw RX followed by physical stop/drain.
 Its two retained frame slots distinguish preparation from subsequent capture;
 late final drainage never changes an earlier receive-window timeout.
 Host, exact image and alias-aware simulation accompany a manual private-report
-operator. Initial AUTOACK requires RF authorization too. No physical run,
-captured-end timing, MAC ACK/retry adapter, continuous POLL closure or network
-membership is established by this preparation; #40 and full #50 remain open.
+operator. Initial AUTOACK requires RF authorization too. The later
+[#78 LG physical run](DEBUGGING.md#2026-09-22-lg-same-owner-txrx-sequence)
+observed one ordinary TX_DONE, an independently captured exact public body,
+an empty receive-window timeout and confirmed final stop. It does not
+establish positive RX/response acceptance, captured-end timing, a MAC ACK/retry
+adapter, continuous POLL closure or membership; #40 and full #50 remain open.
 
 **The controlled active Nordic test-node role is approved**, alongside
 passive sniffing. The #51/#55/#58 preparation branch has resumed after that

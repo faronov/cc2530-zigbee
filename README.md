@@ -532,8 +532,11 @@ admission precedes initial RX/AUTOACK, stop/drain, one channel26/raw05 CCA/TX
 attempt, a bounded raw receive interval and final stop/drain. Two complete
 CRC-good/bad bodies are retained, with pre-TX drainage distinguished; late
 shutdown frames do not turn a receive-window timeout into success.
-Only this new board image is an AUTOACK-linkage exception. Its offline
-evidence and guarded private-capture operator are **not hardware acceptance**,
+Only this new board image is an AUTOACK-linkage exception.
+The [2026-09-22 LG run](docs/DEBUGGING.md#2026-09-22-lg-same-owner-txrx-sequence)
+then physically completed one ordinary TX, an empty raw receive interval and
+confirmed stop; the unchanged Nordic sniffer captured the exact public `LNK1`
+body once. **No reply was received**: this is not bidirectional exchange,
 captured ACK timing, delivery, retries or a Zigbee network connection.
 Initial AUTOACK can transmit independently of the ordinary one-attempt limit.
 

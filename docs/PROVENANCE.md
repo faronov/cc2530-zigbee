@@ -727,6 +727,11 @@ complete raw metadata and allocation/MMIO inventories. The manual operator
 reuses the guarded debugger and private-artifact writer; received bytes stay
 outside Git and CI. Offline evidence does not establish physical TX/RX,
 AUTOACK timing, calibrated power or interoperability.
+The later [#78 LG physical record](DEBUGGING.md#2026-09-22-lg-same-owner-txrx-sequence)
+uses that unchanged accepted image and the existing unchanged Nordic sniffer:
+one exact public-body capture, an empty CC2530 receive interval and confirmed
+stop. It introduces no third-party firmware or private capture into the
+repository and does not establish positive RX, independent FCS or MAC timing.
 
 ### Nordic laboratory stimulus sources
 

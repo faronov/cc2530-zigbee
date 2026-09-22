@@ -17,6 +17,10 @@ The later [#77 board fixture](RADIO_LINK_FIXTURE.md) separately links the real
 owner and clock/startup services for boot-disarmed, manually authorized TX/RX.
 Its offline proof/operator preparation is not silicon acceptance; no other
 board image may link this owner or its synthetic test/model.
+The later [#78 LG physical sequence](DEBUGGING.md#2026-09-22-lg-same-owner-txrx-sequence)
+adds one ordinary TX with independent body equality and an empty RX interval
+followed by stop. It supplies no positive receive, automatic-ACK or timing
+acceptance for this service.
 
 ## Primary basis and limits
 
