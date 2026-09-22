@@ -13,8 +13,22 @@ static MCU_XDATA struct {
     uint32_t start, previous, deadline;
     uint16_t limit;
     uint8_t control, select, event;
+#if defined(CC2530_MAC_RADIO)
+    uint8_t radio;
+#endif
 } work;
 extern MCU_XDATA uint8_t mac_time_reserved_end, _gptrput_PARM_2;
+#if defined(CC2530_MAC_RADIO)
+/* Parent's first XDATA object, linked after ALL lower-service private storage. */
+extern MCU_XDATA uint8_t mac_radio_shared_end;
+extern MCU_XDATA uint8_t __memcpy_PARM_2[3];
+#define PRIVATE_END mac_radio_shared_end
+/* Internal selectors: 0=quiescent read, 1=init, 2=co-owned radio read. */
+#define INITIALIZING (initialize == 1)
+#else
+#define PRIVATE_END mac_time_reserved_end
+#define INITIALIZING initialize
+#endif
 
 static mac_time_result_t observe(void)
 {
@@ -28,8 +42,18 @@ static mac_time_result_t observe(void)
         return MAC_TIME_UNSUPPORTED_STATE;
     if (command != saved_clock) return MAC_TIME_STATE_CHANGED;
     if (MMIO_XREAD(0x624a) != 0xa5 || MMIO_XREAD(0x61e1) ||
+#if defined(CC2530_MAC_RADIO)
+        /* SWRU191F pp260,262-263: only the co-owned reader permits RX requests,
+         * CAL_RUNNING, PLL/SFD and RX/TX_ACTIVE. Reserved FSMSTAT0.7 stays zero.
+         * This is NOT evidence of owner history; the caller must know it.
+         */
+        (!work.radio && MMIO_XREAD(0x618b)) ||
+        (MMIO_XREAD(0x6192) & (work.radio ? 0x80u : 0xc0u)) ||
+        (!work.radio && (MMIO_XREAD(0x6193) & 0x27u)) || MMIO_READ(SOC_RFERRF) ||
+#else
         MMIO_XREAD(0x618b) || (MMIO_XREAD(0x6192) & 0xc0u) ||
         (MMIO_XREAD(0x6193) & 0x27u) || MMIO_READ(SOC_RFERRF) ||
+#endif
         MMIO_XREAD(0x61a3) || MMIO_XREAD(0x61a4) || MMIO_XREAD(0x61a5) ||
         MMIO_READ(SOC_T2IRQM))
         return MAC_TIME_UNSUPPORTED_STATE;
@@ -72,28 +96,42 @@ static mac_time_result_t operate(uint8_t initialize, uint32_t timeout, uint16_t 
 {
     mac_time_result_t result;
     uint16_t address, helper;
+#if defined(CC2530_MAC_RADIO)
+    uint16_t first;
+#endif
     uint8_t i, low, high, a, b, c;
     if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
-    if (initialize && mac_time_ready) return MAC_TIME_ALREADY_INITIALIZED;
-    if (!initialize && !mac_time_ready) return MAC_TIME_NOT_INITIALIZED;
+    if (INITIALIZING && mac_time_ready) return MAC_TIME_ALREADY_INITIALIZED;
+    if (!INITIALIZING && !mac_time_ready) return MAC_TIME_NOT_INITIALIZED;
     if (!timeout || timeout >= TIMEBASE_HALF_RANGE || !limit ||
-        (!initialize && output == NULL)) return MAC_TIME_INVALID_ARGUMENT;
-    if (!initialize) {
+        (!INITIALIZING && output == NULL)) return MAC_TIME_INVALID_ARGUMENT;
+    if (!INITIALIZING) {
         address = MMIO_XADDRESS(output); helper = MMIO_XADDRESS(&_gptrput_PARM_2);
         if (address >= 0x1e00 || sizeof(*output) > 0x1e00u-address)
             return MAC_TIME_INVALID_RANGE;
-        if (address <= MMIO_XADDRESS(&mac_time_reserved_end) ||
+#if defined(CC2530_MAC_RADIO)
+        /* Exact combined proof binds the complete memcpy/memset/gptr suffix. */
+        first = MMIO_XADDRESS(__memcpy_PARM_2);
+        if (address <= MMIO_XADDRESS(&PRIVATE_END) ||
+            (address <= helper && (address >= first || first-address < (uint16_t)sizeof(*output))))
+#else
+        if (address <= MMIO_XADDRESS(&PRIVATE_END) ||
             (helper >= address && helper-address < (uint16_t)sizeof(*output)))
+#endif
             return MAC_TIME_BUFFER_OWNERSHIP;
     }
+#if defined(CC2530_MAC_RADIO)
+    /* No rejected argument/state/storage call may install a private mode. */
+    work.radio = initialize == 2;
+#endif
     for (i = 0; i < sizeof(status); i++) ((uint8_t MCU_XDATA *)&status)[i] = 0;
     status.result = MAC_TIME_PENDING; status.phase = 1;
-    if (initialize) {
+    if (INITIALIZING) {
         saved_clock = MMIO_READ(SOC_CLKCONCMD);
         work.control = 2; work.select = work.event = 0;
     } else { work.control = 9; work.select = 0; work.event = 0x77; }
     result = observe(); if (result != MAC_TIME_OK) goto failed;
-    if (initialize) {
+    if (INITIALIZING) {
         REQUIRE(!status.irq_flags, MAC_TIME_STATE_CHANGED);
         /* Stopped, untouched reset counters only. No counter write/adoption. */
         low = MMIO_READ(SOC_T2M0); high = MMIO_READ(SOC_T2M1);
@@ -104,7 +142,7 @@ static mac_time_result_t operate(uint8_t initialize, uint32_t timeout, uint16_t 
     status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
     REQUIRE(status.timebase_status == TIMEBASE_OK, MAC_TIME_TIMEBASE_ERROR);
     POLL();
-    if (initialize) {
+    if (INITIALIZING) {
         /* SWRU191F pp203-206: CC253x fields, NOT CC2541 long compares. */
         ROOM(); status.phase = 2; work.event = 0x77;
         MMIO_WRITE(SOC_T2EVTCFG, 0x77); POLL();
@@ -154,7 +192,7 @@ static mac_time_result_t operate(uint8_t initialize, uint32_t timeout, uint16_t 
                 MAC_TIME_COUNT_ERROR);
         break;
     }
-    if (initialize) mac_time_ready = 1;
+    if (INITIALIZING) mac_time_ready = 1;
     else { output->fine = staged.fine; output->periods = staged.periods; }
     status.phase = 8; status.result = MAC_TIME_OK;
     return MAC_TIME_OK;
@@ -171,5 +209,12 @@ mac_time_result_t mac_time_read_live(uint32_t timeout, uint16_t poll_limit,
 {
     return operate(0, timeout, poll_limit, output);
 }
+#if defined(CC2530_MAC_RADIO)
+mac_time_result_t mac_time_read_radio(uint32_t timeout, uint16_t poll_limit,
+                                     mac_time_stamp_t MCU_XDATA *output)
+{
+    return operate(2, timeout, poll_limit, output);
+}
+#endif
 const mac_time_diagnostics_t MCU_XDATA *mac_time_diagnostic(void) { return &status; }
 MCU_XDATA uint8_t mac_time_reserved_end;

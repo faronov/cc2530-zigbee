@@ -22,6 +22,13 @@ adds one ordinary TX with independent body equality and an empty RX interval
 followed by stop. It supplies no positive receive, automatic-ACK or timing
 acceptance for this service.
 
+The [#80 co-owned clock/radio composition](MAC_RADIO.md) separately selects
+`CC2530_MAC_RADIO`: verified reset-state Timer2 initialization may precede
+acquisition under that same foreground owner. Its new live reader tolerates
+owned RX/AUTOACK activity without fabricating physical event timestamps.
+Complete shared-prefix and libc guards replace the isolated prefix in this
+profile only. The existing standalone/board CODE and radio phases are unchanged.
+
 ## Primary basis and limits
 
 The following are functional facts from TI **SWRU191F, April 2009, revised

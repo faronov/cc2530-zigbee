@@ -25,8 +25,12 @@ board-image directories and serial, fail-fast submakes. The existing full
 CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
-the two debug-fixture jobs also run the complete standalone component
-corpus, once per board definition, as `test-local` already does. This removes
+the two debug-fixture jobs run `test-common-core`, and two dedicated MAC
+clock/radio jobs run `test-mac-radio`. Their exact union is the complete
+`test-common` corpus, once per board definition, as `test-local` already does.
+This thirty-job partition preserves all28 board/image jobs without adding the
+new composed replay to debug-fixture jobs already taking about13 minutes.
+This removes
 identical repeated work, not cases, while retaining the15-minute job and
 15-second simulator limits and the seven-path artifact whitelist.
 The measurements below predate the flash/TX fixtures and retain their original
@@ -70,6 +74,19 @@ partial-output/timeout regression coverage. No 15-second deadline, alias,
 upper-IRAM, stack, poll-limit or retained-fault check is relaxed. These changes
 provide **host-tested, image-checked and simulated** evidence only; they
 perform no USB/RF operation or new hardware acceptance.
+
+### Co-owned MAC clock/radio
+
+The [#80 composition](MAC_RADIO.md) reuses actual production services and the
+original synthetic radio model, adding a combined Timer2 model rather than
+successful service mocks. Its52 target sequences exercise266 genuine calls
+and79,308 MMIO/four-NOP events, with48,143 artifact negatives and a real
+missing-alias negative. Native and nonrecovering ASan/UBSan execute62,516 calls,
+including native-only exhaustive address sweeps and the longer software wrap.
+The complete CODE/raw metadata/object/listing identities, shared/private/libc
+storage boundaries, exact caller publication, MMIO instruction/DPTR operands
+and full-run SP55/7C remain guarded. The legacy timer, owner and installed
+board-fixture CODE is unchanged. No new hardware result is implied.
 
 ### Scan-proof artifact parsing
 

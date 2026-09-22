@@ -46,7 +46,7 @@ typedef struct {
  * Counters, compares, IRQ flags/masks, clocks and RF are NEVER written.
  * No stop/reset/recovery API; repeated init is ALREADY_INITIALIZED, not success.
  *
- * Both calls: 0<timeout<0x800000 raw Sleep Timer ticks and positive 16-bit poll
+ * All operations: 0<timeout<0x800000 raw Sleep Timer ticks and positive 16-bit poll
  * budget. Fixed entry preflight precedes the deadline; every hardware action
  * has a remaining confirmation poll. Equality times out. CPU progress and
  * true half-range/continuity assumptions are mandatory. PM, reset, debugger
@@ -66,11 +66,34 @@ mac_time_result_t mac_time_init(uint32_t timeout, uint16_t poll_limit);
  * T2MOVF0/1/2 once, then validate state/time/range before publication.
  * Output is a complete persistent ordinary XDATA object below1E00, after the
  * whole timebase/mac_time private prefix and outside generic-store scratch.
+ * In CC2530_MAC_RADIO, both readers instead exclude the complete lower-service
+ * prefix through mac_radio_shared_end and the entire linked memcpy/memset/gptr
+ * scratch suffix. The exact combined link must prove both boundaries.
  * Output is unchanged on EVERY error. Struct layout is not a wire format.
- * No radio composition, capture freshness, elapsed arithmetic or mac_tx bridge.
+ * Init and this reader ALWAYS require physical radio quiescence, including
+ * in CC2530_MAC_RADIO. No capture, elapsed arithmetic or mac_tx bridge.
  */
 mac_time_result_t mac_time_read_live(uint32_t timeout, uint16_t poll_limit,
                                     mac_time_stamp_t MCU_XDATA *output);
+#if defined(CC2530_MAC_RADIO)
+/* Explicit co-owned profile ONLY; no declaration or success stub otherwise.
+ * Caller KNOWS Timer2 and radio_autoack have one serialized foreground owner
+ * since full reset. A register sample cannot prove that history or authorize
+ * mixing arbitrary same-reset services. Verified clock -> mac_time_init must
+ * precede radio acquisition; successful Timer2 init is required for this read.
+ *
+ * Same bounded common-latch/whole-FF-discard/range/time/publication/fault path
+ * as read_live, but allows this owner's ongoing RX, calibration and TX/ACK.
+ * Stable clock, disabled IRQs, DMA inactivity, reset-idle CSP/no scheduled work,
+ * Timer2 control/select/event/mask/flags and RF-error checks remain mandatory.
+ * No MMIO writes, RF/GPIO control or timer capture-register access. The tuple
+ * is live time, NOT an event timestamp, PHY-end attribution, calibrated time
+ * or mac_tx event bridge. Init/read_live do not inherit this permission.
+ * Error output/diagnostics, caller storage and retained-fault rules above apply.
+ */
+mac_time_result_t mac_time_read_radio(uint32_t timeout, uint16_t poll_limit,
+                                     mac_time_stamp_t MCU_XDATA *output);
+#endif
 /* Read-only private diagnostics. COLD at startup, PENDING in flight; partial
  * observations on fault. This memory accessor performs no hardware read.
  */

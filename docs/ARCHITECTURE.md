@@ -147,6 +147,18 @@ rounding, captured-edge identity, radio handoff or original driver relaxation
 is inferred from this arithmetic. Its separate resource proof is not included
 in the integrated protocol budget or board firmware.
 
+The explicit [co-owned clock/radio profile](MAC_RADIO.md) composes those real
+services without adopting an unknown running timer or foreign receiver.
+`mac_radio_init` orders clock selection, reset-state Timer2 initialization,
+epoch binding and radio acquisition. Its operations sample live time before
+radio work, so a time failure cannot turn an already-published frame into an
+error return. One shared lower-service prefix, a separate enclosing private
+prefix and the complete linked libc scratch suffix are excluded from borrowed
+caller objects. Operational faults retain ownership and the first cause;
+there is no recovery, implicit stop or successful placeholder. This profile's
+new active-radio reader is distinct from the unchanged quiescent-only reader.
+It supplies neither physical event timestamps nor a `mac_tx` event adapter.
+
 The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC
 headers or platform code. The [NWK codec contract](NWK.md) preserves raw

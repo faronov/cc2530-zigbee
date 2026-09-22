@@ -164,9 +164,14 @@ class TimebaseCodeTests(unittest.TestCase):
         self.assertIn('make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-board',
                       workflow)
         self.assertIn('if [ "$IMAGE" = debug_fixture ]; then\n'
-                      '            make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" test-common\n'
+                      '            make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" test-common-core\n'
                       '          fi',
                       workflow)
+        composed = workflow.split("  mac-radio:\n", 1)[1].split("  bootstrap:\n", 1)[0]
+        self.assertIn("timeout-minutes: 15", composed)
+        self.assertIn("board: [generic, lg_esl29_rev03]", composed)
+        self.assertEqual(composed.count('test-mac-radio'), 1)
+        self.assertNotIn("upload-artifact", composed)
         uploads = workflow.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
         expected = {prefix + "${{ matrix.image }}." + suffix for suffix in ("hex", "bin", "ihx", "map", "mem", "cdb")}

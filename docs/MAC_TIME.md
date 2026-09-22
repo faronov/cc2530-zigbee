@@ -6,6 +6,14 @@ captured TX/ACK end, calibrated time, scan, or a unified radio owner.
 There is no board `IMAGE` or hardware runner. **Never flash or upload the
 standalone `mac_time_test.ihx` as a board artifact.**
 
+The later [#80 co-owned clock/radio profile](MAC_RADIO.md) adds the distinct
+`mac_time_read_radio` entrypoint only under `CC2530_MAC_RADIO`. It permits
+live samples during that known owner's RF activity; ordinary initialization
+and `mac_time_read_live` remain quiescent-only. The complete shared private
+prefix and libc scratch exclusion are proved in that separate composition.
+Legacy CODE, budgets and standalone cases are unchanged; this exception is
+not a capture API or permission to adopt an unknown running radio.
+
 ## Primary facts and deliberately fixed profile
 
 The implementation is [mac_time.c](../src/mac_time.c), with its full contract

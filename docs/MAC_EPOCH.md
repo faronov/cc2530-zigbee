@@ -74,6 +74,11 @@ event-time quantization policy remain #40 requirements. Radio ownership,
 physical timing and full #50 continuous AUTOACK/POLL behavior are unchanged.
 Neither the existing `mac_time` quiescence contract nor any radio API is relaxed.
 
+The later [#80 co-owned live clock/radio profile](MAC_RADIO.md) composes this
+same arithmetic with real Timer2 and radio calls under a distinct explicit
+ownership profile. It does not change these arithmetic APIs or reinterpret
+live coordinates as captured events.
+
 ## Offline evidence and resources
 
 `make test-mac-epoch` runs the strict native corpus, nonrecovering ASan/UBSan,

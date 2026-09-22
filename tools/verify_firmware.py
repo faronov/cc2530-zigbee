@@ -261,6 +261,9 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(not any(name.startswith("_mac_epoch_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_epoch.c", "test_mac_epoch.c")),
             "Board image must not link the isolated MAC epoch arithmetic")
+    require(not any(name.startswith("_mac_radio_") for name in symbols) and
+            not any(f"C${name}$" in debug for name in ("mac_radio.c", "test_mac_radio.c")),
+            "Board image must not link the isolated MAC radio/clock composition")
     require(not any(name.startswith("_nwk_candidates_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("nwk_candidates.c", "test_nwk_candidates.c")),
             "Board image must not link the isolated NWK candidate collector")

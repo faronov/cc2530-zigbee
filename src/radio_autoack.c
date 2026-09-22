@@ -9,6 +9,13 @@
 MCU_XDATA uint8_t radio_autoack_state, radio_autoack_fault;
 extern MCU_XDATA uint8_t radio_autoack_reserved_end, _gptrput_PARM_2;
 extern MCU_XDATA uint8_t __memcpy_PARM_2[3];
+#if defined(CC2530_MAC_RADIO)
+/* Parent's first XDATA object, after timebase/clock/mac_time/radio/mac_epoch. */
+extern MCU_XDATA uint8_t mac_radio_shared_end;
+#define PRIVATE_END mac_radio_shared_end
+#else
+#define PRIVATE_END radio_autoack_reserved_end
+#endif
 static MCU_XDATA radio_autoack_config_t owned;
 static MCU_XDATA radio_autoack_frame_t staged;
 static MCU_XDATA radio_autoack_diagnostics_t status;
@@ -54,7 +61,7 @@ static radio_autoack_result_t storage(uint16_t address, uint8_t size)
     uint16_t helper = MMIO_XADDRESS(&_gptrput_PARM_2);
     if (address >= 0x1e00 || size > 0x1e00u - address)
         return RADIO_AUTOACK_INVALID_RANGE;
-    if (address <= MMIO_XADDRESS(&radio_autoack_reserved_end) ||
+    if (address <= MMIO_XADDRESS(&PRIVATE_END) ||
         (address <= helper && (address >= first || first - address < size)))
         return RADIO_AUTOACK_BUFFER_OWNERSHIP;
     return RADIO_AUTOACK_READY;

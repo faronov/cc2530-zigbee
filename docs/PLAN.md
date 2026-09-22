@@ -610,6 +610,16 @@ faults under an explicit true half-range continuity precondition. It supplies
 no captured edge, freshness or event-time rounding policy and does not close
 #40. Its standalone CI composition adds no board linkage or ZCL-budget usage.
 
+The [#80 co-owned live clock/radio composition](MAC_RADIO.md) now orders the
+real clock, reset-state MAC Timer, fractional epoch and same-owner radio.
+An explicit separately compiled profile permits live samples during owned
+RX/AUTOACK; legacy quiescent-only entrypoints and legacy CODE remain unchanged.
+Its bounded native/linked/simulator corpus supplies no captured PHY-event
+timestamp, scheduled ACK/retry adapter or network membership. #40 and #50
+remain open. The controlled post-TX incoming-frame experiment #79 is a
+nonblocking follow-up; separate real TX and passive RX evidence suffice to
+continue software integration, not to claim controlled bidirectional RF.
+
 Initial #14 preparation additionally admits canonical unsecured Beacon
 Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.
 They require neither ACK nor frame retries. This does not yet implement

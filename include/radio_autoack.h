@@ -49,6 +49,11 @@ typedef struct {
  * KNOW exclusive radio/CSP/DMA/clock/ST0 ownership since full SoC reset.
  * Only verified clock/timebase operations may precede acquisition. No scheduled
  * work, DMA, IRQs, other RF API, sleep, debugger intervention or GPIO access.
+ * The explicit CC2530_MAC_RADIO profile additionally permits preceding verified
+ * mac_time_init under the SAME foreground owner: clock -> Timer2 init -> radio
+ * acquisition. That owner may then use mac_time_read_radio, not relax init or
+ * mac_time_read_live quiescence. Register samples cannot prove this history;
+ * this exception does not authorize arbitrary same-reset hardware-owner mixing.
  * AUTOACK TRANSMITS RF without CPU intervention: explicit RF-transmitting
  * ownership/authorization and CPU progress are prerequisites. A finite call
  * does not bound the number of over-air ACKs while the receiver remains on.
@@ -64,6 +69,9 @@ typedef struct {
  *
  * Configuration/output are complete persistent XDATA below1E00, beyond the
  * linked timebase/driver private prefix and outside all linked libc scratch.
+ * CC2530_MAC_RADIO instead uses mac_radio_shared_end after the complete linked
+ * lower-service private prefix; the parent must prove this boundary and the
+ * full memcpy/memset/gptr scratch suffix. Isolated markers remain for legacy.
  * timeout is positive and <800000 raw Sleep Timer ticks, NOT symbols; limit
  * is a positive whole-call poll/work bound. Equality expires. True half-range
  * continuity/no missed wraps are required. Each destructive action has room

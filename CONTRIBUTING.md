@@ -80,8 +80,11 @@ concurrent links into a shared directory or relaxed timeouts.
 The existing `make BOARD=... IMAGE=... all test` command remains a full
 single-configuration check. The twenty-eight-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
-is split into `all test-board` in every job plus `test-common` in the two
-debug-fixture jobs, once per board definition. The tool suite itself includes both-board image profiles;
+is split into `all test-board` in every job plus `test-common-core` in the two
+debug-fixture jobs. The additional clock/radio composition runs in two dedicated
+jobs, once per board, rather than overflowing those jobs'15-minute limits.
+The exact union is still `test-common`; thirty jobs retain all twenty-eight
+board/image checks and the unchanged simulator deadlines. The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
 Linked clock/TX metadata tests build their own fresh temporary artifacts when
 SDCC is available; do not prepopulate development directories to activate them.
@@ -92,7 +95,14 @@ make test-tools
 make BOARD=generic test-common
 make BOARD=generic IMAGE=radio_rx_fixture test-board
 make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board
+make BOARD=generic test-mac-radio
 ```
+
+`test-mac-radio` uses separately named `mr_*.rel` objects with the explicit
+`CC2530_MAC_RADIO` profile and immediate seven-listing snapshots. It runs the
+real clock/timer/epoch/radio services against a combined synthetic controller,
+not successful service mocks. The standalone image must never be flashed;
+live samples are not captured PHY-event timestamps. See [MAC_RADIO](docs/MAC_RADIO.md).
 
 `test-common` covers standalone components, not a board fixture;
 `test-board` builds and checks the selected board image, not the standalone

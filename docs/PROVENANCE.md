@@ -1540,6 +1540,16 @@ host oracle uses complete64-bit coordinates; production uses bounded
 freshness claim, foreign implementation, new dependency or hardware access
 is introduced. The original timer and radio ownership contracts are unchanged.
 
+The [#80 co-owned live clock/radio composition](MAC_RADIO.md) and combined
+synthetic controller are original BSD-3-Clause work reusing these existing
+services/models. The explicit active-radio reader uses SWRU191F (April2014),
+sections22.1.2/.6 and Timer2 registers pp203-206; RXENABLE/FSMSTAT0/1
+pp260,262-263; and SWRZ031 (April2009), section1.2 pp2-3. Known common-owner
+history is a caller precondition, not something those register observations
+can prove. Ordinary quiescent-only timer APIs remain strict. No foreign
+implementation, captured-event guarantee, new dependency or hardware access
+is introduced.
+
 ### Offline ED Beacon candidate sources
 
 The [four-entry collector](NWK_CANDIDATES.md), its copied-record policy and

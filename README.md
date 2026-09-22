@@ -597,6 +597,13 @@ phase and faulting ambiguous progress. Its independent wide-integer oracle
 and target proof do not establish captured TX/ACK ends or a radio adapter.
 No board image links it; never flash `mac_epoch_test.ihx`.
 
+The [co-owned live clock/radio composition](docs/MAC_RADIO.md) (#80) now
+serializes the real clock, Timer2, fractional epoch and RX/TX owner under the
+explicit `CC2530_MAC_RADIO` profile. Live time remains available during its
+RX/AUTOACK and stop/drain/send/rearm phases; original quiescent-only entrypoints
+remain strict. This is **not captured PHY-event timing**, ACK/retry scheduling
+or Zigbee membership. No board image links it; never flash `mac_radio_test.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

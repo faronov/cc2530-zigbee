@@ -87,10 +87,11 @@ endif
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
 .PHONY: test-protocol-budget
+.PHONY: test-mac-radio
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
 .PHONY: test-nwk-candidates test-nwk-parent test-nwk-parent-sanitize test-mac-time test-mac-scan test-mac-association test-mac-poll
-.PHONY: test-common test-tools test-board test-local
+.PHONY: test-common test-common-core test-tools test-board test-local
 .PHONY: test-noise-health test-radio-noise
 .PHONY: test-radio-noise-fixture test-radio-noise-fixture-sanitize
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch zcl_write
@@ -836,6 +837,36 @@ test-nwk-parent: $(BUILD)/host-nwk-parent-tests $(BUILD)/nwk_parent_test.ihx
 $(BUILD)/mac_time.rel: src/mac_time.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
+MAC_RADIO_MODULES := timebase clock mac_time radio_autoack mac_epoch mac_radio
+MAC_RADIO_SRC := $(addprefix src/,$(addsuffix .c,$(MAC_RADIO_MODULES)))
+MAC_RADIO_OBJECTS := $(addprefix $(BUILD)/mr_,$(addsuffix .rel,$(MAC_RADIO_MODULES)))
+$(BUILD)/mr_%.rel: src/%.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DCC2530_MAC_RADIO -c $< -o $@
+
+$(BUILD)/mac_radio_test.rel: tests/test_mac_radio.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DCC2530_MAC_RADIO -c $< -o $@
+
+$(BUILD)/mac_radio_test.ihx: $(MAC_RADIO_OBJECTS) $(BUILD)/mac_radio_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(MAC_RADIO_OBJECTS) $(BUILD)/mac_radio_test.rel
+	cp $(BUILD)/mr_timebase.rst $(BUILD)/mac_radio_test.timebase.rst
+	cp $(BUILD)/mr_clock.rst $(BUILD)/mac_radio_test.clock.rst
+	cp $(BUILD)/mr_mac_time.rst $(BUILD)/mac_radio_test.mac_time.rst
+	cp $(BUILD)/mr_radio_autoack.rst $(BUILD)/mac_radio_test.radio_autoack.rst
+	cp $(BUILD)/mr_mac_epoch.rst $(BUILD)/mac_radio_test.mac_epoch.rst
+	cp $(BUILD)/mr_mac_radio.rst $(BUILD)/mac_radio_test.mac_radio.rst
+	cp $(BUILD)/mac_radio_test.rst $(BUILD)/mac_radio_test.test_mac_radio.rst
+
+$(BUILD)/host-mac-radio-tests: tests/test_mac_radio.c tests/test_radio_autoack.c $(MAC_RADIO_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_RADIO tests/test_mac_radio.c $(MAC_RADIO_SRC) tests/host_mmio.c -o $@
+
+$(BUILD)/host-mac-radio-tests-sanitize: tests/test_mac_radio.c tests/test_radio_autoack.c $(MAC_RADIO_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_RADIO -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_radio.c $(MAC_RADIO_SRC) tests/host_mmio.c -o $@
+
+test-mac-radio: $(BUILD)/host-mac-radio-tests $(BUILD)/host-mac-radio-tests-sanitize $(BUILD)/mac_radio_test.ihx
+	$(BUILD)/host-mac-radio-tests
+	$(BUILD)/host-mac-radio-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_radio.py --output $(BUILD) --simulator "$(S51)"
+
 .PHONY: test-mac-epoch
 $(BUILD)/mac_epoch.rel: src/mac_epoch.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -980,10 +1011,11 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
-test-common: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
-test-common: test-noise-health test-radio-noise
-test-common: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
+test-common: test-common-core test-mac-radio
+test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
+test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
+test-common-core: test-noise-health test-radio-noise
+test-common-core: test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-flash test-flash-exec test-flash-write test-nv-record test-nwk-beacon test-nwk-frame test-aps-frame $(BUILD)/host-mac-frame-tests $(BUILD)/mac_frame_test.ihx
 	$(BUILD)/host-mac-frame-tests
 	$(PYTHON) -B tests/boot_mac_frame.py --output $(BUILD) --simulator "$(S51)"
 
