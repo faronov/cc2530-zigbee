@@ -446,9 +446,9 @@ policy changes are used to meet the target.
 
 These are compiled-image measurements; actual execution and full-run SP are
 checked in GitHub Actions, not inferred from allocation. Separate uninterrupted
-SP measurements in both-board CI observed72 for
-the integrated image (previously7A) and5C for Basic (previously5E), distinct
-from their5D/3F checkpoint values; all original guards remain unchanged.
+SP measurements in both-board CI observed72 for the integrated image
+(previously7A),5C for Basic (previously5E) and6A for Identify (previously6E),
+distinct from their5D/3F/4D checkpoint values. All original guards remain unchanged.
 Canonical targets and link order are unchanged. All earlier native/sanitizer and SDCC corpora,
 including370 Basic and102 Identify common cases, are retained without C test
 edits. Complete raw-CDB-before-decode, map, CODE, immediate ordered listings,
