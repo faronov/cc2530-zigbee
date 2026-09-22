@@ -9,11 +9,14 @@ The #73 extension adds one ordinary hardware-gated CCA/TX attempt from
 stopped/drained idle, followed by reception under the same owner.
 
 AUTOACK **transmits RF without CPU intervention**. Actual use requires separately
-authorized RF-transmitting ownership and CPU progress. This change adds no board
-image, hardware runner, RF authorization,
+authorized RF-transmitting ownership and CPU progress. The service foundation adds no
 CSP program, DMA/ISR, GPIO policy, MAC Timer composition, MAC/security acceptance
 or membership. `radio_autoack_test.ihx` is a standalone synthetic executable:
 **never flash it or distribute it as a board firmware artifact**.
+The later [#77 board fixture](RADIO_LINK_FIXTURE.md) separately links the real
+owner and clock/startup services for boot-disarmed, manually authorized TX/RX.
+Its offline proof/operator preparation is not silicon acceptance; no other
+board image may link this owner or its synthetic test/model.
 
 ## Primary basis and limits
 

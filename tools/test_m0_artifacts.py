@@ -123,10 +123,16 @@ class LayoutTests(unittest.TestCase):
             for name in ("_radio_autoack_acquire", "_radio_autoack_receive",
                          "_radio_autoack_stop", "_radio_autoack_resume", "_radio_autoack_send",
                          "_radio_autoack_diagnostic", "_radio_autoack_state",
-                         "_radio_autoack_reserved_end", "_radio_autoack_test_result"):
+                         "_radio_autoack_reserved_end", "_radio_autoack_test_result",
+                         "_radio_link_fixture_poll", "_radio_link_fixture_state"):
+                if image == "radio_link_fixture" and "_test_" not in name:
+                    continue
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "receiver AUTOACK"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for source in ("radio_autoack.c", "test_radio_autoack.c", "host_radio_autoack.c"):
+            for source in ("radio_autoack.c", "test_radio_autoack.c", "host_radio_autoack.c",
+                           "radio_link_fixture.c", "radio_link_fixture_state.c", "test_radio_link_fixture.c"):
+                if image == "radio_link_fixture" and not source.startswith(("test_", "host_")):
+                    continue
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "receiver AUTOACK"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
@@ -343,7 +349,7 @@ class LayoutTests(unittest.TestCase):
                     verify_layout(self.symbols, self.memory, self.debug + f"\nC${source}$1", image)
 
     def test_dma_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 13)
+        self.assertEqual(len(IMAGES), 14)
         for image in IMAGES:
             if image == "dma_fixture":
                 continue
@@ -354,7 +360,7 @@ class LayoutTests(unittest.TestCase):
                 verify_layout(self.symbols, self.memory, self.debug + "\nC$dma.c$1", image)
 
     def test_aes_cannot_enter_other_board_images(self):
-        self.assertEqual(len(IMAGES), 13)
+        self.assertEqual(len(IMAGES), 14)
         for image in IMAGES:
             if image == "aes_fixture":
                 continue

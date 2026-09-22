@@ -159,7 +159,8 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(native.count("host-" + service + "-tests-sanitize"), 1)
             for image in IMAGES:
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
-                self.assertFalse(any(service.replace("-", "_") in arg for args in commands for arg in args))
+                linked = any(service.replace("-", "_") in arg for args in commands for arg in args)
+                self.assertEqual(linked, service == "radio-autoack" and image == "radio_link_fixture")
 
     def test_noise_health_standalone_and_only_explicit_noise_board_linkage(self):
         for board in BOARDS:
@@ -203,6 +204,14 @@ class LocalChecksTests(unittest.TestCase):
                   ("radio_noise", "radio_noise"), (f"startup_{board}", "startup"), (f"status_{board}", "status"),
                   (f"board_{board}", board), (f"example_radio_noise_fixture_{board}", "radio_noise_fixture"),
                   ("radio_noise_fixture_state", "radio_noise_fixture_state"))),
+                ("test-board", "radio_link_fixture", "radio_link_fixture",
+                 ("timebase", "clock", "radio_autoack", f"startup_{board}",
+                  f"status_{board}", f"board_{board}", f"example_radio_link_fixture_{board}",
+                  "radio_link_fixture_state"),
+                 (("timebase", "timebase"), ("clock", "clock"), ("radio_autoack", "radio_autoack"),
+                  (f"startup_{board}", "startup"), (f"status_{board}", "status"),
+                  (f"board_{board}", board), (f"example_radio_link_fixture_{board}", "radio_link_fixture"),
+                  ("radio_link_fixture_state", "radio_link_fixture_state"))),
             )
             for service in ("radio_fifo", "dma", "aes", "prng", "radio_rx"):
                 image = service + "_fixture"
@@ -238,6 +247,16 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(Path(reference[0][-1]).parent, Path(simulation[simulation.index("--output")+1]))
             self.assertLess(commands.index(reference[0]), commands.index(simulation))
             self.assertFalse(any("tests/boot_aes.py" in args or "tests/test_aes.c" in args for args in commands))
+
+    def test_link_board_has_nonrecovering_sanitizer_and_no_hardware_operator(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-board", include_build=True, BOARD=board, IMAGE="radio_link_fixture")
+            sanitizer = next(args for args in commands if "-fsanitize=address,undefined" in args)
+            self.assertIn("-fno-sanitize-recover=all", sanitizer)
+            self.assertEqual(sum(Path(args[0]).name == f"host-radio-link-fixture-sanitize_{board}"
+                                 for args in commands), 1)
+            self.assertFalse(any("check_radio_link_hardware" in arg or "cc-tool" in arg
+                                 for args in commands for arg in args))
 
     def test_local_stops_at_first_failure_without_later_suites(self):
         with tempfile.TemporaryDirectory(prefix="cc2530-make-failure-") as directory:

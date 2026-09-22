@@ -890,6 +890,23 @@ compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration
 and IFS/loss-aware handoff remain full-adapter gates. No silicon AUTOACK or
 finite over-air ACK-count claim follows from bounded CPU calls.
 
+The separate [boot-disarmed link fixture](RADIO_LINK_FIXTURE.md) is the sole
+board-image exception for the genuine service, not the synthetic composition.
+It keeps board GPIO in existing startup/board code and protocol decisions out
+of the raw diagnostic controller. Two explicit mailbox phases return at WAIT
+without clock/RF work; a further uninterrupted continuation consumes one
+experiment before selecting XOSC32. Acquisition may automatically ACK.
+Preparation stops/drains before one ordinary conditional TX; post-TX RX has
+AUTOACK/filtering disabled and a raw Sleep Timer deadline plus work cap.
+Up to two bodies retain CRC metadata and pre-TX classification. Capacity,
+driver or local time/work faults retain ownership without cleanup.
+END requires a real stopped/empty owner. Final drainage may preserve a body
+after the foreground receive interval has already timed out; this does not
+retroactively establish in-window reception, a response or delivery.
+Its750 ordinary XDATA plus64 status reservation fit a separate1024-byte
+budget; the complete335-byte service prefix and12-byte runtime suffix remain
+excluded from all caller pointers. No old owner is mixed into the image.
+
 ## External Nordic laboratory companion
 
 The Nordic may be a **controlled stimulus/observer as well as a passive

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BOARDS = {"generic": 0, "lg_esl29_rev03": 1}
 IMAGES = ("bringup", "debug_fixture", "timebase_fixture", "clock_fixture", "irq_fixture",
           "radio_fifo_fixture", "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture",
-          "flash_fixture", "radio_tx_fixture", "radio_noise_fixture")
+          "flash_fixture", "radio_tx_fixture", "radio_noise_fixture", "radio_link_fixture")
 CAPABILITIES = {
     "bringup": "non-networking-bootstrap",
     "debug_fixture": "non-networking-debug-fixture",
@@ -30,6 +30,7 @@ CAPABILITIES = {
     "flash_fixture": "non-rf-boot-disarmed-destructive-flash-fixture",
     "radio_tx_fixture": "non-networking-boot-disarmed-one-attempt-radio-tx-fixture",
     "radio_noise_fixture": "non-networking-boot-disarmed-raw-irnd-diagnostic-fixture",
+    "radio_link_fixture": "non-networking-boot-disarmed-same-owner-radio-tx-rx-fixture",
 }
 ARTIFACT_EXTENSIONS = ("ihx", "hex", "bin", "map", "mem", "cdb")
 STATUS_ADDRESS = 0x1E00
@@ -236,9 +237,14 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
             not any(f"C${name}$" in debug for name in
                     ("radio_noise.c", "noise_health.c", "radio_noise_fixture.c", "radio_noise_fixture_state.c"))),
             "Board image must not link the isolated raw-noise services")
-    require(not any(name.startswith("_radio_autoack_") for name in symbols) and
+    require(not any(name.startswith(("_radio_autoack_test", "_host_radio_autoack")) for name in symbols) and
             not any(f"C${name}$" in debug for name in
-                    ("radio_autoack.c", "test_radio_autoack.c", "host_radio_autoack.c")),
+                    ("test_radio_autoack.c", "host_radio_autoack.c", "test_radio_link_fixture.c")),
+            "Board image must not link receiver AUTOACK tests/models")
+    require(image_name == "radio_link_fixture" or
+            (not any(name.startswith(("_radio_autoack_", "_radio_link_fixture_")) for name in symbols) and
+             not any(f"C${name}$" in debug for name in
+                     ("radio_autoack.c", "radio_link_fixture.c", "radio_link_fixture_state.c"))),
             "Board image must not link the isolated receiver AUTOACK owner")
     require(not any(name.startswith("_mac_scan_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_scan.c", "test_mac_scan.c", "host_mac_scan.c")),
@@ -384,7 +390,8 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
         require(not occupied.intersection(range(start, end)), "Overlapping XDATA allocator areas")
         occupied.update(range(start, end))
     # Flash fixture measured500 including status reservation; no increase needed.
-    budget = 1024 if image_name == "radio_rx_fixture" else 768 if image_name == "radio_noise_fixture" else 512
+    budget = (1024 if image_name in ("radio_rx_fixture", "radio_link_fixture") else
+              768 if image_name == "radio_noise_fixture" else 512)
     require(len(occupied) + STATUS_RESERVED <= budget, f"M0 exceeds {budget}-byte XDATA budget")
 
     # SDCC .mem omits __at objects. Account for the status separately, and
@@ -473,6 +480,13 @@ def verify_artifacts(output, board, image_name="bringup"):
         from radio_noise_fixture import verify_fixture, verify_listings, verify_memory
         verify_fixture(image, symbols, debug, board)
         verify_listings(output, image, symbols, board)
+        verify_memory(memory)
+    elif image_name == "radio_link_fixture":
+        from radio_link_fixture import modules, verify_fixture, verify_listings, verify_memory
+        verify_fixture(image, symbols, debug, board)
+        listings = {name: (output / f"radio_link_fixture.{name}.rst").read_text()
+                    for name in modules(board)}
+        verify_listings(listings, image, symbols, board)
         verify_memory(memory)
     flash = re.search(
         r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)",

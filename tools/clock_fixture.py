@@ -36,6 +36,10 @@ PROFILES = {
                        "84975bf3a1387bbf9657e6d8f5aebfe20c318e0b05c472f90aac0a551e807195", 64),
     (7924, 173, 11231): ("1d4cb336a8300907838d84afcaff419922f5ff59f442805cecbf2ca97205a465",
                        "84975bf3a1387bbf9657e6d8f5aebfe20c318e0b05c472f90aac0a551e807195", 64),
+    (502, 25, 10649): ("9e86cca30e30dbb6dd766403eb8ac58bfd6465004ca879d66369fba430995f45",
+                      "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
+    (502, 25, 10689): ("dedbc79d616b9fb3e11cabb63b61f352fb14b31de0746bb77f291f67b64ae18a",
+                      "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
 }
 for coupled in (FIFO_CLOCK_PROFILES, DMA_CLOCK_PROFILES, AES_CLOCK_PROFILES,
                 PRNG_CLOCK_PROFILES, RX_CLOCK_PROFILES):

@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [generic, lg_esl29_rev03]
-        image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture, radio_tx_fixture, radio_noise_fixture]
+        image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture, radio_tx_fixture, radio_noise_fixture, radio_link_fixture]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

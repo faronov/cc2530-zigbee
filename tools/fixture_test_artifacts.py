@@ -16,7 +16,7 @@ def linked_fixture(board, image):
     require(board in BOARDS and image in (
         "clock_test", "clock_fixture", "radio_tx_fixture", "radio_fifo_fixture",
         "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture",
-        "radio_noise_fixture",
+        "radio_noise_fixture", "radio_link_fixture",
     ), "Unknown linked regression fixture")
     if not all(shutil.which(tool) for tool in ("make", "sdcc", "packihx", "makebin")):
         raise unittest.SkipTest("SDCC build tools required for linked metadata regressions")

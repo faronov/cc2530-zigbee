@@ -174,6 +174,10 @@ class DebugImage:
             from radio_noise_fixture import verify_fixture
             self.radio_noise_proof = verify_fixture(
                 image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text, board)
+        if image_name == "radio_link_fixture":
+            from radio_link_fixture import verify_fixture
+            self.radio_link_proof = verify_fixture(
+                image, parse_symbols((output / f"{image_name}.map").read_text(encoding="utf-8")), debug_text, board)
 
     def symbol(self, name: str) -> Symbol:
         require(name in self.symbols, f"No supported linked global/label named {name}")

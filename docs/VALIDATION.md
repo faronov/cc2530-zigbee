@@ -17,11 +17,11 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
-`make test-local` now covers all twenty-six board/image checks while running
+`make test-local` now covers all twenty-eight board/image checks while running
 the Python tool suite once and each standalone component corpus once per
 board definition instead of once per image. It uses isolated component and
 board-image directories and serial, fail-fast submakes. The existing full
-`make ... all test` and twenty-six-job CI coverage remain available.
+`make ... all test` and twenty-eight-job CI coverage remain available.
 CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;

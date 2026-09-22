@@ -455,8 +455,8 @@ hardware-gated CCA/TX attempt and post-TX reception from stopped/drained idle.
 Its explicit response phase disables filtering/AUTOACK; stop/drain and resume
 restore them. TX_DONE is PHY completion, not ACK/delivery or timed MAC acceptance.
 Both-board host/image/alias-aware CI binds7007 CODE,450+64 XDATA and SP34.
-This is an RF-transmitting hardware-service foundation, not a board image or
-silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
+This is an RF-transmitting hardware-service foundation, not itself a board image
+or silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
 captured timing (#40), continuous ordinary-TX/RX arbitration, IFS and loss-aware
 MAC/POLL handoff open. Physical STOPPED is not protocol CLOSED or membership.
 Rearm starts another RX episode across an explicit reception gap; it must
@@ -465,6 +465,16 @@ The [#50 primary ownership review](RADIO_AUTOACK.md#ordinary-tx-admission-under-
 now identifies unresolved TX admission during ACK, completion attribution and
 concurrent TX-flush effects. #73 avoids those live-AUTOACK races through a
 verified idle boundary; it does not resolve them or close #50.
+
+The separate [#77 same-owner board fixture](RADIO_LINK_FIXTURE.md) supplies
+real board/startup/clock/owner composition, bounded boot-disarmed ARM/RUN,
+one ordinary conditional TX and raw RX followed by physical stop/drain.
+Its two retained frame slots distinguish preparation from subsequent capture;
+late final drainage never changes an earlier receive-window timeout.
+Host, exact image and alias-aware simulation accompany a manual private-report
+operator. Initial AUTOACK requires RF authorization too. No physical run,
+captured-end timing, MAC ACK/retry adapter, continuous POLL closure or network
+membership is established by this preparation; #40 and full #50 remain open.
 
 **The controlled active Nordic test-node role is approved**, alongside
 passive sniffing. The #51/#55/#58 preparation branch has resumed after that

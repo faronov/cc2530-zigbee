@@ -137,7 +137,8 @@ class ClockMetadataTests(unittest.TestCase):
         from fixture_test_artifacts import linked_fixture
         paths = [linked_fixture(board, name) for board in ("generic", "lg_esl29_rev03")
                  for name in ("clock_test", "clock_fixture", "radio_tx_fixture", "radio_fifo_fixture",
-                              "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture")]
+                              "dma_fixture", "aes_fixture", "prng_fixture", "radio_rx_fixture",
+                              "radio_link_fixture")]
         for path in paths:
             image = parse_ihex(path.with_suffix(".ihx").read_text())
             symbols = parse_symbols(path.with_suffix(".map").read_text())

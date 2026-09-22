@@ -68,7 +68,7 @@ git diff --check
 
 `test-local` runs the complete Python tool suite once, all standalone
 host/image/simulator component corpora once **for each board definition**,
-and the board-specific host/image/simulator checks for all twenty-six board/image
+and the board-specific host/image/simulator checks for all twenty-eight board/image
 combinations. Components have no `IMAGE`-dependent inputs. This removes
 duplicate runs, not cases: every component still runs with both
 `CC2530_BOARD` definitions, and every board fixture retains its own checks.
@@ -78,7 +78,7 @@ the 15-second per-simulator deadline; extra CPU cores do not justify
 concurrent links into a shared directory or relaxed timeouts.
 
 The existing `make BOARD=... IMAGE=... all test` command remains a full
-single-configuration check. The twenty-six-job CI matrix runs its identical
+single-configuration check. The twenty-eight-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common` in the two
 debug-fixture jobs, once per board definition. The tool suite itself includes both-board image profiles;
@@ -137,6 +137,15 @@ proof for each board. Preserve all nine immediate listings, complete
 CODE/CDB/map identities, fixed command/profile ABI and actual full work caps;
 never enlarge the16384-CODE/768-reserved-XDATA/SP7C budgets silently.
 No physical operator is invoked by those targets, `test-local` or CI.
+
+The [same-owner TX/RX board fixture](docs/RADIO_LINK_FIXTURE.md) uses
+`make BOARD=... IMAGE=radio_link_fixture test-board`. It retains strict native
+and nonrecovering ASan/UBSan tests, eight immediate per-link snapshots, complete
+CODE/raw-CDB/map identities and actual MMIO/alias/stack replay. Its separate
+limits are16384 CODE,1024 reserved XDATA and SP7C; no older budget changes.
+The standalone `radio_autoack_test.ihx` remains forbidden for flashing.
+The manual operator requires explicit RF authorization including initial
+AUTOACK and a new private capture outside Git; CI never calls it.
 
 The M1 transport tests use synthetic USB backends and must never enumerate
 hardware. Ordinary tests need no PyUSB; optional PyUSB resource-manager tests

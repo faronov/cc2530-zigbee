@@ -131,8 +131,8 @@ def check_artifact_rejections(output, board, image_name="bringup"):
         work = Path(directory)
         for extension in ("ihx", "hex", "bin", "map", "mem", "cdb"):
             shutil.copyfile(output / f"{image_name}.{extension}", work / f"{image_name}.{extension}")
-        if image_name == "radio_noise_fixture":
-            for listing in output.glob("radio_noise_fixture.*.rst"):
+        if image_name in ("radio_noise_fixture", "radio_link_fixture"):
+            for listing in output.glob(f"{image_name}.*.rst"):
                 shutil.copyfile(listing, work / listing.name)
         other_board = next(name for name in BOARDS if name != board)
         with case.assertRaisesRegex(ValueError, "board identity"):
@@ -542,6 +542,9 @@ def main():
     elif args.image == "radio_noise_fixture":
         from boot_radio_noise_fixture import check_radio_noise_fixture
         check_radio_noise_fixture(args.simulator, args.output, args.board, symbols)
+    elif args.image == "radio_link_fixture":
+        from boot_radio_link_fixture import check_radio_link_fixture
+        check_radio_link_fixture(args.simulator, args.output, args.board, symbols)
     else:
         from boot_prng_fixture import check_prng_fixture
         check_prng_fixture(args.simulator, args.output, args.board, symbols)

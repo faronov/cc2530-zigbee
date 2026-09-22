@@ -7,7 +7,7 @@ BOARD ?= generic
 IMAGE ?= bringup
 BUILD ?= build/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
 LOCAL_BUILD ?= build/local
-BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture flash_fixture radio_tx_fixture radio_noise_fixture
+BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture flash_fixture radio_tx_fixture radio_noise_fixture radio_link_fixture
 
 ifeq ($(BOARD),generic)
 BOARD_NUMBER := 0
@@ -30,6 +30,7 @@ else ifeq ($(IMAGE),radio_rx_fixture)
 else ifeq ($(IMAGE),flash_fixture)
 else ifeq ($(IMAGE),radio_tx_fixture)
 else ifeq ($(IMAGE),radio_noise_fixture)
+else ifeq ($(IMAGE),radio_link_fixture)
 else
 $(error IMAGE must be one of $(BOARD_IMAGES))
 endif
@@ -78,6 +79,9 @@ OBJECTS := $(BUILD)/timebase.rel $(BUILD)/radio_fifo.rel $(BUILD)/radio_tx.rel $
 endif
 ifeq ($(IMAGE),radio_noise_fixture)
 OBJECTS := $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/noise_health.rel $(BUILD)/radio_noise.rel $(OBJECTS) $(BUILD)/radio_noise_fixture_state.rel
+endif
+ifeq ($(IMAGE),radio_link_fixture)
+OBJECTS := $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/radio_autoack.rel $(OBJECTS) $(BUILD)/radio_link_fixture_state.rel
 endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
@@ -145,6 +149,9 @@ $(BUILD)/radio_tx_fixture_state.rel: src/radio_tx_fixture_state.c $(HEADERS) Mak
 $(BUILD)/radio_noise_fixture_state.rel: src/radio_noise_fixture_state.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
+$(BUILD)/radio_link_fixture_state.rel: src/radio_link_fixture_state.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
 # Relink with the selected board even when an explicitly shared BUILD is reused.
 $(TARGET).ihx: $(OBJECTS) force-link
 	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(OBJECTS)
@@ -181,6 +188,16 @@ ifeq ($(IMAGE),radio_noise_fixture)
 	cp $(BUILD)/board_$(BOARD).rst $(TARGET).$(BOARD).rst
 	cp $(BUILD)/example_$(IMAGE)_$(BOARD).rst $(TARGET).radio_noise_fixture.rst
 	cp $(BUILD)/radio_noise_fixture_state.rst $(TARGET).radio_noise_fixture_state.rst
+endif
+ifeq ($(IMAGE),radio_link_fixture)
+	cp $(BUILD)/timebase.rst $(TARGET).timebase.rst
+	cp $(BUILD)/clock.rst $(TARGET).clock.rst
+	cp $(BUILD)/radio_autoack.rst $(TARGET).radio_autoack.rst
+	cp $(BUILD)/startup_$(BOARD).rst $(TARGET).startup.rst
+	cp $(BUILD)/status_$(BOARD).rst $(TARGET).status.rst
+	cp $(BUILD)/board_$(BOARD).rst $(TARGET).$(BOARD).rst
+	cp $(BUILD)/example_$(IMAGE)_$(BOARD).rst $(TARGET).radio_link_fixture.rst
+	cp $(BUILD)/radio_link_fixture_state.rst $(TARGET).radio_link_fixture_state.rst
 endif
 
 $(TARGET).hex: $(TARGET).ihx
@@ -950,6 +967,12 @@ $(BUILD)/host-radio-rx-fixture-tests_$(BOARD): tests/test_radio_rx_fixture.c tes
 $(BUILD)/host-radio-tx-fixture-tests_$(BOARD): tests/test_radio_tx_fixture.c tests/test_radio_tx.c src/radio_tx_fixture_state.c src/radio_tx.c src/radio_fifo.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_tx_fixture.c src/radio_tx_fixture_state.c src/radio_tx.c src/radio_fifo.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
+$(BUILD)/host-radio-link-fixture-tests_$(BOARD): tests/test_radio_link_fixture.c tests/test_radio_autoack.c src/radio_link_fixture_state.c src/radio_autoack.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_radio_link_fixture.c src/radio_link_fixture_state.c src/radio_autoack.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
+$(BUILD)/host-radio-link-fixture-sanitize_$(BOARD): tests/test_radio_link_fixture.c tests/test_radio_autoack.c src/radio_link_fixture_state.c src/radio_autoack.c src/clock.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_radio_link_fixture.c src/radio_link_fixture_state.c src/radio_autoack.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
+
 .PHONY: test-radio-rx-fixture
 test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 	$(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
@@ -982,6 +1005,7 @@ test-board: $(if $(filter flash_fixture,$(IMAGE)),$(BUILD)/host-flash-fixture-te
 test-board: $(if $(filter radio_rx_fixture,$(IMAGE)),$(BUILD)/host-radio-rx-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_tx_fixture,$(IMAGE)),$(BUILD)/host-radio-tx-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_noise_fixture,$(IMAGE)),$(BUILD)/host-radio-noise-fixture-tests_$(BOARD) test-radio-noise-fixture-sanitize)
+test-board: $(if $(filter radio_link_fixture,$(IMAGE)),$(BUILD)/host-radio-link-fixture-tests_$(BOARD) $(BUILD)/host-radio-link-fixture-sanitize_$(BOARD))
 test-board: $(if $(filter aes_fixture,$(IMAGE)),$(BUILD)/host-aes-fixture-tests_$(BOARD) $(BUILD)/aes-reference)
 test-board: $(if $(filter prng_fixture,$(IMAGE)),$(BUILD)/host-prng-fixture-tests_$(BOARD))
 test-board: $(if $(filter radio_fifo_fixture,$(IMAGE)),$(BUILD)/host-radio-fifo-fixture-tests_$(BOARD))
@@ -1011,6 +1035,10 @@ ifeq ($(IMAGE),radio_tx_fixture)
 endif
 ifeq ($(IMAGE),radio_noise_fixture)
 	$(BUILD)/host-radio-noise-fixture-tests_$(BOARD)
+endif
+ifeq ($(IMAGE),radio_link_fixture)
+	$(BUILD)/host-radio-link-fixture-tests_$(BOARD)
+	$(BUILD)/host-radio-link-fixture-sanitize_$(BOARD)
 endif
 ifeq ($(IMAGE),debug_fixture)
 	$(BUILD)/host-fixture-tests_$(BOARD)

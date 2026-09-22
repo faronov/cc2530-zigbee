@@ -717,6 +717,17 @@ synthetic TX/response model and bounded fault behavior are original work.
 No RF measurement, captured timing, ACK acceptance, SDK code or private data
 is introduced; the public manual remains a reference, not a CI dependency.
 
+The [#77 same-owner board fixture](RADIO_LINK_FIXTURE.md) is original
+composition of those already-reviewed services, the existing board/startup
+policy and the real clock/Sleep Timer. It introduces no external implementation
+or new capture/timing interpretation. Public synthetic addresses, the `LNK1`
+diagnostic body and original native controller inputs are not device identities
+or captured traffic. Fresh SDCC4.2.0 links establish both board identities,
+complete raw metadata and allocation/MMIO inventories. The manual operator
+reuses the guarded debugger and private-artifact writer; received bytes stay
+outside Git and CI. Offline evidence does not establish physical TX/RX,
+AUTOACK timing, calibrated power or interoperability.
+
 ### Nordic laboratory stimulus sources
 
 The separate [NS51 source/provenance ledger](../tools/nrf_stimulus/PROVENANCE.md)

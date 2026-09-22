@@ -372,8 +372,8 @@ not just a count/hash. A separately selected genuine stopped-RCTRL probe tests
 terminal rejection; holding the CPU is **not** a PRNG poll-timeout experiment.
 That PRNG addition preserved all sixteen older BINs and existing drivers.
 The passive RX addition brought CI to twenty jobs; the flash and boot-disarmed
-TX fixtures brought it to twenty-four; the raw-IRND board fixture brings it
-to twenty-six, with the
+TX fixtures brought it to twenty-four; the raw-IRND and same-owner TX/RX
+board fixtures bring it to twenty-eight, with the
 same seven artifacts and `hardware_tested=false`.
 The original **7,224-byte wirev1 LG PRNG image** passed
 [short hardware acceptance on 2026-09-17](docs/DEBUGGING.md#2026-09-17-lg-prng-short-acceptance):
@@ -518,12 +518,24 @@ disables filtering/AUTOACK; another stop/drain and resume restores them.
 
 `make test-radio-autoack` is **host-tested, image-checked and simulated only**,
 with CI binding both boards to7007 CODE bytes,450 ordinary XDATA +64 reserved
-and whole-run SP`0x34`. It runs once per board in `test-common`, but no board image links it.
+and whole-run SP`0x34`. Its synthetic executable runs once per board in
+`test-common` and is never linked into board firmware.
 **Never flash `radio_autoack_test.ihx`.** AUTOACK is RF transmission, not passive
 reception; no hardware ACK/timing observation or finite over-air ACK-count
 guarantee is supplied. Broadcast-AR and ignored ACK-FCF compatibility remain
 explicit limits. Physical stop/drain is not IFS completion, a continuous
 MAC/POLL window closure, ordinary-TX handoff or security acceptance.
+
+The separate [boot-disarmed same-owner TX/RX fixture](docs/RADIO_LINK_FIXTURE.md)
+now links the genuine owner with board/startup/clock services. Explicit ARM/RUN
+admission precedes initial RX/AUTOACK, stop/drain, one channel26/raw05 CCA/TX
+attempt, a bounded raw receive interval and final stop/drain. Two complete
+CRC-good/bad bodies are retained, with pre-TX drainage distinguished; late
+shutdown frames do not turn a receive-window timeout into success.
+Only this new board image is an AUTOACK-linkage exception. Its offline
+evidence and guarded private-capture operator are **not hardware acceptance**,
+captured ACK timing, delivery, retries or a Zigbee network connection.
+Initial AUTOACK can transmit independently of the ordinary one-attempt limit.
 
 **A controlled active Nordic test node is an allowed laboratory role** in
 addition to passive sniffing. Preparation is separate from permission to
