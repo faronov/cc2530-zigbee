@@ -324,9 +324,9 @@ def check_result(ram, iram, sfr, allocated):
 
 def check_peak(text):
     found = re.findall(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", text)
-    # Both-board CI 35656738048 observed 5E after all 370 cases and guards
-    # passed; new write-case caller saves/call path reviewed in immediate RST.
-    require(len(found) == 1 and int(found[0], 16) == 0x5e <= 0x7c, f"Basic full-run SP peak changed: {found}")
+    # Both-board CI 35741558214 observed 5C after all 370 cases and guards;
+    # the reviewed compact helper/caller ABI retains the unchanged 7C cap.
+    require(len(found) == 1 and int(found[0], 16) == 0x5c <= 0x7c, f"Basic full-run SP peak changed: {found}")
 
 
 def main():
@@ -369,7 +369,7 @@ def main():
         with unittest.TestCase().assertRaises(ValueError):
             check_peak(bad)
     print(f"Basic: {CODE_SIZE}/{CODE_BUDGET} CODE, 1136+64/{XDATA_BUDGET} reserved XDATA; "
-          f"370 common cases, full-run SP5E/cap7C, checkpoint SP3F; complete raw CDB/map/CODE, "
+          f"370 common cases, full-run SP5C/cap7C, checkpoint SP3F; complete raw CDB/map/CODE, "
           f"7 immediate snapshots, {negatives} artifact +9 guard +3 peak +1 alias negatives PASS "
           "(simulation only; no endpoint, radio or security).")
 
