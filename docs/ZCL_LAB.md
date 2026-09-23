@@ -24,7 +24,7 @@ Reviewed on 2026-09-21:
 
 R8 errata **19-2019** is an open follow-up revision risk, not a blanket stop
 on base-text development. This is **not errata-aware conformance**.
-BDB errata **21-65431** and Test Plan **16-02826** gates remain unchanged;
+BDB errata **21-65431** and Test Plan **16-02826** remain conformance follow-ups;
 no M4/M5 security/commissioning work is implemented here.
 
 The pinned secondary index was fetched using `gh api` at

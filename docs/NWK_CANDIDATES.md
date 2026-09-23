@@ -331,8 +331,8 @@ timing, RF, CRC hardware behavior and bidirectional ownership remain separate
 gates. Host inputs and simulator execution use **synthetic public bytes**;
 no device was enumerated, attached, flashed, tuned or observed.
 
-No BDB procedure was implemented and the PRO BDB v3.0.1 errata gates #16/#17
-remain intact. Candidate retention proves neither network compatibility,
+No BDB procedure was implemented and the PRO BDB v3.0.1 errata/test-plan
+conformance follow-ups #16/#17 remain open. Candidate retention proves neither network compatibility,
 authentication, authorization, secure join nor application interoperability.
 Security, durable counters, required endpoint0 services, ED Timeout/parent
 keepalive and other ledger obligations are not waived by this small collector.

@@ -510,5 +510,5 @@ The real adapter and its confirmed saved-state/filter semantics remain
 unimplemented in board firmware. Active-scan control does not establish a
 complete normative PAN descriptor list, full parent selection, association,
 membership, security, BDB commissioning or application interoperability.
-BDB v3.0.1 errata gates #16/#17, required ED join/rejoin/leave, parent keepalive,
+BDB v3.0.1 errata/test-plan conformance follow-ups #16/#17, required ED join/rejoin/leave, parent keepalive,
 ED Timeout, endpoint0 services and durable counters remain unchanged.

@@ -17,9 +17,10 @@ implemented components and evidence recorded under each milestone.
 
 The [initial conformance ledger](CONFORMANCE.md) exists at M0. Core R22 is
 paired with PRO BDB v3.0.1, document 16-02828-012. The base revision and
-bounded ED requirements are recorded; review of applicable BDB errata
-21-65431 remains a blocking prerequisite for M4/M5 security/commissioning
-implementation, not work postponed until release.
+bounded ED requirements are recorded. BDB errata21-65431 remains unreviewed.
+The 2026-09-23 scope decision permits M4/M5 development against the pinned
+base text with that revision risk recorded; review applicable corrections
+before conformance claims, not as a blanket development stop.
 Update the ledger with each protocol change; M9 audits it rather than first
 creating it.
 
@@ -49,7 +50,7 @@ hardware work. Later features must not bypass their security or recovery gates.
 | Hardware | CC2530F256; generic and LG ESL board descriptions | Other CC253x parts need a separate validation record |
 | Role | Receiver-on ED first, SED second | One logical ED role; no forwarding or children |
 | Network | Centralized Trust Center network first | Distributed networks are deferred; this is a BDB conformance gap, not an ED role exemption |
-| Specification | Core R22 and PRO BDB v3.0.1, 16-02828-012 | Applicable errata gate remains open; neither BDB 1.0 nor BDB 3.1/R23 substitutes for this baseline |
+| Specification | Core R22 and PRO BDB v3.0.1, 16-02828-012 | Unreviewed errata remains a conformance risk, not a development stop; neither BDB 1.0 nor BDB 3.1/R23 substitutes for this baseline |
 | Application | Small reporting sensor, local display later | Only implemented clusters are advertised |
 | Memory | Static pools and explicit bounds | No heap-dependent protocol or frame-sized display buffer |
 | Debugging | CC Debugger plus RAM trace and independent sniffer | An IDE or GDB integration is not assumed to exist |
@@ -790,11 +791,15 @@ degraded recovery and runtime erase-attempt limits over the real flash
 services. Host/image/simulator checks include command cuts, torn patterns
 and genuine reset/retained-RAM paths. No physical durability, lifetime-wear,
 security-counter, key or membership acceptance is implied. This generic
-foundation does not waive the security/commissioning entry gate below.
+foundation does not satisfy the security/commissioning requirements below.
 
-Entry gate: the BDB v3.0.1 base revision and security/commissioning requirements
-are pinned in the conformance ledger. Obtain/review applicable errata
-21-65431 and resolve affected requirements before implementing these procedures.
+Development baseline: the BDB v3.0.1 revision and security/commissioning
+requirements are pinned in the conformance ledger. Implementation may proceed
+against that base text while errata21-65431 remains an explicit revision risk.
+Its missing text does not establish that corrections are absent or harmless.
+Review and resolve applicable corrections before conformance claims.
+Authentication, replay rejection, counter persistence, entropy requirements
+and fail-closed handling remain implementation/acceptance requirements.
 
 Deliver:
 

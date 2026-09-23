@@ -15,7 +15,9 @@ The project does not require IAR or proprietary TI stack libraries.
 
 The selected specification baseline is **Core R22 + PRO BDB 3.0.1**
 (`16-02828-012`). The first centralized-network ED target is a subset, not
-full BDB support; [errata and implementation gates](docs/CONFORMANCE.md) remain open.
+full BDB support. Base-text development may proceed with unreviewed BDB errata
+recorded as a [conformance risk](docs/CONFORMANCE.md); implementation and
+security acceptance are not waived.
 
 [Русский обзор](README.ru.md)
 

@@ -1504,6 +1504,12 @@ section 4.3.4 p.416. Exact errata/test-plan revisions and contents have **not**
 been reviewed; do not infer that the errata is empty or substitute the older
 BDB 1.0 errata 15-02020 or test specification 14-0439.
 
+The maintainer's 2026-09-23 decision permits implementation against this
+pinned base without first obtaining21-65431. It defers a development
+prerequisite, not primary review or conformance: the errata's contents and
+criticality remain unverified. The conformance ledger retains the follow-up;
+base security requirements and negative tests are not waived.
+
 The separately inspected
 [BDB 1.0 PDF](https://csa-iot.org/wp-content/uploads/2019/12/docs-13-0402-13-00zi-Base-Device-Behavior-Specification-2-1.pdf)
 identifies **13-0402-13, February 24, 2016**. It is not BDB 3.0/3.0.1 and is

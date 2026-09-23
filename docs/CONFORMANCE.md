@@ -11,7 +11,7 @@ M9 audits the ledger; it does not postpone specification decisions until release
 | --- | --- | --- |
 | Zigbee Core R22, document 05-3474-22 | Selected engineering baseline | Used for the requirements below |
 | PRO BDB v3.0.1, document 16-02828-012, September 28, 2021 | Selected engineering baseline with Core R22; [primary sources](PROVENANCE.md#bdb-301-baseline-sources) | Bounded ED requirements below; no implementation or certification claim |
-| Applicable BDB v3.0.1 errata, document 21-65431 | **Open: primary text/revision not reviewed** | Review and resolve applicable changes before M4/M5 security/commissioning implementation |
+| Applicable BDB v3.0.1 errata, document 21-65431 | **Open follow-up risk: primary text/revision not reviewed** | Base-text M4/M5 development may proceed; review and resolve applicable corrections before conformance claims, not as a blanket development stop |
 | BDB v3.0.1 Test Plan, document 16-02826 | Open: primary text/revision not reviewed | Required before claiming BDB conformance; project tests do not substitute for it |
 | ZCL Revision 8, document 07-5123-08, release December 2019; Foundation 14-0126-17 | Selected for bounded offline header/value codecs and read-only foundation; [primary source](PROVENANCE.md#zcl-revision-8-wire-sources) | Base-text evidence only, not full or errata-aware ZCL conformance |
 | Approved ZCL R8 errata, document 19-2019 | **Open follow-up risk: primary text/revision not reviewed** | Base-text development may proceed with revision risk recorded; review applicable corrections before conformance claims, not as a blanket development stop |
@@ -21,6 +21,14 @@ M9 audits the ledger; it does not postpone specification decisions until release
 
 Until these decisions and their implementation evidence are complete, the
 project must not claim full Zigbee 3.0 conformance or certification.
+
+On 2026-09-23 the maintainer explicitly deferred the BDB errata development
+prerequisite. This changes scheduling, not evidence: the primary text and
+revision remain unknown, and no claim is made that it contains no critical
+corrections. Base-text security and commissioning code still needs real
+authentication, negative/replay tests, safe persistent state and explicit
+unsupported/failure behavior. No successful security stub or hardware
+authorization follows from this decision. Issue #16 remains open for review.
 
 ## M2 platform acceptance boundary
 
@@ -98,7 +106,7 @@ Page numbers refer to the printed pages of R22.
 | ZDO-04 | Omitted Mgmt LQI returns status-only NOT_SUPPORTED; check this configuration against BDB minimum services/test requirements | section 2.4.4.4.2 p.181; BDB 3.0.1 section 6.6 p.36 | Planned / none; BDB acceptance unresolved | M6 |
 | SEC-01 | Outgoing NWK counter survives reboot, factory reset and NWK Leave without rollback | section 4.3.4 p.416 | Planned / none | M4 |
 | SEC-02 | Two network keys | section 4.3.4.1 p.417 | Planned / none | M4 |
-| SEC-03 | Link keys and applicable Trust Center verification procedures | sections 4.4.7-8 and 4.7.2; BDB 3.0.1 sections 6.3-4,10.1-2 | Planned / none; applicable errata gate open | M4-M5 |
+| SEC-03 | Link keys and applicable Trust Center verification procedures | sections 4.4.7-8 and 4.7.2; BDB 3.0.1 sections 6.3-4,10.1-2 | Planned / none; base-text development permitted with unreviewed errata risk | M4-M5 |
 | SED-01 | Parent polling and rejoin-response retrieval while sleepy | p.215; section 3.6.1.4.2 p.342 | Planned / none | M7 |
 
 The reporting application's binding, reporting and attribute requirements are
@@ -124,8 +132,9 @@ not the R22 page numbers above.
 
 These are paraphrases of the selected base document, not implementations or
 a complete conformance checklist. BDB page numbers below are printed pages
-and match PDF page numbers. Apply the errata gate above before implementing
-the affected procedures; do not reuse section numbers or rules from BDB 1.0.
+and match PDF page numbers. Base-text development follows the recorded errata
+risk above; do not reuse section numbers or rules from BDB 1.0, or claim
+errata-aware conformance before reviewing the corrections.
 
 | ID | Behavior / decision | BDB 3.0.1 reference | Implementation / evidence | Gate |
 | --- | --- | --- | --- | --- |

@@ -1399,7 +1399,8 @@ tests; a million-sample dataset does not belong in CC2530 RAM.
 This source review is **documentation evidence only**. #10 remains open for
 the diagnostic, characterization, entropy estimate, conditioning/DRBG
 selection and resource/physical acceptance. It neither authorizes equipment
-access nor waives the BDB errata or security/commissioning entry gates.
+access nor satisfies security/commissioning acceptance. Unreviewed BDB errata
+remains the separately recorded conformance risk, not a development stop.
 
 ### Binary raw-noise health-test foundation
 
