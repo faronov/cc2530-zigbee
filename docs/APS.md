@@ -5,6 +5,12 @@ of the R22 APS Data APDU. This is an independent byte codec, not an APS
 service, endpoint dispatcher, acknowledged transaction or security service.
 It is not linked into board firmware.
 
+The separate [security envelope](ZIGBEE_SECURITY.md) reuses this Data parser
+and additionally recognizes the two-byte APS Command header. It verifies
+before returning a normalized unsecured copy; callers must retain successful
+security context and separately enforce replay, key/command and endpoint
+admission. This does not expand the bare codec's supported types or layouts.
+
 ## Wire subset
 
 Only Data type `0`, normal unicast delivery mode `0`, with no APS security

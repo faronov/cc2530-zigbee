@@ -26,11 +26,13 @@ CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
 the two debug-fixture jobs run `test-common-core`, and two dedicated composition
-jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join`.
+jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join
+test-zdo-node test-zdo-srv`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
-MMIO replay. Their exact union is the complete
+MMIO replay, and another pair runs `test-zigbee-security` with real AES/DMA.
+Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
-This thirty-two-job partition preserves all 28 board/image jobs without adding
+This thirty-four-job partition preserves all 28 board/image jobs without adding
 the new composed replay to debug-fixture jobs already taking about13 minutes.
 This removes identical repeated work, not cases, while retaining the15-minute job and
 15-second simulator limits and the seven-path artifact whitelist.
@@ -104,6 +106,20 @@ identities,15,644 artifact negatives, seven snapshot negatives and one
 missing-alias negative bind5169 CODE bytes,167+64/256 XDATA and full-run
 SP3A/7C. Existing component/image CODE, budgets and simulator deadlines remain
 unchanged; there is no hardware result or event adapter.
+
+### Bounded cryptography and secured frames
+
+The [#19 composition](ZIGBEE_SECURITY.md) runs real timebase/AES/CCM and
+NWK/APS/envelope code, not a successful authentication mock. Native and
+nonrecovering ASan/UBSan corpora contain12185 checks, with independent CCM
+and full-wire oracles anchored to primary known-answer vectors. The23 linked
+scenarios perform220 shared checks and345 completed AES calls using actual
+DMA/MMIO instructions and transferred bytes. Complete artifact identities,
+61685 artifact negatives,54 snapshot negatives,3 peak negatives and one
+missing-alias negative guard20250 CODE,1907+64 XDATA and peak SP7C/7C.
+The fixed private staging wipes do not erase lower AES/hardware/compiler
+copies. No ISR/full-stack headroom, counter persistence, replay admission,
+hardware-observed CCM or authenticated network join is established.
 
 ### Scan-proof artifact parsing
 

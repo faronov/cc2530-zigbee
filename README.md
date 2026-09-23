@@ -789,6 +789,13 @@ The independent [APS Data codec](docs/APS.md) adds normal-unicast headers,
 endpoint/profile/cluster metadata and opaque payload, with a real offline
 MAC/NWK/APS composition test. APS security, broadcast/group delivery and
 extended headers fail explicitly; ACK request does not implement transactions.
+The separate [CCM*/security envelope](docs/ZIGBEE_SECURITY.md) now protects
+and verifies supported NWK Data, APS unicast Data and APS Command headers
+through the real AES driver. Six authenticated levels, normalized R22
+security-control bits and exact nonce/AAD/MIC handling have host, linked-image
+and simulator evidence. The bare codecs remain unchanged. Durable counters,
+replay/key/Trust Center state, admitted transport and authenticated join are
+not implemented by this stateless service; no new hardware result is claimed.
 The independent [ZDO Node Descriptor codec](docs/ZDO_NODE.md) handles request,
 success, addressed-error and generic unsupported payloads, including TSN,
 queried address and seven-bit Stack Compliance Revision. Its real APS

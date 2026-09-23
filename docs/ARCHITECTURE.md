@@ -310,6 +310,19 @@ service/security limits and endpoint/transaction policy. A separate simulator
 image composes MAC/NWK/APS without expanding the existing MAC test image.
 APS introduces no dispatcher, ZDO handler or board caller.
 
+The separate [CCM*/security envelope](ZIGBEE_SECURITY.md) composes the actual
+AES/timebase services with these unchanged bare codecs. It supports six
+authenticated levels for NWK Data, APS unicast Data and the two-byte APS
+Command header; command semantics and admission are not implemented.
+The caller supplies effective selected keys, mapped IEEE identities and
+already-reserved outgoing counters. Open verifies before publishing a
+normalized unsecured copy; it does not apply replay/key/TC/BDB state.
+Private staging is overwritten, but lower AES/hardware/compiler retention
+remains explicit. The isolated composition is20250 CODE/1907+64 XDATA,
+with peak SP7C at the unchanged cap and no demonstrated ISR/full-stack
+headroom. Actual DMA/MMIO replay is synthetic evidence, not physical CCM,
+entropy, durable security state or membership.
+
 The independent [ZDO Node Descriptor codec](ZDO_NODE.md) handles TSN-bearing
 request/response payloads. It distinguishes17-byte success,4-byte addressed
 failure and2-byte generic NOT_SUPPORTED, requires mandatory fields and

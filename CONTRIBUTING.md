@@ -85,7 +85,8 @@ debug-fixture jobs. The clock/radio, delayed-stamp, synthetic-temperature,
 staged-association and ZDO codec/dispatcher compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The interval attempt's longer MMIO replay runs in two additional dedicated
-jobs. The exact union is still `test-common`; thirty-two jobs retain all
+jobs. The genuine AES/CCM/NWK/APS security composition runs in two further
+dedicated jobs. The exact union is still `test-common`; thirty-four jobs retain all
 twenty-eight board/image checks and the unchanged simulator deadlines.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
@@ -105,6 +106,7 @@ make BOARD=generic test-mac-join
 make BOARD=generic test-zcl-temperature
 make BOARD=generic test-zdo-node
 make BOARD=generic test-zdo-srv
+make BOARD=generic test-zigbee-security
 ```
 
 `test-zdo-node` composes the real Node Descriptor and APS codecs, runs the
@@ -118,6 +120,14 @@ NWK/APS/ZDO reply composition, including native exact allocations and a
 nonrecovering sanitizer build. Five immediate listings feed its strict
 linked/ABI/alias/SFR/stack proof. Broadcast policy uses typed context only;
 the existing APS wire codec remains unicast-only. See [ZDO_SRV](docs/ZDO_SRV.md).
+
+`test-zigbee-security` composes the actual timebase/AES/CCM/NWK/APS/envelope
+services, with host-only mathematical/peripheral oracles, nonrecovering
+sanitizers and seven immediate listings. Preserve its full CODE/raw-CDB/
+ABI/MMIO/alias proof, 24576-CODE/2048-total-XDATA/SP7C caps and15-second
+simulator deadline. Its two dedicated CI jobs upload no crypto artifacts.
+Public synthetic vectors are not private keys, entropy or authenticated
+membership. See [ZIGBEE_SECURITY](docs/ZIGBEE_SECURITY.md).
 
 `test-mac-radio` uses separately named `mr_*.rel` objects with the explicit
 `CC2530_MAC_RADIO` profile and immediate seven-listing snapshots. It runs the

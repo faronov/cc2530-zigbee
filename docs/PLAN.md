@@ -793,6 +793,16 @@ and genuine reset/retained-RAM paths. No physical durability, lifetime-wear,
 security-counter, key or membership acceptance is implied. This generic
 foundation does not satisfy the security/commissioning requirements below.
 
+The independent #19 [CCM*/security envelope](ZIGBEE_SECURITY.md) now implements
+bounded authenticated levels, R22 nonce/AAD/MIC/auxiliary processing and
+verified plaintext publication through the real AES driver and NWK/APS
+codecs. Its original independent oracles and strict linked DMA/MMIO/ABI/
+alias/stack proof provide host/image/simulator evidence, not physical CCM
+or authenticated membership. The caller still supplies effective keys,
+mapped sources and already-reserved counters. #21 reservations, #22
+install-code/MMO derivation, #23 key/replay/TC state and #26 commissioning
+remain required; a valid MIC alone does not satisfy those gates.
+
 Development baseline: the BDB v3.0.1 revision and security/commissioning
 requirements are pinned in the conformance ledger. Implementation may proceed
 against that base text while errata21-65431 remains an explicit revision risk.
@@ -831,6 +841,8 @@ now serializes a bounded normal-unicast subset with endpoint/profile/cluster
 metadata, counter and ACK-request. Standalone and real MAC/NWK/APS composition
 have host, linked-image and alias-aware simulator evidence. Unsupported APS
 security, broadcast/group delivery and extended headers fail explicitly.
+The separate M4 security envelope can protect/verify supported wire layouts;
+it does not change the bare codec or add transport admission.
 This implements no transaction/ACK state, endpoint dispatch or board caller
 and does not close any M4/M5 security, commissioning or interoperability gate.
 ZCL revision/device selection and implementation remain separate M6 work.

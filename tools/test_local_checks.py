@@ -62,7 +62,7 @@ class LocalChecksTests(unittest.TestCase):
             "mac_scan", "mac_association", "mac_poll", "mac_join",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
-            "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv",
+            "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security",
         }
         components = Counter()
         images = Counter()
@@ -93,7 +93,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(normalized(("test-common",)),
                              normalized(("test-common-core", "test-mac-radio", "test-mac-stamp",
                                          "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
-                                         "test-zdo-node", "test-zdo-srv")))
+                                         "test-zdo-node", "test-zdo-srv", "test-zigbee-security")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
@@ -102,6 +102,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertFalse(any("tests/boot_mac_join.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_node.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_srv.py" in args for args in core))
+            self.assertFalse(any("tests/boot_zigbee_security.py" in args for args in core))
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
@@ -225,7 +226,7 @@ class LocalChecksTests(unittest.TestCase):
         for board, service in ((b, s) for b in BOARDS for s in
                                ("zcl-basic", "zcl-identify", "zcl-temperature", "radio-autoack",
                                 "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-join",
-                                "zdo-node", "zdo-srv")):
+                                "zdo-node", "zdo-srv", "zigbee-security")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)
@@ -238,6 +239,28 @@ class LocalChecksTests(unittest.TestCase):
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
                 linked = any(service.replace("-", "_") in arg for args in commands for arg in args)
                 self.assertEqual(linked, service == "radio-autoack" and image == "radio_link_fixture")
+
+    def test_security_composes_real_aes_and_snapshots_all_seven_objects(self):
+        modules = ("timebase", "aes", "ccm_star", "nwk_frame", "aps_frame", "zigbee_security", "security_test")
+        for board in BOARDS:
+            commands = self.dry_run("test-zigbee-security", include_build=True, BOARD=board)
+            link = next(args for args in commands if args[0] == "sdcc" and "-c" not in args)
+            self.assertEqual([Path(p).name for p in link if p.endswith(".rel")],
+                             [m + ".rel" for m in modules])
+            proof = next(args for args in commands if "tests/boot_zigbee_security.py" in args)
+            output = Path(proof[proof.index("--output")+1])
+            snapshots = [["cp", str(output / f"{m}.rst"), str(output / f"security_test.{m}.rst")]
+                         for m in modules]
+            self.assertEqual(commands[commands.index(link)+1:commands.index(link)+8], snapshots)
+            self.assertEqual([args for args in commands if args[0] == "cp"], snapshots)
+            for args in commands:
+                if args[0] == "cc":
+                    for source in ("src/aes.c", "tests/host_mmio.c", "tests/security_aes_model.c",
+                                   "tests/aes_reference.c", "src/ccm_star.c", "src/zigbee_security.c"):
+                        self.assertIn(source, args)
+                if args[0] == "sdcc":
+                    self.assertNotIn("tests/aes_reference.c", args)
+                    self.assertNotIn("tests/security_aes_model.c", args)
 
     def test_mac_radio_profile_does_not_leak_to_legacy_objects(self):
         for board in BOARDS:

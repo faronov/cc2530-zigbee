@@ -1584,6 +1584,42 @@ Complete NPDU goldens, descriptors and addresses are original synthetic test
 inputs. The real existing NWK/APS codecs are reused unchanged; modeled
 broadcast context is not evidence of APS broadcast wire implementation.
 
+### R22 CCM and security envelope sources
+
+The original #19 implementation and independent synthetic oracles use the
+same pinned Core R22 **05-3474-22**, April19,2017,
+[public mirror](https://github.com/pvginkel/ZigBeeHomeAutomation/blob/fc30145012eacd3a5af170b8ae8e0d4c848c2525/Documents/docs-05-3474-22-0csg-zigbee-specification.pdf).
+The599-page PDF has SHA-256
+`991dd02b7e5764ac349c47d5c4cf0fbe01529ff6594df03e8dad3d3d4df9e274`.
+Printed page numbers are25 lower than PDF page numbers.
+
+| Primary location (printed pages) | Functional facts used |
+| --- | --- |
+|4.3.1.1-2, pp412-413|NWK network-key/ext-source auxiliary fields, source nonce, forbidden FFFFFFFF counter, encryption versus authentication-only AAD, post-crypto wire-level zeroing and pre-authentication level replacement|
+|4.4.1.1-3, pp418-421|APS data/command key selectors, command extended nonce, mapped source identity, effective level handling and separate command/TC authorization|
+|2.2.5, pp44-49|Normal-unicast APS Data/Command, control/ACK flags, two-byte Command header and payload command identifier; excluded extended/fragmented formats|
+|4.5.1-2, pp455-457; Table4-30|Auxiliary field order/presence, six authenticated levels, little-endian counter and source8/counter4/effective-control1 nonce|
+|4.5.3, pp457-458|Transport/load key derivation and shared counter ownership; these are caller/key-manager obligations, not implicitly supplied by envelope verification|
+|Annex A, pp486-489|AES CCM*, B0/CBC-MAC/CTR/S0, L2, big-endian block lengths/counters, padded AAD/message and MIC masking|
+|Annex C, pp501-504|Public AES-CCM known-answer input/output, independently reproduced by the existing original host AES and separate CCM oracle|
+
+The bounded contract is [ZIGBEE_SECURITY](ZIGBEE_SECURITY.md). Authentication-only
+frames place their payload in AAD with empty message and still mask the MIC.
+Incoming low security-level bits are replaced by trusted configuration, not
+treated as a negotiation or mandatory wire-zero check. The caller supplies
+already-selected/derived keys and mapped IEEE identity; the wrapper does not
+invent command authorization, key derivation, durable counters or replay state.
+
+All production C, native CCM/wire oracles, synthetic peripheral code and
+linked proof code are original BSD-3-Clause work. Actual existing AES/timebase/
+NWK/APS services are reused; no SDK/stack implementation or dependency was
+imported. Only functional facts and the short public known-answer vector are
+used, not specification text/tables or private keys/captures. Research PDFs
+remain outside Git and CI artifacts. The host controller's printed traces
+contain only fixed public synthetic inputs; production has no such diagnostics.
+The document's notices/licenses are not replaced by the project license.
+No physical observation or errata-aware conformance follows from this work.
+
 ### Offline R22 NWK Beacon payload sources
 
 The original decoder was checked directly against **Zigbee Specification

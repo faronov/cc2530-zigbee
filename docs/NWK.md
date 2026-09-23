@@ -124,6 +124,12 @@ at most **116 bytes**: the 127-byte PHY packet limit minus R22's
 `nwkcMACFrameOverhead = 11`. Optional fields still consume that same bound.
 This is not a promise that a 116-byte NPDU fits every supported MAC header.
 
+The separate [security envelope](ZIGBEE_SECURITY.md) adds/verifies supported
+NWK Data protection through the real AES service, reusing this parser.
+Authenticated open returns a normalized unsecured copy; the caller retains
+its successful security context and still owns replay, key and network
+admission. This bare codec remains unchanged and rejects protected input.
+
 | Offset | Field | Supported treatment |
 | --- | --- | --- |
 | 0..1 | Little-endian Frame Control | Type 0, version 2; Discover Route 0/1 for unicast, 0 for broadcast |

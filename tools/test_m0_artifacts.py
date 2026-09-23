@@ -260,6 +260,23 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZDO ED"):
                     verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
 
+    def test_isolated_security_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_ccm_star_crypt", "_zigbee_security_crypt", "_zigbee_security_inspect", "_security_done"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "Zigbee security"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for module in ("ccm_star", "zigbee_security", "test_zigbee_security"):
+                for evidence in (
+                    f"M:{module}", f"L:C${module}.c$1$0_0$0:123",
+                    f"S:F{module}$state$0_0$0({{16}}DA16d,SC:U),F,0,0",
+                    f"F:F{module}$helper$0_0$0({{2}}DF,SV:S),C,0,0,0,0,0",
+                    f"L:F{module}$helper$0$0:123",
+                    f"S:L{module}.helper$p$1_0$0({{3}}DG,SC:U),F,0,0",
+                    f"T:F{module}$__00000000[]",
+                ):
+                    with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "Zigbee security"):
+                        verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_isolated_zcl_identify_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_zcl_id_init", "_zcl_id_tick", "_zcl_id_rx",
