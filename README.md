@@ -803,6 +803,11 @@ security-control bits and exact nonce/AAD/MIC handling have host, linked-image
 and simulator evidence. The bare codecs remain unchanged. Durable counters,
 replay/key/Trust Center state, admitted transport and authenticated join are
 not implemented by this stateless service; no new hardware result is claimed.
+The separate [install-code derivation](docs/INSTALL_CODE.md) checks the selected
+BDB16+2-byte CRC and hashes all18 octets with real AES-MMO. Independent vectors
+and strict linked DMA/ABI/alias checks provide host/image/simulator evidence.
+It does not generate or provision codes, implement keyed transport/load
+derivation, verify a Trust Center key, or establish membership.
 The independent [ZDO Node Descriptor codec](docs/ZDO_NODE.md) handles request,
 success, addressed-error and generic unsupported payloads, including TSN,
 queried address and seven-bit Stack Compliance Revision. Its real APS

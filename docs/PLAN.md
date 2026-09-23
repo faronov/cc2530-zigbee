@@ -799,9 +799,9 @@ verified plaintext publication through the real AES driver and NWK/APS
 codecs. Its original independent oracles and strict linked DMA/MMIO/ABI/
 alias/stack proof provide host/image/simulator evidence, not physical CCM
 or authenticated membership. The caller still supplies effective keys,
-mapped sources and already-reserved counters. #21 reservations, #22
-install-code/MMO derivation, #23 key/replay/TC state and #26 commissioning
-remain required; a valid MIC alone does not satisfy those gates.
+mapped sources and already-reserved counters. The separate #21 reservations
+and #22 derivation below do not supply #23 key/replay/TC state or #26
+commissioning; a valid MIC alone does not satisfy those gates.
 
 The separate #21 [outgoing counter owner](SECURITY_COUNTERS.md) now commits
 bounded ranges through the actual #20 journal/flash backend before allocation.
@@ -812,6 +812,14 @@ Its host/image/simulator evidence covers synthetic cuts, not electrical
 durability or coherent cold anti-rollback. An independent trusted anchor is
 not supplied. Remaining key-state/commissioning procedures must correctly
 own provisioning, domain selection and counter consumption before crypto.
+
+The isolated #22 [install-code/AES-MMO implementation](INSTALL_CODE.md) now
+checks exactly16 code octets plus their little-endian CRC and derives the
+key from all18 octets through the actual AES driver. Independent vectors,
+failure cases and strict linked DMA/ABI/alias/stack replay establish
+host/image/simulator evidence. No legacy lengths, code generation/provisioning,
+HMAC/keyed transport/load derivation, verified TC state or membership is
+supplied. Lower AES/hardware secret retention remains explicit.
 
 Development baseline: the BDB v3.0.1 revision and security/commissioning
 requirements are pinned in the conformance ledger. Implementation may proceed

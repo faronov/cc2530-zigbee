@@ -186,6 +186,7 @@ class TimebaseCodeTests(unittest.TestCase):
         self.assertIn("timeout-minutes: 15", security)
         self.assertIn("board: [generic, lg_esl29_rev03]", security)
         self.assertEqual(security.count("test-zigbee-security"), 1)
+        self.assertEqual(security.count("test-zigbee-mmo"), 1)
         self.assertNotIn("upload-artifact", security)
         counters = workflow.split("  security-counter:\n", 1)[1].split("  bootstrap:\n", 1)[0]
         self.assertIn("timeout-minutes: 15", counters)

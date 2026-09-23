@@ -85,7 +85,7 @@ debug-fixture jobs. The clock/radio, delayed-stamp, synthetic-temperature,
 staged-association and ZDO codec/dispatcher compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The interval attempt's longer MMIO replay runs in two additional dedicated
-jobs. The genuine AES/CCM/NWK/APS security composition runs in two further
+jobs. The genuine AES/CCM/NWK/APS and install-code compositions run in two further
 dedicated jobs, as does the durable-counter/journal/flash composition.
 The exact union is still `test-common`; thirty-six jobs retain all
 twenty-eight board/image checks and the unchanged simulator deadlines.
@@ -108,6 +108,7 @@ make BOARD=generic test-zcl-temperature
 make BOARD=generic test-zdo-node
 make BOARD=generic test-zdo-srv
 make BOARD=generic test-zigbee-security
+make BOARD=generic test-zigbee-mmo
 make BOARD=generic test-security-counter
 ```
 
@@ -130,6 +131,14 @@ ABI/MMIO/alias proof, 24576-CODE/2048-total-XDATA/SP7C caps and15-second
 simulator deadline. Its two dedicated CI jobs upload no crypto artifacts.
 Public synthetic vectors are not private keys, entropy or authenticated
 membership. See [ZIGBEE_SECURITY](docs/ZIGBEE_SECURITY.md).
+
+`test-zigbee-mmo` composes real timebase/AES/MMO code, independent public
+CRC/hash vectors and nonrecovering sanitizers. Four immediate listings feed
+its strict CODE/raw-CDB/ABI/MMIO/alias proof, with10240-CODE/512-total-XDATA/
+SP7C caps and the same15-second simulator deadline. It runs in both existing
+security jobs without artifact uploads. Only16+2-byte BDB install codes are
+supported; derivation is neither provisioning nor verified TC key state.
+See [INSTALL_CODE](docs/INSTALL_CODE.md).
 
 `test-security-counter` executes the actual journal/flash/RAM backend,
 including cuts and complete-state continuations under the unchanged15-second

@@ -296,8 +296,9 @@ def native_trace(executable, number):
     return blocks, other, sha(completed.stdout.encode("ascii"))
 
 
-def replay(simulator, path, symbols, debug, sites, code, blocks, expected, number):
-    before, done = symbols["_security_before"], symbols["_security_done"]
+def replay(simulator, path, symbols, debug, sites, code, blocks, expected, number, client=None):
+    prefix = "security" if client is None else client.prefix
+    before, done = symbols[f"_{prefix}_before"], symbols[f"_{prefix}_done"]
     initial = GUARDS | {0xb1: 0x69, 0xb2: 0x69, 0xb3: 8, 0xd1: 0,
                         0xd2: 0, 0xd3: 0, 0xd4: 0, 0xd5: 0, 0xd6: 0,
                         0x95: 0, 0x96: 0, 0x97: 0}
@@ -306,7 +307,7 @@ def replay(simulator, path, symbols, debug, sites, code, blocks, expected, numbe
                 f"run 0 {symbols['_main']:#x}", "fill iram 0x7d 0xff 0xc7"]
     commands += [f"set memory sfr {r:#x} {v:#x}" for r, v in initial.items()]
     commands += [f"run {symbols['_main']:#x} {before:#x}",
-                 f"set memory xram {symbols['_security_case']:#x} {number}"]
+                 f"set memory xram {symbols[f'_{prefix}_case']:#x} {number}"]
     stops = set(sites.values()) | {sites["input"] + 12, sites["output"] + 12, done}
     commands += [f"break {pc:#x}" for pc in sorted(stops)] + ["step 1"]
     serial, events, dumps, current = 10, [], [], before + 1
@@ -372,6 +373,8 @@ def replay(simulator, path, symbols, debug, sites, code, blocks, expected, numbe
             write("block_ack" if phase == 3 else "load_ack", 0xd1, 0x1c if phase == 3 else 0x1e)
             commands.append("set memory sfr 0xd1 0")
             write("enc_final" if phase == 3 else "enc_load", 0x98, 0xa4)
+    if client is not None:
+        client.after_blocks(number, commands, write, arm, dump, symbols, expected)
     commands += ["run"] + snapshot_commands(serial)
     text = simulate(simulator, commands, path)
     pieces = re.split(r"^0x2530([0-9a-f]{4})\r?\n", text, flags=re.M)
@@ -390,9 +393,12 @@ def replay(simulator, path, symbols, debug, sites, code, blocks, expected, numbe
                 "Security actual descriptor/input/DMA byte differs from independent AES trace")
     check_pc(section(text, serial), done)
     ram, iram, sfr = snapshot(text, serial)
-    check_result(ram, iram, sfr, symbols, debug, expected)
-    peak = check_peak(text, PEAKS[number])
-    if number == 0:
+    if client is None:
+        check_result(ram, iram, sfr, symbols, debug, expected)
+        peak = check_peak(text, PEAKS[number])
+    else:
+        peak = client.check(text, ram, iram, sfr, symbols, debug, expected, number)
+    if number == 0 and client is None:
         require(snapshot_negatives(ram, iram, sfr, symbols, debug, expected) == 54,
                 "Security snapshot negative count changed")
     return peak, expected["CHECKS"], len(blocks)
@@ -457,19 +463,20 @@ def snapshot_negatives(ram, iram, sfr, symbols, debug, expected):
     return count
 
 
-def negatives(image, symbols, debug_raw, memory, listings, objects):
+def negatives(image, symbols, debug_raw, memory, listings, objects,
+              modules=MODULES, verifier=verify, code_size=SIZE):
     count = 0
 
     def reject(**changes):
         nonlocal count
         args = dict(image=image, symbols=symbols, debug_raw=debug_raw, memory=memory,
                     listings=listings, objects=objects)
-        rejected(lambda: verify(**(args | changes)))
+        rejected(lambda: verifier(**(args | changes)))
         count += 1
 
     for a in image:
         reject(image=image | {a: image[a] ^ 1})
-    reject(image=image | {SIZE: 0})
+    reject(image=image | {code_size: 0})
     for name in symbols:
         reject(symbols=symbols | {name: symbols[name] ^ 1})
     reject(symbols=symbols | {"unreviewed": 0})
@@ -482,7 +489,7 @@ def negatives(image, symbols, debug_raw, memory, listings, objects):
                 debug_raw.replace(b"\n", b"\r")):
         reject(debug_raw=raw)
     reject(memory=memory + b"\n")
-    for m in MODULES:
+    for m in modules:
         reject(listings={n: v for n, v in listings.items() if n != m})
         reject(listings=listings | {m: listings[m].replace(b".ds ", b".lost ", 1)})
         lines = listings[m].splitlines(keepends=True)

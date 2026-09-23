@@ -29,7 +29,7 @@ the two debug-fixture jobs run `test-common-core`, and two dedicated composition
 jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join
 test-zdo-node test-zdo-srv`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
-MMIO replay, another pair runs `test-zigbee-security` with real AES/DMA,
+MMIO replay, another pair runs `test-zigbee-security test-zigbee-mmo` with real AES/DMA,
 and a final pair runs `test-security-counter` with the real journal/flash backend.
 Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
@@ -121,6 +121,22 @@ missing-alias negative guard20250 CODE,1907+64 XDATA and peak SP7C/7C.
 The fixed private staging wipes do not erase lower AES/hardware/compiler
 copies. No ISR/full-stack headroom, counter persistence, replay admission,
 hardware-observed CCM or authenticated network join is established.
+
+### Install-code CRC and AES-MMO
+
+The [#22 composition](INSTALL_CODE.md) adds265384 native/nonrecovering
+ASan/UBSan checks and39 genuine linked cases with117 shared checks and58
+completed AES calls. The primary BDB16+2-byte vector and independent flat
+MMO/CRC oracles cover padding boundaries, exact allocations, all external
+lengths, corrupt CRC and retained failures. Actual output-DMA arm followed by
+poll exhaustion is checked without fabricating input arm or key completion.
+Four immediate listings and full raw-CDB/CODE/map/object/ABI/MMIO/alias
+identities are guarded by27597 artifact,8034 snapshot,117 peak and one
+missing-alias negatives. The isolated image uses9060 CODE/426+64 XDATA and
+peak SP5C under unchanged10240/512/SP7C caps and15-second simulator limits.
+Both existing security CI jobs retain the complete original #19 corpus and
+upload no crypto artifacts. No provisioning, entropy, TC verification,
+complete secret erasure or physical install-code evidence is established.
 
 ### Durable outgoing range owner
 

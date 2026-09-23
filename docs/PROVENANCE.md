@@ -1620,6 +1620,33 @@ contain only fixed public synthetic inputs; production has no such diagnostics.
 The document's notices/licenses are not replaced by the project license.
 No physical observation or errata-aware conformance follows from this work.
 
+### Install-code and AES-MMO sources
+
+The original #22 implementation uses the same pinned R22 PDF/hash above and
+the [BDB3.0.1 primary PDF](#bdb-301-baseline-sources), SHA-256
+`16471aa230657818da4c8440671efb530d80c71a975fce7af71c507ca7aa17d3`.
+R22 B.1.3-5 p490 and B.6 pp493-494 define AES-MMO, zero initial hash,
+`AES(previous hash, block) XOR block` compression and short-message padding
+with a big-endian16-bit original bit length. The32-octet implementation cap
+deliberately excludes the different long-message encoding and is a project
+bound, not a normative maximum.
+
+BDB10.1.1-2 pp73-74 selects16 code octets plus two little-endian CRC octets,
+polynomial1021 with reflected input/output, direct initializationFFFF and
+final XORFFFF. The hash includes the CRC. The short public code/CRC/hash
+known-answer tuple in [INSTALL_CODE](INSTALL_CODE.md) anchors independently
+written normal-polynomial CRC and flat-padding MMO native oracles.
+Generation/provisioning and TC verification are separate obligations; neither
+a CRC pass nor the derived bytes are authenticated membership.
+
+All production code, synthetic cases and linked replay additions are original
+BSD-3-Clause work. They reuse the existing real AES/timebase C and host-only
+mathematical/peripheral model. No stack implementation, sample code, SDK,
+private install code/key or new dependency is imported. Functional facts and
+the short public test vector are used, not specification prose or PDF bodies.
+Research documents remain outside Git/CI artifacts; their notices/licenses
+are not replaced by the project license. No hardware activity occurred.
+
 ### Outgoing counter reservation sources
 
 The original #21 range owner uses the same pinned R22 PDF/hash above and

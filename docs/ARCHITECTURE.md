@@ -333,6 +333,15 @@ membership state. The isolated real flash composition uses9941 CODE and
 cold rollback of both pages needs an independent trusted anchor that is not
 provided here. There is no generic-journal recovery bypass or counter rewind.
 
+The separate [install-code/AES-MMO service](INSTALL_CODE.md) checks the
+selected BDB16+2-byte CRC before hashing all18 octets through the real AES
+driver. Its generic MMO primitive is bounded to0..32 octets and three AES
+calls, with short-message padding and atomic output publication. Operational
+exit overwrites its89-byte private state, not lower AES/hardware/compiler
+copies. The isolated composition uses9060 CODE/426+64 XDATA and peak SP5C.
+It implements neither HMAC/transport/load derivation nor provisioning,
+verified TC state, entropy or membership. It has no board caller.
+
 The independent [ZDO Node Descriptor codec](ZDO_NODE.md) handles TSN-bearing
 request/response payloads. It distinguishes17-byte success,4-byte addressed
 failure and2-byte generic NOT_SUPPORTED, requires mandatory fields and
