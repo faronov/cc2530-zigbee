@@ -789,6 +789,11 @@ The independent [APS Data codec](docs/APS.md) adds normal-unicast headers,
 endpoint/profile/cluster metadata and opaque payload, with a real offline
 MAC/NWK/APS composition test. APS security, broadcast/group delivery and
 extended headers fail explicitly; ACK request does not implement transactions.
+The independent [ZDO Node Descriptor codec](docs/ZDO_NODE.md) handles request,
+success, addressed-error and generic unsupported payloads, including TSN,
+queried address and seven-bit Stack Compliance Revision. Its real APS
+composition is host-tested, image-checked and simulated, not an endpoint-zero
+server, descriptor advertisement, trusted peer or authenticated join.
 The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
 headers and 38 wire-value types, including 8..64-bit byte representations
 and short strings. A separate [read-only attribute model and unicast Read

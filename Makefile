@@ -86,7 +86,7 @@ endif
 
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
-.PHONY: test-zcl-temperature
+.PHONY: test-zcl-temperature test-zdo-node
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -330,6 +330,30 @@ $(BUILD)/aps_frame_test.ihx: $(BUILD)/aps_frame.rel $(BUILD)/aps_frame_test.rel 
 test-aps-frame: $(BUILD)/host-aps-frame-tests $(BUILD)/aps_frame_test.ihx
 	$(BUILD)/host-aps-frame-tests
 	$(PYTHON) -B tests/boot_aps_frame.py --output $(BUILD) --simulator "$(S51)"
+
+ZDO_NODE_SRC := src/zdo_node.c src/aps_frame.c
+$(BUILD)/zdo_node.rel: src/zdo_node.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zdo_node_test.rel: tests/test_zdo_node.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/zdo_node_test.ihx: $(BUILD)/zdo_node.rel $(BUILD)/aps_frame.rel $(BUILD)/zdo_node_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/zdo_node.rel $(BUILD)/aps_frame.rel $(BUILD)/zdo_node_test.rel
+	cp $(BUILD)/zdo_node.rst $(BUILD)/zdo_node_test.zdo_node.rst
+	cp $(BUILD)/aps_frame.rst $(BUILD)/zdo_node_test.aps_frame.rst
+	cp $(BUILD)/zdo_node_test.rst $(BUILD)/zdo_node_test.zdo_node_test.rst
+
+$(BUILD)/host-zdo-node-tests: tests/test_zdo_node.c $(ZDO_NODE_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zdo_node.c $(ZDO_NODE_SRC) -o $@
+
+$(BUILD)/host-zdo-node-tests-sanitize: tests/test_zdo_node.c $(ZDO_NODE_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zdo_node.c $(ZDO_NODE_SRC) -o $@
+
+test-zdo-node: $(BUILD)/host-zdo-node-tests $(BUILD)/host-zdo-node-tests-sanitize $(BUILD)/zdo_node_test.ihx
+	$(BUILD)/host-zdo-node-tests
+	$(BUILD)/host-zdo-node-tests-sanitize
+	$(PYTHON) -B tests/boot_zdo_node.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/host-protocol-frame-tests: tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c $(ZCL_DISPATCH_SRC) $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_protocol_frame.c src/mac_frame.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zcl_attributes.c $(ZCL_DISPATCH_SRC) -o $@
@@ -1139,7 +1163,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

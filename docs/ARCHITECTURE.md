@@ -310,6 +310,18 @@ service/security limits and endpoint/transaction policy. A separate simulator
 image composes MAC/NWK/APS without expanding the existing MAC test image.
 APS introduces no dispatcher, ZDO handler or board caller.
 
+The independent [ZDO Node Descriptor codec](ZDO_NODE.md) handles TSN-bearing
+request/response payloads. It distinguishes17-byte success,4-byte addressed
+failure and2-byte generic NOT_SUPPORTED, requires mandatory fields and
+ignores trailing received fields within its100-byte cap per R22 section1.2.5.
+Descriptor metadata is copied atomically; seven-bit Stack Compliance Revision
+is not Beacon version, peer authentication or proof of conformance.
+The isolated real APS composition has13639 CODE/574+64 XDATA and peak SP5E;
+the production ZDO module itself consumes3133 CODE/86 XDATA. It owns no
+transaction, self advertisement, endpoint, transport or board caller.
+Generic unsupported-service dispatch remains required before endpoint0
+exposure; serialization alone does not complete that dispatcher.
+
 The separate `zcl_frame` and `zcl_value` modules share the typed
 `zcl_wire.h` API but no runtime state. The [ZCL wire contract](ZCL.md)
 pins Revision 8 and keeps manufacturer/command/attribute policy outside

@@ -219,6 +219,27 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "ZCL Basic"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_zdo_node_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_zdo_node_req_decode", "_zdo_node_rsp_encode",
+                         "_zdo_node_result", "_zdo_node_done"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "ZDO Node"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in (
+                "M:zdo_node", "M:test_zdo_node",
+                "L:C$zdo_node.c$1$0_0$0:123", "L:C$test_zdo_node.c$1$0_0$0:123",
+                "F:G$zdo_node_rsp_decode$0_0$0({2}DF,SC:U),Z,0,0,0,0,0",
+                "S:G$zdo_node_result$0_0$0({8}DA8d,SC:U),F,0,0",
+                "F:Fzdo_node$descriptor_valid$0_0$0({2}DF,SC:U),C,0,0,0,0,0",
+                "S:Lzdo_node.zdo_node_rsp_decode$output$1_0$0({3}DG,STtest:S),F,0,0",
+                "T:Fzdo_node$__00000008[]",
+                "L:Ftest_zdo_node$request$0_0$0:123",
+                "S:Ltest_zdo_node.aps_cases$n$1_0$0({1}SC:U),F,0,0",
+                "L:G$zdo_node_done$0_0$0:123",
+            ):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZDO Node"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_isolated_zcl_identify_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_zcl_id_init", "_zcl_id_tick", "_zcl_id_rx",

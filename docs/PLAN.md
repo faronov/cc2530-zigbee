@@ -835,6 +835,13 @@ This implements no transaction/ACK state, endpoint dispatch or board caller
 and does not close any M4/M5 security, commissioning or interoperability gate.
 ZCL revision/device selection and implementation remain separate M6 work.
 
+The independent #85 [Node Descriptor codec](ZDO_NODE.md) now supplies original
+TSN-bearing request/response syntax and real APS composition, including the
+status-only generic unsupported shape, command-specific errors, trailing-field
+tolerance and Stack Compliance Revision metadata. Host/image/simulator evidence
+does not expose endpoint0, advertise a descriptor, authenticate a TC or complete
+join. The #25 dispatcher and transaction/security procedures remain required.
+
 Deliver:
 
 - Required NWK and APS header handling and bounded transaction/ACK state.

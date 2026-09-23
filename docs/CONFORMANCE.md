@@ -104,6 +104,7 @@ Page numbers refer to the printed pages of R22.
 | ZDO-02 | Full Mgmt Leave processing for the ED | section 2.4.4.4.5 p.188 | Planned / none | M6 |
 | ZDO-03 | Full Mgmt Bind table response when the device owns source bindings | section 2.5.4.8.1 p.222 | Planned / none | M6 |
 | ZDO-04 | Omitted Mgmt LQI returns status-only NOT_SUPPORTED; check this configuration against BDB minimum services/test requirements | section 2.4.4.4.2 p.181; BDB 3.0.1 section 6.6 p.36 | Planned / none; BDB acceptance unresolved | M6 |
+| ZDO-WIRE-01 | TSN-bearing Node Descriptor request/success/addressed errors/generic unsupported, bounded trailing-field tolerance and raw Stack Compliance Revision | sections1.2.3/1.2.5 p.3;2.3.2.3 pp.69-73;2.4.2.7-8 pp.83-84;2.4.3.1.3 pp.88-89;2.4.4.1 p.137;2.4.4.2.3 pp.142-143;2.4.5 pp.198-199; [contract](ZDO_NODE.md) | Host-tested, image-checked, simulated with genuine APS; explicit reserved-field subset, no board linkage | Preparatory M5; no endpoint dispatch, advertisement, matching or authentication; ZDO-01 remains open |
 | SEC-01 | Outgoing NWK counter survives reboot, factory reset and NWK Leave without rollback | section 4.3.4 p.416 | Planned / none | M4 |
 | SEC-02 | Two network keys | section 4.3.4.1 p.417 | Planned / none | M4 |
 | SEC-03 | Link keys and applicable Trust Center verification procedures | sections 4.4.7-8 and 4.7.2; BDB 3.0.1 sections 6.3-4,10.1-2 | Planned / none; base-text development permitted with unreviewed errata risk | M4-M5 |

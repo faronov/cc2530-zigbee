@@ -1523,6 +1523,35 @@ keys or test-plan vectors were imported. PDFs and extraction tools remain
 temporary research inputs, not Git or CI artifacts; the specifications'
 notices and licensing are not replaced by BSD-3-Clause.
 
+### R22 Node Descriptor wire sources
+
+The original #85 codec uses the same pinned Core R22 **05-3474-22**,
+April19,2017, [public mirror](https://github.com/pvginkel/ZigBeeHomeAutomation/blob/fc30145012eacd3a5af170b8ae8e0d4c848c2525/Documents/docs-05-3474-22-0csg-zigbee-specification.pdf).
+The599-page PDF's SHA-256 is
+`991dd02b7e5764ac349c47d5c4cf0fbe01529ff6594df03e8dad3d3d4df9e274`.
+Printed page numbers below are25 lower than PDF page numbers.
+
+| Primary location (printed pages) | Facts used |
+| --- | --- |
+| Sections1.2.3/1.2.5, p.3 | Little-endian frame-field transmission; missing mandatory ZDO fields are ignored, trailing fields are ignored while the recognized prefix is processed |
+| Sections2.3.1.3/2.3.2.1-3, pp.66,68-73; Tables2-29..33 | Endpoint0 descriptor discovery, ordered13-byte Node Descriptor, logical/availability/frequency/MAC fields, resource limits, reserved fields and seven-bit Server Mask revision |
+| Sections2.4.2.1/2.4.2.7-8, pp.80-84 | Unicast Node Descriptor discovery, possible alternate holder, APS transport, one-byte TSN and response echo; allocation belongs to the sending application |
+| Section2.4.3.1.3/Table2-47, pp.88-89 | Cluster0002 and16-bit queried address |
+| Section2.4.4.1, p.137 | Generic unsupported unicast response with response cluster and status, broadcast drop; common ZDP TSN still applies |
+| Section2.4.4.2.3/Table2-94, pp.142-143 | Cluster8002; echoed query address, descriptor only on SUCCESS; addressed failure forms and parent/alternate-holder behavior |
+| Section2.4.5/Table2-145, pp.198-199 | SUCCESS00, INV_REQUESTTYPE80, DEVICE_NOT_FOUND81, NOT_SUPPORTED84 and NO_DESCRIPTOR89 |
+
+Section2.3.2.1's transmission-order cross-reference names1.2.1.4, but the
+actual R22 transmission-order heading is1.2.3 on printed p.3. This review
+uses the actual rule, not a guessed nonexistent subsection.
+The codec's100-byte cap and strict zero-reserved-field RX subset are explicit
+local bounds, not broader conformance claims. Synthetic profile0/endpoint0 APS
+test envelopes are not an implemented dispatcher or authenticated service.
+The remote revision/capability/manufacturer fields do not become trusted device
+identity or local advertisements. No normative tables, implementation code,
+vendor defaults or private identities were imported; tests use original
+public synthetic bytes. BDB errata deferral remains a separate scope decision.
+
 ### Offline R22 NWK Beacon payload sources
 
 The original decoder was checked directly against **Zigbee Specification

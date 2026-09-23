@@ -3110,6 +3110,19 @@ The existing MAC scenarios and component reservation limits remain intact.
 This is host-tested, image-checked and simulated syntax, not a firmware image,
 ACK transaction, endpoint dispatcher, ZDO/ZCL support or hardware observation.
 
+The #85 [Node Descriptor composition](ZDO_NODE.md#evidence-and-resources)
+adds2559 actual SDCC checks and1,358,150 native checks, including exact
+ASan/UBSan allocations. Genuine APS carries original request/response bytes;
+remote status and queried address remain metadata. Mandatory-prefix truncation,
+trailing-field tolerance, status-only unsupported, reserved-field policy and
+seven-bit revision handling have explicit cases. The pinned13639-byte CODE
+image uses574+64/768 XDATA with full-run SP5E/7C, raw-CDB-before-decode,
+complete image/map/object/immediate-listing/ABI/ownership checks,39,047
+artifact negatives,21 snapshot negatives,3 peak negatives and one alias
+negative. Both-board composed-service CI retains all earlier cases/deadlines.
+This is host-tested, image-checked and simulated syntax; no endpoint exposure,
+descriptor advertisement, authentication or hardware observation.
+
 The [ZCL Revision 8 wire codecs](ZCL.md) have separate frame and value
 host/SDCC suites, retaining the 512-byte component reservation and unchanged
 CODE/CDB/alias/upper-IRAM/unwind guards. Header tests cover every FCF value
