@@ -9,6 +9,9 @@ MCU_XDATA uint8_t mac_time_fault, mac_time_ready;
 static MCU_XDATA uint8_t saved_clock;
 static MCU_XDATA mac_time_diagnostics_t status;
 static MCU_XDATA mac_time_stamp_t staged;
+#if defined(CC2530_MAC_ATTEMPT)
+static MCU_XDATA uint8_t fast;
+#endif
 static MCU_XDATA struct {
     uint32_t start, previous, deadline;
     uint16_t limit;
@@ -74,7 +77,11 @@ static mac_time_result_t poll(void)
     bool expired;
     mac_time_result_t result;
     if (status.polls == work.limit) return MAC_TIME_WORK_LIMIT;
+#if defined(CC2530_MAC_ATTEMPT)
+    result = fast ? MAC_TIME_OK : observe();
+#else
     result = observe();
+#endif
     now = timebase_read_awake_ticks24(); status.polls++;
     status.elapsed_ticks = (now-work.start) & TIMEBASE_TICKS_MASK;
     if (result != MAC_TIME_OK) return result;
@@ -217,4 +224,85 @@ mac_time_result_t mac_time_read_radio(uint32_t timeout, uint16_t poll_limit,
 }
 #endif
 const mac_time_diagnostics_t MCU_XDATA *mac_time_diagnostic(void) { return &status; }
+#if defined(CC2530_MAC_ATTEMPT)
+MCU_XDATA uint8_t mac_time_attempt_active;
+static mac_time_result_t attempt_clock(uint32_t timeout, uint16_t limit)
+{
+    work.start = timebase_read_awake_ticks24(); work.previous = work.start;
+    work.limit = limit; status.polls = status.discarded = 0;
+    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    return status.timebase_status == TIMEBASE_OK ? MAC_TIME_OK : MAC_TIME_TIMEBASE_ERROR;
+}
+
+mac_time_result_t mac_time_attempt_begin(uint32_t timeout, uint16_t limit,
+                                         mac_time_stamp_t MCU_XDATA *output)
+{
+    mac_time_result_t result;
+    if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
+    if (mac_time_attempt_active) return MAC_TIME_ALREADY_INITIALIZED;
+    result = mac_time_read_radio(timeout, limit, output);
+    if (result == MAC_TIME_OK) mac_time_attempt_active = 1;
+    return result;
+}
+
+mac_time_result_t mac_time_attempt_read(uint32_t timeout, uint16_t limit,
+                                        mac_time_stamp_t MCU_XDATA *output)
+{
+    mac_time_result_t result;
+    uint16_t address, first, last;
+    uint8_t low, high, a, b, c;
+    if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
+    if (!mac_time_ready || !mac_time_attempt_active) return MAC_TIME_NOT_INITIALIZED;
+    if (!output || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
+        return MAC_TIME_INVALID_ARGUMENT;
+    address = MMIO_XADDRESS(output);
+    if (address >= 0x1e00 || sizeof(*output) > 0x1e00u-address)
+        return MAC_TIME_INVALID_RANGE;
+    first = MMIO_XADDRESS(__memcpy_PARM_2); last = MMIO_XADDRESS(&_gptrput_PARM_2);
+    if (address <= MMIO_XADDRESS(&mac_radio_shared_end) ||
+        (address <= last && (address >= first || first-address < (uint16_t)sizeof(*output))))
+        return MAC_TIME_BUFFER_OWNERSHIP;
+    if (attempt_clock(timeout, limit) != MAC_TIME_OK) {
+        mac_time_fault = status.result = MAC_TIME_TIMEBASE_ERROR;
+        return MAC_TIME_TIMEBASE_ERROR;
+    }
+    fast = 1;
+    for (;;) {
+        if (status.polls == limit) { result = MAC_TIME_WORK_LIMIT; break; }
+        /* The same common live latch and whole-FF discard, SWRZ031 1.2. */
+        low = MMIO_READ(SOC_T2M0);
+        if (low != 255) {
+            high = MMIO_READ(SOC_T2M1);
+            a = MMIO_READ(SOC_T2MOVF0);
+            b = MMIO_READ(SOC_T2MOVF1);
+            c = MMIO_READ(SOC_T2MOVF2);
+            staged.fine = (uint16_t)low | ((uint16_t)high << 8);
+            staged.periods = (uint32_t)a | ((uint32_t)b << 8) | ((uint32_t)c << 16);
+        }
+        result = poll();
+        if (result != MAC_TIME_OK) break;
+        if (low == 255) { status.discarded++; continue; }
+        if (staged.fine >= MAC_TIME_FINE_PERIOD || staged.periods >= MAC_TIME_OVERFLOW_PERIOD) {
+            result = MAC_TIME_COUNT_ERROR; break;
+        }
+        output->fine = staged.fine; output->periods = staged.periods;
+        fast = 0;
+        return MAC_TIME_OK;
+    }
+    fast = 0;
+    mac_time_fault = result; status.result = result;
+    return result;
+}
+
+mac_time_result_t mac_time_attempt_end(uint32_t timeout, uint16_t limit,
+                                       mac_time_stamp_t MCU_XDATA *output)
+{
+    mac_time_result_t result;
+    if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
+    if (!mac_time_attempt_active) return MAC_TIME_NOT_INITIALIZED;
+    result = mac_time_read_radio(timeout, limit, output);
+    if (result == MAC_TIME_OK) mac_time_attempt_active = 0;
+    return result;
+}
+#endif
 MCU_XDATA uint8_t mac_time_reserved_end;

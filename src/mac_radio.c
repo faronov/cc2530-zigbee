@@ -112,7 +112,11 @@ static mac_radio_result_t operate(uint8_t operation, const uint8_t MCU_XDATA *bo
     if ((operation == 0 && !output) || (operation == 1 && (!body || !length || length > 125)))
         return MAC_RADIO_INVALID_ARGUMENT;
     if ((operation == 0 || operation == 2) ?
-        (status.phase != MAC_RADIO_RX && status.phase != MAC_RADIO_DRAINING) :
+        (status.phase != MAC_RADIO_RX && status.phase != MAC_RADIO_DRAINING
+#if defined(CC2530_MAC_ATTEMPT)
+         && !(operation == 2 && status.phase == MAC_RADIO_PREPARED)
+#endif
+        ) :
         status.phase != MAC_RADIO_OFF) return MAC_RADIO_STATE;
     if (operation == 0 || operation == 1) {
         result = storage(operation == 0 ? MMIO_XADDRESS(output) : MMIO_XADDRESS(body),
@@ -167,4 +171,60 @@ mac_radio_result_t mac_radio_resume(uint32_t timeout, uint16_t limit)
     return operate(3, NULL, 0, NULL, timeout, limit);
 }
 const mac_radio_diagnostics_t MCU_XDATA *mac_radio_diagnostic(void) { return &status; }
+#if defined(CC2530_MAC_ATTEMPT)
+static radio_autoack_attempt_t MCU_XDATA * MCU_XDATA attempt_output;
+static mac_epoch_t MCU_XDATA * MCU_XDATA attempt_first;
+static mac_radio_result_t attempt_storage(uint16_t a, uint16_t b)
+{
+    mac_radio_result_t result = storage(a, sizeof(radio_autoack_attempt_t));
+    if (result != MAC_RADIO_READY) return result;
+    result = storage(b, sizeof(mac_epoch_t));
+    if (result != MAC_RADIO_READY) return result;
+    if (a <= b ? b-a < (uint16_t)sizeof(radio_autoack_attempt_t) :
+        a-b < (uint16_t)sizeof(mac_epoch_t)) return MAC_RADIO_BUFFER_OWNERSHIP;
+    return MAC_RADIO_READY;
+}
+mac_radio_result_t mac_radio_prepare(const uint8_t MCU_XDATA *body,
+                                             uint8_t length, uint32_t timeout, uint16_t limit)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (!body || !length || length > 125) return MAC_RADIO_INVALID_ARGUMENT;
+    if (status.phase != MAC_RADIO_OFF) return MAC_RADIO_STATE;
+    result = storage(MMIO_XADDRESS(body), length);
+    if (result != MAC_RADIO_READY) return result;
+    result = sample(timeout, limit, 0);
+    if (result != MAC_RADIO_READY) return result;
+    status.radio_result = radio_autoack_prepare(body, length, timeout, limit);
+    if (status.radio_result != RADIO_AUTOACK_READY) return fail(MAC_RADIO_DRIVER_ERROR);
+    status.phase = MAC_RADIO_PREPARED; status.result = MAC_RADIO_READY;
+    return MAC_RADIO_READY;
+}
+
+mac_radio_result_t mac_radio_attempt(uint16_t window, uint32_t timeout, uint16_t limit,
+    radio_autoack_attempt_t MCU_XDATA *output, mac_epoch_t MCU_XDATA *first)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (!output || !first || !window || window > 4096) return MAC_RADIO_INVALID_ARGUMENT;
+    if (status.phase != MAC_RADIO_PREPARED) return MAC_RADIO_STATE;
+    result = attempt_storage(MMIO_XADDRESS(output), MMIO_XADDRESS(first));
+    if (result != MAC_RADIO_READY) return result;
+    attempt_output = output; attempt_first = first;
+    result = sample(timeout, limit, 0);
+    if (result != MAC_RADIO_READY) return result;
+    *attempt_first = mac_radio_epoch;
+    status.radio_result = radio_autoack_attempt(window, timeout, limit, attempt_output);
+    if (status.radio_result == RADIO_AUTOACK_FRAME) result = MAC_RADIO_FRAME;
+    else if (status.radio_result == RADIO_AUTOACK_BAD_CRC) result = MAC_RADIO_BAD_CRC;
+    else if (status.radio_result == RADIO_AUTOACK_EMPTY) result = MAC_RADIO_EMPTY;
+    else if (status.radio_result == RADIO_AUTOACK_CCA_BUSY) result = MAC_RADIO_CCA_BUSY;
+    else return fail(MAC_RADIO_DRIVER_ERROR);
+    status.epoch_result = mac_epoch_step(&mac_radio_epoch, &attempt_output->last, &mac_radio_live);
+    if (status.epoch_result != MAC_EPOCH_OK) return fail(MAC_RADIO_EPOCH_ERROR);
+    status.last_live = mac_radio_live;
+    status.phase = MAC_RADIO_RX; status.result = result;
+    return result;
+}
+#endif
 MCU_XDATA uint8_t mac_radio_reserved_end;

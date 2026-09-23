@@ -27,12 +27,12 @@ generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
 the two debug-fixture jobs run `test-common-core`, and two dedicated composition
 jobs run `test-mac-radio test-mac-stamp test-zcl-temperature`.
-Their exact union is the complete
+Two further dedicated jobs run `test-mac-attempt` and its longer genuine
+MMIO replay. Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
-This thirty-job partition preserves all28 board/image jobs without adding the
-new composed replay to debug-fixture jobs already taking about13 minutes.
-This removes
-identical repeated work, not cases, while retaining the15-minute job and
+This thirty-two-job partition preserves all 28 board/image jobs without adding
+the new composed replay to debug-fixture jobs already taking about13 minutes.
+This removes identical repeated work, not cases, while retaining the15-minute job and
 15-second simulator limits and the seven-path artifact whitelist.
 The measurements below predate the flash/TX fixtures and retain their original
 twenty-image scope; they are not timings for the expanded matrix.

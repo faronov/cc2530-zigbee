@@ -610,6 +610,17 @@ preserving fine phase and rejecting ambiguous/outside values. It is arithmetic
 only: temporal membership does not prove hardware capture freshness or frame
 identity. No board image links it; never flash `mac_stamp_test.ihx`.
 
+The [bounded interval radio attempt](docs/MAC_ATTEMPT.md) (#84) now separates
+idle FIFO preparation from one hardware-qualified CCA1/TX and post-TX receive
+operation. Its explicit profile uses a source-backed minimum packet duration
+and positive completion observations to bound time, preserving fine phase.
+It returns original frame/CRC metadata with atomic publication and retained
+faults, not guessed captured timestamps or ACK/NO_ACK confirmations.
+Response reception is unfiltered/AUTOACK-off, not a complete POLL lease.
+This is host-tested, image-checked and simulated; hardware timing, calibrated
+CCA and an interval-aware protocol adapter remain separate.
+No board image links it; never flash `mac_attempt_test.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

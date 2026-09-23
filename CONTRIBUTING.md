@@ -84,8 +84,10 @@ is split into `all test-board` in every job plus `test-common-core` in the two
 debug-fixture jobs. The clock/radio, delayed-stamp and synthetic-temperature
 compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
-The exact union is still `test-common`; thirty jobs retain all twenty-eight
-board/image checks and the unchanged simulator deadlines. The tool suite itself includes both-board image profiles;
+The interval attempt's longer MMIO replay runs in two additional dedicated
+jobs. The exact union is still `test-common`; thirty-two jobs retain all
+twenty-eight board/image checks and the unchanged simulator deadlines.
+The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
 Linked clock/TX metadata tests build their own fresh temporary artifacts when
 SDCC is available; do not prepopulate development directories to activate them.
@@ -98,6 +100,7 @@ make BOARD=generic IMAGE=radio_rx_fixture test-board
 make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board
 make BOARD=generic test-mac-radio
 make BOARD=generic test-mac-stamp
+make BOARD=generic test-mac-attempt
 make BOARD=generic test-zcl-temperature
 ```
 
@@ -112,6 +115,16 @@ the bounded delayed-sample projection, with three immediate listing snapshots.
 It is also included once per board through `test-common` and those dedicated
 CI jobs. See [MAC_STAMP](docs/MAC_STAMP.md); numeric window membership does not
 establish hardware capture freshness or frame identity.
+
+`test-mac-attempt` uses separate `ma_*.rel` objects with both
+`CC2530_MAC_RADIO` and `CC2530_MAC_ATTEMPT`, never replacing `mr_*` or
+legacy objects in a shared build. Preserve the exact eight-module order and
+immediate snapshots, complete raw-CDB/CODE/map/object/ABI/MMIO proof,
+32768-CODE/2048-total-XDATA/SP7C caps and 15-second simulator deadline.
+Its full replay runs once per board in dedicated 15-minute CI jobs; it must
+not be appended to the already long debug-fixture jobs or shortened to fit.
+See [MAC_ATTEMPT](docs/MAC_ATTEMPT.md). The raw receipt is neither an exact
+captured event nor a MAC confirmation; no test image is a flashing input.
 
 `test-common` covers standalone components, not a board fixture;
 `test-board` builds and checks the selected board image, not the standalone

@@ -167,6 +167,22 @@ It supplies no capture-valid/overrun flag, freshness proof, frame identity,
 PHY offset or integer event-time rounding. It is not linked into the radio
 owner or board images before those hardware/event contracts are established.
 
+The explicit [interval attempt owner](MAC_ATTEMPT.md) adds a separate
+`CC2530_MAC_ATTEMPT` composition over the genuine clock/Timer2/epoch/radio
+services. Idle prepare owns immutable TXFIFO before timing-critical work.
+RX_MODE11 and explicit raw CCA1 exclude new frames before admission; normal
+unfiltered/AUTOACK-off RX must be restored before the earliest possible TX end.
+The fixed serialized PPDU duration supplies a lower bound; positive own
+completion and complete-head predicates precede upper-bound latches.
+Scoped provisional timer reads are bracketed by complete validation.
+Only then are chronological epoch projections and original frame/CRC
+metadata published in a 164-byte target record. Complete lower, wrapper,
+top-level and libc scratch regions remain excluded from caller buffers.
+The real eight-module proof uses 24621 CODE, 1475+64 XDATA and peak SP79,
+within new 32768/2048/SP7C limits without changing earlier budgets or CODE.
+It is not hardware timing/calibration, normative CCA scheduling, an exact-event
+`mac_tx` adapter or a continuous POLL receive/ACK lease.
+
 The separate `nwk_beacon` module decodes only the 15-byte R22 NWK information
 inside the returned upper-layer Beacon Payload. It has no dependency on MAC
 headers or platform code. The [NWK codec contract](NWK.md) preserves raw

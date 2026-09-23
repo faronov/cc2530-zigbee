@@ -693,6 +693,31 @@ reverse TX-flush-to-ACK guarantee. SWRZ031 pp2-3 adds no clarification.
 These are explicit evidence gaps, not assertions of unsupported silicon or
 permission to invent a successful concurrent model.
 
+The subsequent bounded review distinguishes arbitrary live-AUTOACK admission
+from phase-separated preparation. SWRU191F p259 defines RX_MODE11 for
+RSSI/CCA without symbol search; pp242,247-248 define CSP SFD conditions,
+p251 its RX-mask clear, and p223 non-aborting soft stop. These support
+candidate ownership designs, not a hardware-observed mode-transition/capture
+contract.
+IEEE2006 section6.9.9 p66 separately permits energy-only CCA with its
+threshold/detection and in-progress-PPDU rules. The reviewed R22 AnnexD.1-.8
+does not select a CCA mode and does not remove its IEEE2015 reference.
+TI [SWRU214A](https://www.ti.com/lit/ug/swru214a/swru214a.pdf)
+(15 October2009), pp19-21, supplies a TXDONE/ACK-wait architectural
+example but explicitly not a complete MAC/error-handling implementation.
+No SDK license is inferred; no SDK source was read or imported for this review.
+The existing profiles, hardware claims and exact-event APIs are unchanged.
+
+The separate [#84 interval attempt](MAC_ATTEMPT.md) implements the bounded
+phase-owned alternative with unfiltered/AUTOACK-off response reception.
+Its fixed PPDU lower bound comes from SWRU191F sections23.6/23.7.1,
+pp215-217, sections23.8.7-.10, p221, and MDMCTRL0 p266: four preamble
+octets, SFD, PHR, two symbols/octet and generated FCS. Completion and
+complete-head upper predicates use sections23.8.11/23.10, pp222,232-233.
+No analog correction, undocumented zero-flag latency or capture offset is
+assumed. Original code and genuine linked/MMIO simulation are separate from
+hardware timing, calibrated CCA and protocol confirmation evidence.
+
 The #72 same-owner rearm extension reread SWRU191F23.9.1-2 pp222-223,
 Fig23-20/Table23-3 pp235-236 and RXENABLE/RXMASKSET/RXMASKCLR p260 from the
 same PDF, SHA-256
@@ -1217,6 +1242,15 @@ relax the standard's broader receiver behavior. The pending-list rule
 specifically excludes short `FFFF`, without inventing a second sentinel rule.
 The implementation and vectors are original. The public PDF and temporary PDF
 reader were used only for offline research and are not repository/CI artifacts.
+
+The [official IEEE802.15.4-2015 correction sheet](https://standards.ieee.org/wp-content/uploads/import/documents/erratas/802.15.4-2015_errata.pdf),
+issued29 July2016 (STD20893E), was directly inspected during the staged
+association work. Its two-page PDF has SHA256
+`f02e15438a488631dcd38a022727faf99c53661836fd8e1c30128baf127657b1`.
+Page2 corrects the standard title only. It supplies no association timeout or
+frame-wait equation correction; no full2015 reconciliation is inferred.
+The PDF remains an ignored research input, not a redistributed source or CI
+artifact. Search-generated timing claims were not adopted as evidence.
 
 Contiki's RF code depends on Contiki facilities. An adaptation must replace
 those interfaces deliberately, preserve the original notices and be tested

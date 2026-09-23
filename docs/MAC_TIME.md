@@ -190,6 +190,51 @@ asks whether the delay transfers to that front end; the retrieved question
 does not establish that it does. No driver, timestamp correction or hardware
 observation is added by this source review.
 
+### Bounded event intervals are a different interface
+
+Exact trailing-end capture is a requirement of the current `mac_tx` event
+contract, not of every possible conservative MAC design. A future adapter
+could instead supply independently established event identity and a proven
+completion interval, with uncertainty retained explicitly. A sample before
+an owned TX request and a sample after its fresh confirmed completion can
+bound the event; they do not by themselves produce a useful narrow interval.
+A zero completion flag is not a tight lower bound without its latency contract.
+
+For TX end in `[TL,TU]`, ACK end in `[AL,AU]` and window W, conservative
+acceptance requires `AL > TU` and `AU <= TL+W`, or an independent proof of
+physical ordering in place of the first comparison. Waiting until `TU+W`
+does not permit accepting every ACK up to that time. A boundary-straddling
+candidate is uncertain, not automatically ACKED or NO_ACK. IFS can use an
+upper bound only while accounting for any subsequent local ACK activity.
+All comparisons need the real fractional epoch and bounded wrap handling.
+
+This would require an explicit scheduler/POLL/delivery-order interface change,
+not inserting a late live sample into an existing captured-event field.
+Useful successful exchanges, receive continuity and loss-aware closure must
+be demonstrated before such a replacement is accepted. No interval adapter,
+timing correction or physical observation is supplied by this review.
+
+For the verified fixed PHY, a stronger constructive lower bound is available.
+SWRU191F23.6-7 pp215-217,23.8.10 p221 and MDMCTRL0 p266 establish a
+four-octet preamble (`MDMCTRL0=85`), one-octet SFD/PHR, two symbols per octet
+and a length `L=body_length+2` including FCS. Under the unchanged normal,
+finite TX/test-register profile, common undivided clock, immutable FIFO and
+no abort/underflow, a sample S before the owned request gives:
+
+```text
+TX_lower = S + (12 + 2*L) * 512 fine increments
+```
+
+Calibration/start delays only move completion later; no turnaround or analog
+capture offset is added to this lower bound. Normal12-symbol TX turnaround
+plus an ACK ending34 symbols after actual TX-end leaves eight symbols of
+aggregate latency for conservative acceptance within54 symbols. This is a
+nonempty normal-exchange budget, **not a measured or guaranteed hardware
+latency bound**. A late upper observation cannot be repaired by claiming NO_ACK.
+The real [attempt/collect owner and linked hot-path proof](MAC_ATTEMPT.md)
+implement this bounded alternative separately; current point-event APIs are
+unchanged and physical liveness remains unobserved.
+
 ## Offline evidence, ABI and resources
 
 Baseline **SDCC4.2.0** canonical large-model flags and unchanged linker bounds:

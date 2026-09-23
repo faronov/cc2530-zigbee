@@ -23,11 +23,11 @@ SETTINGS = (0x6180, 0x6181, 0x6182, 0x6189, 0x618a, 0x6194, 0x6195,
             0x61b2, 0x61fa, 0x61ae, 0x618f, 0x6190, 0x6191)
 HASHES = {
     "generic": (10758, "67143a40a545bed11ceaf577f3045facb8aaed6eaef76c9168d58c9024be2ca4",
-                "7bafa9e411d09cda5f8407eb464ac8467b325a32aeb300ce8600f8fc1bb74881",
+                "f43eff7cdc7dc83c6b1d3fe5f9a5c4a2ee3d4a94ff918098d21ffcd48cbe1f48",
                 "b349f3037e04fcd666dff13c36f5e2b802a14214443e37531c80654468aefae2",
                 "c98caf2c7ee4eb53813684e49c84ed3c5dc8de3a844b0392d556e16d454071b7"),
     "lg_esl29_rev03": (10798, "ccfad2a8149454ed7dcc225295261a8267171cf62d79708570a5f053ca9a3137",
-                      "b9e6493edc014b09e6c1c7e216fb31630c9c222616e49b138d408a817dff9ba6",
+                      "7f4488ed13719d1ddc48de6c80803decc6ca4ea4345f54f59b8aacb9bf2577fc",
                       "f04afaa8ae52acf275583dc5a1499a9f565ad35e5b9cb01e3765162d6b08a0d3",
                       "0e12c2eaae457732cc8d9954f19175a27c1b3553f541a59cb0a63a415c35aef2"),
 }

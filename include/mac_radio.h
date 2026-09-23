@@ -71,4 +71,14 @@ mac_radio_result_t mac_radio_send(const uint8_t MCU_XDATA *body, uint8_t length,
 mac_radio_result_t mac_radio_stop(uint32_t timeout, uint16_t limit);
 mac_radio_result_t mac_radio_resume(uint32_t timeout, uint16_t limit);
 const mac_radio_diagnostics_t MCU_XDATA *mac_radio_diagnostic(void);
+#if defined(CC2530_MAC_ATTEMPT)
+#define MAC_RADIO_PREPARED 6u
+/* Internal provisional staging hooks for mac_attempt, not public receipts.
+ * Both objects must be disjoint ordinary caller storage outside this prefix.
+ */
+mac_radio_result_t mac_radio_prepare(const uint8_t MCU_XDATA *body,
+                                             uint8_t length, uint32_t timeout, uint16_t limit);
+mac_radio_result_t mac_radio_attempt(uint16_t window, uint32_t timeout, uint16_t limit,
+    radio_autoack_attempt_t MCU_XDATA *output, mac_epoch_t MCU_XDATA *first);
+#endif
 #endif

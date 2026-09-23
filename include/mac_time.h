@@ -98,4 +98,20 @@ mac_time_result_t mac_time_read_radio(uint32_t timeout, uint16_t poll_limit,
  * observations on fault. This memory accessor performs no hardware read.
  */
 const mac_time_diagnostics_t MCU_XDATA *mac_time_diagnostic(void);
+#if defined(CC2530_MAC_ATTEMPT)
+#ifndef CC2530_MAC_RADIO
+#error CC2530_MAC_ATTEMPT requires CC2530_MAC_RADIO
+#endif
+/* Internal co-owner scope. begin/end execute full genuine radio-time checks.
+ * read stages one bounded live latch WITHOUT full peripheral validation.
+ * Its output is provisional until end succeeds; never publish it independently.
+ * No other timer client may intervene. All ordinary storage/fault rules apply.
+ */
+mac_time_result_t mac_time_attempt_begin(uint32_t timeout, uint16_t limit,
+                                         mac_time_stamp_t MCU_XDATA *output);
+mac_time_result_t mac_time_attempt_read(uint32_t timeout, uint16_t limit,
+                                        mac_time_stamp_t MCU_XDATA *output);
+mac_time_result_t mac_time_attempt_end(uint32_t timeout, uint16_t limit,
+                                       mac_time_stamp_t MCU_XDATA *output);
+#endif
 #endif

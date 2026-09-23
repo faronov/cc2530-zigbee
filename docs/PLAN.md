@@ -629,6 +629,17 @@ membership is not capture freshness or frame identity; the physical edge,
 coherency/overwrite and offset evidence still blocks the real event adapter.
 No new hardware facts or RF observations close that gate.
 
+The [#84 bounded interval attempt](MAC_ATTEMPT.md) now implements a real
+alternative owner profile: idle FIFO preparation, RX_MODE11/CCA1 admission,
+runtime early normal-RX restoration, positive completion bounds and exact
+complete-head consumption. It preserves fractional time, publishes atomically
+and retains operational failures. Legacy CODE and contracts are unchanged.
+Host, complete linked-image and alias/MMIO simulator evidence does not
+establish physical liveness or calibrated CCA. Its post-TX reception remains
+unfiltered/AUTOACK-off; no normative ACK/POLL confirmation or exact captured
+event is invented. A separate interval-aware protocol interface and complete
+receiver ACK/filter/closure work are still needed; #40/#50 remain open.
+
 Initial #14 preparation additionally admits canonical unsecured Beacon
 Requests through that same codec/scheduler, DSN owner and CCA/IFS bounds.
 They require neither ACK nor frame retries. This does not yet implement

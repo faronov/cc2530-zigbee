@@ -5,6 +5,9 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_ATTEMPT)
+#include "mac_epoch.h"
+#endif
 
 MCU_XDATA uint8_t radio_autoack_state, radio_autoack_fault;
 extern MCU_XDATA uint8_t radio_autoack_reserved_end, _gptrput_PARM_2;
@@ -24,6 +27,9 @@ static MCU_XDATA struct {
     uint16_t limit;
     uint8_t clock, configured, expected_mask, head, remaining, byte, index;
     uint8_t profile, cca, tx_count, tx_first, tx_last;
+#if defined(CC2530_MAC_ATTEMPT)
+    uint8_t search_disabled, prepared_length;
+#endif
 } work;
 /* SWRU191F pp.214,256-264; SWRS081B Table2 p.24. Address RAM first,
  * then the complete profile, all while idle. Only FSCAL1 has R/W0 high bits.
@@ -49,6 +55,9 @@ static uint8_t setting_value(uint8_t index)
     if (index == 10) return (uint8_t)owned.short_address;
     if (index == 11) return (uint8_t)(owned.short_address >> 8);
     if (index == 12 && (work.profile & 2u)) return 0x0c;
+#if defined(CC2530_MAC_ATTEMPT)
+    if (index == 15 && work.search_disabled) return 0x4c;
+#endif
     if (index == 15 && (work.profile & 1u)) return 0x40;
     if (index == 22) return (uint8_t)(11u + 5u * (owned.channel - 11u));
     return values[index - 12u];
@@ -99,8 +108,14 @@ static radio_autoack_result_t observe(void)
     status.packet = MMIO_XREAD(0x619f);
     status.rssi_valid = MMIO_XREAD(0x6199);
     if (work.cca) {
+#if defined(CC2530_MAC_ATTEMPT)
+        if (MMIO_XREAD(0x6196) != (work.cca >= 3 ? RADIO_AUTOACK_CCA_THRESHOLD_RAW : 0xf8) ||
+            (work.cca == 2 && MMIO_XREAD(0x6197) != 0x1a) ||
+            (work.cca == 4 && MMIO_XREAD(0x6197) != 0x0a))
+#else
         if (MMIO_XREAD(0x6196) != 0xf8 ||
             (work.cca == 2 && MMIO_XREAD(0x6197) != 0x1a))
+#endif
             return RADIO_AUTOACK_STATE_CHANGED;
         work.tx_count = MMIO_XREAD(0x619c);
         work.tx_first = MMIO_XREAD(0x61a1);
@@ -194,6 +209,30 @@ static radio_autoack_result_t consume(void)
 #define CHECK(call) do { result = (call); if (result != RADIO_AUTOACK_READY) goto failed; } while (0)
 #define REQUIRE(test, error) do { if (!(test)) { result = (error); goto failed; } } while (0)
 #define ROOM() REQUIRE(status.polls < work.limit, RADIO_AUTOACK_WORK_LIMIT)
+#if defined(CC2530_MAC_ATTEMPT)
+static radio_autoack_result_t receive_head(void)
+{
+    radio_autoack_result_t result;
+    uint8_t i;
+    work.head = status.first; work.remaining = status.phr + 1u;
+    CHECK(consume());
+    REQUIRE((work.byte & 127u) == status.phr, RADIO_AUTOACK_FIFO_ERROR);
+    staged.length = status.phr - 2u;
+    for (i = 0; i < staged.length; i++) {
+        CHECK(consume()); staged.body[i] = work.byte;
+    }
+    CHECK(consume()); staged.rssi_raw = work.byte;
+    CHECK(consume()); staged.crc_correlation = work.byte;
+    CHECK(poll());
+    REQUIRE(status.first == work.head, RADIO_AUTOACK_FIFO_ERROR);
+    if (radio_autoack_state == RADIO_AUTOACK_DRAINING ||
+        radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK)
+        CHECK(stopped());
+    return RADIO_AUTOACK_READY;
+failed:
+    return result;
+}
+#endif
 static radio_autoack_result_t operate(uint8_t operation,
     const radio_autoack_config_t MCU_XDATA *configuration,
     radio_autoack_frame_t MCU_XDATA *output, uint32_t timeout, uint16_t limit)
@@ -210,7 +249,11 @@ static radio_autoack_result_t operate(uint8_t operation,
         ((operation == 1 || operation == 2) && radio_autoack_state != RADIO_AUTOACK_RX &&
          radio_autoack_state != RADIO_AUTOACK_DRAINING &&
          radio_autoack_state != RADIO_AUTOACK_RX_NOACK &&
-         radio_autoack_state != RADIO_AUTOACK_DRAIN_NOACK))
+         radio_autoack_state != RADIO_AUTOACK_DRAIN_NOACK
+#if defined(CC2530_MAC_ATTEMPT)
+         && !(operation == 2 && radio_autoack_state == RADIO_AUTOACK_ATTEMPT_PREPARED)
+#endif
+         ))
         return RADIO_AUTOACK_STATE;
     if (operation == 0) {
         result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
@@ -233,6 +276,9 @@ static radio_autoack_result_t operate(uint8_t operation,
             work.clock = MMIO_READ(SOC_CLKCONCMD);
             work.configured = work.expected_mask = 0;
             work.profile = work.cca = 0;
+#if defined(CC2530_MAC_ATTEMPT)
+            work.search_disabled = work.prepared_length = 0;
+#endif
             status.phase = 1;
             CHECK(poll());
             REQUIRE(idle() && !status.count && !(status.signals & 0xc0u) &&
@@ -255,6 +301,14 @@ static radio_autoack_result_t operate(uint8_t operation,
             CHECK(stopped());
             REQUIRE(status.flags1 & 4u, RADIO_AUTOACK_STATE_CHANGED);
             REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
+#if defined(CC2530_MAC_ATTEMPT)
+            if (work.search_disabled) {
+                ROOM();
+                MMIO_XWRITE(0x6189, 0x40); work.search_disabled = 0; status.writes++;
+                CHECK(poll()); CHECK(stopped());
+                REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
+            }
+#endif
             if (radio_autoack_state == RADIO_AUTOACK_OFF_NOACK) {
                 ROOM();
                 MMIO_XWRITE(0x6180, 1); work.profile = 1; status.writes++;
@@ -290,6 +344,9 @@ static radio_autoack_result_t operate(uint8_t operation,
         }
         status.phr = MMIO_XREAD(0x619a) & 127u;
         REQUIRE(status.phr >= 5 && status.count >= status.phr + 1u, RADIO_AUTOACK_FIFO_ERROR);
+#if defined(CC2530_MAC_ATTEMPT)
+        CHECK(receive_head());
+#else
         work.head = status.first; work.remaining = status.phr + 1u;
         CHECK(consume());
         REQUIRE((work.byte & 127u) == status.phr, RADIO_AUTOACK_FIFO_ERROR);
@@ -304,6 +361,7 @@ static radio_autoack_result_t operate(uint8_t operation,
         if (radio_autoack_state == RADIO_AUTOACK_DRAINING ||
             radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK)
             CHECK(stopped());
+#endif
         for (i = 0; i < staged.length; i++) output->body[i] = staged.body[i];
         output->length = staged.length;
         output->rssi_raw = staged.rssi_raw;
@@ -397,6 +455,9 @@ radio_autoack_result_t radio_autoack_send(
 {
     radio_autoack_result_t result;
     if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
+#if defined(CC2530_MAC_ATTEMPT)
+    if (work.cca >= 3 || work.search_disabled) return RADIO_AUTOACK_STATE;
+#endif
     if (!body || !length || length > 125 || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
         return RADIO_AUTOACK_INVALID_ARGUMENT;
     if (radio_autoack_state != RADIO_AUTOACK_OFF && radio_autoack_state != RADIO_AUTOACK_OFF_NOACK)
@@ -475,4 +536,226 @@ failed:
     return result;
 }
 const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void) { return &status; }
+#if defined(CC2530_MAC_ATTEMPT)
+static MCU_XDATA mac_epoch_t attempt_epoch;
+static MCU_XDATA mac_epoch_stamp_t attempt_delta;
+static radio_autoack_attempt_t MCU_XDATA * MCU_XDATA attempt_output;
+/* Keep long-lived arithmetic in XDATA, not SDCC's scarce DATA spill cache. */
+static volatile MCU_XDATA struct {
+    uint32_t ticks, duration, until;
+    uint8_t head, phr;
+} attempt;
+
+static radio_autoack_result_t attempt_elapsed(
+    const mac_time_stamp_t MCU_XDATA *first, const mac_time_stamp_t MCU_XDATA *last)
+{
+    if (mac_epoch_start(&attempt_epoch, first, 0) != MAC_EPOCH_OK ||
+        mac_epoch_step(&attempt_epoch, last, &attempt_delta) != MAC_EPOCH_OK ||
+        attempt_delta.symbols > 65535UL)
+        return RADIO_AUTOACK_ATTEMPT_TIMER_ERROR;
+    attempt.ticks = attempt_delta.symbols * 512UL + attempt_delta.fine - first->fine;
+    return RADIO_AUTOACK_READY;
+}
+
+static radio_autoack_result_t attempt_sample(uint32_t timeout, uint16_t limit,
+                                             mac_time_stamp_t MCU_XDATA *output)
+{
+    return mac_time_attempt_read(timeout, limit, output) == MAC_TIME_OK ?
+        RADIO_AUTOACK_READY : RADIO_AUTOACK_ATTEMPT_TIMER_ERROR;
+}
+
+radio_autoack_result_t radio_autoack_prepare(
+    const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit)
+{
+    radio_autoack_result_t result;
+    if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
+    if (!body || !length || length > 125 || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
+        return RADIO_AUTOACK_INVALID_ARGUMENT;
+    if (radio_autoack_state != RADIO_AUTOACK_OFF && radio_autoack_state != RADIO_AUTOACK_OFF_NOACK)
+        return RADIO_AUTOACK_STATE;
+    result = storage(MMIO_XADDRESS(body), length);
+    if (result != RADIO_AUTOACK_READY) return result;
+    memset(&status, 0, sizeof(status)); work.limit = limit;
+    work.start = timebase_read_awake_ticks24(); work.previous = work.start;
+    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
+    status.phase = 17;
+    CHECK(poll()); CHECK(tx_idle());
+    REQUIRE(status.flags1 & 4u, RADIO_AUTOACK_STATE_CHANGED);
+    if (!work.profile) {
+        ROOM();
+        MMIO_XWRITE(0x6189, 0x40); work.profile = 1; status.writes++;
+        CHECK(poll()); CHECK(tx_idle());
+        ROOM();
+        MMIO_XWRITE(0x6180, 0x0c); work.profile = 3; status.writes++;
+        CHECK(poll()); CHECK(tx_idle());
+    }
+    if (work.cca != 4) {
+        ROOM();
+        MMIO_XWRITE(0x6196, RADIO_AUTOACK_CCA_THRESHOLD_RAW); work.cca = 3; status.writes++;
+        CHECK(poll()); CHECK(tx_idle());
+        ROOM();
+        MMIO_XWRITE(0x6197, 0x0a); work.cca = 4; status.writes++;
+        CHECK(poll()); CHECK(tx_idle());
+    }
+    ROOM();
+    MMIO_WRITE(SOC_RFST, 0xee); status.writes++;
+    CHECK(poll()); CHECK(tx_idle());
+    REQUIRE(tx_loaded(0), RADIO_AUTOACK_FIFO_ERROR);
+    for (work.index = 0; work.index <= length; work.index++) {
+        ROOM();
+        MMIO_WRITE(SOC_RFD, work.index ? body[work.index-1u] : (uint8_t)(length+2u));
+        status.writes++;
+        CHECK(poll()); CHECK(tx_idle());
+        REQUIRE(tx_loaded(work.index+1u), RADIO_AUTOACK_FIFO_ERROR);
+    }
+    ROOM();
+    MMIO_WRITE(SOC_RFIRQF1, 0x3d); status.writes++;
+    CHECK(poll()); CHECK(tx_idle());
+    REQUIRE(!(status.flags1 & 2u), RADIO_AUTOACK_STATE_CHANGED);
+    ROOM();
+    MMIO_XWRITE(0x6189, 0x4c); work.search_disabled = 1; status.writes++;
+    CHECK(poll()); CHECK(tx_idle());
+    work.prepared_length = length;
+    radio_autoack_state = RADIO_AUTOACK_ATTEMPT_PREPARED;
+    status.result = RADIO_AUTOACK_READY;
+    return RADIO_AUTOACK_READY;
+failed:
+    radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
+    status.result = result;
+    return result;
+}
+
+/* This hook writes provisional wrapper-owned staging, never a public receipt.
+ * Full time/radio checks bracket the finite hot region. No MMIO reset/recovery.
+ */
+radio_autoack_result_t radio_autoack_attempt(
+    uint16_t window, uint32_t timeout, uint16_t limit,
+    radio_autoack_attempt_t MCU_XDATA *output)
+{
+    radio_autoack_result_t result, received;
+    uint8_t flags, signals;
+    if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
+    if (!output || !window || window > 4096 || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
+        return RADIO_AUTOACK_INVALID_ARGUMENT;
+    if (radio_autoack_state != RADIO_AUTOACK_ATTEMPT_PREPARED) return RADIO_AUTOACK_STATE;
+    result = storage(MMIO_XADDRESS(output), sizeof(*output));
+    if (result != RADIO_AUTOACK_READY) return result;
+    attempt_output = output;
+    memset(&status, 0, sizeof(status)); work.limit = limit;
+    work.start = timebase_read_awake_ticks24(); work.previous = work.start;
+    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
+    CHECK(poll()); CHECK(tx_idle());
+    REQUIRE(work.search_disabled && work.cca == 4 && !(status.flags1 & 2u) &&
+            tx_loaded(work.prepared_length+1u), RADIO_AUTOACK_STATE_CHANGED);
+    REQUIRE(mac_time_attempt_begin(timeout, limit, &attempt_output->last) == MAC_TIME_OK,
+            RADIO_AUTOACK_ATTEMPT_TIMER_ERROR);
+    attempt_output->transmitted = attempt_output->received = attempt_output->sampled_cca =
+        attempt_output->within_window = 0;
+    attempt.duration = (16UL + 2UL*work.prepared_length)*512UL;
+    attempt.until = attempt.duration + (uint32_t)window*512UL;
+    ROOM(); status.phase = 18;
+    MMIO_XWRITE(0x618c, 1); work.expected_mask = 1; status.writes++;
+    do { CHECK(poll()); }
+    while ((status.calibration & 0x40u) || (status.signals & 7u) != 5u || !status.rssi_valid);
+    CHECK(attempt_sample(timeout, limit, &attempt_output->before));
+    do {
+        CHECK(progress());
+        CHECK(attempt_sample(timeout, limit, &attempt_output->armed));
+        CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->armed));
+    } while (attempt.ticks < 8UL*512UL);
+    cca_settle();
+    CHECK(poll());
+    REQUIRE(!(status.calibration & 0x40u) && (status.signals & 7u) == 5u &&
+            status.rssi_valid && !(status.flags1 & 2u) && !status.count &&
+            !(status.signals & 0xc0u) && tx_loaded(work.prepared_length+1u),
+            RADIO_AUTOACK_STATE_CHANGED);
+    ROOM(); status.phase = 19;
+    CHECK(attempt_sample(timeout, limit, &attempt_output->before));
+    MMIO_WRITE(SOC_RFST, 0xea); status.writes++;
+    signals = MMIO_XREAD(0x6193);
+    attempt_output->sampled_cca = (signals >> 3) & 1u;
+    if (attempt_output->sampled_cca) {
+        /* Positive own TX state prevents admission before the submitted TX.
+         * Earliest-end check below also proves this TX cannot already be over.
+         */
+        while (!(signals & 2u)) {
+            CHECK(progress());
+            REQUIRE(!MMIO_READ(SOC_RFERRF), RADIO_AUTOACK_CONTROLLER_ERROR);
+            REQUIRE(!(MMIO_READ(SOC_RFIRQF1) & 2u),
+                    RADIO_AUTOACK_ATTEMPT_LATE_ARM);
+            signals = MMIO_XREAD(0x6193);
+        }
+        REQUIRE(!(signals & 1u), RADIO_AUTOACK_STATE_CHANGED);
+    } else {
+        REQUIRE(!(signals & 2u) && !(MMIO_READ(SOC_RFIRQF1) & 2u),
+                RADIO_AUTOACK_STATE_CHANGED);
+    }
+    MMIO_XWRITE(0x6189, 0x40); work.search_disabled = 0; status.writes++;
+    REQUIRE(MMIO_XREAD(0x6189) == 0x40, RADIO_AUTOACK_STATE_CHANGED);
+    CHECK(attempt_sample(timeout, limit, &attempt_output->armed));
+    if (!attempt_output->sampled_cca) { received = RADIO_AUTOACK_CCA_BUSY; goto complete; }
+    CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->armed));
+    REQUIRE(attempt.ticks < attempt.duration,
+            RADIO_AUTOACK_ATTEMPT_LATE_ARM);
+    received = RADIO_AUTOACK_EMPTY; status.phase = 20;
+    for (;;) {
+        CHECK(progress());
+        REQUIRE(!MMIO_READ(SOC_RFERRF), RADIO_AUTOACK_CONTROLLER_ERROR);
+        flags = MMIO_READ(SOC_RFIRQF1);
+        REQUIRE(!(flags & 0xf8u), RADIO_AUTOACK_STATE_CHANGED);
+        if (!attempt_output->transmitted && (flags & 2u)) {
+            CHECK(attempt_sample(timeout, limit, &attempt_output->tx));
+            CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->tx));
+            REQUIRE(attempt.ticks >= attempt.duration, RADIO_AUTOACK_STATE_CHANGED);
+            attempt_output->transmitted = 1;
+        }
+        signals = MMIO_XREAD(0x6193);
+        REQUIRE((signals & 0xc0u) != 0x40u, RADIO_AUTOACK_CONTROLLER_ERROR);
+        if (signals & 0x40u) {
+            REQUIRE(attempt_output->transmitted, RADIO_AUTOACK_STATE_CHANGED);
+            attempt.head = MMIO_XREAD(0x619d);
+            attempt.phr = MMIO_XREAD(0x619a) & 127u;
+            work.byte = MMIO_XREAD(0x619b);
+            REQUIRE(!(attempt.head & 128u) && MMIO_XREAD(0x619f) == attempt.head &&
+                    attempt.phr >= 5 && work.byte <= 128 && work.byte >= attempt.phr+1u &&
+                    !MMIO_READ(SOC_RFERRF), RADIO_AUTOACK_FIFO_ERROR);
+            CHECK(attempt_sample(timeout, limit, &attempt_output->rx));
+            CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->rx));
+            attempt_output->within_window = attempt.ticks <= attempt.until;
+            CHECK(poll());
+            REQUIRE(status.first == attempt.head &&
+                    (MMIO_XREAD(0x619a) & 127u) == attempt.phr, RADIO_AUTOACK_FIFO_ERROR);
+            ROOM();
+            radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
+            status.phr = attempt.phr;
+            CHECK(receive_head());
+            attempt_output->frame = staged;
+            received = (staged.crc_correlation & 128u) ? RADIO_AUTOACK_FRAME : RADIO_AUTOACK_BAD_CRC;
+            attempt_output->received = 1;
+            break;
+        }
+        CHECK(attempt_sample(timeout, limit, &attempt_output->last));
+        CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->last));
+        if (attempt.ticks >= attempt.until && attempt_output->transmitted) {
+            break;
+        }
+    }
+complete:
+    CHECK(poll());
+    REQUIRE(work.tx_count == work.prepared_length+1u &&
+            work.tx_last == work.prepared_length+1u, RADIO_AUTOACK_FIFO_ERROR);
+    REQUIRE(mac_time_attempt_end(timeout, limit, &attempt_output->last) == MAC_TIME_OK,
+            RADIO_AUTOACK_ATTEMPT_TIMER_ERROR);
+    CHECK(poll());
+    radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
+    status.phase = 21; status.result = received;
+    return received;
+failed:
+    radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
+    status.result = result;
+    return result;
+}
+#endif
 MCU_XDATA uint8_t radio_autoack_reserved_end;

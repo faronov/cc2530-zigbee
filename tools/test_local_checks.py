@@ -58,7 +58,8 @@ class LocalChecksTests(unittest.TestCase):
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_scan", "mac_association", "mac_poll",
+            "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt",
+            "mac_scan", "mac_association", "mac_poll",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
             "zcl_identify", "zcl_temperature",
@@ -91,11 +92,12 @@ class LocalChecksTests(unittest.TestCase):
                                      for i, arg in enumerate(args)) for args in commands)
             self.assertEqual(normalized(("test-common",)),
                              normalized(("test-common-core", "test-mac-radio", "test-mac-stamp",
-                                         "test-zcl-temperature")))
+                                         "test-zcl-temperature", "test-mac-attempt")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
             self.assertFalse(any("tests/boot_zcl_temperature.py" in args for args in core))
+            self.assertFalse(any("tests/boot_mac_attempt.py" in args for args in core))
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
@@ -116,6 +118,9 @@ class LocalChecksTests(unittest.TestCase):
                            ("mr_mac_time", "mac_time"), ("mr_radio_autoack", "radio_autoack"),
                            ("mr_mac_epoch", "mac_epoch"), ("mr_mac_radio", "mac_radio"),
                            ("mac_radio_test", "test_mac_radio"))),
+            ("mac_attempt", tuple(("ma_" + module, module) for module in (
+                "timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio",
+                "mac_attempt", "test_mac_attempt"))),
             ("mac_scan", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
                           ("nwk_beacon", "nwk_beacon"), ("nwk_candidates", "nwk_candidates"),
                           ("mac_scan", "mac_scan"), ("mac_scan_test", "mac_scan_test"))),
@@ -207,7 +212,7 @@ class LocalChecksTests(unittest.TestCase):
     def test_bounded_sanitizers_and_no_board_linkage(self):
         for board, service in ((b, s) for b in BOARDS for s in
                                ("zcl-basic", "zcl-identify", "zcl-temperature", "radio-autoack",
-                                "mac-epoch", "mac-radio", "mac-stamp")):
+                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)
@@ -234,6 +239,28 @@ class LocalChecksTests(unittest.TestCase):
                 self.assertEqual("-DCC2530_MAC_RADIO" in args, selected)
                 if selected: profiled.append(name)
             self.assertEqual(len(profiled), 7)
+
+    def test_attempt_profile_is_separate_from_radio_and_legacy_objects(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-mac-attempt", "test-mac-radio",
+                                    "test-mac-time", "test-radio-autoack",
+                                    include_build=True, BOARD=board)
+            profiled = []
+            for args in commands:
+                if args[0] == "sdcc" and "-c" in args:
+                    name = Path(args[-1]).name
+                    attempt = name.startswith("ma_")
+                    radio = name.startswith("mr_") or name == "mac_radio_test.rel"
+                    self.assertEqual("-DCC2530_MAC_ATTEMPT" in args, attempt)
+                    self.assertEqual("-DCC2530_MAC_RADIO" in args, attempt or radio)
+                    if attempt:
+                        profiled.append(name)
+                elif args[0] == "cc":
+                    attempt = Path(args[-1]).name.startswith("host-mac-attempt-tests")
+                    self.assertEqual("-DCC2530_MAC_ATTEMPT" in args, attempt)
+                    if attempt:
+                        self.assertIn("-DCC2530_MAC_RADIO", args)
+            self.assertEqual(len(profiled), 8)
 
     def test_noise_health_standalone_and_only_explicit_noise_board_linkage(self):
         for board in BOARDS:

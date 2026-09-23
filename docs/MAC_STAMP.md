@@ -80,7 +80,8 @@ queue or physical timestamp is invented.
 `make test-mac-stamp` runs strict native tests, nonrecovering ASan/UBSan and the
 actual linked SDCC/alias-aware target proof. It is part of `test-common` once
 per board; CI executes it in the existing two composition jobs, preserving
-the30-job partition and all28 board/image jobs. No new timeout, dependency,
+all28 board/image jobs; the separate interval owner brings the current
+partition to 32 jobs. No new timeout, dependency,
 board IMAGE, hardware runner or artifact upload is added.
 
 The independent native oracle uses full64-bit coordinates and separately

@@ -18,6 +18,9 @@ typedef enum {
     RADIO_AUTOACK_CONTROLLER_ERROR, RADIO_AUTOACK_FIFO_ERROR,
     RADIO_AUTOACK_TIMEOUT, RADIO_AUTOACK_WORK_LIMIT, RADIO_AUTOACK_TIME_ERROR,
     RADIO_AUTOACK_TX_DONE, RADIO_AUTOACK_CCA_BUSY
+#if defined(CC2530_MAC_ATTEMPT)
+    , RADIO_AUTOACK_ATTEMPT_TIMER_ERROR, RADIO_AUTOACK_ATTEMPT_LATE_ARM
+#endif
 } radio_autoack_result_t;
 
 typedef enum {
@@ -140,4 +143,30 @@ radio_autoack_result_t radio_autoack_send(
     const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit);
 const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void);
 
+#if defined(CC2530_MAC_ATTEMPT)
+#include "mac_time.h"
+#define RADIO_AUTOACK_CCA_ENERGY_ONLY 1u
+#define RADIO_AUTOACK_CCA_THRESHOLD_RAW 0xf8u
+#define RADIO_AUTOACK_ATTEMPT_PREPARED 8u
+
+typedef struct {
+    mac_time_stamp_t before, armed, tx, rx, last;
+    radio_autoack_frame_t frame;
+    uint8_t transmitted, received, sampled_cca, within_window;
+} radio_autoack_attempt_t;
+
+/* Co-owner hooks only. prepare needs OFF/empty and owns the immutable TX slot.
+ * run uses energy-only CCA1, explicit >=8-symbol dwell and RX_MODE11 before
+ * admission. RX_MODE00 afterward remains unfiltered/AUTOACK-off. No MAC result.
+ * Provisional output belongs above mac_radio_shared_end, not driver-private RAM.
+ * Output is provisional internal staging, including on operational error.
+ * Only the top-level composition may publish a fully checked receipt.
+ * EMPTY is an observation boundary, not NO_ACK.
+ */
+radio_autoack_result_t radio_autoack_prepare(
+    const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit);
+radio_autoack_result_t radio_autoack_attempt(
+    uint16_t window, uint32_t timeout, uint16_t limit,
+    radio_autoack_attempt_t MCU_XDATA *output);
+#endif
 #endif

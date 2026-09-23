@@ -332,6 +332,41 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, source=source), self.assertRaisesRegex(ValueError, "radio TX/CCA"):
                     verify_layout(self.symbols, self.memory, self.debug+f"\nC${source}$1", image)
 
+    def test_isolated_mac_join_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_join_init", "_mac_join_start", "_mac_join_step",
+                         "_mac_join_take", "_mac_join_release", "_mac_join_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "staged MAC association"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in (
+                "M:mac_join", "M:test_mac_join",
+                "L:C$mac_join.c$1$0_0$0:123", "L:C$test_mac_join.c$1$0_0$0:123",
+                "F:G$mac_join_init$0_0$0({2}DF,SC:U),Z,0,0,0,0,0",
+                "S:Lmac_join.mac_join_start$request$1_0$0({2}DX,STtest:S),F,0,0",
+                "T:Fmac_join$__00000008[]", "L:Ftest_mac_join$ctx$0_0$0:123",
+                "S:Ltest_mac_join.run_tests$now$1_0$0({4}SL:U),F,0,0",
+            ):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "staged MAC association"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
+    def test_isolated_mac_attempt_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_mac_attempt_init", "_mac_attempt_prepare", "_mac_attempt_run",
+                         "_mac_attempt_receive", "_mac_attempt_stop", "_mac_attempt_resume",
+                         "_mac_attempt_diagnostic", "_mac_attempt_result"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "interval radio attempt"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in (
+                "M:mac_attempt", "M:test_mac_attempt",
+                "L:C$mac_attempt.c$1$0_0$0:123", "L:C$test_mac_attempt.c$1$0_0$0:123",
+                "F:G$mac_attempt_init$0_0$0({2}DF,SC:U),Z,0,0,0,0,0",
+                "S:Lmac_attempt.mac_attempt_run$output$1_0$0({2}DX,STtest:S),F,0,0",
+                "T:Fmac_attempt$__00000008[]", "L:Ftest_mac_attempt$ctx$0_0$0:123",
+                "S:Ltest_mac_attempt.run_tests$now$1_0$0({4}SL:U),F,0,0",
+            ):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "interval radio attempt"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_radio_native_callers_never_enter_board_images(self):
         for image in IMAGES:
             for name in ("_radio_tx_test_result", "_radio_tx_component_main", "_radio_fifo_test_result"):

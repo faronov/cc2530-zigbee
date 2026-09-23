@@ -299,6 +299,20 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
     require(not any(name.startswith("_mac_tx_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("mac_tx.c", "test_mac_tx.c")),
             "Board image must not link the isolated MAC TX scheduler")
+    require(not any(name.startswith("_mac_join_") for name in symbols) and
+            not any(token in debug for token in (
+                "C$mac_join.c$", "C$test_mac_join.c$", "G$mac_join_",
+                "Fmac_join$", "Lmac_join.", "Ftest_mac_join$", "Ltest_mac_join.",
+                "M:mac_join", "M:test_mac_join",
+            )),
+            "Board image must not link the isolated staged MAC association")
+    require(not any(name.startswith("_mac_attempt_") for name in symbols) and
+            not any(token in debug for token in (
+                "C$mac_attempt.c$", "C$test_mac_attempt.c$", "G$mac_attempt_",
+                "Fmac_attempt$", "Lmac_attempt.", "Ftest_mac_attempt$", "Ltest_mac_attempt.",
+                "M:mac_attempt", "M:test_mac_attempt",
+            )),
+            "Board image must not link the isolated interval radio attempt")
     require(not any(name.startswith("_nv_record_") for name in symbols) and
             not any(f"C${name}$" in debug for name in ("nv_record.c", "test_nv_record.c")),
             "Board image must not link the isolated NV record composition")

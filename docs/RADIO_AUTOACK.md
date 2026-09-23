@@ -481,8 +481,8 @@ power, physical liveness or compatibility. An earlier separate ordinary-TX
 observation is not AUTOACK or timing evidence. This work accessed no equipment
 or private hardware material and authorizes no subsequent hardware activity.
 
-A full MAC/POLL adapter still needs a separately proved continuous RX/ordinary
-TX/FIFO owner, preserved global ACK-filter compatibility, captured/fresh/ordered
+A full MAC/POLL adapter still needs proved phase-owned TX/FIFO preparation
+and a continuous response RX/ACK lease, preserved global ACK-filter compatibility, captured/fresh/ordered
 receive and ACK timing (#40), phase/epoch/error bounds, IFS accounting,
 bounded TX-action retirement under existing MAC limits, and loss-aware
 buffer/window handoff. Physical stop/drain here cannot substitute for POLL
@@ -522,3 +522,31 @@ same-owner soft RX rearm after STOPPED. It neither exercises nor resolves the
 three ordinary-TX transitions above. It is the first reusable ownership
 transition toward a combined service, not permission to chain the old
 reset-exclusive TX/FIFO APIs into the gap.
+
+### Narrower admission path under investigation
+
+The three unknowns above concern arbitrary ordinary TX under live AUTOACK;
+they are not prerequisites for every phase-separated MAC design. The existing
+idle-separated send already excludes them for one raw TX/ACK-reception
+attempt. It does not serve a subsequent DATA/command's receiver ACK, and its
+FIFO preparation cannot simply be delayed until a scheduler's CCA deadline.
+
+SWRU191F p259 explicitly defines `FRMCTRL0.RX_MODE=11` as disabling symbol
+search for RSSI/CCA without frame reception. A candidate owner can therefore
+finish/drain prior RX/ACK, prepare TXFIFO only at idle, perform CCA in this
+receive-disabled mode, then restore normal reception after admission.
+This may exclude new autonomous ACKs during preparation instead of requiring
+safe TX flush in every ACK state. The separate [#84 interval owner](MAC_ATTEMPT.md)
+implements and proves a bounded **unfiltered/AUTOACK-off response** variant,
+including its strobe/status/mode-write ordering and runtime early-arm check.
+It does not yet provide the full filtered response RX/ACK lease described
+above, hardware timing acceptance or protocol confirmations.
+
+Disabling symbol search must not silently retain a carrier-sense claim.
+IEEE802.15.4-2006 section6.9.9 p66 permits energy-only CCA mode1, subject to
+its eight-symbol detection and threshold requirements and BUSY for a PPDU
+already being received. The reviewed R22 AnnexD.1-.8 adds no CCA-mode
+selection, but references IEEE2015; this review is not full edition
+reconciliation. A new profile must expose its actual mode, not relabel the
+current mode3. Hardware ACK filtering versus the software receiver's ignored
+ACK-FCF fields remains a separate contract gap.

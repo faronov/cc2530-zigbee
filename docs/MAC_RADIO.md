@@ -108,7 +108,12 @@ negative. The CI matrix preserves its28 board/image jobs and adds two
 dedicated composition jobs (also running delayed stamps and synthetic
 temperature reporting); the existing debug-fixture jobs run
 `test-common-core`. The exact union remains `test-common`, with no duplicate
-or omitted component and no raised15-minute job deadline.
+or omitted component and no raised15-minute job deadline. The separate
+interval-owner replay now adds two further jobs, bringing the current total
+to 32 without enlarging these jobs. The additional `CC2530_MAC_ATTEMPT`
+profile exposes lower prepare/attempt hooks solely to the
+[bounded interval owner](MAC_ATTEMPT.md); ordinary clients must not mix the
+two ownership interfaces.
 
 The52 native/exported scenarios exercise initialization ordering, live time
 with active RF and through stop/drain/send/rearm, CRC-good/bad/empty receive,
