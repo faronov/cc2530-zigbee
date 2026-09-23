@@ -10,7 +10,7 @@ import subprocess
 
 import boot_zigbee_security as aes
 from boot_image import check_alias, verify_component_layout
-from boot_nwk_candidates import label, listing_metrics, records
+from boot_nwk_candidates import label, records
 from boot_zdo_node import rejected
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
@@ -109,11 +109,10 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
     require(set(listings) == set(objects) == set(MODULES), "MMO composition changed")
     require("_aes_reference_encrypt" not in symbols and "C$aes_reference.c$" not in debug and
             "C$security_aes_model.c$" not in debug, "MMO acquired a software AES/controller fallback")
-    decoded, covered, storage = {}, set(), set()
+    decoded, storage = aes.crypto_objects(image, listings, objects, LISTINGS, OBJECTS,
+        {"timebase": (0, 25), "aes": (25, 207), "zigbee_mmo": (207, 334), "mmo_test": (334, 406)})
     for m in MODULES:
         text = listings[m].decode("ascii")
-        require(sha(listings[m]) == LISTINGS[m][0] and listing_metrics(text) == LISTINGS[m][1],
-                "MMO immediate ordered linked listing changed")
         code = records(text)
         if m == "zigbee_mmo":
             require(not peripheral_accesses(dict(code)), "MMO bypassed AES driver ownership")
@@ -121,27 +120,6 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
             require(peripheral_accesses(dict(code)) ==
                     [(8522, b"\x75\xa8\x00", 0xa8), (8525, b"\x75\xb8\x00", 0xb8),
                      (8528, b"\x75\x9a\x00", 0x9a)], "MMO caller IRQ initialization changed")
-        for a, raw in code:
-            span = set(range(a, a+len(raw)))
-            require(not covered & span and all(image.get(a+i) == b for i, b in enumerate(raw)),
-                    "MMO overlapping/non-linked instructions")
-            covered.update(span); decoded[a] = raw
-        segment = text.split(".area XSEG    (XDATA)", 1)[1].split(".area XABS", 1)[0]
-        owned = set()
-        for a, n in re.findall(r"^\s+([0-9A-F]{6})\s+\d+\s+\.ds (\d+)$", segment, re.M):
-            span = set(range(int(a, 16), int(a, 16)+int(n)))
-            require(span and not storage & span, "MMO compiler/private objects overlap")
-            storage |= span; owned |= span
-        expected = {"timebase": (0, 25), "aes": (25, 207), "zigbee_mmo": (207, 334), "mmo_test": (334, 406)}[m]
-        require(owned == set(range(*expected)), "MMO complete module/private/caller span changed")
-        obj = objects[m]
-        require(obj.startswith(b";!FILE ") and sha(obj.split(b"\n", 1)[1]) == OBJECTS[m][0],
-                "MMO complete relocatable object changed")
-        areas = {n: int(s, 16) for n, s in re.findall(r"^A (\S+) size ([0-9A-F]+) flags \S+ addr \S+$",
-                                                    obj.decode("ascii"), re.M)}
-        extent = sum(s for n, s in areas.items() if n in ("HOME", "GSFINAL", "CSEG", "CONST") or n.startswith("GSINIT"))
-        require((extent, *(areas.get(n, 0) for n in ("XSEG", "DSEG", "OSEG", "BSEG"))) == OBJECTS[m][1],
-                "MMO object accounting changed")
     require(storage == set(range(406)) and
             all(symbols.get(n) == a for n, a in RUNTIME.items()), "MMO linked libc scratch boundary changed")
     require(aes.state_location(debug, "zigbee_mmo") == (207, 89), "MMO complete private state changed")
@@ -269,14 +247,9 @@ class Client:
                 *(("sfr", a-128) for a in (0xb3, 0xd2, 0xd3, 0xd4, 0xd5)),
                 *(("sfr", a-128) for a in aes.GUARDS),
             )
-            for space, address in addresses:
-                values = dict(ram=ram, iram=iram, sfr=sfr)
-                changed = bytearray(values[space])
-                changed[address] ^= 1
-                values[space] = bytes(changed)
-                rejected(lambda: self.check(text, **values, symbols=symbols, debug=debug,
-                                            expected=expected, number=number))
-                count += 1
+            count += aes.corrupt_snapshots(
+                lambda **values: self.check(text, **values, symbols=symbols, debug=debug,
+                                            expected=expected, number=number), ram, iram, sfr, addresses)
         return count
 
 

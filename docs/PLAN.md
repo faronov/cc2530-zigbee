@@ -821,6 +821,14 @@ host/image/simulator evidence. No legacy lengths, code generation/provisioning,
 HMAC/keyed transport/load derivation, verified TC state or membership is
 supplied. Lower AES/hardware secret retention remains explicit.
 
+The #23 [keyed-hash prerequisite](KEY_HASH.md) now implements HMAC-AES-MMO
+purposes00/02/03 through those genuine services. Host/image/simulator evidence
+includes independent public KATs and inner/outer failures without partial
+publication. R22's actual Verify-Key field definition supplies selector03.
+This does not complete #23: durable two-slot/key/replay state, retention of
+the old key until successful verification, authenticated Confirm-Key
+processing and commissioning admission still require implementation.
+
 Development baseline: the BDB v3.0.1 revision and security/commissioning
 requirements are pinned in the conformance ledger. Implementation may proceed
 against that base text while errata21-65431 remains an explicit revision risk.

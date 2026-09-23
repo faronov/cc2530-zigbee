@@ -36,8 +36,9 @@ appends80, the minimum zero octets and the **big-endian16-bit original bit
 length**. A residual14/15-octet tail needs another block. Exact16/32-octet
 messages also require padding. At most three real AES calls occur.
 R22's different long-message padding is outside this explicit bound.
-This primitive is not HMAC, the transport/load keyed derivation, or a
-Verify-Key/Confirm-Key procedure.
+This primitive is not HMAC or a Verify-Key/Confirm-Key procedure. The
+separate [keyed-hash foundation](KEY_HASH.md) composes it for the reviewed
+transport/load derivations and initiator hash, still not TC confirmation.
 
 ## Ownership and failure
 

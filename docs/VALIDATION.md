@@ -29,7 +29,8 @@ the two debug-fixture jobs run `test-common-core`, and two dedicated composition
 jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join
 test-zdo-node test-zdo-srv`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
-MMIO replay, another pair runs `test-zigbee-security test-zigbee-mmo` with real AES/DMA,
+MMIO replay, another pair runs `test-zigbee-security test-zigbee-mmo
+test-zigbee-key-hash` with real AES/DMA,
 and a final pair runs `test-security-counter` with the real journal/flash backend.
 Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
@@ -137,6 +138,19 @@ peak SP5C under unchanged10240/512/SP7C caps and15-second simulator limits.
 Both existing security CI jobs retain the complete original #19 corpus and
 upload no crypto artifacts. No provisioning, entropy, TC verification,
 complete secret erasure or physical install-code evidence is established.
+
+### R22 transport/load/Verify-Key hash
+
+The [#23 keyed-hash prerequisite](KEY_HASH.md) adds2891 native/nonrecovering
+sanitizer checks and15 genuine linked cases with45 shared checks and51 AES
+completions. Nine public KATs were independently generated with Python HMAC/
+OpenSSL AES and checked against the original native oracle. The actual
+third/fifth-block failure paths retain DMA/engine faults and publish no hash.
+Five immediate listings, full raw-CDB/CODE/map/object/ABI/MMIO/alias coverage,
+29883 artifact/3735 snapshot/45 peak/one alias negatives and exact per-case
+peaks guard10143 CODE/506+64 XDATA/SP71. Existing CCM/MMO cases, image
+identities, caps and15-second simulator deadlines remain unchanged.
+This is not TC confirmation, key lifecycle, entropy or physical evidence.
 
 ### Durable outgoing range owner
 

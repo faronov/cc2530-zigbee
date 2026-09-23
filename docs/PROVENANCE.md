@@ -1647,6 +1647,41 @@ the short public test vector are used, not specification prose or PDF bodies.
 Research documents remain outside Git/CI artifacts; their notices/licenses
 are not replaced by the project license. No hardware activity occurred.
 
+### R22 keyed-hash sources
+
+The original #23 keyed-hash prerequisite uses the pinned R22 PDF/hash above.
+Section B.1.4 p490 instantiates HMAC with16-byte block/digest sizes and the
+specified AES-MMO hash. Section4.5.3 p457 supplies one-octet purposes00
+(transport) and02 (load); p458 requires their shared link-key counters.
+**Section4.4.10.7.4 p452** separately defines purpose03 for the initiator
+Verify-Key hash and forbids using that result as an encryption/decryption
+key. The4.4.7 service cross-reference to4.5.3 does not list03 itself; reading
+the actual command-field definition resolves it without a later revision
+or guessed selector. Sections4.4.7-8 pp440-446 and BDB10.2.5 pp75-79 distinguish
+hash construction, Verify-Key transmission and authenticated Confirm-Key;
+no completed procedure follows from this primitive.
+
+The HMAC construction and pads were independently reviewed in
+[NIST FIPS198-1](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.198-1.pdf),
+July2008, printed pp3-4 (PDF pp9-10), SHA-256
+`67661ba1407b391c799ff407471de18f36697af51d78a777e817c067ac30da23`.
+This superseding description of FIPS198's construction uses36/5C pads,
+the unchanged16-byte key and nested concatenation; it does not replace
+R22's choice of MMO or imply FIPS approval/validation.
+
+The nine known-answer tuples are original synthetic project vectors using
+zero, ascending-byte and the public BDB-derived key. They were independently
+cross-checked with Python standard-library HMAC and local OpenSSL AES-ECB;
+the development-only MMO adapter first reproduced the primary BDB vector.
+They are not mislabelled as published CSA HMAC vectors. The original native
+flat-padding MMO oracle is shared without changing the existing install-code
+case count or any target instruction/metadata identity. Linked-proof object
+and snapshot helpers are shared without dropping prior negative controls.
+No external implementation, runtime dependency, private key/code/identity,
+SDK, packet capture or PDF body is imported. All additions are original
+BSD-3-Clause; research documents remain outside Git/CI artifacts.
+No physical action or observation occurred.
+
 ### Outgoing counter reservation sources
 
 The original #21 range owner uses the same pinned R22 PDF/hash above and

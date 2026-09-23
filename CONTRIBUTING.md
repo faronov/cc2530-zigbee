@@ -85,7 +85,7 @@ debug-fixture jobs. The clock/radio, delayed-stamp, synthetic-temperature,
 staged-association and ZDO codec/dispatcher compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The interval attempt's longer MMIO replay runs in two additional dedicated
-jobs. The genuine AES/CCM/NWK/APS and install-code compositions run in two further
+jobs. The genuine AES/CCM/NWK/APS, install-code and keyed-hash compositions run in two further
 dedicated jobs, as does the durable-counter/journal/flash composition.
 The exact union is still `test-common`; thirty-six jobs retain all
 twenty-eight board/image checks and the unchanged simulator deadlines.
@@ -109,6 +109,7 @@ make BOARD=generic test-zdo-node
 make BOARD=generic test-zdo-srv
 make BOARD=generic test-zigbee-security
 make BOARD=generic test-zigbee-mmo
+make BOARD=generic test-zigbee-key-hash
 make BOARD=generic test-security-counter
 ```
 
@@ -139,6 +140,13 @@ SP7C caps and the same15-second simulator deadline. It runs in both existing
 security jobs without artifact uploads. Only16+2-byte BDB install codes are
 supported; derivation is neither provisioning nor verified TC key state.
 See [INSTALL_CODE](docs/INSTALL_CODE.md).
+
+`test-zigbee-key-hash` adds transport/load/Verify-Key HMAC-MMO through the
+same actual AES/MMO services. Five immediate listings feed its strict
+linked/ABI/MMIO/alias proof; retain12288-CODE/640-total-XDATA/SP7C caps,
+the15-second deadline and every original CCM/MMO case. It shares the
+two security jobs with nonrecovering sanitizers and no artifact uploads.
+Hashing alone is not key verification. See [KEY_HASH](docs/KEY_HASH.md).
 
 `test-security-counter` executes the actual journal/flash/RAM backend,
 including cuts and complete-state continuations under the unchanged15-second

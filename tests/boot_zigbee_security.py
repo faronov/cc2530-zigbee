@@ -463,6 +463,49 @@ def snapshot_negatives(ram, iram, sfr, symbols, debug, expected):
     return count
 
 
+def corrupt_snapshots(check, ram, iram, sfr, addresses):
+    count = 0
+    for space, address in addresses:
+        values = dict(ram=ram, iram=iram, sfr=sfr)
+        changed = bytearray(values[space])
+        changed[address] ^= 1
+        values[space] = bytes(changed)
+        rejected(lambda: check(**values))
+        count += 1
+    return count
+
+
+def crypto_objects(image, listings, objects, listing_pins, object_pins, spans):
+    require(set(listings) == set(objects) == set(listing_pins) == set(object_pins) == set(spans),
+            "Crypto composition changed")
+    decoded, covered, storage = {}, set(), set()
+    for module, raw_listing in listings.items():
+        text = raw_listing.decode("ascii")
+        require(sha(raw_listing) == listing_pins[module][0] and listing_metrics(text) == listing_pins[module][1],
+                "Crypto immediate ordered linked listing changed")
+        for address, raw in records(text):
+            span = set(range(address, address+len(raw)))
+            require(not covered & span and all(image.get(address+i) == b for i, b in enumerate(raw)),
+                    "Crypto overlapping/non-linked instructions")
+            covered.update(span); decoded[address] = raw
+        segment = text.split(".area XSEG    (XDATA)", 1)[1].split(".area XABS", 1)[0]
+        owned = set()
+        for address, size in re.findall(r"^\s+([0-9A-F]{6})\s+\d+\s+\.ds (\d+)$", segment, re.M):
+            span = set(range(int(address, 16), int(address, 16)+int(size)))
+            require(span and not storage & span, "Crypto compiler/private objects overlap")
+            storage |= span; owned |= span
+        require(owned == set(range(*spans[module])), "Crypto complete module/private/caller span changed")
+        obj = objects[module]
+        require(obj.startswith(b";!FILE ") and sha(obj.split(b"\n", 1)[1]) == object_pins[module][0],
+                "Crypto complete relocatable object changed")
+        areas = {n: int(s, 16) for n, s in re.findall(r"^A (\S+) size ([0-9A-F]+) flags \S+ addr \S+$",
+                                                    obj.decode("ascii"), re.M)}
+        extent = sum(s for n, s in areas.items() if n in ("HOME", "GSFINAL", "CSEG", "CONST") or n.startswith("GSINIT"))
+        require((extent, *(areas.get(n, 0) for n in ("XSEG", "DSEG", "OSEG", "BSEG"))) == object_pins[module][1],
+                "Crypto object accounting changed")
+    return decoded, storage
+
+
 def negatives(image, symbols, debug_raw, memory, listings, objects,
               modules=MODULES, verifier=verify, code_size=SIZE):
     count = 0

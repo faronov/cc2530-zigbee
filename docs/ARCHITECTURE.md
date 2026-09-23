@@ -342,6 +342,14 @@ copies. The isolated composition uses9060 CODE/426+64 XDATA and peak SP5C.
 It implements neither HMAC/transport/load derivation nor provisioning,
 verified TC state, entropy or membership. It has no board caller.
 
+The separate [keyed-hash foundation](KEY_HASH.md) composes this unchanged
+MMO primitive for transport00/load02/Verify-Key03 HMAC. It needs exactly
+five AES calls on success, preserves output on every failure, accumulates
+both hashes' diagnostics and overwrites60 private bytes without claiming
+lower secret erasure. Its isolated image is10143 CODE/506+64 XDATA, peak SP71.
+No key-state/replay mutation, TC command procedure or membership is supplied;
+the Verify-Key hash must not be used as an encryption/decryption key.
+
 The independent [ZDO Node Descriptor codec](ZDO_NODE.md) handles TSN-bearing
 request/response payloads. It distinguishes17-byte success,4-byte addressed
 failure and2-byte generic NOT_SUPPORTED, requires mandatory fields and

@@ -104,17 +104,8 @@ void main(void)
 #else
 static void reference(const uint8_t *message, unsigned length, uint8_t *hash)
 {
-    uint8_t padded[48] = {0}, encrypted[16];
-    unsigned bits = length*8, blocks = (bits+1+16+127)/128, i, block;
-    CHECK(length <= 32 && blocks <= 3);
-    if (length) memcpy(padded, message, length);
-    padded[length] = 0x80;
-    padded[blocks*16-2] = (uint8_t)(bits >> 8); padded[blocks*16-1] = (uint8_t)bits;
-    memset(hash, 0, 16);
-    for (block = 0; block < blocks; block++) {
-        aes_reference_encrypt(hash, padded+block*16, encrypted);
-        for (i = 0; i < 16; i++) hash[i] = encrypted[i] ^ padded[block*16+i];
-    }
+    CHECK(length <= 32 && (length*8+1+16+127)/128 <= 3);
+    aes_mmo_reference(message, length, hash);
 }
 
 static uint16_t crc_reference(const uint8_t *message)

@@ -808,6 +808,11 @@ BDB16+2-byte CRC and hashes all18 octets with real AES-MMO. Independent vectors
 and strict linked DMA/ABI/alias checks provide host/image/simulator evidence.
 It does not generate or provision codes, implement keyed transport/load
 derivation, verify a Trust Center key, or establish membership.
+The independent [keyed-hash foundation](docs/KEY_HASH.md) adds the reviewed
+R22 transport/load derivations and initiator Verify-Key hash using real
+AES-MMO. Its native/linked/simulated failures preserve output, including
+failures after the inner hash. Actual TC confirmation, durable key slots and
+replay/lifecycle admission remain unimplemented; #23 is not complete.
 The independent [ZDO Node Descriptor codec](docs/ZDO_NODE.md) handles request,
 success, addressed-error and generic unsupported payloads, including TSN,
 queried address and seven-bit Stack Compliance Revision. Its real APS

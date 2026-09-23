@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
- * Original host-only FIPS 197 (2001) section 5.1 mathematical oracle.
+ * Original host-only FIPS197(2001) section5.1 and R22 B.6 mathematical oracles.
  */
 #include "aes_reference.h"
 #include "aes_vectors.h"
@@ -72,6 +72,21 @@ void aes_reference_check(void)
         assert(!memcmp(out, aes_test_vectors[i][2], 16));
     }
     assert(sbox[0] == 0x63 && sbox[0x53] == 0xed);
+}
+
+void aes_mmo_reference(const uint8_t *message, unsigned length, uint8_t hash[16])
+{
+    uint8_t padded[48] = {0}, encrypted[16];
+    unsigned bits = length*8, blocks = (bits+1+16+127)/128, i, block;
+    assert(length <= 32 && blocks <= 3);
+    if (length) memcpy(padded, message, length);
+    padded[length] = 0x80;
+    padded[blocks*16-2] = (uint8_t)(bits >> 8); padded[blocks*16-1] = (uint8_t)bits;
+    memset(hash, 0, 16);
+    for (block = 0; block < blocks; block++) {
+        aes_reference_encrypt(hash, padded+block*16, encrypted);
+        for (i = 0; i < 16; i++) hash[i] = encrypted[i] ^ padded[block*16+i];
+    }
 }
 
 #if defined(AES_REFERENCE_MAIN)

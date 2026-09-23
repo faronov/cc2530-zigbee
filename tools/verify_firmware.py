@@ -291,13 +291,13 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
             )),
             "Board image must not link the isolated ZDO ED dispatcher")
     require(not any(name.startswith(("_ccm_star_", "_zigbee_security_", "_security_", "_counter_",
-                                    "_zigbee_mmo_", "_install_code_", "_mmo_")) for name in symbols) and
+                                    "_zigbee_mmo_", "_install_code_", "_mmo_", "_zigbee_key_hash", "_kh_")) for name in symbols) and
             not any(token in debug for module in ("ccm_star", "zigbee_security", "test_zigbee_security",
                                                  "security_counter", "test_security_counter",
-                                                 "zigbee_mmo", "test_zigbee_mmo")
+                                                 "zigbee_mmo", "test_zigbee_mmo", "zigbee_key_hash", "test_zigbee_key_hash")
                     for token in (f"C${module}.c$", f"F{module}$", f"L{module}.", f"M:{module}")) and
             not any(token in debug for token in ("G$ccm_star_", "G$zigbee_security_", "G$security_", "G$counter_",
-                                                "G$zigbee_mmo_", "G$install_code_", "G$mmo_")),
+                                                "G$zigbee_mmo_", "G$install_code_", "G$mmo_", "G$zigbee_key_hash", "G$kh_")),
             "Board image must not link isolated Zigbee security")
     require(not any(name.startswith(("_zcl_temp_", "_zcl_temperature_")) for name in symbols) and
             not any(token in debug for token in (

@@ -265,11 +265,11 @@ class LayoutTests(unittest.TestCase):
             for name in ("_ccm_star_crypt", "_zigbee_security_crypt", "_zigbee_security_inspect", "_security_done",
                          "_security_counter_open", "_security_counter_create", "_security_counter_take",
                          "_security_counter_save", "_security_counter_read", "_counter_done",
-                         "_zigbee_mmo_hash", "_install_code_derive", "_mmo_done"):
+                         "_zigbee_mmo_hash", "_install_code_derive", "_mmo_done", "_zigbee_key_hash", "_kh_done"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "Zigbee security"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
             for module in ("ccm_star", "zigbee_security", "test_zigbee_security", "security_counter",
-                           "test_security_counter", "zigbee_mmo", "test_zigbee_mmo"):
+                           "test_security_counter", "zigbee_mmo", "test_zigbee_mmo", "zigbee_key_hash", "test_zigbee_key_hash"):
                 for evidence in (
                     f"M:{module}", f"L:C${module}.c$1$0_0$0:123",
                     f"S:F{module}$state$0_0$0({{16}}DA16d,SC:U),F,0,0",

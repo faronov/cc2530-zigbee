@@ -87,7 +87,7 @@ endif
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
 .PHONY: test-zcl-temperature test-zdo-node test-zdo-srv
-.PHONY: test-zigbee-security test-zigbee-mmo test-security-counter
+.PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -391,6 +391,34 @@ test-zigbee-mmo: $(BUILD)/host-zigbee-mmo-tests $(BUILD)/host-zigbee-mmo-tests-s
 	$(BUILD)/host-zigbee-mmo-tests
 	$(BUILD)/host-zigbee-mmo-tests-sanitize
 	$(PYTHON) -B tests/boot_zigbee_mmo.py --output $(BUILD) --simulator "$(S51)"
+
+KEY_HASH_SRC := $(MMO_SRC) src/zigbee_key_hash.c
+KEY_HASH_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(KEY_HASH_SRC:.c=.rel))) $(BUILD)/key_hash_test.rel
+
+$(BUILD)/zigbee_key_hash.rel: src/zigbee_key_hash.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/key_hash_test.rel: tests/test_zigbee_key_hash.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/key_hash_test.ihx: $(KEY_HASH_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(KEY_HASH_OBJECTS)
+	cp $(BUILD)/timebase.rst $(BUILD)/key_hash_test.timebase.rst
+	cp $(BUILD)/aes.rst $(BUILD)/key_hash_test.aes.rst
+	cp $(BUILD)/zigbee_mmo.rst $(BUILD)/key_hash_test.zigbee_mmo.rst
+	cp $(BUILD)/zigbee_key_hash.rst $(BUILD)/key_hash_test.zigbee_key_hash.rst
+	cp $(BUILD)/key_hash_test.rst $(BUILD)/key_hash_test.key_hash_test.rst
+
+$(BUILD)/host-zigbee-key-hash-tests: tests/test_zigbee_key_hash.c $(KEY_HASH_SRC) $(SECURITY_MODELS) $(HEADERS) tests/security_aes_model.h tests/aes_reference.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_zigbee_key_hash.c $(KEY_HASH_SRC) $(SECURITY_MODELS) -o $@
+
+$(BUILD)/host-zigbee-key-hash-tests-sanitize: tests/test_zigbee_key_hash.c $(KEY_HASH_SRC) $(SECURITY_MODELS) $(HEADERS) tests/security_aes_model.h tests/aes_reference.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zigbee_key_hash.c $(KEY_HASH_SRC) $(SECURITY_MODELS) -o $@
+
+test-zigbee-key-hash: $(BUILD)/host-zigbee-key-hash-tests $(BUILD)/host-zigbee-key-hash-tests-sanitize $(BUILD)/key_hash_test.ihx
+	$(BUILD)/host-zigbee-key-hash-tests
+	$(BUILD)/host-zigbee-key-hash-tests-sanitize
+	$(PYTHON) -B tests/boot_zigbee_key_hash.py --output $(BUILD) --simulator "$(S51)"
 
 ZDO_NODE_SRC := src/zdo_node.c src/aps_frame.c
 $(BUILD)/zdo_node.rel: src/zdo_node.c $(HEADERS) Makefile | $(BUILD)
@@ -1281,7 +1309,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-security-counter
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
