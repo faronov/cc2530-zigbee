@@ -133,24 +133,29 @@ def page_state(data):
     return 2 if zlib.crc32(data[:2040]) == int.from_bytes(data[2040:2044], "little") else 5
 
 
-def execute(simulator, path, image, allocated, erase_call, initial, operations):
+def execute(simulator, path, image, allocated, erase_call, initial, operations, client=None):
     nv = bytearray(initial)
     require(len(nv) == 4096, "Synthetic NV extent changed")
+    main = MAIN if client is None else client.main
+    before = BEFORE if client is None else client.before
+    done = DONE if client is None else client.done
     sfr = GUARD_SFRS | {0xbe: 4, 0xc7: 2, 0xd6: 0, 0xd7: 0, 0xc6: 0xc9, 0x9e: 0xc9, 0x92: 0, 0x9f: 3}
     commands = [ALIAS, "fill xram 0 0x1eff 0xa5", "fill xram 0x6000 0x7fff 0x69",
                 "fill xram 0xe7f0 0xf80f 0x69", "fill rom 0x8000 0x9fff 0xa6"]
     for offset in range(0, 4096, 128):
         commands.append(f"set memory xram {0xe800+offset:#x} "+" ".join(hex(b) for b in nv[offset:offset+128]))
     records, ident, mapping, quotas, current_mapping = [], 10, False, [0, 0], 2
+    boundaries = []
     peripheral = {0x624a: 0xa5, 0x6270: 4, 0x6276: 0x44, 0x6277: 0xff}
     call_count, command_count = 0, 0
 
     def start():
-        commands.extend(["delete", f"run 0 {MAIN:#x}", "fill iram 0x80 0xff 0xc7",
-                         f"run {MAIN:#x} {BEFORE:#x}"])
+        commands.extend(["delete", f"run 0 {main:#x}",
+                         "fill iram 0x80 0xff 0xc7" if client is None else "fill iram 0x7d 0xff 0xc7",
+                         f"run {main:#x} {before:#x}"])
         commands.extend(f"set memory sfr {a:#x} {v:#x}" for a, v in sfr.items())
         commands.extend(f"set memory xram {a:#x} {v:#x}" for a, v in peripheral.items())
-        commands.extend(f"break {pc:#x}" for pc in (READ_CALL, PROGRAM_CALL, erase_call, DONE, 0x487))
+        commands.extend(f"break {pc:#x}" for pc in (READ_CALL, PROGRAM_CALL, erase_call, done, 0x487))
 
     def point(pc, dumps, kind, data=None, run=True):
         nonlocal ident
@@ -227,23 +232,10 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations):
         if mode == "normal": current_mapping = 2
         return False
 
-    start()
-    terminal = False
-    for index, options in enumerate(operations):
+    def journal(options, caller):
         terminal = False
-        if options.get("reset"):
-            quotas = [0, 0]; peripheral[0x6270] = 4; current_mapping = 2; start()
-        elif index: commands.extend(["step 1", f"run {DONE+1:#x} {BEFORE:#x}"])
-        if "quotas" in options:
-            quotas = list(options["quotas"])
-            commands.append("set memory xram 0x1a2 "+" ".join(str(n) for n in quotas))
         body = options.get("body", bytes(i ^ 0x69 for i in range(128)))
-        action, length, recovery = options.get("action", 0), options.get("length", 128), options.get("recovery", 0)
-        pointer, limit = options.get("pointer", 0x295), options.get("limit", 3)
-        args = bytes((action, length, recovery, 0xaa))+limit.to_bytes(2, "little")+pointer.to_bytes(2, "little")
-        caller = body+b"\xa5"*(128-len(body)) if action else b"\xa5"*128
-        commands.extend(["set memory xram 0x315 "+" ".join(hex(b) for b in args),
-                         "set memory xram 0x295 "+" ".join(hex(b) for b in caller), "step 1"])
+        action, length = options.get("action", 0), options.get("length", 128)
         if not options.get("benign") and not options.get("retained"):
             scan(0); scan(1)
             if action and options["result"] in (0, 1, 12, 13):
@@ -262,7 +254,35 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations):
                 page = options["page"]; scan(page)
                 data = nv[page*2048:(page+1)*2048]
                 caller = bytes(data[12:12+data[6]])+b"\xa5"*(128-data[6])
-        checkpoint = engine.RET if terminal and options.get("mode") == "cut" else engine.STOP if terminal else DONE
+        return terminal, caller
+
+    start()
+    terminal = False
+    for index, options in enumerate(operations):
+        terminal = False
+        if options.get("reset"):
+            quotas = [0, 0]; peripheral[0x6270] = 4; current_mapping = 2; start()
+        elif index: commands.extend(["step 1", f"run {done+1:#x} {before:#x}"])
+        if "quotas" in options:
+            quotas = list(options["quotas"])
+            commands.append("set memory xram 0x1a2 "+" ".join(str(n) for n in quotas))
+        if client is None:
+            body = options.get("body", bytes(i ^ 0x69 for i in range(128)))
+            action, length, recovery = options.get("action", 0), options.get("length", 128), options.get("recovery", 0)
+            pointer, limit = options.get("pointer", 0x295), options.get("limit", 3)
+            args = bytes((action, length, recovery, 0xaa))+limit.to_bytes(2, "little")+pointer.to_bytes(2, "little")
+            caller = body+b"\xa5"*(128-len(body)) if action else b"\xa5"*128
+            commands.extend(["set memory xram 0x315 "+" ".join(hex(b) for b in args),
+                             "set memory xram 0x295 "+" ".join(hex(b) for b in caller), "step 1"])
+            terminal, caller = journal(options, caller)
+        else:
+            client.configure(options, commands)
+            caller = None
+            for operation in options["journal"]:
+                terminal, _ = journal(operation, None)
+                if terminal:
+                    break
+        checkpoint = engine.RET if terminal and options.get("mode") == "cut" else engine.STOP if terminal else done
         point(checkpoint, [], "pc", run=not terminal)
         n = ident; ident += 6
         commands.extend(snapshot_commands(n)+[marker(n+4), "dump /h xram 0xe7f0 0xf80f", marker(n+5)])
@@ -277,8 +297,10 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations):
                                "dump /h sfr 0xc7 0xc7"], "stopped", run=False)
             peripheral[0x6270] = 4
             require(index == len(operations)-1, "RAM stop must end sequence")
+        boundaries.append((len(commands), checkpoint, mapping))
     n = ident; commands.extend([marker(n), "dump /h xram 0x6000 0x7fff", marker(n+1)])
-    text = simulate(simulator, commands, path)
+    text = (simulate(simulator, commands, path) if client is None else
+            client.simulate(simulator, commands, path, boundaries))
     parts = re.split(r"^0x2530([0-9a-f]{4})\r?\n", text, flags=re.M)
     keys = [int(parts[i], 16) for i in range(1, len(parts), 2)]
     require(len(keys) == len(set(keys)), "Duplicate NV simulator marker")
@@ -334,22 +356,26 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations):
             iram = memory_dump(blocks[number+1], 0, 256)
             registers = memory_dump(blocks[number+2], 0x80, 128)
             d = ram[0x195:0x1a4]
-            require(ram[0x295:0x315] == caller, "NV caller publication/tail differs")
-            require(ram[0x318] == (0xaa if options["result"] == 13 else options["result"]),
-                    f"NV public result differs: {ram[0x318]} expected {options['result']}")
+            if client is None:
+                require(ram[0x295:0x315] == caller, "NV caller publication/tail differs")
+                require(ram[0x318] == (0xaa if options["result"] == 13 else options["result"]),
+                        f"NV public result differs: {ram[0x318]} expected {options['result']}")
+            else:
+                client.check(options, ram, iram, registers)
             require(d[13:] == bytes(quota), "NV runtime erase accounting differs")
-            if options["result"] in (0, 1):
+            if client is None and options["result"] in (0, 1):
                 page = options["page"]; contents = expected_nv[page*2048:(page+1)*2048]
                 require(d[:4] == contents[8:12] and d[5:8] == bytes((page, contents[6], 8)),
                         "NV selected generation/length/done phase differs")
-            if options["result"] == 13:
+            if (client is None and options["result"] == 13) or (client is not None and options.get("mode") in ("cut", "stuck")):
                 require(d[4] == 13 and d[9] == 10 and
                         ram[7] == (0 if options.get("mode") == "cut" else 7) and ram[0xd1] == 10,
                         "NV interrupted command became successful publication")
-            require(ram[0x1e00:0x1e08] == b"NVR1\x01\x08\0\0" and
+            require(ram[0x1e00:0x1e08] == (b"NVR1\x01\x08\0\0" if client is None else client.signature) and
                     all(b == 0xa5 for a, b in enumerate(ram) if a not in allocated),
                     "NV escaped allocated/status XDATA")
-            require(iram[128:] == b"\xc7"*128 and (options["result"] == 13 or registers[1] == 0x39),
+            require(iram[128:] == b"\xc7"*128 and
+                    (client is not None or options["result"] == 13 or registers[1] == 0x39),
                     "NV upper IRAM/alias/stack unwind failed")
             expected_sfr = sfr | {0xc7: expected_mapping}
             mismatches = [(a, registers[a-0x80], v) for a, v in expected_sfr.items() if registers[a-0x80] != v]

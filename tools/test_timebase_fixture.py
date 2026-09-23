@@ -182,11 +182,16 @@ class TimebaseCodeTests(unittest.TestCase):
         self.assertIn("board: [generic, lg_esl29_rev03]", attempt)
         self.assertEqual(attempt.count("test-mac-attempt"), 1)
         self.assertNotIn("upload-artifact", attempt)
-        security = workflow.split("  zigbee-security:\n", 1)[1].split("  bootstrap:\n", 1)[0]
+        security = workflow.split("  zigbee-security:\n", 1)[1].split("  security-counter:\n", 1)[0]
         self.assertIn("timeout-minutes: 15", security)
         self.assertIn("board: [generic, lg_esl29_rev03]", security)
         self.assertEqual(security.count("test-zigbee-security"), 1)
         self.assertNotIn("upload-artifact", security)
+        counters = workflow.split("  security-counter:\n", 1)[1].split("  bootstrap:\n", 1)[0]
+        self.assertIn("timeout-minutes: 15", counters)
+        self.assertIn("board: [generic, lg_esl29_rev03]", counters)
+        self.assertEqual(counters.count("test-security-counter"), 1)
+        self.assertNotIn("upload-artifact", counters)
         uploads = workflow.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
         expected = {prefix + "${{ matrix.image }}." + suffix for suffix in ("hex", "bin", "ihx", "map", "mem", "cdb")}

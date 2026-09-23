@@ -225,7 +225,10 @@ static void cuts(void)
     }
 }
 
-int main(void)
+#ifndef NV_RECORD_TEST_ENTRY
+#define NV_RECORD_TEST_ENTRY main
+#endif
+int NV_RECORD_TEST_ENTRY(void)
 {
     unsigned i, page, before;
     uint8_t baseline[4096], saved[128];

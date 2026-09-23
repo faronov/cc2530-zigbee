@@ -62,7 +62,7 @@ class LocalChecksTests(unittest.TestCase):
             "mac_scan", "mac_association", "mac_poll", "mac_join",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
-            "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security",
+            "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security", "security_counter",
         }
         components = Counter()
         images = Counter()
@@ -93,7 +93,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(normalized(("test-common",)),
                              normalized(("test-common-core", "test-mac-radio", "test-mac-stamp",
                                          "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
-                                         "test-zdo-node", "test-zdo-srv", "test-zigbee-security")))
+                                         "test-zdo-node", "test-zdo-srv", "test-zigbee-security", "test-security-counter")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
@@ -103,6 +103,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertFalse(any("tests/boot_zdo_node.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_srv.py" in args for args in core))
             self.assertFalse(any("tests/boot_zigbee_security.py" in args for args in core))
+            self.assertFalse(any("tests/boot_security_counter.py" in args for args in core))
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
@@ -123,6 +124,9 @@ class LocalChecksTests(unittest.TestCase):
                           ("zdo_node_test", "zdo_node_test"))),
             ("zdo_srv", tuple((m, m) for m in
                              ("zdo_srv", "zdo_node", "aps_frame", "nwk_frame", "zdo_srv_test"))),
+            ("security_counter", tuple((m, m) for m in
+                                       ("flash_exec", "flash", "flash_write", "nv_record",
+                                        "security_counter", "security_counter_test"))),
             ("mac_radio", (("mr_timebase", "timebase"), ("mr_clock", "clock"),
                            ("mr_mac_time", "mac_time"), ("mr_radio_autoack", "radio_autoack"),
                            ("mr_mac_epoch", "mac_epoch"), ("mr_mac_radio", "mac_radio"),
@@ -226,7 +230,7 @@ class LocalChecksTests(unittest.TestCase):
         for board, service in ((b, s) for b in BOARDS for s in
                                ("zcl-basic", "zcl-identify", "zcl-temperature", "radio-autoack",
                                 "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-join",
-                                "zdo-node", "zdo-srv", "zigbee-security")):
+                                "zdo-node", "zdo-srv", "zigbee-security", "security-counter")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)

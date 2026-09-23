@@ -1620,6 +1620,35 @@ contain only fixed public synthetic inputs; production has no such diagnostics.
 The document's notices/licenses are not replaced by the project license.
 No physical observation or errata-aware conformance follows from this work.
 
+### Outgoing counter reservation sources
+
+The original #21 range owner uses the same pinned R22 PDF/hash above and
+the [BDB3.0.1 primary PDF](#bdb-301-baseline-sources), rechecked as SHA-256
+`16471aa230657818da4c8440671efb530d80c71a975fce7af71c507ca7aa17d3`.
+R22 4.3.1.1-2 pp412-413 and4.4.1.1-2 pp418-420 establish outgoing counter
+consumption, forbidden FFFFFFFF and the separate incoming freshness state.
+Section4.5.3 pp457-458 establishes shared counters for derived link keys and
+network-key use across layers. BDB section9 p69 and9.3-5 pp70-71 require
+preserving the single outgoing NWK counter through network leave and local/
+remote factory reset; Basic-cluster defaults are not a network factory reset.
+The Core reset exceptions are not implemented as a counter-rewind shortcut.
+
+The two domains,256-counter range, stricter shared APS lifetime policy,
+CTR1 payload schema, runtime snapshot/generation comparison and rejection
+of generic-journal degraded selection are explicit project policies.
+They are not imported stack code or a claim that these sizes/algorithms are
+normatively prescribed. A coherent cold rollback of both pages requires an
+independent anchor; neither CRC nor generation is presented as one.
+Hardware requirements remain those of the unchanged reviewed flash services.
+
+All production code, counter test cases and continuation checks are original
+BSD-3-Clause work. Tests reuse the genuine existing journal/flash C, original
+synthetic controller, independent CRC oracle and instruction-level replay.
+Complete-state continuations follow existing offline proofs and retain every
+CPU/RAM/backing-flash/XMAP byte, not guessed counter or programming history.
+No external implementation, private key/NV record, SDK, capture, PDF body or
+new dependency is imported. No hardware operation or observation is performed.
+
 ### Offline R22 NWK Beacon payload sources
 
 The original decoder was checked directly against **Zigbee Specification

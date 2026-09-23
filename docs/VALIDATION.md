@@ -29,10 +29,11 @@ the two debug-fixture jobs run `test-common-core`, and two dedicated composition
 jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join
 test-zdo-node test-zdo-srv`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
-MMIO replay, and another pair runs `test-zigbee-security` with real AES/DMA.
+MMIO replay, another pair runs `test-zigbee-security` with real AES/DMA,
+and a final pair runs `test-security-counter` with the real journal/flash backend.
 Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
-This thirty-four-job partition preserves all 28 board/image jobs without adding
+This thirty-six-job partition preserves all 28 board/image jobs without adding
 the new composed replay to debug-fixture jobs already taking about13 minutes.
 This removes identical repeated work, not cases, while retaining the15-minute job and
 15-second simulator limits and the seven-path artifact whitelist.
@@ -120,6 +121,19 @@ missing-alias negative guard20250 CODE,1907+64 XDATA and peak SP7C/7C.
 The fixed private staging wipes do not erase lower AES/hardware/compiler
 copies. No ISR/full-stack headroom, counter persistence, replay admission,
 hardware-observed CCM or authenticated network join is established.
+
+### Durable outgoing range owner
+
+The [#21 composition](SECURITY_COUNTERS.md) uses actual counter, journal,
+reader, writer and RAM-executor code. Native/nonrecovering sanitizer cases
+cover clean restart, reservation versus allocation, corrupt/degraded media,
+runtime rollback, exhaustion, state clearing and every relevant command cut.
+Linked replay preserves full CPU/RAM/flash/XMAP state at operation boundaries
+without changing the15-second deadline or resetting counter/history objects.
+The original61 NV sequences retain17149 actual calls/829 RAM commands and
+peak SP57. The new isolated image is9941 CODE/1120+64 XDATA, not full-stack
+fit or physical power-loss evidence. Neither CRC nor generation detects a
+coherent cold rollback of both pages; no independent anchor is claimed.
 
 ### Scan-proof artifact parsing
 

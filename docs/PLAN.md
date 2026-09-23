@@ -803,6 +803,16 @@ mapped sources and already-reserved counters. #21 reservations, #22
 install-code/MMO derivation, #23 key/replay/TC state and #26 commissioning
 remain required; a valid MIC alone does not satisfy those gates.
 
+The separate #21 [outgoing counter owner](SECURITY_COUNTERS.md) now commits
+bounded ranges through the actual #20 journal/flash backend before allocation.
+Clean restart skips previous reservations; opaque state clearing preserves
+both ceilings. Degraded/unknown records and unexpected runtime snapshots fail
+closed, with no automatic empty-media initialization or counter rewind.
+Its host/image/simulator evidence covers synthetic cuts, not electrical
+durability or coherent cold anti-rollback. An independent trusted anchor is
+not supplied. Remaining key-state/commissioning procedures must correctly
+own provisioning, domain selection and counter consumption before crypto.
+
 Development baseline: the BDB v3.0.1 revision and security/commissioning
 requirements are pinned in the conformance ledger. Implementation may proceed
 against that base text while errata21-65431 remains an explicit revision risk.

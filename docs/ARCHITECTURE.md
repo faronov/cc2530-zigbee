@@ -323,6 +323,16 @@ with peak SP7C at the unchanged cap and no demonstrated ISR/full-stack
 headroom. Actual DMA/MMIO replay is synthetic evidence, not physical CCM,
 entropy, durable security state or membership.
 
+The independent [outgoing counter owner](SECURITY_COUNTERS.md) adds real
+journal-backed exclusive ceilings, range allocation and opaque state saving.
+It preserves both domains across restart/state clearing, rejects degraded
+selection and runtime snapshot/generation changes, and never automatically
+initializes empty media. Its112-byte opaque payload is not validated key or
+membership state. The isolated real flash composition uses9941 CODE and
+1120+64 XDATA; whole-stack fit and physical durability remain open. A coherent
+cold rollback of both pages needs an independent trusted anchor that is not
+provided here. There is no generic-journal recovery bypass or counter rewind.
+
 The independent [ZDO Node Descriptor codec](ZDO_NODE.md) handles TSN-bearing
 request/response payloads. It distinguishes17-byte success,4-byte addressed
 failure and2-byte generic NOT_SUPPORTED, requires mandatory fields and

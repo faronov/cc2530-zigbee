@@ -262,10 +262,12 @@ class LayoutTests(unittest.TestCase):
 
     def test_isolated_security_cannot_enter_board_images(self):
         for image in IMAGES:
-            for name in ("_ccm_star_crypt", "_zigbee_security_crypt", "_zigbee_security_inspect", "_security_done"):
+            for name in ("_ccm_star_crypt", "_zigbee_security_crypt", "_zigbee_security_inspect", "_security_done",
+                         "_security_counter_open", "_security_counter_create", "_security_counter_take",
+                         "_security_counter_save", "_security_counter_read", "_counter_done"):
                 with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "Zigbee security"):
                     verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
-            for module in ("ccm_star", "zigbee_security", "test_zigbee_security"):
+            for module in ("ccm_star", "zigbee_security", "test_zigbee_security", "security_counter", "test_security_counter"):
                 for evidence in (
                     f"M:{module}", f"L:C${module}.c$1$0_0$0:123",
                     f"S:F{module}$state$0_0$0({{16}}DA16d,SC:U),F,0,0",

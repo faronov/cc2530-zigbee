@@ -87,7 +87,7 @@ endif
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
 .PHONY: test-zcl-temperature test-zdo-node test-zdo-srv
-.PHONY: test-zigbee-security
+.PHONY: test-zigbee-security test-security-counter
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -894,6 +894,36 @@ test-nv-record: $(BUILD)/host-nv-record-tests $(BUILD)/nv_record_test.ihx
 	$(BUILD)/host-nv-record-tests
 	$(PYTHON) -B tests/boot_nv_record.py --output $(BUILD) --simulator "$(S51)"
 
+COUNTER_SRC := src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c
+COUNTER_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(COUNTER_SRC:.c=.rel))) $(BUILD)/security_counter_test.rel
+COUNTER_HOST_INPUTS := tests/test_security_counter.c tests/test_nv_record.c tests/test_flash_write.c tests/host_flash_engine.c tests/host_mmio.c tests/host_mmio.h $(COUNTER_SRC) $(HEADERS) Makefile
+
+$(BUILD)/security_counter.rel: src/security_counter.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/security_counter_test.rel: tests/test_security_counter.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(BUILD)/security_counter_test.ihx: $(COUNTER_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(COUNTER_OBJECTS)
+	cp $(BUILD)/flash_exec.rst $(BUILD)/security_counter_test.flash_exec.rst
+	cp $(BUILD)/flash.rst $(BUILD)/security_counter_test.flash.rst
+	cp $(BUILD)/flash_write.rst $(BUILD)/security_counter_test.flash_write.rst
+	cp $(BUILD)/nv_record.rst $(BUILD)/security_counter_test.nv_record.rst
+	cp $(BUILD)/security_counter.rst $(BUILD)/security_counter_test.security_counter.rst
+	cp $(BUILD)/security_counter_test.rst $(BUILD)/security_counter_test.security_counter_test.rst
+
+$(BUILD)/host-security-counter-tests: $(COUNTER_HOST_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c $(COUNTER_SRC) -o $@
+
+$(BUILD)/host-security-counter-tests-sanitize: $(COUNTER_HOST_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c $(COUNTER_SRC) -o $@
+
+test-security-counter: $(BUILD)/host-security-counter-tests $(BUILD)/host-security-counter-tests-sanitize $(BUILD)/security_counter_test.ihx
+	$(BUILD)/host-security-counter-tests
+	$(BUILD)/host-security-counter-tests-sanitize
+	$(PYTHON) -B tests/boot_security_counter.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -1224,7 +1254,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-security-counter
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

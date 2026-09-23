@@ -75,8 +75,8 @@ unique peer identity when the key is shared by a group.
 
 On TX, the counter must already be durably reserved and consumed, including
 when this call later fails. No counter is allocated, incremented or persisted
-here. Receiving a valid MIC does not advance a replay watermark. Durable
-outgoing reservations (#21), install-code/MMO derivation (#22), key/replay/TC
+here. Receiving a valid MIC does not advance a replay watermark.
+[Durable outgoing reservations](SECURITY_COUNTERS.md) (#21), install-code/MMO derivation (#22), key/replay/TC
 state (#23), admitted transport (#24) and commissioning (#26) remain separate.
 Public deterministic test inputs neither implement nor qualify entropy (#10).
 

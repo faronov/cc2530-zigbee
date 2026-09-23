@@ -739,8 +739,8 @@ result with the real reader. Programming requires a fresh verified erase
 in the current runtime epoch and permits only one attempt per word, even
 for allFF data; reset does not make erased-looking words safe to reuse.
 `make test-flash-write` is **host-tested, image-checked and simulated only**.
-There is still no hardware write/erase acceptance or security-counter
-persistence. The separate generic journal below has offline evidence only.
+There is still no hardware write/erase acceptance. The separate journal and
+counter owner below have offline evidence only.
 Never flash the
 standalone `flash_write_test.ihx`.
 
@@ -752,6 +752,13 @@ explicit recovery. `make test-nv-record` is **host-tested, image-checked and
 simulated**, including command cuts/reset recovery, not physical durability.
 Its bounded runtime erase accounting does not establish lifetime wear.
 It is not a security-counter/key/membership service or a board image.
+
+The separate [outgoing counter owner](docs/SECURITY_COUNTERS.md) now commits
+bounded NWK/APS ranges through that real journal before allocating counters.
+Restart skips prior reservations; state clearing preserves ceilings, and
+degraded/unknown state fails closed. Host/image/simulator evidence is not
+physical durability or protection against coherent rollback of both pages.
+No key lifecycle, board linkage or authenticated join is implied.
 
 ### Boot-disarmed flash board fixture — offline only
 
