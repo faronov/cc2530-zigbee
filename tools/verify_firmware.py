@@ -294,7 +294,8 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
                                     "_zigbee_mmo_", "_install_code_", "_mmo_", "_zigbee_key_hash", "_kh_")) for name in symbols) and
             not any(token in debug for module in ("ccm_star", "zigbee_security", "test_zigbee_security",
                                                  "security_counter", "test_security_counter",
-                                                 "zigbee_mmo", "test_zigbee_mmo", "zigbee_key_hash", "test_zigbee_key_hash")
+                                                 "zigbee_mmo", "test_zigbee_mmo", "zigbee_key_hash", "test_zigbee_key_hash",
+                                                 "security_iram_low", "security_iram_high")
                     for token in (f"C${module}.c$", f"F{module}$", f"L{module}.", f"M:{module}")) and
             not any(token in debug for token in ("G$ccm_star_", "G$zigbee_security_", "G$security_", "G$counter_",
                                                 "G$zigbee_mmo_", "G$install_code_", "G$mmo_", "G$zigbee_key_hash", "G$kh_")),

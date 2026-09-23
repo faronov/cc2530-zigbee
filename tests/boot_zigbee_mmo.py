@@ -194,7 +194,8 @@ def native_trace(executable, number):
 class Client:
     prefix = "mmo"
 
-    def __init__(self):
+    def __init__(self, peaks=PEAKS):
+        self.peaks = peaks
         self.snapshots = []
 
     @staticmethod
@@ -214,12 +215,15 @@ class Client:
 
     def check(self, text, ram, iram, sfr, symbols, debug, expected, number):
         require(ram[0x1e00:0x1e08] == b"MMO1\x01\x08\0\0", "Actual MMO C corpus/status failed")
-        require(int.from_bytes(ram[391:395], "little") == expected["CHECKS"] and
-                ram[395] == number and ram[396] == expected["RETURN"], "MMO case/result/check count differs")
-        for name, (a, n) in CALLER.items():
+        checks, case, result = (symbols[f"_mmo_{name}"] for name in ("checks", "case", "return"))
+        require(int.from_bytes(ram[checks:checks+4], "little") == expected["CHECKS"] and
+                ram[case] == number and ram[result] == expected["RETURN"], "MMO case/result/check count differs")
+        for name, (_, n) in CALLER.items():
+            a = cdb_address(debug, f"L:Ftest_zigbee_mmo${name}$0_0$0")
             require(ram[a:a+n] == expected[name.upper()], "MMO complete caller output/input/info differs")
-        require(ram[207:296] == bytes(89), "MMO private hash/block state was not overwritten")
-        require(iram[0x7d:] == b"\xc7"*131 and sfr[1] == STACK-1, "MMO stack/alias/unwind changed")
+        a, n = aes.state_location(debug, "zigbee_mmo")
+        require(ram[a:a+n] == bytes(n), "MMO private hash/block state was not overwritten")
+        require(iram[0x7d:] == b"\xc7"*131 and sfr[1] == symbols["s_SSEG"]-1, "MMO stack/alias/unwind changed")
         guards = aes.GUARDS | ({0xd6: 2} if number == 36 else {})
         require(all(sfr[r-128] == v for r, v in guards.items()), "MMO changed unowned registers")
         used = bool(expected["AES"])
@@ -230,18 +234,20 @@ class Client:
             address = symbols[name] if used or number == 36 else 0
             final[lo], final[hi] = address & 255, address >> 8
         require(all(sfr[r-128] == v for r, v in final.items()), "MMO final owned AES/DMA registers changed")
-        allocated = set(range(XDATA)) | set(range(0x1e00, 0x1e08))
+        allocated = set(range(symbols["l_XSEG"])) | set(range(0x1e00, 0x1e08))
         require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated), "MMO unallocated/status-tail write")
-        peak = aes.check_peak(text, PEAKS[number])
+        peak = aes.check_peak(text, self.peaks[number])
         self.snapshots.append((text, ram, iram, sfr, symbols, debug, expected, number))
         return peak
 
     def negatives(self):
         count = 0
         for text, ram, iram, sfr, symbols, debug, expected, number in tuple(self.snapshots):
+            state, size = aes.state_location(debug, "zigbee_mmo")
+            caller = cdb_address(debug, "L:Ftest_zigbee_mmo$input$0_0$0")
             addresses = (
-                *(("ram", a) for a in (*range(0x1e00, 0x1e08), 0x1e08, 0x1eff, XDATA,
-                                       *range(207, 296), *range(334, 397),
+                *(("ram", a) for a in (*range(0x1e00, 0x1e08), 0x1e08, 0x1eff, symbols["l_XSEG"],
+                                       *range(state, state+size), *range(caller, symbols["_mmo_return"]+1),
                                        symbols["_aes_used"], symbols["_aes_fault"])),
                 ("iram", 0x7d), ("iram", 0xff), ("sfr", 1),
                 *(("sfr", a-128) for a in (0xb3, 0xd2, 0xd3, 0xd4, 0xd5)),

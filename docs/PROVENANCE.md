@@ -1682,6 +1682,29 @@ SDK, packet capture or PDF body is imported. All additions are original
 BSD-3-Clause; research documents remain outside Git/CI artifacts.
 No physical action or observation occurred.
 
+### Resident crypto/NV profile sources
+
+The [resident crypto/NV profile](SECURITY_RESIDENT.md) adds no protocol rule
+or imported implementation. SDCC4.2.0's installed `--help` documents
+`--dataseg` as selecting the DATA segment name. Comparing full assembler
+objects, after only that name and the existing output-path normalization,
+establishes equality to the already accepted source/ABI objects. Actual
+linked maps/memory reports establish that named areas alone do not reserve
+physical DATA/OSEG/stack space; two real DATA reservation objects do.
+
+The transfer decoder was checked against TI SWRU191F section2.4/Table2-3,
+pp36-39 (same pinned SHA-256
+`a8fe8e92db33ad79c7f371075b0a464602a6db747614625d9f8d3e6be990b877`),
+and the actual SDCC/sdas8051 emitted instruction extents. The two-byte
+`DJNZ Rn,rel` includes its relative operand; the one-byte entry in that
+manual's table is not used to truncate the emitted instruction.
+The verifier reconstructs long/absolute/relative transfers and completely
+decodes linked libc, rather than guessing safety from a successful link.
+Its fixed RAM and bounded switch exceptions are pinned actual instructions.
+No manual body, external implementation, private capture/key, SDK binary
+or hardware result is included. The reservation/proof code is original
+BSD-3-Clause and changes no existing production source.
+
 ### Outgoing counter reservation sources
 
 The original #21 range owner uses the same pinned R22 PDF/hash above and

@@ -350,6 +350,16 @@ lower secret erasure. Its isolated image is10143 CODE/506+64 XDATA, peak SP71.
 No key-state/replay mutation, TC command procedure or membership is supplied;
 the Verify-Key hash must not be used as an encryption/decryption key.
 
+The isolated [resident crypto/NV profile](SECURITY_RESIDENT.md) now links
+all thirteen real lower services in four original-caller compositions.
+It keeps the original large-model code/ABI: only complete DATA area names
+change. Two physical reservations cover08..1F and22..46, while emitted
+call/branch/tail and libc checks prove disjoint simultaneously active
+module frames. Retained state is not overlaid. OSEG47..50 and stack51
+are separately accounted, with actual peaks78/6C/76/79 below7C.
+The largest image uses31786 CODE and3101+64 XDATA; no board, ISR,
+mixed lifecycle, whole-stack space or generic overlay safety is claimed.
+
 The independent [ZDO Node Descriptor codec](ZDO_NODE.md) handles TSN-bearing
 request/response payloads. It distinguishes17-byte success,4-byte addressed
 failure and2-byte generic NOT_SUPPORTED, requires mandatory fields and

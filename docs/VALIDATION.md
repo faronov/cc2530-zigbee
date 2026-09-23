@@ -152,6 +152,26 @@ peaks guard10143 CODE/506+64 XDATA/SP71. Existing CCM/MMO cases, image
 identities, caps and15-second simulator deadlines remain unchanged.
 This is not TC confirmation, key lifecycle, entropy or physical evidence.
 
+### Resident crypto/NV composition
+
+The [resident profile](SECURITY_RESIDENT.md) adds four all-thirteen-service
+images, each with an unchanged original caller. Normalized relocatable
+objects must match the already accepted originals, with only DATA area
+names different. Physical IRAM reservations, complete emitted active-call
+and libc checks, complete raw artifact identities and sixteen immediate
+listings per image precede replay. Added calls/recursion/overlap are rejected.
+
+All23 security,39 MMO,15 keyed-hash and56 counter sequences remain, with
+345/58/51 AES calls and36695 flash calls/919 RAM commands/162 continuations.
+Actual maximum SP is78/6C/76/79, still capped at7C. Complete CODE is
+31786/29421/29775/28231; ordinary XDATA is3101/2367/2370/2425 plus64
+reserved status bytes. There are99456/93116/92761/89734 artifact negatives,
+all original runtime negatives, exact relocated peak checks and mutations
+of every inactive service byte. Eight new board/caller CI jobs upload nothing
+and retain the15-minute job limit.
+Original image identities, budgets and per-simulator deadlines are unchanged.
+This is resident-layout simulation, not mixed key lifecycle or a physical join.
+
 ### Durable outgoing range owner
 
 The [#21 composition](SECURITY_COUNTERS.md) uses actual counter, journal,

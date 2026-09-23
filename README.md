@@ -813,6 +813,11 @@ R22 transport/load derivations and initiator Verify-Key hash using real
 AES-MMO. Its native/linked/simulated failures preserve output, including
 failures after the inner hash. Actual TC confirmation, durable key slots and
 replay/lifecycle admission remain unimplemented; #23 is not complete.
+The [resident crypto/NV profile](docs/SECURITY_RESIDENT.md) now links all
+thirteen real service modules together and replays the original four
+callers with checked active DATA-frame sharing. It preserves the SP7C
+limit and every original component check. This is offline memory-layout
+evidence, not mixed key lifecycle, board integration or authenticated join.
 The independent [ZDO Node Descriptor codec](docs/ZDO_NODE.md) handles request,
 success, addressed-error and generic unsupported payloads, including TSN,
 queried address and seven-bit Stack Compliance Revision. Its real APS

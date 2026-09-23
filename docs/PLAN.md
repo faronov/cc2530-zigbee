@@ -829,6 +829,13 @@ This does not complete #23: durable two-slot/key/replay state, retention of
 the old key until successful verification, authenticated Confirm-Key
 processing and commissioning admission still require implementation.
 
+The next #23 prerequisite, the [resident crypto/NV profile](SECURITY_RESIDENT.md),
+links all thirteen unchanged service modules in each of four original-caller
+images. Real physical IRAM reservations, complete active-frame/libc proofs
+and original crypto/counter replay establish bounded resident fit without
+changing old caps or the SP7C limit. This is not yet mixed lifecycle
+execution, persistent key/replay ownership or authenticated TC confirmation.
+
 Development baseline: the BDB v3.0.1 revision and security/commissioning
 requirements are pinned in the conformance ledger. Implementation may proceed
 against that base text while errata21-65431 remains an explicit revision risk.

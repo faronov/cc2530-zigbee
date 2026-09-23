@@ -225,7 +225,12 @@ class CounterClient:
     main, before, done = ABI["_main"], ABI["_counter_before"], ABI["_counter_done"]
     signature = b"CTR1\x01\x08\0\0"
 
-    def __init__(self):
+    def __init__(self, symbols=None):
+        self.caller, self.xdata, self.unwind = 990, XDATA, 0x4b
+        if symbols is not None:
+            self.main, self.before, self.done = (symbols[n] for n in ("_main", "_counter_before", "_counter_done"))
+            self.caller, self.xdata = symbols["_counter_test_buffer"], symbols["l_XSEG"]
+            self.unwind = symbols["s_SSEG"] + 1
         self.snapshots = []
         self.continuations = []
 
@@ -259,24 +264,24 @@ class CounterClient:
                 bytes((options["action"], len(payload), options.get("domain", 0), 0xaa)))
 
     def configure(self, options, commands):
-        commands.extend(["set memory xram 0x3de "+" ".join(hex(b) for b in self.arena(options)), "step 1"])
+        commands.extend([f"set memory xram {self.caller:#x} "+" ".join(hex(b) for b in self.arena(options)), "step 1"])
 
     def check(self, options, ram, iram, sfr):
         expected = bytearray(self.arena(options))
         if options.get("mode") not in ("cut", "stuck"):
             expected[-1] = options["result"]
-            require(sfr[1] == 0x4b, "Counter stack failed to unwind")
+            require(sfr[1] == self.unwind, "Counter stack failed to unwind")
         if "value" in options:
             expected[112:116] = options["value"].to_bytes(4, "little")
         if "read_payload" in options:
             output = options["read_payload"]
             expected[:len(output)] = output
             expected[-3] = len(output)
-        require(ram[990:1120] == expected, "Counter caller output/tail/arguments changed")
+        require(ram[self.caller:self.caller+130] == expected, "Counter caller output/tail/arguments changed")
         require(ram[661:685] == options["diag"], "Counter allocation/reservation/fault diagnostic changed")
         require(iram[0x7d:] == b"\xc7"*(256-0x7d), "Counter crossed upper-IRAM guard")
         require(ram[0x1e00:0x1e08] == self.signature and
-                ram[XDATA:0x1e00] == b"\xa5"*(0x1e00-XDATA) and ram[0x1e08:] == b"\xa5"*248,
+                ram[self.xdata:0x1e00] == b"\xa5"*(0x1e00-self.xdata) and ram[0x1e08:] == b"\xa5"*248,
                 "Counter changed status/unallocated memory")
         self.snapshots.append((options, ram, iram, sfr))
 
@@ -384,7 +389,8 @@ def negatives(image, symbols, debug_raw, memory, listings, objects):
 def runtime_negatives(client):
     options, *memory = client.snapshots[-1]
     count = 0
-    for space, addresses in ((0, (*range(661, 685), *range(990, 1120), XDATA, 0x1dff, 0x1e00, 0x1e08, 0x1eff)),
+    for space, addresses in ((0, (*range(661, 685), *range(client.caller, client.caller+130),
+                                 client.xdata, 0x1dff, 0x1e00, 0x1e08, 0x1eff)),
                              (1, (0x7d, 0xff)), (2, (1,))):
         for address in addresses:
             changed = list(memory)

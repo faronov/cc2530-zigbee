@@ -108,3 +108,8 @@ There are29883 artifact,3735 snapshot,45 peak and one missing-alias negatives.
 The15-second per-simulator deadline and every pre-existing proof cap/case
 remain unchanged. This isolated composition is not whole-stack or ISR fit,
 provisioning, authenticated TC exchange, entropy or network membership.
+
+The separate [resident profile](SECURITY_RESIDENT.md) also runs this exact
+corpus with all thirteen real crypto/NV services present and checked DATA
+frame sharing. It leaves this standalone image, ABI, corpus and caps intact.
+Resident fit is not mixed key lifecycle or actual TC confirmation.

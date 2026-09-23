@@ -445,8 +445,9 @@ def snapshot_negatives(ram, iram, sfr, symbols, debug, expected):
     count = 0
     for space, address in (
         *(("ram", a) for a in (0x1e00, 0x1e06, 0x1e08, 0x1eff, symbols["l_XSEG"],
-                               symbols["_security_checks"], CALLER["output"][0],
-                               CALLER["wire"][0], CALLER["decoded"][0],
+                               symbols["_security_checks"],
+                               *(cdb_address(debug, f"L:Ftest_zigbee_security${n}$0_0$0")
+                                 for n in ("output", "wire", "decoded")),
                                symbols["_aes_used"], symbols["_aes_fault"],
                                state_location(debug, "ccm_star")[0],
                                state_location(debug, "zigbee_security")[0])),

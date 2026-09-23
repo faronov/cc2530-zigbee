@@ -171,7 +171,8 @@ def native_trace(executable, number):
 class Client:
     prefix = "kh"
 
-    def __init__(self):
+    def __init__(self, peaks=PEAKS):
+        self.peaks = peaks
         self.snapshots = []
 
     @staticmethod
@@ -195,12 +196,16 @@ class Client:
 
     def check(self, text, ram, iram, sfr, symbols, debug, expected, number):
         require(ram[0x1e00:0x1e08] == b"KHS1\x01\x08\0\0", "Actual key hash C corpus/status failed")
-        require(int.from_bytes(ram[451:455], "little") == expected["CHECKS"] and
-                ram[455] == number and ram[456] == expected["RETURN"], "Key hash case/result/check count differs")
-        for name, (a, n) in CALLER.items():
+        checks, case, result = (symbols[f"_kh_{name}"] for name in ("checks", "case", "return"))
+        require(int.from_bytes(ram[checks:checks+4], "little") == expected["CHECKS"] and
+                ram[case] == number and ram[result] == expected["RETURN"], "Key hash case/result/check count differs")
+        for name, (_, n) in CALLER.items():
+            a = cdb_address(debug, f"L:Ftest_zigbee_key_hash${name}$0_0$0")
             require(ram[a:a+n] == expected[name.upper()], "Key hash complete caller result/input/info differs")
-        require(ram[207:296] == bytes(89) and ram[334:394] == bytes(60), "Key hash private staging not overwritten")
-        require(iram[0x7d:] == b"\xc7"*131 and sfr[1] == STACK-1, "Key hash stack/alias/unwind changed")
+        for module in ("zigbee_mmo", "zigbee_key_hash"):
+            a, n = aes.state_location(debug, module)
+            require(ram[a:a+n] == bytes(n), "Key hash private staging not overwritten")
+        require(iram[0x7d:] == b"\xc7"*131 and sfr[1] == symbols["s_SSEG"]-1, "Key hash stack/alias/unwind changed")
         failed = number in (10, 11, 12)
         arm = 2 if number == 10 else 3 if failed else 0
         guards = aes.GUARDS | {0xd6: arm}
@@ -213,18 +218,21 @@ class Client:
             address = symbols[name] if used or failed else 0
             final[lo], final[hi] = address & 255, address >> 8
         require(all(sfr[r-128] == v for r, v in final.items()), "Key hash final owned AES/DMA registers changed")
-        allocated = set(range(XDATA)) | set(range(0x1e00, 0x1e08))
+        allocated = set(range(symbols["l_XSEG"])) | set(range(0x1e00, 0x1e08))
         require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated), "Key hash unallocated/status-tail write")
-        peak = aes.check_peak(text, PEAKS[number])
+        peak = aes.check_peak(text, self.peaks[number])
         self.snapshots.append((text, ram, iram, sfr, symbols, debug, expected, number))
         return peak
 
     def negatives(self):
         count = 0
         for text, ram, iram, sfr, symbols, debug, expected, number in tuple(self.snapshots):
+            states = [aes.state_location(debug, module) for module in ("zigbee_mmo", "zigbee_key_hash")]
+            private = tuple(a for start, size in states for a in range(start, start+size))
+            caller = cdb_address(debug, "L:Ftest_zigbee_key_hash$key$0_0$0")
             addresses = (
-                *(("ram", a) for a in (*range(0x1e00, 0x1e08), 0x1e08, 0x1eff, XDATA,
-                                       *range(207, 296), *range(334, 394), *range(411, 457),
+                *(("ram", a) for a in (*range(0x1e00, 0x1e08), 0x1e08, 0x1eff, symbols["l_XSEG"],
+                                       *private, *range(caller, symbols["_kh_return"]+1),
                                        symbols["_aes_used"], symbols["_aes_fault"])),
                 ("iram", 0x7d), ("iram", 0xff), ("sfr", 1),
                 *(("sfr", a-128) for a in (0xb3, 0xd2, 0xd3, 0xd4, 0xd5)),

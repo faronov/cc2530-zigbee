@@ -87,7 +87,9 @@ jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The interval attempt's longer MMIO replay runs in two additional dedicated
 jobs. The genuine AES/CCM/NWK/APS, install-code and keyed-hash compositions run in two further
 dedicated jobs, as does the durable-counter/journal/flash composition.
-The exact union is still `test-common`; thirty-six jobs retain all
+The all-thirteen-service resident profile runs its four original-caller
+compositions in eight further jobs, one per board/caller, with no uploads.
+The exact union is still `test-common`; forty-four jobs retain all
 twenty-eight board/image checks and the unchanged simulator deadlines.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
@@ -147,6 +149,17 @@ linked/ABI/MMIO/alias proof; retain12288-CODE/640-total-XDATA/SP7C caps,
 the15-second deadline and every original CCM/MMO case. It shares the
 two security jobs with nonrecovering sanitizers and no artifact uploads.
 Hashing alone is not key verification. See [KEY_HASH](docs/KEY_HASH.md).
+
+`test-security-resident` builds separately prefixed-directory objects for
+four all-thirteen-service compositions, using unchanged original callers.
+Two real DATA objects reserve the shared physical IRAM; complete emitted
+active-call/libc and lifetime checks precede original crypto/NV replay.
+Every image immediately snapshots all sixteen listings. No board linkage,
+old budget relaxation, skipped case or longer simulator deadline is allowed.
+See [SECURITY_RESIDENT](docs/SECURITY_RESIDENT.md); this is not key lifecycle.
+CI uses its exact `test-security-resident-{security,mmo,key-hash,counter}`
+partition to retain the15-minute job limit as well as the15-second
+per-simulator deadline.
 
 `test-security-counter` executes the actual journal/flash/RAM backend,
 including cuts and complete-state continuations under the unchanged15-second

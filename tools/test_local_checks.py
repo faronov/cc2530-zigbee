@@ -63,7 +63,8 @@ class LocalChecksTests(unittest.TestCase):
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
             "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security", "zigbee_mmo",
-            "zigbee_key_hash", "security_counter",
+            "zigbee_key_hash", "security_counter", "security_resident_security", "security_resident_mmo",
+            "security_resident_key_hash", "security_resident_counter",
         }
         components = Counter()
         images = Counter()
@@ -79,7 +80,10 @@ class LocalChecksTests(unittest.TestCase):
                 outputs.add(output)
             else:
                 self.assertEqual(output.name, "components")
-                components[output.parent.name, Path(args[2]).stem.removeprefix("boot_")] += 1
+                component = Path(args[2]).stem.removeprefix("boot_")
+                if component == "security_resident":
+                    component += "_" + args[args.index("--profile")+1]
+                components[output.parent.name, component] += 1
         self.assertEqual(images, Counter({(b, i): 1 for b in BOARDS for i in IMAGES}))
         self.assertEqual(components, Counter({(b, c): 1 for b in BOARDS for c in expected_components}))
         self.assertEqual(len(outputs), len(BOARDS)*len(IMAGES))
@@ -95,7 +99,8 @@ class LocalChecksTests(unittest.TestCase):
                              normalized(("test-common-core", "test-mac-radio", "test-mac-stamp",
                                          "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
                                          "test-zdo-node", "test-zdo-srv", "test-zigbee-security",
-                                         "test-zigbee-mmo", "test-zigbee-key-hash", "test-security-counter")))
+                                         "test-zigbee-mmo", "test-zigbee-key-hash", "test-security-counter",
+                                         "test-security-resident")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
@@ -108,6 +113,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertFalse(any("tests/boot_zigbee_mmo.py" in args for args in core))
             self.assertFalse(any("tests/boot_zigbee_key_hash.py" in args for args in core))
             self.assertFalse(any("tests/boot_security_counter.py" in args for args in core))
+            self.assertFalse(any("tests/boot_security_resident.py" in args for args in core))
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
@@ -280,6 +286,45 @@ class LocalChecksTests(unittest.TestCase):
                 if args[0] == "sdcc":
                     self.assertNotIn("tests/aes_reference.c", args)
                     self.assertNotIn("tests/security_aes_model.c", args)
+
+    def test_resident_profile_has_physical_reservations_and_immediate_snapshots(self):
+        modules = ("security_iram_low", "security_iram_high", "flash_exec", "flash", "flash_write",
+                   "nv_record", "security_counter", "timebase", "aes", "ccm_star", "nwk_frame",
+                   "aps_frame", "zigbee_security", "zigbee_mmo", "zigbee_key_hash")
+        callers = ("security_test", "mmo_test", "key_hash_test", "security_counter_test")
+        for board in BOARDS:
+            commands = self.dry_run("test-security-resident", "test-zigbee-key-hash",
+                                    include_build=True, BOARD=board)
+            proof = next(args for args in commands if "tests/boot_security_resident.py" in args)
+            output = Path(proof[proof.index("--output")+1])
+            links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
+            self.assertEqual(len(links), 5)
+            for link, caller in zip(links, callers):
+                self.assertEqual([p for p in link if p.endswith(".rel")],
+                                 [str(output / "resident" / (m+".rel")) for m in modules+(caller,)])
+                stem = Path(link[link.index("-o")+1]).stem
+                profile = stem.removeprefix("resident_")
+                proof = next(args for args in commands if "tests/boot_security_resident.py" in args
+                             and args[args.index("--profile")+1] == profile)
+                snapshots = [["cp", str(output / "resident" / (m+".rst")),
+                              str(output / f"{stem}.{m}.rst")] for m in modules+(caller,)]
+                self.assertEqual(commands[commands.index(link)+1:commands.index(link)+17], snapshots)
+                self.assertLess(commands.index(link)+16, commands.index(proof))
+            split = self.dry_run("test-security-resident-security", "test-security-resident-mmo",
+                                 "test-security-resident-key-hash", "test-security-resident-counter",
+                                 BOARD=board)
+            self.assertEqual([args[args.index("--profile")+1] for args in split],
+                             ["security", "mmo", "key_hash", "counter"])
+            for args in commands:
+                if args[0] == "sdcc" and "-c" in args:
+                    selected = Path(args[-1]).parent == output / "resident"
+                    self.assertEqual("-DCC2530_SECURITY_RESIDENT" in args, selected)
+                    reserved = Path(args[-1]).stem in modules[:2]
+                    self.assertEqual("--dataseg" in args, selected and not reserved)
+            for image in IMAGES:
+                commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
+                self.assertFalse(any("CC2530_SECURITY_RESIDENT" in arg or "security_iram" in arg
+                                     or "/resident/" in arg for args in commands for arg in args))
 
     def test_mac_radio_profile_does_not_leak_to_legacy_objects(self):
         for board in BOARDS:

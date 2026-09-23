@@ -87,7 +87,8 @@ endif
 .PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
 .PHONY: test-zcl-temperature test-zdo-node test-zdo-srv
-.PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter
+.PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
+.PHONY: test-security-resident-security test-security-resident-mmo test-security-resident-key-hash test-security-resident-counter
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -419,6 +420,57 @@ test-zigbee-key-hash: $(BUILD)/host-zigbee-key-hash-tests $(BUILD)/host-zigbee-k
 	$(BUILD)/host-zigbee-key-hash-tests
 	$(BUILD)/host-zigbee-key-hash-tests-sanitize
 	$(PYTHON) -B tests/boot_zigbee_key_hash.py --output $(BUILD) --simulator "$(S51)"
+
+RESIDENT_MODULES := flash_exec flash flash_write nv_record security_counter timebase aes ccm_star nwk_frame aps_frame zigbee_security zigbee_mmo zigbee_key_hash
+RESIDENT_OBJECTS := $(addprefix $(BUILD)/resident/,security_iram_low.rel security_iram_high.rel $(addsuffix .rel,$(RESIDENT_MODULES)))
+RESIDENT_AREAS := SR_EXEC SR_READ SR_WRITE SR_NV SR_COUNTER SR_TIME SR_AES SR_CCM SR_NWK SR_APS SR_SECURITY SR_MMO SR_HASH
+RESIDENT_BASES := 0x08 0x10 0x14 0x22 0x39 0x08 0x22 0x08 0x22 0x22 0x08 0x08 0x42
+RESIDENT_LINK := -Wl-bSR_CALLER=0x1a
+define resident_module
+$(BUILD)/resident/$(1).rel: src/$(1).c $(HEADERS) Makefile | $(BUILD)/resident
+	$$(SDCC) $$(SDCC_FLAGS) -DCC2530_SECURITY_RESIDENT --dataseg $(2) -c $$< -o $$@
+RESIDENT_LINK += -Wl-b$(2)=$(3)
+endef
+$(foreach n,1 2 3 4 5 6 7 8 9 10 11 12 13,$(eval $(call resident_module,$(word $(n),$(RESIDENT_MODULES)),$(word $(n),$(RESIDENT_AREAS)),$(word $(n),$(RESIDENT_BASES)))))
+
+$(BUILD)/resident:
+	mkdir -p $@
+
+$(BUILD)/resident/security_iram_%.rel: tests/security_iram_%.c Makefile | $(BUILD)/resident
+	$(SDCC) $(SDCC_FLAGS) -DCC2530_SECURITY_RESIDENT -c $< -o $@
+
+define resident_image
+$(BUILD)/resident/$(3).rel: tests/test_$(2).c $(HEADERS) Makefile | $(BUILD)/resident
+	$$(SDCC) $$(SDCC_FLAGS) -DCC2530_SECURITY_RESIDENT --dataseg SR_CALLER -c $$< -o $$@
+
+$(BUILD)/resident_$(1).ihx: $$(RESIDENT_OBJECTS) $(BUILD)/resident/$(3).rel force-link
+	$$(SDCC) $$(SDCC_FLAGS) $$(LINK_FLAGS) $$(RESIDENT_LINK) -o $$@ $$(RESIDENT_OBJECTS) $(BUILD)/resident/$(3).rel
+	cp $(BUILD)/resident/security_iram_low.rst $(BUILD)/resident_$(1).security_iram_low.rst
+	cp $(BUILD)/resident/security_iram_high.rst $(BUILD)/resident_$(1).security_iram_high.rst
+	cp $(BUILD)/resident/flash_exec.rst $(BUILD)/resident_$(1).flash_exec.rst
+	cp $(BUILD)/resident/flash.rst $(BUILD)/resident_$(1).flash.rst
+	cp $(BUILD)/resident/flash_write.rst $(BUILD)/resident_$(1).flash_write.rst
+	cp $(BUILD)/resident/nv_record.rst $(BUILD)/resident_$(1).nv_record.rst
+	cp $(BUILD)/resident/security_counter.rst $(BUILD)/resident_$(1).security_counter.rst
+	cp $(BUILD)/resident/timebase.rst $(BUILD)/resident_$(1).timebase.rst
+	cp $(BUILD)/resident/aes.rst $(BUILD)/resident_$(1).aes.rst
+	cp $(BUILD)/resident/ccm_star.rst $(BUILD)/resident_$(1).ccm_star.rst
+	cp $(BUILD)/resident/nwk_frame.rst $(BUILD)/resident_$(1).nwk_frame.rst
+	cp $(BUILD)/resident/aps_frame.rst $(BUILD)/resident_$(1).aps_frame.rst
+	cp $(BUILD)/resident/zigbee_security.rst $(BUILD)/resident_$(1).zigbee_security.rst
+	cp $(BUILD)/resident/zigbee_mmo.rst $(BUILD)/resident_$(1).zigbee_mmo.rst
+	cp $(BUILD)/resident/zigbee_key_hash.rst $(BUILD)/resident_$(1).zigbee_key_hash.rst
+	cp $(BUILD)/resident/$(3).rst $(BUILD)/resident_$(1).$(3).rst
+
+test-security-resident-$(subst _,-,$(1)): $(BUILD)/resident_$(1).ihx $(if $(4),$(BUILD)/host-$(4)-tests)
+	$$(PYTHON) -B tests/boot_security_resident.py --output $(BUILD) --simulator "$$(S51)" --profile $(1)
+endef
+$(eval $(call resident_image,security,zigbee_security,security_test,zigbee-security))
+$(eval $(call resident_image,mmo,zigbee_mmo,mmo_test,zigbee-mmo))
+$(eval $(call resident_image,key_hash,zigbee_key_hash,key_hash_test,zigbee-key-hash))
+$(eval $(call resident_image,counter,security_counter,security_counter_test))
+
+test-security-resident: test-security-resident-security test-security-resident-mmo test-security-resident-key-hash test-security-resident-counter
 
 ZDO_NODE_SRC := src/zdo_node.c src/aps_frame.c
 $(BUILD)/zdo_node.rel: src/zdo_node.c $(HEADERS) Makefile | $(BUILD)
@@ -1309,7 +1361,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
