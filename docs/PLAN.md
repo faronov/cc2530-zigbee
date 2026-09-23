@@ -721,6 +721,20 @@ No old component limit or scenario was relaxed. Continuous RX/ACK ownership,
 captured timing (#40), configured-F deployment, total Association timing (#45),
 IEEE2015 headers, lower-MAC ACK/IFS and membership remain open.
 
+The [#83 staged association controller](MAC_JOIN.md) now composes the supported
+Request -> R decision wait -> real Data Request/POLL -> contextual Response
+path. Request retirement precedes the wait; the same actual transmitter
+retains DSN, generation and IFS across both submissions. Response metadata
+survives generic POLL NO_DATA/COMMAND and subsequent cleanup failure.
+The context uses the accepted extraction ACK B and configured F=1..65534
+to preserve `(B,B+F]` inside `[B,B+F+1)`, without retimestamping late input.
+Local lifetime/work aborts deliberately do not choose a total IEEE NO_DATA
+deadline. Twenty-two native/linked/simulated sequences include actual
+restoration faults and retained leases. Full test images reach32763/32768 CODE,
+3117+64/3200 XDATA and SP7C/7C; no full-stack fit follows. This is not complete
+MLME, an adapter for #84 intervals, physical RX/ACK, installed parent/address,
+MAC membership or authenticated Zigbee join. #40/#45/#50 remain open.
+
 **Offline preparatory implementation:** the [legacy body codec](MAC.md)
 encodes/decodes a bounded DATA/ACK subset plus five fixed-format commands and
 their addressing layouts, with host, linked-image and

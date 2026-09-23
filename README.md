@@ -701,6 +701,19 @@ are explicit adapter obligations, not implemented radio services. This is not
 repeated polling, complete association, membership or full-stack fit.
 Never flash `mac_poll_test.ihx`.
 
+The [staged association controller](docs/MAC_JOIN.md) (#83) now executes
+Request -> accepted ACK -> decision wait -> Data Request -> contextual Response
+through those real components and one shared DSN/generation/IFS owner.
+A Response is retained even when generic POLL reports NO_DATA/COMMAND or later
+cleanup fails. Whole-attempt limits produce local aborts, not a guessed IEEE
+association timeout; receiver ACK and restoration still require truthful
+adapter confirmations. This is host-tested, image-checked and simulated,
+not complete MLME, address/parent installation, membership or authenticated
+Zigbee joining. Its 22 test images reach 32763/32768 CODE and SP7C/7C;
+that five-byte CODE margin is not complete-stack headroom. It does not convert
+raw interval observations into captured events or link a radio adapter.
+No board image links it; never flash `mac_join_<n>_test.ihx`.
+
 ## Isolated reserved flash reader
 
 The [first flash slice](docs/ARCHITECTURE.md#reserved-flash-read-foundation)

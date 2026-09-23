@@ -81,7 +81,8 @@ The existing `make BOARD=... IMAGE=... all test` command remains a full
 single-configuration check. The twenty-eight-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common-core` in the two
-debug-fixture jobs. The clock/radio, delayed-stamp and synthetic-temperature
+debug-fixture jobs. The clock/radio, delayed-stamp, synthetic-temperature and
+staged-association
 compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The interval attempt's longer MMIO replay runs in two additional dedicated
@@ -101,6 +102,7 @@ make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board
 make BOARD=generic test-mac-radio
 make BOARD=generic test-mac-stamp
 make BOARD=generic test-mac-attempt
+make BOARD=generic test-mac-join
 make BOARD=generic test-zcl-temperature
 ```
 
@@ -389,6 +391,21 @@ deadline; never reset caller state or patch returns to finish the corpus.
 Configured PIB F, captured ACK end, loss-free closure and immediate lower-MAC
 ACK/IFS are truthful adapter preconditions, not successful stubs.
 **Never flash or upload `mac_poll_test.ihx` or its independent floor diagnostic.**
+
+The [staged association composition](docs/MAC_JOIN.md) has
+`make BUILD=build/mac-join-check test-mac-join`, included in `test-common` and
+the two existing composed-service CI jobs, not `test-common-core`.
+Native/sanitizer builds run all 22 sequences; SDCC callers use
+`MAC_JOIN_CASE=0..21`. Keep every `mac_join_<n>_test` image and its six
+immediate snapshots in the exact codec/TX/Association/POLL/join/caller order.
+Preserve full raw-CDB-before-decode identities, ABI/allocation/call proofs,
+alias/SFR/guard negatives and separate uninterrupted peak measurements.
+The new composition's 32768-CODE/3200-total-XDATA/SP7C caps do not enlarge
+older budgets. Its worst CODE margin is only five bytes and peak SP is7C;
+this is not full-stack or interrupt headroom. Local abort, raw Response
+metadata and verified restoration remain distinct from MLME confirmation or
+membership. Neither live samples nor interval bounds satisfy captured-event
+inputs. **Never flash or upload these 22 test images.**
 
 The isolated [reserved flash reader](docs/ARCHITECTURE.md#reserved-flash-read-foundation)
 has a focused offline target:

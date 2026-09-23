@@ -275,6 +275,24 @@ no profile is installed in the public context or inherited by a later call.
 The32641-CODE/1989-byte-reservation test composition reaches SP7B under the
 unchanged SP7C cap. Its127-byte CODE margin is not full-stack or IRQ headroom.
 
+The [staged association controller](MAC_JOIN.md) leases that same transmitter
+across the complete supported Request/decision-wait/extraction/Response path.
+Its 645-byte context contains actual POLL and Association contexts, not layout
+casts or a second transmitter. Request actions execute the genuine scheduler
+internally; extraction preserves POLL's external one-step grant/report.
+The accepted Request ACK starts R; prompt retirement preserves the existing
+quiescence bound instead of holding a TX action through the wait.
+An extraction ACK opens a contextual lifetime F+1 for configured F=1..65534,
+preserving exact `(B,B+F]` reception without changing captured timestamps.
+Response metadata is taken before later cleanup can fail. The one-shot
+prepare/close/restore tokens require genuine adapter confirmations; FAULT
+retains ownership. Local abort reasons, lower-layer records and cleanup errors
+remain separate from membership or MLME confirmation.
+Five production modules consume30428 CODE/1900 XDATA; full caller images
+reach32763 CODE/3117+64 XDATA/SP7C, with no whole-stack headroom claim.
+This remains an exact-event offline controller, not an interval-to-point
+conversion or a link to the raw radio owner.
+
 The independent `nwk_frame` module encodes/decodes only the bounded,
 unsecured R22 Data NPDU: fixed addressing/radius/sequence fields, optional
 IEEE addresses and opaque payload. Unsupported security, multicast and

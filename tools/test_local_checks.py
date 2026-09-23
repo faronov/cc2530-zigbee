@@ -59,7 +59,7 @@ class LocalChecksTests(unittest.TestCase):
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
             "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt",
-            "mac_scan", "mac_association", "mac_poll",
+            "mac_scan", "mac_association", "mac_poll", "mac_join",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
             "zcl_identify", "zcl_temperature",
@@ -92,12 +92,13 @@ class LocalChecksTests(unittest.TestCase):
                                      for i, arg in enumerate(args)) for args in commands)
             self.assertEqual(normalized(("test-common",)),
                              normalized(("test-common-core", "test-mac-radio", "test-mac-stamp",
-                                         "test-zcl-temperature", "test-mac-attempt")))
+                                         "test-zcl-temperature", "test-mac-attempt", "test-mac-join")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
             self.assertFalse(any("tests/boot_zcl_temperature.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_attempt.py" in args for args in core))
+            self.assertFalse(any("tests/boot_mac_join.py" in args for args in core))
 
     def test_composed_snapshots_every_listing_after_its_link(self):
         cases = (
@@ -174,19 +175,23 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(Path(native[0][0]).parent, output)
             self.assertLess(commands.index(native[0]), commands.index(simulation))
 
-    def test_temperature_partitions_and_immediate_snapshots(self):
-        production = ("zcl_temperature", "zcl_dispatch", "zcl_write", "zcl_attributes",
-                      "zcl_frame", "zcl_value")
-        for board in BOARDS:
-            commands = self.dry_run("test-zcl-temperature", include_build=True, BOARD=board)
+    def test_partitioned_compositions_and_immediate_snapshots(self):
+        cases = (
+            ("zcl_temperature", ("zcl_temperature", "zcl_dispatch", "zcl_write", "zcl_attributes",
+                                 "zcl_frame", "zcl_value"), ("wire", "config", "report"), "ZCL_TEMP_PART", 1),
+            ("mac_join", ("mac_frame", "mac_tx", "mac_association", "mac_poll", "mac_join"),
+             tuple(map(str, range(22))), "MAC_JOIN_CASE", 0),
+        )
+        for board, (service, production, parts, define, first) in ((b, c) for b in BOARDS for c in cases):
+            commands = self.dry_run("test-" + service.replace("_", "-"), include_build=True, BOARD=board)
             links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
-            self.assertEqual(len(links), 3)
-            proofs = [args for args in commands if "tests/boot_zcl_temperature.py" in args]
+            self.assertEqual(len(links), len(parts))
+            proofs = [args for args in commands if f"tests/boot_{service}.py" in args]
             self.assertEqual(len(proofs), 1)
             output = Path(proofs[0][proofs[0].index("--output")+1])
             snapshots = []
-            for number, (part, link) in enumerate(zip(("wire", "config", "report"), links), 1):
-                stem = f"zcl_temperature_{part}_test"
+            for number, (part, link) in enumerate(zip(parts, links), first):
+                stem = f"{service}_{part}_test"
                 modules = production + (stem,)
                 self.assertEqual(link[link.index("-o")+1], str(output / f"{stem}.ihx"))
                 self.assertEqual([Path(arg).name for arg in link if arg.endswith(".rel")],
@@ -194,25 +199,25 @@ class LocalChecksTests(unittest.TestCase):
                 compile_args = [args for args in commands if args[0] == "sdcc"
                                 and "-c" in args and args[-1] == str(output / f"{stem}.rel")]
                 self.assertEqual(len(compile_args), 1)
-                self.assertIn(f"-DZCL_TEMP_PART={number}", compile_args[0])
-                self.assertIn("tests/test_zcl_temperature.c", compile_args[0])
+                self.assertIn(f"-D{define}={number}", compile_args[0])
+                self.assertIn(f"tests/test_{service}.c", compile_args[0])
                 expected = [["cp", str(output / f"{module}.rst"),
                              str(output / f"{stem}.{module}.rst")] for module in modules]
                 start = commands.index(link) + 1
-                self.assertEqual(commands[start:start+7], expected)
-                self.assertLess(start+6, commands.index(proofs[0]))
+                self.assertEqual(commands[start:start+len(modules)], expected)
+                self.assertLess(start+len(modules)-1, commands.index(proofs[0]))
                 snapshots.extend(expected)
             self.assertEqual([args for args in commands if args[0] == "cp"], snapshots)
             for args in commands:
                 if args[0] == "cc":
-                    self.assertFalse(any(arg.startswith("-DZCL_TEMP_PART") for arg in args))
+                    self.assertFalse(any(arg.startswith("-D" + define) for arg in args))
                     self.assertEqual([arg for arg in args if arg.startswith("src/")],
                                      [f"src/{module}.c" for module in production])
 
     def test_bounded_sanitizers_and_no_board_linkage(self):
         for board, service in ((b, s) for b in BOARDS for s in
                                ("zcl-basic", "zcl-identify", "zcl-temperature", "radio-autoack",
-                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt")):
+                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-join")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
                             if args[0] == "cc" and "-fsanitize=address,undefined" in args)

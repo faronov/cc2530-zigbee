@@ -12,6 +12,12 @@ through the real `mac_association` context. Source events are explicitly
 synthetic; neither API success nor the simulator supplies physical evidence.
 There is no hardware, USB, RF, GPIO, private-material or SDK dependency.
 
+The separate [staged association controller](MAC_JOIN.md) now performs the
+preceding Request/decision wait and orchestrates this real extraction with
+the same TX owner. It preserves the unchanged continuous RX/ACK/closure
+obligations and dispatches command receipts even when POLL reports NO_DATA.
+It supplies neither the radio adapter nor a total Association NO_DATA deadline.
+
 ## Primary basis and selected contract
 
 The reviewed public primary sources are:

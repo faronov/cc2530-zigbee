@@ -1252,6 +1252,14 @@ frame-wait equation correction; no full2015 reconciliation is inferred.
 The PDF remains an ignored research input, not a redistributed source or CI
 artifact. Search-generated timing claims were not adopted as evidence.
 
+The original [#83 staged association implementation](MAC_JOIN.md) composes
+the existing genuine codec/TX/POLL/Response components using the reviewed
+IEEE2006 Request, decision-wait and extraction stages and explicit R22 receive
+profile. Whole-attempt abort bounds and the F=1..65534 contextual restriction
+are documented project policy, not a repaired standard equation or invented
+MLME timeout. Its synthetic adapter events supply no hardware, authentication
+or membership evidence; no external implementation was imported.
+
 Contiki's RF code depends on Contiki facilities. An adaptation must replace
 those interfaces deliberately, preserve the original notices and be tested
 against the CC2530 documentation. It does not supply Zigbee NWK/APS/ZDO.

@@ -173,6 +173,7 @@ class TimebaseCodeTests(unittest.TestCase):
         self.assertEqual(composed.count('test-mac-radio'), 1)
         self.assertEqual(composed.count('test-mac-stamp'), 1)
         self.assertEqual(composed.count('test-zcl-temperature'), 1)
+        self.assertEqual(composed.count('test-mac-join'), 1)
         self.assertNotIn("upload-artifact", composed)
         attempt = workflow.split("  mac-attempt:\n", 1)[1].split("  bootstrap:\n", 1)[0]
         self.assertIn("timeout-minutes: 15", attempt)

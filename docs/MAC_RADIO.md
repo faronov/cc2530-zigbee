@@ -106,7 +106,7 @@ Prepared evidence is **host-tested, image-checked and simulated**:
 calls/79,308 MMIO events,48,143 artifact negatives and one missing-alias
 negative. The CI matrix preserves its28 board/image jobs and adds two
 dedicated composition jobs (also running delayed stamps and synthetic
-temperature reporting); the existing debug-fixture jobs run
+temperature reporting and staged association); the existing debug-fixture jobs run
 `test-common-core`. The exact union remains `test-common`, with no duplicate
 or omitted component and no raised15-minute job deadline. The separate
 interval-owner replay now adds two further jobs, bringing the current total

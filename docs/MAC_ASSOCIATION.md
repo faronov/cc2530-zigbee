@@ -261,12 +261,15 @@ standard's title; they do not resolve association timing or the frame-wait
 equation. This does not establish that no other correction exists, or replace
 review of the complete2015 edition referenced by R22.
 
-The unresolved total-confirmation rule does not prohibit implementing the
-supported Request/decision-wait/extraction/Response sequence. Its overall
-resource/time bound must remain an explicit local abort, not an invented
-IEEE NO_DATA deadline. A received Response can be classified separately
-from an unresolved failure-confirmation mapping; no successful path may
-invent receiver ACK, radio restoration, PIB installation or membership.
+The separate [staged controller](MAC_JOIN.md) now implements the supported
+Request/decision-wait/extraction/Response sequence. Its overall resource/time
+bound remains an explicit local abort, not an invented IEEE NO_DATA deadline.
+The extraction ACK supplies context start B; configured F=1..65534 gives
+lifetime F+1 so `(B,B+F]` remains inside this context's half-open interval.
+It never retimestamps an old Response to force acceptance. A received Response
+is classified separately from unresolved failure-confirmation mapping;
+receiver ACK, radio restoration, PIB installation and membership are not
+invented.
 
 The separate [conditional POLL controller](MAC_POLL.md) now implements one
 legacy extraction using caller-valid configured F. Its genuine caller forwards

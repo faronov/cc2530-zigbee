@@ -26,7 +26,7 @@ CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
 the two debug-fixture jobs run `test-common-core`, and two dedicated composition
-jobs run `test-mac-radio test-mac-stamp test-zcl-temperature`.
+jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
 MMIO replay. Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
@@ -43,6 +43,13 @@ reference executable directly: it must not depend on a preceding standalone
 AES run to populate its directory. The first aggregate run exposed this
 previously implicit dependency; a separate regression checks both boards'
 standalone `test-board` command ordering and reference path.
+
+Staged association adds 22 separately linked callers, not 22 copies of a
+mocked protocol result. Dry-run checks require case defines0..21, all six
+immediate per-image snapshots and unpartitioned native/sanitizer runs on
+both boards. Its full artifact/ABI/call, alias, SFR, guard and uninterrupted
+stack proofs run in those same composed-service jobs. The raw interval owner
+remains separate; neither corpus converts interval bounds to captured events.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

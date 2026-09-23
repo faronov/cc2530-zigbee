@@ -90,6 +90,7 @@ endif
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
+.PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
 .PHONY: test-nv-record test-mac-tx
@@ -1064,6 +1065,37 @@ test-mac-poll: $(BUILD)/host-mac-poll-tests $(BUILD)/mac_poll_test.ihx
 	$(BUILD)/host-mac-poll-tests
 	$(PYTHON) -B tests/boot_mac_poll.py --output $(BUILD) --simulator "$(S51)"
 
+MAC_JOIN_MODULES := mac_frame mac_tx mac_association mac_poll mac_join
+MAC_JOIN_SRC := $(addprefix src/,$(addsuffix .c,$(MAC_JOIN_MODULES)))
+MAC_JOIN_OBJECTS := $(addprefix $(BUILD)/,$(addsuffix .rel,$(MAC_JOIN_MODULES)))
+MAC_JOIN_CASES := 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21
+MAC_JOIN_IMAGES := $(addprefix $(BUILD)/mac_join_,$(addsuffix _test.ihx,$(MAC_JOIN_CASES)))
+$(BUILD)/mac_join.rel: src/mac_join.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+$(MAC_JOIN_IMAGES:.ihx=.rel): $(BUILD)/mac_join_%_test.rel: tests/test_mac_join.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DMAC_JOIN_CASE=$* -c $< -o $@
+
+$(MAC_JOIN_IMAGES): $(BUILD)/mac_join_%_test.ihx: $(MAC_JOIN_OBJECTS) $(BUILD)/mac_join_%_test.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(MAC_JOIN_OBJECTS) $(@:.ihx=.rel)
+	cp $(BUILD)/mac_frame.rst $(@:.ihx=).mac_frame.rst
+	cp $(BUILD)/mac_tx.rst $(@:.ihx=).mac_tx.rst
+	cp $(BUILD)/mac_association.rst $(@:.ihx=).mac_association.rst
+	cp $(BUILD)/mac_poll.rst $(@:.ihx=).mac_poll.rst
+	cp $(BUILD)/mac_join.rst $(@:.ihx=).mac_join.rst
+	cp $(@:.ihx=.rst) $(@:.ihx=).mac_join_$*_test.rst
+
+$(BUILD)/host-mac-join-tests: tests/test_mac_join.c $(MAC_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/test_mac_join.c $(MAC_JOIN_SRC) -o $@
+
+$(BUILD)/host-mac-join-tests-sanitize: tests/test_mac_join.c $(MAC_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_join.c $(MAC_JOIN_SRC) -o $@
+
+test-mac-join: $(BUILD)/host-mac-join-tests $(BUILD)/host-mac-join-tests-sanitize $(MAC_JOIN_IMAGES)
+	$(BUILD)/host-mac-join-tests
+	$(BUILD)/host-mac-join-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_join.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-timebase-fixture-tests_$(BOARD): tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c tests/host_mmio.h src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_timebase_fixture.c src/timebase_fixture_state.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $@
 
@@ -1107,7 +1139,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
