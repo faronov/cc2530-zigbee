@@ -794,6 +794,11 @@ success, addressed-error and generic unsupported payloads, including TSN,
 queried address and seven-bit Stack Compliance Revision. Its real APS
 composition is host-tested, image-checked and simulated, not an endpoint-zero
 server, descriptor advertisement, trusted peer or authenticated join.
+The separate [ED ZDO dispatcher](docs/ZDO_SRV.md) now builds local Node
+Descriptor replies and generic unicast NOT_SUPPORTED responses, with explicit
+broadcast/Parent_annce drops and no response-to-response/notification loops.
+Its real NWK/APS composition remains offline; no endpoint registration,
+authentication, address-state processing or APS transactions are implemented.
 The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
 headers and 38 wire-value types, including 8..64-bit byte representations
 and short strings. A separate [read-only attribute model and unicast Read

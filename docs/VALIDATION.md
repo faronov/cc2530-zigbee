@@ -3123,6 +3123,20 @@ negative. Both-board composed-service CI retains all earlier cases/deadlines.
 This is host-tested, image-checked and simulated syntax; no endpoint exposure,
 descriptor advertisement, authentication or hardware observation.
 
+The #86 [ED ZDO dispatcher](ZDO_SRV.md#evidence-and-resources) adds1694
+shared target checks and942,914 native checks, with exact allocations under
+nonrecovering ASan/UBSan. Twelve genuine NWK/APS/ZDO exchanges cover three
+response shapes and four optional-address layouts; an independent complete
+NPDU golden checks local success. All16-bit clusters/profiles/queried and
+local addresses are exercised natively, including no response loops,
+role-specific Parent_annce drop, explicit unimplemented notifications and
+atomic malformed/capacity failures. The isolated image uses15802/16384 CODE,
+834+64/1024 XDATA and full-run SP65/7C; complete raw artifact/ABI/private/
+caller/libc checks reject46,446 artifact,21 snapshot,3 peak and one alias
+negative. Existing APS
+broadcast/security rejection is preserved. This is not registered endpoint
+exposure, authenticated admission, durable address state or hardware evidence.
+
 The [ZCL Revision 8 wire codecs](ZCL.md) have separate frame and value
 host/SDCC suites, retaining the 512-byte component reservation and unchanged
 CODE/CDB/alias/upper-IRAM/unwind guards. Header tests cover every FCF value

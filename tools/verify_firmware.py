@@ -283,6 +283,13 @@ def verify_layout(symbols, memory, debug, image_name="bringup"):
                 "M:zdo_node", "M:test_zdo_node",
             )),
             "Board image must not link the isolated ZDO Node Descriptor codec")
+    require(not any(name.startswith("_zdo_srv_") for name in symbols) and
+            not any(token in debug for token in (
+                "C$zdo_srv.c$", "C$test_zdo_srv.c$", "G$zdo_srv_",
+                "Fzdo_srv$", "Lzdo_srv.", "Ftest_zdo_srv$", "Ltest_zdo_srv.",
+                "M:zdo_srv", "M:test_zdo_srv",
+            )),
+            "Board image must not link the isolated ZDO ED dispatcher")
     require(not any(name.startswith(("_zcl_temp_", "_zcl_temperature_")) for name in symbols) and
             not any(token in debug for token in (
                 "C$zcl_temperature.c$", "C$test_zcl_temperature.c$", "G$zcl_temp_", "G$zcl_temperature_",

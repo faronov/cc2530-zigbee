@@ -1552,6 +1552,38 @@ identity or local advertisements. No normative tables, implementation code,
 vendor defaults or private identities were imported; tests use original
 public synthetic bytes. BDB errata deferral remains a separate scope decision.
 
+### R22 ED ZDO dispatcher sources
+
+The original #86 dispatcher uses the same pinned599-page R22 PDF and hash
+above, not an external stack implementation. Sections1.2.5 p.3 and
+2.4.2.7-8 pp.83-84 establish mandatory-prefix handling, TSN echo and
+application-object clients beyond ZDO itself; source endpoint0 is therefore
+not imposed on every requester. Section2.3.1.3 p.66 assigns the device-profile
+endpoint. Profile0 is the selected bounded dispatcher/test context, not a
+new application-profile advertisement or a full transport admission policy.
+
+Section2.4.3.1.3 p.88 specifies unicast Node Descriptor requests; the
+broadcast drop for that command is this module's unsupported-delivery policy.
+Section2.4.4.2.3 p.143 specifies local success and INV_REQUESTTYPE for another
+queried address at an ED, not a discovery-cache lookup.
+Section2.4.4.1 p.137 supplies the generic unsupported-unicast reply and
+unsupported-broadcast drop, with the common ZDP TSN. Unknown low-bit requests
+are not parsed as a guessed future layout.
+
+The Parent_annce effect-on-receipt text on p.98 requires an ED to drop it
+without further processing. Section2.4.4.2 p.137 prohibits a Device_annce
+response but requires address-reference processing; that processing is not
+implemented and returns an explicit local error. Section2.4.4.4.12,
+pp.197-198, identifies003B as an unsolicited channel-report notification to
+the network manager, not a request to reflect through generic fallback.
+All high-bit response clusters are kept out of this server request path.
+
+These are role/response-policy facts only. No security, transactions, device
+identities, manufacturer defaults, tables or implementation code were imported.
+Complete NPDU goldens, descriptors and addresses are original synthetic test
+inputs. The real existing NWK/APS codecs are reused unchanged; modeled
+broadcast context is not evidence of APS broadcast wire implementation.
+
 ### Offline R22 NWK Beacon payload sources
 
 The original decoder was checked directly against **Zigbee Specification

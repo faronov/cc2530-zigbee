@@ -322,6 +322,19 @@ transaction, self advertisement, endpoint, transport or board caller.
 Generic unsupported-service dispatch remains required before endpoint0
 exposure; serialization alone does not complete that dispatcher.
 
+The separate [ED ZDO request dispatcher](ZDO_SRV.md) now uses that real codec
+for local Node Descriptor success, ED other-address errors and common
+TSN/status-only fallback. It selects endpoint0/profile0 context, suppresses
+broadcast replies and applies the ED Parent_annce drop; response clusters and
+unimplemented Device_annce/update notifications fail without generated replies.
+Caller-admitted typed context does not establish peer/identity/authentication
+admission or duplicate removal. The real unicast NWK/APS/ZDO test composition
+uses fresh caller-supplied outgoing counters and a nonzero client endpoint.
+Broadcast policy is only typed-context tested; the APS broadcast wire codec
+remains unsupported. Production dispatcher adds1534 CODE/69 XDATA/0 DSEG;
+the isolated full image uses15802 CODE/834+64 XDATA with peak SP65/7C.
+No board endpoint, persistent address state or transaction owner is installed.
+
 The separate `zcl_frame` and `zcl_value` modules share the typed
 `zcl_wire.h` API but no runtime state. The [ZCL wire contract](ZCL.md)
 pins Revision 8 and keeps manufacturer/command/attribute policy outside

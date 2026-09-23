@@ -82,7 +82,7 @@ single-configuration check. The twenty-eight-job CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common-core` in the two
 debug-fixture jobs. The clock/radio, delayed-stamp, synthetic-temperature,
-staged-association and ZDO Node Descriptor compositions run in two dedicated
+staged-association and ZDO codec/dispatcher compositions run in two dedicated
 jobs, once per board, rather than overflowing those jobs'15-minute limits.
 The interval attempt's longer MMIO replay runs in two additional dedicated
 jobs. The exact union is still `test-common`; thirty-two jobs retain all
@@ -104,6 +104,7 @@ make BOARD=generic test-mac-attempt
 make BOARD=generic test-mac-join
 make BOARD=generic test-zcl-temperature
 make BOARD=generic test-zdo-node
+make BOARD=generic test-zdo-srv
 ```
 
 `test-zdo-node` composes the real Node Descriptor and APS codecs, runs the
@@ -111,6 +112,12 @@ native/nonrecovering sanitizer corpus, and takes three immediate listing
 snapshots for the strict linked/ABI/alias/SFR/stack proof. Its synthetic
 descriptors do not advertise a device or establish authenticated join.
 See the [bounded contract and resources](docs/ZDO_NODE.md).
+
+`test-zdo-srv` runs the offline ED request-policy corpus and genuine
+NWK/APS/ZDO reply composition, including native exact allocations and a
+nonrecovering sanitizer build. Five immediate listings feed its strict
+linked/ABI/alias/SFR/stack proof. Broadcast policy uses typed context only;
+the existing APS wire codec remains unicast-only. See [ZDO_SRV](docs/ZDO_SRV.md).
 
 `test-mac-radio` uses separately named `mr_*.rel` objects with the explicit
 `CC2530_MAC_RADIO` profile and immediate seven-listing snapshots. It runs the

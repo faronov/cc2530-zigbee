@@ -37,7 +37,7 @@ jobs:
       - name: Test clock/radio, timestamps, reporting, staged association and ZDO
         env:
           BOARD: ${{ matrix.board }}
-        run: make BOARD="$BOARD" BUILD="build/$BOARD/compositions" test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join test-zdo-node
+        run: make BOARD="$BOARD" BUILD="build/$BOARD/compositions" test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join test-zdo-node test-zdo-srv
 
   mac-attempt:
     name: Offline MAC interval owner (${{ matrix.board }})

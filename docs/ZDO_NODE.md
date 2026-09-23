@@ -111,7 +111,10 @@ the future transaction owner's responsibility.
 Node Descriptor is a mandatory service; the generic status-only encoding is
 not permission to omit it from a conforming endpoint. The general unsupported
 unicast-response/broadcast-drop dispatcher is still required by #25 **before
-endpoint0 is exposed**. There is no endpoint exposure here.
+endpoint0 is exposed**. The subsequent [offline ED dispatcher](ZDO_SRV.md)
+now implements that bounded response/drop policy with this codec, but still
+does not register an endpoint or complete the remaining mandatory services.
+There is no endpoint exposure here.
 
 ## Evidence and resources
 

@@ -41,6 +41,11 @@ services, and source/destination endpoint/profile compatibility is not checked.
 The caller must eventually implement those policies and the appropriate
 NWK destination/security checks before dispatch.
 
+The separate [offline ED ZDO dispatcher](ZDO_SRV.md) consumes typed APS
+metadata and payload after caller admission. Its unicast NWK/APS composition
+does not change this codec's unsupported broadcast/security behavior or add
+ACK/transaction ownership.
+
 ACK request is only a header bit: decoding it neither sends an ACK nor
 creates a pending transaction. APS, NWK and MAC counters are independent.
 The codec does not allocate counters, retry, recognize duplicates, authenticate

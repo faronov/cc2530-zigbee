@@ -240,6 +240,26 @@ class LayoutTests(unittest.TestCase):
                 with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZDO Node"):
                     verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
 
+    def test_isolated_zdo_srv_cannot_enter_board_images(self):
+        for image in IMAGES:
+            for name in ("_zdo_srv_handle", "_zdo_srv_result", "_zdo_srv_done"):
+                with self.subTest(image=image, name=name), self.assertRaisesRegex(ValueError, "ZDO ED"):
+                    verify_layout(self.symbols | {name: 0x100}, self.memory, self.debug, image)
+            for evidence in (
+                "M:zdo_srv", "M:test_zdo_srv",
+                "L:C$zdo_srv.c$1$0_0$0:123", "L:C$test_zdo_srv.c$1$0_0$0:123",
+                "F:G$zdo_srv_handle$0_0$0({2}DF,SC:U),Z,0,0,0,0,0",
+                "S:G$zdo_srv_result$0_0$0({8}DA8d,SC:U),F,0,0",
+                "S:Lzdo_srv.zdo_srv_handle$local$1_0$0({3}DG,STtest:S),F,0,0",
+                "T:Fzdo_srv$__00000008[]",
+                "L:Ftest_zdo_srv$local$0_0$0:123",
+                "F:Ftest_zdo_srv$reset$0_0$0({2}DF,SV:S),C,0,0,0,0,0",
+                "S:Ltest_zdo_srv.chain_cases$i$1_0$0({1}SC:U),F,0,0",
+                "L:G$zdo_srv_done$0_0$0:123",
+            ):
+                with self.subTest(image=image, evidence=evidence), self.assertRaisesRegex(ValueError, "ZDO ED"):
+                    verify_layout(self.symbols, self.memory, self.debug + "\n" + evidence, image)
+
     def test_isolated_zcl_identify_cannot_enter_board_images(self):
         for image in IMAGES:
             for name in ("_zcl_id_init", "_zcl_id_tick", "_zcl_id_rx",

@@ -842,6 +842,15 @@ tolerance and Stack Compliance Revision metadata. Host/image/simulator evidence
 does not expose endpoint0, advertise a descriptor, authenticate a TC or complete
 join. The #25 dispatcher and transaction/security procedures remain required.
 
+The separate #86 [ED ZDO dispatcher](ZDO_SRV.md) implements the bounded
+request policy: local Node Descriptor response, other-address ED error,
+generic unsupported-unicast reply, broadcast/Parent_annce no-reply outcomes,
+and explicit rejection of response clusters/unimplemented notifications.
+Real unicast NWK/APS/ZDO exchanges have isolated host/image/simulator coverage.
+This is not endpoint registration: #24 admission/queues/ACK/retry and #25
+address/announce/mandatory service processing remain open. Broadcast context
+tests do not expand the existing APS wire codec or establish authentication.
+
 Deliver:
 
 - Required NWK and APS header handling and bounded transaction/ACK state.
