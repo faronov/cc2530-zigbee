@@ -79,7 +79,9 @@ disables automatic analysis, then attaches `commands analyze` to permanent
 bank-window breakpoints before clearing them. Temporary breakpoints do not
 run this cleanup before formatting in this version. This changes neither
 CODE nor CPU/RAM state; an exact before/after snapshot regression enforces
-that. It does not add a debugger backend or replace/increase the simulator.
+that. Common-only instruction sweeps retain ordinary simulator names: the
+numeric workaround is not a universal disassembler repair. It does not add
+a debugger backend or replace/increase the simulator.
 The relevant packaged sources are
 [mem.cc](https://sources.debian.org/src/sdcc/4.2.0%2Bdfsg-1/sim/ucsim/sim.src/mem.cc/),
 [var.cc](https://sources.debian.org/src/sdcc/4.2.0%2Bdfsg-1/sim/ucsim/sim.src/var.cc/),
@@ -108,9 +110,9 @@ object and 123-byte RAM engine have independent identities.
 
 The current corpus includes23,399 artifact/address/metadata mutations,
 26 terminal runtime negatives,16 explicit constant-helper error cases and
-162 interrupt-boundary cases. The latter interrupt both16-bit and32-bit
-call/return paths at78 reached trampoline instruction sites and interrupt
-constant selection/read/restoration at six sites. Each executes the actual
+600 interrupt-boundary cases. These comprise396 trials across all five
+foreground call/return paths, including the bank7-specific admission branch,
+and204 trials across mapping/copy/restoration for banks0,1,2,7. Each executes the actual
 common ISR, banked IRQ-only leaf and RETI. Normal nested calls, the three-byte
 function pointer and constants at the last usable bank7 bytes have exact
 independent results.

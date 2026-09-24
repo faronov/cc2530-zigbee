@@ -8,7 +8,8 @@ RF, USB or debugger access is performed by these files.
 Owned implementation: `include/banked.h`, `src/banked.c`,
 `tests/banked_fixture.h`, `tests/banked_fixture.c`, and
 `tests/banked_fixture_bank{1,2,7}.c`. Build integration, image packing,
-complete linked-image verification and modeled replay are separate work.
+complete linked-image verification and modeled replay are described in
+[the acceptance contract](BANKED_CODE.md).
 No old source, shared SFR declaration, image limit or simulator gate changes.
 
 ## Sources and license
@@ -171,6 +172,12 @@ emitted-ABI proof. Likewise, final acceptance must allowlist the fixture's
 function signatures, actual call sites and parameter storage, rejecting
 unsupported shapes rather than reporting their execution successful.
 The helper's depth limit does not make static C parameters recursive.
+The depth limit8 counts **all** active banked frames, including the IRQ
+leaf. An interruptible foreground must therefore leave at least one free
+depth slot and separately reserve the complete ISR stack requirement.
+Depth8 or a trampoline's maximum admitted SP is not an interruptible
+caller budget. The admitted fixture's measured complete call graph has
+that headroom; arbitrary future callers need their own proof.
 
 ## Explicit foreign-bank constants
 

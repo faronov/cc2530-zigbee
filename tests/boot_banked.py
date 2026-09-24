@@ -164,6 +164,7 @@ def numeric_debugger(simulator):
 def run_model(simulator, commands):
     # The pinned banker's label lookup dereferences a null memchip. Clear only
     # simulator names; never replace banked CODE, CPU registers or instructions.
+    # Use only for audited bank-window stops; common-only sweeps keep native names.
     return simulate(simulator, numeric_debugger(simulator) + commands)
 
 
@@ -250,9 +251,9 @@ def check_mapping(simulator, *, code=True, alias=True):
     require(memory_dump(section(text, 48), 0x9234, 1) == b"\x54", "Restored FMAP banker is not live")
 
 
-def stop_at(pc, number):
-    stopped = ([f"break {pc:#x}", "commands analyze", "run", f"clear {pc:#x}"]
-               if pc >= 0x8000 else [f"tbreak {pc:#x}", "run"])
+def stop_at(pc, number, hit=1):
+    stopped = ([f"break {pc:#x} {hit}", "commands analyze", "run", f"clear {pc:#x}"]
+               if pc >= 0x8000 else [f"tbreak {pc:#x} {hit}", "run"])
     return (["analyze"] if pc >= 0x8000 else []) + stopped + [marker(number), "state",
             "dump /h sfr 0x9f 0x9f", "dump /h sfr 0xc7 0xc7", marker(number+1)]
 
@@ -268,12 +269,12 @@ def start(image, symbols):
 
 
 def check_debugger_equivalence(simulator, image, symbols):
-    commands = start(image, symbols) + stop_at(symbols["_banked_fixture_after_calls"], 10)
+    commands = start(image, symbols) + [f"run {symbols['_main']:#x} {symbols['_banked_fixture_after_calls']:#x}"]
     commands += snapshot_commands(20)
     plain = simulate(simulator, commands)
     numeric = run_model(simulator, commands)
-    check_pc(section(plain, 10), symbols["_banked_fixture_after_calls"])
-    check_pc(section(numeric, 10), symbols["_banked_fixture_after_calls"])
+    check_pc(section(plain, 20), symbols["_banked_fixture_after_calls"])
+    check_pc(section(numeric, 20), symbols["_banked_fixture_after_calls"])
     require(snapshot(plain, 20) == snapshot(numeric, 20),
             "Numeric debugger workaround changed executed CPU/RAM state")
 
@@ -316,13 +317,12 @@ def runtime_faults(simulator, image, symbols):
 
 
 def interrupt_boundaries(simulator, image, symbols, decoded):
-    boundaries = [pc for pc in decoded if 0x503 <= pc <= 0x55C and pc not in (0x540, 0x541, 0x543)
-                  or 0x576 <= pc <= 0x5B9]
-    for wide, pc in ((wide, pc) for wide in (False, True) for pc in boundaries):
-        commands = start(image, symbols)
-        if wide:
-            commands += stop_at(0xD7E, 8)
-        commands += stop_at(pc, 10)
+    boundaries = [pc for pc in decoded if 0x503 <= pc <= 0x55C or 0x576 <= pc <= 0x5B9]
+    cases = [(hit, pc) for hit in range(1, 6) for pc in boundaries
+             if hit in (4, 5) or pc not in (0x540, 0x541, 0x543)]
+    for hit, pc in cases:
+        occurrence = hit-3 if pc in (0x540, 0x541, 0x543) else hit
+        commands = start(image, symbols) + stop_at(pc, 10, occurrence)
         commands += ["set memory sfr 0xa8 0x81", "set memory sfr 0x88 3"]
         commands += stop_at(symbols["_banked_fixture_irq_enter"], 12)
         commands += stop_at(symbols["_banked_fixture_irq_exit"], 14)
@@ -341,7 +341,7 @@ def interrupt_boundaries(simulator, image, symbols, decoded):
                 "Interrupt used unallocated IRAM")
         peaks = [int(v, 16) for v in re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", text)]
         require(peaks and max(peaks) <= 0x7C, "Interrupted bank trampoline exceeded stack")
-    return len(boundaries)*2
+    return len(cases)
 
 
 def constant_errors(simulator, image, symbols):
@@ -372,20 +372,20 @@ def constant_errors(simulator, image, symbols):
     return len(cases)
 
 
-def constant_interrupts(simulator, image, symbols):
-    sites = (0x6B1, 0x6B3, 0x6E8, 0x6E9, 0x6FA, 0x6FC)
-    for pc in sites:
-        commands = start(image, symbols) + stop_at(pc, 10)
+def constant_interrupts(simulator, image, symbols, decoded):
+    sites = [pc for pc in decoded if 0x6A6 <= pc <= 0x709 and pc not in (0x6B8, 0x6BA, 0x701, 0x703)]
+    for call, pc in ((call, pc) for call in (0x8C9, 0x924, 0x97F, 0x9DA) for pc in sites):
+        commands = start(image, symbols) + stop_at(call, 8) + stop_at(pc, 10)
         commands += ["set memory sfr 0xa8 0x81", "set memory sfr 0x88 3"]
         commands += stop_at(symbols["_banked_fixture_irq_enter"], 12)
         commands += stop_at(symbols["_banked_fixture_irq_exit"], 14)
-        commands += stop_at(0x8CC, 16) + ["set memory sfr 0xa8 0"]
+        commands += stop_at(call+3, 16) + ["set memory sfr 0xa8 0"]
         commands += stop_at(0xC6B, 18) + ["step 1"] + xmap()
         commands += stop_at(0xC8E, 20) + ["step 1"] + code_banks()
         commands += stop_at(symbols["_banked_fixture_after_constants"], 22) + snapshot_commands(30)
-        text = run_model(simulator, commands)
+        text = simulate(simulator, commands)
         for number, target in ((10, pc), (12, symbols["_banked_fixture_irq_enter"]),
-                               (14, symbols["_banked_fixture_irq_exit"]), (16, 0x8CC),
+                               (14, symbols["_banked_fixture_irq_exit"]), (16, call+3),
                                (18, 0xC6B), (20, 0xC8E), (22, symbols["_banked_fixture_after_constants"])):
             check_pc(section(text, number), target)
         ram, iram, sfr = snapshot(text, 30)
@@ -393,8 +393,11 @@ def constant_interrupts(simulator, image, symbols):
                 "Interrupt corrupted foreign-bank constants or error publication")
         require(ram[0x1E07] == 0 and iram[0x10:0x12] == b"\0\0" and sfr[1] == 0x21
                 and sfr[0x9F-0x80] == 1, "Constant-read IRQ failed to restore context")
+        bank = memory_dump(section(text, 12), 0x9F, 1)
+        require(memory_dump(section(text, 14), 0x9F, 1) == bank and ram[0x1E2C:0x1E2D] == bank,
+                "ISR failed to preserve the in-progress constant reader's bank")
         require(iram[0x7D:] == b"\xc7"*131, "Constant-read IRQ escaped stack reservation")
-    return len(sites)
+    return len(sites)*4
 
 
 def prefix(image, symbols):
@@ -536,7 +539,7 @@ def main():
     faults = runtime_faults(args.simulator, image, symbols)
     errors = constant_errors(args.simulator, image, symbols)
     interrupts = interrupt_boundaries(args.simulator, image, symbols, decoded)
-    interrupts += constant_interrupts(args.simulator, image, symbols)
+    interrupts += constant_interrupts(args.simulator, image, symbols, decoded)
     print(f"Banked CODE: {negatives} artifact negatives, {faults} terminal negatives; "
           f"{errors} returned errors, {interrupts} IRQ boundary cases; "
           f"real nested/pointer/IRQ calls, constants, flash return/fail-stop; normal SP {peak:02x}/7c")
