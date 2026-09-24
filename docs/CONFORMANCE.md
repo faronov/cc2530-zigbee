@@ -159,6 +159,14 @@ errata-aware conformance before reviewing the corrections.
 
 ### Commissioning and recovery boundaries
 
+The [bounded ED integration](ED_JOIN.md) now exercises the initial centralized
+sequence through real C key/replay, NWK/APS, ZDO and BDB owners against a
+synthetic coordinator. This is host/sanitizer plus SDCC-compilation evidence,
+not completion of the planned rows' target/hardware/conformance gates.
+Its direct-TC, fixed-network and Timeout-Request-keepalive restrictions,
+explicit persisted-recovery rejection and remaining address/recovery limits
+are part of the contract, not silent success fallbacks.
+
 The first target is a receiver-on ED on a centralized R22 network, using the
 APS Request Key method (`bdbTCLinkKeyExchangeMethod = 0`). This is a bounded
 development configuration, not a declaration that other mandatory BDB

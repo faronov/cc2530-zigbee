@@ -811,8 +811,9 @@ derivation, verify a Trust Center key, or establish membership.
 The independent [keyed-hash foundation](docs/KEY_HASH.md) adds the reviewed
 R22 transport/load derivations and initiator Verify-Key hash using real
 AES-MMO. Its native/linked/simulated failures preserve output, including
-failures after the inner hash. Actual TC confirmation, durable key slots and
-replay/lifecycle admission remain unimplemented; #23 is not complete.
+failures after the inner hash. The separate bounded integration below adds
+actual TC confirmation, durable key slots and replay/lifecycle ownership;
+its remaining target acceptance gates mean #23 is not complete.
 The [resident crypto/NV profile](docs/SECURITY_RESIDENT.md) now links all
 thirteen real service modules together and replays the original four
 callers with checked active DATA-frame sharing. It preserves the SP7C
@@ -827,7 +828,18 @@ The separate [ED ZDO dispatcher](docs/ZDO_SRV.md) now builds local Node
 Descriptor replies and generic unicast NOT_SUPPORTED responses, with explicit
 broadcast/Parent_annce drops and no response-to-response/notification loops.
 Its real NWK/APS composition remains offline; no endpoint registration,
-authentication, address-state processing or APS transactions are implemented.
+authentication, address-state processing or APS transactions are implemented
+by that standalone dispatcher.
+
+The new [authenticated ED integration](docs/ED_JOIN.md) connects the real
+scan/association controllers, [durable key owner](docs/SECURITY_KEYS.md),
+NWK/APS ACK/retry transport and endpoint-zero services to BDB commissioning.
+Its synthetic coordinator verifies the real HMAC exchange; application
+readiness follows authenticated Confirm-Key, parent negotiation and actual
+final permit transmission. This is a bounded **host integration**, with
+SDCC compilation, not a linked/simulated whole-stack firmware or physical
+join. The boot images remain non-networking. Target memory/ABI proof,
+real-radio integration and persisted-rejoin orchestration remain open.
 The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
 headers and 38 wire-value types, including 8..64-bit byte representations
 and short strings. A separate [read-only attribute model and unicast Read

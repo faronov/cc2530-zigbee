@@ -89,7 +89,10 @@ jobs. The genuine AES/CCM/NWK/APS, install-code and keyed-hash compositions run 
 dedicated jobs, as does the durable-counter/journal/flash composition.
 The all-thirteen-service resident profile runs its four original-caller
 compositions in eight further jobs, one per board/caller, with no uploads.
-The exact union is still `test-common`; forty-four jobs retain all
+The new wire/key-owner/authenticated-join host composition runs in six more
+board/profile jobs, with nonrecovering sanitizers and SDCC compilation but
+no new whole-stack linked-image claim or artifact uploads.
+The exact union is still `test-common`; fifty jobs retain all
 twenty-eight board/image checks and the unchanged simulator deadlines.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
@@ -99,6 +102,7 @@ For focused iteration, the explicit parts are:
 
 ```sh
 make test-tools
+make BOARD=generic test-ed-integration
 make BOARD=generic test-common
 make BOARD=generic IMAGE=radio_rx_fixture test-board
 make BOARD=lg_esl29_rev03 IMAGE=radio_rx_fixture test-board

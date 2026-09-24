@@ -89,6 +89,7 @@ endif
 .PHONY: test-zcl-temperature test-zdo-node test-zdo-srv
 .PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
 .PHONY: test-security-resident-security test-security-resident-mmo test-security-resident-key-hash test-security-resident-counter
+.PHONY: test-ed-wire test-security-keys test-bdb-join test-ed-integration
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -1031,6 +1032,37 @@ test-security-counter: $(BUILD)/host-security-counter-tests $(BUILD)/host-securi
 	$(BUILD)/host-security-counter-tests-sanitize
 	$(PYTHON) -B tests/boot_security_counter.py --output $(BUILD) --simulator "$(S51)"
 
+ED_CRYPTO_SRC := src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c \
+	src/nwk_frame.c src/aps_frame.c src/ed_wire.c
+ED_KEY_SRC := $(COUNTER_SRC) $(ED_CRYPTO_SRC) src/security_keys.c
+ED_JOIN_SRC := $(ED_KEY_SRC) src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c \
+	src/nwk_parent.c src/mac_scan.c src/mac_poll.c src/mac_association.c src/mac_join.c \
+	src/nwk_aps.c src/zdo_node.c src/zdo_srv.c src/zdo_runtime.c src/bdb_join.c
+ED_MODEL_SRC := tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c \
+	tests/host_mmio.c tests/aes_reference.c
+ED_WIRE_SRC := tests/test_ed_wire.c $(ED_CRYPTO_SRC) src/zigbee_security.c \
+	tests/security_aes_model.c tests/host_mmio.c tests/aes_reference.c
+
+$(BUILD)/ed-join:
+	mkdir -p $@
+
+$(BUILD)/ed-join/%.rel: src/%.c $(HEADERS) Makefile | $(BUILD)/ed-join
+	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
+
+define ED_HOST_TEST
+$(BUILD)/host-$(1)-tests: $(2) $(HEADERS) tests/security_joint_model.h tests/security_aes_model.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(2) -o $$@
+$(BUILD)/host-$(1)-tests-sanitize: $(2) $(HEADERS) tests/security_joint_model.h tests/security_aes_model.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(2) -o $$@
+test-$(1): $(BUILD)/host-$(1)-tests $(BUILD)/host-$(1)-tests-sanitize $(addprefix $(BUILD)/ed-join/,$(3))
+	$(BUILD)/host-$(1)-tests
+	$(BUILD)/host-$(1)-tests-sanitize
+endef
+$(eval $(call ED_HOST_TEST,ed-wire,$(ED_WIRE_SRC),ed_wire.rel))
+$(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),security_keys.rel))
+$(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel zdo_runtime.rel bdb_join.rel))
+test-ed-integration: test-ed-wire test-security-keys test-bdb-join
+
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -1361,7 +1393,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

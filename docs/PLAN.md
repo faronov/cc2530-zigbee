@@ -825,9 +825,11 @@ The #23 [keyed-hash prerequisite](KEY_HASH.md) now implements HMAC-AES-MMO
 purposes00/02/03 through those genuine services. Host/image/simulator evidence
 includes independent public KATs and inner/outer failures without partial
 publication. R22's actual Verify-Key field definition supplies selector03.
-This does not complete #23: durable two-slot/key/replay state, retention of
-the old key until successful verification, authenticated Confirm-Key
-processing and commissioning admission still require implementation.
+This primitive alone does not complete #23. The separate bounded
+[key owner](SECURITY_KEYS.md) and [host integration](ED_JOIN.md) now implement
+two-slot/key/replay state, old-key retention, authenticated Confirm-Key and
+commissioning admission; their new linked-image/ABI/alias acceptance remains
+open and is not supplied by the old primitive proofs.
 
 The next #23 prerequisite, the [resident crypto/NV profile](SECURITY_RESIDENT.md),
 links all thirteen unchanged service modules in each of four original-caller
@@ -895,6 +897,15 @@ Real unicast NWK/APS/ZDO exchanges have isolated host/image/simulator coverage.
 This is not endpoint registration: #24 admission/queues/ACK/retry and #25
 address/announce/mandatory service processing remain open. Broadcast context
 tests do not expand the existing APS wire codec or establish authentication.
+
+The new [bounded host join](ED_JOIN.md) integrates #23–#26 against an explicit
+synthetic centralized coordinator. It performs real scan/association, key
+transport/verification, announcement-before-TC-update, ZDO transactions,
+ED Timeout negotiation and final permit broadcast before application readiness.
+It includes real NWK/APS security-counter allocation, duplicate/ACK/retry
+processing and shared live AES/NV execution. This is not full M4/M5 acceptance:
+new complete-image resource/ABI/alias proof, physical adapter/interoperability,
+general recovery and the remaining conformance obligations are still open.
 
 Deliver:
 

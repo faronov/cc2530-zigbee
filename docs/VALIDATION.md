@@ -172,6 +172,22 @@ and retain the15-minute job limit.
 Original image identities, budgets and per-simulator deadlines are unchanged.
 This is resident-layout simulation, not mixed key lifecycle or a physical join.
 
+### Authenticated host join
+
+The [ED integration](ED_JOIN.md) adds strict native and nonrecovering sanitizer
+execution of extended wire formats, the real durable key owner and an actual
+C scan/association-to-commissioning transcript. The explicit synthetic peer
+decrypts requests, verifies HMAC03 before confirming a key, and checks parent
+negotiation and final permit broadcast. Negative MIC/CRC/replay and
+early/wrong/delayed ACK cases do not bypass those operations. A genuine modeled
+reset retains NV and must not turn stored VERIFIED keys into BDB READY.
+
+Six separate board/profile CI jobs run these host corpora and SDCC compilation
+without artifact uploads. This is not a new linked image or alias-aware
+whole-stack simulation. All original44 jobs, strict proofs, cases, resource
+caps and15-second simulator deadlines remain. New complete target placement,
+execution and hardware evidence are expressly not inferred from the host run.
+
 ### Durable outgoing range owner
 
 The [#21 composition](SECURITY_COUNTERS.md) uses actual counter, journal,

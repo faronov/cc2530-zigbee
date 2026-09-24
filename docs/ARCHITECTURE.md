@@ -4,6 +4,15 @@ This is the intended stack architecture. At M0 only board/platform bootstrap,
 status storage and validation infrastructure exist. The layer names below
 are boundaries to implement, not a list of working APIs.
 
+The separate [host authenticated-join composition](ED_JOIN.md) now connects
+real scan/association, durable key/replay ownership, NWK/APS transactions,
+ZDO and bounded BDB commissioning. Its real C services share a synthetic
+AES/flash peripheral model; a synthetic coordinator must verify the key
+exchange. `bdb_join` never accepts an authentication-success flag. It keeps
+membership distinct from application readiness and retains physical cleanup
+ownership. This adds neither a board caller nor proof of whole-stack8051
+memory/ABI fit; the existing strict target profiles remain separate.
+
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
 probe is confined to the target example. It shares existing startup/board

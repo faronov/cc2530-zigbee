@@ -27,6 +27,17 @@ No external implementation, assembly or new normative behavior is imported.
 
 ## Reviewed reference candidates
 
+The original [authenticated ED integration](ED_JOIN.md) uses functional facts
+from the already pinned R22 and BDB3.0.1 primary documents, not imported stack
+code. R22 APS ACK/duplicate/retry rules are on pp46,50–51,57–59; NWK/IEEE
+address services on pp86–88,138–142; Device_annce mapping on pp96–97;
+ED Initiator on p290; Network Update and ED Timeout on pp312–318.
+BDB8.2 pp45–46 orders Device_annce before the updated TC exchange;
+10.2.5 pp75–79 provides descriptor/request/verify stages and five-second bounds.
+The fixture's keys, identities, RF events and timestamps are public synthetic
+data. Its successful transcript is not a physical observation or a new
+8051 complete-image proof.
+
 | Reference | Status and permitted use |
 | --- | --- |
 | [TI CC2530](https://www.ti.com/product/CC2530) and [SWRU191F](https://www.ti.com/lit/pdf/swru191) | Primary hardware facts; link/cite documentation rather than redistribute whole manuals |

@@ -38,7 +38,9 @@ static uint16_t address(const volatile void *object)
 
 uint32_t host_aes_pointer(const uint8_t *object)
 {
-    return address(object);
+    /* Default hook is address(). A combined controller may supply one shared
+     * synthetic RAM map without resetting the live AES/DMA controller. */
+    return host_mmio_xaddress_hook(object);
 }
 
 static void hex(const uint8_t *bytes)

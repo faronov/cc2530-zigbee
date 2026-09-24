@@ -100,7 +100,7 @@ class LocalChecksTests(unittest.TestCase):
                                          "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
                                          "test-zdo-node", "test-zdo-srv", "test-zigbee-security",
                                          "test-zigbee-mmo", "test-zigbee-key-hash", "test-security-counter",
-                                         "test-security-resident")))
+                                         "test-security-resident", "test-ed-integration")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
@@ -325,6 +325,41 @@ class LocalChecksTests(unittest.TestCase):
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
                 self.assertFalse(any("CC2530_SECURITY_RESIDENT" in arg or "security_iram" in arg
                                      or "/resident/" in arg for args in commands for arg in args))
+
+    def test_ed_integration_keeps_real_services_and_host_only_models(self):
+        new_modules = {"ed_wire", "security_keys", "nwk_aps", "zdo_runtime", "bdb_join"}
+        for board in BOARDS:
+            commands = self.dry_run("test-ed-integration", include_build=True, BOARD=board)
+            builds = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(builds), 6)
+            for args in builds:
+                for source in ("src/aes.c", "src/ccm_star.c", "src/ed_wire.c",
+                               "tests/security_aes_model.c", "tests/aes_reference.c"):
+                    self.assertIn(source, args)
+                self.assertNotIn("-DNDEBUG", args)
+                if "tests/test_ed_wire.c" not in args:
+                    for source in ("src/security_keys.c", "src/security_counter.c",
+                                   "src/nv_record.c", "src/flash_write.c", "src/flash_exec.c",
+                                   "tests/security_joint_model.c", "tests/host_flash_engine.c"):
+                        self.assertIn(source, args)
+                if "tests/test_bdb_join.c" in args:
+                    for module in ("mac_tx", "mac_scan", "mac_poll", "mac_association", "mac_join",
+                                   "nwk_candidates", "nwk_parent", "nwk_aps", "zdo_runtime", "bdb_join"):
+                        self.assertIn(f"src/{module}.c", args)
+            sanitized = [args for args in builds if "-fsanitize=address,undefined" in args]
+            self.assertEqual(len(sanitized), 3)
+            for args in sanitized:
+                self.assertIn("-fno-sanitize-recover=all", args)
+            target = [args for args in commands if args[0] == "sdcc"]
+            self.assertEqual({Path(args[args.index("-c")+1]).stem for args in target}, new_modules)
+            for args in target:
+                self.assertIn("-c", args)
+                self.assertFalse(any(arg.startswith("tests/") for arg in args))
+                self.assertNotIn("-DCC2530_HOST_TEST", args)
+            for image in IMAGES:
+                commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
+                self.assertFalse(any(Path(arg).stem in new_modules
+                                     for args in commands for arg in args if arg.endswith((".c", ".rel"))))
 
     def test_mac_radio_profile_does_not_leak_to_legacy_objects(self):
         for board in BOARDS:

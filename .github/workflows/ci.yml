@@ -141,6 +141,33 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: make BOARD="$BOARD" BUILD="build/$BOARD/resident-$PROFILE" "test-security-resident-$PROFILE"
 
+  ed-integration:
+    name: Host authenticated ED (${{ matrix.board }}, ${{ matrix.profile }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [generic, lg_esl29_rev03]
+        profile: [ed-wire, security-keys, bdb-join]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned SDCC toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential python3 sdcc=4.2.0+dfsg-1
+
+      - name: Exercise real services with synthetic coordinator and compile new target modules
+        env:
+          BOARD: ${{ matrix.board }}
+          PROFILE: ${{ matrix.profile }}
+        run: make BOARD="$BOARD" BUILD="build/$BOARD/ed-$PROFILE" "test-$PROFILE"
+
   bootstrap:
     name: Offline board fixture (${{ matrix.board }}, ${{ matrix.image }})
     runs-on: ubuntu-24.04
