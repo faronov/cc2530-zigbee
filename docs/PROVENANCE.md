@@ -25,6 +25,14 @@ uses only existing original C and compiler artifacts: compact private value
 classification, equivalent bounded lookup/discovery and shared publication.
 No external implementation, assembly or new normative behavior is imported.
 
+The [banked CODE foundation](BANKED_CODE.md) is original work based on
+SWRU191F pp27,33-34 memory/FMAP/MEMCTR facts, emitted SDCC 4.2.0 ABI
+artifacts and the installed uCsim memory-command interface. Its packer and
+synthetic memory model do not import a Contiki/vendor banking implementation.
+Compiler/runtime licenses remain upstream's; generated artifacts are not
+relicensed or committed. All fixture values and peripheral events are
+synthetic, with no OEM image, private identity, equipment or RF input.
+
 ## Reviewed reference candidates
 
 The original [authenticated ED integration](ED_JOIN.md) uses functional facts

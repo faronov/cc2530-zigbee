@@ -17,6 +17,13 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
+The current partition also includes eight resident crypto/NV caller jobs,
+six authenticated-join host jobs and two isolated banked-CODE jobs.
+Together with the earlier thirty-six-job partition described below,
+these retain all old cases in fifty-two jobs. The banked profile is
+separate from every unbanked board image; it has no hardware/artifact upload
+step. See [the banked memory-model boundaries](BANKED_CODE.md).
+
 `make test-local` now covers all twenty-eight board/image checks while running
 the Python tool suite once and each standalone component corpus once per
 board definition instead of once per image. It uses isolated component and

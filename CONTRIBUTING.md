@@ -92,7 +92,9 @@ compositions in eight further jobs, one per board/caller, with no uploads.
 The new wire/key-owner/authenticated-join host composition runs in six more
 board/profile jobs, with nonrecovering sanitizers and SDCC compilation but
 no new whole-stack linked-image claim or artifact uploads.
-The exact union is still `test-common`; fifty jobs retain all
+The isolated banked CODE foundation runs in two more board jobs without
+uploads; it does not expand any old image's CODE limit or debugger API.
+The exact union is still `test-common`; fifty-two jobs retain all
 twenty-eight board/image checks and the unchanged simulator deadlines.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
@@ -102,6 +104,7 @@ For focused iteration, the explicit parts are:
 
 ```sh
 make test-tools
+make BOARD=generic test-banked
 make BOARD=generic test-ed-integration
 make BOARD=generic test-common
 make BOARD=generic IMAGE=radio_rx_fixture test-board

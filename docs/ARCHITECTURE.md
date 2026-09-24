@@ -1728,6 +1728,14 @@ C rules:
 - Any banking support must handle calls, interrupts, constants and debugger
   addresses together. It is not only a linker flag.
 
+The selected resource direction is now [full FMAP banking](BANKED_CODE.md),
+first in an isolated original SDCC ABI fixture. Linker virtual, CPU logical
+and physical flash addresses are distinct. Sparse packing excludes NV and
+lock/config pages, and no legacy image receives a larger CODE budget.
+Common vectors/startup and flash/XMAP control must remain executable across
+bank changes. The current hardware debugger remains deliberately unbanked;
+offline bank identities are not observed hardware breakpoint support.
+
 ## Integrated protocol resource budget
 
 `make test-protocol-budget` links **one** unbanked SDCC image containing

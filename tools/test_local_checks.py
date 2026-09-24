@@ -65,6 +65,7 @@ class LocalChecksTests(unittest.TestCase):
             "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security", "zigbee_mmo",
             "zigbee_key_hash", "security_counter", "security_resident_security", "security_resident_mmo",
             "security_resident_key_hash", "security_resident_counter",
+            "banked",
         }
         components = Counter()
         images = Counter()
@@ -100,7 +101,7 @@ class LocalChecksTests(unittest.TestCase):
                                          "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
                                          "test-zdo-node", "test-zdo-srv", "test-zigbee-security",
                                          "test-zigbee-mmo", "test-zigbee-key-hash", "test-security-counter",
-                                         "test-security-resident", "test-ed-integration")))
+                                         "test-security-resident", "test-ed-integration", "test-banked")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
@@ -360,6 +361,45 @@ class LocalChecksTests(unittest.TestCase):
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
                 self.assertFalse(any(Path(arg).stem in new_modules
                                      for args in commands for arg in args if arg.endswith((".c", ".rel"))))
+
+    def test_banked_profile_is_isolated_and_uses_reviewed_abi_and_immediate_snapshots(self):
+        modules = ("flash_exec", "banked", "banked_fixture", "banked_fixture_bank1",
+                   "banked_fixture_bank2", "banked_fixture_bank7")
+        for board in BOARDS:
+            commands = self.dry_run("test-banked", include_build=True, BOARD=board)
+            compiles = [a for a in commands if a[0] == "sdcc" and "-c" in a]
+            self.assertEqual([Path(a[-1]).stem for a in compiles], list(modules))
+            for args, module in zip(compiles, modules):
+                self.assertIn("--model-large", args)
+                self.assertIn("--debug", args)
+                self.assertIn("--Werror", args)
+                self.assertFalse(set(args) & {"--model-huge", "--stack-auto", "--xstack",
+                                             "--parms-in-bank1", "--stack-loc"})
+                if module[-1] in "127":
+                    self.assertEqual(args[args.index("--codeseg")+1], "BANK"+module[-1])
+                    self.assertEqual(args[args.index("--constseg")+1], "BANK"+module[-1]+"_CONST")
+                else:
+                    self.assertNotIn("--codeseg", args)
+            link = next(a for a in commands if a[0] == "sdcc" and "-c" not in a)
+            self.assertEqual([Path(a).stem for a in link if a.endswith(".rel")], list(modules))
+            self.assertEqual(link[link.index("--code-size")+1], "0x80000")
+            self.assertEqual(link[link.index("--stack-size")+1], "0x5b")
+            self.assertEqual(link[link.index("--xram-size")+1], "0x1e00")
+            for flag in ("-Wl-r", "-Wl-bBANK1=0x18000", "-Wl-bBANK2=0x28000",
+                         "-Wl-bBANK7=0x78000", "-Wl-bBANK7_CONST=0x7e7f8"):
+                self.assertIn(flag, link)
+            directory = Path(link[link.index("-o")+1]).parent
+            index = commands.index(link)+1
+            self.assertEqual(commands[index:index+6],
+                             [["cp", str(directory/f"{m}.rst"), str(directory/f"banked.{m}.rst")]
+                              for m in modules])
+            self.assertIn("tools/banked_image.py", commands[index+6])
+            self.assertIn("tests/boot_banked.py", commands[index+7])
+            for image in IMAGES:
+                old = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
+                self.assertFalse(any("/banked/" in a or a.endswith("/banked.c") for cmd in old for a in cmd))
+                old_link = next(a for a in old if a[0] == "sdcc" and "-c" not in a)
+                self.assertEqual(old_link[old_link.index("--code-size")+1], "0x8000")
 
     def test_mac_radio_profile_does_not_leak_to_legacy_objects(self):
         for board in BOARDS:

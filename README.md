@@ -63,6 +63,12 @@ The generic board performs no application-specific pin control. The
 permission to flash an unknown device: preserve and verify recovery backups
 and confirm the hardware first.
 
+The separate [banked CODE foundation](docs/BANKED_CODE.md) prepares full
+256-KiB flash placement through the CC2530's banked CPU view, rather than
+raising existing images' limits. It is an offline ABI/image/mapping fixture,
+not a banked Zigbee firmware release. Full-stack DATA/stack fit and physical
+banked debugger/flash acceptance remain separate work.
+
 ## M1 debugger fixture
 
 The first target-side M1 component is a separate, deterministic non-RF image:

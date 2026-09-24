@@ -1114,7 +1114,7 @@ See [PROVENANCE.md](PROVENANCE.md).
 
 | Resource | Bootstrap contract | Stack design target |
 | --- | --- | --- |
-| Flash | Unbanked, validated bounds | Try unbanked first; add tested FMAP banking only when needed |
+| Flash | Unbanked, validated bounds | Full FMAP banking; isolated ABI/image proof before moving real services |
 | Ordinary XDATA | Allocator below `0x1E00` | Budget every queue/table; exact limits follow measurements |
 | Debug status | At most 64 bytes at `0x1E00` | Versioned debug build feature, not a hidden permanent heap |
 | Nonaliased XDATA use | At most 512 bytes for bootstrap | Stay within 7,936 bytes total with explicit headroom |
@@ -1125,6 +1125,14 @@ See [PROVENANCE.md](PROVENANCE.md).
 The CC2530 has 256 KiB flash but a banked CODE view, not a flat 256 KiB code
 space. The upper 256 bytes of its 8 KiB SRAM are the XDATA alias of IRAM.
 Prototype display memory figures do not predict final stack size.
+
+The authenticated host integration now exceeds the common-CODE profile.
+The selected direction is full banked placement, not a permanent 64-KiB
+ceiling. The [isolated foundation](BANKED_CODE.md) establishes explicit
+bank identities, call/return and constant ownership before the complete
+stack is placed. Existing unbanked image limits stay unchanged. New DATA
+lifetimes, IRQ headroom and whole-stack XDATA fit remain separate gates;
+banking cannot resolve a failed DATA allocation.
 
 **Measured preparatory integration:** `make test-protocol-budget` now links
 and executes the complete implemented MAC/NWK Data/APS/ZCL codec and

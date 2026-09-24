@@ -90,6 +90,7 @@ endif
 .PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
 .PHONY: test-security-resident-security test-security-resident-mmo test-security-resident-key-hash test-security-resident-counter
 .PHONY: test-ed-wire test-security-keys test-bdb-join test-ed-integration
+.PHONY: test-banked
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -1063,6 +1064,42 @@ $(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_S
 $(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel zdo_runtime.rel bdb_join.rel))
 test-ed-integration: test-ed-wire test-security-keys test-bdb-join
 
+BANKED_DIR := $(BUILD)/banked
+BANKED_MODULES := flash_exec banked banked_fixture banked_fixture_bank1 banked_fixture_bank2 banked_fixture_bank7
+BANKED_OBJECTS := $(addprefix $(BANKED_DIR)/,$(addsuffix .rel,$(BANKED_MODULES)))
+BANKED_LINK_FLAGS := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 \
+	--code-size 0x80000 --stack-size 0x5b -Wl-r \
+	-Wl-bBANK1=0x18000 -Wl-bBANK2=0x28000 -Wl-bBANK7=0x78000 \
+	-Wl-bBANK1_CONST=0x19000 -Wl-bBANK2_CONST=0x29000 -Wl-bBANK7_CONST=0x7e7f8
+
+$(BANKED_DIR):
+	mkdir -p $@
+
+$(BANKED_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(BANKED_DIR)
+	$(SDCC) $(SDCC_FLAGS) -Itests -c $< -o $@
+
+$(BANKED_DIR)/banked_fixture.rel: tests/banked_fixture.c tests/banked_fixture.h $(HEADERS) Makefile | $(BANKED_DIR)
+	$(SDCC) $(SDCC_FLAGS) -Itests -c $< -o $@
+
+define BANKED_MODULE
+$(BANKED_DIR)/banked_fixture_bank$(1).rel: tests/banked_fixture_bank$(1).c tests/banked_fixture.h $(HEADERS) Makefile | $(BANKED_DIR)
+	$(SDCC) $(SDCC_FLAGS) -Itests --codeseg BANK$(1) --constseg BANK$(1)_CONST -c $$< -o $$@
+endef
+$(foreach bank,1 2 7,$(eval $(call BANKED_MODULE,$(bank))))
+
+$(BANKED_DIR)/banked.ihx: $(BANKED_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(BANKED_LINK_FLAGS) -o $@ $(BANKED_OBJECTS)
+	cp $(BANKED_DIR)/flash_exec.rst $(BANKED_DIR)/banked.flash_exec.rst
+	cp $(BANKED_DIR)/banked.rst $(BANKED_DIR)/banked.banked.rst
+	cp $(BANKED_DIR)/banked_fixture.rst $(BANKED_DIR)/banked.banked_fixture.rst
+	cp $(BANKED_DIR)/banked_fixture_bank1.rst $(BANKED_DIR)/banked.banked_fixture_bank1.rst
+	cp $(BANKED_DIR)/banked_fixture_bank2.rst $(BANKED_DIR)/banked.banked_fixture_bank2.rst
+	cp $(BANKED_DIR)/banked_fixture_bank7.rst $(BANKED_DIR)/banked.banked_fixture_bank7.rst
+	$(PYTHON) -B tools/banked_image.py --output $(BANKED_DIR)
+
+test-banked: $(BANKED_DIR)/banked.ihx
+	$(PYTHON) -B tests/boot_banked.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -1393,7 +1430,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
