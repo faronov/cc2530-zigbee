@@ -52,14 +52,21 @@ Measurements on2026-09-24:
 | Measurement | Result | Meaning |
 | --- | ---: | --- |
 | Old documentation-only c93763d, Actions36026021702 | 54 jobs;913s workflow elapsed;7382 summed job-seconds | Actual hosted baseline, including setup/queue effects; not a simulator-only measurement |
+| New full policy fd02a7b, Actions36032740145 | 56 successful jobs;842s elapsed;7260 summed job-seconds | All54 original workers plus selection/acceptance; run-to-run timing is not a claimed algorithmic speedup |
 | Complete immutable banked-key image verification | 2.041s | Local existing accepted artifact set, before execution |
 | All244699 banked-key artifact mutations | 27.038s | Local complete campaign, no cases sampled |
 | Changed `src/bdb_join.c` | 2 selected workers instead of54 | Dependency-plan count, not a measured runtime speedup |
 | Changed `src/security_keys.c` | 6 selected workers instead of54 | Key host, BDB host and banked lifecycle for both boards |
 
 These savings avoid unrelated work; they do not make a smaller tier equivalent
-to a full source-change acceptance. Hosted timings for the new policy must be
-recorded only after its workflow actually completes.
+to a full source-change acceptance. Hosted timings are recorded only after their workflows complete.
+Exact-head [Actions36032740145](https://github.com/faronov/cc2530-zigbee/actions/runs/36032740145)
+accepted `fd02a7b59df9e888327ff4a44c5ae406a4c8585d`: all54 original worker
+names and both control jobs succeeded. Both banked-key logs retain all244699
+artifact/9941 outcome negatives,22 real operations, SP7B/7C and the actual
+retained RAM failure. Hosted GCC coverage agrees with every count below.
+This proves the full tier; an accepted-baseline documentation-only follow-up
+is a separate selection-path check, not a second full firmware acceptance.
 
 Fresh GCC13.3.0, `-O0 --coverage`, generic-board host coverage merges the
 actual `test_ed_wire`, `test_security_keys` and `test_bdb_join` executions.
