@@ -54,30 +54,31 @@ typedef struct {
  * broadcast_time is the established network broadcast-delivery bound in
  * symbols. Eight separate source/NWK-sequence BTRs are never silently evicted.
  */
-nwk_aps_result_t nwk_aps_init(nwk_aps_t *ctx, mac_tx_t *owner, uint8_t endpoint,
-    uint16_t profile, const ccm_star_limits_t *limits, uint16_t nv_polls,
-    uint32_t ack_wait, uint32_t broadcast_time, uint32_t now);
-nwk_aps_result_t nwk_aps_queue(nwk_aps_t *ctx, const ed_packet_t *packet,
-                               uint8_t aps_secure, uint32_t now);
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner, volatile uint8_t endpoint,
+    volatile uint16_t profile, const ccm_star_limits_t * volatile limits, volatile uint16_t nv_polls,
+    volatile uint32_t ack_wait, volatile uint32_t broadcast_time, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * volatile packet,
+                               volatile uint8_t aps_secure, volatile uint32_t now);
 /* which1=Request-Key, which2=Verify-Key, which3=local Leave. quiet explicitly
  * records keyless abandonment without a PHY transmission.
  * Key selection/phase/counters belong
  * exclusively to the real security owner, never to a caller-supplied boolean.
  */
-nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t *ctx, uint8_t which, uint32_t now);
-nwk_aps_result_t nwk_aps_step(nwk_aps_t *ctx, uint32_t now,
-    const mac_tx_event_t *event, mac_tx_action_t *action);
-nwk_aps_result_t nwk_aps_receive(nwk_aps_t *ctx, const uint8_t *npdu, uint16_t length, uint32_t now);
-nwk_aps_result_t nwk_aps_take(nwk_aps_t *ctx, ed_packet_t *packet, uint8_t *event);
-nwk_aps_result_t nwk_aps_confirm(nwk_aps_t *ctx, uint8_t *result);
+nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
+    const mac_tx_event_t * volatile event, mac_tx_action_t * volatile action);
+nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
+    volatile uint16_t length, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event);
+nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile result);
 /* Request cancellation; step must still establish physical quiescence. */
-nwk_aps_result_t nwk_aps_cancel(nwk_aps_t *ctx, uint32_t now);
+nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now);
 /* Stop ordinary TX and priority ACK without releasing an active MAC lease.
  * step drains cancellation/QUIESCED before clearing stopping. A failed ACK
  * with confirmed MAC release returns ACK_FAILED and records its MAC outcome
  * in reply_result; it is not an uncertain radio fault or membership loss.
  */
-nwk_aps_result_t nwk_aps_stop(nwk_aps_t *ctx, uint32_t now);
+nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now);
 
 /* Nonreentrant, disjoint complete ordinary caller objects only. Applications
  * remain blocked until a genuine network announcement, verified TC key and

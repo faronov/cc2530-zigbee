@@ -23,7 +23,7 @@ static uint8_t expired(uint32_t now, uint32_t until)
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-static zdo_runtime_result_t advance(zdo_runtime_t *ctx, uint32_t now)
+static zdo_runtime_result_t advance(zdo_runtime_t * volatile ctx, volatile uint32_t now)
 {
     if (!ctx || ctx->version != 1) return ZDO_RUNTIME_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return ZDO_RUNTIME_CLOCK;
@@ -31,7 +31,7 @@ static zdo_runtime_result_t advance(zdo_runtime_t *ctx, uint32_t now)
     return ZDO_RUNTIME_OK;
 }
 
-static void base(ed_packet_t *p, uint16_t destination, uint16_t cluster)
+static void base(ed_packet_t * volatile p, volatile uint16_t destination, volatile uint16_t cluster)
 {
     memset(p, 0, sizeof(*p));
     p->nwk.version = 2; p->nwk.radius = 30; p->nwk.destination = destination;
@@ -39,8 +39,8 @@ static void base(ed_packet_t *p, uint16_t destination, uint16_t cluster)
     p->aps.cluster_id = cluster;
 }
 
-zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t *ctx,
-    const zdo_node_descriptor_t *descriptor, uint32_t now)
+zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
+    const zdo_node_descriptor_t * volatile descriptor, volatile uint32_t now)
 {
     uint8_t length;
     if (!ctx || !descriptor || descriptor->logical_type != 2) return ZDO_RUNTIME_ARGUMENT;
@@ -53,12 +53,12 @@ zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t *ctx,
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t *ctx, nwk_aps_t *transport,
-    uint8_t which, uint32_t now)
+zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
+    volatile uint8_t which, volatile uint32_t now)
 {
     zdo_runtime_result_t result = advance(ctx, now);
     nwk_aps_result_t queued;
-    ed_packet_t *p;
+    ed_packet_t * volatile p;
     if (result) return result;
     if (!transport || which < 1 || which > 4) return ZDO_RUNTIME_ARGUMENT;
     if (ctx->query || ctx->response_pending || ctx->response_tx) return ZDO_RUNTIME_FULL;
@@ -82,9 +82,9 @@ zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t *ctx, nwk_aps_t *transpor
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t address_request(zdo_runtime_t *ctx, const ed_packet_t *p)
+static zdo_runtime_result_t address_request(zdo_runtime_t * volatile ctx, const ed_packet_t * volatile p)
 {
-    ed_packet_t *r = &ctx->response;
+    ed_packet_t * volatile r = &ctx->response;
     uint8_t ieee_request = p->aps.cluster_id == 1;
     uint8_t type, match, broadcast = p->nwk.destination >= 0xfffbu || p->aps.delivery_mode == 2;
     uint16_t address;
@@ -111,7 +111,8 @@ static zdo_runtime_result_t address_request(zdo_runtime_t *ctx, const ed_packet_
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t announce(zdo_runtime_t *ctx, nwk_aps_t *transport, const ed_packet_t *p)
+static zdo_runtime_result_t announce(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
+    const ed_packet_t * volatile p)
 {
     uint8_t i, found = ZDO_RUNTIME_MAP_SIZE, free_slot = ZDO_RUNTIME_MAP_SIZE, unknown = 1;
     uint16_t address;
@@ -125,7 +126,7 @@ static zdo_runtime_result_t announce(zdo_runtime_t *ctx, nwk_aps_t *transport, c
         ctx->map[1].used = ctx->map[1].valid = 1;
     }
     for (i = 0; i < ZDO_RUNTIME_MAP_SIZE; i++) {
-        zdo_runtime_address_t *m = &ctx->map[i];
+        zdo_runtime_address_t * volatile m = &ctx->map[i];
         if (!m->used) free_slot = i;
         else if (!memcmp(m->ieee, p->payload+3, 8)) found = i;
         else if (m->valid && m->address == address) {
@@ -144,9 +145,9 @@ static zdo_runtime_result_t announce(zdo_runtime_t *ctx, nwk_aps_t *transport, c
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t received(zdo_runtime_t *ctx, nwk_aps_t *transport)
+static zdo_runtime_result_t received(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport)
 {
-    const ed_packet_t *p = &ctx->packet;
+    const ed_packet_t * volatile p = &ctx->packet;
     uint8_t event;
     if (nwk_aps_take(transport, &ctx->packet, &event) != NWK_APS_OK) return ZDO_RUNTIME_STATE;
     if (security_keys_status(&keys) != SECURITY_KEYS_OK) return ZDO_RUNTIME_SECURITY;
@@ -215,7 +216,8 @@ static zdo_runtime_result_t received(zdo_runtime_t *ctx, nwk_aps_t *transport)
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t *ctx, nwk_aps_t *transport, uint32_t now)
+zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
+    volatile uint32_t now)
 {
     uint8_t result;
     zdo_runtime_result_t rc = advance(ctx, now);
@@ -252,7 +254,8 @@ zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t *ctx, nwk_aps_t *transport, 
     return rc;
 }
 
-zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t *ctx, nwk_aps_t *transport, uint32_t now)
+zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
+    volatile uint32_t now)
 {
     zdo_runtime_result_t result = advance(ctx, now);
     if (result) return result;
@@ -266,7 +269,8 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t *ctx, nwk_aps_t *transport
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t *ctx, uint8_t *which, uint8_t *result)
+zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
+    uint8_t * volatile which, uint8_t * volatile result)
 {
     if (!ctx || ctx->version != 1 || !which || !result) return ZDO_RUNTIME_ARGUMENT;
     if (!ctx->query || !ctx->tx_done || ctx->result == ZDO_RUNTIME_NO_EVENT) return ZDO_RUNTIME_STATE;
@@ -274,7 +278,7 @@ zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t *ctx, uint8_t *which,
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t *ctx, ed_packet_t *packet)
+zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile ctx, ed_packet_t * volatile packet)
 {
     if (!ctx || ctx->version != 1 || !packet) return ZDO_RUNTIME_ARGUMENT;
     if (!ctx->application_ready) return ZDO_RUNTIME_STATE;

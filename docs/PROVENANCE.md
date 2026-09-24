@@ -60,6 +60,9 @@ reproduced against real existing services with synthetic coordinator/PHY
 faults, then integrated into the existing host caller. The fixed-TC
 Device_annce admission boundary is unchanged. No equipment, private capture,
 SDK binary, new dependency or external implementation is involved.
+The subsequent full-service allocation measurements and volatile-copy
+refactoring likewise use original C and actual SDCC objects; no linker/stack
+budget or hardware claim is expanded.
 
 | Reference | Status and permitted use |
 | --- | --- |

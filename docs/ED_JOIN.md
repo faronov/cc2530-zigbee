@@ -216,6 +216,12 @@ Fast-poll waits cross4096 calls and uint32 time wrap before accepting a valid
 network/TC key. Stopped time, ignored events, unconfirmed INSTALL and missing
 QUIESCED are separate negative cases. These checks do not implement #27's
 full recovery procedure.
+The runtime corrections at `4c19bd2` passed
+[full Actions acceptance](https://github.com/faronov/cc2530-zigbee/actions/runs/36044641734):
+56/56 successful jobs, including the78786-check native and nonrecovering
+sanitizer BDB corpus on both boards and the unchanged original target suites.
+This accepts the bounded runtime changes, not the still-missing whole-MCU
+composition below.
 
 The unchanged synthetic READY fixture begins with17 of64 per-power-epoch
 erase attempts consumed. Sixteen successful30-second keepalive cycles fit;
@@ -243,6 +249,44 @@ contiguous DATA bytes. The separate [banked security image](BANKED_SECURITY.md)
 now resolves that bounded placement with real key lifecycle execution and
 checked physical DATA ownership. It does not yet include this document's
 complete MAC/NWK/APS/ZDO/BDB caller or prove whole-stack resource/stack fit.
+
+### Complete-service allocation baseline
+
+The next placement preparation compiles all28 genuine `ED_JOIN_SRC` modules
+with the existing SDCC4.2.0 large-model flags, rather than inferring fit from
+the key-only image. At the runtime-fix revision `4c19bd2`, their relocatable
+objects contain132049 CSEG bytes,16 CONST bytes and6570 XSEG bytes, before
+the caller, libc, startup, banking and placement. Summing module DATA/OSEG
+is not a valid simultaneous-frame or linked-IRAM proof.
+
+Top-level volatile parameter and local pointer copies now shorten compiler
+temporary lifetimes, following the existing MAC/key-owner technique. They
+do not make caller objects volatile, change pointer memory spaces, move
+fields, introduce reentrancy or add an alternate protocol implementation.
+SDCC requires the matching parameter qualifiers in declarations and
+definitions. Actual individual object allocations change as follows:
+
+| Module | CSEG before / after | XSEG before / after | DATA before / after | OSEG before / after |
+| --- | ---: | ---: | ---: | ---: |
+| `bdb_join` |13390 /16390|205 /208|102 /44|4 /0|
+| `nwk_aps` |14174 /17278|298 /319|138 /35|9 /6|
+| `zdo_runtime` |9556 /10575|220 /232|83 /17|6 /0|
+
+This removes227 bytes of summed module DATA allocation, trading7123 CODE
+and36 XDATA bytes, but **does not establish complete target fit**. SDCC
+`sizeof` gives2743 bytes for `bdb_join_t`,168 for the separate MAC owner,
+125 for a BDB event and126 for an action. The current production XSEG sum
+is6606 bytes; the services plus only the BDB context and MAC owner already
+need9517 bytes, exceeding the7680-byte ordinary region below status. Event,
+action, caller configuration and libc storage are not included in that lower
+bound. The key-only peak SP7B/7C also supplies no additional caller headroom.
+
+#26 therefore still needs explicit phase lifetimes, reduced/shared work
+storage with an active-call ownership proof, balanced CODE banks and real
+execution under the unchanged stack/alias limits. Merely enlarging a linker
+allowance or allocating the IRAM alias as more RAM cannot make this
+composition valid. These measurements are **SDCC object/size checks plus
+unchanged host regressions**, not a linked-image or simulated MCU join.
 
 All fixture identities and key material are deliberately public synthetic
 values. No key-bearing firmware/NV dumps or captures are uploaded by these

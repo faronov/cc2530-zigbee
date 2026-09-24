@@ -54,6 +54,11 @@ The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-an
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
 full MCU join or completed recovery.
+The [complete-service allocation baseline](ED_JOIN.md#complete-service-allocation-baseline)
+also identifies real RAM and caller-depth work: after initial spill
+refactoring, services plus only BDB/MAC contexts require9517 ordinary XDATA
+bytes before caller I/O and libc, beyond the7680-byte region. CODE banking
+alone is not the remaining solution.
 Real radio/association integration (#13/#14) and separate
 MAC/coordinator acceptance (#15/#28) retain timing (#40/#45), physical NV (#8)
 and entropy (#10) requirements. The subsequent #87

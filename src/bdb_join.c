@@ -15,7 +15,7 @@ static uint8_t expired(uint32_t now, uint32_t until)
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-static bdb_join_result_t advance(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now)
+static bdb_join_result_t advance(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now)
 {
     if (!ctx || ctx->version != 1) return BDB_JOIN_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return BDB_JOIN_CLOCK;
@@ -23,7 +23,7 @@ static bdb_join_result_t advance(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now)
     return BDB_JOIN_OK;
 }
 
-static void fail(bdb_join_t BDB_JOIN_RAM *ctx, uint8_t result)
+static void fail(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint8_t result)
 {
     ctx->abandon = result == BDB_JOIN_ADDRESS_CONFLICT ||
         (result != BDB_JOIN_WORK_LIMIT && ctx->phase < BDB_JOIN_READY &&
@@ -35,7 +35,7 @@ static void fail(bdb_join_t BDB_JOIN_RAM *ctx, uint8_t result)
     }
 }
 
-bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now)
+bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now)
 {
     if (!ctx) return BDB_JOIN_ARGUMENT;
     memset(ctx, 0, sizeof(*ctx));
@@ -45,8 +45,8 @@ bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now)
     return BDB_JOIN_OK;
 }
 
-bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM *ctx, mac_tx_t BDB_JOIN_RAM *owner,
-    const bdb_join_config_t *config, uint32_t now)
+bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_t BDB_JOIN_RAM * volatile owner,
+    const bdb_join_config_t * volatile config, volatile uint32_t now)
 {
     bdb_join_result_t result = advance(ctx, now);
     if (result) return result;
@@ -79,7 +79,7 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM *ctx, mac_tx_t BDB_JOIN
     return BDB_JOIN_OK;
 }
 
-static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM *ctx)
+static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 {
     uint8_t i;
     memset(&policy, 0, sizeof(policy));
@@ -87,7 +87,7 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM *ctx)
     memcpy(policy.extended_pan_id, keys.config.extended_pan, 8);
     policy.minimum_known = 1; policy.minimum_update_id = keys.config.update_id;
     for (i = 0; i < ctx->scan.candidates.count; i++) {
-        const nwk_candidate_t *c = &ctx->scan.candidates.entries[i];
+        const nwk_candidate_t * volatile c = &ctx->scan.candidates.entries[i];
         policy.link_cost[i] = ctx->config.link_cost;
         if (c->address_mode == MAC_ADDRESS_EXTENDED && c->pan_id == keys.config.pan &&
             c->channel == keys.config.channel && c->network.update_id == keys.config.update_id &&
@@ -100,7 +100,7 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM *ctx)
     return BDB_JOIN_OK;
 }
 
-static void base(bdb_join_t BDB_JOIN_RAM *ctx, uint16_t destination, uint16_t cluster)
+static void base(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint16_t destination, volatile uint16_t cluster)
 {
     memset(&ctx->packet, 0, sizeof(ctx->packet));
     ctx->packet.nwk.version = 2; ctx->packet.nwk.radius = 30;
@@ -108,7 +108,7 @@ static void base(bdb_join_t BDB_JOIN_RAM *ctx, uint16_t destination, uint16_t cl
     ctx->packet.aps.cluster_id = cluster; ctx->packet.payload[0] = ctx->zdo.next_tsn++;
 }
 
-static bdb_join_result_t announcement(bdb_join_t BDB_JOIN_RAM *ctx)
+static bdb_join_result_t announcement(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 {
     if (security_keys_status(&keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
     base(ctx, 0xfffdu, 0x0013u);
@@ -120,19 +120,19 @@ static bdb_join_result_t announcement(bdb_join_t BDB_JOIN_RAM *ctx)
         BDB_JOIN_OK : BDB_JOIN_TRANSMIT_FAILED;
 }
 
-static void install(bdb_join_t BDB_JOIN_RAM *ctx)
+static void install(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 {
     if (ctx->token == 0xffffu) { fail(ctx, BDB_JOIN_INSTALL_FAILED); return; }
     ctx->token++; ctx->issued = 0; ctx->phase = BDB_JOIN_INSTALLING;
     ctx->until = ctx->last+BDB_JOIN_EXCHANGE_WAIT;
 }
 
-static uint8_t finished(bdb_join_t BDB_JOIN_RAM *ctx, uint8_t *result)
+static uint8_t finished(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result)
 {
     return nwk_aps_confirm(&ctx->transport, result) == NWK_APS_OK;
 }
 
-static void runtime(bdb_join_t BDB_JOIN_RAM *ctx)
+static void runtime(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 {
     uint8_t which, result;
     zdo_runtime_result_t rc;
@@ -249,8 +249,8 @@ static void runtime(bdb_join_t BDB_JOIN_RAM *ctx)
     }
 }
 
-bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now,
-    const bdb_join_event_t BDB_JOIN_RAM *event, bdb_join_action_t BDB_JOIN_RAM *action)
+bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now,
+    const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action)
 {
     bdb_join_result_t result;
     nwk_aps_result_t transported;
@@ -389,8 +389,8 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now,
     return ignored ? BDB_JOIN_IGNORED : BDB_JOIN_OK;
 }
 
-bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM *ctx,
-    const uint8_t *body, uint16_t length, uint8_t crc_valid, uint32_t now)
+bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now)
 {
     bdb_join_result_t result = advance(ctx, now);
     nwk_aps_result_t received;
@@ -421,8 +421,8 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM *ctx,
     return BDB_JOIN_SECURITY;
 }
 
-bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM *ctx,
-    const ed_packet_t *packet, uint8_t aps_secure, uint32_t now)
+bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now)
 {
     nwk_aps_result_t result;
     if (!ctx || ctx->version != 1 || !packet) return BDB_JOIN_ARGUMENT;
@@ -437,7 +437,7 @@ bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM *ctx,
     return BDB_JOIN_OK;
 }
 
-bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM *ctx, uint8_t *result)
+bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result)
 {
     if (!ctx || ctx->version != 1 || !result) return BDB_JOIN_ARGUMENT;
     if (!ctx->application_done) return BDB_JOIN_STATE;

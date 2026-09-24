@@ -108,19 +108,19 @@ typedef struct {
  * application readiness but preserve durable keys for explicit recovery;
  * commissioning abandonment/address conflict still requests genuine Leave.
  */
-bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now);
-bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM *ctx, mac_tx_t BDB_JOIN_RAM *owner,
-    const bdb_join_config_t *config, uint32_t now);
-bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now,
-    const bdb_join_event_t BDB_JOIN_RAM *event, bdb_join_action_t BDB_JOIN_RAM *action);
+bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now);
+bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_t BDB_JOIN_RAM * volatile owner,
+    const bdb_join_config_t * volatile config, volatile uint32_t now);
+bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now,
+    const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action);
 /* FCS-free DATA body; CRC truth is PHY metadata, never authentication.
  * Authentication, replay checks and all key decisions execute real C services.
  */
-bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM *ctx,
-    const uint8_t *body, uint16_t length, uint8_t crc_valid, uint32_t now);
-bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM *ctx,
-    const ed_packet_t *packet, uint8_t aps_secure, uint32_t now);
-bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM *ctx, uint8_t *result);
+bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now);
+bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now);
+bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result);
 
 /* Public context fields are read-only diagnostics. One foreground owner,
  * complete disjoint ordinary persistent objects; no reentrancy/ISR or resets
