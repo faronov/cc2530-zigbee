@@ -147,13 +147,18 @@ static void runtime(bdb_join_t BDB_JOIN_RAM *ctx)
         ctx->phase = BDB_JOIN_UPDATING; ctx->transport.ready = 0;
         if (ctx->transport.queued && nwk_aps_cancel(&ctx->transport, ctx->last) != NWK_APS_OK)
             fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
-    } else if (ctx->zdo.security_event == SECURITY_KEYS_EVENT_TC_KEY) ctx->got_tc = 1;
-    else if (ctx->zdo.security_event == SECURITY_KEYS_EVENT_VERIFIED) ctx->got_confirm = 1;
+    } else if (ctx->zdo.security_event == SECURITY_KEYS_EVENT_TC_KEY ||
+               ctx->zdo.security_event == SECURITY_KEYS_EVENT_VERIFIED) {
+        if (expired(ctx->last, ctx->until)) { fail(ctx, BDB_JOIN_TC_FAILED); return; }
+        if (ctx->zdo.security_event == SECURITY_KEYS_EVENT_TC_KEY) ctx->got_tc = 1;
+        else ctx->got_confirm = 1;
+    }
     if (ctx->application_pending && ctx->transport.completed) {
         if (!finished(ctx, &ctx->application_result)) { fail(ctx, BDB_JOIN_TRANSMIT_FAILED); return; }
         ctx->application_pending = 0; ctx->application_done = 1;
     }
     if (ctx->phase == BDB_JOIN_WAIT_KEY && ctx->zdo.security_event == SECURITY_KEYS_EVENT_NETWORK_KEY) {
+        if (expired(ctx->last, ctx->until)) { fail(ctx, BDB_JOIN_KEY_TIMEOUT); return; }
         ctx->member = 1;
         if (announcement(ctx)) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
         else ctx->phase = BDB_JOIN_ANNOUNCING;
@@ -163,7 +168,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM *ctx)
     } else if (ctx->phase == BDB_JOIN_NODE) {
         if (zdo_runtime_take_result(&ctx->zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (!result && which == ZDO_RUNTIME_NODE && !ctx->zdo.tc.logical_type &&
-                ctx->zdo.tc.stack_revision >= 21 && (ctx->zdo.tc.server_flags & 1u)) {
+                ctx->zdo.tc.stack_revision >= 21) {
                 ctx->phase = BDB_JOIN_REQUESTING; ctx->issued = ctx->attempts = 0;
             } else if (result != ZDO_RUNTIME_TIMEOUT || ctx->attempts == BDB_JOIN_ATTEMPTS)
                 fail(ctx, BDB_JOIN_TC_FAILED);
@@ -177,13 +182,14 @@ static void runtime(bdb_join_t BDB_JOIN_RAM *ctx)
         if (!ctx->issued) {
             nwk_aps_result_t queued = nwk_aps_key_exchange(&ctx->transport,
                 ctx->phase == BDB_JOIN_REQUESTING ? 1 : 2, ctx->last);
-            if (queued == NWK_APS_OK) { ctx->issued = 1; ctx->attempts++; }
+            if (queued == NWK_APS_OK) {
+                ctx->issued = 1; ctx->attempts++; ctx->until = ctx->last+BDB_JOIN_EXCHANGE_WAIT;
+            }
             else if (queued != NWK_APS_FULL) fail(ctx, BDB_JOIN_TC_FAILED);
         } else if (finished(ctx, &result)) {
             if (result) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
             else {
                 ctx->phase = ctx->phase == BDB_JOIN_REQUESTING ? BDB_JOIN_WAIT_TC : BDB_JOIN_WAIT_CONFIRM;
-                ctx->until = ctx->last+BDB_JOIN_EXCHANGE_WAIT;
             }
         }
     } else if (ctx->phase == BDB_JOIN_WAIT_TC && ctx->got_tc) {
@@ -221,6 +227,9 @@ static void runtime(bdb_join_t BDB_JOIN_RAM *ctx)
             expired(ctx->last, ctx->keepalive+BDB_JOIN_EXCHANGE_WAIT)) fail(ctx, BDB_JOIN_PARENT_FAILED);
     }
     if (ctx->phase == BDB_JOIN_WAIT_KEY && expired(ctx->last, ctx->until)) fail(ctx, BDB_JOIN_KEY_TIMEOUT);
+    if (((ctx->phase == BDB_JOIN_REQUESTING && !ctx->got_tc) ||
+         (ctx->phase == BDB_JOIN_VERIFYING && !ctx->got_confirm)) &&
+        ctx->issued && expired(ctx->last, ctx->until)) fail(ctx, BDB_JOIN_TC_FAILED);
     if ((ctx->phase == BDB_JOIN_WAIT_TC || ctx->phase == BDB_JOIN_WAIT_CONFIRM) && expired(ctx->last, ctx->until)) {
         if (ctx->attempts == BDB_JOIN_ATTEMPTS) fail(ctx, BDB_JOIN_TC_FAILED);
         else { ctx->phase = ctx->phase == BDB_JOIN_WAIT_TC ? BDB_JOIN_REQUESTING : BDB_JOIN_VERIFYING; ctx->issued = 0; }

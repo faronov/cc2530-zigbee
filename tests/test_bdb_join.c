@@ -216,7 +216,7 @@ static void observe_transmission(void)
         descriptor.descriptor.frequency_band = 8; descriptor.descriptor.mac_capability = 0x8e;
         descriptor.descriptor.max_buffer = 127; descriptor.descriptor.max_incoming = 64;
         descriptor.descriptor.max_outgoing = 64; descriptor.descriptor.stack_revision = 22;
-        descriptor.descriptor.server_flags = 1; descriptor.descriptor.manufacturer = 0x1234;
+        descriptor.descriptor.manufacturer = 0x1234;
         base_peer(0, 0, 0x8002u);
         CHECK(zdo_node_rsp_encode(&descriptor, peer_out.payload, sizeof(peer_out.payload), &peer_out.length) == ZDO_NODE_OK);
         seal_peer(0, 0, NULL, 1);
@@ -466,7 +466,15 @@ static void commission(void)
                 peer_out.payload[1] == 4) ||
                 (test_case == 3 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 16))
                 pending = 0;
-            else deliver();
+            else {
+                if ((test_case == 6 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 5 &&
+                     peer_out.payload[1] == 1) ||
+                    (test_case == 7 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 5 &&
+                     peer_out.payload[1] == 4) ||
+                    (test_case == 8 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 16))
+                    now = device.until;
+                deliver();
+            }
         }
     }
     CHECK(iterations < 512);
@@ -644,7 +652,7 @@ int main(void)
     CHECK(bdb_join_init(&device, now) == BDB_JOIN_OK);
     CHECK(bdb_join_start(&device, &transmitter, &config, now) == BDB_JOIN_RECOVERY_REQUIRED);
     CHECK(!device.transport.ready && !device.member && device.phase == BDB_JOIN_IDLE);
-    for (test_case = 1; test_case <= 5; test_case++) {
+    for (test_case = 1; test_case <= 8; test_case++) {
         setup(); commission();
         CHECK(!device.transport.ready && !device.member);
         CHECK(security_keys_status(&status) == SECURITY_KEYS_OK);
@@ -654,7 +662,7 @@ int main(void)
         } else {
             CHECK(device.phase == BDB_JOIN_FAILED && transmitter.phase == MAC_TX_IDLE);
             CHECK(status.phase == SECURITY_KEYS_LEFT && !permit);
-            CHECK(device.result == (test_case == 1 ? BDB_JOIN_KEY_TIMEOUT :
+            CHECK(device.result == (test_case == 1 || test_case == 6 ? BDB_JOIN_KEY_TIMEOUT :
                 test_case == 4 ? BDB_JOIN_PARENT_FAILED : BDB_JOIN_TC_FAILED));
             CHECK(test_case == 1 ? device.transport.quiet && !leave_sent : leave_sent && !device.transport.quiet);
         }

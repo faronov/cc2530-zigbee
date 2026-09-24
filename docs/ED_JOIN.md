@@ -21,6 +21,9 @@ is an adapter fact1..3, not an invented RSSI conversion. This is one selected
 network, not arbitrary network selection, router forwarding or trust-center
 migration. A TC with Stack Compliance Revision below21 is not silently
 accepted through BDB's legacy exception.
+The descriptor's system-server discovery flags do not establish TC trust and
+are not an extra BDB acceptance prerequisite; the revision selects the modern
+exchange, and the actual bound-key proof must still complete (BDB10.2.5 p78).
 
 The initial parent must advertise End Device Timeout Request keepalive
 (parent-information bit1). Timeout enumeration1 requests two minutes;
@@ -147,6 +150,9 @@ The end-to-end negative corpus includes key and confirmation timeouts, real
 Leave/quiet abandonment, unsupported parent keepalive, missing physical
 quiescence, wrong-TSN/status/key responses, broadcast duplicate filtering and
 PAN-update cancellation/reinstallation before application traffic can resume.
+Network-key, TC-key and Confirm responses at the expired deadline cannot
+complete commissioning. Exchange timers start with the request, not after
+eventual MAC cleanup; a valid MIC does not extend a transaction deadline.
 It also exercises all three APS retries, late/wrong/early ACKs, full receive
 tables and real transmitted APS-counter wrap. Parent keepalive continues
 during the wrap quarantine; counter0 is not reused before its expiry.
