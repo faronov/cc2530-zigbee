@@ -47,13 +47,51 @@ working firmware features or changes the project's support claims.
 
 ## Development checks
 
-**GitHub Actions is the normal full acceptance gate.** Do not routinely run
+**GitHub Actions is the normal acceptance gate.** Do not routinely run
 the full host/sanitizer/image/simulator matrix locally and then repeat it in
 CI. Locally, do only the compilation/artifact inspection needed to prepare
 the change, or a narrow check needed to reproduce and fix a failure.
 After publication, use the CI result for complete acceptance; do not claim
 it passed before the workflow finishes. Keep every existing CI case, strict
 linked-image/ABI/alias guard and simulator deadline.
+
+| Tier | Trigger / command | Evidence |
+| --- | --- | --- |
+| Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
+| Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora, including every244699 banked-key artifact mutation |
+
+Selection uses actual forced Make dry-run compiler inputs and recursively
+follows project includes, including C test helpers included by other C tests.
+It does not infer consumers from similar filenames. Shared headers, board
+definitions, build/workflow/verification/tool changes and unknown consumers
+select full acceptance. No dependency result persists across invocations.
+Fast builds force fresh selected host executables, including embedded C
+helpers; target-only callers are reported rather than counted as host tests.
+`test-fast` compares HEAD with staged/unstaged/untracked source by default.
+It is a development aid, never a substitute for the affected integration gate.
+
+CI only narrows a push/PR when its exact previous/base commit already has a
+successful main CI result. A failed/cancelled/in-progress predecessor,
+missing baseline or unavailable approval selects full acceptance, even for
+a documentation-only follow-up. This prevents cancellation from hiding an
+untested code change behind a later docs push. An accepted-baseline docs-only
+change runs publication/link/selection checks and no firmware workers.
+The stable **Required offline acceptance** job rejects failures, cancellation
+and unexpected skips; use that gate if configuring required status checks.
+This change does not configure repository branch protection.
+
+The default Make targets still run the full artifact campaign. Explicit local
+affected reproduction may use `ARTIFACT_CAMPAIGN=deferred` with
+`test-banked-security`; its immutable full-image checks,22 real operations,
+9941 outcome negatives and retained flash failure remain mandatory.
+No artifact mutation is sampled or removed from the full tier.
+`make BOARD=generic test-coverage` collects fresh GCC line/branch evidence
+from the real wire/key/join tests. It requires matching GCC/gcov; raw
+instrumentation stays in a temporary build directory, and only relative-path
+counts/gaps are retained locally. CI reports metrics without uploading any
+coverage, key-bearing or NV artifact. See the
+[coverage/risk baseline](docs/VALIDATION.md#risk-based-selection-and-host-coverage).
 
 The commands below are available for offline reproduction or targeted
 debugging, not a mandatory duplicate before every push.
@@ -78,7 +116,7 @@ the 15-second per-simulator deadline; extra CPU cores do not justify
 concurrent links into a shared directory or relaxed timeouts.
 
 The existing `make BOARD=... IMAGE=... all test` command remains a full
-single-configuration check. The twenty-eight-job CI matrix runs its identical
+single-configuration check. The full selected CI matrix runs its identical
 Python tool suite once in generic/bringup, and `all test-common test-board`
 is split into `all test-board` in every job plus `test-common-core` in the two
 debug-fixture jobs. The clock/radio, delayed-stamp, synthetic-temperature,
@@ -96,8 +134,11 @@ The isolated banked CODE foundation runs in two more board jobs without
 uploads; it does not expand any old image's CODE limit or debugger API.
 Two banked key-lifecycle jobs add real mixed crypto/NV execution and checked
 physical DATA ownership, also without uploads or hardware actions.
-The exact union is still `test-common`; fifty-four jobs retain all
-twenty-eight board/image checks and the unchanged simulator deadlines.
+The exact component union is still `test-common`; fifty-four worker jobs retain
+all twenty-eight board/image checks and the unchanged simulator deadlines.
+Selection and the stable acceptance gate add two control jobs. A full run has
+56 jobs, not fewer cases; an affected run contains only its selected workers.
+The generic BDB host worker also reports fresh host coverage.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
 Linked clock/TX metadata tests build their own fresh temporary artifacts when

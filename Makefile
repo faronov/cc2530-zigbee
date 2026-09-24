@@ -7,6 +7,7 @@ BOARD ?= generic
 IMAGE ?= bringup
 BUILD ?= build/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
 LOCAL_BUILD ?= build/local
+ARTIFACT_CAMPAIGN ?= full
 BOARD_IMAGES := bringup debug_fixture timebase_fixture clock_fixture irq_fixture radio_fifo_fixture dma_fixture aes_fixture prng_fixture radio_rx_fixture flash_fixture radio_tx_fixture radio_noise_fixture radio_link_fixture
 
 ifeq ($(BOARD),generic)
@@ -100,6 +101,7 @@ endif
 .PHONY: test-nv-record test-mac-tx
 .PHONY: test-nwk-candidates test-nwk-parent test-nwk-parent-sanitize test-mac-time test-mac-scan test-mac-association test-mac-poll
 .PHONY: test-common test-common-core test-tools test-board test-local
+.PHONY: test-fast test-coverage
 .PHONY: test-noise-health test-radio-noise
 .PHONY: test-radio-noise-fixture test-radio-noise-fixture-sanitize
 PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attributes zcl_dispatch zcl_write
@@ -1161,7 +1163,7 @@ $(BUILD)/host-banked-security-vectors-sanitize: tests/banked_security_vectors.c 
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/banked_security_vectors.c $(ED_MODEL_SRC) $(ED_KEY_SRC) -o $@
 
 test-banked-security: $(BANKED_SECURITY_DIR)/banked_security.ihx $(BUILD)/host-banked-security-vectors $(BUILD)/host-banked-security-vectors-sanitize
-	$(PYTHON) -B tests/boot_banked_security.py --output $(BUILD) --simulator "$(S51)"
+	$(PYTHON) -B tests/boot_banked_security.py --output $(BUILD) --simulator "$(S51)" --artifact-campaign "$(ARTIFACT_CAMPAIGN)"
 
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -1503,6 +1505,12 @@ test-common-core: test-timebase test-clock test-irq test-radio-fifo test-dma tes
 
 test-tools:
 	$(PYTHON) -B -m unittest discover -s tools -p 'test_*.py' -v
+
+test-fast:
+	$(PYTHON) -B tools/ci_plan.py --tier fast
+
+test-coverage:
+	$(PYTHON) -B tools/host_coverage.py --board $(BOARD) --output $(BUILD)/coverage
 
 test: test-common test-tools test-board
 

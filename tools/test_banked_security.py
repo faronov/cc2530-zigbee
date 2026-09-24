@@ -2,10 +2,12 @@
 """Pure parser/ownership/continuation negatives; no tools or hardware invoked."""
 import sys
 import unittest
+from unittest.mock import patch
 
 from verify_firmware import ROOT
 sys.path.insert(0, str(ROOT / "tests"))
 
+import boot_banked_security as lifecycle
 from boot_banked_security import restore
 from boot_banked import normalized_object, pin_artifacts, sha
 from boot_nwk_candidates import records
@@ -14,6 +16,43 @@ from verify_banked_security import EDGES, FRAMES
 
 
 class BankedSecurityTests(unittest.TestCase):
+    def test_artifact_campaign_is_explicit_and_full_count_is_unchanged(self):
+        with patch.object(lifecycle.layout, "artifact_bytes", return_value=()), \
+                patch.object(lifecycle.banking, "artifact_negatives", return_value=244699) as negative:
+            self.assertEqual(lifecycle.artifact_campaign((), "full"), "244699 artifact negatives")
+            negative.assert_called_once()
+            negative.reset_mock()
+            self.assertIn("explicitly deferred", lifecycle.artifact_campaign((), "deferred"))
+            negative.assert_not_called()
+            negative.return_value = 244698
+            with self.assertRaises(ValueError):
+                lifecycle.artifact_campaign((), "full")
+        with self.assertRaises(ValueError):
+            lifecycle.artifact_campaign((), "unknown")
+
+    def test_deferred_campaign_still_checks_image_files_alias_execution_and_busy_failure(self):
+        with patch.object(sys, "argv", ["boot", "--output", "unused", "--artifact-campaign", "deferred"]), \
+                patch.object(lifecycle.layout, "load", return_value=("artifacts",)), \
+                patch.object(lifecycle.layout, "verify") as verify, \
+                patch.object(lifecycle.banking, "verify_files") as files, \
+                patch.object(lifecycle.banking, "artifact_negatives", side_effect=AssertionError("deferred")), \
+                patch.object(lifecycle, "reference", return_value=["calls"]) as reference, \
+                patch.object(lifecycle, "check_alias") as alias, \
+                patch.object(lifecycle, "run", return_value=(0x7b, 9941)) as run, \
+                patch("builtins.print"):
+            lifecycle.main()
+            verify.assert_called_once_with("artifacts")
+            files.assert_called_once()
+            self.assertEqual(reference.call_count, 2)
+            alias.assert_called_once_with("s51")
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args.kwargs, {"failure": True})
+            verify.side_effect = ValueError("Corrupted immutable image")
+            run.reset_mock()
+            with self.assertRaisesRegex(ValueError, "Corrupted immutable"):
+                lifecycle.main()
+            run.assert_not_called()
+
     def test_data_only_object_keeps_its_nonoptional_format_header(self):
         raw = b"XH3\nH 1A areas 3 global symbols\n"
         self.assertEqual(normalized_object(raw), raw)

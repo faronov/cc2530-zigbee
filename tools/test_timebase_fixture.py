@@ -153,54 +153,29 @@ class TimebaseCodeTests(unittest.TestCase):
             verify_layout(symbols, baseline.memory, debug.replace("{32}STfixture", "{31}STfixture"), "timebase_fixture")
 
     def test_ci_uploads_only_selected_board_artifacts(self):
+        from ci_plan import full_plan
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text()
-        self.assertIn("board: [generic, lg_esl29_rev03]", workflow)
-        self.assertIn("image: [bringup, debug_fixture, timebase_fixture, clock_fixture, irq_fixture, radio_fifo_fixture, dma_fixture, aes_fixture, prng_fixture, radio_rx_fixture, flash_fixture, radio_tx_fixture, radio_noise_fixture, radio_link_fixture]",
-                      workflow)
+        rows = full_plan("upload policy")["matrix"]["include"]
+        self.assertEqual(len([row for row in rows if row["image"]]), 28)
+        for row in rows:
+            if row["image"]:
+                self.assertEqual(row["directory"], row["image"])
+                self.assertIn("test-board", row["targets"].split())
+            else:
+                self.assertNotIn("test-board", row["targets"].split())
         self.assertEqual(workflow.count("python3 -m unittest discover -s tools -p 'test_*.py' -v"), 1)
         tool_step = workflow.split("- name: Check host tool regressions\n", 1)[1].split("- name:", 1)[0]
-        self.assertIn("if: matrix.board == 'generic' && matrix.image == 'bringup'", tool_step)
+        self.assertIn("if: matrix.tools", tool_step)
         self.assertIn("python3 -m unittest discover -s tools -p 'test_*.py' -v", tool_step)
-        self.assertIn('make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" all test-board',
-                      workflow)
-        self.assertIn('if [ "$IMAGE" = debug_fixture ]; then\n'
-                      '            make BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD" test-common-core\n'
-                      '          fi',
-                      workflow)
-        composed = workflow.split("  mac-radio:\n", 1)[1].split("  mac-attempt:\n", 1)[0]
-        self.assertIn("timeout-minutes: 15", composed)
-        self.assertIn("board: [generic, lg_esl29_rev03]", composed)
-        self.assertEqual(composed.count('test-mac-radio'), 1)
-        self.assertEqual(composed.count('test-mac-stamp'), 1)
-        self.assertEqual(composed.count('test-zcl-temperature'), 1)
-        self.assertEqual(composed.count('test-mac-join'), 1)
-        self.assertEqual(composed.count('test-zdo-node'), 1)
-        self.assertEqual(composed.count('test-zdo-srv'), 1)
-        self.assertNotIn("upload-artifact", composed)
-        attempt = workflow.split("  mac-attempt:\n", 1)[1].split("  zigbee-security:\n", 1)[0]
-        self.assertIn("timeout-minutes: 15", attempt)
-        self.assertIn("board: [generic, lg_esl29_rev03]", attempt)
-        self.assertEqual(attempt.count("test-mac-attempt"), 1)
-        self.assertNotIn("upload-artifact", attempt)
-        security = workflow.split("  zigbee-security:\n", 1)[1].split("  security-counter:\n", 1)[0]
-        self.assertIn("timeout-minutes: 15", security)
-        self.assertIn("board: [generic, lg_esl29_rev03]", security)
-        self.assertEqual(security.count("test-zigbee-security"), 1)
-        self.assertEqual(security.count("test-zigbee-mmo"), 1)
-        self.assertEqual(security.count("test-zigbee-key-hash"), 1)
-        self.assertNotIn("upload-artifact", security)
-        counters = workflow.split("  security-counter:\n", 1)[1].split("  security-resident:\n", 1)[0]
-        self.assertIn("timeout-minutes: 15", counters)
-        self.assertIn("board: [generic, lg_esl29_rev03]", counters)
-        self.assertEqual(counters.count("test-security-counter"), 1)
-        self.assertNotIn("upload-artifact", counters)
-        resident = workflow.split("  security-resident:\n", 1)[1].split("  bootstrap:\n", 1)[0]
-        self.assertIn("timeout-minutes: 15", resident)
-        self.assertIn("board: [generic, lg_esl29_rev03]", resident)
-        self.assertIn("profile: [security, mmo, key-hash, counter]", resident)
-        self.assertEqual(resident.count("test-security-resident"), 1)
-        self.assertNotIn("upload-artifact", resident)
-        uploads = workflow.split("          path: |\n", 1)[1].strip().splitlines()
+        workers = workflow.split("  checks:\n", 1)[1].split("\n  acceptance:", 1)[0]
+        self.assertIn("timeout-minutes: 15", workers)
+        self.assertIn('make -j1 BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD"', workers)
+        self.assertIn('"${targets[@]}"', workers)
+        upload = workers.split("- name: Upload generated board artifacts", 1)[1]
+        self.assertIn("if: matrix.image != ''", upload)
+        self.assertIn("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", upload)
+        self.assertEqual(workflow.count("uses: actions/upload-artifact"), 1)
+        uploads = upload.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
         expected = {prefix + "${{ matrix.image }}." + suffix for suffix in ("hex", "bin", "ihx", "map", "mem", "cdb")}
         expected.add(prefix + "build-info.json")

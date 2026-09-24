@@ -400,10 +400,20 @@ def run(output, simulator, artifacts=None, reference_calls=None, *, failure=Fals
     return peak, negatives
 
 
+def artifact_campaign(artifacts, campaign):
+    if campaign == "full":
+        count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
+        require(count == 244699, "Banked key artifact-negative coverage changed")
+        return f"{count} artifact negatives"
+    require(campaign == "deferred", "Unknown artifact campaign")
+    return "artifact corruption explicitly deferred to full tier"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--simulator", default="s51")
+    parser.add_argument("--artifact-campaign", choices=("full", "deferred"), default="full")
     args = parser.parse_args()
     artifacts = layout.load(args.output)
     layout.verify(*artifacts)
@@ -411,13 +421,12 @@ def main():
     calls = reference(args.output/"host-banked-security-vectors")
     require(reference(args.output/"host-banked-security-vectors-sanitize") == calls,
             "Sanitized public reference differs")
-    count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-    require(count == 244699, "Banked key artifact-negative coverage changed")
+    campaign = artifact_campaign(artifacts, args.artifact_campaign)
     check_alias(args.simulator)
     peak, negatives = run(args.output, args.simulator, artifacts, calls)
     require((peak, negatives) == (0x7b, 9941), "Banked key peak/negative coverage changed")
     run(args.output, args.simulator, artifacts, calls, failure=True)
-    print(f"Banked security: 22 real lifecycle operations, {count} artifact negatives, "
+    print(f"Banked security: 22 real lifecycle operations, {campaign}, "
           f"{negatives} outcome negatives, peak SP {peak:02x}/7c; synthetic, never flash.")
 
 

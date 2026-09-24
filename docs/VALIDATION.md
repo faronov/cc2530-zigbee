@@ -17,11 +17,89 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
+### Risk-based selection and host coverage
+
+The #87 policy separates fast native/sanitizer iteration, affected integration
+and full acceptance; exact commands and triggers are in
+[CONTRIBUTING](../CONTRIBUTING.md#development-checks). `tools/ci_plan.py` derives
+consumers from actual Make compiler recipes and recursive project includes,
+not a manually guessed source-name mapping. This includes nested C helpers:
+changing `test_radio_autoack.c` selects the real interval/clock-radio and
+board-fixture consumers as well as the standalone owner. Both board definitions
+are retained. The full catalog is mechanically compared with the original
+`test-common` partition and contains all54 original workers,28 board/image
+checks, the complete tool/PyUSB checks and the seven-path board upload policy.
+Only the two selection/acceptance control jobs are added.
+
+CI requires an already successful exact previous/base main commit before
+narrowing a push/PR. Otherwise it selects full acceptance, including when
+the immediate change is only documentation. Cancelled/failed/in-progress
+predecessors cannot disappear from the evidence chain. Nightly, manual and
+release events are always full. Shared headers/build/verification/runtime
+changes and unknown dependency mappings also select full.
+
+The expensive banked-key artifact corruption campaign is explicit:
+`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all244699
+mutations. A selected affected run may defer this campaign, **not** the
+immutable CODE/address/raw-CDB/map/listing/object identities, physical
+DATA/libc/IRAM-alias ownership or actual CPU/peripheral execution.
+It still requires all22 operations,9941 outcome negatives, SP7B/7C and the
+retained busy-flash RAM failure. The full tier retains every mutation;
+there is no sampling, weakened validator or simulated-outcome cache.
+
+Measurements on2026-09-24:
+
+| Measurement | Result | Meaning |
+| --- | ---: | --- |
+| Old documentation-only c93763d, Actions36026021702 | 54 jobs;913s workflow elapsed;7382 summed job-seconds | Actual hosted baseline, including setup/queue effects; not a simulator-only measurement |
+| Complete immutable banked-key image verification | 2.041s | Local existing accepted artifact set, before execution |
+| All244699 banked-key artifact mutations | 27.038s | Local complete campaign, no cases sampled |
+| Changed `src/bdb_join.c` | 2 selected workers instead of54 | Dependency-plan count, not a measured runtime speedup |
+| Changed `src/security_keys.c` | 6 selected workers instead of54 | Key host, BDB host and banked lifecycle for both boards |
+
+These savings avoid unrelated work; they do not make a smaller tier equivalent
+to a full source-change acceptance. Hosted timings for the new policy must be
+recorded only after its workflow actually completes.
+
+Fresh GCC13.3.0, `-O0 --coverage`, generic-board host coverage merges the
+actual `test_ed_wire`, `test_security_keys` and `test_bdb_join` executions.
+Counters from separate executables are unioned by source line/branch shape;
+missing execution, invalid counts and incompatible layouts fail explicitly.
+Fresh temporary objects prevent stale `.gcda` data from inflating coverage.
+
+| Production owner | Lines hit/total | Branch edges hit/total |
+| --- | ---: | ---: |
+| `ed_wire.c` | 197/209 (94.3%) | 216/276 (78.3%) |
+| `security_keys.c` | 569/597 (95.3%) | 624/836 (74.6%) |
+| `nwk_aps.c` | 261/279 (93.5%) | 299/444 (67.3%) |
+| `zdo_runtime.c` | 147/184 (79.9%) | 143/300 (47.7%) |
+| `bdb_join.c` | 275/317 (86.8%) | 348/550 (63.3%) |
+
+This is a baseline, not a100%-line target or proof of all combinations of
+conditions. `build/.../coverage/summary.json` identifies every uncovered line
+and branch index; CI prints relative-path totals only and uploads no report
+or instrumentation. Compiler/optimization changes can change these counts.
+
+| Risk / transition | Existing evidence | Coverage gap to prioritize |
+| --- | --- | --- |
+| Key receipt -> provisional -> verified; replay/rotation/Leave/cuts | Real key-owner tests, independent encrypted vectors and38 save-command cut points | Remaining argument/failure edges; host branch coverage cannot establish electrical durability |
+| Initial join -> announcement -> TC verification -> permit -> READY | Real synthetic coordinator and timed negative host scenarios | Association retry/refusal and retained transmit/abandonment fault branches in `bdb_join.c:278-286,327-354` are not all executed by these three suites |
+| Transaction cancellation and uncertain radio cleanup | Existing APS retry/ACK/deadline tests | `nwk_aps.c:211-215` cancel-event construction is not executed by this coverage corpus |
+| Endpoint-zero mapping and address transactions | Node/fallback/address-server and timed client tests | `zdo_runtime.c:114-144` Device_annce map/conflict path and parts of address-client response handling at192-196 are unexecuted here |
+| MCU banks/DATA/libc/alias/stack and actual AES/flash commands | Separate genuine linked-image/simulator corpora | Not measurable by native GCC coverage; these checks remain mandatory in affected target acceptance |
+| Persisted restart -> secure rejoin -> usable link | Persisted VERIFIED is rejected as automatic READY | Complete recovery is still #27, not supplied by a coverage percentage |
+
+The uncovered paths are testing/integration work for #26/#27, not evidence of
+a confirmed production bug or a waiver of their behavior requirements.
+The later #37 fuzz/interruption/watchdog/endurance scope remains distinct.
+
+### Full worker partition and earlier measurements
+
 The current partition also includes eight resident crypto/NV caller jobs,
 six authenticated-join host jobs, two isolated banked-CODE jobs and two
 banked key/crypto/NV jobs.
 Together with the earlier thirty-six-job partition described below,
-these retain all old cases in fifty-four jobs. Both banked profiles are
+these retain all old cases in fifty-four full-tier worker jobs. Both banked profiles are
 separate from every unbanked board image; it has no hardware/artifact upload
 step. See [the banked memory-model boundaries](BANKED_CODE.md) and the
 [real key-service execution contract](BANKED_SECURITY.md).
@@ -31,7 +109,7 @@ the Python tool suite once and each standalone component corpus once per
 board definition instead of once per image. It uses isolated component and
 board-image directories and serial, fail-fast submakes. The existing full
 `make ... all test` and twenty-eight-job CI coverage remain available.
-CI runs the complete board-independent Python tool suite once in the
+Full CI runs the complete board-independent Python tool suite once in the
 generic/bringup job; that suite itself exercises both-board image profiles.
 Every matrix job runs its selected-board native/linked/simulator checks;
 the two debug-fixture jobs run `test-common-core`, and two dedicated composition

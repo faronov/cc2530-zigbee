@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 from verify_firmware import BOARDS, IMAGES, ROOT
+from ci_plan import COMPONENTS
 
 
 @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
@@ -97,12 +98,8 @@ class LocalChecksTests(unittest.TestCase):
                                      if i or arg == "python3" else Path(arg).name
                                      for i, arg in enumerate(args)) for args in commands)
             self.assertEqual(normalized(("test-common",)),
-                             normalized(("test-common-core", "test-mac-radio", "test-mac-stamp",
-                                         "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
-                                         "test-zdo-node", "test-zdo-srv", "test-zigbee-security",
-                                         "test-zigbee-mmo", "test-zigbee-key-hash", "test-security-counter",
-                                         "test-security-resident", "test-ed-integration", "test-banked",
-                                         "test-banked-security")))
+                             normalized(("test-common-core", *(target for _, targets in COMPONENTS.values()
+                                                               for target in targets))))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))

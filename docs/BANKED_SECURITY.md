@@ -134,8 +134,14 @@ command in the real RAM fail-stop and stays there after later synthetic idle,
 without successful publication or media replacement.
 
 The regular lifecycle executes128 actual AES calls and532 flash-RAM commands.
-Its maximum SP is `7B` under the unchanged `7C` cap; the corpus requires
+Its maximum SP is `7B` under the unchanged `7C` cap. Full acceptance requires
 244699 artifact and9941 outcome negatives, without sampling either count.
+The explicit affected tier may defer only the exhaustive artifact corruption
+campaign (`ARTIFACT_CAMPAIGN=deferred`); complete immutable artifact/layout
+checks, all real execution,9941 outcome negatives, aliases/stack and retained
+busy failure still run. The Make default remains `full`, and CI runs the
+complete campaign on full/nightly/release/verification changes. See the
+[tier and coverage contract](VALIDATION.md#risk-based-selection-and-host-coverage).
 
 Wipe checks cover the complete named key/crypto work areas, not durable
 counter/journal payloads or retained lower AES/DMA/compiler copies.

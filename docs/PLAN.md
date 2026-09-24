@@ -50,8 +50,11 @@ Next are the bounded testing/coverage/run-selection review (#87), the complete
 banked MAC/NWK/APS/ZDO/BDB MCU composition (#26), and secure persisted
 restart/rejoin (#27). Real radio/association integration (#13/#14) and separate
 MAC/coordinator acceptance (#15/#28) retain timing (#40/#45), physical NV (#8)
-and entropy (#10) requirements. The testing-policy change is not implemented
-by this issue audit; the existing CI cases and limits remain in force.
+and entropy (#10) requirements. The subsequent #87
+[risk-based check selection](VALIDATION.md#risk-based-selection-and-host-coverage)
+preserves all existing cases and limits in the full tier while selecting
+affected consumers for accepted-baseline changes. It does not grant a new
+firmware capability or physical acceptance.
 
 The bounded TX/CCA implementation (#12) and fixed-parent key lifecycle (#23)
 are complete at their documented evidence levels. #23 now has actual banked
