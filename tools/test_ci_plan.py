@@ -66,6 +66,7 @@ class SelectionTests(unittest.TestCase):
     def test_actual_shared_c_consumers_not_filename_matching(self):
         cases = {
             "src/bdb_join.c": {"ed-bdb-join"},
+            "tests/bdb_join_layout.c": {"ed-bdb-join"},
             "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security"},
             "src/zcl_temperature.c": {"compositions"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},

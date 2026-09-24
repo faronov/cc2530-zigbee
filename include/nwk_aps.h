@@ -7,6 +7,7 @@
 #include "ed_wire.h"
 #include "mac_tx.h"
 
+#define NWK_APS_VERSION 2u
 #define NWK_APS_DUPLICATES 8u
 #define NWK_APS_RETRIES 3u
 #define NWK_APS_ACK_WAIT 100000UL
@@ -28,12 +29,12 @@ typedef struct {
 } nwk_aps_duplicate_t;
 
 typedef struct {
-    ed_packet_t outgoing, incoming, acknowledgment, staging;
+    ed_packet_t outgoing, incoming, acknowledgment;
     nwk_aps_duplicate_t duplicate[NWK_APS_DUPLICATES];
     nwk_aps_duplicate_t broadcast[NWK_APS_DUPLICATES];
     mac_tx_t *owner;
     ccm_star_limits_t limits;
-    uint8_t wire[NWK_FRAME_MAX_BODY], mac[MAC_FRAME_MAX_BODY];
+    uint8_t mac[MAC_FRAME_MAX_BODY];
     uint32_t last, deadline, counter_until, ack_wait, duplicate_time, transaction_until, broadcast_time;
     uint16_t nv_polls, profile;
     uint8_t endpoint, next_aps, next_nwk, length, mac_length;
@@ -53,6 +54,12 @@ typedef struct {
  * FULL never authorizes a dropped control transition or successful delivery.
  * broadcast_time is the established network broadcast-delivery bound in
  * symbols. Eight separate source/NWK-sequence BTRs are never silently evicted.
+ * An unoccupied incoming slot is returning receive scratch; receive_ready is
+ * set only after actual authentication, durable admission and routing checks.
+ * Nonpublication clears that slot; a pending packet/ACK blocks reuse before
+ * security processing. Protected TX is constructed after the fixed short/
+ * short compressed MAC prefix, then the real codec emits only that header.
+ * No overlapping payload/output is passed to a codec.
  */
 nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner, volatile uint8_t endpoint,
     volatile uint16_t profile, const ccm_star_limits_t * volatile limits, volatile uint16_t nv_polls,

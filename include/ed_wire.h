@@ -47,4 +47,13 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
     const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
     uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) SECURITY_FAR;
 
+/* All six public operations share returning ordinary-XDATA work. Serialize
+ * them in foreground, with no ISR/reentrant use and no retained private
+ * pointer. Syntax metadata stays live separately; header/frame and
+ * encoded/packet/text unions reuse only sequential lifetimes, and CCM input
+ * and output remain disjoint. On every public return (including errors),
+ * named syntax, crypto and buffer work is volatile-wiped. This does not
+ * promise to wipe all compiler temporaries or lower-service retained state.
+ */
+
 #endif

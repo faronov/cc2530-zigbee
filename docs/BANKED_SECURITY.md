@@ -24,12 +24,12 @@ Full acceptance belongs to the completed Actions run, not merely compilation.
 | --- | --- | ---: |
 | Common CODE | Startup, runtime, real crypto/NV, codecs, caller and libc | 25017 |
 | Bank1 | `security_keys`, virtual `18000..1C28E` | 17039 |
-| Bank2 | `ed_wire`, virtual `28000..29ADF` | 6880 |
-| Complete executable | Sparse canonical bank identities | 48936 |
-| Ordinary XDATA | All production/caller/compiler/libc storage | 3886 |
+| Bank2 | `ed_wire`, virtual `28000..29C24` | 7205 |
+| Complete executable | Sparse canonical bank identities | 49261 |
+| Ordinary XDATA | All production/caller/compiler/libc storage | 3555 |
 | Status | Separately reserved at `1E00` | 64 |
 
-The new composition budgets are 51200 populated CODE bytes and 4096 total
+The composition budgets remain 51200 populated CODE bytes and 4096 total
 XDATA bytes including status. These do not enlarge an older profile's budget.
 The packer emits `banked_security.hex` with physical addresses and
 `banked_security-layout.json` with the distinct
@@ -57,8 +57,9 @@ symbolic-expression spelling changes.
 Top-level volatile parameter/local copies shorten SDCC register lifetimes;
 they do not make caller memory volatile or change pointer memory spaces.
 The ordinary key object uses 16835 CODE / 841 XDATA / 4 DATA bytes, compared
-with the earlier 14755 / 783 / 46. The wire object uses 6837 CODE / 797
-XDATA / 9 DATA bytes, instead of its earlier57-byte DATA requirement.
+with the earlier 14755 / 783 / 46. The wire object's original spill conversion
+used6837 CODE /797 XDATA /9 DATA bytes, instead of its earlier57-byte DATA
+requirement. Its subsequent returning-work reduction uses7181 /466 /9.
 Both still use4 OSEG bytes; the linked libc requires10.
 
 The key owner copies the install input and keyed-hash input into its existing
@@ -93,6 +94,50 @@ complete20-byte libc XDATA suffix, not just `__gptrput_PARM_2`.
 
 This is a **serialized foreground-only** composition. The IRQ demonstration
 in the separate ABI fixture does not confer ISR headroom on this image.
+
+### Returning wire-work ownership
+
+The subsequent #26 resource increment changes only genuine `ed_wire` work
+storage; it does not add a fixture-side authentication or NV result. Real C
+unions replace simultaneously allocated arrays, rather than renaming linker
+segments. The former430-byte syntax and272-byte crypto objects become78-byte
+syntax metadata,40-byte crypto metadata and236 bytes of buffers:
+
+| Region | Actual bytes / offset | Active lifetime |
+| --- | --- | --- |
+| `syntax` |78, separate object|NWK/APS header metadata, plus encode headers; stays live while crypt validates APS selectors|
+| `crypto` |40, separate object|Nonce, written length and security metadata throughout inspect/crypt|
+| `buffers.wire` |116 at0|Header parsing/encoding, **then** crypto frame; header readers return before frame construction|
+| `buffers.body` |120 at116|Encoded APS payload **or** decoded packet **or** CCM output; encode/decode/crypt do not nest|
+
+Nested header readers touch only `wire.header` and syntax metadata. They
+cannot clear their caller's live encoded payload/decoded packet. Both encode
+codecs receive disjoint input/output; CCM's frame and text are in distinct
+regions. Lower synchronous services do not retain these spans or call back.
+No private address escapes. Public wrappers call private ordinary readers,
+copy their result to the caller, and only then finish. All six public APIs
+volatile-wipe all three named work objects on error and success. Private
+readers deliberately do not wipe a live ancestor's work.
+
+The linked proof additionally checks the exact raw-CDB object extents and
+union field offsets and **every** emitted internal transfer, including the
+ordinary SDCC `MOV DPL,A; RET` epilogues. It rejects a reader calling the
+wiper or another helper's middle. Complete byte identities bind the reviewed
+load/store ordering; this call graph alone is not a stack or authentication
+proof. Actual key-lifecycle execution checks unchanged cipher/flash operands,
+public results and all three complete wire work regions after returns.
+Native regressions directly interleave all six APIs, extended addresses,
+small-output failures and malformed headers without private-state overrides.
+
+Including added compiler parameter storage, this saves331 ordinary-XDATA
+bytes and costs325 banked CODE bytes (344 ordinary CSEG bytes). DATA9/OSEG4, real reservations, libc20-byte
+suffix, all lower-service objects, and the original fixture/scenarios remain
+unchanged. The source/libc boundary is now3535, with `__gptrput_PARM_2` at3546.
+The complete generic/LG artifact identities match. Earlier accepted
+48936-CODE/3886-XDATA images and their244699/9941 mutation counts remain
+historical evidence, not the current layout contract. The reduced layout has
+passed the complete **local** both-board checks below; a later completed
+Actions run is still required for published acceptance.
 
 ## Executed contract
 
@@ -135,16 +180,20 @@ without successful publication or media replacement.
 
 The regular lifecycle executes128 actual AES calls and532 flash-RAM commands.
 Its maximum SP is `7B` under the unchanged `7C` cap. Full acceptance requires
-244699 artifact and9941 outcome negatives, without sampling either count.
+246324 artifact and10354 outcome negatives, without sampling either count.
 The explicit affected tier may defer only the exhaustive artifact corruption
 campaign (`ARTIFACT_CAMPAIGN=deferred`); complete immutable artifact/layout
-checks, all real execution,9941 outcome negatives, aliases/stack and retained
+checks, all real execution,10354 outcome negatives, aliases/stack and retained
 busy failure still run. The Make default remains `full`, and CI runs the
 complete campaign on full/nightly/release/verification changes. See the
 [tier and coverage contract](VALIDATION.md#risk-based-selection-and-host-coverage).
 
 Wipe checks cover the complete named key/crypto work areas, not durable
 counter/journal payloads or retained lower AES/DMA/compiler copies.
+The additional1625 artifact mutations cover every byte of the325 added CODE
+bytes in all five existing address-sensitive mutations. The additional413
+outcome mutations cover331 newly unowned XDATA bytes and82 net additional
+named wipe bytes (354 rather than272). No old scenario class is removed.
 Artifact comparisons cache only immutable bytes already authenticated
 against the fixed expected digest; every address/byte mutation still runs.
 Static CDB location caching never caches a simulated observation.

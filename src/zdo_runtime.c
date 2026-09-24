@@ -25,7 +25,7 @@ static uint8_t expired(uint32_t now, uint32_t until)
 
 static zdo_runtime_result_t advance(zdo_runtime_t * volatile ctx, volatile uint32_t now)
 {
-    if (!ctx || ctx->version != 1) return ZDO_RUNTIME_ARGUMENT;
+    if (!ctx || ctx->version != ZDO_RUNTIME_VERSION) return ZDO_RUNTIME_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return ZDO_RUNTIME_CLOCK;
     ctx->last = now;
     return ZDO_RUNTIME_OK;
@@ -48,7 +48,7 @@ zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     if (zdo_node_rsp_encode(&node, descriptor_bytes, sizeof(descriptor_bytes), &length) != ZDO_NODE_OK)
         return ZDO_RUNTIME_ARGUMENT;
     memset(ctx, 0, sizeof(*ctx));
-    ctx->local = *descriptor; ctx->last = now; ctx->version = 1;
+    ctx->local = *descriptor; ctx->last = now; ctx->version = ZDO_RUNTIME_VERSION;
     ctx->security_event = ZDO_RUNTIME_NO_EVENT;
     return ZDO_RUNTIME_OK;
 }
@@ -147,9 +147,9 @@ static zdo_runtime_result_t announce(zdo_runtime_t * volatile ctx, nwk_aps_t * v
 
 static zdo_runtime_result_t received(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport)
 {
-    const ed_packet_t * volatile p = &ctx->packet;
+    const ed_packet_t * volatile p = &ctx->application;
     uint8_t event;
-    if (nwk_aps_take(transport, &ctx->packet, &event) != NWK_APS_OK) return ZDO_RUNTIME_STATE;
+    if (nwk_aps_take(transport, &ctx->application, &event) != NWK_APS_OK) return ZDO_RUNTIME_STATE;
     if (security_keys_status(&keys) != SECURITY_KEYS_OK) return ZDO_RUNTIME_SECURITY;
     if (event != SECURITY_KEYS_EVENT_DATA && event != SECURITY_KEYS_EVENT_MANAGEMENT) {
         ctx->security_event = event;
@@ -173,7 +173,7 @@ static zdo_runtime_result_t received(zdo_runtime_t * volatile ctx, nwk_aps_t * v
         return ZDO_RUNTIME_OK;
     }
     if (p->aps.destination_endpoint || p->aps.profile_id) {
-        ctx->application = *p; ctx->application_ready = 1;
+        ctx->application_ready = 1;
         return ZDO_RUNTIME_OK;
     }
     if (p->aps.type || !p->length) return ZDO_RUNTIME_FORMAT;
@@ -240,8 +240,10 @@ zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t * volatile ctx, nwk_aps_t * 
         ctx->result = ZDO_RUNTIME_TIMEOUT;
         if (ctx->query_tx && nwk_aps_cancel(transport, now) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
     }
-    if (transport->receive_ready && !ctx->application_ready)
+    if (transport->receive_ready && !ctx->application_ready) {
         rc = received(ctx, transport);
+        if (!ctx->application_ready) memset(&ctx->application, 0, sizeof(ctx->application));
+    }
     if (ctx->response_pending && !transport->queued && !transport->completed) {
         queued = nwk_aps_queue(transport, &ctx->response, 0, now);
         if (queued == NWK_APS_EXHAUSTED) {
@@ -272,7 +274,7 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t 
 zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
     uint8_t * volatile which, uint8_t * volatile result)
 {
-    if (!ctx || ctx->version != 1 || !which || !result) return ZDO_RUNTIME_ARGUMENT;
+    if (!ctx || ctx->version != ZDO_RUNTIME_VERSION || !which || !result) return ZDO_RUNTIME_ARGUMENT;
     if (!ctx->query || !ctx->tx_done || ctx->result == ZDO_RUNTIME_NO_EVENT) return ZDO_RUNTIME_STATE;
     *which = ctx->query; *result = ctx->result; ctx->query = 0;
     return ZDO_RUNTIME_OK;
@@ -280,9 +282,41 @@ zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
 
 zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile ctx, ed_packet_t * volatile packet)
 {
-    if (!ctx || ctx->version != 1 || !packet) return ZDO_RUNTIME_ARGUMENT;
+    if (!ctx || ctx->version != ZDO_RUNTIME_VERSION || !packet) return ZDO_RUNTIME_ARGUMENT;
     if (!ctx->application_ready) return ZDO_RUNTIME_STATE;
     *packet = ctx->application;
     memset(&ctx->application, 0, sizeof(ctx->application)); ctx->application_ready = 0;
     return ZDO_RUNTIME_OK;
+}
+
+zdo_runtime_result_t zdo_runtime_broadcast(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
+    volatile uint8_t which, volatile uint32_t now)
+{
+    zdo_runtime_result_t result = advance(ctx, now);
+    nwk_aps_result_t queued;
+    ed_packet_t * volatile p;
+    if (result) return result;
+    if (!transport || (which != ZDO_RUNTIME_BROADCAST_ANNOUNCE && which != ZDO_RUNTIME_BROADCAST_PERMIT))
+        return ZDO_RUNTIME_ARGUMENT;
+    if (ctx->application_ready) return ZDO_RUNTIME_FULL;
+    if (which == ZDO_RUNTIME_BROADCAST_ANNOUNCE && security_keys_status(&keys) != SECURITY_KEYS_OK)
+        return ZDO_RUNTIME_SECURITY;
+    p = &ctx->application;
+    base(p, which == ZDO_RUNTIME_BROADCAST_ANNOUNCE ? 0xfffdu : 0xfffcu,
+            which == ZDO_RUNTIME_BROADCAST_ANNOUNCE ? 0x0013u : 0x0036u);
+    p->nwk.discover_route = NWK_DISCOVER_ROUTE_SUPPRESS;
+    p->aps.delivery_mode = APS_DELIVERY_BROADCAST;
+    p->payload[0] = ctx->next_tsn++;
+    if (which == ZDO_RUNTIME_BROADCAST_ANNOUNCE) {
+        p->payload[1] = (uint8_t)keys.config.address;
+        p->payload[2] = (uint8_t)(keys.config.address >> 8);
+        memcpy(p->payload+3, keys.config.own_ieee, 8);
+        p->payload[11] = ctx->local.mac_capability; p->length = 12;
+    } else {
+        p->payload[1] = 180; p->payload[2] = 1; p->length = 3;
+    }
+    queued = nwk_aps_queue(transport, p, 0, now);
+    memset(&ctx->application, 0, sizeof(ctx->application));
+    return queued == NWK_APS_OK ? ZDO_RUNTIME_OK :
+        queued == NWK_APS_FULL ? ZDO_RUNTIME_FULL : ZDO_RUNTIME_TRANSMIT;
 }

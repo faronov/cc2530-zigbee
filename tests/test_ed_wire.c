@@ -74,6 +74,80 @@ static void roundtrip(uint8_t kind, uint8_t layer)
     CHECK(info.length == size && !memcmp(opened, input, size));
 }
 
+/* Alternate every public entry point across both buffer-union lifetimes.
+ * Extended NWK addresses ensure a nested APS header read must not overwrite
+ * the decoded packet or the encoded payload that is still live in its caller.
+ * Failures must preserve caller outputs and must not poison the next call.
+ */
+static void returning_work(void)
+{
+    nwk_frame_info_t nwk, old_nwk;
+    aps_frame_info_t aps, old_aps;
+    zigbee_security_meta_t meta, old_meta;
+    uint8_t kind, i, cipher_length, saved_length, rejected_length, header_length;
+    for (kind = 0; kind < 6; kind++) {
+        setup(kind);
+        packet.nwk.flags = NWK_FLAG_DESTINATION_IEEE | NWK_FLAG_SOURCE_IEEE;
+        if (kind == 1) packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+        header_length = kind == 1 ? 16 : 24;
+        for (i = 0; i < 8; i++) {
+            if (kind != 1) packet.nwk.destination_ieee[i] = (uint8_t)(0x60+i);
+            packet.nwk.source_ieee[i] = (uint8_t)(0x70+i);
+        }
+        CHECK(ed_wire_encode(&packet, plain, sizeof(plain), &n) == ZIGBEE_SECURITY_OK);
+        saved_length = n;
+        CHECK(ed_wire_nwk(plain, n, &nwk) == ZIGBEE_SECURITY_OK);
+        CHECK(nwk.payload_offset == header_length);
+        CHECK(!memcmp(&nwk.header, &packet.nwk, sizeof(nwk.header)));
+        old_nwk = nwk;
+        CHECK(ed_wire_nwk(plain, header_length-1, &nwk) == ZIGBEE_SECURITY_LENGTH);
+        CHECK(!memcmp(&nwk, &old_nwk, sizeof(nwk)));
+        CHECK(ed_wire_nwk(NULL, n, &nwk) == ZIGBEE_SECURITY_ARGUMENT);
+        CHECK(!memcmp(&nwk, &old_nwk, sizeof(nwk)));
+        if (!packet.nwk.type) {
+            CHECK(ed_wire_aps(plain+header_length, n-header_length, &aps) == ZIGBEE_SECURITY_OK);
+            CHECK(!memcmp(&aps.header, &packet.aps, sizeof(aps.header)));
+            old_aps = aps;
+            CHECK(ed_wire_aps(plain+header_length, 1, &aps) == ZIGBEE_SECURITY_LENGTH);
+            CHECK(!memcmp(&aps, &old_aps, sizeof(aps)));
+            CHECK(ed_wire_aps(NULL, n-header_length, &aps) == ZIGBEE_SECURITY_ARGUMENT);
+            CHECK(!memcmp(&aps, &old_aps, sizeof(aps)));
+        }
+        CHECK(ed_wire_decode(plain, n, &decoded) == ZIGBEE_SECURITY_OK);
+        CHECK(!memcmp(&decoded, &packet, sizeof(packet)));
+        memset(damaged, 0xa5, sizeof(damaged)); rejected_length = 0xa5;
+        CHECK(ed_wire_encode(&packet, damaged, n-1, &rejected_length) == ZIGBEE_SECURITY_SPACE);
+        CHECK(rejected_length == 0xa5);
+        for (i = 0; i < sizeof(damaged); i++) CHECK(damaged[i] == 0xa5);
+        key.key_identifier = 1;
+        security_aes_reset();
+        CHECK(ed_wire_crypt(0, 0, &key, plain, n, sealed, sizeof(sealed), &info) == ZIGBEE_SECURITY_OK);
+        cipher_length = info.length;
+        CHECK(ed_wire_inspect(0, sealed, cipher_length, &meta) == ZIGBEE_SECURITY_OK);
+        CHECK(meta.header_length == header_length && meta.counter == key.counter);
+        old_meta = meta;
+        CHECK(ed_wire_inspect(0, sealed, header_length+4, &meta) == ZIGBEE_SECURITY_LENGTH);
+        CHECK(!memcmp(&meta, &old_meta, sizeof(meta)));
+        CHECK(ed_wire_inspect(2, sealed, cipher_length, &meta) == ZIGBEE_SECURITY_ARGUMENT);
+        CHECK(!memcmp(&meta, &old_meta, sizeof(meta)));
+        memset(opened, 0xa5, sizeof(opened)); saved_info = info;
+        security_aes_reset();
+        CHECK(ed_wire_crypt(1, 0, &key, sealed, cipher_length, opened, saved_length-1, &info)
+              == ZIGBEE_SECURITY_SPACE);
+        CHECK(!memcmp(&info, &saved_info, sizeof(info)));
+        CHECK(security_aes_blocks() == 0);
+        for (i = 0; i < sizeof(opened); i++) CHECK(opened[i] == 0xa5);
+        security_aes_reset();
+        CHECK(ed_wire_crypt(1, 0, &key, sealed, cipher_length, opened, sizeof(opened), &info)
+              == ZIGBEE_SECURITY_OK);
+        CHECK(info.length == saved_length && !memcmp(opened, plain, saved_length));
+        CHECK(ed_wire_decode(opened, info.length, &decoded) == ZIGBEE_SECURITY_OK);
+        CHECK(!memcmp(&decoded, &packet, sizeof(packet)));
+        CHECK(ed_wire_encode(&decoded, opened, sizeof(opened), &n) == ZIGBEE_SECURITY_OK);
+        CHECK(n == saved_length && !memcmp(opened, plain, n));
+    }
+}
+
 int main(void)
 {
     unsigned kind, length, field;
@@ -107,6 +181,7 @@ int main(void)
     CHECK(ed_wire_encode(&packet, plain, sizeof(plain), &n) != 0);
     CHECK(ed_wire_decode(plain, 0xffff, &decoded) != 0);
     CHECK(ed_wire_encode(NULL, plain, sizeof(plain), &n) != 0);
+    returning_work();
     printf("ED wire: %u checks PASS; original AES/CCM, extended headers, no admission claims.\n", checks);
     return 0;
 }

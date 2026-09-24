@@ -17,6 +17,34 @@ backpressure cannot block a pending client's response merely because its
 server slot is occupied. This adds neither a board caller nor proof of whole-stack8051
 memory/ABI fit; the existing strict target profiles remain separate.
 
+The [phase-owned BDB context](ED_JOIN.md#phase-owned-bdb-storage) now reuses
+one ordinary-XDATA union for scan, association and runtime. Explicit successful
+release precedes reuse, retries retain nested generations, and a fault keeps
+the actual lower context. Configuration, scan outcome, selected parent and
+the full association record/timestamp remain outside the union. The context
+shrinks from2743 to1904 SDCC bytes without resetting the MAC owner or extending
+key deadlines. This is host-tested and object-checked, not complete target fit:
+services plus only BDB/MAC require8691 bytes at that phase-only step.
+It supplies no DATA-frame sharing or extra stack, and no full-join image.
+
+The subsequent [returning wire-work reduction](BANKED_SECURITY.md#returning-wire-work-ownership)
+reuses real union objects only across sequential encode/decode/crypt lifetimes.
+Nested header readers preserve live caller buffers, CCM input/output remain
+disjoint, and every public return wipes named work. This saves331 more XDATA
+bytes; the existing real banked key profile is image-checked and simulated
+again, still SP7B/7C. The whole-service lower bound is now8360 bytes, or8704
+with config/event/action, versus7680 available. That key-only proof does not
+grant space or call-depth headroom to the complete MCU caller.
+
+The next [occupancy-owned runtime-slot step](ED_JOIN.md#occupancy-owned-runtime-slots-and-tagged-io)
+removes duplicate NWK/APS receive/encapsulation storage and ZDO receive/BDB
+broadcast packets; occupied slots and server responses remain independent.
+Real tagged event/action unions also shrink caller I/O. Current SDCC BDB
+size is1428, the services+BDB/MAC lower bound7891, and explicit caller
+configuration/I/O raises it to8090. Both-board81722-check native/sanitizer
+evidence and retained exact key-image identities do not establish complete
+target fit or execution.
+
 The [banked security target profile](BANKED_SECURITY.md) now separately proves
 real key/wire/crypto/NV placement and mixed execution. Common lower services,
 bank1 key ownership and bank2 wire protection use physically reserved shared

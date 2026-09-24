@@ -57,7 +57,18 @@ full MCU join or completed recovery.
 The [complete-service allocation baseline](ED_JOIN.md#complete-service-allocation-baseline)
 also identifies real RAM and caller-depth work: after initial spill
 refactoring, services plus only BDB/MAC contexts require9517 ordinary XDATA
-bytes before caller I/O and libc, beyond the7680-byte region. CODE banking
+bytes before caller I/O and libc. The subsequent
+[phase-owned BDB storage](ED_JOIN.md#phase-owned-bdb-storage) reduces that
+lower bound to8691 bytes, still beyond the7680-byte region. Real release/
+fault/retry lifetimes and the original host corpus are preserved; no complete
+MCU composition or new stack proof is supplied. The subsequent
+[returning wire-work reduction](ED_JOIN.md#returning-wire-work-reduction)
+saves331 more XDATA bytes and fully revalidates the existing banked key
+profile locally at SP7B/7C. The next
+[occupancy/tagged-slot reduction](ED_JOIN.md#occupancy-owned-runtime-slots-and-tagged-io)
+lowers the whole-service requirement to7891, or8090 with explicit caller
+I/O/configuration, still above7680. Full-call DATA/stack
+ownership and a genuine complete MCU fixture remain unresolved; CODE banking
 alone is not the remaining solution.
 Real radio/association integration (#13/#14) and separate
 MAC/coordinator acceptance (#15/#28) retain timing (#40/#45), physical NV (#8)

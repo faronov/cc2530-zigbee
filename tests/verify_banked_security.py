@@ -19,12 +19,12 @@ FRAMES = dict(zip(LOWER+("ed_wire", "security_keys", "banked_security_fixture"),
     ("BS_MMO", 8, 18), ("BS_HASH", 67, 3), ("BS_NWK", 35, 12), ("BS_APS", 35, 8),
     ("BS_WIRE", 8, 9), ("BS_KEYS", 26, 4), ("BS_CALLER", 26, 0))))
 PINS = (
-    "f9ad03896a76b77ae1e22a775cbc91c61c9ab7ad506034bddbf121a7e405e96f",
-    "062f9c0f046993cb1f034db700cf44a5219dee8579aaaf089af7b1509611046f",
-    "dd1cc7f6adcd61331fc9d093dabea2098ed6b7f785e2bd49257ab19dbb4bbc27",
-    "ed2059b8cbbb60bb0fbf12d8b44558c84c4008bf7b35eab7afae948a9aa4f725",
-    "e3bc9800544bcd2911ecbd20b64935977550f6d0c295129d09e3eb952ee74be3",
-    "b253251f333f27a50c39c0f9f8e954ce614bc0a059a6639177fe472443a54454",
+    "4a34660071d0a6014d0f2b55c8d225fa5469fac57f4f1d813ea11a5a7c9378c0",
+    "9ab6b704a317c0c0a53d4e6ff6cd9a7883676ffd10d889fd1a97b1cc4211d457",
+    "78a890a4657092589ca6a66a0383c3bdd4836462eaddeff893ec3378467ce5dd",
+    "e8c0022283b3007cd4ed17ca89785561c94205780f7bef05599de02d3e15e8cd",
+    "852ccf062a4f48df7c33ac613702c9215c4cde0afd983a92417c69ea7b9e8983",
+    "b9b4740f9dbe215e3e82fdfb551fd3cbdb24dd7fb4a29616df1a0d949a152ca8",
 )
 EDGES = (resident.EDGES - {e for e in resident.EDGES if e[0] == "zigbee_security"}) | {
     ("ed_wire", "nwk_frame"), ("ed_wire", "aps_frame"), ("ed_wire", "ccm_star"),
@@ -49,7 +49,7 @@ def artifact_bytes(*artifacts):
 def verify(image, symbols, debug_raw, memory, listings, objects):
     banking.pin_artifacts(artifact_bytes(image, symbols, debug_raw, memory, listings, objects), PINS)
     require(len(image) <= 51200 and symbols["l_XSEG"]+64 <= 4096, "Banked key image exceeds its own budgets")
-    require(len(image) == len(banking.pack(image)) == 48936, "Complete banked security CODE extent changed")
+    require(len(image) == len(banking.pack(image)) == 49261, "Complete banked security CODE extent changed")
     areas = ("HOME", "GSINIT0", "GSINIT1", "GSINIT2", "GSINIT3", "GSINIT4", "GSINIT5",
              "GSINIT", "GSFINAL", "CSEG", "CONST", "BK_KEYS", "BK_WIRE")
     covered = set()
@@ -59,11 +59,11 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         covered |= span
     require(covered == set(image), "Missing/unassigned banked security CODE")
     require((symbols["s_BK_KEYS"], symbols["l_BK_KEYS"], symbols["s_BK_WIRE"], symbols["l_BK_WIRE"]) ==
-            (0x18000, 17039, 0x28000, 6880), "Banked owner/wire placement changed")
+            (0x18000, 17039, 0x28000, 7205), "Banked owner/wire placement changed")
     require((symbols["s_XSEG"], symbols["l_XSEG"], symbols["s_SSEG"], symbols["l_SSEG"],
              symbols["s_OSEG"], symbols["l_OSEG"], symbols["s_BSEG_BYTES"], symbols["l_BSEG_BYTES"],
              symbols["_banked_depth"], symbols["_banked_fault"], symbols["_fixture_status"]) ==
-            (0, 3886, 0x52, 43, 0x48, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00),
+            (0, 3555, 0x52, 43, 0x48, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00),
             "Physical banked security IRAM/XDATA allocation changed")
     require(b"16 bit mode initial stack starts at: 0x52 (sp set to 0x51) with 43 bytes available." in memory,
             "CPU stack/return-address ABI changed")
@@ -116,10 +116,10 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
             owned |= span; storage |= span
         require(owned == set(range(offset, offset+len(owned))), "Noncontiguous source XDATA ownership")
         offset += len(owned)
-    require(offset == 3866 and symbols["___memcpy_PARM_2"] == offset,
+    require(offset == 3535 and symbols["___memcpy_PARM_2"] == offset,
             "Complete source/libc scratch boundary changed")
     require(storage == set(range(offset)), "Source XDATA has an ownership hole")
-    require(symbols["l_XSEG"]-offset == 20 and symbols["__gptrput_PARM_2"] == 3877,
+    require(symbols["l_XSEG"]-offset == 20 and symbols["__gptrput_PARM_2"] == 3546,
             "Complete libc scratch (not only gptrput) changed")
     pc = symbols["___memcpy"]
     end = symbols["s_CSEG"]+symbols["l_CSEG"]
@@ -187,4 +187,84 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
     require(banking.sha(bytes(image[a] for a in range(0x62, 0xdd))) ==
             "87ac19a19ee72052c542b9b159adc1d1f2618e506324522ffb0ebfd8db504f8d",
             "Real copied flash RAM engine changed")
+    wire_work(debug, decoded, owners)
     return decoded
+
+
+def wire_work(debug, decoded, owners):
+    """Real union objects, disjoint metadata and complete internal transfers.
+
+    Public operations finish/wipe only after their private readers return.
+    Those readers cannot clear a parent's still-live encoded/decoded buffer.
+    Full byte identities bind the reviewed load/store ordering; execution
+    checks operands/results and all three returning work regions separately.
+    This function is not a stack-high-water or cryptographic-success oracle.
+    """
+    fields = {
+        11: ((0, "nwk", 29), (29, "aps", 12), (41, "transmit", 27), (68, "application", 10)),
+        12: ((0, "nonce", 13), (13, "written", 1), (14, "info", 26)),
+        13: ((0, "wire", 116), (116, "body", 120)),
+        14: ((0, "header", 116), (0, "frame", 116)),
+        15: ((0, "encoded", 116), (0, "packet", 120), (0, "text", 116)),
+    }
+    for number, expected in fields.items():
+        record = re.findall(rf"^T:Fed_wire\$__{number:08d}\[(.*)\]$", debug, re.M)
+        require(len(record) == 1, "Missing/duplicate wire-work field record")
+        actual = re.findall(r"\(\{(\d+)\}S:S\$([^$]+)\$0_0\$0\(\{(\d+)\}", record[0])
+        require(tuple((int(o), name, int(n)) for o, name, n in actual) == expected,
+                "Wire work union/metadata field layout changed")
+    storage = set()
+    for name, size, number in (("syntax", 78, 11), ("crypto", 40, 12), ("buffers", 236, 13)):
+        key = f"Fed_wire${name}$0_0$0"
+        require(f"S:{key}({{{size}}}ST__{number:08d}:S),F,0,0" in debug,
+                "Wire work is not its actual ordinary-XDATA object")
+        a = cdb_address(debug, "L:"+key)
+        span = set(range(a, a+size))
+        require(not storage & span and max(span) < 0x1e00, "Wire metadata/buffer objects overlap")
+        storage |= span
+
+    private = ("counter_value", "wipe", "finish", "read_nwk", "read_aps", "header", "inspect")
+    public = tuple("ed_wire_"+n for n in ("nwk", "aps", "decode", "encode", "inspect", "crypt"))
+    ranges, function = {}, {}
+    for name in private+public:
+        prefix = ("Fed_wire$" if name in private else "G$")+name+"$0$0"
+        first, last = (cdb_address(debug, "L:"+p+prefix) for p in ("", "X"))
+        require(first <= last, "Reversed wire function boundary")
+        # SDCC marks these ordinary epilogues at MOV DPL,A, before RET.
+        # Account for the real trailing instruction, not an unowned gap.
+        if name in ("finish", "header"):
+            require(decoded.get(last) == b"\xf5\x82" and decoded.get(last+2) == b"\x22",
+                    "Wire ordinary-helper result epilogue changed")
+            last += 2
+        if name in private:
+            require(decoded.get(last) == b"\x22", "Wire private helper does not return normally")
+        ranges[name] = (first, last)
+        for pc in decoded:
+            if first <= pc <= last:
+                require(pc not in function and owners[pc] == "ed_wire", "Wire function overlap")
+                function[pc] = name
+    require(set(function) == {pc for pc in decoded if owners[pc] == "ed_wire"},
+            "Incomplete wire helper instruction ownership")
+    edges = set()
+    for pc, source in function.items():
+        target = resident.branch(pc, decoded[pc])
+        if target is None:
+            continue
+        if 0x8000 <= target < 0x10000:
+            target |= pc & 0x70000
+        if target in function and function[target] != source:
+            dest = function[target]
+            require(target == ranges[dest][0], "Wire transfer enters another helper's middle")
+            edges.add((source, dest))
+    expected = {
+        ("finish", "wipe"),
+        ("ed_wire_nwk", "read_nwk"), ("ed_wire_nwk", "finish"),
+        ("ed_wire_aps", "read_aps"), ("ed_wire_aps", "finish"),
+        ("ed_wire_decode", "read_nwk"), ("ed_wire_decode", "read_aps"), ("ed_wire_decode", "finish"),
+        ("ed_wire_encode", "read_aps"), ("ed_wire_encode", "finish"),
+        ("header", "read_nwk"), ("header", "read_aps"),
+        ("inspect", "header"), ("inspect", "counter_value"),
+        ("ed_wire_inspect", "inspect"), ("ed_wire_inspect", "finish"),
+        ("ed_wire_crypt", "inspect"), ("ed_wire_crypt", "header"), ("ed_wire_crypt", "finish"),
+    }
+    require(edges == expected, f"Wire work lifetime edges changed: {edges ^ expected}")

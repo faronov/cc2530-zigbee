@@ -10,6 +10,7 @@
 #include "zdo_runtime.h"
 
 #define BDB_JOIN_RAM MAC_JOIN_RAM
+#define BDB_JOIN_VERSION 2u
 #define BDB_JOIN_SECURITY_WAIT 625000UL
 #define BDB_JOIN_EXCHANGE_WAIT 312500UL
 #define BDB_JOIN_KEEPALIVE 1875000UL
@@ -52,47 +53,83 @@ typedef struct {
     uint8_t endpoint, link_cost;
 } bdb_join_config_t;
 
-typedef struct {
+typedef union {
     mac_scan_event_t scan;
     mac_join_event_t association;
     mac_tx_event_t tx;
     security_keys_config_t installed;
+} bdb_join_event_data_t;
+
+typedef struct {
+    bdb_join_event_data_t data;
     uint32_t epoch;
     uint16_t token;
     uint8_t kind;
 } bdb_join_event_t;
 
-typedef struct {
+typedef union {
     mac_scan_action_t scan;
     mac_join_action_t association;
     mac_tx_action_t tx;
     security_keys_config_t install;
+} bdb_join_action_data_t;
+
+typedef struct {
+    bdb_join_action_data_t data;
     uint32_t epoch;
     uint16_t token;
     uint8_t kind;
 } bdb_join_action_t;
 
+/* Only the tagged member is live. NONE includes fresh/rejected start storage.
+ * A failed/faulted controller retains its member, including its lower lease.
+ */
+#define BDB_JOIN_WORK_NONE 0u
+#define BDB_JOIN_WORK_SCAN 1u
+#define BDB_JOIN_WORK_ASSOCIATION 2u
+#define BDB_JOIN_WORK_RUNTIME 3u
+
 typedef struct {
-    mac_scan_t scan;
-    mac_join_t association;
     nwk_aps_t transport;
     zdo_runtime_t zdo;
+} bdb_join_runtime_t;
+
+typedef union {
+    mac_scan_t scan;
+    mac_join_t association;
+    bdb_join_runtime_t runtime;
+} bdb_join_work_t;
+
+/* Retained scan outcome after release; the selected parent is copied below.
+ * The candidate table itself is available only while WORK_SCAN is retained.
+ */
+typedef struct {
+    uint32_t generation, sent, unscanned;
+    uint8_t reason, cleanup_error, overflow, tx_outcome, candidates;
+} bdb_join_scan_result_t;
+
+typedef struct {
+    bdb_join_work_t work;
     bdb_join_config_t config;
+    bdb_join_scan_result_t scan_result;
     mac_join_record_t record;
     nwk_parent_choice_t parent;
-    ed_packet_t packet;
     mac_tx_t BDB_JOIN_RAM *owner;
     uint32_t last, until, keepalive, epoch, commission_until, work_at;
     uint16_t token, steps;
     uint8_t version, phase, result, cleanup_error, attempts, issued, member;
     uint8_t got_tc, got_confirm, application_pending, application_done, application_result;
     uint8_t receive_result, abandon;
+    uint8_t workspace;
 } bdb_join_t;
 
 /* Original bounded R22/BDB3.0.1 centralized, install-code, awake direct-TC ED.
  * start requires explicit real provisioning, not EMPTY-media initialization.
  * Existing verified storage returns RECOVERY_REQUIRED; it is not resumed join.
  * scan/association actions preserve the real lower-controller grant contracts.
+ * Event/action data is a real tagged union: construct/read only the member
+ * selected by kind. epoch/token/kind are outside that union. Finish consuming
+ * a lower TX event before reusing its bytes for a scan-completion event.
  * INSTALL requires truthful confirmation of channel/PAN/IEEE/allocated-short
  * filters and continuous awake receive service, with matching epoch/token.
  * No function accesses equipment or supplies RF, entropy, CRC or timestamps.
@@ -122,7 +159,15 @@ bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now);
 bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result);
 
-/* Public context fields are read-only diagnostics. One foreground owner,
+/* Public context fields are read-only diagnostics. Inspect workspace before
+ * reading work.scan, work.association or work.runtime; inactive union members
+ * are not diagnostics. A successful release precedes every reuse. Association
+ * retries retain their context/generations; runtime persists through Update,
+ * stop and fault. record (including the actual Response stamp), scan_result
+ * and parent survive all subsequent phases. Runtime readiness exists only in
+ * WORK_RUNTIME; NONE/SCAN/ASSOCIATION can never authorize application traffic.
+ * init is for fresh storage/adapter epoch only, never recovery of a live lease.
+ * One foreground owner,
  * complete disjoint ordinary persistent objects; no reentrancy/ISR or resets
  * of leased/faulted lower owners. READY is local authenticated commissioning
  * completion, not certification, hardware observation or peer app receipt.

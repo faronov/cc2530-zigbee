@@ -6,6 +6,7 @@
 #include "nwk_aps.h"
 #include "zdo_srv.h"
 
+#define ZDO_RUNTIME_VERSION 2u
 #define ZDO_RUNTIME_WAIT 312500UL
 #define ZDO_RUNTIME_MAP_SIZE 4u
 #define ZDO_RUNTIME_NODE 1u
@@ -13,6 +14,8 @@
 #define ZDO_RUNTIME_IEEE_ADDRESS 3u
 #define ZDO_RUNTIME_PARENT 4u
 #define ZDO_RUNTIME_NO_EVENT 255u
+#define ZDO_RUNTIME_BROADCAST_ANNOUNCE 1u
+#define ZDO_RUNTIME_BROADCAST_PERMIT 2u
 
 typedef enum {
     ZDO_RUNTIME_OK = 0, ZDO_RUNTIME_ARGUMENT, ZDO_RUNTIME_STATE,
@@ -30,7 +33,7 @@ typedef struct {
 typedef struct {
     zdo_node_descriptor_t local, tc;
     zdo_runtime_address_t map[ZDO_RUNTIME_MAP_SIZE];
-    ed_packet_t packet, response, application;
+    ed_packet_t response, application;
     uint32_t last, deadline;
     uint8_t version, next_tsn, sequence, query, query_tx, tx_done, result;
     uint8_t response_pending, response_tx, application_ready, security_event;
@@ -46,6 +49,10 @@ typedef struct {
  * step never drives MAC. It preserves its pending TX through cancellation and
  * quiescence; take_result cannot turn a logical response into physical release.
  * Public context fields are allocation/read-only diagnostics, not setters.
+ * The unoccupied application slot is also returning receive scratch.
+ * application_ready alone publishes it; other consumed input is cleared.
+ * A pending application blocks taking another transport packet, but does not
+ * block client timeout/TX retirement or discard a separate server response.
  */
 zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     const zdo_node_descriptor_t * volatile local, volatile uint32_t now);
@@ -64,5 +71,15 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t 
 zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
     uint8_t * volatile which, uint8_t * volatile result);
 zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile ctx, ed_packet_t * volatile packet);
+
+/* BDB commissioning messages, not a successful-join input: construct either
+ * the local Device_annce or final 180-second permit broadcast in an EMPTY
+ * application slot, queue through real NWK/APS, then clear returning work.
+ * Pending applications are preserved. Server responses remain separate.
+ * The BDB caller owns the transport confirmation; this does not acquire a
+ * ZDO client/server transaction, send RF, authenticate or publish readiness.
+ */
+zdo_runtime_result_t zdo_runtime_broadcast(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
+    volatile uint8_t which, volatile uint32_t now);
 
 #endif

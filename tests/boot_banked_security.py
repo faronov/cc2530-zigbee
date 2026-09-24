@@ -237,7 +237,8 @@ def wiped_regions(debug):
     regions = []
     for module, name, size in (("security_keys", "w", 617), ("ccm_star", "state", 267),
                                 ("zigbee_mmo", "state", 89), ("zigbee_key_hash", "state", 60),
-                                ("ed_wire", "crypto", 272)):
+                                ("ed_wire", "crypto", 40), ("ed_wire", "syntax", 78),
+                                ("ed_wire", "buffers", 236)):
         key = f"F{module}${name}$0_0$0"
         require(re.findall(rf"^S:{re.escape(key)}\(\{{(\d+)\}}[^)]*\),F,0,0$", debug, re.M) == [str(size)],
                 "Complete wipe-owned XDATA extent changed")
@@ -403,7 +404,7 @@ def run(output, simulator, artifacts=None, reference_calls=None, *, failure=Fals
 def artifact_campaign(artifacts, campaign):
     if campaign == "full":
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        require(count == 244699, "Banked key artifact-negative coverage changed")
+        require(count == 246324, "Banked key artifact-negative coverage changed")
         return f"{count} artifact negatives"
     require(campaign == "deferred", "Unknown artifact campaign")
     return "artifact corruption explicitly deferred to full tier"
@@ -424,7 +425,7 @@ def main():
     campaign = artifact_campaign(artifacts, args.artifact_campaign)
     check_alias(args.simulator)
     peak, negatives = run(args.output, args.simulator, artifacts, calls)
-    require((peak, negatives) == (0x7b, 9941), "Banked key peak/negative coverage changed")
+    require((peak, negatives) == (0x7b, 10354), "Banked key peak/negative coverage changed")
     run(args.output, args.simulator, artifacts, calls, failure=True)
     print(f"Banked security: 22 real lifecycle operations, {campaign}, "
           f"{negatives} outcome negatives, peak SP {peak:02x}/7c; synthetic, never flash.")

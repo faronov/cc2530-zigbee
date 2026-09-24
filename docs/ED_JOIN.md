@@ -259,7 +259,8 @@ objects contain132049 CSEG bytes,16 CONST bytes and6570 XSEG bytes, before
 the caller, libc, startup, banking and placement. Summing module DATA/OSEG
 is not a valid simultaneous-frame or linked-IRAM proof.
 
-Top-level volatile parameter and local pointer copies now shorten compiler
+At `3888eae1871f42b02613456a9e57894bfeecf0fe`, top-level volatile parameter
+and local pointer copies shorten compiler
 temporary lifetimes, following the existing MAC/key-owner technique. They
 do not make caller objects volatile, change pointer memory spaces, move
 fields, introduce reentrancy or add an alternate protocol implementation.
@@ -275,11 +276,15 @@ definitions. Actual individual object allocations change as follows:
 This removes227 bytes of summed module DATA allocation, trading7123 CODE
 and36 XDATA bytes, but **does not establish complete target fit**. SDCC
 `sizeof` gives2743 bytes for `bdb_join_t`,168 for the separate MAC owner,
-125 for a BDB event and126 for an action. The current production XSEG sum
+125 for a BDB event and126 for an action. That revision's production XSEG sum
 is6606 bytes; the services plus only the BDB context and MAC owner already
 need9517 bytes, exceeding the7680-byte ordinary region below status. Event,
 action, caller configuration and libc storage are not included in that lower
 bound. The key-only peak SP7B/7C also supplies no additional caller headroom.
+That exact baseline revision passed
+[Actions36046973052](https://github.com/faronov/cc2530-zigbee/actions/runs/36046973052),
+56/56 successful jobs. This accepts the published baseline, not the following
+unpublished resource increments or a whole-MCU join.
 
 #26 therefore still needs explicit phase lifetimes, reduced/shared work
 storage with an active-call ownership proof, balanced CODE banks and real
@@ -287,6 +292,265 @@ execution under the unchanged stack/alias limits. Merely enlarging a linker
 allowance or allocating the IRAM alias as more RAM cannot make this
 composition valid. These measurements are **SDCC object/size checks plus
 unchanged host regressions**, not a linked-image or simulated MCU join.
+
+### Phase-owned BDB storage
+
+The first bounded #26 resource increment replaces simultaneous caller-owned scan,
+association and runtime allocation with a **real C union in ordinary XDATA**.
+It is not linker-area renaming, private compiler-scratch sharing or additional
+IRAM. The context ABI is version2; public entry-point memory spaces and
+foreground/nonreentrant calling conventions are unchanged. Callers inspect
+`workspace` before reading `work.scan`, `work.association` or `work.runtime`.
+An inactive member is not a readiness flag or a diagnostic record.
+
+| Live storage | Entry and lifetime | Required handoff |
+| --- | --- | --- |
+| NONE | Fresh context or rejected runtime configuration; bytes are not a live controller | Real runtime initializers validate endpoint/profile, crypto/NV limits, ACK/broadcast bounds and descriptor before scan can acquire a lease |
+| SCAN | Real `mac_scan_init/start/step`; a rejected scan start remains IDLE, while FAILED/FAULT retain the actual member | Copy scan outcome and selected parent, then require successful `mac_scan_release` before overwriting scan |
+| ASSOCIATION | Initialize once after scan release; all retries reuse the same context and nested generations | Copy the **complete** `mac_join_record_t`, then require successful `mac_join_release` with physical restoration and idle unchanged MAC owner |
+| RUNTIME | Initialize NWK/APS, ZDO and packet staging after association release and before durable short-address admission | Retained throughout INSTALL, key exchange, READY, PAN Update, draining, failure and fault; never reinitialized to recover an owner |
+
+Initial runtime validation uses this as-yet-unleased union, admits no packet
+or transaction and is discarded before scan starts. It does not leave an
+initialized runtime hidden underneath the scan. Neither runtime initializer
+resets the MAC owner or touches crypto/counters/NV. There are no callbacks or
+ISR users at any handoff; the previous service has returned and its release
+has succeeded before the next initializer is called. Configuration, owner
+pointer, phase/tag, selected parent, scan summary and complete association
+outcome live **outside** the union. The raw candidate table is available only
+while SCAN is retained; its copied summary keeps generation, sent/unscanned
+masks, reason, cleanup error, overflow, TX outcome and candidate count.
+Faulted scan/association members are never replaced by runtime storage.
+
+The original Response timestamp remains in `record.association.stamp`;
+delayed restoration/runtime initialization cannot restart the network-key
+deadline. Association rejection retries do not reset nested generations,
+MAC DSN, generation or IFS. A flash-read failure during subsequent durable
+association cannot publish INSTALL, membership or readiness, and a genuine
+modeled reboot still sees PROVISIONED. This is not a secure-rejoin procedure.
+
+Measured at the phase-only step with the unchanged SDCC4.2.0 large-model flags
+(the subsequent wire reduction is recorded separately below):
+
+| Allocation | `3888eae` | Phase-owned storage |
+| --- | ---: | ---: |
+| `sizeof(bdb_join_t)` |2743|1904|
+| BDB object CSEG / XSEG / DATA / OSEG |16390 /208 /44 /0|17090 /221 /49 /0|
+| All28 production objects CSEG / CONST / XSEG |139172 /16 /6606|139872 /16 /6619|
+| Services + BDB +168-byte MAC owner, excluding other caller storage |9517|8691|
+| Above +93-byte config,125-byte event,126-byte action |9861|9035|
+
+The union is1518 bytes and the retained scan summary17 bytes. Net caller
+saving is839 bytes; including the13-byte increase in BDB private compiler
+storage saves826 ordinary-XDATA bytes. At that step all27 other production objects match
+the baseline after excluding only the assembler's output-directory comment.
+`tests/bdb_join_layout.c` compiles actual caller allocation objects and
+asserts SDCC sizes and outside-union retained-field offsets in both existing
+BDB host workers. It is **not linked or executable**, supplies no substitute
+service and is not a banked target fixture.
+
+The existing78786 host checks first passed unchanged apart from moved-field
+access. The additional phase tests bring the corpus to79783 checks, passing
+native and nonrecovering ASan/UBSan for both board definitions. They cover
+both successful handoffs with byte-identical MAC ownership, retained outcome/
+timestamp, early API rejection without crypto/NV work, no candidate, missing
+scan/association restoration, terminal fault retention, actual refusal packets
+across three attempts, refusal followed by successful authenticated join,
+durable-association read failure and corrected never-leased start/cancellation.
+They never write a production context to manufacture a phase or result.
+
+**Whole-MCU acceptance remains unresolved.** The phase-only8691-byte lower bound
+exceeds the7680-byte ordinary region by1011 bytes, before caller I/O, libc,
+startup and banker scratch; the explicit caller objects raise the deficit
+to1355 bytes. Module DATA sums are not a simultaneous active-frame proof.
+No complete image, physical DATA reservation layout, full libc/active-lifetime
+proof, new stack high-water, mixed MCU trace or full-join CI worker is claimed.
+The key-only image still peaks at SP7B under the unchanged7C cap.
+Remaining #26 work must reduce/prove returning scratch separately from
+retained security/NV state, solve real banked call depth, place the actual
+services and new synthetic caller, then add strict linked identities and
+alias-aware AES/flash-RAM execution including failure/nonpublication cases.
+No old verifier identity, component budget, case, simulator deadline or CI
+worker is changed or removed by the phase-only increment. #27, #40/#45 and hardware
+acceptance remain separate.
+
+Local reproduction (isolated paths; no equipment or duplicate full matrix):
+
+```sh
+make -j1 BOARD=generic BUILD=build/stage2-phase/generic test-bdb-join
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-phase/lg test-bdb-join
+make -j1 BOARD=generic BUILD=build/stage2-phase/generic \
+  --eval 'stage2-objects: ; $(MAKE) -j1 $(patsubst src/%.c,$(BUILD)/ed-join/%.rel,$(ED_JOIN_SRC))' \
+  stage2-objects
+PYTHONPATH=tools python3 -B -m unittest test_ci_plan test_local_checks
+```
+
+### Returning wire-work reduction
+
+The next implemented reduction uses actual C unions for sequential
+`ed_wire` encode/decode/crypt scratch. Header/frame occupy one116-byte region;
+encoded payload/decoded packet/CCM output occupy a separate120-byte region.
+Metadata remains independently live. Private nested readers cannot wipe
+their caller's buffers, while every public return wipes all three named work
+objects. No retained counter, key history or journal state is overlaid.
+See the [complete lifetime, ABI and execution proof](BANKED_SECURITY.md#returning-wire-work-ownership).
+
+| Allocation | Phase-only step | Phase + returning wire work |
+| --- | ---: | ---: |
+| Ordinary `ed_wire` CSEG / XSEG / DATA / OSEG |6837 /797 /9 /4|7181 /466 /9 /4|
+| All28 production objects CSEG / CONST / XSEG |139872 /16 /6619|140216 /16 /6288|
+| Services +1904-byte BDB +168-byte MAC, excluding other caller storage |8691|8360|
+| Above +93-byte config,125-byte event,126-byte action |9035|8704|
+
+Both-board genuine SDCC object measurements agree. All26 modules other than
+BDB and wire still match `3888eae` after excluding only the output-directory
+comment. Combined ordinary-XDATA saving from that revision is1157 bytes:
+826 from phase storage plus331 from wire work. This is **not enough**:
+the new lower bound exceeds ordinary RAM by680 bytes, or1024 with explicit
+caller I/O/configuration, before libc/startup/banker scratch. No extra pool,
+reserved-status overlap or use of the IRAM alias is introduced.
+
+The existing banked key profile changes only as required by the real wire
+implementation and has been fully revalidated locally on both boards:
+49261 populated CODE bytes,3555 ordinary XDATA, unchanged physical DATA/
+bit/OSEG reservations, complete20-byte libc suffix, and actual peak SP7B
+under7C. Its original22 operations,128 AES calls,532 flash-RAM commands and
+retained busy fail-stop remain. Every extra CODE/unowned/wipe byte is included
+in the full246324 artifact/10354 outcome mutations; no old class is dropped.
+This is key-only **image-checked and simulated** evidence, not full MCU join.
+The native/nonrecovering sanitizer corpora pass on both boards with49119
+wire checks (1590 added interleaving/error checks),9490 key checks and79783
+BDB checks. No fixture-side success result or production-state overwrite
+manufactures these outcomes.
+
+Reproduction, each with a distinct build directory:
+
+```sh
+make -j1 BOARD=generic BUILD=build/stage2-wire-host/generic test-ed-integration
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-wire-host/lg test-ed-integration
+make -j1 BOARD=generic BUILD=build/stage2-wire/generic test-banked-security
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-wire/lg test-banked-security
+make -j1 BOARD=generic BUILD=build/stage2-wire-host/generic \
+  --eval 'stage2-objects: ; $(MAKE) -j1 $(patsubst src/%.c,$(BUILD)/ed-join/%.rel,$(ED_JOIN_SRC))' \
+  stage2-objects
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-wire-host/lg \
+  --eval 'stage2-objects: ; $(MAKE) -j1 $(patsubst src/%.c,$(BUILD)/ed-join/%.rel,$(ED_JOIN_SRC))' \
+  stage2-objects
+python3 -B tools/host_coverage.py --board generic --output build/stage2-wire-coverage/generic
+PYTHONPATH=tools python3 -B -m unittest test_banked_security test_ci_plan test_local_checks
+python3 -B tools/check_repository.py
+git diff --check
+```
+
+The remaining #26 work is concrete: remove the remaining ordinary-XDATA
+deficit without discarding retained state; establish physical DATA/libc
+ownership for the full active caller graph; solve real key-operation caller
+depth without raising SP7C; place/link the complete28-service composition;
+then add a separate real-wire synthetic MCU caller, strict whole-image/
+failure-state replay and both-board CI consumers. None is supplied by
+successful linkage of the smaller key image or native BDB READY. Stages3/4,
+#27, #40/#45 and all physical acceptance remain outside this increment.
+
+### Occupancy-owned runtime slots and tagged I/O
+
+The next reduction removes redundant runtime/caller buffers without sharing
+retained key/counter/journal state or adding a generic scratch pool.
+
+| Storage | Admission and active lifetime | Publication / retirement |
+| --- | --- | --- |
+| NWK/APS `incoming` | Reused as receive scratch **only** when neither a packet nor priority ACK is pending; full capacity rejects before key-owner work | Actual authentication and durable admission run first; transport checks then set `receive_ready`. Ignored ACKs/endpoints, duplicates, table exhaustion and failures clear unoccupied scratch. A pending packet is never cleared |
+| NWK/APS `mac[125]` | Real key services produce at most116 NPDU bytes at offset9; only an idle, unleased transport enters transmit construction | The real MAC codec emits a zero-payload short/short compressed header into the separate9-byte prefix; its returned size must be9 before submitting all bytes to the real MAC owner |
+| ZDO `application` | Receive scratch only while `application_ready` is clear; incoming transport packet remains separately owned until taken | Application reception sets the flag; all other consumed input is cleared before returning, including FORMAT/error/control results. Taking the application copies then clears it |
+| ZDO commissioning constructor | An unoccupied application slot constructs Device_annce or the final permit broadcast; `nwk_aps_queue` must really admit/copy it | Returning scratch is cleared on queue success or failure. BDB still owns actual TX confirmation and readiness; a message selector is not an authentication-success input |
+| BDB event/action `data` | A real union selected by outer `kind`; only one scan/association/TX/install payload is active | Epoch/token/tag remain outside the union. The synthetic driver finishes the real MAC step before reusing its TX-event bytes as a scan completion |
+
+The MAC prefix is the existing codec's3+4+2-byte layout, not a new framing
+rule. No overlapping payload/output is passed to a codec. Header emission
+cannot touch the already-produced NPDU, and a compile-time extent check
+requires9+116=125. Subsequent priority ACKs cannot overwrite an active MAC
+owner: existing `active`, release and QUIESCED rules still govern transmission.
+All operations remain synchronous, serialized foreground calls with disjoint
+complete caller objects; no ISR/callback/reentrant user can observe or retain
+the intermediate scratch span.
+
+ZDO server response storage remains independent of both its application slot
+and the transport's queued outgoing packet. A deferred response does not
+block a client/control receive, and another request cannot overwrite it.
+Before initial BDB readiness, transport admission blocks application delivery,
+so the commissioning constructor can use the empty application slot without
+discarding a pending application or adding another packet to BDB.
+It preserves the original Device_annce/permit contents, TSN allocation,
+confirmation owner and NV frequency. Both runtime context versions are now2;
+BDB's new version2 ABI also includes the `event.data`/`action.data` unions.
+No on-flash schema changes.
+
+Actual SDCC4.2.0 large-model measurements, identical for both board definitions:
+
+| Allocation | Phase + wire step | With occupancy/tagged slots |
+| --- | ---: | ---: |
+| `sizeof(nwk_aps_t)` |939|703|
+| `sizeof(zdo_runtime_t)` |459|339|
+| `sizeof(bdb_join_work_t)` / `sizeof(bdb_join_t)` |1518 /1904|1042 /1428|
+| BDB event / action |125 /126|55 /51|
+| NWK/APS object CSEG / XSEG / DATA / OSEG |17278 /319 /35 /6|17367 /320 /35 /6|
+| ZDO runtime object CSEG / XSEG / DATA / OSEG |10575 /232 /17 /0|11473 /246 /20 /0|
+| BDB object CSEG / XSEG / DATA / OSEG |17090 /221 /49 /0|16272 /213 /46 /0|
+| All28 objects CSEG / CONST / XSEG |140216 /16 /6288|140385 /16 /6295|
+| Services + BDB +168-byte MAC |8360|7891|
+| Above +93-byte config and event/action |8704|8090|
+
+The additional saving is614 ordinary-XDATA bytes:476 in BDB's live runtime,
+145 in caller I/O, minus7 additional compiler bytes. The complete saving from
+`3888eae`, with those explicit caller objects, is1771 bytes. All24 production
+objects other than BDB, NWK/APS, ZDO runtime and wire still match that baseline
+after excluding only their output-directory comment. The compile-only
+allocation regression now allocates1795 bytes and checks actual context,
+payload-union and outer-tag offsets; it is not a target executable.
+
+The prior79783 BDB checks passed unchanged before adding1939 checks, bringing
+the both-board native/nonrecovering sanitizer corpus to81722. New regressions
+preserve two simultaneously pending application/transport packets, reject
+FULL without crypto/counter consumption and then accept the **same** retried
+wire frame, check priority-ACK/duplicate/nonpublication cleanup, reject bad
+MICs and wrong endpoints, clear malformed endpoint-zero scratch, preserve
+pending client/server bytes, and reject a real durable receive failure.
+Invalid commissioning selectors, null arguments and half-range time jumps
+are rejected without acquiring transport or consuming a TSN.
+The genuine persisted reset boundary still retains VERIFIED, not automatic
+READY. Maximum125-byte MAC frames execute with82-byte NWK-only or65-byte
+NWK+APS protected application payloads; one extra protected byte fails
+without a MAC lease, frame publication or a hidden success result.
+
+Fresh both-board key-image links retain **exactly** the complete immutable
+identities checked and replayed in the preceding wire step. No key-image hash,
+case, budget, stack limit or simulator deadline is changed by this slot step.
+The slot changes themselves are **host-tested and SDCC object-checked**, not
+yet part of an executed complete MCU image. The remaining ordinary-RAM
+deficit is211 bytes before caller I/O, or410 with configuration/event/action,
+before libc/startup/banker scratch. Full active-call DATA/libc ownership and
+real complete-caller stack depth under7C are still unresolved.
+
+Local reproduction, without repeating the accepted old full matrix:
+
+```sh
+make -j1 BOARD=generic BUILD=build/stage2-slots/generic test-ed-integration
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-slots/lg test-ed-integration
+make -j1 BOARD=generic BUILD=build/stage2-slots/generic \
+  --eval 'stage2-objects: ; $(MAKE) -j1 $(patsubst src/%.c,$(BUILD)/ed-join/%.rel,$(ED_JOIN_SRC))' \
+  stage2-objects
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-slots/lg \
+  --eval 'stage2-objects: ; $(MAKE) -j1 $(patsubst src/%.c,$(BUILD)/ed-join/%.rel,$(ED_JOIN_SRC))' \
+  stage2-objects
+make -j1 BOARD=generic BUILD=build/stage2-slots-image/generic \
+  build/stage2-slots-image/generic/banked-security/banked_security.ihx
+make -j1 BOARD=lg_esl29_rev03 BUILD=build/stage2-slots-image/lg \
+  build/stage2-slots-image/lg/banked-security/banked_security.ihx
+PYTHONPATH=tools:tests python3 -B -c 'from pathlib import Path; import verify_banked_security as v; [v.verify(*v.load(Path("build/stage2-slots-image")/b)) for b in ("generic", "lg")]'
+python3 -B tools/host_coverage.py --board generic --output build/stage2-slots-coverage/generic
+PYTHONPATH=tools python3 -B -m unittest test_banked_security test_banked_image test_host_coverage test_ci_plan test_local_checks
+python3 -B tools/check_repository.py
+git diff --check
+```
 
 All fixture identities and key material are deliberately public synthetic
 values. No key-bearing firmware/NV dumps or captures are uploaded by these

@@ -64,6 +64,37 @@ The subsequent full-service allocation measurements and volatile-copy
 refactoring likewise use original C and actual SDCC objects; no linker/stack
 budget or hardware claim is expanded.
 
+The subsequent BDB phase-union storage and lifecycle regressions are also
+original BSD-3-Clause work. They use actual existing scan/association/runtime
+services, public synthetic wire packets and the existing combined peripheral
+model, not authentication-result overrides. Measurements are genuine SDCC4.2
+object/type allocations, **not** a linked full-stack or active-DATA/stack proof.
+Memory boundaries remain those of TI **SWRU191F, revised April2014**,
+section2.2.2 pp27-28 and the FMAP/MEMCTR descriptions pp33-34: SRAM/IRAM
+mapping does not provide another independent pool. **SWRZ031, April2009**,
+Table1 and sections1.1/1.2 retain the DMA variable-length and MAC Timer
+latching concerns; this change touches neither DMA modes nor timer hardware.
+No register/board policy, wire revision, dependency, external implementation
+or hardware evidence is added.
+
+The subsequent returning wire-work unions/private readers/public-return wipes
+are original refactoring of the same syntax and CCM services. The independent
+public synthetic transcript, all real lower-service objects, actual AES/MMIO
+and flash-RAM execution, DATA reservations and SP7C cap are preserved.
+Raw-CDB field/instruction ownership and full-byte identities bind reviewed
+storage lifetimes; neither a hash refresh alone nor host roundtrips establish
+target acceptance. No cryptographic algorithm, NV format, wire semantics,
+hardware register or specification revision is changed.
+
+The occupancy-owned runtime slots, BDB event/action unions and ZDO-owned
+commissioning constructor are likewise original BSD work. The9-byte MAC
+prefix is derived from the existing codec's short/short PAN-compressed
+layout, with the real codec emitting the header and real security services
+producing the NPDU; no external packet builder or authentication result is
+imported. Tests use public synthetic wire packets, actual save/read failure
+and the existing physical-retirement model. No lower hardware implementation,
+wire revision, NV schema/frequency, timing limit or stack cap is changed.
+
 | Reference | Status and permitted use |
 | --- | --- |
 | [TI CC2530](https://www.ti.com/product/CC2530) and [SWRU191F](https://www.ti.com/lit/pdf/swru191) | Primary hardware facts; link/cite documentation rather than redistribute whole manuals |

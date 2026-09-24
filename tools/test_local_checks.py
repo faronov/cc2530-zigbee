@@ -30,6 +30,19 @@ class LocalChecksTests(unittest.TestCase):
                     if line.startswith(("python3 ", directory + "/")) or
                     include_build and line.startswith(("cc ", "sdcc ", "cp "))]
 
+    def test_bdb_object_layout_is_mandatory_but_not_an_executable_claim(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-bdb-join", BOARD=board, include_build=True)
+            compiles = [args for args in commands if args[0] == "sdcc"]
+            self.assertEqual({args[args.index("-c")+1] for args in compiles},
+                             {"src/nwk_aps.c", "src/zdo_runtime.c", "src/bdb_join.c",
+                              "tests/bdb_join_layout.c"})
+            self.assertTrue(all("--model-large" in args and "--std-c99" in args and
+                                args[args.index("-o")+1].endswith(".rel") for args in compiles))
+            self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
+            self.assertEqual([Path(args[0]).name for args in commands if args[0] not in ("cc", "sdcc")],
+                             ["host-bdb-join-tests", "host-bdb-join-tests-sanitize"])
+
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
             for image in IMAGES:
@@ -327,6 +340,7 @@ class LocalChecksTests(unittest.TestCase):
 
     def test_ed_integration_keeps_real_services_and_host_only_models(self):
         new_modules = {"ed_wire", "security_keys", "nwk_aps", "zdo_runtime", "bdb_join"}
+        target_modules = new_modules | {"bdb_join_layout"}
         for board in BOARDS:
             commands = self.dry_run("test-ed-integration", include_build=True, BOARD=board)
             builds = [args for args in commands if args[0] == "cc"]
@@ -350,14 +364,16 @@ class LocalChecksTests(unittest.TestCase):
             for args in sanitized:
                 self.assertIn("-fno-sanitize-recover=all", args)
             target = [args for args in commands if args[0] == "sdcc"]
-            self.assertEqual({Path(args[args.index("-c")+1]).stem for args in target}, new_modules)
+            self.assertEqual({Path(args[args.index("-c")+1]).stem for args in target}, target_modules)
             for args in target:
                 self.assertIn("-c", args)
-                self.assertFalse(any(arg.startswith("tests/") for arg in args))
+                self.assertEqual([arg for arg in args if arg.startswith("tests/")],
+                                 ["tests/bdb_join_layout.c"] if
+                                 args[args.index("-c")+1] == "tests/bdb_join_layout.c" else [])
                 self.assertNotIn("-DCC2530_HOST_TEST", args)
             for image in IMAGES:
                 commands = self.dry_run("all", include_build=True, BOARD=board, IMAGE=image)
-                self.assertFalse(any(Path(arg).stem in new_modules
+                self.assertFalse(any(Path(arg).stem in target_modules
                                      for args in commands for arg in args if arg.endswith((".c", ".rel"))))
 
     def test_banked_profile_is_isolated_and_uses_reviewed_abi_and_immediate_snapshots(self):

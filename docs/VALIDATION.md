@@ -39,13 +39,16 @@ release events are always full. Shared headers/build/verification/runtime
 changes and unknown dependency mappings also select full.
 
 The expensive banked-key artifact corruption campaign is explicit:
-`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all244699
+`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all246324
 mutations. A selected affected run may defer this campaign, **not** the
 immutable CODE/address/raw-CDB/map/listing/object identities, physical
 DATA/libc/IRAM-alias ownership or actual CPU/peripheral execution.
-It still requires all22 operations,9941 outcome negatives, SP7B/7C and the
+It still requires all22 operations,10354 outcome negatives, SP7B/7C and the
 retained busy-flash RAM failure. The full tier retains every mutation;
 there is no sampling, weakened validator or simulated-outcome cache.
+These current counts include the [returning wire-work reduction](BANKED_SECURITY.md#returning-wire-work-ownership).
+The smaller counts and timings below describe the earlier accepted revision;
+they are not updated measurements of the new image.
 
 Measurements on2026-09-24:
 
@@ -73,7 +76,8 @@ Its20s versus the old docs-only913s is an observed selection saving, not
 faster execution of an identical corpus or a second full firmware acceptance.
 Summed job-seconds describe observed job durations, not rounded billing units.
 
-Fresh GCC13.3.0, `-O0 --coverage`, generic-board host coverage merges the
+The following coverage table and risk/line references are the historical
+`fd02a7b` baseline. Fresh GCC13.3.0, `-O0 --coverage`, generic-board host coverage merges the
 actual `test_ed_wire`, `test_security_keys` and `test_bdb_join` executions.
 Counters from separate executables are unioned by source line/branch shape;
 missing execution, invalid counts and incompatible layouts fail explicitly.
@@ -104,6 +108,24 @@ or instrumentation. Compiler/optimization changes can change these counts.
 The uncovered paths are testing/integration work for #26/#27, not evidence of
 a confirmed production bug or a waiver of their behavior requirements.
 The later #37 fuzz/interruption/watchdog/endurance scope remains distinct.
+
+After the phase-storage, returning-wire-work and occupancy/tagged-slot
+increments, a fresh **local**
+GCC13.3.0 run of the same three genuine corpora reports:
+
+| Production owner | Lines hit/total | Branch edges hit/total |
+| --- | ---: | ---: |
+| `ed_wire.c` |204/216|224/278|
+| `security_keys.c` |573/597|631/836|
+| `nwk_aps.c` |287/299|336/468|
+| `zdo_runtime.c` |205/225|208/346|
+| `bdb_join.c` |332/358|432/610|
+
+Phase refusal/retry/fault handoffs and all six public wire API interleavings
+now execute in the expanded corpora; the old line-number gap list above is
+not a current uncovered-branch report. Remaining combinations and full MCU
+ownership/execution are still separate work. These local counts neither
+replace the historical Actions record nor establish whole-target acceptance.
 
 ### Full worker partition and earlier measurements
 
@@ -286,6 +308,42 @@ without artifact uploads. This is not a new linked image or alias-aware
 whole-stack simulation. All original44 jobs, strict proofs, cases, resource
 caps and15-second simulator deadlines remain. New complete target placement,
 execution and hardware evidence are expressly not inferred from the host run.
+
+The later [phase-storage increment](ED_JOIN.md#phase-owned-bdb-storage) retains
+the now54-worker partition, adds mandatory SDCC caller-size/offset assertions
+to the two existing BDB workers, and extends their78786-check corpus to79783.
+Both-board local native/nonrecovering sanitizer checks passed. The new tests
+exercise real release-before-reuse, retained fault contexts, refusal/retry
+generations, delayed restoration without deadline extension and flash-reader
+failure without membership. The new allocation object is not an executable
+target fixture. Its1904-byte BDB context still leaves services plus BDB/MAC
+at8691 ordinary-XDATA bytes before caller I/O and libc; no whole-MCU linked
+image, alias-aware execution or new stack measurement is implied.
+
+The following [wire-work increment](ED_JOIN.md#returning-wire-work-reduction)
+reduces the combined lower bound to8360, still680 bytes over ordinary RAM
+(1024 over with caller I/O/configuration). Its changed banked **key-only**
+image passes complete both-board local artifact, ABI/lifetime, alias-aware
+AES/MMIO/flash-RAM and failure execution: CODE49261, XDATA3555+64 status,
+SP7B/7C,246324 artifact and10354 outcome negatives. Original scenarios,
+physical DATA reservations, lower-service object identities,15-second
+invocations,15-minute jobs and worker/upload policy remain intact. Native
+wire49119, key9490 and BDB79783 checks pass with nonrecovering sanitizers on
+both boards. Published full Actions acceptance remains a separate step.
+
+The subsequent [occupancy/tagged-slot step](ED_JOIN.md#occupancy-owned-runtime-slots-and-tagged-io)
+adds1939 BDB checks (81722 total), passes both-board native/nonrecovering
+sanitizers and exact SDCC context/tagged-payload assertions, and lowers the
+ordinary allocation bound to7891, or8090 with caller I/O/configuration.
+Full slots are preserved before authentication/counter consumption; exact
+125-byte protected frames, one-byte-over failures, malformed control cleanup,
+pending server/client/application concurrency and durable nonpublication are
+exercised with real services. Fresh key-image links retain all six complete
+identities from the already replayed wire increment, with no hash update or
+new simulation claim for the absent BDB/NWK/APS/ZDO caller.
+The published starting revision `3888eae1871f42b02613456a9e57894bfeecf0fe`
+passed [Actions36046973052](https://github.com/faronov/cc2530-zigbee/actions/runs/36046973052),
+56/56 jobs; that baseline acceptance does not cover these unpublished changes.
 
 ### Durable outgoing range owner
 

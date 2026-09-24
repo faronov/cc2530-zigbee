@@ -59,7 +59,7 @@ linked-image/ABI/alias guard and simulator deadline.
 | --- | --- | --- |
 | Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
 | Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
-| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora, including every244699 banked-key artifact mutation |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora, including every246324 banked-key artifact mutation |
 
 Selection uses actual forced Make dry-run compiler inputs and recursively
 follows project includes, including C test helpers included by other C tests.
@@ -84,7 +84,7 @@ This change does not configure repository branch protection.
 The default Make targets still run the full artifact campaign. Explicit local
 affected reproduction may use `ARTIFACT_CAMPAIGN=deferred` with
 `test-banked-security`; its immutable full-image checks,22 real operations,
-9941 outcome negatives and retained flash failure remain mandatory.
+10354 outcome negatives and retained flash failure remain mandatory.
 No artifact mutation is sampled or removed from the full tier.
 `make BOARD=generic test-coverage` collects fresh GCC line/branch evidence
 from the real wire/key/join tests. It requires matching GCC/gcov; raw
@@ -165,6 +165,22 @@ make BOARD=generic test-zigbee-mmo
 make BOARD=generic test-zigbee-key-hash
 make BOARD=generic test-security-counter
 ```
+
+`test-bdb-join` also compiles the SDCC-only `tests/bdb_join_layout.c`
+caller-allocation regression. Its context/union sizes and retained-field
+offsets are object-level checks, not a full-join image or stack proof.
+The [phase-owned storage contract](docs/ED_JOIN.md#phase-owned-bdb-storage)
+records actual release lifetimes, the79783-check host corpus and the remaining
+whole-MCU RAM deficit. The original worker partition and target suites remain.
+The subsequent [wire-work reduction](docs/ED_JOIN.md#returning-wire-work-reduction)
+also requires the complete both-board `test-banked-security` checks, not just
+native roundtrips: full immutable artifacts, actual banked/AES/flash-RAM
+execution, all named wipes, negative mutations and the unchanged SP7C ceiling.
+The [occupancy/tagged-slot checks](docs/ED_JOIN.md#occupancy-owned-runtime-slots-and-tagged-io)
+extend the BDB corpus to81722 and the mandatory allocation assertions to
+1428-byte context,55-byte event and51-byte action layouts. Do not omit either
+board, the original runtime negatives or the exact-frame/backpressure and
+durable-nonpublication cases. These are not a whole-MCU fixture or stack proof.
 
 `test-zdo-node` composes the real Node Descriptor and APS codecs, runs the
 native/nonrecovering sanitizer corpus, and takes three immediate listing
