@@ -18,7 +18,7 @@ typedef enum {
     NWK_APS_OK = 0, NWK_APS_ARGUMENT, NWK_APS_STATE, NWK_APS_FULL,
     NWK_APS_SECURITY, NWK_APS_WIRE, NWK_APS_CLOCK, NWK_APS_TIMEOUT,
     NWK_APS_RADIO, NWK_APS_DUPLICATE, NWK_APS_IGNORED, NWK_APS_EXHAUSTED,
-    NWK_APS_CANCELLED
+    NWK_APS_CANCELLED, NWK_APS_ACK_FAILED
 } nwk_aps_result_t;
 
 typedef struct {
@@ -41,6 +41,7 @@ typedef struct {
     uint8_t reply, reply_secure, receive_ready, event, secure, special;
     uint8_t completed, result, error, announced, permit_sent, ready, wrap_wait, version;
     uint8_t cancel, cancel_sent, cancel_result, parent_information, quiet;
+    uint8_t stopping, reply_result;
 } nwk_aps_t;
 
 /* A single foreground owner with one application/control TX, one priority ACK,
@@ -71,6 +72,12 @@ nwk_aps_result_t nwk_aps_take(nwk_aps_t *ctx, ed_packet_t *packet, uint8_t *even
 nwk_aps_result_t nwk_aps_confirm(nwk_aps_t *ctx, uint8_t *result);
 /* Request cancellation; step must still establish physical quiescence. */
 nwk_aps_result_t nwk_aps_cancel(nwk_aps_t *ctx, uint32_t now);
+/* Stop ordinary TX and priority ACK without releasing an active MAC lease.
+ * step drains cancellation/QUIESCED before clearing stopping. A failed ACK
+ * with confirmed MAC release returns ACK_FAILED and records its MAC outcome
+ * in reply_result; it is not an uncertain radio fault or membership loss.
+ */
+nwk_aps_result_t nwk_aps_stop(nwk_aps_t *ctx, uint32_t now);
 
 /* Nonreentrant, disjoint complete ordinary caller objects only. Applications
  * remain blocked until a genuine network announcement, verified TC key and

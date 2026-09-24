@@ -187,6 +187,17 @@ TC exchange failure instead requires leave, network-parameter reset,
 `bdbNodeIsOnANetwork = FALSE` and `TCLK_EX_FAILURE`.
 Exhausted discovery must not become a successful join or an unbounded loop.
 
+The implementation distinguishes this initial-commissioning failure policy
+from post-READY operational loss. Bounded keepalive retries and explicit
+TX/ACK retirement can remove application readiness without persisting LEFT.
+Quiescent lost server responses/APS ACKs and APS counter backpressure do not
+trigger Leave. Local stopped-clock work exhaustion is a separate WORK_LIMIT,
+not an early authentication timeout. These are original bounded runtime
+policies, not new normative wire rules or completed recovery/conformance
+claims. Authenticated remote Leave and admitted fixed-binding address
+conflict retain their terminal behavior; arbitrary-peer Device_annce
+admission and network-wide conflict handling remain unsupported.
+
 Section 10.2.5 gives separate descriptor, request-key and verify-key retry
 stages, using `bdbcTCLinkKeyExchangeTimeout = 5 s` and
 `bdbTCLinkKeyExchangeAttemptsMax`. Its R20-or-earlier descriptor exception

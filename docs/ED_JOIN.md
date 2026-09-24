@@ -70,6 +70,38 @@ Failed commissioning demotes readiness and requests a real protected Leave
 when possible. Keyless abandonment explicitly produces no frame. A physical
 cleanup failure retains the lower owner in FAULT, never resets it to fake IDLE.
 
+### Operational failure and foreground work
+
+Commissioning abandonment is not the response to an ordinary READY failure.
+A lost periodic Timeout Response or a quiescent MAC transmission failure
+retries the parent query up to three attempts. Exhaustion demotes volatile
+membership/application readiness, drains outstanding TX/ACK ownership and
+finishes with `BDB_JOIN_PARENT_FAILED`, without constructing Leave or saving
+LEFT. Other fatal operational errors likewise preserve durable key history
+for explicit recovery; they do not automatically resume READY. Initial
+commissioning failures and admitted local/TC address conflicts retain their
+real Leave behavior. Authenticated remote Leave remains terminal.
+
+A failed priority APS ACK with confirmed MAC release reports
+`NWK_APS_ACK_FAILED` and its actual MAC outcome in `reply_result`. A quiescent
+failed ZDO server reply reports `ZDO_RUNTIME_DROPPED` and its NWK/APS cause in
+`response_result`. Neither failure destroys membership. Uncertain MAC FAULT,
+crypto/storage failure and failed cancellation are not reclassified as these
+ordinary losses. `nwk_aps_stop` prevents new admission, cancels ordinary TX
+and the priority ACK, and clears `stopping` only after physical retirement.
+It cannot turn a pending or faulted radio owner into IDLE.
+
+After association, `BDB_JOIN_STALL_STEPS=4096` bounds consecutive step calls
+at the same symbol time. Advancing the coherent symbol epoch resets this
+local guard, so normal polling at approximately1 ms does not truncate the
+10-second network-key or5-second TC deadlines. The4097th same-time call
+latches `BDB_JOIN_WORK_LIMIT`, not a key timeout, and drains without Leave.
+An issued, unconfirmed adapter INSTALL instead retains FAULT. Unrelated
+events cannot bypass the guard or retirement; callers inspect actions even
+when the event returns IGNORED. The100-second commissioning deadline and
+the existing explicit scan, association, MAC and cleanup bounds remain.
+No CPU frequency or new maximum ordinary polling rate is assumed.
+
 ## Bounded transport
 
 `nwk_aps` has one outbound transaction, one priority ACK, one receive record
@@ -123,15 +155,32 @@ queue admission as a response.
 The server retains the original generic unsupported-unicast fallback and
 broadcast/Parent_annce drop rules. Address requests add the specified matching
 broadcast exception, addressed failures and childless extended response.
-Device_annce updates a four-entry address map, invalidates conflicting short
-bindings, and fails closed on conflict with the fixed local/TC binding.
+For packets admitted by the fixed-peer security owner, Device_annce updates
+a four-entry address map, invalidates conflicting short bindings, and fails
+closed on conflict with the fixed local/TC binding. Only NWK-source0 with the
+bound TC's security identity reaches this path. Relayed third-party
+announcements, including a third party claiming the local short address,
+are rejected before map mutation; this is not general network-wide address
+conflict detection.
 It does not manufacture a replacement address or claim complete routing-side
 conflict resolution. Optional discovery, binding and application services
 remain outside this initial integration.
 
+APS counter quarantine explicitly drops an unsendable server response with
+`response_result=NWK_APS_EXHAUSTED`, rather than leaving a response queued
+for the full duplicate window. Ordinary TX backpressure retains the one
+deferred response, but does not block reception of client responses or
+durable control events. A further server request while that response slot
+is occupied is explicitly dropped with `NWK_APS_FULL`; it cannot overwrite
+the retained response. The application still must drain its single delivery
+slot. None of these results claims successful response delivery.
+
 Authenticated Network Update is persisted by the key owner. During READY the
 owner stops current traffic and requires a new real adapter-install confirmation
-before resuming. An update during initial commissioning requires recovery rather
+before resuming. It cancels an outstanding parent query without discarding
+its physical TX completion, removes deferred old-configuration responses,
+and rearms keepalive after successful reinstallation. An old query deadline
+cannot make the reinstalled device leave. An update during initial commissioning requires recovery rather
 than silently continuing with uninstalled network parameters.
 
 ## Evidence and remaining target gate
@@ -156,6 +205,26 @@ eventual MAC cleanup; a valid MIC does not extend a transaction deadline.
 It also exercises all three APS retries, late/wrong/early ACKs, full receive
 tables and real transmitted APS-counter wrap. Parent keepalive continues
 during the wrap quarantine; counter0 is not reused before its expiry.
+Operational-loss regressions include one/all three lost keepalives, transient
+and sustained CCA failure, failed priority ACKs, four real MAC NO_ACK attempts
+for a server response, AR0/AR1 requests during actual APS wrap, client reception
+while a server response is deferred, and PAN update during a pending query.
+Modeled resets verify that operational failures retain VERIFIED and permit
+the actual protected Rejoin primitive with a larger security counter, whereas
+genuine terminal Leave retains LEFT and rejects that primitive without output.
+Fast-poll waits cross4096 calls and uint32 time wrap before accepting a valid
+network/TC key. Stopped time, ignored events, unconfirmed INSTALL and missing
+QUIESCED are separate negative cases. These checks do not implement #27's
+full recovery procedure.
+
+The unchanged synthetic READY fixture begins with17 of64 per-power-epoch
+erase attempts consumed. Sixteen successful30-second keepalive cycles fit;
+the17th reaches the programmed NV quota at about510 seconds. Cleanup must
+not attempt another NV write or Leave, and a modeled reset retains VERIFIED.
+This is a software work/wear quota, not measured electrical endurance or
+acceptable long-running availability. Persistence-frequency work is still
+required; neither increasing quotas nor weakening durable replay/counter
+ownership is implied by these fixes.
 
 This evidence is **host-tested and SDCC compile-checked**, not a new linked-image,
 alias-aware execution or physical observation. Existing linked-image and

@@ -10,7 +10,11 @@ ZDO and bounded BDB commissioning. Its real C services share a synthetic
 AES/flash peripheral model; a synthetic coordinator must verify the key
 exchange. `bdb_join` never accepts an authentication-success flag. It keeps
 membership distinct from application readiness and retains physical cleanup
-ownership. This adds neither a board caller nor proof of whole-stack8051
+ownership. Operational loss drains TX/ACK ownership without invoking
+commissioning Leave or overwriting durable verified keys. Explicit
+stopped-clock work limits do not replace protocol deadlines, and ZDO response
+backpressure cannot block a pending client's response merely because its
+server slot is occupied. This adds neither a board caller nor proof of whole-stack8051
 memory/ABI fit; the existing strict target profiles remain separate.
 
 The [banked security target profile](BANKED_SECURITY.md) now separately proves

@@ -198,6 +198,10 @@ static zdo_runtime_result_t received(zdo_runtime_t *ctx, nwk_aps_t *transport)
         return ZDO_RUNTIME_OK;
     }
     if (p->aps.cluster_id == ZDO_SRV_DEVICE_ANNCE) return announce(ctx, transport, p);
+    if (ctx->response_pending) {
+        ctx->response_result = NWK_APS_FULL;
+        return ZDO_RUNTIME_DROPPED;
+    }
     if (p->aps.cluster_id < 2) return address_request(ctx, p);
     local.descriptor = ctx->local; local.address = keys.config.address;
     rx.header = p->aps; rx.broadcast = p->nwk.destination >= 0xfffbu || p->aps.delivery_mode == 2;
@@ -223,24 +227,43 @@ zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t *ctx, nwk_aps_t *transport, 
         if (nwk_aps_confirm(transport, &result) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
         if (ctx->query_tx) {
             ctx->query_tx = 0; ctx->tx_done = 1;
-            if (result && ctx->result != ZDO_RUNTIME_TIMEOUT) ctx->result = ZDO_RUNTIME_TRANSMIT;
+            if (result && ctx->result != ZDO_RUNTIME_TIMEOUT && ctx->result != ZDO_RUNTIME_CANCELLED)
+                ctx->result = ZDO_RUNTIME_TRANSMIT;
         } else {
-            ctx->response_tx = 0;
-            if (result) return ZDO_RUNTIME_TRANSMIT;
+            ctx->response_tx = 0; ctx->response_result = result;
+            if (result) return ZDO_RUNTIME_DROPPED;
         }
     }
     if (ctx->query && ctx->result == ZDO_RUNTIME_NO_EVENT && expired(now, ctx->deadline)) {
         ctx->result = ZDO_RUNTIME_TIMEOUT;
         if (ctx->query_tx && nwk_aps_cancel(transport, now) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
     }
-    if (transport->receive_ready && !ctx->response_pending && !ctx->application_ready)
+    if (transport->receive_ready && !ctx->application_ready)
         rc = received(ctx, transport);
     if (ctx->response_pending && !transport->queued && !transport->completed) {
         queued = nwk_aps_queue(transport, &ctx->response, 0, now);
+        if (queued == NWK_APS_EXHAUSTED) {
+            ctx->response_pending = 0; ctx->response_result = (uint8_t)queued;
+            return ZDO_RUNTIME_DROPPED;
+        }
         if (queued != NWK_APS_OK) return queued == NWK_APS_FULL ? ZDO_RUNTIME_FULL : ZDO_RUNTIME_TRANSMIT;
         ctx->response_pending = 0; ctx->response_tx = 1;
     }
     return rc;
+}
+
+zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t *ctx, nwk_aps_t *transport, uint32_t now)
+{
+    zdo_runtime_result_t result = advance(ctx, now);
+    if (result) return result;
+    if (!transport) return ZDO_RUNTIME_ARGUMENT;
+    if ((ctx->query_tx || ctx->response_tx) && transport->queued &&
+        nwk_aps_cancel(transport, now) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
+    if (ctx->query) ctx->result = ZDO_RUNTIME_CANCELLED;
+    if (ctx->response_pending) {
+        ctx->response_pending = 0; ctx->response_result = NWK_APS_CANCELLED;
+    }
+    return ZDO_RUNTIME_OK;
 }
 
 zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t *ctx, uint8_t *which, uint8_t *result)

@@ -5,6 +5,7 @@
 #include "bdb_join.h"
 #include "security_joint_model.h"
 #include "zigbee_key_hash.h"
+#include "nv_record.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,10 +35,14 @@ static uint8_t scan_beacon, associated_request, extracted, initial_key;
 static uint8_t app_sends, app_counter, dropped_ack, test_case;
 static uint8_t leave_sent;
 static uint8_t wrap_mode, drop_all_acks;
+static uint8_t phy_busy, phy_lose, mute_timeout;
+static unsigned lost_frames, muted, busy_events;
+static const uint8_t *aux_source;
 static uint16_t expected_reply_cluster;
 static uint16_t peer_pan;
 static uint8_t expected_reply_status, expected_reply_length, reply_seen;
 static uint32_t now, peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device_aps;
+static uint32_t initial_now = 100;
 static unsigned checks, iterations, transmissions;
 #define CHECK(x) do { checks++; if (!(x)) { \
     fprintf(stderr, "BDB integration: case%u line%d phase%u/%u key%u error%u/%u\n", \
@@ -59,7 +64,7 @@ static void key_context(zigbee_security_key_t *key, const uint8_t *material,
 {
     memset(key, 0, sizeof(*key));
     memcpy(key->key, material, 16);
-    memcpy(key->source, outgoing ? identity.tc_ieee : identity.own_ieee, 8);
+    memcpy(key->source, outgoing ? (aux_source ? aux_source : identity.tc_ieee) : identity.own_ieee, 8);
     key->level = 5; key->extended_nonce = 1; key->key_identifier = layer ? selector : 1;
     key->counter = counter; key->limits = limits;
 }
@@ -172,6 +177,7 @@ static void observe_transmission(void)
         CHECK(!memcmp(peer_in.nwk.source_ieee, identity.own_ieee, 8));
         CHECK(!memcmp(peer_in.nwk.destination_ieee, identity.tc_ieee, 8));
         CHECK(!!(peer_in.nwk.flags & NWK_FLAG_END_DEVICE_INITIATOR) == !!parent_set);
+        if (mute_timeout) { muted++; return; }
         base_peer(1, 0, 0);
         peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
         memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
@@ -260,8 +266,13 @@ static void source_event(mac_tx_event_t *source)
     source->retry = transmitter.retries; source->nb = transmitter.nb;
     if (transmitter.phase == MAC_TX_DRAW_WAIT) source->kind = MAC_TX_EVENT_RANDOM;
     else if (transmitter.phase == MAC_TX_RADIO) {
-        source->kind = MAC_TX_EVENT_SENT; now = transmitter.at+24u+2u*transmitter.length;
-        observe_transmission();
+        if (phy_busy) { source->kind = MAC_TX_EVENT_BUSY; now = transmitter.at+8u; busy_events++; }
+        else {
+            source->kind = MAC_TX_EVENT_SENT; now = transmitter.at+24u+2u*transmitter.length;
+            if (phy_lose) lost_frames++; else observe_transmission();
+        }
+    } else if (transmitter.phase == MAC_TX_ACK_WAIT && phy_lose) {
+        now = transmitter.tx_end+MAC_TX_ACK_SYMBOLS;
     } else if (transmitter.phase == MAC_TX_ACK_WAIT) {
         source->kind = MAC_TX_EVENT_ACK; now = transmitter.tx_end+34u;
         ack[0] = device.phase == BDB_JOIN_ASSOCIATING ? 0x12 : 2;
@@ -411,6 +422,8 @@ static void setup(void)
     scan_beacon = associated_request = extracted = initial_key = pending = 0;
     app_sends = app_counter = dropped_ack = leave_sent = reply_seen = wrap_mode = drop_all_acks = 0;
     aps_counter = nwk_sequence = 0; expected_reply_cluster = 0;
+    phy_busy = phy_lose = mute_timeout = 0; lost_frames = muted = busy_events = 0;
+    aux_source = NULL;
     last_device_nwk = last_device_aps = 0; transmissions = 0;
     peer_pan = identity.pan;
     security_joint_reset(1);
@@ -448,7 +461,7 @@ static void setup(void)
     memcpy(mh.destination, identity.own_ieee, 8);
     payload[0] = 2; payload[1] = 0x78; payload[2] = 0x56; payload[3] = 0;
     CHECK(mac_frame_encode(&mh, payload, 4, response, sizeof(response), &response_length) == MAC_CODEC_OK);
-    now = 100; peer_nwk_counter = peer_aps_counter = 1;
+    now = initial_now; peer_nwk_counter = peer_aps_counter = 1;
     CHECK(mac_tx_init(&transmitter, 255, now) == MAC_TX_OK);
     CHECK(bdb_join_init(&device, now) == BDB_JOIN_OK);
     CHECK(bdb_join_start(&device, &transmitter, &config, now) == BDB_JOIN_OK);
@@ -478,6 +491,384 @@ static void commission(void)
         }
     }
     CHECK(iterations < 512);
+}
+
+static void ready(void)
+{
+    test_case = 0; setup(); commission();
+    CHECK(device.phase == BDB_JOIN_READY && device.transport.ready && device.member);
+}
+
+static void drain(void)
+{
+    for (iterations = 0; iterations < 256 && device.phase < BDB_JOIN_FAILED &&
+        (device.transport.active || device.transport.queued || device.transport.reply ||
+         device.transport.completed || device.transport.stopping || device.zdo.response_pending ||
+         device.zdo.response_tx || device.phase == BDB_JOIN_ABORTING || device.phase == BDB_JOIN_LEAVING);
+         iterations++) drive();
+    CHECK(iterations < 256);
+}
+
+static void retained(uint8_t phase)
+{
+    ed_packet_t rejoin = {0};
+    zigbee_security_meta_t meta;
+    uint8_t output[64], written = 0xa5;
+    unsigned before;
+    security_joint_reset(0);
+    CHECK(security_keys_open() == SECURITY_KEYS_OK);
+    CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == phase);
+    CHECK(mac_tx_init(&transmitter, 17, now) == MAC_TX_OK);
+    CHECK(bdb_join_init(&device, now) == BDB_JOIN_OK);
+    CHECK(bdb_join_start(&device, &transmitter, &config, now) == BDB_JOIN_RECOVERY_REQUIRED);
+    CHECK(!device.member && !device.transport.ready);
+    if (phase != SECURITY_KEYS_VERIFIED && phase != SECURITY_KEYS_LEFT) return;
+    rejoin.nwk.type = ED_NWK_COMMAND; rejoin.nwk.version = 2; rejoin.nwk.radius = 1;
+    rejoin.nwk.source = status.config.address;
+    rejoin.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(rejoin.nwk.source_ieee, identity.own_ieee, 8);
+    memcpy(rejoin.nwk.destination_ieee, identity.tc_ieee, 8);
+    rejoin.length = 2; rejoin.payload[0] = 6; rejoin.payload[1] = 0x88;
+    memset(output, 0xa5, sizeof(output)); before = security_joint_flash_commands();
+    if (phase == SECURITY_KEYS_VERIFIED) {
+        CHECK(security_keys_send(&rejoin, 0, output, sizeof(output), &written, &limits, 2000) == SECURITY_KEYS_OK);
+        CHECK(ed_wire_inspect(0, output, written, &meta) == ZIGBEE_SECURITY_OK);
+        CHECK(meta.counter > last_device_nwk);
+        CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_REJOINING);
+    } else {
+        CHECK(security_keys_send(&rejoin, 0, output, sizeof(output), &written, &limits, 2000) == SECURITY_KEYS_CONTEXT);
+        CHECK(written == 0xa5 && security_joint_flash_commands() == before);
+        for (before = 0; before < sizeof(output); before++) CHECK(output[before] == 0xa5);
+    }
+}
+
+static void address_request(uint8_t ar)
+{
+    base_peer(0, 0, 0);
+    peer_out.aps.flags = ar ? APS_FLAG_ACK_REQUEST : 0;
+    peer_out.payload[0] = 0x77; memcpy(peer_out.payload+1, identity.own_ieee, 8);
+    peer_out.length = 11; seal_peer(0, 0, NULL, 1);
+    expected_reply_cluster = 0x8000u; expected_reply_status = 0; expected_reply_length = 12;
+}
+
+static void timeout_response(void)
+{
+    base_peer(1, 0, 0);
+    peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+    memcpy(peer_out.nwk.destination_ieee, identity.own_ieee, 8);
+    peer_out.length = 3; peer_out.payload[0] = 0x0c; peer_out.payload[2] = 2;
+    seal_peer(0, 0, NULL, 1);
+}
+
+static void update_network(void)
+{
+    base_peer(1, 0, 0);
+    peer_out.nwk.destination = 0xffffu; peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+    peer_out.payload[0] = 10; peer_out.payload[1] = 1;
+    memcpy(peer_out.payload+2, identity.extended_pan, 8);
+    peer_out.payload[10] = 1; peer_out.payload[11] = 0x45; peer_out.payload[12] = 0x23;
+    peer_out.length = 13; seal_peer(0, 0, NULL, 1);
+}
+
+static void keepalive_sent(void)
+{
+    now = device.keepalive;
+    for (iterations = 0; iterations < 128 &&
+        !(device.zdo.query == ZDO_RUNTIME_PARENT && device.zdo.tx_done); iterations++) drive();
+    CHECK(iterations < 128 && device.phase == BDB_JOIN_READY);
+}
+
+static void keepalive_success(void)
+{
+    uint32_t previous = device.keepalive;
+    mute_timeout = phy_busy = phy_lose = 0; expected_reply_cluster = 0;
+    if ((uint32_t)(now-previous) >= MAC_TX_HALF) now = previous;
+    for (iterations = 0; iterations < 128 &&
+        (device.keepalive == previous || device.zdo.query); iterations++) {
+        drive();
+        if (pending && !device.transport.active) deliver();
+    }
+    CHECK(iterations < 128 && device.phase == BDB_JOIN_READY && device.transport.ready);
+    CHECK(!device.attempts && !leave_sent && !device.result);
+}
+
+static void operational_failures(void)
+{
+    uint8_t attempt, sustained;
+    ready(); mute_timeout = 1; keepalive_sent();
+    CHECK(muted == 1 && device.attempts == 1);
+    now = device.zdo.deadline; drive();
+    CHECK(device.phase == BDB_JOIN_READY && device.attempts == 2);
+    keepalive_success(); retained(SECURITY_KEYS_VERIFIED);
+
+    ready(); mute_timeout = 1;
+    for (attempt = 1; attempt <= BDB_JOIN_ATTEMPTS; attempt++) {
+        keepalive_sent();
+        CHECK(device.attempts == attempt && muted == attempt);
+        now = device.zdo.deadline; drive();
+    }
+    drain();
+    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_PARENT_FAILED);
+    CHECK(!device.member && !device.transport.ready && !leave_sent && !device.cleanup_error);
+    retained(SECURITY_KEYS_VERIFIED);
+
+    for (sustained = 0; sustained < 2; sustained++) {
+        ready(); phy_busy = 1; now = device.keepalive;
+        for (iterations = 0; iterations < 256 && busy_events < 5u*(sustained ? BDB_JOIN_ATTEMPTS : 1u);
+             iterations++) drive();
+        CHECK(iterations < 256);
+        if (sustained) {
+            drain();
+            CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_PARENT_FAILED && !leave_sent);
+        } else keepalive_success();
+        retained(SECURITY_KEYS_VERIFIED);
+
+        ready(); address_request(1);
+        CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+        pending = 0; phy_busy = 1;
+        for (iterations = 0; iterations < 128 && device.transport.reply_result != MAC_TX_CHANNEL_ACCESS;
+             iterations++) drive();
+        CHECK(iterations < 128 && busy_events == 5 && device.phase == BDB_JOIN_READY && !reply_seen);
+        if (!sustained) phy_busy = 0;
+        drain();
+        CHECK(device.phase == BDB_JOIN_READY && device.transport.ready && !leave_sent);
+        CHECK(reply_seen == !sustained);
+        CHECK(device.zdo.response_result == (sustained ? NWK_APS_RADIO : NWK_APS_OK));
+        keepalive_success(); retained(SECURITY_KEYS_VERIFIED);
+    }
+
+    ready(); address_request(0);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    pending = 0; phy_lose = 1; drive(); drain();
+    CHECK(lost_frames == 4 && !reply_seen && device.zdo.response_result == NWK_APS_RADIO);
+    CHECK(device.phase == BDB_JOIN_READY && device.transport.ready && !leave_sent);
+    keepalive_success(); retained(SECURITY_KEYS_VERIFIED);
+}
+
+static void update_pending_query(void)
+{
+    uint32_t old_deadline;
+    ready(); mute_timeout = 1; keepalive_sent(); old_deadline = device.zdo.deadline;
+    update_network();
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    timeout_response(); pending = 0;
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_MALFORMED);
+    drive();
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_STATE);
+    peer_pan = 0x2345; timeout_response(); pending = 0;
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_STATE);
+    for (iterations = 0; iterations < 16 && device.phase != BDB_JOIN_READY; iterations++) drive();
+    CHECK(iterations < 16 && device.transport.ready && !device.zdo.query && !device.attempts);
+    CHECK(device.zdo.result == ZDO_RUNTIME_CANCELLED && !device.cleanup_error);
+    now = old_deadline; drive();
+    CHECK(device.phase == BDB_JOIN_READY && !device.zdo.query && !leave_sent);
+    keepalive_success(); retained(SECURITY_KEYS_VERIFIED);
+}
+
+static void response_backpressure(void)
+{
+    ed_packet_t application = {0};
+    uint8_t ar, result;
+    unsigned counter;
+    application.nwk.version = 2; application.nwk.radius = 30;
+    application.aps.source_endpoint = application.aps.destination_endpoint = 1;
+    application.aps.profile_id = 0x0104; application.length = 1;
+    for (ar = 0; ar < 2; ar++) {
+        ready(); wrap_mode = 1;
+        for (counter = device.transport.next_aps; counter < 256u; counter++) {
+            CHECK(bdb_join_send(&device, &application, 0, now) == BDB_JOIN_OK);
+            drain();
+            CHECK(bdb_join_confirm(&device, &result) == BDB_JOIN_OK && result == NWK_APS_OK);
+            CHECK(app_counter == (uint8_t)counter);
+        }
+        CHECK(device.transport.wrap_wait && !device.transport.next_aps);
+        wrap_mode = 0; mute_timeout = 1; keepalive_sent();
+        address_request(ar);
+        CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+        pending = 0; drive(); drain();
+        CHECK(device.phase == BDB_JOIN_READY && !reply_seen && !device.zdo.response_pending);
+        CHECK(device.zdo.response_result == NWK_APS_EXHAUSTED && device.transport.wrap_wait);
+        CHECK(device.zdo.query == ZDO_RUNTIME_PARENT && !leave_sent);
+        timeout_response(); deliver();
+        CHECK(!device.zdo.query && device.phase == BDB_JOIN_READY && device.transport.ready);
+        CHECK(device.transport.wrap_wait && !device.transport.next_aps && !device.attempts);
+        retained(SECURITY_KEYS_VERIFIED);
+    }
+
+    ready(); now = device.keepalive; drive();
+    CHECK(device.zdo.query_tx && device.transport.queued && !device.transport.active);
+    address_request(0);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    pending = 0; drive();
+    CHECK(device.zdo.response_pending);
+    for (iterations = 0; iterations < 64 && !pending; iterations++) drive();
+    CHECK(iterations < 64 && device.transport.active && device.zdo.response_pending);
+    deliver();
+    CHECK(device.zdo.result == ZDO_RUNTIME_OK && device.zdo.response_pending);
+    drain();
+    CHECK(reply_seen && !device.zdo.query && device.phase == BDB_JOIN_READY && !leave_sent);
+}
+
+static uint8_t tc_key_pending(void)
+{
+    return pending && peer_out.aps.type == ED_APS_COMMAND &&
+        peer_out.payload[0] == 5 && peer_out.payload[1] == 4;
+}
+
+static void work_and_deadlines(void)
+{
+    uint32_t start;
+    unsigned poll, before;
+    uint8_t which;
+    for (which = 0; which < 4; which++) {
+        test_case = 0; initial_now = which & 2u ? 0xffff0000UL : 100; setup();
+        for (iterations = 0; iterations < 512; iterations++) {
+            if ((!(which & 1u) && device.phase == BDB_JOIN_WAIT_KEY) ||
+                ((which & 1u) && device.phase == BDB_JOIN_WAIT_TC && tc_key_pending() && !device.transport.active)) break;
+            drive();
+            if ((which & 1u) && device.phase == BDB_JOIN_WAIT_KEY && !initial_key) initial_transport();
+            if (pending && !device.transport.active && device.phase >= BDB_JOIN_WAIT_KEY && !tc_key_pending()) deliver();
+        }
+        CHECK(iterations < 512);
+        start = now;
+        for (poll = 0; (uint32_t)(now+62u-start) < (which & 1u ? 281250UL : 312500UL); poll++) {
+            now += 62u;
+            CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+            CHECK(device.phase == (which & 1u ? BDB_JOIN_WAIT_TC : BDB_JOIN_WAIT_KEY));
+        }
+        CHECK(poll > BDB_JOIN_STALL_STEPS && device.steps == 1);
+        now = start+(which & 1u ? 281250UL : 312500UL);
+        CHECK((uint32_t)(device.until-now) < MAC_TX_HALF);
+        if (!(which & 1u)) initial_transport();
+        deliver(); commission();
+        CHECK(device.phase == BDB_JOIN_READY && device.transport.ready && !leave_sent);
+    }
+    initial_now = 100;
+    for (which = 0; which < 3; which++) {
+        setup();
+        for (iterations = 0; iterations < 512; iterations++) {
+            if (which == 2 ? action.kind == BDB_JOIN_ACTION_INSTALL : device.phase == BDB_JOIN_WAIT_KEY) break;
+            drive();
+        }
+        CHECK(iterations < 512);
+        memset(&event, 0, sizeof(event)); event.kind = BDB_JOIN_EVENT_SCAN;
+        before = security_joint_flash_commands();
+        for (poll = device.steps; poll < BDB_JOIN_STALL_STEPS; poll++)
+            CHECK(bdb_join_step(&device, now, which == 1 ? &event : NULL, &action) ==
+                (which == 1 ? BDB_JOIN_IGNORED : BDB_JOIN_OK));
+        CHECK(device.phase == (which == 2 ? BDB_JOIN_INSTALLING : BDB_JOIN_WAIT_KEY));
+        CHECK(bdb_join_step(&device, now, which == 1 ? &event : NULL, &action) ==
+            (which == 1 ? BDB_JOIN_IGNORED : BDB_JOIN_OK));
+        CHECK(device.result == BDB_JOIN_WORK_LIMIT && !leave_sent && !device.transport.ready);
+        CHECK(device.phase == (which == 2 ? BDB_JOIN_FAULT : BDB_JOIN_FAILED));
+        CHECK(security_joint_flash_commands() == before);
+        retained(SECURITY_KEYS_ASSOCIATED);
+    }
+}
+
+static void stopped_transport(void)
+{
+    uint8_t fault;
+    for (fault = 0; fault < 2; fault++) {
+        ready(); address_request(1);
+        CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+        pending = 0; drive(); drive();
+        CHECK(device.transport.active && device.transport.active_ack && transmitter.phase == MAC_TX_RADIO);
+        CHECK(nwk_aps_stop(&device.transport, now) == NWK_APS_OK);
+        CHECK(device.transport.active && device.transport.reply && !device.transport.ready);
+        CHECK(nwk_aps_step(&device.transport, now, NULL, &granted) == NWK_APS_OK);
+        CHECK(granted.kind == MAC_TX_ACTION_QUIESCE && transmitter.phase == MAC_TX_STOPPING);
+        CHECK(device.transport.active && device.transport.stopping);
+        if (fault) {
+            now = transmitter.stop_at;
+            CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+            CHECK(device.phase == BDB_JOIN_FAULT && transmitter.phase == MAC_TX_FAULT);
+            CHECK(device.transport.active && device.transport.reply && device.transport.stopping);
+            CHECK(mac_tx_release(&transmitter) == MAC_TX_STATE);
+        } else {
+            source_event(&event.tx);
+            CHECK(nwk_aps_step(&device.transport, now, &event.tx, &granted) == NWK_APS_OK);
+            CHECK(!device.transport.active && transmitter.phase == MAC_TX_IDLE);
+            CHECK(nwk_aps_step(&device.transport, now, NULL, &granted) == NWK_APS_OK);
+            CHECK(!device.transport.stopping && !device.transport.reply && !device.transport.queued);
+            CHECK(device.transport.reply_result == MAC_TX_CANCELLED);
+            CHECK(zdo_runtime_step(&device.zdo, &device.transport, now) == ZDO_RUNTIME_DROPPED);
+            CHECK(device.zdo.response_result == NWK_APS_CANCELLED && !device.transport.completed);
+        }
+        CHECK(!leave_sent);
+        retained(SECURITY_KEYS_VERIFIED);
+    }
+}
+
+static void storage_quota(void)
+{
+    unsigned cycle, cleanup_start;
+    ready();
+    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 17);
+    for (cycle = 0; cycle < 17 && device.phase == BDB_JOIN_READY; cycle++) {
+        uint32_t previous = device.keepalive;
+        now = previous;
+        for (iterations = 0; iterations < 128 && device.phase == BDB_JOIN_READY &&
+            device.keepalive == previous; iterations++) {
+            drive();
+            if (pending && !device.transport.active && device.phase == BDB_JOIN_READY) {
+                bdb_join_result_t result;
+                pending = 0; result = bdb_join_receive(&device, mac_body, mac_length, 1, now);
+                CHECK(result == BDB_JOIN_OK || result == BDB_JOIN_SECURITY);
+            }
+        }
+        CHECK(iterations < 128);
+    }
+    CHECK(cycle == 17 && device.phase != BDB_JOIN_READY);
+    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 2u*NV_RECORD_ERASE_LIMIT);
+    cleanup_start = security_joint_flash_commands(); drain();
+    CHECK(device.phase == BDB_JOIN_FAILED && !leave_sent && !device.transport.ready);
+    CHECK(security_joint_flash_commands() == cleanup_start);
+    retained(SECURITY_KEYS_VERIFIED);
+}
+
+static void announcement(uint16_t source, uint16_t address, const uint8_t *ieee)
+{
+    base_peer(0, 0, 0x0013u);
+    peer_out.nwk.source = source; peer_out.nwk.destination = 0xfffdu; peer_out.aps.delivery_mode = 2;
+    peer_out.payload[0] = 0x55; peer_out.payload[1] = (uint8_t)address;
+    peer_out.payload[2] = (uint8_t)(address >> 8);
+    memcpy(peer_out.payload+3, ieee, 8); peer_out.payload[11] = 0x80; peer_out.length = 12;
+    aux_source = source ? ieee : NULL;
+    seal_peer(0, 0, NULL, 1); aux_source = NULL;
+}
+
+static void terminal_control(void)
+{
+    static const uint8_t third_ieee[8] = {0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38};
+    unsigned before;
+    ready(); before = security_joint_flash_commands();
+    announcement(0x1111u, 0x1111u, third_ieee);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_SECURITY);
+    CHECK(device.transport.error == SECURITY_KEYS_IDENTITY);
+    announcement(0x5678u, 0x5678u, third_ieee);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_SECURITY);
+    CHECK(device.transport.error == SECURITY_KEYS_IDENTITY);
+    pending = 0; drive();
+    CHECK(!device.zdo.map[0].used && !device.zdo.conflict && device.phase == BDB_JOIN_READY);
+    CHECK(security_joint_flash_commands() == before);
+    announcement(0, 0x5678u, third_ieee);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    pending = 0; drive(); drain();
+    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_ADDRESS_CONFLICT && leave_sent);
+    retained(SECURITY_KEYS_LEFT);
+
+    ready(); base_peer(1, 0, 0);
+    peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+    peer_out.payload[0] = 4; peer_out.payload[1] = 0x40; peer_out.length = 2;
+    seal_peer(0, 0, NULL, 1);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    pending = 0; drive(); drain();
+    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_REMOTE_LEAVE && !leave_sent);
+    retained(SECURITY_KEYS_LEFT);
 }
 
 int main(void)
@@ -616,13 +1007,7 @@ int main(void)
     wrap_mode = 0;
     CHECK(bdb_join_send(&device, &application, 0, now) == BDB_JOIN_OK);
     previous = transmitter.generation;
-    base_peer(1, 0, 0);
-    peer_out.nwk.destination = 0xffffu; peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE;
-    memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
-    peer_out.payload[0] = 10; peer_out.payload[1] = 1;
-    memcpy(peer_out.payload+2, identity.extended_pan, 8);
-    peer_out.payload[10] = 1; peer_out.payload[11] = 0x45; peer_out.payload[12] = 0x23;
-    peer_out.length = 13; seal_peer(0, 0, NULL, 1);
+    update_network();
     CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
     CHECK(!device.transport.ready);
     CHECK(bdb_join_send(&device, &application, 0, now) == BDB_JOIN_STATE);
@@ -667,6 +1052,8 @@ int main(void)
             CHECK(test_case == 1 ? device.transport.quiet && !leave_sent : leave_sent && !device.transport.quiet);
         }
     }
-    printf("BDB join: %u checks PASS; real scan/association, CCM/HMAC, NV, TC proof, ZDO, parent, permit, APS retry.\n", checks);
+    operational_failures(); update_pending_query(); response_backpressure();
+    work_and_deadlines(); stopped_transport(); storage_quota(); terminal_control();
+    printf("BDB join: %u checks PASS; real commissioning, operational loss, bounded work, backpressure and durable recovery boundary.\n", checks);
     return 0;
 }

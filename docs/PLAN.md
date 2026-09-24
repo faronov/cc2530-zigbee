@@ -46,9 +46,15 @@ hardware work. Later features must not bypass their security or recovery gates.
 
 [Roadmap #5](https://github.com/faronov/cc2530-zigbee/issues/5) is the current
 execution index; the milestone exit requirements below remain unchanged.
-Next are the bounded testing/coverage/run-selection review (#87), the complete
-banked MAC/NWK/APS/ZDO/BDB MCU composition (#26), and secure persisted
-restart/rejoin (#27). Real radio/association integration (#13/#14) and separate
+The bounded testing/coverage/run-selection work (#87) is accepted. The current
+sequence fixes the reproduced READY failure/backpressure/work-budget defects,
+then integrates the complete banked MAC/NWK/APS/ZDO/BDB MCU composition (#26),
+followed by secure persisted restart/rejoin (#27).
+The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
+preserve durable keys on operational loss, explicit physical retirement,
+real commissioning Leave, and the existing NV quotas. They do not constitute
+full MCU join or completed recovery.
+Real radio/association integration (#13/#14) and separate
 MAC/coordinator acceptance (#15/#28) retain timing (#40/#45), physical NV (#8)
 and entropy (#10) requirements. The subsequent #87
 [risk-based check selection](VALIDATION.md#risk-based-selection-and-host-coverage)
@@ -944,7 +950,9 @@ synthetic centralized coordinator. It performs real scan/association, key
 transport/verification, announcement-before-TC-update, ZDO transactions,
 ED Timeout negotiation and final permit broadcast before application readiness.
 It includes real NWK/APS security-counter allocation, duplicate/ACK/retry
-processing and shared live AES/NV execution. This is not full M4/M5 acceptance:
+processing and shared live AES/NV execution. Its operational failure/work guards and
+nonblocking ZDO backpressure now have explicit host regressions, distinct
+from commissioning abandonment. This is not full M4/M5 acceptance:
 new complete-image resource/ABI/alias proof, physical adapter/interoperability,
 general recovery and the remaining conformance obligations are still open.
 

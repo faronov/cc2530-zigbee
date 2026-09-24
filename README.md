@@ -854,6 +854,9 @@ final permit transmission. This is a bounded **host integration**, with
 SDCC compilation, not a linked/simulated whole-stack firmware or physical
 join. The boot images remain non-networking. Target memory/ABI proof,
 real-radio integration and persisted-rejoin orchestration remain open.
+Operational losses now preserve recoverable durable keys instead of invoking
+commissioning Leave; bounded keepalive retries, explicit stopped-clock work
+limits and nonfatal ZDO response backpressure have host regressions.
 The [ZCL Revision 8 wire codecs](docs/ZCL.md) add global/cluster-specific
 headers and 38 wire-value types, including 8..64-bit byte representations
 and short strings. A separate [read-only attribute model and unicast Read

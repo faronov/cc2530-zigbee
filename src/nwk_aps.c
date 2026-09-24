@@ -48,7 +48,7 @@ static nwk_aps_result_t reserve(nwk_aps_t *ctx, uint32_t now, uint8_t aps)
 {
     nwk_aps_result_t result = advance(ctx, now);
     if (result) return result;
-    if (ctx->queued || ctx->completed) return NWK_APS_FULL;
+    if (ctx->queued || ctx->completed || ctx->stopping) return NWK_APS_FULL;
     if (aps) {
         if (ctx->wrap_wait && !reached(now, ctx->counter_until)) return NWK_APS_EXHAUSTED;
         ctx->wrap_wait = 0;
@@ -207,7 +207,7 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t *ctx, uint32_t now,
         ctx->cancel = 1; ctx->cancel_result = NWK_APS_TIMEOUT;
     }
     if (ctx->active) {
-        if (ctx->cancel && !ctx->active_ack && !ctx->cancel_sent && !event) {
+        if ((ctx->stopping || (ctx->cancel && !ctx->active_ack)) && !ctx->cancel_sent && !event) {
             memset(&cancellation, 0, sizeof(cancellation));
             cancellation.kind = MAC_TX_EVENT_CANCEL;
             cancellation.generation = ctx->owner->generation;
@@ -225,8 +225,8 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t *ctx, uint32_t now,
         if (mac_tx_release(ctx->owner) != MAC_TX_OK) return NWK_APS_RADIO;
         ctx->active = 0;
         if (ctx->active_ack) {
-            ctx->reply = 0;
-            if (outcome != MAC_TX_ACKED) return NWK_APS_RADIO;
+            ctx->reply = ctx->cancel_sent = 0; ctx->reply_result = outcome;
+            if (outcome != MAC_TX_ACKED && !ctx->stopping) return NWK_APS_ACK_FAILED;
         } else if (ctx->cancel) complete(ctx, ctx->cancel_result);
         else if (outcome != MAC_TX_ACKED && outcome != MAC_TX_UNACKNOWLEDGED) {
             complete(ctx, NWK_APS_RADIO);
@@ -238,6 +238,12 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t *ctx, uint32_t now,
     }
     if (event) return NWK_APS_IGNORED;
     if (ctx->owner->phase != MAC_TX_IDLE) return NWK_APS_STATE;
+    if (ctx->stopping) {
+        if (ctx->reply) { ctx->reply = 0; ctx->reply_result = MAC_TX_CANCELLED; }
+        if (ctx->queued) complete(ctx, NWK_APS_CANCELLED);
+        ctx->stopping = ctx->cancel = ctx->cancel_sent = 0;
+        return NWK_APS_OK;
+    }
     if (ctx->cancel && ctx->queued) complete(ctx, ctx->cancel_result);
     if (ctx->waiting && ctx->seen_ack) complete(ctx, NWK_APS_OK);
     if (ctx->waiting && reached(now, ctx->deadline)) {
@@ -296,6 +302,7 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t *ctx, const uint8_t *npdu, uint16_t l
     if (!npdu) return NWK_APS_ARGUMENT;
     result = advance(ctx, now);
     if (result) return result;
+    if (ctx->stopping) return NWK_APS_STATE;
     if (ctx->receive_ready || ctx->reply) return NWK_APS_FULL;
     if (ed_wire_nwk(npdu, length, &hint) != ZIGBEE_SECURITY_OK) return NWK_APS_WIRE;
     if (hint.header.destination >= 0xfffbu) {
@@ -386,5 +393,14 @@ nwk_aps_result_t nwk_aps_cancel(nwk_aps_t *ctx, uint32_t now)
     if (result) return result;
     if (!ctx->queued) return NWK_APS_STATE;
     ctx->cancel = 1; ctx->cancel_result = NWK_APS_CANCELLED;
+    return NWK_APS_OK;
+}
+
+nwk_aps_result_t nwk_aps_stop(nwk_aps_t *ctx, uint32_t now)
+{
+    nwk_aps_result_t result = advance(ctx, now);
+    if (result) return result;
+    ctx->ready = 0; ctx->stopping = 1;
+    if (ctx->queued) { ctx->cancel = 1; ctx->cancel_result = NWK_APS_CANCELLED; }
     return NWK_APS_OK;
 }

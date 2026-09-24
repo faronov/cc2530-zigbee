@@ -14,6 +14,7 @@
 #define BDB_JOIN_EXCHANGE_WAIT 312500UL
 #define BDB_JOIN_KEEPALIVE 1875000UL
 #define BDB_JOIN_ATTEMPTS 3u
+#define BDB_JOIN_STALL_STEPS 4096u
 
 typedef enum {
     BDB_JOIN_OK = 0, BDB_JOIN_ARGUMENT, BDB_JOIN_STATE, BDB_JOIN_CLOCK,
@@ -21,7 +22,7 @@ typedef enum {
     BDB_JOIN_NO_PARENT, BDB_JOIN_ASSOCIATION_FAILED, BDB_JOIN_INSTALL_FAILED,
     BDB_JOIN_KEY_TIMEOUT, BDB_JOIN_TRANSMIT_FAILED, BDB_JOIN_TC_FAILED,
     BDB_JOIN_PARENT_FAILED, BDB_JOIN_ADDRESS_CONFLICT, BDB_JOIN_REMOTE_LEAVE,
-    BDB_JOIN_FULL, BDB_JOIN_MALFORMED, BDB_JOIN_IGNORED
+    BDB_JOIN_FULL, BDB_JOIN_MALFORMED, BDB_JOIN_IGNORED, BDB_JOIN_WORK_LIMIT
 } bdb_join_result_t;
 
 typedef enum {
@@ -81,11 +82,11 @@ typedef struct {
     nwk_parent_choice_t parent;
     ed_packet_t packet;
     mac_tx_t BDB_JOIN_RAM *owner;
-    uint32_t last, until, keepalive, epoch, commission_until;
+    uint32_t last, until, keepalive, epoch, commission_until, work_at;
     uint16_t token, steps;
     uint8_t version, phase, result, cleanup_error, attempts, issued, member;
     uint8_t got_tc, got_confirm, application_pending, application_done, application_result;
-    uint8_t receive_result;
+    uint8_t receive_result, abandon;
 } bdb_join_t;
 
 /* Original bounded R22/BDB3.0.1 centralized, install-code, awake direct-TC ED.
@@ -96,6 +97,16 @@ typedef struct {
  * filters and continuous awake receive service, with matching epoch/token.
  * No function accesses equipment or supplies RF, entropy, CRC or timestamps.
  * Time is mac_tx's coherent captured 16-us symbol epoch, gaps <2^31.
+ * After association, at most STALL_STEPS consecutive step calls may observe
+ * the same symbol time. Advancing time resets this local work guard; normal
+ * polling frequency does not shorten protocol deadlines. Exhaustion latches
+ * WORK_LIMIT, not KEY_TIMEOUT, and drains without durable Leave. An outstanding
+ * unconfirmed INSTALL instead retains FAULT. Scan/association retain their
+ * own explicit lower work limits. Unrelated events cannot bypass this guard
+ * or retirement: inspect actions even when step returns IGNORED.
+ * READY keepalive retries at most ATTEMPTS times. Operational failures stop
+ * application readiness but preserve durable keys for explicit recovery;
+ * commissioning abandonment/address conflict still requests genuine Leave.
  */
 bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM *ctx, uint32_t now);
 bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM *ctx, mac_tx_t BDB_JOIN_RAM *owner,

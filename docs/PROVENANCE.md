@@ -53,6 +53,14 @@ The fixture's keys, identities, RF events and timestamps are public synthetic
 data. Its successful transcript is not a physical observation or a new
 8051 complete-image proof.
 
+The subsequent READY-loss, response-backpressure and stopped-clock corrections
+are original runtime/ownership policies, not imported protocol code or new
+specification interpretations. Their executable regression scenarios were
+reproduced against real existing services with synthetic coordinator/PHY
+faults, then integrated into the existing host caller. The fixed-TC
+Device_annce admission boundary is unchanged. No equipment, private capture,
+SDK binary, new dependency or external implementation is involved.
+
 | Reference | Status and permitted use |
 | --- | --- |
 | [TI CC2530](https://www.ti.com/product/CC2530) and [SWRU191F](https://www.ti.com/lit/pdf/swru191) | Primary hardware facts; link/cite documentation rather than redistribute whole manuals |
