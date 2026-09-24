@@ -38,7 +38,7 @@
 /* No operational secrets survive a returning public call in this module.
  * The counter/journal still retain their real persistent/cached payloads. */
 static MCU_XDATA struct {
-    uint8_t record[112], a[116], b[116];
+    uint8_t record[112], a[116], b[116], hash_key[16];
     ed_packet_t packet;
     nwk_frame_info_t nwk;
     zigbee_security_key_t key;
@@ -148,13 +148,13 @@ static uint8_t valid_record(void)
             w.record[SEQ] || w.record[SEQ+1] ||
             (w.record[PHASE] & (PARENT_MASK | TIMEOUT_PENDING))) return 0;
     } else {
-        if (!(f & (1u << active_slot()))) return 0;
+        if (!(f & (uint8_t)(1u << active_slot()))) return 0;
         if ((f & NEWER) && (f & 3) != 3) return 0;
         if ((f & 3) == 3 &&
             (w.record[SEQ] == w.record[SEQ+1] ||
              same(w.record+NK, w.record+NK+16, 16))) return 0;
         for (i = 0; i < 2; i++) {
-            if (f & (1u << i)) {
+            if (f & (uint8_t)(1u << i)) {
                 if (all(w.record+NK+16u*i, 16, 0) ||
                     same(w.record+NK+16u*i, w.record+LK, 16) ||
                     same(w.record+NK+16u*i, w.record+PK, 16)) return 0;
@@ -218,20 +218,23 @@ static security_keys_result_t crypto_result(zigbee_security_result_t r)
     if (r == ZIGBEE_SECURITY_AES || r == ZIGBEE_SECURITY_CCM) return SECURITY_KEYS_CRYPTO;
     return SECURITY_KEYS_FORMAT;
 }
-static security_keys_result_t key(uint8_t offset, uint8_t identifier, uint8_t sending)
+static security_keys_result_t key(volatile uint8_t offset, volatile uint8_t identifier, uint8_t sending)
 {
+    volatile uint8_t purpose;
     memset(&w.key, 0, sizeof(w.key));
     w.key.limits = w.limits;
     w.key.level = 5; w.key.extended_nonce = 1; w.key.key_identifier = identifier;
     memcpy(w.key.source, w.record+(sending ? OWN : TC), 8);
     if (identifier == 2 || identifier == 3) {
-        if (zigbee_key_hash(w.record+offset, identifier == 2 ? ZIGBEE_HASH_TRANSPORT : ZIGBEE_HASH_LOAD,
+        memcpy(w.hash_key, w.record+offset, 16);
+        purpose = identifier == 2 ? ZIGBEE_HASH_TRANSPORT : ZIGBEE_HASH_LOAD;
+        if (zigbee_key_hash(w.hash_key, purpose,
             w.key.key, w.limits.block_timeout, w.limits.block_polls, &w.hash_info) != ZIGBEE_MMO_OK)
             return SECURITY_KEYS_CRYPTO;
     } else memcpy(w.key.key, w.record+offset, 16);
     return SECURITY_KEYS_OK;
 }
-static security_keys_result_t take(uint8_t domain)
+static inline security_keys_result_t take(uint8_t domain)
 {
     security_counter_result_t r = security_counter_take(domain, &w.counter, w.polls);
     if (r == SECURITY_COUNTER_EXHAUSTED) return SECURITY_KEYS_EXHAUSTED;
@@ -240,7 +243,7 @@ static security_keys_result_t take(uint8_t domain)
     return SECURITY_KEYS_OK;
 }
 
-security_keys_result_t security_keys_open(void)
+security_keys_result_t security_keys_open(void) SECURITY_FAR
 {
     security_counter_result_t r;
     security_keys_result_t result;
@@ -261,9 +264,9 @@ security_keys_result_t security_keys_open(void)
 }
 
 security_keys_result_t security_keys_provision(
-    const security_keys_config_t *config, const uint8_t *install_code18,
-    uint32_t nwk_floor, uint32_t aps_floor,
-    const ccm_star_limits_t *limits, uint16_t nv_polls)
+    const security_keys_config_t * volatile config, const uint8_t * volatile install_code18,
+    volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
     if (security_keys_phase != SECURITY_KEYS_UNPROVISIONED) return finish(SECURITY_KEYS_STATE);
     if (!config || !install_code18 || !limits_ok(limits, nv_polls) ||
@@ -275,18 +278,19 @@ security_keys_result_t security_keys_provision(
     put16(w.record+PAN, config->pan); put16(w.record+ADDR, config->address);
     w.record[CHANNEL] = config->channel; w.record[UPDATE] = config->update_id;
     if (!valid_config()) return finish(SECURITY_KEYS_ARGUMENT);
-    if (install_code_derive(install_code18, 18, w.record+LK,
+    memcpy(w.a, install_code18, 18);
+    if (install_code_derive(w.a, 18, w.record+LK,
         w.limits.block_timeout, w.limits.block_polls, &w.hash_info) != ZIGBEE_MMO_OK)
         return finish(SECURITY_KEYS_CRYPTO);
     w.record[MAGIC] = 'K'; w.record[MAGIC+1] = 2;
     set_phase(SECURITY_KEYS_PROVISIONED);
-    if (security_counter_create(nwk_floor, aps_floor, w.record, 112, nv_polls) != SECURITY_COUNTER_OK)
+    if (security_counter_create(nwk_floor, aps_floor, w.record, 112, w.polls) != SECURITY_COUNTER_OK)
         return finish(fault(SECURITY_KEYS_STORAGE));
     security_keys_phase = SECURITY_KEYS_PROVISIONED;
     return finish(SECURITY_KEYS_OK);
 }
 
-security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls)
+security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR
 {
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
@@ -495,7 +499,7 @@ static security_keys_result_t nwk_command(void)
 static security_keys_result_t open_aps(void)
 {
     security_keys_result_t r;
-    uint8_t length = w.nwk.payload_length, offset = w.nwk.payload_offset;
+    volatile uint8_t length = w.nwk.payload_length, offset = w.nwk.payload_offset;
     w.aps_secured = (w.a[offset] & APS_FLAG_SECURITY) != 0;
     if (!w.aps_secured) return SECURITY_KEYS_OK;
     r = crypto_result(ed_wire_inspect(ZIGBEE_SECURITY_APS, w.a+offset, length, &w.meta));
@@ -515,7 +519,8 @@ static security_keys_result_t open_aps(void)
         else if (r != SECURITY_KEYS_AUTH) return r;
     }
     if (!w.pending) {
-        if (w.meta.counter < u32(w.record+AF)) return SECURITY_KEYS_REPLAY;
+        w.counter = u32(w.record+AF);
+        if (w.meta.counter < w.counter) return SECURITY_KEYS_REPLAY;
         r = key(LK, w.key_id, 0);
         if (r != SECURITY_KEYS_OK) return r;
         w.key.extended_nonce = w.meta.extended_nonce;
@@ -529,11 +534,12 @@ static security_keys_result_t open_aps(void)
 }
 
 security_keys_result_t security_keys_receive(
-    const uint8_t *raw_npdu, uint16_t length, ed_packet_t *output, uint8_t *event,
-    const ccm_star_limits_t *limits, uint16_t nv_polls)
+    const uint8_t * volatile raw_npdu, volatile uint16_t length,
+    ed_packet_t * volatile output, uint8_t * volatile event,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
     security_keys_result_t r = load();
-    uint8_t i;
+    volatile uint8_t i;
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!raw_npdu || !output || !event || !limits_ok(limits, nv_polls))
         return finish(SECURITY_KEYS_ARGUMENT);
@@ -607,10 +613,12 @@ security_keys_result_t security_keys_receive(
     return finish(r);
 }
 
-static security_keys_result_t seal(uint8_t aps_secure)
+static inline security_keys_result_t seal(volatile uint8_t aps_secure)
 {
     security_keys_result_t r;
-    uint8_t offset, total, slot = active_slot();
+    volatile uint8_t offset, slot;
+    uint8_t total;
+    slot = active_slot();
     /* R22 3.3.1.1.9: this owner is an ED; callers cannot assert EDI.
      * Only parent information from a contextual authenticated response
      * determines the outgoing bit, including later Leave/key commands. */
@@ -655,8 +663,8 @@ static void command_packet(uint8_t nwk_seq, uint8_t aps_counter)
     w.packet.aps.counter = aps_counter;
 }
 security_keys_result_t security_keys_request(
-    uint8_t nwk_seq, uint8_t aps_counter, uint8_t *out, uint16_t capacity,
-    uint8_t *written, const ccm_star_limits_t *limits, uint16_t nv_polls)
+    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
+    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
@@ -674,8 +682,8 @@ security_keys_result_t security_keys_request(
     return finish(r);
 }
 security_keys_result_t security_keys_verify(
-    uint8_t nwk_seq, uint8_t aps_counter, uint8_t *out, uint16_t capacity,
-    uint8_t *written, const ccm_star_limits_t *limits, uint16_t nv_polls)
+    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
+    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
@@ -695,8 +703,8 @@ security_keys_result_t security_keys_verify(
     return finish(r);
 }
 security_keys_result_t security_keys_leave(
-    uint8_t nwk_seq, uint8_t *out, uint16_t capacity, uint8_t *written,
-    const ccm_star_limits_t *limits, uint16_t nv_polls)
+    uint8_t nwk_seq, uint8_t * volatile out, volatile uint16_t capacity, uint8_t * volatile written,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
@@ -722,8 +730,8 @@ security_keys_result_t security_keys_leave(
     return finish(r);
 }
 security_keys_result_t security_keys_send(
-    const ed_packet_t *packet, uint8_t aps_secure, uint8_t *out, uint16_t capacity,
-    uint8_t *written, const ccm_star_limits_t *limits, uint16_t nv_polls)
+    const ed_packet_t * volatile packet, uint8_t aps_secure, uint8_t * volatile out, volatile uint16_t capacity,
+    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
     security_keys_result_t r = load();
     uint8_t transition = 0;
@@ -792,7 +800,7 @@ security_keys_result_t security_keys_send(
     if (r == SECURITY_KEYS_OK) r = publish(out, capacity, written);
     return finish(r);
 }
-security_keys_result_t security_keys_status(security_keys_status_t *output)
+security_keys_result_t security_keys_status(security_keys_status_t * volatile output) SECURITY_FAR
 {
     security_keys_result_t r;
     uint8_t prior = security_keys_result;

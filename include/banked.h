@@ -18,7 +18,12 @@
 
 #define BANKED_CODE_MAX_READ 32u
 #define BANKED_MAX_DEPTH 8u
-#define BANKED_STACK_FIRST 0x22u
+#ifndef BANKED_STACK_FIRST
+#define BANKED_STACK_FIRST 0x22
+#endif
+#if BANKED_STACK_FIRST < 0x22 || BANKED_STACK_FIRST > 0x78
+#error Banked stack start must match a separately checked physical reservation
+#endif
 #define BANKED_STACK_LAST 0x7cu
 
 #define BANKED_OK 0u

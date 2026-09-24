@@ -90,7 +90,7 @@ endif
 .PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
 .PHONY: test-security-resident-security test-security-resident-mmo test-security-resident-key-hash test-security-resident-counter
 .PHONY: test-ed-wire test-security-keys test-bdb-join test-ed-integration
-.PHONY: test-banked
+.PHONY: test-banked test-banked-security
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -1100,6 +1100,69 @@ $(BANKED_DIR)/banked.ihx: $(BANKED_OBJECTS) force-link
 test-banked: $(BANKED_DIR)/banked.ihx
 	$(PYTHON) -B tests/boot_banked.py --output $(BUILD) --simulator "$(S51)"
 
+BANKED_SECURITY_DIR := $(BUILD)/banked-security
+BANKED_SECURITY_MODULES := flash_exec flash flash_write nv_record security_counter timebase \
+	aes ccm_star zigbee_mmo zigbee_key_hash nwk_frame aps_frame banked ed_wire security_keys
+BANKED_SECURITY_AREAS := BS_EXEC BS_READ BS_WRITE BS_NV BS_COUNTER BS_TIME \
+	BS_AES BS_CCM BS_MMO BS_HASH BS_NWK BS_APS DSEG BS_WIRE BS_KEYS
+BANKED_SECURITY_BASES := 0x08 0x10 0x14 0x23 0x3a 0x08 \
+	0x23 0x08 0x08 0x43 0x23 0x23 0 0x08 0x1a
+BANKED_SECURITY_OBJECTS := $(addprefix $(BANKED_SECURITY_DIR)/,banked_security_iram_low.rel \
+	banked_security_iram_high.rel $(addsuffix .rel,$(BANKED_SECURITY_MODULES)) banked_security_fixture.rel)
+BANKED_SECURITY_LINK := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 \
+	--code-size 0x80000 --stack-size 0x2b -Wl-r -Wl-bBS_CALLER=0x1a \
+	-Wl-bBK_KEYS=0x18000 -Wl-bBK_WIRE=0x28000
+BANKED_SECURITY_FLAGS := $(SDCC_FLAGS) -DCC2530_BANKED_SECURITY -DBANKED_STACK_FIRST=0x52
+
+$(BANKED_SECURITY_DIR):
+	mkdir -p $@
+
+define BANKED_SECURITY_MODULE
+$(BANKED_SECURITY_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile | $(BANKED_SECURITY_DIR)
+	$$(SDCC) $$(BANKED_SECURITY_FLAGS) --dataseg $(2) \
+		$(if $(filter security_keys,$(1)),--codeseg BK_KEYS) \
+		$(if $(filter ed_wire,$(1)),--codeseg BK_WIRE) -c $$< -o $$@
+$(if $(filter-out DSEG,$(2)),BANKED_SECURITY_LINK += -Wl-b$(2)=$(3))
+endef
+$(foreach n,1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,$(eval $(call BANKED_SECURITY_MODULE,$(word $(n),$(BANKED_SECURITY_MODULES)),$(word $(n),$(BANKED_SECURITY_AREAS)),$(word $(n),$(BANKED_SECURITY_BASES)))))
+
+$(BANKED_SECURITY_DIR)/banked_security_iram_%.rel: tests/banked_security_iram_%.c Makefile | $(BANKED_SECURITY_DIR)
+	$(SDCC) $(BANKED_SECURITY_FLAGS) -c $< -o $@
+
+$(BANKED_SECURITY_DIR)/banked_security_fixture.rel: tests/banked_security_fixture.c $(HEADERS) Makefile | $(BANKED_SECURITY_DIR)
+	$(SDCC) $(BANKED_SECURITY_FLAGS) --dataseg BS_CALLER -c $< -o $@
+
+$(BANKED_SECURITY_DIR)/banked_security.ihx: $(BANKED_SECURITY_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(BANKED_SECURITY_LINK) -o $@ $(BANKED_SECURITY_OBJECTS)
+	cp $(BANKED_SECURITY_DIR)/banked_security_iram_low.rst $(BANKED_SECURITY_DIR)/banked_security.banked_security_iram_low.rst
+	cp $(BANKED_SECURITY_DIR)/banked_security_iram_high.rst $(BANKED_SECURITY_DIR)/banked_security.banked_security_iram_high.rst
+	cp $(BANKED_SECURITY_DIR)/flash_exec.rst $(BANKED_SECURITY_DIR)/banked_security.flash_exec.rst
+	cp $(BANKED_SECURITY_DIR)/flash.rst $(BANKED_SECURITY_DIR)/banked_security.flash.rst
+	cp $(BANKED_SECURITY_DIR)/flash_write.rst $(BANKED_SECURITY_DIR)/banked_security.flash_write.rst
+	cp $(BANKED_SECURITY_DIR)/nv_record.rst $(BANKED_SECURITY_DIR)/banked_security.nv_record.rst
+	cp $(BANKED_SECURITY_DIR)/security_counter.rst $(BANKED_SECURITY_DIR)/banked_security.security_counter.rst
+	cp $(BANKED_SECURITY_DIR)/timebase.rst $(BANKED_SECURITY_DIR)/banked_security.timebase.rst
+	cp $(BANKED_SECURITY_DIR)/aes.rst $(BANKED_SECURITY_DIR)/banked_security.aes.rst
+	cp $(BANKED_SECURITY_DIR)/ccm_star.rst $(BANKED_SECURITY_DIR)/banked_security.ccm_star.rst
+	cp $(BANKED_SECURITY_DIR)/zigbee_mmo.rst $(BANKED_SECURITY_DIR)/banked_security.zigbee_mmo.rst
+	cp $(BANKED_SECURITY_DIR)/zigbee_key_hash.rst $(BANKED_SECURITY_DIR)/banked_security.zigbee_key_hash.rst
+	cp $(BANKED_SECURITY_DIR)/nwk_frame.rst $(BANKED_SECURITY_DIR)/banked_security.nwk_frame.rst
+	cp $(BANKED_SECURITY_DIR)/aps_frame.rst $(BANKED_SECURITY_DIR)/banked_security.aps_frame.rst
+	cp $(BANKED_SECURITY_DIR)/banked.rst $(BANKED_SECURITY_DIR)/banked_security.banked.rst
+	cp $(BANKED_SECURITY_DIR)/ed_wire.rst $(BANKED_SECURITY_DIR)/banked_security.ed_wire.rst
+	cp $(BANKED_SECURITY_DIR)/security_keys.rst $(BANKED_SECURITY_DIR)/banked_security.security_keys.rst
+	cp $(BANKED_SECURITY_DIR)/banked_security_fixture.rst $(BANKED_SECURITY_DIR)/banked_security.banked_security_fixture.rst
+	$(PYTHON) -B tools/banked_image.py --output $(BANKED_SECURITY_DIR) --profile security
+
+$(BUILD)/host-banked-security-vectors: tests/banked_security_vectors.c $(ED_MODEL_SRC) $(ED_KEY_SRC) $(HEADERS) tests/security_joint_model.h tests/security_aes_model.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) tests/banked_security_vectors.c $(ED_MODEL_SRC) $(ED_KEY_SRC) -o $@
+
+$(BUILD)/host-banked-security-vectors-sanitize: tests/banked_security_vectors.c $(ED_MODEL_SRC) $(ED_KEY_SRC) $(HEADERS) tests/security_joint_model.h tests/security_aes_model.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/banked_security_vectors.c $(ED_MODEL_SRC) $(ED_KEY_SRC) -o $@
+
+test-banked-security: $(BANKED_SECURITY_DIR)/banked_security.ihx $(BUILD)/host-banked-security-vectors $(BUILD)/host-banked-security-vectors-sanitize
+	$(PYTHON) -B tests/boot_banked_security.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -1430,7 +1493,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

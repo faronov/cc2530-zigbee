@@ -80,6 +80,23 @@ class BankedImageTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_ihex(line)
 
+    def test_security_profile_cannot_claim_abi_fixture_identity(self):
+        import json
+        image = {0: 2, 0x18000: 0x11, 0x28000: 0x22}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            (output / "banked_security.ihx").write_text(ihex(image), encoding="ascii")
+            (output / "banked_security.hex").write_text(ihex(pack(image)), encoding="ascii")
+            path = output / "banked_security-layout.json"
+            path.write_text(json.dumps(manifest(image, "security")), encoding="ascii")
+            self.assertEqual(verify_files(output, "security"), image)
+            self.assertEqual(manifest(image, "security")["capability"], "offline-banked-security-fixture")
+            path.write_text(json.dumps(manifest(image)), encoding="ascii")
+            with self.assertRaisesRegex(ValueError, "layout identity"):
+                verify_files(output, "security")
+        with self.assertRaisesRegex(ValueError, "Unknown"):
+            manifest(image, "arbitrary")
+
 
 if __name__ == "__main__":
     unittest.main()

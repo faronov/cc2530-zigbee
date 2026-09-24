@@ -33,6 +33,13 @@ Compiler/runtime licenses remain upstream's; generated artifacts are not
 relicensed or committed. All fixture values and peripheral events are
 synthetic, with no OEM image, private identity, equipment or RF input.
 
+The [banked security composition](BANKED_SECURITY.md) likewise uses only
+original existing services, spill/lifetime refactoring and an original
+public test caller. Its combined replay reuses this repository's AES oracle,
+DMA and actual flash-RAM models; no external cryptographic or networking
+implementation is imported. No new wire/specification revision is selected.
+Compiler/ABI measurements and synthetic execution are not hardware evidence.
+
 ## Reviewed reference candidates
 
 The original [authenticated ED integration](ED_JOIN.md) uses functional facts

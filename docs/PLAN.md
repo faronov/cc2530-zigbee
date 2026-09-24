@@ -1134,6 +1134,13 @@ stack is placed. Existing unbanked image limits stay unchanged. New DATA
 lifetimes, IRQ headroom and whole-stack XDATA fit remain separate gates;
 banking cannot resolve a failed DATA allocation.
 
+The first [banked real-service composition](BANKED_SECURITY.md) now places
+the key owner and extended wire layer in banks1/2 with common crypto/NV.
+It adds physical DATA ownership and executed authenticated key lifecycle,
+not just a larger link. Full MAC/NWK/APS/ZDO/BDB placement and a truthful
+physical radio adapter remain the next integration gates; this synthetic
+image is not eligible for flashing.
+
 **Measured preparatory integration:** `make test-protocol-budget` now links
 and executes the complete implemented MAC/NWK Data/APS/ZCL codec and
 read/discovery chain: **22,829 CODE and 1,500 ordinary XDATA bytes**, plus

@@ -65,7 +65,7 @@ class LocalChecksTests(unittest.TestCase):
             "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security", "zigbee_mmo",
             "zigbee_key_hash", "security_counter", "security_resident_security", "security_resident_mmo",
             "security_resident_key_hash", "security_resident_counter",
-            "banked",
+            "banked", "banked_security",
         }
         components = Counter()
         images = Counter()
@@ -101,7 +101,8 @@ class LocalChecksTests(unittest.TestCase):
                                          "test-zcl-temperature", "test-mac-attempt", "test-mac-join",
                                          "test-zdo-node", "test-zdo-srv", "test-zigbee-security",
                                          "test-zigbee-mmo", "test-zigbee-key-hash", "test-security-counter",
-                                         "test-security-resident", "test-ed-integration", "test-banked")))
+                                         "test-security-resident", "test-ed-integration", "test-banked",
+                                         "test-banked-security")))
             core = self.dry_run("test-common-core", BOARD=board)
             self.assertFalse(any("tests/boot_mac_radio.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
@@ -414,6 +415,41 @@ class LocalChecksTests(unittest.TestCase):
                 self.assertEqual("-DCC2530_MAC_RADIO" in args, selected)
                 if selected: profiled.append(name)
             self.assertEqual(len(profiled), 7)
+
+    def test_banked_security_reservations_snapshots_and_isolated_far_abi(self):
+        modules = ("banked_security_iram_low", "banked_security_iram_high", "flash_exec", "flash",
+                   "flash_write", "nv_record", "security_counter", "timebase", "aes", "ccm_star",
+                   "zigbee_mmo", "zigbee_key_hash", "nwk_frame", "aps_frame", "banked", "ed_wire",
+                   "security_keys", "banked_security_fixture")
+        for board in BOARDS:
+            commands = self.dry_run("test-banked-security", "test-ed-integration", include_build=True, BOARD=board)
+            link = next(a for a in commands if a[0] == "sdcc" and "-c" not in a)
+            self.assertEqual([Path(a).stem for a in link if a.endswith(".rel")], list(modules))
+            self.assertEqual(link[link.index("--code-size")+1], "0x80000")
+            self.assertEqual(link[link.index("--stack-size")+1], "0x2b")
+            directory = Path(link[link.index("-o")+1]).parent
+            start = commands.index(link)+1
+            self.assertEqual(commands[start:start+len(modules)],
+                             [["cp", str(directory/f"{m}.rst"), str(directory/f"banked_security.{m}.rst")]
+                              for m in modules])
+            packer = commands[start+len(modules)]
+            self.assertIn("tools/banked_image.py", packer)
+            self.assertEqual(packer[-2:], ["--profile", "security"])
+            for args in commands:
+                if args[0] != "sdcc" or "-c" not in args:
+                    continue
+                selected = Path(args[-1]).parent == directory
+                self.assertEqual("-DCC2530_BANKED_SECURITY" in args, selected)
+                self.assertEqual("-DBANKED_STACK_FIRST=0x52" in args, selected)
+                self.assertFalse(set(args) & {"--model-huge", "--stack-auto", "--xstack", "--parms-in-bank1"})
+                module = Path(args[-1]).stem
+                self.assertEqual("--codeseg" in args, selected and module in ("ed_wire", "security_keys"))
+            builds = [a for a in commands if a[0] == "cc" and "tests/banked_security_vectors.c" in a]
+            self.assertEqual(len(builds), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in a for a in builds), 1)
+            for args in builds:
+                self.assertNotIn("-DCC2530_BANKED_SECURITY", args)
+                self.assertNotIn("-DNDEBUG", args)
 
     def test_attempt_profile_is_separate_from_radio_and_legacy_objects(self):
         for board in BOARDS:

@@ -12,6 +12,10 @@ from verify_firmware import parse_ihex, require
 
 BANK_SIZE = 0x8000
 CODE_END = 0x3E800  # NV pages 125/126 and the entire lock/config page stay absent.
+PROFILES = {
+    "abi": ("banked", "offline-banked-abi-fixture"),
+    "security": ("banked_security", "offline-banked-security-fixture"),
+}
 
 
 def physical_address(virtual):
@@ -67,7 +71,8 @@ def ihex(image):
     return "\n".join(lines + [record(0, 1, b""), ""])
 
 
-def manifest(image):
+def manifest(image, profile="abi"):
+    require(profile in PROFILES, "Unknown banked image profile")
     packed = pack(image)
     banks = []
     for bank in range(8):
@@ -80,15 +85,17 @@ def manifest(image):
                                         for a in sorted(items))).hexdigest()
         banks.append({"bank": bank, "first": identity(start), "last": identity(end),
                       "bytes": len(items), "addressed_sha256": digest})
-    return {"format": "cc2530-banked-v1", "capability": "offline-banked-abi-fixture",
+    return {"format": "cc2530-banked-v1", "capability": PROFILES[profile][1],
             "physical_code_end_exclusive": CODE_END, "bytes": len(packed), "banks": banks}
 
 
-def verify_files(output):
-    linked = parse_ihex((output / "banked.ihx").read_text(encoding="ascii"))
-    require(parse_ihex((output / "banked.hex").read_text(encoding="ascii")) == pack(linked),
+def verify_files(output, profile="abi"):
+    require(profile in PROFILES, "Unknown banked image profile")
+    stem = PROFILES[profile][0]
+    linked = parse_ihex((output / f"{stem}.ihx").read_text(encoding="ascii"))
+    require(parse_ihex((output / f"{stem}.hex").read_text(encoding="ascii")) == pack(linked),
             "Packed physical HEX differs from linked banked image")
-    require(json.loads((output / "banked-layout.json").read_text(encoding="ascii")) == manifest(linked),
+    require(json.loads((output / f"{stem}-layout.json").read_text(encoding="ascii")) == manifest(linked, profile),
             "Banked layout identity differs from linked image")
     return linked
 
@@ -96,13 +103,15 @@ def verify_files(output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--profile", choices=tuple(PROFILES), default="abi")
     args = parser.parse_args()
-    linked = parse_ihex((args.output / "banked.ihx").read_text(encoding="ascii"))
+    stem = PROFILES[args.profile][0]
+    linked = parse_ihex((args.output / f"{stem}.ihx").read_text(encoding="ascii"))
     physical = pack(linked)
-    (args.output / "banked.hex").write_text(ihex(physical), encoding="ascii")
-    (args.output / "banked-layout.json").write_text(
-        json.dumps(manifest(linked), indent=2) + "\n", encoding="ascii")
-    verify_files(args.output)
+    (args.output / f"{stem}.hex").write_text(ihex(physical), encoding="ascii")
+    (args.output / f"{stem}-layout.json").write_text(
+        json.dumps(manifest(linked, args.profile), indent=2) + "\n", encoding="ascii")
+    verify_files(args.output, args.profile)
 
 
 if __name__ == "__main__":

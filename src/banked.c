@@ -42,7 +42,7 @@ void _sdcc_banked_call(void) __naked
         ; Check BEFORE PUSH: even SP=ff must not wrap and overwrite IRAM0.
         mov r3,psw
         mov r4,sp
-        cjne r4,#0x23,00007$
+        cjne r4,#(BANKED_STACK_FIRST + 1),00007$
     00007$:
         jc 00003$
         cjne r4,#0x7a,00008$
@@ -115,7 +115,7 @@ void _sdcc_banked_ret(void) __naked
     __asm
         mov r3,psw
         mov r4,sp
-        cjne r4,#0x24,00014$
+        cjne r4,#(BANKED_STACK_FIRST + 2),00014$
     00014$:
         jc 00013$
         cjne r4,#0x7b,00015$

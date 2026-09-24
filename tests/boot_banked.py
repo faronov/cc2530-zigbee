@@ -24,30 +24,46 @@ PINS = (
     "75238f64a69072c50e23d09b55aeec6af0e789b57e7d5923100f5cac5aecedc4",
     "abf0685f316f9041c584fb5eb821b1bc25785a4a6b25cab555c89b8e6662f2b3",
     "279382bf8bcb05ea2f55f071cd176b87b327c851b706c6d00271581e8381933c",
-    "76c1f5102c81f4f79693317cd7c8a3561906670e996a0b7eb6f177d0b431d698",
+    "20d7c4dff73f3ffe64416f44d51fd4ab6adce0a3a7f95497e31c8a2885ba53d5",
     "ca895cc0bc1e4132056c22b40d65685ec0cd5a9a2a9982ff02927965c60d31be",
 )
+_pinned_artifacts = {}
 
 
 def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def artifact_bytes(image, symbols, debug, memory, listings, objects):
-    require(set(listings) == set(objects) == set(MODULES), "Banked object composition changed")
+def normalized_object(raw):
+    require(isinstance(raw, bytes), "Relocatable object is not immutable bytes")
+    if raw.startswith(b";!FILE "):
+        _, newline, raw = raw.partition(b"\n")
+        require(newline, "Incomplete relocatable path comment")
+    require(raw.startswith(b"XH3\n"), "Relocatable format signature changed")
+    return raw
+
+
+def artifact_bytes(image, symbols, debug, memory, listings, objects, modules=MODULES):
+    require(set(listings) == set(objects) == set(modules), "Banked object composition changed")
     return (
         b"".join(a.to_bytes(4, "big") + bytes((image[a],)) for a in sorted(image)),
         json.dumps(symbols, sort_keys=True, separators=(",", ":")).encode("ascii"),
         debug, memory,
-        b"".join(m.encode("ascii") + b"\0" + listings[m] for m in MODULES),
-        b"".join(m.encode("ascii") + b"\0" + objects[m].split(b"\n", 1)[1] for m in MODULES),
+        b"".join(m.encode("ascii") + b"\0" + listings[m] for m in modules),
+        b"".join(m.encode("ascii") + b"\0" + normalized_object(objects[m]) for m in modules),
     )
 
 
-def pin_artifacts(raw):
-    require(len(raw) == len(PINS), "Missing banked artifact")
-    for name, content, expected in zip(("CODE", "map", "raw CDB", "memory", "listings", "objects"), raw, PINS):
-        require(isinstance(content, bytes) and sha(content) == expected, f"Complete banked {name} changed")
+def pin_artifacts(raw, pins=PINS):
+    require(len(raw) == len(pins) == 6, "Missing banked artifact")
+    for name, content, expected in zip(("CODE", "map", "raw CDB", "memory", "listings", "objects"), raw, pins):
+        require(isinstance(content, bytes), f"Complete banked {name} is not immutable bytes")
+        if expected not in _pinned_artifacts:
+            require(sha(content) == expected, f"Complete banked {name} changed")
+            if len(_pinned_artifacts) == 12:
+                _pinned_artifacts.clear()
+            _pinned_artifacts[expected] = content
+        require(content == _pinned_artifacts[expected], f"Complete banked {name} changed")
 
 
 def verify(image, symbols, debug, memory, listings, objects):
@@ -120,7 +136,7 @@ def verify(image, symbols, debug, memory, listings, objects):
     return decoded
 
 
-def artifact_negatives(raw):
+def artifact_negatives(raw, pins=PINS):
     count = 0
     # Every linked address and byte participates in the CODE identity.
     positions = range(len(raw[0]))
@@ -129,7 +145,7 @@ def artifact_negatives(raw):
         content = bytearray(raw[0]); content[offset] ^= 1
         changed[0] = bytes(content)
         try:
-            pin_artifacts(changed)
+            pin_artifacts(changed, pins)
         except ValueError:
             count += 1
         else:
@@ -141,7 +157,7 @@ def artifact_negatives(raw):
                 continue
             changed = list(raw); changed[index] = replacement
             try:
-                pin_artifacts(changed)
+                pin_artifacts(changed, pins)
             except ValueError:
                 count += 1
             else:

@@ -34,8 +34,8 @@ static void wipe(void)
     for (i = 0; i < sizeof(syntax); i++) p[i] = 0;
 }
 
-zigbee_security_result_t ed_wire_nwk(const uint8_t *frame, uint16_t length,
-                                     nwk_frame_info_t *info)
+zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t length,
+                                     nwk_frame_info_t * volatile info) SECURITY_FAR
 {
     uint8_t type, h;
     if (!frame || !info) return ZIGBEE_SECURITY_ARGUMENT;
@@ -58,8 +58,8 @@ zigbee_security_result_t ed_wire_nwk(const uint8_t *frame, uint16_t length,
     return ZIGBEE_SECURITY_OK;
 }
 
-zigbee_security_result_t ed_wire_aps(const uint8_t *frame, uint16_t length,
-                                     aps_frame_info_t *info)
+zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t length,
+                                     aps_frame_info_t * volatile info) SECURITY_FAR
 {
     uint8_t type, delivery, flags, short_header;
     if (!frame || !info) return ZIGBEE_SECURITY_ARGUMENT;
@@ -88,7 +88,8 @@ zigbee_security_result_t ed_wire_aps(const uint8_t *frame, uint16_t length,
     return ZIGBEE_SECURITY_OK;
 }
 
-zigbee_security_result_t ed_wire_decode(const uint8_t *frame, uint16_t length, ed_packet_t *packet)
+zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t length,
+                                        ed_packet_t * volatile packet) SECURITY_FAR
 {
     zigbee_security_result_t result;
     uint8_t offset, size;
@@ -116,10 +117,11 @@ zigbee_security_result_t ed_wire_decode(const uint8_t *frame, uint16_t length, e
     return ZIGBEE_SECURITY_OK;
 }
 
-zigbee_security_result_t ed_wire_encode(const ed_packet_t *packet, uint8_t *frame,
-                                        uint16_t capacity, uint8_t *length)
+zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uint8_t * volatile frame,
+                                        uint16_t capacity, uint8_t * volatile length) SECURITY_FAR
 {
-    uint8_t n, total, control;
+    volatile uint8_t n, control;
+    uint8_t total, encoded_length;
     if (!packet || !frame || !length) return ZIGBEE_SECURITY_ARGUMENT;
     if (packet->length > ED_PAYLOAD_MAX || packet->nwk.type > ED_NWK_COMMAND ||
         (packet->nwk.flags & NWK_FLAG_SECURITY) || (packet->aps.flags & APS_FLAG_SECURITY))
@@ -143,8 +145,9 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t *packet, uint8_t *fram
             syntax.application.type = 0; syntax.application.delivery_mode = 0;
             syntax.application.flags &= APS_FLAG_ACK_REQUEST;
             if (aps_frame_encode(&syntax.application, packet->payload, n,
-                                 syntax.encoded, sizeof(syntax.encoded), &n) != APS_CODEC_OK)
+                                 syntax.encoded, sizeof(syntax.encoded), &encoded_length) != APS_CODEC_OK)
                 return ZIGBEE_SECURITY_HEADER;
+            n = encoded_length;
             syntax.encoded[0] = control;
         }
         if (ed_wire_aps(syntax.encoded, n, &syntax.aps) != ZIGBEE_SECURITY_OK ||
@@ -163,8 +166,8 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t *packet, uint8_t *fram
     return ZIGBEE_SECURITY_OK;
 }
 
-static zigbee_security_result_t header(uint8_t layer, const uint8_t *frame, uint16_t length,
-                                       uint8_t *size)
+static zigbee_security_result_t header(uint8_t layer, const uint8_t * volatile frame, uint16_t length,
+                                       uint8_t * volatile size)
 {
     zigbee_security_result_t result;
     if (layer > ZIGBEE_SECURITY_APS) return ZIGBEE_SECURITY_ARGUMENT;
@@ -178,10 +181,11 @@ static zigbee_security_result_t header(uint8_t layer, const uint8_t *frame, uint
     return result;
 }
 
-static zigbee_security_result_t inspect(uint8_t layer, const uint8_t *frame, uint16_t length)
+static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * volatile frame, volatile uint16_t length)
 {
     zigbee_security_result_t result;
-    uint8_t h, c, a;
+    uint8_t h;
+    volatile uint8_t c, a;
     result = header(layer, frame, length, &h);
     if (result) return result;
     if (!(frame[layer ? 0 : 1] & (layer ? APS_FLAG_SECURITY : 2)))
@@ -206,8 +210,8 @@ static zigbee_security_result_t inspect(uint8_t layer, const uint8_t *frame, uin
     return ZIGBEE_SECURITY_OK;
 }
 
-zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t *frame, uint16_t length,
-                                        zigbee_security_meta_t *meta)
+zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile frame, uint16_t length,
+                                        zigbee_security_meta_t * volatile meta) SECURITY_FAR
 {
     zigbee_security_result_t result;
     if (!frame || !meta) return ZIGBEE_SECURITY_ARGUMENT;
@@ -218,13 +222,14 @@ zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t *frame, ui
     return result;
 }
 
-zigbee_security_result_t ed_wire_crypt(uint8_t open, uint8_t layer,
-    const zigbee_security_key_t *key, const uint8_t *frame, uint16_t length,
-    uint8_t *output, uint16_t capacity, zigbee_security_info_t *info)
+zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t layer,
+    const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
+    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) SECURITY_FAR
 {
     zigbee_security_result_t result;
     ccm_star_result_t encrypted;
-    uint8_t h, a, p, i, total;
+    volatile uint8_t h, a, p, total;
+    uint8_t i;
     if (!key || !frame || !output || !info || open > 1 || layer > 1)
         return ZIGBEE_SECURITY_ARGUMENT;
     if (key->level != 5 || key->extended_nonce != 1) return ZIGBEE_SECURITY_LEVEL;

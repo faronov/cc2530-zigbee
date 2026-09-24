@@ -61,33 +61,34 @@ typedef struct {
  * consumed stay consumed. Uncertain storage failure latches FAILED.
  * No key-export, authentication-boolean, reset, recovery or NV bypass API.
  */
-security_keys_result_t security_keys_open(void);
+security_keys_result_t security_keys_open(void) SECURITY_FAR;
 security_keys_result_t security_keys_provision(
-    const security_keys_config_t *config, const uint8_t *install_code18,
-    uint32_t nwk_floor, uint32_t aps_floor,
-    const ccm_star_limits_t *limits, uint16_t nv_polls);
-security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls);
+    const security_keys_config_t * volatile config, const uint8_t * volatile install_code18,
+    volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
+security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR;
 security_keys_result_t security_keys_receive(
-    const uint8_t *raw_npdu, uint16_t length, ed_packet_t *output, uint8_t *event,
-    const ccm_star_limits_t *limits, uint16_t nv_polls);
+    const uint8_t * volatile raw_npdu, volatile uint16_t length,
+    ed_packet_t * volatile output, uint8_t * volatile event,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 /* Request/Verify use AR=0, normalized APS header {01, aps_counter}.
  * Each call, including a retry with the same APS counter, builds a fresh
  * envelope and consumes fresh security counters for the protected layers.
  */
 security_keys_result_t security_keys_request(
-    uint8_t nwk_seq, uint8_t aps_counter, uint8_t *out, uint16_t capacity,
-    uint8_t *written, const ccm_star_limits_t *limits, uint16_t nv_polls);
+    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
+    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 security_keys_result_t security_keys_verify(
-    uint8_t nwk_seq, uint8_t aps_counter, uint8_t *out, uint16_t capacity,
-    uint8_t *written, const ccm_star_limits_t *limits, uint16_t nv_polls);
+    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
+    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 /* APS protection of Data or full/short ACK uses data key-id0 only.
  * Real NWK Timeout Request0B commits its outstanding context before output.
  * All outgoing NPDU EDI bits are normalized from durable parent information,
  * never accepted as caller assertions.
  */
 security_keys_result_t security_keys_send(
-    const ed_packet_t *packet, uint8_t aps_secure, uint8_t *out, uint16_t capacity,
-    uint8_t *written, const ccm_star_limits_t *limits, uint16_t nv_polls);
+    const ed_packet_t * volatile packet, uint8_t aps_secure, uint8_t * volatile out, volatile uint16_t capacity,
+    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 /* Local failed-join abandonment, not authenticated input or recovery.
  * With a network key: real protected NWK Leave 04 00, source IEEE, radius1,
  * destinationFFFD; requires36 bytes. LEFT is durable before frame publication.
@@ -98,11 +99,11 @@ security_keys_result_t security_keys_send(
  * request, automatic provisioning, counter reset or delivery claim.
  */
 security_keys_result_t security_keys_leave(
-    uint8_t nwk_seq, uint8_t *out, uint16_t capacity, uint8_t *written,
-    const ccm_star_limits_t *limits, uint16_t nv_polls);
+    uint8_t nwk_seq, uint8_t * volatile out, volatile uint16_t capacity, uint8_t * volatile written,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 /* Metadata only. VERIFIED is persisted key verification, NOT restart/rejoin,
  * BDB completion, radio readiness or application-traffic permission from BDB.
  */
-security_keys_result_t security_keys_status(security_keys_status_t *output);
+security_keys_result_t security_keys_status(security_keys_status_t * volatile output) SECURITY_FAR;
 
 #endif

@@ -13,6 +13,12 @@ membership distinct from application readiness and retains physical cleanup
 ownership. This adds neither a board caller nor proof of whole-stack8051
 memory/ABI fit; the existing strict target profiles remain separate.
 
+The [banked security target profile](BANKED_SECURITY.md) now separately proves
+real key/wire/crypto/NV placement and mixed execution. Common lower services,
+bank1 key ownership and bank2 wire protection use physically reserved shared
+DATA and the original far-call ABI. It has no board/radio or full MAC/BDB
+caller, no ISR headroom claim, and no automatic persistence-to-READY path.
+
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
 probe is confined to the target example. It shares existing startup/board

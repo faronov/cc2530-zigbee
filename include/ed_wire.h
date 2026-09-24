@@ -7,6 +7,7 @@
 #include "zigbee_security.h"
 #include "nwk_frame.h"
 #include "aps_frame.h"
+#include "banked_security.h"
 
 #define ED_PAYLOAD_MAX 82u
 #define ED_APS_COMMAND 1u
@@ -25,14 +26,14 @@ typedef struct {
  * source routing, fragmentation or implicit forwarding. Existing bare codecs
  * and their narrower contracts are unchanged.
  */
-zigbee_security_result_t ed_wire_nwk(const uint8_t *frame, uint16_t length,
-                                     nwk_frame_info_t *info);
-zigbee_security_result_t ed_wire_aps(const uint8_t *frame, uint16_t length,
-                                     aps_frame_info_t *info);
-zigbee_security_result_t ed_wire_decode(const uint8_t *frame, uint16_t length,
-                                        ed_packet_t *packet);
-zigbee_security_result_t ed_wire_encode(const ed_packet_t *packet,
-                                        uint8_t *frame, uint16_t capacity, uint8_t *length);
+zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t length,
+                                     nwk_frame_info_t * volatile info) SECURITY_FAR;
+zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t length,
+                                     aps_frame_info_t * volatile info) SECURITY_FAR;
+zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t length,
+                                        ed_packet_t * volatile packet) SECURITY_FAR;
+zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet,
+    uint8_t * volatile frame, uint16_t capacity, uint8_t * volatile length) SECURITY_FAR;
 
 /* Real CCM*, selected R22 ENC-MIC32 only. inspect is untrusted syntax; crypt
  * checks MIC and selected source/identifier/sequence, never replay or membership.
@@ -40,10 +41,10 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t *packet,
  * zigbee_security.h. Error preserves output/info. Wire level bits are replaced
  * with trusted level5 for authentication and zeroed after sealing.
  */
-zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t *frame,
-                                        uint16_t length, zigbee_security_meta_t *meta);
-zigbee_security_result_t ed_wire_crypt(uint8_t open, uint8_t layer,
-    const zigbee_security_key_t *key, const uint8_t *frame, uint16_t length,
-    uint8_t *output, uint16_t capacity, zigbee_security_info_t *info);
+zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile frame,
+    uint16_t length, zigbee_security_meta_t * volatile meta) SECURITY_FAR;
+zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t layer,
+    const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
+    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) SECURITY_FAR;
 
 #endif

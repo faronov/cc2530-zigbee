@@ -130,6 +130,12 @@ are named static XDATA slots, e.g. `_banked_fixture_bank2_PARM_2`.
 Each banked C epilogue emits `LJMP __sdcc_banked_ret`, not `RET`.
 Ordinary common C functions retain normal `LCALL`/`RET`.
 
+The separate [real key-service profile](BANKED_SECURITY.md) opts its public
+generic-pointer APIs into this convention. It has its own physical DATA and
+stack proof: `BANKED_STACK_FIRST=0x52` instead of the foundation's default22.
+Only the two minimum-SP comparisons are parameterized; the unchanged7C
+maximum is not a configurable escape from stack-fit requirements.
+
 The original call trampoline:
 
 1. Checks the incoming stack before any push, so SPff cannot wrap into IRAM0.

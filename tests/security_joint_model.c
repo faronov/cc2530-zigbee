@@ -9,6 +9,7 @@
 #include "flash_exec.h"
 #include "host_mmio.h"
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 #if defined(__SDCC)
@@ -31,6 +32,7 @@ static uint8_t nv[4096], saved[2048], addresses[2], staged[4], controller, activ
 static unsigned commands, data_writes, polls, reads_nv, fail_read, erases[2], words[1024];
 static unsigned cut_command, cut_bits, stop_command;
 static uint8_t cut_kind;
+static uint8_t trace_enabled;
 static jmp_buf *cut_env;
 static host_mmio_read_hook_t aes_read;
 static host_mmio_write_hook_t aes_write;
@@ -95,6 +97,10 @@ static void complete(void)
         words[a]++;
         for (i = 0; i < 4; i++) nv[a*4+i] &= staged[i];
     }
+    if (trace_enabled)
+        printf("FLASH %u %u %u %02x%02x%02x%02x\n", erase ? 1u : 2u, page, position,
+               erase ? 0 : staged[0], erase ? 0 : staged[1],
+               erase ? 0 : staged[2], erase ? 0 : staged[3]);
     controller &= 12; active = 0;
     if (cut_env && commands == cut_command) {
         if (cut_kind == 3) {
@@ -173,6 +179,7 @@ void security_joint_reset(uint8_t erase)
     /* The ONLY AES reset in the combined model: real modeled cold boot. */
     security_aes_reset();
     security_aes_trace(0);
+    trace_enabled = 0;
     aes_read = host_mmio_read_hook; aes_write = host_mmio_write_hook;
     aes_cycles = host_mmio_cycles_hook;
     memset(flash_exec_work, 0, sizeof(flash_exec_work)); flash_fault = 0;
@@ -196,6 +203,11 @@ uint8_t *security_joint_nv(void) { return nv; }
 unsigned security_joint_flash_commands(void) { return commands; }
 unsigned security_joint_flash_erases(uint8_t page) { assert(page < 2); return erases[page]; }
 unsigned security_joint_aes_blocks(void) { return security_aes_blocks(); }
+void security_joint_trace(uint8_t enabled)
+{
+    trace_enabled = enabled;
+    security_aes_trace(enabled);
+}
 void security_joint_cut(jmp_buf *env, unsigned command, uint8_t kind, unsigned bits)
 {
     assert(!env || (kind >= 1 && kind <= 3));

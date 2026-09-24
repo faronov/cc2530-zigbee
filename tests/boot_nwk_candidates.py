@@ -63,7 +63,7 @@ CALLER_OBJECTS = {'table': (354, 150),
  'position': (960, 1)}
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)"
-    r"\[\s*\d+\]\s+\d+\s+\S.*$", re.MULTILINE,
+    r"\[\s*\d+\]\s*\d+\s+\S.*$", re.MULTILINE,
 )
 
 

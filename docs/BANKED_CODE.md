@@ -134,3 +134,7 @@ CC2530 interrupt-source integration, hardware-observed banking or physical
 flash acceptance. CPU register-bank0/DPS0 remain normal C caller
 preconditions; a state check inside a compiled C function does not make
 arbitrary entry calling conventions safe.
+
+The [banked security composition](BANKED_SECURITY.md) is the next, separate
+real-service profile. It does not replace this foundation's IRQ/pointer/
+bank7/constant/failure corpus or turn its synthetic fixture into board firmware.

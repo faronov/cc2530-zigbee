@@ -69,6 +69,12 @@ raising existing images' limits. It is an offline ABI/image/mapping fixture,
 not a banked Zigbee firmware release. Full-stack DATA/stack fit and physical
 banked debugger/flash acceptance remain separate work.
 
+The [banked key/crypto/NV composition](docs/BANKED_SECURITY.md) now places
+real services in common CODE and two switchable banks. Its offline fixture
+executes authenticated key exchange, protected sending, persistent reopen,
+replay rejection and Leave. This is not yet the complete MCU MAC/BDB join
+image, a real-radio adapter or a hardware interoperability result.
+
 ## M1 debugger fixture
 
 The first target-side M1 component is a separate, deterministic non-RF image:

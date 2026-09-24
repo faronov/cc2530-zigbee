@@ -166,10 +166,12 @@ new ABI/alias proofs, a truthful real-radio adapter, entropy, electrical
 durability and physical interoperability are still gates. #23-#26 must not
 be closed merely because this synthetic join reaches READY.
 
-The smaller key-owner/crypto/NV composition already requests49,576 CODE bytes
-against the unchanged32,768-byte unbanked limit and fails allocation of57
-contiguous DATA bytes. That failed link is not a measurement of a working
-whole-stack image, and relaxing the limit would not solve banking/IRAM safety.
+The earlier smaller key-owner/crypto/NV composition requested49,576 CODE bytes
+against the unchanged32,768-byte unbanked limit and failed allocation of57
+contiguous DATA bytes. The separate [banked security image](BANKED_SECURITY.md)
+now resolves that bounded placement with real key lifecycle execution and
+checked physical DATA ownership. It does not yet include this document's
+complete MAC/NWK/APS/ZDO/BDB caller or prove whole-stack resource/stack fit.
 
 All fixture identities and key material are deliberately public synthetic
 values. No key-bearing firmware/NV dumps or captures are uploaded by these

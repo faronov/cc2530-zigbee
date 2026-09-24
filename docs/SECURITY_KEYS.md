@@ -469,7 +469,7 @@ sdcc -mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror \
   -o build/security-keys-dev/security_keys.rel
 ```
 
-The final owner object is 14,755 CODE bytes, 783 XDATA bytes, 46 DATA bytes,
+The earlier owner object was 14,755 CODE bytes, 783 XDATA bytes, 46 DATA bytes,
 4 overlay bytes and 12 bit variables. Those are compiler object extents, not
 a proved safe complete allocation or executed stack high water.
 
@@ -479,8 +479,12 @@ CODE bytes versus 32,768, and failure to allocate 57 consecutive DATA bytes.
 Its memory report requested 3,909 ordinary XDATA bytes and initial SP `7F`,
 also not the accepted resident 3,200-total-XDATA / SP`7C` contract. This
 failure is **not an image check pass or a simulated stack measurement**.
-There is no acceptable owner image to feed the alias-aware simulator;
-no simulator deadline, ABI guard, budget or successful stub was substituted.
-New-module DATA lifetimes/active calls, linked-image checks and alias-aware
-execution remain blocking target integration work. Full Actions acceptance
-belongs to the parent integration; this standalone owner is not board firmware.
+That historical failed profile was not repaired by relaxing its limits.
+The separate [banked security profile](BANKED_SECURITY.md) now links and
+executes the real owner/wire/crypto/NV composition with physical DATA
+reservations, full artifact/active-frame checks and mixed peripheral replay.
+The current ordinary owner is16835 CODE /841 XDATA /4 DATA bytes;
+banked entry/return adds204 CODE bytes. Wipe-owned staging and private
+inlining trade XDATA/CODE for genuine stack headroom. Old profiles, schemas
+and host corpora remain unchanged. Full MCU MAC/BDB join and hardware gates
+remain separate; this synthetic owner fixture is not board firmware.

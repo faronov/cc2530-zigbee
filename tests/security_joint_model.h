@@ -15,6 +15,7 @@ uint8_t *security_joint_nv(void);
 unsigned security_joint_flash_commands(void);
 unsigned security_joint_flash_erases(uint8_t page);
 unsigned security_joint_aes_blocks(void);
+void security_joint_trace(uint8_t enabled);
 /* Absolute command number in current power epoch; kind1 before command,
  * kind2 after completion, kind3 torn (bits completed). env must remain live.
  * NULL disables injection. longjmp(*env,1) is power cut, 2 RAM fail-stop.

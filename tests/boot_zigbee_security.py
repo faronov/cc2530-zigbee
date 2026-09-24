@@ -296,13 +296,50 @@ def native_trace(executable, number):
     return blocks, other, sha(completed.stdout.encode("ascii"))
 
 
+def append_block(commands, symbols, key, plain, cipher, write, arm, dump):
+    """Drive only synthetic AES/DMA peripherals at actual emitted write sites."""
+    desc0, desc1 = symbols["_aes_dma0"], symbols["_aes_dma1"]
+    for name, reg, value in (("cfg0h", 0xd5, desc0 >> 8), ("cfg0l", 0xd4, desc0 & 255),
+                             ("cfg1h", 0xd3, desc1 >> 8), ("cfg1l", 0xd2, desc1 & 255)):
+        write(name, reg, value)
+    arm("output", 0)
+    for phase, data in enumerate((key, bytes(16), plain), 1):
+        arm("input", 2)
+        write("command", 0xb3, (0x45, 0x47, 0x41)[phase-1])
+        source = symbols[("_aes_key", "_aes_iv", "_aes_input")[phase-1]]
+        dump("xram", desc0, source.to_bytes(2, "big") + bytes.fromhex("70b100101d41"))
+        dump("xram", desc1, bytes.fromhex("70b2") + symbols["_aes_output"].to_bytes(2, "big") +
+             bytes.fromhex("00101e11") + bytes(24))
+        dump("xram", source, data)
+        for i, byte in enumerate(data):
+            cfg = "(sfr[0xd5]*256+sfr[0xd4])"
+            src = f"(xram[{cfg}]*256+xram[{cfg}+1])"
+            dst = f"(xram[{cfg}+2]*256+xram[{cfg}+3])"
+            commands.append(f"expression xram[{dst}]=xram[{src}+{i}]")
+            dump("sfr", 0xb1, bytes((byte,)))
+        if phase == 3:
+            for i, byte in enumerate(cipher):
+                commands.append(f"set memory sfr 0xb2 {byte}")
+                cfg = "(sfr[0xd3]*256+sfr[0xd2])"
+                src = f"(xram[{cfg}]*256+xram[{cfg}+1])"
+                dst = f"(xram[{cfg}+2]*256+xram[{cfg}+3])"
+                commands.append(f"expression xram[{dst}+{i}]=xram[{src}]")
+            dump("xram", symbols["_aes_output"], cipher)
+        commands += [f"set memory sfr 0xd6 {0 if phase == 3 else 2}",
+                     f"set memory sfr 0xd1 {3 if phase == 3 else 1}",
+                     f"set memory sfr 0xb3 {(0x44, 0x46, 0x48)[phase-1]}",
+                     "set memory sfr 0x98 0xa7"]
+        write("block_ack" if phase == 3 else "load_ack", 0xd1, 0x1c if phase == 3 else 0x1e)
+        commands.append("set memory sfr 0xd1 0")
+        write("enc_final" if phase == 3 else "enc_load", 0x98, 0xa4)
+
+
 def replay(simulator, path, symbols, debug, sites, code, blocks, expected, number, client=None):
     prefix = "security" if client is None else client.prefix
     before, done = symbols[f"_{prefix}_before"], symbols[f"_{prefix}_done"]
     initial = GUARDS | {0xb1: 0x69, 0xb2: 0x69, 0xb3: 8, 0xd1: 0,
                         0xd2: 0, 0xd3: 0, 0xd4: 0, 0xd5: 0, 0xd6: 0,
                         0x95: 0, 0x96: 0, 0x97: 0}
-    desc0, desc1 = symbols["_aes_dma0"], symbols["_aes_dma1"]
     commands = [ALIAS, AES_ALIAS, "fill xram 0 0x1eff 0xa5", "fill xram 0x6000 0x70ff 0x69",
                 f"run 0 {symbols['_main']:#x}", "fill iram 0x7d 0xff 0xc7"]
     commands += [f"set memory sfr {r:#x} {v:#x}" for r, v in initial.items()]
@@ -340,39 +377,7 @@ def replay(simulator, path, symbols, debug, sites, code, blocks, expected, numbe
         event(sites[name] + 12)
 
     for key, plain, cipher in blocks:
-        for name, reg, value in (("cfg0h", 0xd5, desc0 >> 8), ("cfg0l", 0xd4, desc0 & 255),
-                                 ("cfg1h", 0xd3, desc1 >> 8), ("cfg1l", 0xd2, desc1 & 255)):
-            write(name, reg, value)
-        arm("output", 0)
-        for phase, data in enumerate((key, bytes(16), plain), 1):
-            arm("input", 2)
-            write("command", 0xb3, (0x45, 0x47, 0x41)[phase-1])
-            source = symbols[("_aes_key", "_aes_iv", "_aes_input")[phase-1]]
-            dump("xram", desc0, source.to_bytes(2, "big") + bytes.fromhex("70b100101d41"))
-            dump("xram", desc1, bytes.fromhex("70b2") + symbols["_aes_output"].to_bytes(2, "big") +
-                 bytes.fromhex("00101e11") + bytes(24))
-            dump("xram", source, data)
-            for i, byte in enumerate(data):
-                cfg = "(sfr[0xd5]*256+sfr[0xd4])"
-                src = f"(xram[{cfg}]*256+xram[{cfg}+1])"
-                dst = f"(xram[{cfg}+2]*256+xram[{cfg}+3])"
-                commands.append(f"expression xram[{dst}]=xram[{src}+{i}]")
-                dump("sfr", 0xb1, bytes((byte,)))
-            if phase == 3:
-                for i, byte in enumerate(cipher):
-                    commands.append(f"set memory sfr 0xb2 {byte}")
-                    cfg = "(sfr[0xd3]*256+sfr[0xd2])"
-                    src = f"(xram[{cfg}]*256+xram[{cfg}+1])"
-                    dst = f"(xram[{cfg}+2]*256+xram[{cfg}+3])"
-                    commands.append(f"expression xram[{dst}+{i}]=xram[{src}]")
-                dump("xram", symbols["_aes_output"], cipher)
-            commands += [f"set memory sfr 0xd6 {0 if phase == 3 else 2}",
-                         f"set memory sfr 0xd1 {3 if phase == 3 else 1}",
-                         f"set memory sfr 0xb3 {(0x44, 0x46, 0x48)[phase-1]}",
-                         "set memory sfr 0x98 0xa7"]
-            write("block_ack" if phase == 3 else "load_ack", 0xd1, 0x1c if phase == 3 else 0x1e)
-            commands.append("set memory sfr 0xd1 0")
-            write("enc_final" if phase == 3 else "enc_load", 0x98, 0xa4)
+        append_block(commands, symbols, key, plain, cipher, write, arm, dump)
     if client is not None:
         client.after_blocks(number, commands, write, arm, dump, symbols, expected)
     commands += ["run"] + snapshot_commands(serial)
