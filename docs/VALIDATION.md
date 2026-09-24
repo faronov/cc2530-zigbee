@@ -343,7 +343,13 @@ identities from the already replayed wire increment, with no hash update or
 new simulation claim for the absent BDB/NWK/APS/ZDO caller.
 The published starting revision `3888eae1871f42b02613456a9e57894bfeecf0fe`
 passed [Actions36046973052](https://github.com/faronov/cc2530-zigbee/actions/runs/36046973052),
-56/56 jobs; that baseline acceptance does not cover these unpublished changes.
+56/56 jobs. The subsequent phase, wire and runtime-slot reductions were
+published in `c97e32d4bf4126b78b645d5c7fc706a133238e1c` and passed
+[Actions36059444790](https://github.com/faronov/cc2530-zigbee/actions/runs/36059444790),
+56/56 final jobs. The timed-out generic bringup worker and dependent
+acceptance gate were rerun without source, deadline or corpus changes.
+This acceptance covers the resource reductions and key-only image; a
+complete MCU join remains absent.
 
 ### Durable outgoing range owner
 

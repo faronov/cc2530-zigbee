@@ -283,8 +283,13 @@ action, caller configuration and libc storage are not included in that lower
 bound. The key-only peak SP7B/7C also supplies no additional caller headroom.
 That exact baseline revision passed
 [Actions36046973052](https://github.com/faronov/cc2530-zigbee/actions/runs/36046973052),
-56/56 successful jobs. This accepts the published baseline, not the following
-unpublished resource increments or a whole-MCU join.
+56/56 successful jobs. The following three resource increments were then
+published in `c97e32d4bf4126b78b645d5c7fc706a133238e1c` and accepted by
+[Actions36059444790](https://github.com/faronov/cc2530-zigbee/actions/runs/36059444790),
+56/56 successful jobs after a targeted rerun of the timed-out generic bringup
+worker and dependent acceptance gate. No source, deadline or corpus changed
+for the rerun. This accepts the resource reductions and existing key-only
+image, **not a whole-MCU join**.
 
 #26 therefore still needs explicit phase lifetimes, reduced/shared work
 storage with an active-call ownership proof, balanced CODE banks and real
