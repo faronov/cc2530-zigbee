@@ -129,13 +129,15 @@ There are no artifact uploads, hardware connections, automatic flashing or
 RF actions. `test-common` remains the exact union including the unchanged
 original service suites.
 
-## What still must be implemented
+## Separate key lifecycle and remaining integration
 
-This profile does not persist keys or accept a coordinator. #23 still needs
-two network-key slots, old/pending TC link-key states, bounded persistent
-replay rejection and authenticated Transport/Verify/Confirm processing.
-Actual interleaving, interruptions and restart must be tested with those
-owners present. Upper staging must remain outside every lower module and
+This resident-primitives profile does not persist keys or accept a coordinator.
+The separate [key owner](SECURITY_KEYS.md) now implements two network-key slots,
+old/pending TC state, durable replay rejection and authenticated
+Transport/Verify/Confirm processing. Its [banked lifecycle](BANKED_SECURITY.md)
+has genuine mixed-execution evidence; this older profile does not supply that
+proof. Complete MCU join (#26) and secure persisted recovery (#27) remain open.
+Upper staging must remain outside every lower module and
 complete libc scratch region; earlier NV-owned key buffers cannot simply
 be passed to AES. `security_counter` remains the only journal writer.
 No new entropy, physical durability or cold-rollback protection is claimed.

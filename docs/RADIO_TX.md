@@ -215,7 +215,7 @@ or authorization for another run. Before physical execution:
 1. Identify the exact board/revision/CC2530F256, recovery material, separately
    selected **boot-disarmed board fixture**, linked image hash/toolchain and
    return-to-known-state procedure. Complete the still-open physical/scope
-   dependencies, including #8/#9 where applicable. Do not use a component
+   dependencies, including #8/#4 where applicable. Do not use a component
    executable or infer permission from past RX work.
 2. Obtain explicit scope for channel, raw power profile, antenna/test
    environment, independent receiver/sniffer, public synthetic frame bytes,
@@ -248,8 +248,9 @@ or authorization for another run. Before physical execution:
 
 **Open gates:** the one LG conditional-clear/body observation does not cover
 physical busy-channel behavior, independent FCS, fault containment/recovery,
-generic hardware or calibration. Those #12 acceptance gates remain open.
-#15 also requires its
+generic hardware or calibration. #12's bounded implementation is complete;
+its remaining physical observations are now tracked by #15, with calibration
+under #4. #15 also requires its
 separate lab fixture, independent captures and unimplemented ACK/retry/
 association behavior; this slice closes none of those or M3 as a whole.
 

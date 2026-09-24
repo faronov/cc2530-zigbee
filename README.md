@@ -825,7 +825,9 @@ R22 transport/load derivations and initiator Verify-Key hash using real
 AES-MMO. Its native/linked/simulated failures preserve output, including
 failures after the inner hash. The separate bounded integration below adds
 actual TC confirmation, durable key slots and replay/lifecycle ownership;
-its remaining target acceptance gates mean #23 is not complete.
+the [banked key/wire/crypto/NV profile](docs/BANKED_SECURITY.md) now has genuine
+image-checked and simulated lifecycle evidence, completing bounded #23.
+Whole-stack MCU join, secure restart and physical acceptance remain separate.
 The [resident crypto/NV profile](docs/SECURITY_RESIDENT.md) now links all
 thirteen real service modules together and replays the original four
 callers with checked active DATA-frame sharing. It preserves the SP7C

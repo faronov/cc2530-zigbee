@@ -3,11 +3,13 @@
 Original BSD-3-Clause code. This is an actual serialized foreground composition
 of `ed_wire_crypt`, CCM*, AES, install-code/MMO/keyed-hash, outgoing counters,
 the journal and flash services. There are no successful security/NV substitutes.
-It is **host-tested and SDCC object-compiled, not target-image accepted,
-simulated, hardware-observed or application-interoperability evidence**.
-The genuine combined target link currently fails the unchanged limits below.
-The owner is not linked into a board image and does not change existing
-production services. The parent separately owns Makefile/workflow integration.
+It is **host-tested, image-checked and simulated** in the
+[banked key/wire/crypto/NV profile](BANKED_SECURITY.md). The earlier unbanked
+link failure below is historical, not an unresolved fit failure for that
+bounded composition. This completes #23's bounded implementation, not full
+MAC/NWK/APS/ZDO/BDB target acceptance (#26), secure restart (#27), entropy
+(#10), electrical durability (#8) or coordinator interoperability (#28).
+The owner is not linked into a board image; no hardware result is claimed.
 
 ## Deliberately bounded profile
 

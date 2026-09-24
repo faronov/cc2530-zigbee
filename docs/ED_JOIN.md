@@ -163,8 +163,10 @@ simulator suites remain mandatory and unchanged; the old resident profile
 does not prove that these new services fit or execute safely together on8051.
 Whole-stack CODE/XDATA/IRAM placement, banked execution if required, complete
 new ABI/alias proofs, a truthful real-radio adapter, entropy, electrical
-durability and physical interoperability are still gates. #23-#26 must not
-be closed merely because this synthetic join reaches READY.
+durability and physical interoperability are still gates. #26 now owns the
+remaining complete-target acceptance of the consolidated #24/#25/#26 scopes;
+host READY alone cannot close it. #23's bounded implementation is accepted
+separately through the genuine banked lifecycle below, not from host READY.
 
 The earlier smaller key-owner/crypto/NV composition requested49,576 CODE bytes
 against the unchanged32,768-byte unbanked limit and failed allocation of57

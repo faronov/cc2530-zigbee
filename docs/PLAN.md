@@ -42,6 +42,38 @@ M0 repository / reproducible bootstrap
 Host-side codecs, test vectors and documentation can proceed alongside earlier
 hardware work. Later features must not bypass their security or recovery gates.
 
+### Current execution and issue ownership (2026-09-24)
+
+[Roadmap #5](https://github.com/faronov/cc2530-zigbee/issues/5) is the current
+execution index; the milestone exit requirements below remain unchanged.
+Next are the bounded testing/coverage/run-selection review (#87), the complete
+banked MAC/NWK/APS/ZDO/BDB MCU composition (#26), and secure persisted
+restart/rejoin (#27). Real radio/association integration (#13/#14) and separate
+MAC/coordinator acceptance (#15/#28) retain timing (#40/#45), physical NV (#8)
+and entropy (#10) requirements. The testing-policy change is not implemented
+by this issue audit; the existing CI cases and limits remain in force.
+
+The bounded TX/CCA implementation (#12) and fixed-parent key lifecycle (#23)
+are complete at their documented evidence levels. #23 now has actual banked
+key/wire/crypto/NV execution, not just host tests; it is still neither complete
+MCU join nor physical network acceptance. #12's remaining physical busy-CCA,
+independent FCS and fault/recovery observations are explicitly owned by #15.
+
+| Consolidated tracker | Active owner of remaining requirements |
+| --- | --- |
+| #9 platform audit/calibration | #4 M2 exit |
+| #24 transport and #25 endpoint-zero target acceptance | #26 complete MCU join |
+| #50 RX/AUTOACK/ordinary-TX ownership | #13 real MAC adapter |
+| #51 reversible Nordic stimulus preparation | #55 deferred startup/execution/return qualification |
+| #67 raw IRND physical acquisition | #10 entropy workstream |
+
+These administrative closures are not passed or cancelled acceptance gates.
+Historical component/hardware records retain their original issue IDs and
+evidence dates; their remaining work follows the active owners above. M2-M5
+milestones are not closed by this reorganization. Optional Nordic work,
+application interoperability, sleepy operation, sensors and display remain
+tracked without blocking independent initial MCU join work.
+
 ## 2. Scope decisions
 
 | Area | Initial decision | Consequence |
@@ -375,8 +407,9 @@ now supplies separate public build/proof integration: real startup/clock,
 fixed channel26/1024-bit acquisition, explicit ARM/RUN, retained END/FAULT,
 and health failure separate from acquisition success. Both boards have
 native/sanitizer/linked/alias-aware evidence,9426/9466 CODE,440+64 XDATA,
-full-run SP40 under SP7C. Physical acceptance is pending; #67 is not closed
-by this offline implementation. Only this distinct board image can be a
+full-run SP40 under SP7C. Physical acceptance is pending under #10 after
+administrative consolidation of #67, not passed by this implementation.
+Only this distinct board image can be a
 candidate for a separately authorized experiment, never the synthetic test image.
 No entropy, secure RNG or waiver of #10's characterization gates follows.
 
@@ -829,9 +862,12 @@ This primitive alone does not complete #23. The separate bounded
 [key owner](SECURITY_KEYS.md) and [host integration](ED_JOIN.md) now implement
 two-slot/key/replay state, old-key retention, authenticated Confirm-Key and
 commissioning admission; their new linked-image/ABI/alias acceptance remains
-open and is not supplied by the old primitive proofs.
+separate from the old primitive proofs. The [banked security profile](BANKED_SECURITY.md)
+now supplies the key/wire/crypto/NV composition's genuine image/ABI/alias and
+mixed-execution acceptance. The complete MAC/NWK/APS/ZDO/BDB target caller
+and whole-stack resources remain #26, not evidence supplied by that profile.
 
-The next #23 prerequisite, the [resident crypto/NV profile](SECURITY_RESIDENT.md),
+The earlier #23 prerequisite, the [resident crypto/NV profile](SECURITY_RESIDENT.md),
 links all thirteen unchanged service modules in each of four original-caller
 images. Real physical IRAM reservations, complete active-frame/libc proofs
 and original crypto/counter replay establish bounded resident fit without
@@ -894,9 +930,11 @@ request policy: local Node Descriptor response, other-address ED error,
 generic unsupported-unicast reply, broadcast/Parent_annce no-reply outcomes,
 and explicit rejection of response clusters/unimplemented notifications.
 Real unicast NWK/APS/ZDO exchanges have isolated host/image/simulator coverage.
-This is not endpoint registration: #24 admission/queues/ACK/retry and #25
-address/announce/mandatory service processing remain open. Broadcast context
-tests do not expand the existing APS wire codec or establish authentication.
+This standalone component is not endpoint registration. The host composition
+below supplies the bounded #24 admission/queues/ACK/retry and #25 address/announce
+services; their remaining whole-target acceptance is consolidated into #26.
+Broadcast context tests do not expand the original APS wire codec or establish
+authentication.
 
 The new [bounded host join](ED_JOIN.md) integrates #23–#26 against an explicit
 synthetic centralized coordinator. It performs real scan/association, key

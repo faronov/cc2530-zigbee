@@ -306,7 +306,7 @@ there is **no implementation of this adapter** and no composition with these
 drivers in the linked image. A future unified bidirectional owner needs its
 own primary hardware review, resource/ABI proofs and authorized acceptance.
 Queue TX dequeue from #11 remains copied memory ownership, never an event of
-physical TX completion. #12 remains open for its physical fixture/capture gate.
+physical TX completion. #12's remaining physical acceptance is tracked by #15.
 
 ## Time, retries, completion and cancellation
 
@@ -686,7 +686,7 @@ Before real use, implement/review the unified adapter and exact time domain;
 separately authorize a boot-disarmed fixture, board/channel/power/attempt
 limits, recovery and independent captures. Observe CCA/backoff, turnaround,
 ACK/retry timing and failure cleanup physically. None was done here, and
-#12's physical acceptance and #13/M3's adapter/timing gates remain open.
+#15's physical acceptance and #13/M3's adapter/timing gates remain open.
 The independent #20 NV journal adds no persistence/security/commissioning
 behavior to this scheduler and does not waive BDB errata/test-plan gates.
 
