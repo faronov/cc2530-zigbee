@@ -259,6 +259,11 @@ breakpoints. Exact511/512/513-tick boundaries and whole-FF retry/exhaustion
 are executed, not inferred from an instruction count. The complete MAC
 action/clock/RX binding remains native-only; this is not a banked real-radio
 join, full #13/#14 acceptance or hardware evidence.
+Commit `166b15c` passed
+[Actions36170918483](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),
+104/104 jobs. Both handoff workers completed the full71-sequence corpus and
+86410 artifact negatives plus the alias control in5m03s/5m04s, preserving
+all100 previous workers and their deadlines.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

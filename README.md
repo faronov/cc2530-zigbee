@@ -653,6 +653,9 @@ uncertainty retain faults. It is **host-tested, image-checked and simulated**.
 Its native interval-MAC binding and isolated lower-service MCU image are
 not yet the production/banked radio adapter or interval scan/POLL/association.
 No RF test or board image is added; never flash `mac_handoff_test.ihx`.
+Commit `166b15c` passed
+[full CI,104/104 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),
+including all71 handoff sequences for each board.
 
 ## Offline MAC transmission state
 

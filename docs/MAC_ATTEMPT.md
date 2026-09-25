@@ -335,6 +335,12 @@ RX/receiver-ACK lease. It neither injects MAC success nor initializes private
 protocol state. That composition is **not** the isolated MCU image above.
 This increment is host-tested, image-checked and simulated, not
 hardware-observed or complete #13/#14 acceptance.
+Commit `166b15c` passed
+[full Actions36170918483](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),
+104/104 jobs. Each new board worker executed all71 sequences and86410 artifact
+mutations plus the alias rejection; complete job durations were5m03s/5m04s.
+All100 previous workers remain accepted. This accepts the isolated handoff
+and native binding, not a combined/banked radio adapter.
 
 Remaining work is the production adapter and combined/banked MCU binding,
 loss-free receive closure, interval-aware scan/POLL/association and subsequent

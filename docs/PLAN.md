@@ -68,6 +68,10 @@ filter/AUTOACK transition without stopping RX or flushing a FIFO. Its
 isolated target proof and native interval-MAC composition remain distinct.
 Production adapter/combined MCU binding, loss-free closure and interval
 scan/POLL/association still remain; this does not close #13/#14 or #45.
+This bounded handoff at `166b15c` passed
+[full Actions36170918483](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),
+104/104 jobs, including both complete71-sequence target workers and all
+previous workers. No new hardware evidence is claimed.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
