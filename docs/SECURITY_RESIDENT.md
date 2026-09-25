@@ -118,8 +118,10 @@ generic in4m40s and LG in3m16s, retaining56 cases,36695 calls,
 162 continuations, SP75,89775 artifact and1513 runtime negatives.
 This resolves that component deadline gate without removing a corpus,
 continuation or mutation, or relaxing a deadline. The overall run still
-failed on the separate protocol-budget identity refresh; it is not full
-revision acceptance.
+failed on the separate protocol-budget identity refresh. The corrected
+`08672c5` subsequently passed
+[all64 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416),
+including the eight resident workers and Required offline acceptance.
 
 The new profile caps are32768 CODE and3200 total XDATA including64 reserved
 status bytes; executed SP remains at or below the original7C cap. These

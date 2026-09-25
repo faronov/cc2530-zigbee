@@ -47,6 +47,15 @@ control and executing both genuine protocol compositions. Current integrated
 resources are23498 CODE/1639+64 XDATA, stack5A/peak6E; no budget or deadline
 changes. The failed run is not full revision acceptance.
 
+The corrected exact-head
+[Actions36124292416](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416)
+accepted `08672c5a99265a583cba27618c1395cb9a992d84`: all64 jobs succeeded,
+including all62 workers and Required offline acceptance. All original
+workers and the eight complete-join scenarios ran; this was not a narrowed
+or rerun-only acceptance. Existing deadlines, full corruption campaigns and
+artifact-upload exclusions remained unchanged. #26 still retains its
+remaining whole-target transport/endpoint-zero edge coverage.
+
 CI requires an already successful exact previous/base main commit before
 narrowing a push/PR. Otherwise it selects full acceptance, including when
 the immediate change is only documentation. Cancelled/failed/in-progress

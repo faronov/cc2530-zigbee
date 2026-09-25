@@ -64,8 +64,9 @@ limit; no key/NV/image artifact from this fixture is uploaded.
 Reproduce with `make BOARD=generic test-banked-join`, or a bounded
 `test-banked-join-success`, `-missing-key`, `-radio-fault` or `-flash-fault`
 target. A runner `--limit` is explicitly a development prefix, never full
-acceptance. Full CI and the remaining #26 transport/endpoint-zero edge-case
-acceptance must finish before closing that tracker. Real-radio/timing,
+acceptance. Full CI for the current corpus is accepted below; the remaining
+#26 transport/endpoint-zero edge-case acceptance must finish before closing
+that tracker. Real-radio/timing,
 entropy, electrical NV durability and secure restart/rejoin remain separate
 gates. The earlier allocation sections below record successive historical
 steps, not the current complete-image size.
@@ -82,8 +83,13 @@ the15-minute deadline: both hosted counter workers passed in
 [Actions36122466601](https://github.com/faronov/cc2530-zigbee/actions/runs/36122466601).
 All eight complete-join workers also passed, including success in9m05s
 on generic and8m05s on LG. The overall run failed only on stale
-`protocol_budget` compiler identities in both debug workers; full revision
-acceptance still requires the corrected follow-up gate.
+`protocol_budget` compiler identities in both debug workers. The corrected
+revision `08672c5a99265a583cba27618c1395cb9a992d84` then passed
+[Actions36124292416](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416):
+all62 workers and both control jobs succeeded, including Required offline
+acceptance. This accepts the current complete-image corpus, not the still
+unported wrap/quarantine, full-queue, broadcast-table, address-conflict and
+remaining late/deadline combinations carried by #26.
 
 ## Selected configuration and boundaries
 

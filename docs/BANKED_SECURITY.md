@@ -136,9 +136,9 @@ unchanged at that step. Its source/libc boundary was3535, with
 `__gptrput_PARM_2` at3546.
 The complete generic/LG artifact identities match. Earlier accepted
 48936-CODE/3886-XDATA images and their244699/9941 mutation counts remain
-historical evidence, not the current layout contract. The reduced layout has
-passed the complete **local** both-board checks below; a later completed
-Actions run is still required for published acceptance.
+historical evidence, not the current layout contract. The reduced layout
+passed the complete **local** both-board checks before the later stack
+refresh and full acceptance recorded below.
 
 The subsequent complete-join stack work shortens register-save lifetimes in
 CCM, counter reservation and journal replacement. The isolated key image is
@@ -147,7 +147,9 @@ now49236 CODE /3564 ordinary XDATA, with source/libc boundary3544 and
 reservations and the20-byte libc suffix remain unchanged. Both board
 artifact identities match, and the genuine22-operation lifecycle and
 retained busy-flash case pass locally with peakSP77. This is separate from
-the larger complete-join caller's SP7B result and pending full CI.
+the larger complete-join caller's SP7B result. The corrected `08672c5`
+passed [full Actions36124292416](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416),
+64/64 jobs, including both unchanged-limit key-lifecycle workers.
 
 ## Executed contract
 

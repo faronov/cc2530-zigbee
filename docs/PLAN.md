@@ -75,8 +75,9 @@ now resolves that placement/call-depth barrier without changing its limits:
 143092 populated CODE,7512 ordinary XDATA andSP7B/7C. A genuine415-call
 MCU transcript reaches READY, protected exchange, update/reinstallation and
 explicit failure/restart boundaries. Both board artifact identities match;
-complete CI and the remaining #26 transport/endpoint-zero edge acceptance
-are still required before closing the tracker. This is simulated, not
+`08672c5` passed [full Actions36124292416](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416),
+64/64 jobs. The remaining #26 transport/endpoint-zero edge acceptance
+is still required before closing the tracker. This is simulated, not
 physical network acceptance.
 Real radio/association integration (#13/#14) and separate
 MAC/coordinator acceptance (#15/#28) retain timing (#40/#45), physical NV (#8)
