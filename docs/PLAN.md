@@ -42,14 +42,14 @@ M0 repository / reproducible bootstrap
 Host-side codecs, test vectors and documentation can proceed alongside earlier
 hardware work. Later features must not bypass their security or recovery gates.
 
-### Current execution and issue ownership (2026-09-24)
+### Current execution and issue ownership (2026-09-25)
 
 [Roadmap #5](https://github.com/faronov/cc2530-zigbee/issues/5) is the current
 execution index; the milestone exit requirements below remain unchanged.
 The bounded testing/coverage/run-selection work (#87) is accepted. The current
-sequence fixes the reproduced READY failure/backpressure/work-budget defects,
-then integrates the complete banked MAC/NWK/APS/ZDO/BDB MCU composition (#26),
-followed by secure persisted restart/rejoin (#27).
+sequence has accepted the READY failure/backpressure/work-budget corrections
+and the complete banked MAC/NWK/APS/ZDO/BDB MCU composition (#26).
+Secure persisted restart/rejoin (#27) follows.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
@@ -79,8 +79,11 @@ explicit failure/restart boundaries. Both board artifact identities match;
 64/64 jobs on the initial143092-byte image. Eighteen additional
 [public-call edge scenarios](ED_JOIN.md#whole-target-edge-corpus) now cover
 queues/ACKs/wrap/broadcasts/addresses/update/late commissioning input in the
-target runner. Their full CI acceptance is still required before closing
-#26; native references and matching linked images alone are insufficient.
+target runner. `8348ac1` passed
+[full Actions36141209979](https://github.com/faronov/cc2530-zigbee/actions/runs/36141209979),
+100/100 jobs including all44 MCU workers, completing #26's carried
+transport/endpoint-zero requirements without a RAM/stack/deadline increase.
+Native references and matching images alone were not the acceptance gate.
 This is simulated, not
 physical network acceptance.
 Real radio/association integration (#13/#14) and separate
@@ -970,20 +973,21 @@ and explicit rejection of response clusters/unimplemented notifications.
 Real unicast NWK/APS/ZDO exchanges have isolated host/image/simulator coverage.
 This standalone component is not endpoint registration. The host composition
 below supplies the bounded #24 admission/queues/ACK/retry and #25 address/announce
-services; their remaining whole-target acceptance is consolidated into #26.
+services; their consolidated whole-target acceptance is now complete under #26.
 Broadcast context tests do not expand the original APS wire codec or establish
 authentication.
 
-The new [bounded host join](ED_JOIN.md) integrates #23–#26 against an explicit
+The [bounded host and complete MCU join](ED_JOIN.md) integrates #23–#26 against an explicit
 synthetic centralized coordinator. It performs real scan/association, key
 transport/verification, announcement-before-TC-update, ZDO transactions,
 ED Timeout negotiation and final permit broadcast before application readiness.
 It includes real NWK/APS security-counter allocation, duplicate/ACK/retry
 processing and shared live AES/NV execution. Its operational failure/work guards and
 nonblocking ZDO backpressure now have explicit host regressions, distinct
-from commissioning abandonment. This is not full M4/M5 acceptance:
-new complete-image resource/ABI/alias proof, physical adapter/interoperability,
-general recovery and the remaining conformance obligations are still open.
+from commissioning abandonment. Complete-image resource/ABI/alias proof and
+both-board simulated join/edge execution are accepted under #26. This is not
+full M4/M5 acceptance: physical adapter/interoperability, general recovery,
+electrical NV/entropy and remaining conformance obligations are still open.
 
 Deliver:
 

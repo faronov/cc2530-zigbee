@@ -79,11 +79,11 @@ The separate [complete banked MCU composition](docs/ED_JOIN.md#complete-banked-m
 now reaches authenticated READY and exchanges protected data in an8051
 simulation using a synthetic PHY/coordinator and actual production services.
 It fits7512/7680 ordinary XDATA bytes and peaks atSP7B under the unchanged7C
-cap. Its initial corpus passed
-[full CI,64/64 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416).
-This is host-tested, image-checked and simulated, not hardware-observed;
-the expanded [#26 edge corpus](docs/ED_JOIN.md#whole-target-edge-corpus)
-awaits its own full acceptance. Physical network operation remains separate.
+cap. Its complete join and expanded [#26 edge corpus](docs/ED_JOIN.md#whole-target-edge-corpus)
+passed [full CI,100/100 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36141209979).
+This is host-tested, image-checked and simulated, not hardware-observed.
+Real-radio integration, secure restart/rejoin and physical network acceptance
+remain separate.
 
 ## M1 debugger fixture
 

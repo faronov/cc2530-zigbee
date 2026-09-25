@@ -39,7 +39,7 @@ entries/returns and analyzes279 functions with1262 live-byte/callee-write
 pairs, including OSEG and transitive libc scratch. Raw CDB, complete map,
 memory report, ordered relocated listings, relocatable objects and all
 CODE addresses/bytes are pinned before execution. The complete image
-corruption campaign requires716229 mutations.
+corruption campaign passes716229 mutations.
 
 The native and nonrecovering-sanitizer transcript contains415 public calls
 and2791 real modeled AES/flash events. The generic MCU run executes all415:
@@ -64,9 +64,8 @@ limit; no key/NV/image artifact from this fixture is uploaded.
 Reproduce with `make BOARD=generic test-banked-join`, or a bounded
 `test-banked-join-success`, `-missing-key`, `-radio-fault`, `-flash-fault`
 or one of the edge targets below. A runner `--limit` is explicitly a development
-prefix, never full acceptance. Full CI for the initial corpus is accepted
-below; the expanded #26 transport/endpoint-zero edge corpus awaits its own
-full acceptance before closing that tracker. Real-radio/timing,
+prefix, never full acceptance. Full CI for the initial and expanded #26
+transport/endpoint-zero corpora is accepted below. Real-radio/timing,
 entropy, electrical NV durability and secure restart/rejoin remain separate
 gates. The earlier allocation sections below record successive historical
 steps, not the current complete-image size.
@@ -127,8 +126,16 @@ host corpus runs82089 checks per native/sanitized executable. Only `nwk_aps`
 and the synthetic caller objects change from the accepted MCU baseline;
 ordinary XDATA and the279-function/1262-pair liveness proof are unchanged.
 Both board definitions match all six new complete artifact identities.
-Full hosted acceptance of these target cases is pending, not implied by the
-native references or image proof.
+Exact revision `8348ac11117d206c3174a3afe385ecd0027711c1` passed
+[full Actions36141209979](https://github.com/faronov/cc2530-zigbee/actions/runs/36141209979):
+**100/100 jobs**, all98 workers and both controls. All44 complete-MCU workers
+passed: each board executes the original415 calls plus3232 edge calls,
+21494 AES/flash events in total, and the separate retained busy-flash case.
+Every complete scenario peaks atSP7B. Both missing-key workers retain the
+full716229-mutation campaign. The generic wrap worker takes14m02s and ZDO
+server10m35s, below the unchanged15-minute limit; no corpus or guard was
+removed to fit. This completes #26's linked-image/simulated transport and
+endpoint-zero scope, not #27 recovery or physical #13/#14/#15/#28 acceptance.
 
 ## Selected configuration and boundaries
 
@@ -356,15 +363,15 @@ acceptable long-running availability. Persistence-frequency work is still
 required; neither increasing quotas nor weakening durable replay/counter
 ownership is implied by these fixes.
 
-This evidence is **host-tested and SDCC compile-checked**, not a new linked-image,
+This earlier evidence is **host-tested and SDCC compile-checked**, not a new linked-image,
 alias-aware execution or physical observation. Existing linked-image and
 simulator suites remain mandatory and unchanged; the old resident profile
 does not prove that these new services fit or execute safely together on8051.
-Whole-stack CODE/XDATA/IRAM placement, banked execution if required, complete
-new ABI/alias proofs, a truthful real-radio adapter, entropy, electrical
-durability and physical interoperability are still gates. #26 now owns the
-remaining complete-target acceptance of the consolidated #24/#25/#26 scopes;
-host READY alone cannot close it. #23's bounded implementation is accepted
+Whole-stack placement/execution and ABI/alias proof were still gates at that
+stage; the [complete MCU corpus above](#whole-target-edge-corpus) now accepts
+the consolidated #24/#25/#26 target scope. A truthful real-radio adapter,
+entropy, electrical durability and physical interoperability remain separate.
+Host READY alone did not close #26. #23's bounded implementation is accepted
 separately through the genuine banked lifecycle below, not from host READY.
 
 The earlier smaller key-owner/crypto/NV composition requested49,576 CODE bytes
@@ -571,14 +578,15 @@ python3 -B tools/check_repository.py
 git diff --check
 ```
 
-The remaining #26 work is concrete: remove the remaining ordinary-XDATA
+At this historical stage the remaining #26 work was concrete: remove the ordinary-XDATA
 deficit without discarding retained state; establish physical DATA/libc
 ownership for the full active caller graph; solve real key-operation caller
 depth without raising SP7C; place/link the complete28-service composition;
 then add a separate real-wire synthetic MCU caller, strict whole-image/
-failure-state replay and both-board CI consumers. None is supplied by
-successful linkage of the smaller key image or native BDB READY. Stages3/4,
-#27, #40/#45 and all physical acceptance remain outside this increment.
+failure-state replay and both-board CI consumers. The complete MCU and edge
+sections above record its later completion; linkage of the smaller key image
+or native BDB READY did not supply it. #27, #40/#45 and all physical acceptance
+remain outside that completed offline scope.
 
 ### Occupancy-owned runtime slots and tagged I/O
 

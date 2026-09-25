@@ -55,8 +55,20 @@ accepted `08672c5a99265a583cba27618c1395cb9a992d84`: all64 jobs succeeded,
 including all62 workers and Required offline acceptance. All original
 workers and the eight complete-join scenarios ran; this was not a narrowed
 or rerun-only acceptance. Existing deadlines, full corruption campaigns and
-artifact-upload exclusions remained unchanged. #26 still retains its
-remaining whole-target transport/endpoint-zero edge coverage.
+artifact-upload exclusions remained unchanged. That initial acceptance did
+not yet cover all carried #26 transport/endpoint-zero cases.
+
+The expanded exact revision `8348ac11117d206c3174a3afe385ecd0027711c1` passed
+[Actions36141209979](https://github.com/faronov/cc2530-zigbee/actions/runs/36141209979),
+**100/100 jobs**, including all98 workers and Required offline acceptance.
+All44 complete-MCU workers executed: the original corpus plus eighteen
+additional independently reset public-call scenarios per board. The total
+is3647 calls/21494 peripheral events per board, plus retained busy-flash
+failure; every case peaks atSP7B under7C. Both complete-image corruption
+campaigns passed716229 mutations. No worker, guard, reset, transcript, or
+deadline was skipped or relaxed. This closes the #26 simulated integration
+gate, not real radio, entropy, electrical durability, secure recovery or
+coordinator interoperability.
 
 CI requires an already successful exact previous/base main commit before
 narrowing a push/PR. Otherwise it selects full acceptance, including when
@@ -171,8 +183,8 @@ separate from every unbanked board image; they have no hardware/artifact upload
 step. See [the banked memory-model boundaries](BANKED_CODE.md) and the
 [real key-service execution contract](BANKED_SECURITY.md).
 The [complete MCU join evidence](ED_JOIN.md#complete-banked-mcu-execution)
-distinguishes linked/simulated READY and protected exchange from still
-unaccepted physical radio/timing and broad target edge-case coverage.
+distinguishes accepted linked/simulated READY, protected exchange and the
+bounded edge corpus from still-unaccepted physical radio/timing and recovery.
 
 `make test-local` now covers all twenty-eight board/image checks while running
 the Python tool suite once and each standalone component corpus once per
