@@ -283,8 +283,14 @@ and rejects missing/duplicate boundaries. Initial local preparation of the
 whole18-case replay took401.18s without changing the15-second subprocess
 deadline, before the four added invalid-close checks; that measurement is
 not a completed CI job or hardware evidence.
-Full revision acceptance is pending publication/Actions. Interval procedure
-and complete authenticated-join/radio integration remain open.
+Code `3cc26b0` then passed
+[full Actions36187341754](https://github.com/faronov/cc2530-zigbee/actions/runs/36187341754),
+**106/106 jobs**. Both new workers executed the entire18-case corpus and
+277229 artifact mutations plus three mapping/alias controls; their complete
+job durations were3m43s (generic) and2m58s (LG). All102 previous workers and
+their limits remain accepted. Interval procedures, independent RX reopening/
+retuning/address installation and complete authenticated-join/radio
+integration remain open; no hardware result is implied.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

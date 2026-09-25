@@ -660,8 +660,9 @@ including all71 handoff sequences for each board.
 The subsequent [banked MAC action adapter](docs/MAC_ADAPTER.md) connects the
 real scheduler and radio services on the MCU model: busy CCA, TX/ACK,
 guarded AUTOACK handoff, retained frames and actual stop/drain coverage.
-Its18 prepared scenarios are **host-tested, image-checked and simulated**,
-with55442 CODE,2848 ordinary XDATA andSP78/7C; full revision CI is pending.
+Its18 scenarios are **host-tested, image-checked and simulated**,
+with55442 CODE,2848 ordinary XDATA andSP78/7C. Code `3cc26b0` passed
+[full CI,106/106 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36187341754).
 It is not integrated into the complete authenticated-join image or the
 interval scan/POLL/association controllers. No hardware/RF result is claimed;
 never flash `mac-adapter/mac_adapter.ihx`.

@@ -14,6 +14,10 @@ hardware-observed result or an authenticated real-radio join. The already
 accepted [complete banked join](ED_JOIN.md#complete-banked-mcu-execution)
 still has synthetic PHY events. Its interval-aware scan/POLL/association
 binding and actual combined RAM/call-lifetime placement remain separate.
+This owner has fixed initialization-time channel/PAN/address configuration.
+Independent RX reopening, safe channel retuning and parent/short-address
+installation APIs are not implemented here; they must use real services
+without resetting the device-wide MAC/epoch or bypassing ownership.
 
 ## One owner, real actions
 
@@ -178,8 +182,13 @@ separate whole-transcript scan per dump; missing or duplicated dump boundaries
 still fail. CI has two dedicated15-minute workers and uploads no adapter
 image or reference.
 
-Current preparation is **host-tested, image-checked and simulated**. Full
-revision acceptance is pending publication/Actions, not implied by those
-local preparation results. No hardware was accessed or RF test authorized.
+This increment is **host-tested, image-checked and simulated**. Code commit
+`3cc26b0` passed
+[full Actions36187341754](https://github.com/faronov/cc2530-zigbee/actions/runs/36187341754),
+**106/106 jobs**, including both complete adapter workers and all102 previous
+workers. The new jobs took3m43s (generic) and2m58s (LG), each retaining all18
+sequences,2410 calls,210988 MMIO events and277229 artifact mutations plus the
+three mapping/alias rejection controls. No limit, older case or upload
+exclusion changed. No hardware was accessed or RF test authorized.
 The isolated2848-byte composition is not proof of adding these services to
 the7512-byte complete join: real combined RAM/ABI integration is still needed.

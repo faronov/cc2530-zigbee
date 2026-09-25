@@ -172,6 +172,7 @@ make BOARD=generic test-mac-radio
 make BOARD=generic test-mac-stamp
 make BOARD=generic test-mac-attempt
 make BOARD=generic test-mac-tx-interval
+make BOARD=generic test-mac-adapter
 make BOARD=generic test-mac-join
 make BOARD=generic test-zcl-temperature
 make BOARD=generic test-zdo-node

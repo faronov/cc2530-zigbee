@@ -102,8 +102,10 @@ busy/retirement assertions without confusing them with captured edges.
 Frame backpressure and a preserved pre-first-stop watermark precede actual
 drain/closure. Faults retain the original frame and physical owner rather
 than fabricating timestamps or successful cleanup. Its isolated55442-CODE/
-2848-XDATA composition is not the complete join/radio placement, an interval
-scan/POLL/association implementation or full revision acceptance yet.
+2848-XDATA composition passed full106-job offline acceptance at `3cc26b0`.
+It is not the complete join/radio placement, an interval scan/POLL/association
+implementation or a hardware result; fixed configuration and reopening/
+retuning/address-installation boundaries remain explicit.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
