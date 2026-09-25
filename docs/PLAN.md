@@ -57,6 +57,11 @@ response RX/AUTOACK, loss-free closure and interval-aware scan/POLL/association
 integration still remain. #45's complete MLME timing/revision reconciliation
 does not prevent bounded staged-success work, but prevents a full conformance
 claim. No new hardware/RF authorization follows from this ordering.
+The interval prerequisite at `8f5a314` passed
+[full Actions36149393912](https://github.com/faronov/cc2530-zigbee/actions/runs/36149393912),
+102/102 jobs, including all52 target groups for each board and every prior
+worker. This accepts that isolated scheduler/receipt-consumption increment,
+not #13/#14 as a whole.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

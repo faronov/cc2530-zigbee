@@ -677,6 +677,9 @@ backoff and cleanup rather than weakening the existing exact-event API.
 Its standalone target corpus and native real-radio-service receipt consumer
 are separate evidence: the latter does not provide a complete MCU radio
 adapter or continuous POLL/receiver-ACK service. Neither profile is a board image.
+The interval scheduler is **host-tested, image-checked and simulated**:
+`8f5a314` passed [full CI,102/102 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36149393912),
+including all52 target groups on each board.
 
 The separate [Beacon candidate collector](docs/NWK_CANDIDATES.md) keeps four
 copied preliminary records using the real MAC/NWK Beacon decoders. It requires

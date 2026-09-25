@@ -228,10 +228,14 @@ stack proofs run in those same composed-service jobs. The raw interval owner
 remains separate; neither corpus converts interval bounds to captured events.
 The newer [interval MAC-TX profile](MAC_TX.md#explicit-interval-profile) is
 explicitly typed and separately composed; it does not relax either existing
-contract. Both-board prepared artifacts are26797 CODE and1285+64/1536 XDATA,
-with targeted SP67/7C observations. Full52-group execution, complete immutable
+contract. Both-board artifacts are26797 CODE and1285+64/1536 XDATA,
+with SP67/7C in all52 groups. Full52-group execution, complete immutable
 CODE/raw-CDB/allocation/listing checks, artifact negatives, physical aliases
 and the unchanged15-second subprocess bound are required in the new worker.
+Commit `8f5a314` passed
+[Actions36149393912](https://github.com/faronov/cc2530-zigbee/actions/runs/36149393912),
+102/102 jobs. Both new workers retained18807 artifact negatives and finished
+in2m19s/2m23s; all98 previous workers also passed.
 Its native seven-case lower-service consumer is not a combined8051 radio
 adapter, prepared-state clock API or physical acceptance.
 

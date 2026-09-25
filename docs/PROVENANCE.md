@@ -66,7 +66,7 @@ The separate target image proves the interval scheduler, not that complete
 radio composition.
 
 For the next real-adapter boundary, SWRU191F (revised April2014),
-sections23.9.5/23.9.7, printed pp224-227/231, were re-read directly.
+sections23.9.5/23.9.8, printed pp224-227/231, were re-read directly.
 ACK type/length filtering does not bypass global addressing/minimum-length
 conditions. Live filter/address changes need not turn RX off, but changes
 between SFD and address acceptance can use either value for that frame.

@@ -179,12 +179,16 @@ work/time exhaustion and retained cleanup faults. No case writes a private
 controller field to establish protocol progress.
 The new composition reserves28672 CODE and1536 total XDATA bytes, without
 changing any old budget. Both-board compiler artifacts agree at26797 CODE,
-1285 ordinary XDATA plus64 reserved status bytes, initialSP4E and targeted
-observed peakSP67 under7C. The checker pins the complete image, raw CDB
+1285 ordinary XDATA plus64 reserved status bytes, initialSP4E and peakSP67
+under7C in every case group. The checker pins the complete image, raw CDB
 (including file-scope helpers), parsed linked allocations and all instruction
 records; it executes every group with physical IRAM aliases and the unchanged
-15-second subprocess deadline. Full acceptance is the Actions gate, not those
-preparatory measurements.
+15-second subprocess deadline. Commit `8f5a314` passed
+[full Actions36149393912](https://github.com/faronov/cc2530-zigbee/actions/runs/36149393912):
+102/102 jobs, preserving all98 prior workers and adding the two interval
+workers. Each new worker passed all52 groups and18807 artifact negatives;
+their complete jobs took2m19s/2m23s. This profile is **host-tested,
+image-checked and simulated**, not hardware-observed.
 
 The same target also runs a **native-only composed receipt consumer** with
 the genuine clock/Timer2/epoch/radio/attempt C services and the existing MMIO
