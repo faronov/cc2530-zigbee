@@ -15,8 +15,8 @@ durable counter, journal and flash-RAM services together. The synthetic PHY
 and coordinator supply external events and public packets only; they never
 write expected controller state or supply authentication-success flags.
 
-The measured image has143092 populated CODE bytes:28483 common bytes and
-four bank windows containing28018,28001,29185 and29405 bytes. Ordinary
+The measured image has143242 populated CODE bytes:28551 common bytes and
+four bank windows containing28018,28001,29185 and29487 bytes. Ordinary
 XDATA is7512/7680, leaving168 bytes before the status block. Both board
 definitions produce the same six pinned complete artifact identities.
 The actual physical DATA reservations are08..1D and26..45, banking state
@@ -39,7 +39,7 @@ entries/returns and analyzes279 functions with1262 live-byte/callee-write
 pairs, including OSEG and transitive libc scratch. Raw CDB, complete map,
 memory report, ordered relocated listings, relocatable objects and all
 CODE addresses/bytes are pinned before execution. The complete image
-corruption campaign covers715479 mutations.
+corruption campaign requires716229 mutations.
 
 The native and nonrecovering-sanitizer transcript contains415 public calls
 and2791 real modeled AES/flash events. The generic MCU run executes all415:
@@ -57,16 +57,16 @@ READY, and no completed caller status or new NV image is published.
 Each continuation preserves and rechecks complete CPU, IRAM/alias, XDATA,
 peripheral and physical-flash state. Binary simulator dumps preserve every
 observed byte; batching retains an observation after every public call.
-The15-second subprocess deadline is unchanged. CI has four independent
+The15-second subprocess deadline is unchanged. CI has twenty-two independent
 fresh-reset scenarios per board, each under the existing15-minute worker
 limit; no key/NV/image artifact from this fixture is uploaded.
 
 Reproduce with `make BOARD=generic test-banked-join`, or a bounded
-`test-banked-join-success`, `-missing-key`, `-radio-fault` or `-flash-fault`
-target. A runner `--limit` is explicitly a development prefix, never full
-acceptance. Full CI for the current corpus is accepted below; the remaining
-#26 transport/endpoint-zero edge-case acceptance must finish before closing
-that tracker. Real-radio/timing,
+`test-banked-join-success`, `-missing-key`, `-radio-fault`, `-flash-fault`
+or one of the edge targets below. A runner `--limit` is explicitly a development
+prefix, never full acceptance. Full CI for the initial corpus is accepted
+below; the expanded #26 transport/endpoint-zero edge corpus awaits its own
+full acceptance before closing that tracker. Real-radio/timing,
 entropy, electrical NV durability and secure restart/rejoin remain separate
 gates. The earlier allocation sections below record successive historical
 steps, not the current complete-image size.
@@ -87,9 +87,48 @@ on generic and8m05s on LG. The overall run failed only on stale
 revision `08672c5a99265a583cba27618c1395cb9a992d84` then passed
 [Actions36124292416](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416):
 all62 workers and both control jobs succeeded, including Required offline
-acceptance. This accepts the current complete-image corpus, not the still
-unported wrap/quarantine, full-queue, broadcast-table, address-conflict and
-remaining late/deadline combinations carried by #26.
+acceptance. This accepts the initial143092-byte complete-image corpus, not
+the expanded edge corpus below.
+
+### Whole-target edge corpus
+
+Eighteen additional native/nonrecovering-sanitizer references contain3232
+public calls and18703 actual modeled AES/flash events. Their raw stdout
+identities, exact call/event counts and scenario names are pinned before
+parsing. The original415-call/2791-event transcript remains byte-identical.
+Each added target starts from genuine reset/provisioning/scan/association,
+not an uploaded READY context, counter, duplicate table or key state.
+
+| `test-banked-join-` suffix | Required complete-MCU behavior |
+| --- | --- |
+| `rx-queues` | Separate application/RX/priority-ACK ownership, pre-authentication FULL, exact-frame retry after drain, duplicate ACK without second delivery, endpoint/profile rejection |
+| `wrap-quarantine` | Public queue/cancel/step/confirm through254; actual TX254/255, quarantine and ZDO reply exhaustion, actual counter0 at exact expiry |
+| `ack-correlation`, `ack-deadlines` | Early/wrong/late ACK, peer/endpoints/profile/cluster/counter/format/security, no completion before quiescence, three retries with fresh protection, exact and absolute deadlines |
+| `zdo-server` | NWK/IEEE address type/status/identity handling, Node Descriptor, generic unsupported TSN reply, Parent_annce/broadcast no-reply, malformed input, deferred response/full-slot/client independence |
+| `broadcast-table`, `address-map` | Eight non-evictable broadcast records, sequence wrap and exact expiry; bounded address map, reassignment, unknown IEEE, own-address conflict and genuine Leave |
+| `update-full`, `install-timeout` | Durable PAN update despite full APS duplicate table, pending-traffic cancellation, token/epoch/PAN/address/channel/IEEE install correlation, exact-deadline failure |
+| `node-correlation`, `node-timeout`, `node-status` | Real Node query, early/correlation/format rejection, three attempts, old TSN, exact deadline and negative status; no premature READY |
+| `tc-key-timeout`, `tc-confirm-timeout`, `parent-status` | Missing updated-key/Confirm responses, bounded retry/exhaustion, unsupported parent method and real commissioning Leave |
+| `network-key-late`, `tc-key-late`, `tc-confirm-late` | Authenticated input at the exact commissioning deadline never restores READY; durable state and cleanup remain observable |
+
+The wrap setup consumes sequence numbers through real public cancellations;
+it does not claim extra PHY transmissions. All timer inputs use the real
+monotonic modular clock, including initial32-bit rollover. Time advancement
+expires live tables through production logic rather than clearing them.
+Every public-call observation still checks the complete controller/MAC/NV
+state, CPU continuation, guarded memory and unchanged SP7C cap.
+
+This work also exposed and fixes a real endpoint-admission mismatch:
+ZDO's source endpoint0/profile0 reply may target a nonzero requester endpoint
+after READY. The remote endpoint no longer misclassifies that reply as local
+application traffic and retires membership. Before READY it remains refused;
+wrong local source endpoints/profiles remain refused. The focused genuine
+host corpus runs82089 checks per native/sanitized executable. Only `nwk_aps`
+and the synthetic caller objects change from the accepted MCU baseline;
+ordinary XDATA and the279-function/1262-pair liveness proof are unchanged.
+Both board definitions match all six new complete artifact identities.
+Full hosted acceptance of these target cases is pending, not implied by the
+native references or image proof.
 
 ## Selected configuration and boundaries
 

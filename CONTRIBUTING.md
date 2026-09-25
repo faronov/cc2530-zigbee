@@ -59,7 +59,7 @@ linked-image/ABI/alias guard and simulator deadline.
 | --- | --- | --- |
 | Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
 | Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
-| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora plus eight complete-join workers; exhaustive current banked-key and join artifact mutations |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora plus44 complete-join workers; exhaustive current banked-key and join artifact mutations |
 
 Selection uses actual forced Make dry-run compiler inputs and recursively
 follows project includes, including C test helpers included by other C tests.
@@ -137,12 +137,14 @@ The isolated banked CODE foundation runs in two more board jobs without
 uploads; it does not expand any old image's CODE limit or debugger API.
 Two banked key-lifecycle jobs add real mixed crypto/NV execution and checked
 physical DATA ownership, also without uploads or hardware actions.
-Eight complete-join jobs add independent success/data/update/restart,
-missing-key, radio-fault and retained busy-flash scenarios for both boards.
-The exact component union is still `test-common`; sixty-two worker jobs retain
+Forty-four complete-join jobs retain independent success/data/update/restart,
+missing-key, radio-fault and retained busy-flash scenarios, plus eighteen
+[transport/ZDO/deadline edge cases](docs/ED_JOIN.md#whole-target-edge-corpus)
+for each board. Each starts with genuine reset and real public calls.
+The exact component union is still `test-common`; ninety-eight worker jobs retain
 all twenty-eight board/image checks and the unchanged simulator deadlines.
 Selection and the stable acceptance gate add two control jobs. A full run has
-64 jobs, not fewer cases; an affected run contains only its selected workers.
+100 jobs, not fewer cases; an affected run contains only its selected workers.
 The generic BDB host worker also reports fresh host coverage.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.

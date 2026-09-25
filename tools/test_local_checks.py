@@ -82,6 +82,12 @@ class LocalChecksTests(unittest.TestCase):
             "banked", "banked_security",
             "banked_join_joined-data-update-loss-restart", "banked_join_missing-network-key",
             "banked_join_retained-radio-fault", "banked_join_retained-flash-fault",
+            "banked_join_rx-queues", "banked_join_wrap-quarantine", "banked_join_ack-correlation",
+            "banked_join_ack-deadlines", "banked_join_zdo-server", "banked_join_broadcast-table",
+            "banked_join_address-map", "banked_join_update-full", "banked_join_install-timeout",
+            "banked_join_node-correlation", "banked_join_node-timeout", "banked_join_node-status",
+            "banked_join_tc-key-timeout", "banked_join_tc-confirm-timeout", "banked_join_parent-status",
+            "banked_join_network-key-late", "banked_join_tc-key-late", "banked_join_tc-confirm-late",
         }
         components = Counter()
         images = Counter()

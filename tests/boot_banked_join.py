@@ -24,12 +24,36 @@ from verify_firmware import require
 REFERENCE_SHA = "9897c6467d17df75491aa33a6654bc20ca5117e55fa12538d19ae03799cba579"
 CASES = ("joined-data-update-loss-restart", "missing-network-key", "retained-radio-fault")
 FLASH_FAILURE = "retained-flash-fault"
+EDGE_CASES = {
+    "rx-queues": ("88e72147bb38a77a48b61539dd71fb3ad37c7cfb2ef22824f54775e48bf56f20", 136, 1309),
+    "wrap-quarantine": ("98ca74aa0323b21e6fa368016d453d5c06105f944b91665877dd8ef68ad1007d", 1154, 1108),
+    "ack-correlation": ("ec1d2b312eaea518d79eb4de24c831a74f3f69cc8ed6b19bbd519085f7b6a5f4", 136, 1411),
+    "ack-deadlines": ("f453528673a362e8699130dd886e02d796173f3d92f0a8739d1ab93d7a9885a8", 148, 1437),
+    "zdo-server": ("4aa750331c2f19b20d32c00b995fc19e5c36fcd741ac58cbb1de17135e943099", 239, 2409),
+    "broadcast-table": ("eeb59b035a9513d38c5344a045ea8680f3dd421954e2200bbc243cd1ba735c5e", 138, 1396),
+    "address-map": ("272666a6dec9ec250ab25261fa70f1262d86ab4b1860ac957afc2aa9390fddb3", 143, 1358),
+    "update-full": ("16c754fa2f7c10d12f1d5154071130d6bb45519a4ced34843e38f431a35df6a9", 146, 1273),
+    "install-timeout": ("cbaf01f00def4c3a47112d4fd17505412f5b2680df9c29725d0bde7c829b907e", 127, 909),
+    "node-correlation": ("a8c6235a902db9d157e05265fccce605b9fbc3af3137c9d113c5789a8d5073c3", 129, 1071),
+    "node-timeout": ("e84675f07629dcfb4f9e25276ddbe769fcf44625b0ea3c75e6e6be32c8ae3d05", 89, 598),
+    "node-status": ("08fd69c7f023117154ced88c12b04f08ab0fb16e53b19d8ec0d240557fc7681b", 71, 324),
+    "tc-key-timeout": ("7d49bb12f9b8ec00c8162de45e1dafdc9e8548f5cb8cabcc87fab886efe51fcc", 101, 764),
+    "tc-confirm-timeout": ("21ce7f0b57534d1bc6e238e8b5df8ae0842f0958af3097fc35b3ca2faf4358d2", 113, 852),
+    "parent-status": ("e48f46efd708908e27f3e3420e2c78d5af1ba007c7a266e6906b5477bb95fc34", 114, 903),
+    "network-key-late": ("ca047178558505135b37ebee3c8faddbaf0535cb145b38f28bc27e21e96fd386", 58, 228),
+    "tc-key-late": ("71cebf6232bd07b8b4b09ce6e91fdb4ccb933b3f1b56cae9bef2e1b55d2da3f6", 88, 585),
+    "tc-confirm-late": ("645ec7676aa2f8903caaec810ffd6729febdb816b8d8cd7e1abee1f40ee6826b", 102, 768),
+}
 
 
-def reference(executable):
-    text = subprocess.run([str(executable)], capture_output=True, text=True,
-                          check=True, timeout=15).stdout
-    require(banking.sha(text.encode("ascii")) == REFERENCE_SHA, "Complete synthetic join reference changed")
+def reference(executable, selected=None):
+    require(selected is None or selected in EDGE_CASES, "Unknown complete join reference")
+    digest, expected_calls, expected_events = ((REFERENCE_SHA, 415, 2791) if selected is None
+                                              else EDGE_CASES[selected])
+    raw = subprocess.run([str(executable)]+([] if selected is None else [selected]), capture_output=True,
+                         check=True, timeout=15).stdout
+    require(banking.sha(raw) == digest, "Complete synthetic join reference changed")
+    text = raw.decode("ascii")
     calls, current, reset, case, total = [], None, None, None, None
     for line in text.splitlines():
         fields = line.split()
@@ -45,7 +69,7 @@ def reference(executable):
         elif kind == "CALL":
             require(current is None and case and len(fields) == 8, "Invalid join call")
             command, stamp, arg, length, written = map(int, fields[1:6])
-            require(0 <= command <= 11 and 0 <= stamp < 2**32 and
+            require(0 <= command <= 12 and 0 <= stamp < 2**32 and
                     0 <= arg <= 255 and 0 <= length <= 125 and written == 165,
                     "Invalid join scalar input")
             current = dict(command=command, now=stamp, arg=arg, length=length, written=written,
@@ -86,8 +110,11 @@ def reference(executable):
             total = int(fields[1])
         else:
             raise ValueError(f"Unknown join reference record: {kind}")
-    require(current is None and reset is None and len(calls) == total == 415 and calls[0]["reset"] == 1,
+    require(current is None and reset is None and len(calls) == total == expected_calls and calls[0]["reset"] == 1,
             "Incomplete join transcript")
+    require(sum(len(call["events"]) for call in calls) == expected_events and
+            tuple(dict.fromkeys(call["case"] for call in calls)) == (CASES if selected is None else (selected,)),
+            "Join scenario/peripheral coverage changed")
     return calls
 
 
@@ -321,14 +348,21 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--simulator", default="s51")
     parser.add_argument("--limit", type=int, help="Development prefix only; not complete acceptance")
-    parser.add_argument("--case", choices=("all",)+CASES+(FLASH_FAILURE,), default="all")
+    parser.add_argument("--case", choices=("all",)+CASES+(FLASH_FAILURE,)+tuple(EDGE_CASES), default="all")
     args = parser.parse_args()
     require(args.limit is None or args.limit > 0, "Development prefix must contain operations")
     artifacts = layout.load(args.output)
     layout.verify(*artifacts)
-    calls = reference(args.output/"host-banked-join-vectors")
-    require(calls == reference(args.output/"host-banked-join-vectors-sanitize"), "Native/sanitized transcript differs")
-    require(tuple(dict.fromkeys(call["case"] for call in calls)) == CASES, "Join scenario coverage changed")
+    selected = args.case if args.case in EDGE_CASES else None
+    calls = reference(args.output/"host-banked-join-vectors", selected)
+    require(calls == reference(args.output/"host-banked-join-vectors-sanitize", selected),
+            "Native/sanitized transcript differs")
+    if args.case == "all" and args.limit is None:
+        for selected in EDGE_CASES:
+            extra = reference(args.output/"host-banked-join-vectors", selected)
+            require(extra == reference(args.output/"host-banked-join-vectors-sanitize", selected),
+                    "Native/sanitized edge transcript differs")
+            calls += extra
     require(args.case != FLASH_FAILURE or args.limit is None, "Terminal flash case cannot be truncated")
     if args.case not in ("all", FLASH_FAILURE):
         calls = [call for call in calls if call["case"] == args.case]
@@ -337,7 +371,7 @@ def main():
     rejected(lambda: check_alias(args.simulator, False))
     if args.limit is None and args.case in ("all", "missing-network-key"):
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        require(count == 715479, "Complete join artifact-negative coverage changed")
+        require(count == 716229, "Complete join artifact-negative coverage changed")
         print(f"Complete join: {count} immutable artifact negatives", flush=True)
     peak = run(args.output, args.simulator, calls, limit=args.limit, failure=args.case == FLASH_FAILURE)
     if args.case == "all" and args.limit is None:

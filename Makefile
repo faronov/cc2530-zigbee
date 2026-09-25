@@ -1213,7 +1213,7 @@ $(BANKED_JOIN_DIR)/banked_join.ihx: $(BANKED_JOIN_OBJECTS) force-link
 $(BANKED_JOIN_DIR)/banked_join_layout.h: $(BANKED_JOIN_DIR)/banked_join.ihx tests/verify_banked_join.py
 	PYTHONPATH=tools:tests $(PYTHON) -B tests/verify_banked_join.py --output $(BUILD) --emit-header $@
 
-BANKED_JOIN_HOST_INPUTS := tests/banked_join_vectors.c tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) \
+BANKED_JOIN_HOST_INPUTS := tests/banked_join_vectors.c tests/banked_join_edges.c tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) \
 	$(HEADERS) tests/security_joint_model.h tests/security_aes_model.h $(BANKED_JOIN_DIR)/banked_join_layout.h Makefile
 $(BUILD)/host-banked-join-vectors: $(BANKED_JOIN_HOST_INPUTS) | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -I$(BANKED_JOIN_DIR) tests/banked_join_vectors.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) -o $@
@@ -1223,6 +1223,7 @@ $(BUILD)/host-banked-join-vectors-sanitize: $(BANKED_JOIN_HOST_INPUTS) | $(BUILD
 		-fno-omit-frame-pointer -fno-pie -no-pie tests/banked_join_vectors.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) -o $@
 
 define BANKED_JOIN_CASE
+.PHONY: test-banked-join-$(1)
 test-banked-join-$(1): $(BANKED_JOIN_DIR)/banked_join.ihx $(BUILD)/host-banked-join-vectors $(BUILD)/host-banked-join-vectors-sanitize
 	$(PYTHON) -B tests/boot_banked_join.py --output $(BUILD) --simulator "$(S51)" --case $(2)
 endef
@@ -1230,7 +1231,11 @@ $(eval $(call BANKED_JOIN_CASE,success,joined-data-update-loss-restart))
 $(eval $(call BANKED_JOIN_CASE,missing-key,missing-network-key))
 $(eval $(call BANKED_JOIN_CASE,radio-fault,retained-radio-fault))
 $(eval $(call BANKED_JOIN_CASE,flash-fault,retained-flash-fault))
-test-banked-join: test-banked-join-success test-banked-join-missing-key test-banked-join-radio-fault test-banked-join-flash-fault
+BANKED_JOIN_EDGES := rx-queues wrap-quarantine ack-correlation ack-deadlines zdo-server \
+	broadcast-table address-map update-full install-timeout node-correlation node-timeout node-status \
+	tc-key-timeout tc-confirm-timeout parent-status network-key-late tc-key-late tc-confirm-late
+$(foreach edge,$(BANKED_JOIN_EDGES),$(eval $(call BANKED_JOIN_CASE,$(edge),$(edge))))
+test-banked-join: test-banked-join-success test-banked-join-missing-key test-banked-join-radio-fault test-banked-join-flash-fault $(addprefix test-banked-join-,$(BANKED_JOIN_EDGES))
 
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@

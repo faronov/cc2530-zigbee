@@ -1132,6 +1132,37 @@ static void transport_configuration(void)
     CHECK(flash == security_joint_flash_commands() && aes == security_joint_aes_blocks());
 }
 
+static void transport_endpoints(void)
+{
+    ed_packet_t packet = {0};
+    nwk_aps_t fresh, before;
+    mac_tx_t idle;
+    uint8_t which, result;
+    setup();
+    CHECK(mac_tx_init(&idle, 0x73, now) == MAC_TX_OK);
+    CHECK(nwk_aps_init(&fresh, &idle, &config.transport, now) == NWK_APS_OK);
+    packet.nwk.version = 2; packet.nwk.radius = 30;
+    packet.aps.cluster_id = 0x8001; packet.aps.destination_endpoint = 3;
+    packet.length = 2;
+    before = fresh;
+    CHECK(nwk_aps_queue(&fresh, &packet, 0, now) == NWK_APS_STATE);
+    CHECK(!memcmp(&fresh, &before, sizeof(fresh)));
+    ready(); before = runtime.transport;
+    for (which = 0; which < 4; which++) {
+        packet.aps.source_endpoint = which < 2 ? 0 : which == 2 ? 2 : 1;
+        packet.aps.profile_id = which == 0 ? 0x0104 : which == 1 ? 1 : which == 2 ? 0x0104 : 0;
+        CHECK(nwk_aps_queue(&runtime.transport, &packet, 0, now) == NWK_APS_STATE);
+        CHECK(!memcmp(&runtime.transport, &before, sizeof(before)));
+    }
+    packet.aps.source_endpoint = 0; packet.aps.profile_id = 0;
+    CHECK(nwk_aps_queue(&runtime.transport, &packet, 0, now) == NWK_APS_OK);
+    CHECK(runtime.transport.outgoing.aps.destination_endpoint == 3);
+    CHECK(nwk_aps_cancel(&runtime.transport, now) == NWK_APS_OK);
+    CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+    CHECK(nwk_aps_confirm(&runtime.transport, &result) == NWK_APS_OK && result == NWK_APS_CANCELLED);
+    CHECK(device.phase == BDB_JOIN_READY && runtime.transport.ready);
+}
+
 static void empty_packet(const ed_packet_t *packet)
 {
     const uint8_t zero[sizeof(*packet)] = {0};
@@ -1510,7 +1541,7 @@ int main(void)
     operational_failures(); update_pending_query(); response_backpressure();
     work_and_deadlines(); stopped_transport(); storage_quota(); terminal_control();
     phase_storage(); rejected_start_storage(); transport_configuration();
-    slot_lifetimes(); transmit_extent();
+    slot_lifetimes(); transmit_extent(); transport_endpoints();
     printf("BDB join: %u checks PASS; real commissioning, operational loss, bounded work, backpressure, phase/slot ownership and durable recovery boundary.\n", checks);
     return 0;
 }

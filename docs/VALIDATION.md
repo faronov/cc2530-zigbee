@@ -29,9 +29,11 @@ board-fixture consumers as well as the standalone owner. Both board definitions
 are retained. The full catalog is mechanically compared with the original
 `test-common` partition and retains all54 original workers,28 board/image
 checks, the complete tool/PyUSB checks and the seven-path board upload policy.
-Eight complete-join workers add four independent fresh-reset scenarios per
-board: success/data/update/restart, missing network key, retained radio fault
-and retained busy-flash failure. There are62 workers plus the two
+Forty-four complete-join workers add twenty-two independent fresh-reset
+scenarios per board: the original success/data/update/restart, missing network
+key, retained radio fault and retained busy-flash cases, plus eighteen
+[transport/ZDO/deadline cases](ED_JOIN.md#whole-target-edge-corpus).
+There are98 workers plus the two
 selection/acceptance control jobs. Their existing15-minute deadlines and
 no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
@@ -73,7 +75,7 @@ It still requires all22 operations,10345 outcome mutations,
 the measured SP77 under the unchanged7C cap, and retained busy-flash RAM failure.
 The full tier retains every mutation;
 there is no sampling, weakened validator or simulated-outcome cache.
-The new complete-join profile separately retains all715479 artifact
+The expanded complete-join profile separately requires all716229 artifact
 mutations in its missing-key worker. Full raw identities, complete DATA/OSEG
 liveness, native/sanitized transcript identity and actual CPU/alias
 observations precede every scenario. Explicit Make-generated CDB observation
@@ -162,9 +164,9 @@ replace the historical Actions record nor establish whole-target acceptance.
 
 The current partition also includes eight resident crypto/NV caller jobs,
 six authenticated-join host jobs, two isolated banked-CODE jobs and two
-banked key/crypto/NV jobs, plus eight complete banked join jobs.
+banked key/crypto/NV jobs, plus44 complete banked join jobs.
 Together with the earlier thirty-six-job partition described below,
-these retain all old cases in sixty-two full-tier worker jobs. All banked profiles are
+these retain all old cases in98 full-tier worker jobs. All banked profiles are
 separate from every unbanked board image; they have no hardware/artifact upload
 step. See [the banked memory-model boundaries](BANKED_CODE.md) and the
 [real key-service execution contract](BANKED_SECURITY.md).

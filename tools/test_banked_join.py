@@ -140,9 +140,87 @@ class JoinObservationTests(unittest.TestCase):
 
     def test_unapproved_reference_is_rejected_before_parsing_or_execution(self):
         with patch.object(join.subprocess, "run", return_value=subprocess.CompletedProcess(
-                [], 0, "DONE 415\n", "")):
+                [], 0, b"DONE 415\n", b"")):
             with self.assertRaisesRegex(ValueError, "reference changed"):
                 join.reference("synthetic")
+
+    def test_named_reference_uses_explicit_native_argument_and_raw_pin(self):
+        for case in join.EDGE_CASES:
+            with self.subTest(case=case), patch.object(join.subprocess, "run", return_value=
+                    subprocess.CompletedProcess([], 0, b"not a reference\r\n", b"")) as run:
+                with self.assertRaisesRegex(ValueError, "reference changed"):
+                    join.reference("synthetic", case)
+                run.assert_called_once_with(["synthetic", case], capture_output=True, check=True, timeout=15)
+        with self.assertRaisesRegex(ValueError, "Unknown complete join reference"):
+            join.reference("synthetic", "unlisted")
+
+    def test_edge_reference_requires_complete_cold_case_and_peripheral_count(self):
+        call = (f"CALL 12 1 0 0 165 {'00'*180} {'a5'*125}\n"
+                f"RESULT 0 0 165 {'00'*37} {'a5'*125}\n"
+                f"DEVICE {'00'*1676}\nMAC {'00'*168}\nNV {'ff'*4096}\n")
+        valid = ("CASE edge\nRESET 1\n"+call+"DONE 1\n").encode("ascii")
+        for raw, count, events, accepted in (
+                (valid, 1, 0, True), (valid, 2, 0, False), (valid, 1, 1, False),
+                (valid.replace(b"CASE edge", b"CASE other"), 1, 0, False),
+                (valid.replace(b"RESET 1\n", b""), 1, 0, False),
+                (valid.replace(b"RESET 1", b"RESET 0"), 1, 0, False),
+                (valid.replace(b"DONE 1\n", b""), 1, 0, False),
+                (valid.replace(b"CALL 12", b"CALL 13"), 1, 0, False)):
+            with self.subTest(count=count, events=events, raw=raw[:50]), \
+                    patch.object(join, "EDGE_CASES", {"edge": (join.banking.sha(raw), count, events)}), \
+                    patch.object(join.subprocess, "run", return_value=
+                                 subprocess.CompletedProcess([], 0, raw, b"")):
+                if accepted:
+                    self.assertEqual(join.reference("synthetic", "edge")[0]["command"], 12)
+                else:
+                    with self.assertRaises(ValueError):
+                        join.reference("synthetic", "edge")
+        with patch.object(join, "EDGE_CASES", {"edge": (join.banking.sha(valid), 1, 0)}), \
+                patch.object(join.subprocess, "run", return_value=subprocess.CompletedProcess(
+                    [], 0, valid.replace(b"\n", b"\r\n"), b"")):
+            with self.assertRaisesRegex(ValueError, "reference changed"):
+                join.reference("synthetic", "edge")
+
+    def test_edge_selection_replays_actual_case_and_compares_sanitizer(self):
+        case = next(iter(join.EDGE_CASES))
+        calls = [{"case": case, "reset": 1}]
+        with patch.object(sys, "argv", ["boot", "--output", "unused", "--case", case]), \
+                patch.object(join.layout, "load", return_value=("artifacts",)), \
+                patch.object(join.layout, "verify"), \
+                patch.object(join, "reference", return_value=calls) as reference, \
+                patch.object(join, "check_alias", side_effect=[None, ValueError("missing alias")]), \
+                patch.object(join.banking, "artifact_negatives") as artifacts, \
+                patch.object(join, "run", return_value=0x7b) as run, patch("builtins.print"):
+            join.main()
+            self.assertEqual([call.args[1] for call in reference.call_args_list], [case, case])
+            self.assertEqual(run.call_args.args[2], calls)
+            self.assertEqual(run.call_args.kwargs, {"limit": None, "failure": False})
+            artifacts.assert_not_called()
+            run.reset_mock()
+            reference.side_effect = [calls, []]
+            with self.assertRaisesRegex(ValueError, "transcript differs"):
+                join.main()
+            run.assert_not_called()
+
+    def test_all_preserves_original_edges_artifact_campaign_and_retained_flash(self):
+        def reference(executable, selected=None):
+            return [{"case": case, "reset": 1} for case in (join.CASES if selected is None else (selected,))]
+        with patch.object(sys, "argv", ["boot", "--output", "unused"]), \
+                patch.object(join.layout, "load", return_value=("artifacts",)), \
+                patch.object(join.layout, "verify"), \
+                patch.object(join.layout, "artifact_bytes", return_value="complete"), \
+                patch.object(join, "reference", side_effect=reference) as native, \
+                patch.object(join, "check_alias", side_effect=[None, ValueError("missing alias")]), \
+                patch.object(join.banking, "artifact_negatives", return_value=716229) as artifacts, \
+                patch.object(join, "run", return_value=0x7b) as run, patch("builtins.print"):
+            join.main()
+            self.assertEqual(native.call_count, 2*(1+len(join.EDGE_CASES)))
+            self.assertEqual(tuple(call["case"] for call in run.call_args_list[0].args[2]),
+                             join.CASES+tuple(join.EDGE_CASES))
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args_list[0].kwargs, {"limit": None, "failure": False})
+            self.assertEqual(run.call_args_list[1].kwargs, {"failure": True})
+            artifacts.assert_called_once_with("complete", join.layout.PINS)
 
     def test_flash_case_requires_pinned_image_and_genuine_execution(self):
         calls = [{"case": case, "reset": 1} for case in join.CASES]

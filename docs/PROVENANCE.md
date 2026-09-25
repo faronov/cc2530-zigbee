@@ -49,6 +49,11 @@ uCsim, including its binary-dump interface. No vendor implementation,
 SDK binary, private key/capture, new wire revision or hardware observation
 is imported. Volatile copies change compiler storage lifetimes, not security
 or persistence semantics.
+The subsequent transport/ZDO edge references likewise use original public
+synthetic packets and public calls, including cancellation to consume APS
+sequence numbers without inventing transmissions. The endpoint-admission
+correction aligns the existing ZDO reply contract with its local source
+endpoint/profile ownership; it imports no wire rule or external code.
 
 ## Reviewed reference candidates
 

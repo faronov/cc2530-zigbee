@@ -31,7 +31,12 @@ COMPONENTS = {
     "banked-security": ("Offline banked key lifecycle ({board})", ("test-banked-security",)),
     **{f"banked-join-{case}": (f"Offline complete MCU join ({{board}}, {case})",
                              (f"test-banked-join-{case}",))
-       for case in ("success", "missing-key", "radio-fault", "flash-fault")},
+       for case in ("success", "missing-key", "radio-fault", "flash-fault",
+                    "rx-queues", "wrap-quarantine", "ack-correlation", "ack-deadlines",
+                    "zdo-server", "broadcast-table", "address-map", "update-full",
+                    "install-timeout", "node-correlation", "node-timeout", "node-status",
+                    "tc-key-timeout", "tc-confirm-timeout", "parent-status",
+                    "network-key-late", "tc-key-late", "tc-confirm-late")},
 }
 COMMON_RUNTIME = {"src/startup.c", "src/status.c", "src/banked.c"}
 SOURCE = re.compile(r"(?:src|tests|boards|examples)/[A-Za-z0-9_/-]+\.c\Z")

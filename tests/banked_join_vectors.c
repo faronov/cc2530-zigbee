@@ -253,11 +253,26 @@ static mac_tx_result_t recorded_mac_copy(const mac_tx_t *m, uint8_t *body, uint1
     written = *length; memcpy(call_output, body, *length); finish(result); return result;
 }
 
-int main(void)
+static nwk_aps_result_t recorded_cancel(void)
+{
+    nwk_aps_result_t result;
+    prepare(); begin(12, now, 0, 0);
+    result = nwk_aps_cancel(&runtime.transport, now); finish(result); return result;
+}
+
+#include "banked_join_edges.c"
+
+int main(int argc, char **argv)
 {
     ed_packet_t application = {0}, received = {0};
     uint8_t result = 0xa5, failure;
     uint32_t old_deadline;
+    if (argc != 1) {
+        CHECK(argc == 2);
+        edge_case(argv[1]);
+        printf("DONE %u\n", operations);
+        return 0;
+    }
     puts("CASE joined-data-update-loss-restart");
     initial_now = 0xfffffc00UL;
     ready();

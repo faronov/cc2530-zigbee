@@ -104,6 +104,9 @@ void main(void)
         else if (fixture_command == 11)
             fixture_status.result = mac_tx_copy(&fixture_mac, fixture_output.bytes,
                 sizeof(fixture_output.bytes), &fixture_written);
+        else if (fixture_command == 12)
+            fixture_status.result = fixture_device.workspace == BDB_JOIN_WORK_RUNTIME ?
+                nwk_aps_cancel(&fixture_device.work.runtime.transport, fixture_now) : NWK_APS_STATE;
         else
             fixture_status.result = 255;
         fixture_status.metadata_result = security_keys_status(&fixture_status.metadata);

@@ -61,13 +61,18 @@ DATA and the original far-call ABI. It has no board/radio or full MAC/BDB
 caller, no ISR headroom claim, and no automatic persistence-to-READY path.
 
 The subsequent [complete banked MCU caller](ED_JOIN.md#complete-banked-mcu-execution)
-now fits and executes those production owners together:143092 populated CODE
+now fits and executes those production owners together:143242 populated CODE
 bytes,7512 ordinary XDATA andSP7B under7C. Actual association context/shadow
 storage, DATA/OSEG/libc liveness and all bank/alias boundaries are checked.
 It reaches authenticated READY and protected exchange with synthetic PHY
 events, not a real-radio driver. Earlier allocation figures above are
 historical steps; no extra RAM, ISR headroom or persisted-to-READY shortcut
 was introduced.
+The [expanded edge caller](ED_JOIN.md#whole-target-edge-corpus) adds only a
+public transport-cancel command; its references never initialize private
+runtime state. ZDO replies to nonzero remote endpoints retain local
+endpoint0/profile0 ownership after READY; pre-READY and application
+source/profile restrictions remain.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

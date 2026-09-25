@@ -72,9 +72,11 @@ nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * vol
     if (!packet || aps_secure > 1 || packet->length > ED_PAYLOAD_MAX) return NWK_APS_ARGUMENT;
     result = reserve(ctx, now, !packet->nwk.type);
     if (result) return result;
+    /* ZDO owns source endpoint0/profile0 even when replying to another endpoint. */
     if (!packet->nwk.type && packet->aps.type == APS_FRAME_DATA &&
         (packet->aps.source_endpoint || packet->aps.destination_endpoint || packet->aps.profile_id) &&
-        (!ctx->ready || packet->aps.source_endpoint != ctx->endpoint || packet->aps.profile_id != ctx->profile))
+        (!ctx->ready || ((packet->aps.source_endpoint || packet->aps.profile_id) &&
+         (packet->aps.source_endpoint != ctx->endpoint || packet->aps.profile_id != ctx->profile))))
         return NWK_APS_STATE;
     if (!packet->nwk.type && packet->aps.type != APS_FRAME_DATA) return NWK_APS_ARGUMENT;
     ctx->outgoing = *packet; ctx->secure = aps_secure; ctx->special = 0;
