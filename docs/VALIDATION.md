@@ -34,7 +34,8 @@ scenarios per board: the original success/data/update/restart, missing network
 key, retained radio fault and retained busy-flash cases, plus eighteen
 [transport/ZDO/deadline cases](ED_JOIN.md#whole-target-edge-corpus).
 Two interval-MAC workers add the separate fractional scheduler and native
-real-service receipt-consumption checks. There are100 workers plus the two
+real-service receipt-consumption checks. Two guarded-handoff workers add the
+opt-in live clock/RX transition and native MAC binding. There are102 workers plus the two
 selection/acceptance control jobs. Their existing15-minute deadlines and
 no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
@@ -201,7 +202,9 @@ test-zdo-node test-zdo-srv`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
 MMIO replay. The separate `test-mac-tx-interval` pair preserves all52 target
 case groups and the native/sanitizer real-service receipt consumers without
-extending the already long core workers. Another pair runs `test-zigbee-security test-zigbee-mmo
+extending the already long core workers. `test-mac-handoff` has its own pair,
+with71 target sequences and four native/sanitizer binaries; synthetic handoff
+images are not uploaded. Another pair runs `test-zigbee-security test-zigbee-mmo
 test-zigbee-key-hash` with real AES/DMA,
 and a final pair runs `test-security-counter` with the real journal/flash backend.
 Their exact union is the complete
@@ -238,6 +241,24 @@ Commit `8f5a314` passed
 in2m19s/2m23s; all98 previous workers also passed.
 Its native seven-case lower-service consumer is not a combined8051 radio
 adapter, prepared-state clock API or physical acceptance.
+
+The subsequent [guarded handoff profile](MAC_ATTEMPT.md#guarded-live-rx-handoff)
+adds actual prepared-state clock sampling and a measured raw-ACK-to-normal-RX
+transition. Matching both-board artifacts use27423 CODE,1543+64/2048 XDATA,
+initialSP5B and actual peakSP7B/7C. The separate immutable profile retains
+all original CODE/raw-CDB/map/listing/object/ABI/MMIO/alias/stack guards and
+all28 attempt sequences, plus43 clock/handoff sequences. Native/sanitizer
+references must agree across1099 real calls/409315 MMIO events; the artifact
+campaign requires86410 mutations and the missing-alias rejection.
+The simulator receives only declared caller input and
+the exact peripheral inventory, never private controller-state injection.
+It verifies all18 provisional clock bytes and original lower diagnostics.
+Rejection controls also cover missing observations, unowned initial state,
+forbidden handoff FIFO/stop/strobe operations and the adjacent SFD-clear/read
+breakpoints. Exact511/512/513-tick boundaries and whole-FF retry/exhaustion
+are executed, not inferred from an instruction count. The complete MAC
+action/clock/RX binding remains native-only; this is not a banked real-radio
+join, full #13/#14 acceptance or hardware evidence.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

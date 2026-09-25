@@ -69,6 +69,10 @@ a genuine bounded deadline/poll cap. Relative interval arithmetic additionally
 rejects separations exceeding 65535 raw periods, using the actual unchanged
 `mac_epoch` half-range/continuity checks.
 
+The optional [guarded handoff profile](#guarded-live-rx-handoff) below adds
+owned live sampling and a checked raw-ACK-to-normal-RX transition. Without
+that explicit define, the original stop/drain/resume contract is unchanged.
+
 The first operational fault is retained. In particular, invalid clock/profile,
 lost submission/completion, FIFO overflow, exhausted work/time and late arming
 are failures, not NO_ACK. Radio diagnostics distinguish
@@ -237,3 +241,104 @@ Fresh legacy CODE remains 2999/7007/15040 for Timer2/radio/MAC_RADIO and
 Only genuinely affected raw debug/object identities are refreshed. Full
 repository acceptance remains Actions; this component evidence does not
 by itself establish a full repository or hardware acceptance result.
+
+## Guarded live RX handoff
+
+`CC2530_MAC_HANDOFF` requires both existing co-owner defines. Its only new
+public calls are `mac_attempt_now(timeout, limit, output)` and
+`mac_attempt_handoff(timeout, limit)`. Use these through the top-level owner,
+not by mixing independently initialized radio/timer clients.
+
+`now` samples the actual clock/Timer2/epoch, including while an immutable
+slot is PREPARED. It retains the complete top-level private/libc/range guards,
+atomic publication and operational faults. It issues no RF operation, does
+not release the prepared frame, and never returns a captured PHY end.
+The original `mac_radio_now` still rejects PREPARED.
+
+`handoff` requires this slot's retained first successful FRAME receipt:
+transmitted, received, within the caller's collection window, exactly three
+CRC-good ACK bytes and type2. It does not narrow the otherwise ignored ACK
+FCF bits. The MAC must independently establish its own normative ACK timing;
+`within_window` alone does not establish the54-symbol ACK bound.
+An intervening clock call is allowed; an intervening radio operation removes
+eligibility. Before transition, the owner reads the actual immutable TXFIFO
+AR bit and DSN at6081/6083 and matches the retained ACK.
+
+The transition does not stop RX, flush/read a FIFO, issue a strobe, rewrite
+the receiver mask, reset or recover. It requires consistent empty FIFO/head
+observations and no active SFD/TX, then checks a genuine live-clock bracket
+around two SFD probes and a conditional old-SFD-flag clear. The naked helper
+contains one SFD read, a conditional RFIRQF0=`FD` write and an immediately
+adjacent second SFD read; no C expression duplicates an MMIO read.
+
+The scoped Timer2 reader uses the actual coherent low-byte-first latch.
+A low FF discards the entire sample without reading upper bytes or publishing
+output; each retry charges the existing radio deadline/work budget.
+Its result stays in the timer's own fixed staging, exposed only as a read-only
+view after OK; no arbitrary caller pointer enters that short primitive.
+The radio validates its complete destination object before starting the
+bracket and copies each valid value. Public buffer/private/libc guards remain
+outside the short measured interval rather than being repeated inside it.
+Full owner/timer validation brackets the provisional samples. The measured
+elapsed interval must be **strictly below512 fine ticks**:511 succeeds,
+512 and513 fail. This is conservatively below one symbol and hence shorter
+than the mandatory two-symbol PHR byte. A complete reception cannot silently
+start and finish between those probes; a later SFD remains sticky, and a
+completed head remains in FIFO. These are live bounds, not captured events.
+SWRU191F section2.2.3, printed p28, explicitly says default/prefetch flash
+execution is not cycle-accurate; instruction counts cannot replace this
+runtime check or establish a worst-case handoff latency.
+
+After rechecking activity/FIFO/flags, the owner enables AUTOACK (`FRMCTRL0=60`)
+and then normal filtering, with complete readback and race checks after each.
+Only this opt-in profile uses `FRMFILT0=05`, accepting frame versions0/1;
+initial acquisition and explicit resume use the same profile. Legacy
+`FRMFILT0=01` and all unflagged linked identities remain unchanged.
+Queued/in-flight data, a new SFD, ignored clear, RF error, readback mismatch,
+wide bracket, invalid time or exhausted budget retains the original fault.
+RF/AUTOACK may already be active on failure; that is not permission to retry
+or reset. Success does not guarantee that software can beat an early response.
+
+Primary basis is SWRU191F pp28,210,213-214,227,231-233,263, together with the
+already reviewed selected-PHY serialization and Timer2/SWRZ031 latch rules.
+Live filter changes may otherwise apply either old or new settings to an
+in-flight frame; the checks above are not optional. Manual ACK strobes after
+receiving a complete frame are not an alternative.
+
+`make test-mac-handoff` runs four native/nonrecovering-sanitizer executables
+and a separate linked `mac_handoff_test.ihx` with all eight immediate listing
+snapshots. **Never flash this synthetic image.** Both board artifacts agree:
+27423/32768 CODE,1543 ordinary plus64 reserved status bytes/2048 XDATA,
+initial SP5B and full-run peak SP7B under the unchanged7C cap. Resident volatile
+XDATA arguments/work prevent new compiler DATA spills; no stack or RAM
+limit is increased.
+
+The target corpus retains all28 attempt sequences and adds43 handoff/clock
+sequences:1099 genuine calls and409315 MMIO events. The complete artifact
+campaign retains86410 mutations plus the missing-alias rejection.
+It exercises SFD/clear/configuration races, retained faults,
+511/512/513-tick boundaries, whole-FF retry/exhaustion, invalid scoped fine/
+coarse tuples, buffer exclusions,
+prepared-state sampling and real clock advancement. Original first-ACK
+bytes and the private18-byte provisional bracket are checked against target
+RAM. Native tests additionally enumerate all8192 type2 FCF combinations.
+Valid version1 DATA and successful/refused version0 Association Responses
+drive the model's automatic ACK machinery from the actual programmed RF
+registers, AR/type/CRC and destination fields; a bad-CRC command is not ACKed.
+An active modeled ACK is explicitly retired without changing the immutable
+ordinary-TX FIFO. These are synthetic peripheral events, not RF observations.
+
+The additional native-only MAC composition drives real interval-MAC actions
+from `mac_attempt_now`, consumes genuine attempt bounds/ACK bytes, performs
+the handoff and retires the ordinary-TX owner while retaining an independent
+RX/receiver-ACK lease. It neither injects MAC success nor initializes private
+protocol state. That composition is **not** the isolated MCU image above.
+This increment is host-tested, image-checked and simulated, not
+hardware-observed or complete #13/#14 acceptance.
+
+Remaining work is the production adapter and combined/banked MCU binding,
+loss-free receive closure, interval-aware scan/POLL/association and subsequent
+network integration. Handoff READY is not MAC ACKED, POLL CLOSED/NO_DATA,
+a per-frame ACK attestation, calibrated PHY timing, arbitrary-input
+unicast-only ACK policy or full MLME conformance. #45's complete Association
+deadline/revision gate remains open.

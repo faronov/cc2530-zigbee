@@ -81,4 +81,12 @@ mac_radio_result_t mac_radio_prepare(const uint8_t MCU_XDATA *body,
 mac_radio_result_t mac_radio_attempt(uint16_t window, uint32_t timeout, uint16_t limit,
     radio_autoack_attempt_t MCU_XDATA *output, mac_epoch_t MCU_XDATA *first);
 #endif
+#if defined(CC2530_MAC_HANDOFF)
+/* Internal same-owner hooks. The clock hook also admits PREPARED without
+ * issuing an RF operation or weakening ordinary mac_radio_now's contract.
+ */
+mac_radio_result_t mac_radio_attempt_now(uint32_t timeout, uint16_t limit,
+                                        mac_epoch_stamp_t MCU_XDATA *output);
+mac_radio_result_t mac_radio_handoff(uint32_t timeout, uint16_t limit);
+#endif
 #endif

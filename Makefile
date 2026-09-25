@@ -97,6 +97,7 @@ endif
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
 .PHONY: test-mac-tx-interval
+.PHONY: test-mac-handoff
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1387,6 +1388,39 @@ test-mac-attempt: $(BUILD)/host-mac-attempt-tests $(BUILD)/host-mac-attempt-test
 	$(BUILD)/host-mac-attempt-tests-sanitize
 	$(PYTHON) -B tests/boot_mac_attempt.py --output $(BUILD) --simulator "$(S51)"
 
+MAC_HANDOFF_MODULES := $(MAC_ATTEMPT_MODULES) test_mac_handoff
+MAC_HANDOFF_OBJECTS := $(addprefix $(BUILD)/mh_,$(addsuffix .rel,$(MAC_HANDOFF_MODULES)))
+MAC_HANDOFF_DEFINES := $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_HANDOFF
+$(BUILD)/mh_%.rel: src/%.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) $(MAC_HANDOFF_DEFINES) -c $< -o $@
+$(BUILD)/mh_test_mac_handoff.rel: tests/test_mac_handoff.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) $(MAC_HANDOFF_DEFINES) -c $< -o $@
+$(BUILD)/mac_handoff_test.ihx: $(MAC_HANDOFF_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(MAC_HANDOFF_OBJECTS)
+	cp $(BUILD)/mh_timebase.rst $(BUILD)/mac_handoff_test.timebase.rst
+	cp $(BUILD)/mh_clock.rst $(BUILD)/mac_handoff_test.clock.rst
+	cp $(BUILD)/mh_mac_time.rst $(BUILD)/mac_handoff_test.mac_time.rst
+	cp $(BUILD)/mh_radio_autoack.rst $(BUILD)/mac_handoff_test.radio_autoack.rst
+	cp $(BUILD)/mh_mac_epoch.rst $(BUILD)/mac_handoff_test.mac_epoch.rst
+	cp $(BUILD)/mh_mac_radio.rst $(BUILD)/mac_handoff_test.mac_radio.rst
+	cp $(BUILD)/mh_mac_attempt.rst $(BUILD)/mac_handoff_test.mac_attempt.rst
+	cp $(BUILD)/mh_test_mac_handoff.rst $(BUILD)/mac_handoff_test.test_mac_handoff.rst
+$(BUILD)/host-mac-handoff-tests: tests/test_mac_handoff.c tests/test_mac_attempt.c tests/test_radio_autoack.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_HANDOFF_DEFINES) tests/test_mac_handoff.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
+$(BUILD)/host-mac-handoff-tests-sanitize: tests/test_mac_handoff.c tests/test_mac_attempt.c tests/test_radio_autoack.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_HANDOFF_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_handoff.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
+$(BUILD)/host-mac-handoff-mac-tests: tests/test_mac_handoff.c tests/test_mac_attempt.c tests/test_radio_autoack.c $(MAC_ATTEMPT_SRC) src/mac_tx.c src/mac_frame.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_HANDOFF_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_handoff.c $(MAC_ATTEMPT_SRC) src/mac_tx.c src/mac_frame.c tests/host_mmio.c -o $@
+$(BUILD)/host-mac-handoff-mac-tests-sanitize: tests/test_mac_handoff.c tests/test_mac_attempt.c tests/test_radio_autoack.c $(MAC_ATTEMPT_SRC) src/mac_tx.c src/mac_frame.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_HANDOFF_DEFINES) -DCC2530_MAC_INTERVAL -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_handoff.c $(MAC_ATTEMPT_SRC) src/mac_tx.c src/mac_frame.c tests/host_mmio.c -o $@
+
+test-mac-handoff: $(BUILD)/host-mac-handoff-tests $(BUILD)/host-mac-handoff-tests-sanitize $(BUILD)/host-mac-handoff-mac-tests $(BUILD)/host-mac-handoff-mac-tests-sanitize $(BUILD)/mac_handoff_test.ihx
+	$(BUILD)/host-mac-handoff-tests
+	$(BUILD)/host-mac-handoff-tests-sanitize
+	$(BUILD)/host-mac-handoff-mac-tests
+	$(BUILD)/host-mac-handoff-mac-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_handoff.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1599,7 +1633,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

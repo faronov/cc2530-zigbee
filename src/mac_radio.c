@@ -227,4 +227,39 @@ mac_radio_result_t mac_radio_attempt(uint16_t window, uint32_t timeout, uint16_t
     return result;
 }
 #endif
+#if defined(CC2530_MAC_HANDOFF)
+MCU_XDATA radio_autoack_handoff_clock_t mac_radio_handoff_clock;
+mac_radio_result_t mac_radio_attempt_now(uint32_t timeout, uint16_t limit,
+                                        mac_epoch_stamp_t MCU_XDATA *output)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (!output) return MAC_RADIO_INVALID_ARGUMENT;
+    if ((status.phase < MAC_RADIO_RX || status.phase > MAC_RADIO_OFF) &&
+        status.phase != MAC_RADIO_PREPARED) return MAC_RADIO_STATE;
+    result = storage(MMIO_XADDRESS(output), sizeof(*output));
+    if (result != MAC_RADIO_READY) return result;
+    result = sample(timeout, limit, 0);
+    if (result != MAC_RADIO_READY) return result;
+    *output = mac_radio_live;
+    status.result = MAC_RADIO_READY;
+    return MAC_RADIO_READY;
+}
+
+mac_radio_result_t mac_radio_handoff(uint32_t timeout, uint16_t limit)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (status.phase != MAC_RADIO_RX || !radio_autoack_handoff_eligible())
+        return MAC_RADIO_STATE;
+    result = sample(timeout, limit, 0);
+    if (result != MAC_RADIO_READY) return result;
+    status.radio_result = radio_autoack_handoff(timeout, limit, &mac_radio_handoff_clock);
+    if (status.radio_result != RADIO_AUTOACK_READY) return fail(MAC_RADIO_DRIVER_ERROR);
+    result = sample(timeout, limit, 0);
+    if (result != MAC_RADIO_READY) return result;
+    status.result = MAC_RADIO_READY;
+    return MAC_RADIO_READY;
+}
+#endif
 MCU_XDATA uint8_t mac_radio_reserved_end;

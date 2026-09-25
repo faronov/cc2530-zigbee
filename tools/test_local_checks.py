@@ -49,6 +49,25 @@ class LocalChecksTests(unittest.TestCase):
             self.assertTrue(all(args[0] == "cp" for args in commands[links[0]+1:links[0]+4]))
             self.assertEqual(sum("tests/boot_mac_tx_interval.py" in args for args in commands), 1)
 
+    def test_handoff_keeps_four_native_callers_and_isolated_target_profile(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-mac-handoff", BOARD=board, include_build=True)
+            hosts = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(hosts), 4)
+            for args in hosts:
+                self.assertTrue({"-DCC2530_MAC_RADIO", "-DCC2530_MAC_ATTEMPT",
+                                 "-DCC2530_MAC_HANDOFF", "tests/test_mac_handoff.c",
+                                 "src/mac_attempt.c", "src/mac_radio.c", "src/mac_time.c",
+                                 "src/radio_autoack.c", "src/clock.c", "src/timebase.c"} <= set(args))
+                self.assertEqual("-DCC2530_MAC_INTERVAL" in args, "src/mac_tx.c" in args)
+            self.assertEqual(sum("-DCC2530_MAC_INTERVAL" in args for args in hosts), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in hosts), 2)
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
+            self.assertEqual(len(compiles), 8)
+            self.assertTrue(all("-DCC2530_MAC_HANDOFF" in args and "-DCC2530_MAC_INTERVAL" not in args
+                                for args in compiles))
+            self.assertEqual(sum("tests/boot_mac_handoff.py" in args for args in commands), 1)
+
     def test_bdb_object_layout_is_mandatory_but_not_an_executable_claim(self):
         for board in BOARDS:
             commands = self.dry_run("test-bdb-join", BOARD=board, include_build=True)
@@ -91,7 +110,7 @@ class LocalChecksTests(unittest.TestCase):
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_tx_interval", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt",
+            "mac_frame", "mac_tx", "mac_tx_interval", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt", "mac_handoff",
             "mac_scan", "mac_association", "mac_poll", "mac_join",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
@@ -147,6 +166,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertFalse(any("tests/boot_mac_stamp.py" in args for args in core))
             self.assertFalse(any("tests/boot_zcl_temperature.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_attempt.py" in args for args in core))
+            self.assertFalse(any("tests/boot_mac_handoff.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_join.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_node.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_srv.py" in args for args in core))
@@ -185,6 +205,9 @@ class LocalChecksTests(unittest.TestCase):
             ("mac_attempt", tuple(("ma_" + module, module) for module in (
                 "timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio",
                 "mac_attempt", "test_mac_attempt"))),
+            ("mac_handoff", tuple(("mh_" + module, module) for module in (
+                "timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio",
+                "mac_attempt", "test_mac_handoff"))),
             ("mac_scan", (("mac_frame", "mac_frame"), ("mac_tx", "mac_tx"),
                           ("nwk_beacon", "nwk_beacon"), ("nwk_candidates", "nwk_candidates"),
                           ("mac_scan", "mac_scan"), ("mac_scan_test", "mac_scan_test"))),
@@ -280,7 +303,7 @@ class LocalChecksTests(unittest.TestCase):
     def test_bounded_sanitizers_and_no_board_linkage(self):
         for board, service in ((b, s) for b in BOARDS for s in
                                ("zcl-basic", "zcl-identify", "zcl-temperature", "radio-autoack",
-                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-join",
+                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-handoff", "mac-join",
                                 "zdo-node", "zdo-srv", "zigbee-security", "zigbee-mmo", "zigbee-key-hash",
                                 "security-counter")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)

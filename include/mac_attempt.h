@@ -49,5 +49,22 @@ mac_radio_result_t mac_attempt_receive(uint32_t timeout, uint16_t limit,
 mac_radio_result_t mac_attempt_stop(uint32_t timeout, uint16_t limit);
 mac_radio_result_t mac_attempt_resume(uint32_t timeout, uint16_t limit);
 const mac_radio_diagnostics_t MCU_XDATA *mac_attempt_diagnostic(void);
+#if defined(CC2530_MAC_HANDOFF)
+/* Complete top-level storage/fault guards also apply to live sampling, including
+ * an immutable PREPARED slot. A live sample is never a captured frame end.
+ */
+mac_radio_result_t mac_attempt_now(uint32_t timeout, uint16_t limit,
+                                   mac_epoch_stamp_t MCU_XDATA *output);
+/* Only immediately after this slot's first CRC-good, within-window ACK receipt,
+ * with no intervening radio operation. Clock sampling is allowed. The lower
+ * owner additionally matches the real TXFIFO DSN and ACK-request bit.
+ * READY means a guarded transition to continuous normal RX/AUTOACK (v0/v1),
+ * not ACKED, a normative ACK window, a per-frame ACK observation or POLL CLOSED.
+ * This uses the run's caller-selected collection window; the MAC must prove
+ * its own ACK timing before asking for this handoff. RF may remain active on
+ * failure; retain the receipt and ownership. No automatic stop/reset/retry.
+ */
+mac_radio_result_t mac_attempt_handoff(uint32_t timeout, uint16_t limit);
+#endif
 #endif
 #endif

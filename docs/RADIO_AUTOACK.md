@@ -550,3 +550,14 @@ selection, but references IEEE2015; this review is not full edition
 reconciliation. A new profile must expose its actual mode, not relabel the
 current mode3. Hardware ACK filtering versus the software receiver's ignored
 ACK-FCF fields remains a separate contract gap.
+
+The subsequent opt-in [guarded handoff](MAC_ATTEMPT.md#guarded-live-rx-handoff)
+addresses one narrower transition: retain and match the first raw ACK, then
+restore v0/v1 filtering/AUTOACK without stopping RX or accessing RXFIFO.
+Actual Timer2 samples must bound the SFD-read/old-flag-clear/SFD-read sequence
+to less than512 fine ticks; default flash-cache execution has no static
+cycle-accurate upper-bound guarantee. New activity, queued data, configuration
+failure or a wide interval is terminal, not a successful handoff.
+It preserves raw ACK FCF acceptance without claiming arbitrary ordinary TX
+under live AUTOACK, loss-free POLL closure, guaranteed transition latency,
+per-frame ACK attestation or hardware observation.

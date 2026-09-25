@@ -199,8 +199,14 @@ the MAC context. Its synthetic caller schedules invocation using the model;
 that is not a production prepared-state clock API, a proof of exact hardware
 CCA start, or a combined8051 radio/scheduler image.
 
-Remaining #13/#14 work includes that actual action/clock binding, safe live
-RX/AUTOACK handoff, continuous response ACK service, frame preservation and
+The subsequent [handoff profile](MAC_ATTEMPT.md#guarded-live-rx-handoff)
+supplies real prepared-state clock sampling and a guarded live RX/AUTOACK
+transition. Its new native composition drives the interval MAC through those
+actual calls and retains an independent receive/ACK lease after ordinary-TX
+retirement. It is not a combined8051 MAC/radio image.
+
+Remaining #13/#14 work includes the production/MCU action binding, integration
+of continuous response ACK service, frame preservation and
 loss-aware closure, then explicit interval-aware scan/POLL/association
 contracts and the complete banked composition. The current raw attempt's
 AUTOACK-off receive phase cannot be relabeled as any of these.

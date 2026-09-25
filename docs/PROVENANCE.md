@@ -76,6 +76,18 @@ continuous handoff or justify narrowing ignored ACK FCF fields. Public PDF
 SHA256 remains `a8fe8e92db33ad79c7f371075b0a464602a6db747614625d9f8d3e6be990b877`;
 no document or external implementation is vendored.
 
+The subsequent [guarded live handoff](MAC_ATTEMPT.md#guarded-live-rx-handoff)
+is original BSD-3-Clause work, not an imported driver. Additional direct
+SWRU191F reading covers section2.2.3/p28 (default/prefetch flash timing is
+not cycle-accurate), RFIRQF0/p210, FIFO RAM/pp213-214, receive/filter/ACK/FIFO
+facts/pp227,231-233 and FSMSTAT1/p263. A real Timer2 bracket strictly below
+512 fine ticks replaces the rejected instruction-count upper-bound argument.
+The existing four pre-strobe NOPs establish a minimum, not that rejected
+upper bound. The SFD helper, scoped latch, v0/v1 opt-in filter and synthetic
+DATA/command ACK model import no external implementation, private identity
+or capture. All emitted-image and simulator measurements remain offline;
+no new hardware or conformance evidence is asserted.
+
 ## Reviewed reference candidates
 
 The original [authenticated ED integration](ED_JOIN.md) uses functional facts

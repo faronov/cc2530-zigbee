@@ -90,7 +90,7 @@ static const uint16_t settings[] = {
     0x6180, 0x6181, 0x6182, 0x6189, 0x618a, 0x6194, 0x6195,
     0x61b2, 0x61fa, 0x61ae, 0x618f, 0x6190, 0x6191
 };
-static const uint8_t values[] = {1, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69};
+static const uint8_t values[] = {RADIO_AUTOACK_NORMAL_FILTER, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69};
 #define XR(a) xregs[(a) - 0x6100u]
 #define CASE_COUNT 194u
 
@@ -296,7 +296,7 @@ static void xstore(uint16_t address, uint8_t value)
     } else if (mode == 5) {
         assert(!count && !packets && !XR(0x618b) && !(XR(0x6193) & 0x27));
         assert((address == 0x6189 && (value == 0x40 || value == 0x60)) ||
-               (address == 0x6180 && (value == 0x0c || value == 1)) ||
+               (address == 0x6180 && (value == 0x0c || value == RADIO_AUTOACK_NORMAL_FILTER)) ||
                (address == 0x6196 && value == 0xf8) || (address == 0x6197 && value == 0x1a));
         XR(address) = value ^ (address == phase_write_fault ? 1u : 0u);
         if (unexpected_rx && address == 0x6189 && value == 0x40)
@@ -584,7 +584,7 @@ static void scenario(unsigned n)
                 CALL(3, RADIO_AUTOACK_STATE_CHANGED);
             } else {
                 CALL(3, RADIO_AUTOACK_READY);
-                assert(XR(0x6180) == 1 && XR(0x6189) == 0x60 &&
+                assert(XR(0x6180) == RADIO_AUTOACK_NORMAL_FILTER && XR(0x6189) == 0x60 &&
                        XR(0x6196) == 0xf8 && XR(0x6197) == 0x1a && config_writes == 25);
                 if (n == 188) {
                     stop_receive = 1; stop_delay = 2; ack_delay = 3;

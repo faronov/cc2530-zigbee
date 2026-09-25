@@ -39,7 +39,7 @@ static const MCU_CODE uint16_t settings[] = {
     0x61b2, 0x61fa, 0x61ae, 0x618f, 0x6190, 0x6191
 };
 static const MCU_CODE uint8_t values[] = {
-    0x01, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69
+    RADIO_AUTOACK_NORMAL_FILTER, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69
 };
 
 static uint16_t setting_address(uint8_t index)
@@ -311,7 +311,7 @@ static radio_autoack_result_t operate(uint8_t operation,
 #endif
             if (radio_autoack_state == RADIO_AUTOACK_OFF_NOACK) {
                 ROOM();
-                MMIO_XWRITE(0x6180, 1); work.profile = 1; status.writes++;
+                MMIO_XWRITE(0x6180, RADIO_AUTOACK_NORMAL_FILTER); work.profile = 1; status.writes++;
                 CHECK(poll()); CHECK(stopped());
                 REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
                 ROOM();
@@ -752,6 +752,129 @@ complete:
     radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
     status.phase = 21; status.result = received;
     return received;
+failed:
+    radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
+    status.result = result;
+    return result;
+}
+#endif
+#if defined(CC2530_MAC_HANDOFF)
+#if defined(__SDCC)
+static uint8_t handoff_clear_sfd(void) __naked
+{
+    __asm
+        mov dptr,#0x6193
+        movx a,@dptr
+        jb acc.5,00001$
+        mov _SOC_RFIRQF0,#0xfd
+        movx a,@dptr
+        anl a,#0x20
+        orl a,#1
+        sjmp 00002$
+    00001$:
+        mov a,#0x20
+    00002$:
+        mov dpl,a
+        ret
+    __endasm;
+}
+#else
+static uint8_t handoff_clear_sfd(void)
+{
+    uint8_t signals = MMIO_XREAD(0x6193);
+    if (!(signals & 0x20u)) {
+        MMIO_WRITE(SOC_RFIRQF0, 0xfd);
+        signals = MMIO_XREAD(0x6193);
+        return (signals & 0x20u) | 1u;
+    }
+    return signals & 0x20u;
+}
+#endif
+
+uint8_t radio_autoack_handoff_eligible(void)
+{
+    return !radio_autoack_fault && radio_autoack_state == RADIO_AUTOACK_RX_NOACK &&
+        status.phase == 21 && status.result == RADIO_AUTOACK_FRAME &&
+        work.cca == 4 && work.profile == 3 && !work.search_disabled &&
+        work.prepared_length >= 3 && status.bytes_read == 6 &&
+        staged.length == 3 && (staged.crc_correlation & 0x80u) &&
+        (staged.body[0] & 7u) == 2u;
+}
+
+static radio_autoack_result_t handoff_empty(void)
+{
+    return !status.count && !(status.signals & 0xe2u) &&
+        status.first == work.head && status.last == work.head ?
+        RADIO_AUTOACK_READY : RADIO_AUTOACK_HANDOFF_RACE;
+}
+
+static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volatile output)
+{
+    const mac_time_stamp_t MCU_XDATA *raw;
+    mac_time_result_t sampled;
+    radio_autoack_result_t result;
+    do {
+        sampled = mac_time_handoff_read();
+        if (sampled == MAC_TIME_OK) {
+            raw = mac_time_handoff_value();
+            output->fine = raw->fine; output->periods = raw->periods;
+            return RADIO_AUTOACK_READY;
+        }
+        if (sampled != MAC_TIME_PENDING) return RADIO_AUTOACK_ATTEMPT_TIMER_ERROR;
+        result = progress();
+        if (result != RADIO_AUTOACK_READY) return result;
+    } while (status.polls < work.limit);
+    return RADIO_AUTOACK_WORK_LIMIT;
+}
+
+radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile uint16_t limit,
+                                            radio_autoack_handoff_clock_t MCU_XDATA * volatile clock)
+{
+    volatile MCU_XDATA radio_autoack_result_t result;
+    if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
+    if (!clock || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
+        return RADIO_AUTOACK_INVALID_ARGUMENT;
+    if (!radio_autoack_handoff_eligible()) return RADIO_AUTOACK_STATE;
+    result = storage(MMIO_XADDRESS(clock), sizeof(*clock));
+    if (result != RADIO_AUTOACK_READY) return result;
+    memset(&status, 0, sizeof(status)); work.limit = limit;
+    work.start = timebase_read_awake_ticks24(); work.previous = work.start;
+    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
+    status.phase = 22;
+    CHECK(poll()); CHECK(handoff_empty());
+    REQUIRE(work.expected_mask == 1 && work.tx_count == work.prepared_length + 1u &&
+            work.tx_last == work.prepared_length + 1u &&
+            (MMIO_XREAD(0x6081) & 0x20u) && MMIO_XREAD(0x6083) == staged.body[2],
+            RADIO_AUTOACK_STATE_CHANGED);
+    ROOM();
+    REQUIRE(mac_time_attempt_begin(timeout, limit, &clock->last) == MAC_TIME_OK,
+            RADIO_AUTOACK_ATTEMPT_TIMER_ERROR);
+    CHECK(handoff_sample(&clock->before));
+    work.byte = handoff_clear_sfd();
+    if (work.byte & 1u) status.writes++;
+    REQUIRE(!(work.byte & 0x20u), RADIO_AUTOACK_HANDOFF_RACE);
+    CHECK(handoff_sample(&clock->after));
+    REQUIRE(mac_time_attempt_end(timeout, limit, &clock->last) == MAC_TIME_OK,
+            RADIO_AUTOACK_ATTEMPT_TIMER_ERROR);
+    CHECK(attempt_elapsed(&clock->before, &clock->after));
+    /* Flash-cache stalls preclude a cycle-count timing assertion. Require a
+     * measured interval below one symbol, strictly shorter than the PHR byte.
+     */
+    REQUIRE(attempt.ticks < 512u, RADIO_AUTOACK_HANDOFF_RACE);
+    CHECK(poll()); CHECK(handoff_empty());
+    REQUIRE(!(status.flags0 & 2u), RADIO_AUTOACK_HANDOFF_RACE);
+    ROOM();
+    MMIO_XWRITE(0x6189, 0x60); work.profile = 2; status.writes++;
+    CHECK(poll()); CHECK(handoff_empty());
+    REQUIRE(!(status.flags0 & 2u), RADIO_AUTOACK_HANDOFF_RACE);
+    ROOM();
+    MMIO_XWRITE(0x6180, RADIO_AUTOACK_NORMAL_FILTER); work.profile = 0; status.writes++;
+    CHECK(poll()); CHECK(handoff_empty());
+    REQUIRE(!(status.flags0 & 2u), RADIO_AUTOACK_HANDOFF_RACE);
+    radio_autoack_state = RADIO_AUTOACK_RX;
+    status.phase = 23; status.result = RADIO_AUTOACK_READY;
+    return RADIO_AUTOACK_READY;
 failed:
     radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
     status.result = result;

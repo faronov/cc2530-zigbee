@@ -62,6 +62,12 @@ The interval prerequisite at `8f5a314` passed
 102/102 jobs, including all52 target groups for each board and every prior
 worker. This accepts that isolated scheduler/receipt-consumption increment,
 not #13/#14 as a whole.
+The next [guarded RX handoff](MAC_ATTEMPT.md#guarded-live-rx-handoff)
+adds a real prepared-state owner clock and a measured raw-ACK-to-v0/v1
+filter/AUTOACK transition without stopping RX or flushing a FIFO. Its
+isolated target proof and native interval-MAC composition remain distinct.
+Production adapter/combined MCU binding, loss-free closure and interval
+scan/POLL/association still remain; this does not close #13/#14 or #45.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

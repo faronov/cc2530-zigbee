@@ -20,6 +20,7 @@ COMPONENTS = {
         "test-mac-join", "test-zdo-node", "test-zdo-srv")),
     "mac-attempt": ("Offline MAC interval owner ({board})", ("test-mac-attempt",)),
     "mac-tx-interval": ("Offline interval MAC transmitter ({board})", ("test-mac-tx-interval",)),
+    "mac-handoff": ("Offline guarded RX handoff ({board})", ("test-mac-handoff",)),
     "security": ("Offline Zigbee security ({board})",
                  ("test-zigbee-security", "test-zigbee-mmo", "test-zigbee-key-hash")),
     "counters": ("Offline durable counters ({board})", ("test-security-counter",)),

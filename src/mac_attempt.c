@@ -138,4 +138,26 @@ const mac_radio_diagnostics_t MCU_XDATA *mac_attempt_diagnostic(void)
     if (mac_attempt_fault) return &failed_status;
     return mac_radio_diagnostic();
 }
+#if defined(CC2530_MAC_HANDOFF)
+mac_radio_result_t mac_attempt_now(uint32_t timeout, uint16_t limit,
+                                   mac_epoch_stamp_t MCU_XDATA *output)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (!output) return MAC_RADIO_INVALID_ARGUMENT;
+    result = storage(MMIO_XADDRESS(output), sizeof(*output));
+    if (result != MAC_RADIO_READY) return result;
+    return mac_radio_attempt_now(timeout, limit, output);
+}
+
+mac_radio_result_t mac_attempt_handoff(uint32_t timeout, uint16_t limit)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (last_result != MAC_RADIO_FRAME || staged.slot != mac_attempt_slot ||
+        !staged.transmitted || !staged.received || !staged.within_window)
+        return MAC_RADIO_STATE;
+    return mac_radio_handoff(timeout, limit);
+}
+#endif
 MCU_XDATA uint8_t mac_attempt_reserved_end;

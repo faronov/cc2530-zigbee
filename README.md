@@ -645,6 +645,15 @@ This is host-tested, image-checked and simulated; hardware timing, calibrated
 CCA and an interval-aware protocol adapter remain separate.
 No board image links it; never flash `mac_attempt_test.ihx`.
 
+The opt-in [guarded live handoff](docs/MAC_ATTEMPT.md#guarded-live-rx-handoff)
+adds owned clock sampling while TX is prepared, then a checked transition
+from the retained raw ACK to normal v0/v1 RX/AUTOACK without stopping RX.
+A real sub-symbol Timer2 bracket guards the SFD-flag clear; races and timing
+uncertainty retain faults. It is **host-tested, image-checked and simulated**.
+Its native interval-MAC binding and isolated lower-service MCU image are
+not yet the production/banked radio adapter or interval scan/POLL/association.
+No RF test or board image is added; never flash `mac_handoff_test.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

@@ -560,7 +560,10 @@ static void interval_radio_case(unsigned selected)
     assert(interval_tx.engine.phase == (selected == 4 ? MAC_TX_DRAW : MAC_TX_DONE));
 }
 #endif
-int main(int argc, char **argv)
+#ifndef MAC_ATTEMPT_MAIN
+#define MAC_ATTEMPT_MAIN main
+#endif
+int MAC_ATTEMPT_MAIN(int argc, char **argv)
 {
     unsigned n;
     (void)radio_autoack_component_main;

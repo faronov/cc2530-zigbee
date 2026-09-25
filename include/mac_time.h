@@ -113,5 +113,14 @@ mac_time_result_t mac_time_attempt_read(uint32_t timeout, uint16_t limit,
                                         mac_time_stamp_t MCU_XDATA *output);
 mac_time_result_t mac_time_attempt_end(uint32_t timeout, uint16_t limit,
                                        mac_time_stamp_t MCU_XDATA *output);
+#if defined(CC2530_MAC_HANDOFF)
+/* Internal active-scope one-latch reader into owned private staging, not caller
+ * storage. Low FF returns PENDING without changing the staged value; the radio
+ * owner charges its existing deadline/work budget before retrying. Copy the
+ * read-only value only after OK. Full begin/end validation remains mandatory.
+ */
+mac_time_result_t mac_time_handoff_read(void);
+const mac_time_stamp_t MCU_XDATA *mac_time_handoff_value(void);
+#endif
 #endif
 #endif

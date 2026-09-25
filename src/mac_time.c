@@ -305,4 +305,34 @@ mac_time_result_t mac_time_attempt_end(uint32_t timeout, uint16_t limit,
     return result;
 }
 #endif
+#if defined(CC2530_MAC_HANDOFF)
+mac_time_result_t mac_time_handoff_read(void)
+{
+    uint8_t low, high, a, b, c;
+    if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
+    if (!mac_time_ready || !mac_time_attempt_active) return MAC_TIME_NOT_INITIALIZED;
+    low = MMIO_READ(SOC_T2M0);
+    if (low == 255) {
+        status.result = MAC_TIME_PENDING;
+        return MAC_TIME_PENDING;
+    }
+    high = MMIO_READ(SOC_T2M1);
+    a = MMIO_READ(SOC_T2MOVF0);
+    b = MMIO_READ(SOC_T2MOVF1);
+    c = MMIO_READ(SOC_T2MOVF2);
+    if (high >= 2 || (a == 255 && b == 255 && c == 255)) {
+        mac_time_fault = status.result = MAC_TIME_COUNT_ERROR;
+        return MAC_TIME_COUNT_ERROR;
+    }
+    staged.fine = (uint16_t)low | ((uint16_t)high << 8);
+    staged.periods = (uint32_t)a | ((uint32_t)b << 8) | ((uint32_t)c << 16);
+    status.result = MAC_TIME_OK;
+    return MAC_TIME_OK;
+}
+
+const mac_time_stamp_t MCU_XDATA *mac_time_handoff_value(void)
+{
+    return &staged;
+}
+#endif
 MCU_XDATA uint8_t mac_time_reserved_end;

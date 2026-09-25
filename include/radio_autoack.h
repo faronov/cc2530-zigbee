@@ -6,6 +6,15 @@
 
 #include "cc2530_mmio.h"
 
+#if defined(CC2530_MAC_HANDOFF)
+#if !defined(CC2530_MAC_ATTEMPT) || !defined(CC2530_MAC_RADIO)
+#error MAC handoff requires the complete same-owner interval-attempt profile
+#endif
+#define RADIO_AUTOACK_NORMAL_FILTER 0x05
+#else
+#define RADIO_AUTOACK_NORMAL_FILTER 0x01
+#endif
+
 #define RADIO_AUTOACK_BODY_MAX 125u
 #define RADIO_AUTOACK_POWER_05 0x05u
 
@@ -20,6 +29,9 @@ typedef enum {
     RADIO_AUTOACK_TX_DONE, RADIO_AUTOACK_CCA_BUSY
 #if defined(CC2530_MAC_ATTEMPT)
     , RADIO_AUTOACK_ATTEMPT_TIMER_ERROR, RADIO_AUTOACK_ATTEMPT_LATE_ARM
+#endif
+#if defined(CC2530_MAC_HANDOFF)
+    , RADIO_AUTOACK_HANDOFF_RACE
 #endif
 } radio_autoack_result_t;
 
@@ -168,5 +180,23 @@ radio_autoack_result_t radio_autoack_prepare(
 radio_autoack_result_t radio_autoack_attempt(
     uint16_t window, uint32_t timeout, uint16_t limit,
     radio_autoack_attempt_t MCU_XDATA *output);
+#endif
+#if defined(CC2530_MAC_HANDOFF)
+typedef struct {
+    mac_time_stamp_t before, after, last;
+} radio_autoack_handoff_clock_t;
+/* Co-owner hooks, not standalone ownership or a MAC confirmation. Eligibility
+ * is history only, never a live no-race assertion. Handoff consumes the first
+ * CRC-good ACK already read by attempt, checks the immutable hardware TX DSN,
+ * and restores version<=1 filtering/AUTOACK without stopping RX. A new SFD,
+ * queued/partial frame, RF error or failed readback retains a terminal fault.
+ * Both SFD probes must fit inside a measured <512-tick live-clock bracket;
+ * instruction counts cannot bound flash-cache stalls. Clock staging is private,
+ * after the complete lower-service prefix, and is provisional on failure.
+ * No FIFO read/flush, strobe, receiver-mask write or recovery occurs.
+ */
+uint8_t radio_autoack_handoff_eligible(void);
+radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile uint16_t limit,
+                                            radio_autoack_handoff_clock_t MCU_XDATA * volatile clock);
 #endif
 #endif

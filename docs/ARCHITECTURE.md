@@ -85,6 +85,16 @@ contexts. The isolated linked scheduler and native lower-service receipt
 composition do not establish a full-MCU radio adapter or continuous AUTOACK
 handoff; the accepted banked join still uses synthetic PHY events.
 
+The subsequent opt-in [guarded handoff](MAC_ATTEMPT.md#guarded-live-rx-handoff)
+adds actual top-level live sampling while PREPARED and restores normal v0/v1
+RX/AUTOACK after the retained matching first raw ACK. It checks actual FIFO
+identity, empty/activity predicates and a measured sub-symbol SFD-clear
+bracket, then verifies each configuration transition. It never stops RX,
+reads/flushes a FIFO or converts an interval to a captured timestamp.
+Uncertainty retains the fault and physical ownership. Separate MCU
+lower-service execution and a native interval-MAC binding do not yet supply
+the production adapter, loss-free POLL closure or banked real-radio join.
+
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
 probe is confined to the target example. It shares existing startup/board
