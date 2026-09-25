@@ -1,22 +1,14 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
-#include "nwk_aps.h"
-#include "security_keys.h"
+#include "nwk_aps_internal.h"
 #include <stddef.h>
 #include <string.h>
 
-static MCU_XDATA security_keys_status_t keys;
-static MCU_XDATA mac_header_t mac_header;
-static MCU_XDATA mac_tx_event_t cancellation;
-static MCU_XDATA nwk_frame_info_t hint;
-
-/* Frame control/DSN(3), destination PAN/short(4), compressed source short(2).
- * This profile never changes MAC addressing shape. Keep the real codec's
- * input/output disjoint by encoding a zero-payload header into this prefix.
- */
-#define MAC_PREFIX 9u
-typedef char mac_payload_extent[MAC_PREFIX+NWK_FRAME_MAX_BODY == MAC_FRAME_MAX_BODY ? 1 : -1];
+MCU_XDATA security_keys_status_t nwk_aps_keys;
+/* The active-MAC step returns before transmit construction. Receive parsing
+ * is a separate foreground call; no lower service retains these views. */
+MCU_XDATA nwk_aps_work_t nwk_aps_work;
 
 static uint8_t reached(uint32_t now, uint32_t until)
 {
@@ -31,21 +23,21 @@ static nwk_aps_result_t advance(nwk_aps_t * volatile ctx, volatile uint32_t now)
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner, volatile uint8_t endpoint,
-    volatile uint16_t profile, const ccm_star_limits_t * volatile limits, volatile uint16_t nv_polls,
-    volatile uint32_t ack_wait, volatile uint32_t broadcast_time, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner,
+    const nwk_aps_config_t * volatile config, volatile uint32_t now)
 {
-    if (!ctx || !owner || !limits || !endpoint || endpoint == 255 || !profile ||
-        !limits->block_timeout || !limits->block_polls || !nv_polls ||
-        ack_wait < 93750UL || ack_wait >= MAC_TX_HALF/8u || !broadcast_time || broadcast_time >= MAC_TX_HALF)
+    if (!ctx || !owner || !config || !config->endpoint || config->endpoint == 255 || !config->profile ||
+        !config->limits.block_timeout || !config->limits.block_polls || !config->nv_polls ||
+        config->ack_wait < 93750UL || config->ack_wait >= MAC_TX_HALF/8u ||
+        !config->broadcast_time || config->broadcast_time >= MAC_TX_HALF)
         return NWK_APS_ARGUMENT;
     if (owner->phase != MAC_TX_IDLE) return NWK_APS_STATE;
     memset(ctx, 0, sizeof(*ctx));
-    ctx->owner = owner; ctx->endpoint = endpoint; ctx->profile = profile;
-    ctx->limits = *limits; ctx->nv_polls = nv_polls; ctx->last = now;
-    ctx->ack_wait = ack_wait;
-    ctx->broadcast_time = broadcast_time;
-    ctx->duplicate_time = (ack_wait+NWK_APS_TX_LIFETIME+MAC_TX_STOP_SYMBOLS)*4u;
+    ctx->owner = owner; ctx->endpoint = config->endpoint; ctx->profile = config->profile;
+    ctx->limits = config->limits; ctx->nv_polls = config->nv_polls; ctx->last = now;
+    ctx->ack_wait = config->ack_wait;
+    ctx->broadcast_time = config->broadcast_time;
+    ctx->duplicate_time = (config->ack_wait+NWK_APS_TX_LIFETIME+MAC_TX_STOP_SYMBOLS)*4u;
     if (ctx->duplicate_time < NWK_APS_DUPLICATE_TIME) ctx->duplicate_time = NWK_APS_DUPLICATE_TIME;
     ctx->version = NWK_APS_VERSION;
     return NWK_APS_OK;
@@ -103,7 +95,7 @@ nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t
     return NWK_APS_OK;
 }
 
-static void complete(nwk_aps_t * volatile ctx, volatile uint8_t result)
+void nwk_aps_complete(nwk_aps_t * volatile ctx, volatile uint8_t result)
 {
     ed_packet_t * volatile p = &ctx->outgoing;
     ctx->queued = ctx->waiting = 0; ctx->completed = 1; ctx->result = result;
@@ -111,21 +103,21 @@ static void complete(nwk_aps_t * volatile ctx, volatile uint8_t result)
     if (result || ctx->special || p->nwk.type || p->aps.type || p->aps.profile_id ||
         p->aps.source_endpoint || p->aps.destination_endpoint || p->aps.delivery_mode != 2)
         return;
-    if (security_keys_status(&keys) != SECURITY_KEYS_OK) return;
+    if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return;
     if (p->aps.cluster_id == 0x0013u && p->length == 12 && p->nwk.destination == 0xfffdu &&
-        p->payload[1] == (uint8_t)keys.config.address &&
-        p->payload[2] == (uint8_t)(keys.config.address >> 8) &&
-        !memcmp(p->payload+3, keys.config.own_ieee, 8) &&
+        p->payload[1] == (uint8_t)nwk_aps_keys.config.address &&
+        p->payload[2] == (uint8_t)(nwk_aps_keys.config.address >> 8) &&
+        !memcmp(p->payload+3, nwk_aps_keys.config.own_ieee, 8) &&
         (p->payload[11] == 0x88 || p->payload[11] == 0x8c))
         ctx->announced = 1;
     if (p->aps.cluster_id == 0x0036u && p->length == 3 && p->payload[1] >= 180 &&
         p->payload[2] == 1 && p->nwk.destination == 0xfffcu && ctx->announced &&
-        keys.phase == SECURITY_KEYS_VERIFIED) {
+        nwk_aps_keys.phase == SECURITY_KEYS_VERIFIED) {
         ctx->permit_sent = ctx->ready = 1;
     }
 }
 
-static nwk_aps_result_t broadcast_slot(nwk_aps_t * volatile ctx, volatile uint16_t source, volatile uint8_t sequence,
+nwk_aps_result_t nwk_aps_broadcast_slot(nwk_aps_t * volatile ctx, volatile uint16_t source, volatile uint8_t sequence,
                                       volatile uint32_t now, uint8_t * volatile slot)
 {
     uint8_t i;
@@ -138,71 +130,12 @@ static nwk_aps_result_t broadcast_slot(nwk_aps_t * volatile ctx, volatile uint16
     return *slot == NWK_APS_DUPLICATES ? NWK_APS_FULL : NWK_APS_OK;
 }
 
-static void remember_broadcast(nwk_aps_t * volatile ctx, volatile uint8_t slot, volatile uint16_t source,
+void nwk_aps_broadcast_put(nwk_aps_t * volatile ctx, volatile uint8_t slot, volatile uint16_t source,
     volatile uint8_t sequence, volatile uint32_t now)
 {
     nwk_aps_duplicate_t * volatile entry = &ctx->broadcast[slot];
     entry->used = 1; entry->source = source; entry->counter = sequence;
     entry->until = now+ctx->broadcast_time;
-}
-
-static nwk_aps_result_t transmit(nwk_aps_t * volatile ctx, volatile uint8_t acknowledgment, volatile uint32_t now)
-{
-    ed_packet_t * volatile p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
-    security_keys_result_t secured;
-    nwk_aps_result_t btr;
-    uint8_t slot;
-    if (security_keys_status(&keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
-    p->nwk.source = keys.config.address; p->nwk.sequence = ctx->next_nwk++;
-    if (!p->nwk.type && !ctx->special && p->nwk.destination < 0xfffbu)
-        p->nwk.discover_route = NWK_DISCOVER_ROUTE_ENABLE;
-    p->nwk.flags &= (uint16_t)~NWK_FLAG_END_DEVICE_INITIATOR;
-    if (ctx->parent_information) p->nwk.flags |= NWK_FLAG_END_DEVICE_INITIATOR;
-    if (!acknowledgment && ctx->special) {
-        if (ctx->special == 3) {
-            secured = security_keys_leave(p->nwk.sequence, ctx->mac+MAC_PREFIX, NWK_FRAME_MAX_BODY,
-                &ctx->length, &ctx->limits, ctx->nv_polls);
-            if (secured == SECURITY_KEYS_OK && !ctx->length) {
-                ctx->quiet = 1; complete(ctx, NWK_APS_OK);
-                return NWK_APS_OK;
-            }
-        } else secured = ctx->special == 1 ?
-            security_keys_request(p->nwk.sequence, p->aps.counter, ctx->mac+MAC_PREFIX, NWK_FRAME_MAX_BODY,
-                                  &ctx->length, &ctx->limits, ctx->nv_polls) :
-            security_keys_verify(p->nwk.sequence, p->aps.counter, ctx->mac+MAC_PREFIX, NWK_FRAME_MAX_BODY,
-                                 &ctx->length, &ctx->limits, ctx->nv_polls);
-    } else {
-        secured = security_keys_send(p, acknowledgment ? ctx->reply_secure : ctx->secure,
-            ctx->mac+MAC_PREFIX, NWK_FRAME_MAX_BODY, &ctx->length, &ctx->limits, ctx->nv_polls);
-    }
-    if (secured) { ctx->error = (uint8_t)secured; return NWK_APS_SECURITY; }
-    if (!acknowledgment && (ctx->special == 3 || (!ctx->special && p->nwk.destination >= 0xfffbu))) {
-        btr = broadcast_slot(ctx, keys.config.address, p->nwk.sequence, now, &slot);
-        if (btr) return btr == NWK_APS_DUPLICATE ? NWK_APS_EXHAUSTED : btr;
-        remember_broadcast(ctx, slot, keys.config.address, p->nwk.sequence, now);
-    }
-    memset(&mac_header, 0, sizeof(mac_header));
-    mac_header.type = MAC_FRAME_DATA; mac_header.flags = MAC_FLAG_PAN_COMPRESSION;
-    mac_header.source_mode = mac_header.destination_mode = MAC_ADDRESS_SHORT;
-    mac_header.source_pan = mac_header.destination_pan = keys.config.pan;
-    mac_header.source[0] = (uint8_t)keys.config.address;
-    mac_header.source[1] = (uint8_t)(keys.config.address >> 8);
-    /* R22 3.6.5: an ED sends NWK broadcasts to its parent's short address,
-     * without MAC ACK, rather than acting as a broadcasting router. */
-    if (acknowledgment || (ctx->special != 3 && (ctx->special || p->nwk.destination < 0xfffbu)))
-        mac_header.flags |= MAC_FLAG_ACK_REQUEST;
-    if (!ctx->length || ctx->length > NWK_FRAME_MAX_BODY ||
-        mac_frame_encode(&mac_header, NULL, 0, ctx->mac,
-                         MAC_PREFIX, &ctx->mac_length) != MAC_CODEC_OK ||
-        ctx->mac_length != MAC_PREFIX)
-        return NWK_APS_WIRE;
-    ctx->mac_length += ctx->length;
-    if (mac_tx_submit(ctx->owner, ctx->mac, ctx->mac_length, now,
-                      NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
-        return NWK_APS_RADIO;
-    ctx->active = 1; ctx->active_ack = acknowledgment;
-    if (!acknowledgment) ctx->sent = 0;
-    return NWK_APS_OK;
 }
 
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
@@ -219,11 +152,11 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
     }
     if (ctx->active) {
         if ((ctx->stopping || (ctx->cancel && !ctx->active_ack)) && !ctx->cancel_sent && !event) {
-            memset(&cancellation, 0, sizeof(cancellation));
-            cancellation.kind = MAC_TX_EVENT_CANCEL;
-            cancellation.generation = ctx->owner->generation;
-            cancellation.retry = ctx->owner->retries; cancellation.nb = ctx->owner->nb;
-            cancellation.stamp = now; event = &cancellation; ctx->cancel_sent = 1;
+            memset(&nwk_aps_work.cancellation, 0, sizeof(nwk_aps_work.cancellation));
+            nwk_aps_work.cancellation.kind = MAC_TX_EVENT_CANCEL;
+            nwk_aps_work.cancellation.generation = ctx->owner->generation;
+            nwk_aps_work.cancellation.retry = ctx->owner->retries; nwk_aps_work.cancellation.nb = ctx->owner->nb;
+            nwk_aps_work.cancellation.stamp = now; event = &nwk_aps_work.cancellation; ctx->cancel_sent = 1;
         }
         if (mac_tx_step(ctx->owner, now, event, action) != MAC_TX_OK) return NWK_APS_RADIO;
         if (!ctx->active_ack && ctx->owner->transmissions) ctx->sent = 1;
@@ -238,34 +171,34 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
         if (ctx->active_ack) {
             ctx->reply = ctx->cancel_sent = 0; ctx->reply_result = outcome;
             if (outcome != MAC_TX_ACKED && !ctx->stopping) return NWK_APS_ACK_FAILED;
-        } else if (ctx->cancel) complete(ctx, ctx->cancel_result);
+        } else if (ctx->cancel) nwk_aps_complete(ctx, ctx->cancel_result);
         else if (outcome != MAC_TX_ACKED && outcome != MAC_TX_UNACKNOWLEDGED) {
-            complete(ctx, NWK_APS_RADIO);
+            nwk_aps_complete(ctx, NWK_APS_RADIO);
         } else if (!ctx->special && (ctx->outgoing.aps.flags & APS_FLAG_ACK_REQUEST) &&
                    !ctx->outgoing.nwk.type && !ctx->seen_ack) {
             ctx->waiting = 1; ctx->deadline = now+ctx->ack_wait;
-        } else complete(ctx, NWK_APS_OK);
+        } else nwk_aps_complete(ctx, NWK_APS_OK);
         return NWK_APS_OK;
     }
     if (event) return NWK_APS_IGNORED;
     if (ctx->owner->phase != MAC_TX_IDLE) return NWK_APS_STATE;
     if (ctx->stopping) {
         if (ctx->reply) { ctx->reply = 0; ctx->reply_result = MAC_TX_CANCELLED; }
-        if (ctx->queued) complete(ctx, NWK_APS_CANCELLED);
+        if (ctx->queued) nwk_aps_complete(ctx, NWK_APS_CANCELLED);
         ctx->stopping = ctx->cancel = ctx->cancel_sent = 0;
         return NWK_APS_OK;
     }
-    if (ctx->cancel && ctx->queued) complete(ctx, ctx->cancel_result);
-    if (ctx->waiting && ctx->seen_ack) complete(ctx, NWK_APS_OK);
+    if (ctx->cancel && ctx->queued) nwk_aps_complete(ctx, ctx->cancel_result);
+    if (ctx->waiting && ctx->seen_ack) nwk_aps_complete(ctx, NWK_APS_OK);
     if (ctx->waiting && reached(now, ctx->deadline)) {
         ctx->waiting = 0;
-        if (ctx->retries == NWK_APS_RETRIES) complete(ctx, NWK_APS_TIMEOUT);
+        if (ctx->retries == NWK_APS_RETRIES) nwk_aps_complete(ctx, NWK_APS_TIMEOUT);
         else { ctx->retries++; ctx->sent = ctx->seen_ack = 0; }
     }
     if (ctx->reply || (ctx->queued && !ctx->waiting)) {
-        result = transmit(ctx, ctx->reply, now);
+        result = nwk_aps_transmit(ctx, ctx->reply, now);
         if (result) {
-            if (!ctx->reply) complete(ctx, (uint8_t)result);
+            if (!ctx->reply) nwk_aps_complete(ctx, (uint8_t)result);
             return result;
         }
         if (!ctx->active) return NWK_APS_OK;
@@ -316,9 +249,9 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
     if (result) return result;
     if (ctx->stopping) return NWK_APS_STATE;
     if (ctx->receive_ready || ctx->reply) return NWK_APS_FULL;
-    if (ed_wire_nwk(npdu, length, &hint) != ZIGBEE_SECURITY_OK) return NWK_APS_WIRE;
-    if (hint.header.destination >= 0xfffbu) {
-        result = broadcast_slot(ctx, hint.header.source, hint.header.sequence, now, &slot);
+    if (ed_wire_nwk(npdu, length, &nwk_aps_work.hint) != ZIGBEE_SECURITY_OK) return NWK_APS_WIRE;
+    if (nwk_aps_work.hint.header.destination >= 0xfffbu) {
+        result = nwk_aps_broadcast_slot(ctx, nwk_aps_work.hint.header.source, nwk_aps_work.hint.header.sequence, now, &slot);
         if (result) return result;
         broadcast = 1;
     }
@@ -333,7 +266,7 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
         result = NWK_APS_SECURITY; goto discard;
     }
     p = &ctx->incoming;
-    if (broadcast) remember_broadcast(ctx, slot, p->nwk.source, p->nwk.sequence, now);
+    if (broadcast) nwk_aps_broadcast_put(ctx, slot, p->nwk.source, p->nwk.sequence, now);
     if (!p->nwk.type && p->nwk.destination >= 0xfffbu && (p->aps.flags & APS_FLAG_ACK_REQUEST)) {
         result = NWK_APS_WIRE; goto discard;
     }

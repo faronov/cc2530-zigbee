@@ -217,33 +217,77 @@ case, memory cap or simulator deadline was relaxed.
 
 ### Current explicit-reception profile (#64)
 
-The current composition is genuinely **32641 CODE /1925 ordinary XDATA +64
-reserved**, stack start4C/unwind4B/observed peak7B. The same CODE8000,
-reservation2048 and SP7C caps leave **127 CODE bytes,59 reservation bytes and
-one SP increment to the cap**. These are test-composition margins, not
+The current composition is genuinely **32593 CODE /1874 ordinary XDATA +64
+reserved**, stack start4C/unwind4B/observed peak72. The same CODE8000,
+reservation2048 and SP7C caps leave **175 CODE bytes,110 reservation bytes and
+ten SP increments to the cap**. These are test-composition margins, not
 deployment or ISR-nesting capacity.
 
-`mac_poll` is7619 CODE/350 XSEG/5 DSEG/0 OSEG/4 BSEG bits; its caller is
-8762 CODE/1068 XSEG/0 DSEG/0 OSEG/2 bits. Other modules and public layouts
-are unchanged. Private/caller/runtime XDATA account for833/1068/24 bytes.
+`mac_poll` is7614 CODE/299 XSEG/5 DSEG/0 OSEG/3 BSEG bits; its caller is
+8762 CODE/1068 XSEG/0 DSEG/0 OSEG/2 bits. The complete-join decoder lowering
+changes `mac_frame` to7093 CODE/216 XSEG/12 DSEG; public layouts remain
+unchanged. Private/caller/runtime XDATA account for782/1068/24 bytes.
 Both boards produce identical IHX and CDB bytes.
 
-The complete proof checks23 public entries and22455 raw F/S/L/T rows
-(41/559/21804/51), all five immediate relocated listings,164 ordered CODE
+The complete proof checks23 public entries and22456 raw F/S/L/T rows,
+all five immediate relocated listings,164 ordered CODE
 data bytes and56 switch targets. Both step entries must actually call the
 same private worker; the genuine caller invokes both profile-aware POLL and
 Association APIs. **278 artifact +1 alias +17 continuation negatives pass.**
 All56 cases execute in14 four-case processes with complete-state restoration
 and the original15-second per-process limit; no instruction/return is patched.
 
+The following hashes record the preceding returning-work image; the refreshed
+complete byte/metadata identities are pinned in `tests/boot_mac_poll.py`.
+
 ```
 contiguous CODE SHA256
-9758b6de16fedd17df3d8dfac38e5138b53edf9d8cc78ea0b382f7b55cbdb0d1
+dd03465761fc45ae5026aa6c430043104c424b052a8b32421015f890dd8cab82
 IHX SHA256
-d76d7e8212d849e24d1973ff99f425f2e829f94e5e090e6f6fcc1e90b1566a32
+a9cf702d119196220573422b5308a15cd647659c7f72bacaccfacb4aa9cac1a7
 full non-public-entry F/S/L/T SHA256
-6554dce6aa96e6cfaabe9afcacac68dc54fa1f04aa588fb69feb242eddca6d83
+188970e48f007876ec6998059c6ea46f944f8082450338f5a54009a5489dd0ec
 ```
+
+### Returning-work ownership
+
+The2026-09-25 original BSD refactoring reduces this object's ordinary XDATA
+350→299 and CODE7619→7614 on both board definitions. Public266-byte contexts
+and the real123-byte control staging remain unchanged. No DATA reservation,
+stack cap, wire/timing interpretation, owner/lease or failure result changes.
+
+The28-byte `syntax` union holds the actual26-byte encoder header in `start`
+or28-byte decoded frame in `step`. These foreground entries cannot overlap.
+Every header field is replaced before encoding, including zero version and
+sequence. The command byte, complete control, retained receipt and I/O stay
+outside that syntax slot; no mirror struct or pointer cast is used.
+
+The48-byte `io` union holds either the copied input48 or constructed
+output25. All original-event ACK witnessing, FRAME parsing/copying and
+CLOSED watermark checks finish before `publish` clears/constructs output.
+Every early jump to publication has DONE or FAULT phase, so none can issue
+an ARM, active-TX or DRAIN action. No input field is read after the handoff.
+API errors still return before publication without touching caller outputs.
+The receipt body is independent and survives take, later errors and scratch
+reuse. Real codec/TX calls and per-call profile selection remain unchanged.
+
+Both-board native/nonrecovering ASan/UBSan runs pass the full existing corpus
+plus an interleaved decoded-frame/encoder-header/invalid-input/cleanup
+regression with complete original receipt/control/TX/output comparisons.
+The full56-case generic target replay and all278 artifact, alias and17
+continuation negatives pass at unchanged SP7B/7C and15-second process bounds.
+Both-board linked CODE/raw-CDB/parsed-map/memory/immediate-listing identities
+and complete object-area inventories match. The union types/member extents
+are checked explicitly in both strict POLL and association verifiers.
+
+Together with [association work reuse](MAC_JOIN.md#returning-work-reduction-2026-09-25)
+this saves233 XDATA bytes, not the requested600-byte resource objective or
+complete MCU join acceptance. TI **SWRU191F, revised April2014**, §2.2.2
+pp27–28 remains the memory basis: ordinary allocation stays below1E00,
+status reservation remains separate, and1F00..1FFF is only the IRAM alias.
+**SWRZ031, April2009**, Table1/§1.1/§1.2 concerns are unaffected; no DMA/timer,
+GPIO, USB, RF, SDK or private input is introduced. No hardware evidence is
+claimed and #40/#45 remain open.
 
 The independent Association/TX floor does not link `mac_poll` and retains
 the #63 identity and108 cases. The following ledgers preserve earlier

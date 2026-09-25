@@ -202,7 +202,183 @@ remains UNBOUND. Response DSN is the coordinator's DSN, not either Request DSN.
 No result implies PIB installation, MAC membership, successful response ACK,
 network admission, BDB completion or security.
 
-## Reproducible evidence and resources
+## Returning-work reduction (2026-09-25)
+
+The returning-work step used **32310..32744/32768 CODE** and
+**2884+64/3200 XDATA reservation**. All22 rows below retain their original
+events, outcomes and SP peaks; subtract19 CODE bytes from each historical
+row. Worst CODE headroom is24 bytes. Stack starts at51, unwinds to50 and
+still peaks at7C under the unchanged7C cap.
+
+The later complete-join decoder lowering reduces each image by a further43
+CODE bytes: current profiles use32267..32701 CODE, the same2884 ordinary
+XDATA and stack start51, with measured peaks65..73. All22 original profiles
+and116 artifact/12 guard/3 peak negatives per profile still execute on both
+boards. Only compiler pointer/length copies change; command admission and
+the error-atomic645-byte controller/shadow contract remain unchanged.
+
+The measured SDCC4.2 large-model object costs are identical for `generic`
+and `lg_esl29_rev03`:
+
+| Object | CSEG before → after | XSEG before → after | DSEG | OSEG | BSEG bits before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| mac_join | 7184 → 7170 | 1067 → 885 | 5 → 5 | 0 → 0 | 1 → 1 |
+| mac_poll | 7619 → 7614 | 350 → 299 | 5 → 5 | 0 → 0 | 4 → 3 |
+
+CONST stays zero. The combined saving is **233 ordinary-XDATA and19 CODE
+bytes**, not600 bytes or proof of complete MCU fit. The full645-byte
+transactional `mac_join_t` staging object is deliberately retained. Public
+contexts, requests, events, actions, diagnostics and pointer qualifiers do
+not change. Complete composition ownership is now production0..1666,
+caller1667..2857 and libc2858..2883 (1667/1191/26 bytes); reserved status and
+the entire unallocated region remain guarded. No DATA overlay or new stack
+capacity is introduced.
+
+The real165-byte C union contains either97-byte start work or165-byte step
+work. Start's43-byte proposed request,26-byte header,2-byte command,25-byte
+encoded body and length remain mutually disjoint while the real codec runs.
+Every header field is assigned, including zero version/sequence, before
+encoding; prior step bytes cannot supply an accidental header field.
+During step, input48, output44 and POLL action25 remain distinct throughout.
+Only the nested48-byte slot is reused, in this actual returning order:
+
+1. `pr` is consumed by genuine `mac_poll_start` before extraction uses `pe`.
+2. `pe` is consumed by genuine `mac_poll_step_rx` before `window` constructs `ar`.
+3. `ar` is consumed by genuine `mac_association_start` before `receipt` constructs `ae`.
+4. FRAME `ae` is consumed before `finish_window` can reuse it for CANCEL.
+   Its borrowed body is in `staged.record.poll`, never in the returning slot.
+
+All nested contexts, records and outgoing bytes stay outside this union;
+`pa` remains live across `window/receipt/finish_window`. No returning member
+is retained by a lower service. The [POLL unions](MAC_POLL.md#returning-work-ownership)
+likewise never overlap this caller's live work.
+
+Both-board native and nonrecovering ASan/UBSan runs retain the original
+corpora and repeat all22 sequences with284 interleaved, genuinely
+cancelled/restored/taken/released attempts in an independent synthetic device
+world. They compare full original context/TX/event/action/receipt bytes and
+exercise rejected calls after scratch reuse. No faulted owner is reset.
+All22 generic images were independently replayed with116 artifact,
+12 guard and3 peak negatives each, plus the original alias/four-MMIO
+controls. Both boards pass the complete image/ABI checks and have identical
+linked CODE, raw CDB, parsed map, memory report and immediate listing bytes,
+and identical complete object-area inventories. Unlinked `.rel` files differ
+only in the build-directory `;!FILE` comment. Full Actions acceptance is
+separate; this is focused local evidence, not a new hardware observation.
+
+These are original BSD refactorings, with no new wire interpretation,
+dependency or peripheral access. Memory facts remain TI **SWRU191F, revised
+April2014**, §2.2.2 pp27–28: `1F00..1FFF` is the IRAM alias, not another pool.
+**SWRZ031, April2009**, Table1/§1.1/§1.2 DMA and MAC Timer concerns are
+unchanged; neither peripheral is touched. #40/#45 and physical gates remain
+open. Larger in-place/partial-control experiments failed the old CODE/DATA
+constraints and are not production changes.
+
+## Full-profile static shadow binding (compile-only)
+
+`CC2530_JOIN_WORKSPACE` is an explicit full-composition storage opt-in,
+**not banking, a new public ABI, or complete-image acceptance**. The ordinary
+component retains its private `static mac_join_t MAC_JOIN_RAM staged`.
+With the flag, the same source instead declares:
+
+```c
+extern mac_join_t MAC_JOIN_RAM mac_join_staged;
+```
+
+Every existing `staged` use names that statically addressed symbol. There is
+no workspace pointer, additional parameter, shortened snapshot, in-place
+mutation, successful service stub or fallback allocation. No `JOIN_FAR`,
+banking-header or stack-policy change accompanies this option.
+
+SDCC4.2 large-model measurements, identical on both board definitions:
+
+| mac_join object | CSEG | Ordinary XSEG | DSEG | OSEG | BSEG bits | CONST |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ordinary | 7170 | 885 | 5 | 0 | 1 | 0 |
+| External shadow | 7170 | 240 | 5 | 0 | 1 | 0 |
+
+The645-byte allocation is removed from this **object**, not from the
+application's memory requirement. Its `.rel` contains an unresolved
+`_mac_join_staged` reference. There are4640 identical emitted instructions
+and235 direct-symbol operands: the complete `.asm` is identical after
+removing precisely the private645-byte declaration and renaming that symbol.
+The complete `.adb` differs only in the full object's static/global linkage
+record; all types, parameters, private locals, return ABIs and qualifiers
+remain identical. Complete `.rel`, `.asm`, `.lst` and `.adb` identities are
+pinned by the separate object check, including assembled bytes/relocations.
+Only the `.rel` build-path comment is excluded, never object contents.
+Its32 negative controls reject changed bytes, wrong type/size/linkage,
+extra shadow allocation, pointer substitution and the ordinary object passed
+as the external profile.
+
+### Required integrator proof
+
+The integrator must bind `_mac_join_staged` to the exact address of a real
+C-allocated, complete `mac_join_t` field. A proposed association aggregate is
+`{ mac_join_t context; mac_join_t staged; }` inside a separately proved phase
+union. A linker alias by itself reserves **no memory**. The full linked map,
+raw CDB/type/member offset, enclosing allocation and complete simultaneous
+lifetimes must prove that binding and disjointness from the live context,
+TX owner, input/output/request spans, other returning work and libc scratch.
+The complete645-byte extent must remain below1E00; status, MMIO, CODE and
+the1F00..1FFF IRAM alias are never possible backing allocations.
+
+The shadow is used by `init`, `start`, **every `step` and its nested helpers**,
+and `release`, not merely admission. It must remain exclusively available
+until each operation returns. `take` uses the caller's retained record.
+The actual full-context copies/publication and all error paths are unchanged.
+No association/runtime union reuse is admitted while a call is active or
+while the parent still needs the retained association context; failed cleanup
+cannot be turned into release. Required outcome/timestamp metadata must be
+preserved outside any reused phase storage.
+
+The proposed1290-byte aggregate versus1042-byte runtime member would grow the
+phase union by248 while removing645 private bytes: a **potential397-byte net
+saving**, or630 with the earlier233-byte reduction. This arithmetic is not
+a measured full-profile allocation, DATA/stack proof, linked image or
+alias-aware execution result. Those aggregate/binding/phase-lifetime gates
+remain the responsibility of the complete composition.
+
+### Focused reproduction and evidence
+
+For the generic board (`CC2530_BOARD=1` selects the corresponding LG object):
+
+```sh
+make -s -j1 BOARD=generic BUILD=build/stage2-mac-static/default-generic \
+  build/stage2-mac-static/default-generic/mac_join.rel
+mkdir -p build/stage2-mac-static/external-generic
+sdcc -mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror \
+  -Iinclude -DCC2530_BOARD=0 -DCC2530_JOIN_WORKSPACE \
+  -c src/mac_join.c -o build/stage2-mac-static/external-generic/mac_join.rel
+python3 -B tests/boot_mac_join.py \
+  --output build/stage2-mac-static/default-generic \
+  --check-workspace-object build/stage2-mac-static/external-generic
+```
+
+The explicit object-check mode does not link, bind an address, simulate or
+access hardware. Normal `test-mac-join` retains all22 cases and its existing
+budgets, negative controls and15-second simulator deadlines. All22 rebuilt
+ordinary executables, parsed maps and memory reports match the fully
+replayed233-byte-reduction baseline exactly; only source/debug/listing
+metadata changes, with complete updated manifest pins.
+All22 updated ordinary image/ABI checks pass. Focused ordinary case20 was
+also replayed through its real retained-fault/receipt path at unchanged SP7C,
+with116 artifact,12 guard,3 peak, one alias and four MMIO negative controls.
+No external-shadow target link or simulation was performed.
+
+Native and nonrecovering ASan/UBSan external-shadow runs pass on both boards,
+including all22 sequences, the existing exact-span/admission cases and284
+interleaved retired attempts. Only those host tests provide a separate real
+global shadow definition; it is not a target aggregate or SRAM-fit proof.
+This is original BSD storage/linkage work using the same SWRU191F §2.2.2
+memory-space basis cited above. No wire, peripheral, physical or #40/#45
+acceptance boundary changes.
+
+## Reproducible evidence and historical resources
+
+The following numeric ledger records the pre-union profile. The current
+costs/ownership above supersede its resource numbers; commands, all22 cases,
+public layouts, budgets, deadline and acceptance obligations remain intact.
 
 Canonical target: `test-mac-join`, with strict `host-mac-join-tests` and
 nonrecovering `host-mac-join-tests-sanitize`. Native runs all 22 sequences
@@ -271,9 +447,9 @@ Stack starts at 0x51, checkpoint SP is 0x50, independently measured uninterrupte
 peaks are 0x6E..0x7C under the unchanged 0x7C cap. These are standalone composition
 costs, not full-stack or interrupt headroom. No old budget or corpus changes.
 
-Exact object-area identities, complete artifact-manifest hashes, ABI and
+Current object-area identities, complete artifact-manifest hashes, ABI and
 allocation maps are pinned in `boot_mac_join.py` (`OBJECTS`, `PINS`, `PUBLIC`,
-`FIELDS`, `CALLER`, `RUNTIME`). Ordinary XDATA ownership is production
+`FIELDS`, `CALLER`, `RUNTIME`). Historical ordinary XDATA ownership was production
 0..1899, caller 1900..3090 and runtime 3091..3116. The result occupies
 0x1E00..0x1E07; the remaining reserved status bytes and all unallocated
 ordinary XDATA stay guarded. XDATA 0x1F00..0x1FFF is only the genuine IRAM

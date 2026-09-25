@@ -10,7 +10,7 @@
 #include "zdo_runtime.h"
 
 #define BDB_JOIN_RAM MAC_JOIN_RAM
-#define BDB_JOIN_VERSION 2u
+#define BDB_JOIN_VERSION 3u
 #define BDB_JOIN_SECURITY_WAIT 625000UL
 #define BDB_JOIN_EXCHANGE_WAIT 312500UL
 #define BDB_JOIN_KEEPALIVE 1875000UL
@@ -47,10 +47,8 @@ typedef struct {
     mac_scan_request_t scan;
     mac_join_request_t association;
     zdo_node_descriptor_t descriptor;
-    ccm_star_limits_t crypto;
-    uint32_t ack_wait, broadcast_time;
-    uint16_t nv_polls, profile;
-    uint8_t endpoint, link_cost;
+    nwk_aps_config_t transport;
+    uint8_t link_cost;
 } bdb_join_config_t;
 
 typedef union {
@@ -94,9 +92,16 @@ typedef struct {
     zdo_runtime_t zdo;
 } bdb_join_runtime_t;
 
+typedef struct {
+    mac_join_t context;
+#if defined(CC2530_JOIN_WORKSPACE)
+    mac_join_t staged;
+#endif
+} bdb_join_association_t;
+
 typedef union {
     mac_scan_t scan;
-    mac_join_t association;
+    bdb_join_association_t association;
     bdb_join_runtime_t runtime;
 } bdb_join_work_t;
 
@@ -145,19 +150,19 @@ typedef struct {
  * application readiness but preserve durable keys for explicit recovery;
  * commissioning abandonment/address conflict still requests genuine Leave.
  */
-bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now);
+bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_t BDB_JOIN_RAM * volatile owner,
-    const bdb_join_config_t * volatile config, volatile uint32_t now);
+    const bdb_join_config_t * volatile config, volatile uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now,
-    const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action);
+    const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action) JOIN_FAR;
 /* FCS-free DATA body; CRC truth is PHY metadata, never authentication.
  * Authentication, replay checks and all key decisions execute real C services.
  */
 bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now);
+    const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now);
-bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result);
+    const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now) JOIN_FAR;
+bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result) JOIN_FAR;
 
 /* Public context fields are read-only diagnostics. Inspect workspace before
  * reading work.scan, work.association or work.runtime; inactive union members

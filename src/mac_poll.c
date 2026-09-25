@@ -6,8 +6,22 @@
 #include <string.h>
 
 static mac_poll_control_t MAC_POLL_RAM control;
-static mac_poll_event_t MAC_POLL_RAM input;
-static mac_poll_action_t MAC_POLL_RAM output;
+/* start's codec input and step's decoded frame have disjoint returning
+ * lifetimes. Both stay separate from control, input, output and the receipt. */
+static union {
+    mac_header_t header;
+    mac_frame_info_t frame;
+} MAC_POLL_RAM syntax;
+#define start_header syntax.header
+#define decoded syntax.frame
+/* No input field is read after publish. In particular the real ACK witness
+ * and FRAME/CLOSED checks finish before output takes ownership of this slot. */
+static union {
+    mac_poll_event_t input;
+    mac_poll_action_t output;
+} MAC_POLL_RAM io;
+#define input io.input
+#define output io.output
 static mac_poll_record_t MAC_POLL_RAM *receipt;
 static uint32_t MAC_POLL_RAM step_time;
 
@@ -124,7 +138,6 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
     mac_tx_t MAC_POLL_RAM * volatile tx,
     const mac_poll_request_t MAC_POLL_RAM * volatile request, uint32_t volatile now)
 {
-    mac_header_t header;
     uint8_t command = MAC_COMMAND_DATA_REQUEST;
     volatile uint32_t generation;
     if (p == NULL || tx == NULL || request == NULL)
@@ -145,20 +158,22 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
         return MAC_POLL_INVALID;
     if (control.generation == UINT32_MAX || tx->generation == UINT32_MAX)
         return MAC_POLL_LIMIT;
-    memset(&header, 0, sizeof(header));
-    header.type = MAC_FRAME_COMMAND;
-    header.flags = MAC_FLAG_ACK_REQUEST | MAC_FLAG_PAN_COMPRESSION;
-    header.destination_mode = control.request.coordinator_mode;
-    header.source_mode = control.request.local_mode;
-    header.source_pan = header.destination_pan = control.request.pan;
-    memcpy(header.destination, control.request.coordinator, 8);
-    memcpy(header.source, control.request.local, 8);
+    /* Replace every field even when the union last held a decoded frame. */
+    start_header.version = 0;
+    start_header.sequence = 0;
+    start_header.type = MAC_FRAME_COMMAND;
+    start_header.flags = MAC_FLAG_ACK_REQUEST | MAC_FLAG_PAN_COMPRESSION;
+    start_header.destination_mode = control.request.coordinator_mode;
+    start_header.source_mode = control.request.local_mode;
+    start_header.source_pan = start_header.destination_pan = control.request.pan;
+    memcpy(start_header.destination, control.request.coordinator, 8);
+    memcpy(start_header.source, control.request.local, 8);
     generation = control.generation + 1;
     /* Preserve the copied request and clear the remaining object representation.
      * There is no mirror cast or assumed host pointer/padding layout. */
     memset((uint8_t *)&control + sizeof(control.request), 0,
            sizeof(control) - sizeof(control.request));
-    if (mac_frame_encode(&header, &command, 1, control.outgoing,
+    if (mac_frame_encode(&start_header, &command, 1, control.outgoing,
                          sizeof(control.outgoing), &control.outgoing_length) != MAC_CODEC_OK)
         return MAC_POLL_INVALID;
     control.version = MAC_POLL_VERSION;
@@ -179,7 +194,6 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
 
 static mac_poll_result_t step(void)
 {
-    mac_frame_info_t frame;
     volatile uint8_t kind, observation, status, unbound, response;
     volatile uint32_t remaining;
     if (step_poll == NULL || step_tx == NULL || step_action == NULL || step_profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
@@ -201,7 +215,6 @@ static mac_poll_result_t step(void)
         return MAC_POLL_STATE;
     receipt = &step_poll->record;
     step_time = step_now;
-    memset(&output, 0, sizeof(output));
     kind = 0;
     observation = MAC_POLL_OBS_NONE;
     if (control.phase >= MAC_POLL_DONE)
@@ -290,7 +303,7 @@ static mac_poll_result_t step(void)
             else if (!input.crc_valid)
                 observation = MAC_POLL_OBS_BAD_CRC;
             else {
-                status = mac_frame_decode_profile(input.body, input.length, &frame, step_profile);
+                status = mac_frame_decode_profile(input.body, input.length, &decoded, step_profile);
                 if (status == MAC_CODEC_UNSUPPORTED_TYPE || status == MAC_CODEC_UNSUPPORTED_VERSION
                         || status == MAC_CODEC_UNSUPPORTED_SECURITY
                         || status == MAC_CODEC_UNSUPPORTED_ADDRESSING
@@ -301,30 +314,30 @@ static mac_poll_result_t step(void)
                     observation = MAC_POLL_OBS_MALFORMED;
                 else {
                     /* Only Response can learn a still-unbound coordinator IEEE. */
-                    response = frame.header.type == MAC_FRAME_COMMAND
-                        && input.body[frame.payload_offset] == MAC_COMMAND_ASSOCIATION_RESPONSE;
+                    response = decoded.header.type == MAC_FRAME_COMMAND
+                        && input.body[decoded.payload_offset] == MAC_COMMAND_ASSOCIATION_RESPONSE;
                     unbound = response && control.request.coordinator_mode == MAC_ADDRESS_SHORT;
-                    if ((frame.header.type != MAC_FRAME_DATA && frame.header.type != MAC_FRAME_COMMAND)
-                            || (frame.header.destination_pan != control.request.pan
+                    if ((decoded.header.type != MAC_FRAME_DATA && decoded.header.type != MAC_FRAME_COMMAND)
+                            || (decoded.header.destination_pan != control.request.pan
                                 && !(step_profile == MAC_RX_R22_ASSOCIATION_RESPONSE && response
-                                     && frame.header.destination_pan == 0xffffu))
-                            || frame.header.source_pan != control.request.pan
-                            || frame.header.destination_mode != control.request.local_mode
-                            || memcmp(frame.header.destination, control.request.local, 8)
-                            || (!unbound && (frame.header.source_mode != control.request.coordinator_mode
-                                || memcmp(frame.header.source, control.request.coordinator, 8))))
+                                     && decoded.header.destination_pan == 0xffffu))
+                            || decoded.header.source_pan != control.request.pan
+                            || decoded.header.destination_mode != control.request.local_mode
+                            || memcmp(decoded.header.destination, control.request.local, 8)
+                            || (!unbound && (decoded.header.source_mode != control.request.coordinator_mode
+                                || memcmp(decoded.header.source, control.request.coordinator, 8))))
                         observation = MAC_POLL_OBS_FOREIGN;
                     else {
                         memcpy(receipt->body, input.body, input.length);
                         receipt->length = (uint8_t)input.length;
-                        receipt->payload_offset = frame.payload_offset;
-                        receipt->payload_length = frame.payload_length;
+                        receipt->payload_offset = decoded.payload_offset;
+                        receipt->payload_length = decoded.payload_length;
                         receipt->source_relation = unbound ? MAC_POLL_SOURCE_UNBOUND : MAC_POLL_SOURCE_MATCHED;
                         observation = MAC_POLL_OBS_DELIVERY;
-                        decide(frame.header.type == MAC_FRAME_DATA && frame.payload_length
+                        decide(decoded.header.type == MAC_FRAME_DATA && decoded.payload_length
                                   ? MAC_POLL_SUCCESS : MAC_POLL_NO_DATA,
-                               frame.header.type == MAC_FRAME_COMMAND ? MAC_POLL_COMMAND
-                                  : frame.payload_length ? MAC_POLL_DATA : MAC_POLL_EMPTY,
+                               decoded.header.type == MAC_FRAME_COMMAND ? MAC_POLL_COMMAND
+                                  : decoded.payload_length ? MAC_POLL_DATA : MAC_POLL_EMPTY,
                                input.stamp);
                     }
                 }
@@ -353,6 +366,10 @@ static mac_poll_result_t step(void)
             control.phase = MAC_POLL_DONE;
         }
     }
+publish:
+    /* Early arrivals here are terminal DONE/FAULT only. Consequently they
+     * cannot issue any of the ARM / active-TX / DRAIN actions below. */
+    memset(&output, 0, sizeof(output));
     if (control.phase == MAC_POLL_ARM && !control.token) {
         output.kind = MAC_POLL_ACTION_PREPARE;
         output.token = ++control.token;
@@ -374,7 +391,6 @@ static mac_poll_result_t step(void)
         output.token = control.close_token;
         output.kind = MAC_POLL_ACTION_CLOSE;
     }
-publish:
     output.epoch = control.request.epoch;
     output.generation = control.generation;
     output.until = control.phase == MAC_POLL_DRAIN ? control.stop_at : control.deadline;

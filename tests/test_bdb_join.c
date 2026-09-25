@@ -321,14 +321,14 @@ static void drive(void)
     } else if (device.phase == BDB_JOIN_ASSOCIATING) {
         mac_join_event_t *j = &event.data.association;
         event.kind = BDB_JOIN_EVENT_ASSOCIATION; input = &event;
-        j->epoch = device.epoch; j->generation = device.work.association.generation;
+        j->epoch = device.epoch; j->generation = device.work.association.context.generation;
         j->token = action.data.association.token;
         if (action.data.association.kind == MAC_JOIN_ACTION_PREPARE ||
             action.data.association.kind == MAC_JOIN_ACTION_RECEIVE) j->kind = MAC_JOIN_PREPARED;
         else if (action.data.association.kind == MAC_JOIN_ACTION_TX) {
             j->kind = MAC_JOIN_TX; source_event(&j->source); j->crc_valid = 1;
             j->tx_result = mac_tx_step(&transmitter, now, j->source.kind ? &j->source : NULL, &granted);
-        } else if (action.data.association.kind == MAC_JOIN_ACTION_RADIO || device.work.association.phase == MAC_JOIN_REQUEST) {
+        } else if (action.data.association.kind == MAC_JOIN_ACTION_RADIO || device.work.association.context.phase == MAC_JOIN_REQUEST) {
             source_event(&j->source); j->kind = j->source.kind ? MAC_JOIN_SOURCE : 0;
             j->crc_valid = 1;
         } else if (action.data.association.kind == MAC_JOIN_ACTION_CLOSE) {
@@ -336,11 +336,11 @@ static void drive(void)
         } else if (action.data.association.kind == MAC_JOIN_ACTION_RESTORE) {
             if ((uint32_t)(now-transmitter.ready_at) >= MAC_TX_HALF) now = transmitter.ready_at;
             j->kind = MAC_JOIN_RESTORED;
-        } else if (device.work.association.phase == MAC_JOIN_WAIT) now = device.work.association.wait_until;
-        else if (device.work.association.phase == MAC_JOIN_EXTRACT &&
-                 device.work.association.poll.control.phase == MAC_POLL_RECEIVE) {
+        } else if (device.work.association.context.phase == MAC_JOIN_WAIT) now = device.work.association.context.wait_until;
+        else if (device.work.association.context.phase == MAC_JOIN_EXTRACT &&
+                 device.work.association.context.poll.control.phase == MAC_POLL_RECEIVE) {
             CHECK(extracted);
-            now = device.work.association.poll.control.ack_end+100u;
+            now = device.work.association.context.poll.control.ack_end+100u;
             j->kind = MAC_JOIN_FRAME; j->serial = 1; j->crc_valid = 1;
             j->channel = 15; j->body = response; j->length = response_length;
         }
@@ -453,9 +453,9 @@ static void setup(void)
     config.association.extraction.local_mode = config.association.extraction.coordinator_mode = 3;
     memcpy(config.association.extraction.local, identity.own_ieee, 8);
     memcpy(config.association.extraction.coordinator, identity.tc_ieee, 8);
-    config.crypto = limits; config.nv_polls = 2000; config.profile = 0x0104;
-    config.endpoint = 1; config.link_cost = 1; config.ack_wait = NWK_APS_ACK_WAIT;
-    config.broadcast_time = 1000000;
+    config.transport.limits = limits; config.transport.nv_polls = 2000; config.transport.profile = 0x0104;
+    config.transport.endpoint = 1; config.link_cost = 1; config.transport.ack_wait = NWK_APS_ACK_WAIT;
+    config.transport.broadcast_time = 1000000;
     config.descriptor.logical_type = 2; config.descriptor.frequency_band = 8;
     config.descriptor.mac_capability = 0x88; config.descriptor.max_buffer = 127;
     config.descriptor.max_incoming = config.descriptor.max_outgoing = 64;
@@ -935,13 +935,13 @@ static void phase_storage(void)
         device.scan_result.unscanned == scan.unscanned && device.scan_result.reason == MAC_SCAN_FINISHED);
     CHECK(device.scan_result.cleanup_error == scan.cleanup_error && device.scan_result.overflow == scan.overflow &&
         device.scan_result.tx_outcome == scan.tx_outcome && device.scan_result.candidates == scan.candidates.count);
-    CHECK(device.work.association.generation == 1 && !device.work.association.poll.control.generation);
+    CHECK(device.work.association.context.generation == 1 && !device.work.association.context.poll.control.generation);
     CHECK(!memcmp(&device.config, &config, sizeof(config)));
     before_runtime();
     restore_action(1);
-    CHECK(device.work.association.phase == MAC_JOIN_RESTORE && transmitter.phase == MAC_TX_IDLE);
-    CHECK(device.work.association.owner == &transmitter && !device.work.association.restored);
-    record = device.work.association.record; tx = transmitter;
+    CHECK(device.work.association.context.phase == MAC_JOIN_RESTORE && transmitter.phase == MAC_TX_IDLE);
+    CHECK(device.work.association.context.owner == &transmitter && !device.work.association.context.restored);
+    record = device.work.association.context.record; tx = transmitter;
     CHECK(record.association.outcome == MAC_ASSOCIATION_RESPONSE && !record.association.status);
     CHECK(record.association.short_address == 0x5678 && record.association.stamp);
     before_runtime();
@@ -977,15 +977,15 @@ static void phase_storage(void)
      * Both scan and association keep their complete faulted lower context. */
     for (retry = 0; retry < 2; retry++) {
         setup(); restore_action(retry); before = security_joint_flash_commands();
-        now = retry ? device.work.association.stop_at : device.work.scan.deadline;
+        now = retry ? device.work.association.context.stop_at : device.work.scan.deadline;
         CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
         CHECK(device.phase == BDB_JOIN_FAULT &&
             device.workspace == (retry ? BDB_JOIN_WORK_ASSOCIATION : BDB_JOIN_WORK_SCAN));
         if (retry) {
-            CHECK(device.work.association.phase == MAC_JOIN_FAULT && device.work.association.owner == &transmitter);
-            CHECK(device.work.association.record.cleanup_error == MAC_JOIN_CLEANUP_FAILED);
-            CHECK(device.work.association.record.association.short_address == 0x5678);
-            CHECK(mac_join_release(&device.work.association, &transmitter) == MAC_JOIN_STATE);
+            CHECK(device.work.association.context.phase == MAC_JOIN_FAULT && device.work.association.context.owner == &transmitter);
+            CHECK(device.work.association.context.record.cleanup_error == MAC_JOIN_CLEANUP_FAILED);
+            CHECK(device.work.association.context.record.association.short_address == 0x5678);
+            CHECK(mac_join_release(&device.work.association.context, &transmitter) == MAC_JOIN_STATE);
         } else {
             CHECK(device.work.scan.phase == MAC_SCAN_FAULT && device.work.scan.owner == &transmitter);
             CHECK(device.scan_result.cleanup_error == MAC_SCAN_CLEANUP_FAILED);
@@ -1005,10 +1005,10 @@ static void phase_storage(void)
     response[response_length-3] = response[response_length-2] = 255; response[response_length-1] = 1;
     for (iterations = 0; iterations < 256 && device.phase < BDB_JOIN_FAILED; iterations++) drive();
     CHECK(iterations < 256 && device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_ASSOCIATION_FAILED);
-    CHECK(device.workspace == BDB_JOIN_WORK_ASSOCIATION && device.work.association.phase == MAC_JOIN_IDLE);
-    CHECK(device.attempts == BDB_JOIN_ATTEMPTS && device.work.association.generation == BDB_JOIN_ATTEMPTS);
-    CHECK(device.work.association.poll.control.generation == BDB_JOIN_ATTEMPTS &&
-        device.work.association.association.generation == BDB_JOIN_ATTEMPTS);
+    CHECK(device.workspace == BDB_JOIN_WORK_ASSOCIATION && device.work.association.context.phase == MAC_JOIN_IDLE);
+    CHECK(device.attempts == BDB_JOIN_ATTEMPTS && device.work.association.context.generation == BDB_JOIN_ATTEMPTS);
+    CHECK(device.work.association.context.poll.control.generation == BDB_JOIN_ATTEMPTS &&
+        device.work.association.context.association.generation == BDB_JOIN_ATTEMPTS);
     CHECK(device.record.generation == BDB_JOIN_ATTEMPTS && device.record.association.status == 1 &&
         device.record.association.address_kind == MAC_ASSOCIATION_REFUSED);
     CHECK(transmitter.phase == MAC_TX_IDLE && transmitter.generation == 1u+2u*BDB_JOIN_ATTEMPTS);
@@ -1019,7 +1019,7 @@ static void phase_storage(void)
     response[response_length-3] = response[response_length-2] = 255; response[response_length-1] = 1;
     for (iterations = 0; iterations < 128 && device.attempts != 2; iterations++) drive();
     CHECK(iterations < 128 && device.workspace == BDB_JOIN_WORK_ASSOCIATION);
-    CHECK(device.work.association.generation == 2 && device.work.association.poll.control.generation == 1);
+    CHECK(device.work.association.context.generation == 2 && device.work.association.context.poll.control.generation == 1);
     response[response_length-3] = 0x78; response[response_length-2] = 0x56; response[response_length-1] = 0;
     commission();
     CHECK(device.phase == BDB_JOIN_READY && device.workspace == BDB_JOIN_WORK_RUNTIME && runtime.transport.ready);
@@ -1027,7 +1027,7 @@ static void phase_storage(void)
 
     /* Association is physically retired but durable short-address admission
      * fails in the real flash reader: no INSTALL, key receipt or membership. */
-    setup(); restore_action(1); record = device.work.association.record; tx = transmitter;
+    setup(); restore_action(1); record = device.work.association.context.record; tx = transmitter;
     before = security_joint_flash_commands(); security_joint_fail_read(1); drive();
     CHECK(device.workspace == BDB_JOIN_WORK_RUNTIME && device.result == BDB_JOIN_SECURITY);
     CHECK(device.phase == BDB_JOIN_ABORTING && !runtime.transport.ready && !device.member);
@@ -1054,9 +1054,9 @@ static void rejected_start_storage(void)
     for (which = 0; which < 5; which++) {
         CHECK(bdb_join_init(&fresh, now) == BDB_JOIN_OK);
         bad = config;
-        if (!which) bad.endpoint = 0;
-        else if (which == 1) bad.ack_wait = 93749;
-        else if (which == 2) bad.crypto.block_polls = 0;
+        if (!which) bad.transport.endpoint = 0;
+        else if (which == 1) bad.transport.ack_wait = 93749;
+        else if (which == 2) bad.transport.limits.block_polls = 0;
         else if (which == 3) bad.descriptor.max_buffer = 128;
         else bad.scan.work = 0;
         CHECK(bdb_join_start(&fresh, &idle, &bad, now) ==
@@ -1080,6 +1080,56 @@ static void rejected_start_storage(void)
     CHECK(bdb_join_step(&fresh, now, &cancel, &cleanup) == BDB_JOIN_OK);
     CHECK(fresh.phase == BDB_JOIN_FAILED && fresh.scan_result.reason == MAC_SCAN_CANCELLED);
     CHECK(fresh.work.scan.phase == MAC_SCAN_IDLE && !memcmp(&previous, &idle, sizeof(idle)));
+}
+
+static void transport_configuration(void)
+{
+    nwk_aps_t fresh, previous;
+    nwk_aps_config_t input, saved;
+    mac_tx_t idle, before;
+    uint8_t which;
+    unsigned flash, aes;
+    setup();
+    CHECK(mac_tx_init(&idle, 0x73, now) == MAC_TX_OK);
+    before = idle;
+    flash = security_joint_flash_commands(); aes = security_joint_aes_blocks();
+    memset(&fresh, 0xa5, sizeof(fresh)); previous = fresh;
+    CHECK(nwk_aps_init(&fresh, &idle, NULL, now) == NWK_APS_ARGUMENT);
+    CHECK(!memcmp(&fresh, &previous, sizeof(fresh)));
+    for (which = 0; which < 10; which++) {
+        input = config.transport;
+        if (!which) input.endpoint = 0;
+        else if (which == 1) input.endpoint = 255;
+        else if (which == 2) input.profile = 0;
+        else if (which == 3) input.limits.block_timeout = 0;
+        else if (which == 4) input.limits.block_polls = 0;
+        else if (which == 5) input.nv_polls = 0;
+        else if (which == 6) input.ack_wait = 93749;
+        else if (which == 7) input.ack_wait = MAC_TX_HALF/8u;
+        else if (which == 8) input.broadcast_time = 0;
+        else input.broadcast_time = MAC_TX_HALF;
+        saved = input;
+        CHECK(nwk_aps_init(&fresh, &idle, &input, now) == NWK_APS_ARGUMENT);
+        CHECK(!memcmp(&input, &saved, sizeof(input)));
+        CHECK(!memcmp(&fresh, &previous, sizeof(fresh)));
+        CHECK(!memcmp(&idle, &before, sizeof(idle)));
+    }
+    for (which = 0; which < 2; which++) {
+        input = config.transport;
+        input.ack_wait = which ? MAC_TX_HALF/8u-1u : 93750UL;
+        input.broadcast_time = which ? MAC_TX_HALF-1u : 1;
+        saved = input;
+        CHECK(nwk_aps_init(&fresh, &idle, &input, now) == NWK_APS_OK);
+        CHECK(!memcmp(&input, &saved, sizeof(input)));
+        memset(&input, 0, sizeof(input));
+        CHECK(fresh.owner == &idle && fresh.last == now && !fresh.ready);
+        CHECK(fresh.endpoint == saved.endpoint && fresh.profile == saved.profile);
+        CHECK(fresh.nv_polls == saved.nv_polls && fresh.ack_wait == saved.ack_wait);
+        CHECK(fresh.broadcast_time == saved.broadcast_time);
+        CHECK(!memcmp(&fresh.limits, &saved.limits, sizeof(saved.limits)));
+        CHECK(!memcmp(&idle, &before, sizeof(idle)));
+    }
+    CHECK(flash == security_joint_flash_commands() && aes == security_joint_aes_blocks());
 }
 
 static void empty_packet(const ed_packet_t *packet)
@@ -1459,7 +1509,7 @@ int main(void)
     }
     operational_failures(); update_pending_query(); response_backpressure();
     work_and_deadlines(); stopped_transport(); storage_quota(); terminal_control();
-    phase_storage(); rejected_start_storage();
+    phase_storage(); rejected_start_storage(); transport_configuration();
     slot_lifetimes(); transmit_extent();
     printf("BDB join: %u checks PASS; real commissioning, operational loss, bounded work, backpressure, phase/slot ownership and durable recovery boundary.\n", checks);
     return 0;

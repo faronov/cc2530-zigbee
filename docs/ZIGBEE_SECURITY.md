@@ -135,25 +135,26 @@ the existing15-second deadline and XDATA1F00..1FFF-to-IRAM alias.
 
 | Resource | Measured / limit |
 | --- | --- |
-| Complete isolated CODE |20250 /24576 bytes|
-| Ordinary XDATA plus reserved status |1907+64 /2048 bytes|
+| Complete isolated CODE |20259 /24576 bytes|
+| Ordinary XDATA plus reserved status |1911+64 /2048 bytes|
 | Stack allocation / unwound SP |55 /54 hex|
-| Maximum observed full-run SP |7C /7C hex|
-| CCM module CODE / XDATA |2103 /314 bytes|
+| Maximum observed full-run SP |77 /7C hex|
+| CCM module CODE / XDATA |2112 /318 bytes|
 | Envelope module CODE / XDATA |4124 /395 bytes|
 
-This composition reaches the existing stack cap: there is **no demonstrated
-headroom for another wrapper or ISR**, and no whole-stack fit claim.
-Ordinary XDATA spans are timebase[0,25), AES[25,207), CCM[207,521),
-NWK[521,617), APS[617,686), envelope[686,1081), caller[1081,1875),
-and complete linked libc scratch[1875,1907). The result occupies1E00..1E07;
+Volatile CCM scalar/loop copies shorten actual register-save lifetimes;
+the unchanged23-case corpus now peaks at77 instead of7C. This supplies
+**no arbitrary-wrapper or ISR headroom claim**, nor a whole-stack fit proof.
+Ordinary XDATA spans are timebase[0,25), AES[25,207), CCM[207,525),
+NWK[525,621), APS[621,690), envelope[690,1085), caller[1085,1879),
+and complete linked libc scratch[1879,1911). The result occupies1E00..1E07;
 unallocated memory, remaining status bytes and upper IRAM remain guarded.
 
 The strict proof pins complete CODE, raw CDB before decoding, map, memory,
 all objects, ordered listings and instruction metrics. It checks struct
 fields, public ABI/parameter storage, actual call chains, module/private/libc
 ownership, final AES/fault/register state, complete caller bytes, private
-wipes, unchanged SFRs and exact per-case stack peaks. The61685 artifact negatives
+wipes, unchanged SFRs and exact per-case stack peaks. The61724 artifact negatives
 mutate every CODE byte, map symbol and F/S/L/T metadata record, listings,
 objects and raw line endings, plus54 snapshot faults,3 peak faults and a
 missing physical alias. No existing image, case, deadline or budget is relaxed.

@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include "mac_frame.h"
+#include "banked_join.h"
 
 /* IEEE 802.15.4-2006, selected nonbeacon-enabled 2450 MHz O-QPSK subset.
  * Time is an adapter-provided uint32_t SYMBOL counter (one unit = 16 us),
@@ -105,7 +106,7 @@ typedef struct {
 /* Memory initialization only, never radio recovery. NULL returns INVALID
  * without mutation; valid fresh-epoch storage is initialized and returns OK.
  */
-mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now);
+mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now) JOIN_FAR;
 /* Direct DATA or canonical unsecured Beacon/Association/Data Request only.
  * Data Request requires both short/extended addresses, a non-FFFF compressed
  * PAN, ACK request and no Pending. Caller chooses its valid allocated short
@@ -121,14 +122,14 @@ mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t
  */
 mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                               const uint8_t * volatile body, uint16_t length,
-                              uint32_t now, uint32_t lifetime, uint16_t work_limit);
+                              uint32_t now, uint32_t lifetime, uint16_t work_limit) JOIN_FAR;
 mac_tx_result_t mac_tx_copy(const mac_tx_t * volatile tx,
                             uint8_t * volatile body, uint16_t capacity,
-                            uint8_t * volatile length);
+                            uint8_t * volatile length) JOIN_FAR;
 mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
                             const mac_tx_event_t * volatile event,
-                            mac_tx_action_t * volatile action);
-mac_tx_result_t mac_tx_release(mac_tx_t *tx);
+                            mac_tx_action_t * volatile action) JOIN_FAR;
+mac_tx_result_t mac_tx_release(mac_tx_t *tx) JOIN_FAR;
 
 /* NULL event polls. Invalid arguments and admission/copy/release errors leave
  * state and outputs unchanged. A successful step may advance timers/work even

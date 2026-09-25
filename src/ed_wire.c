@@ -124,13 +124,13 @@ zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t le
 }
 
 zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t length,
-                                     aps_frame_info_t * volatile info) SECURITY_FAR
+                                     aps_frame_info_t * volatile info) WIRE_FAR
 {
     return finish(read_aps(frame, length, info));
 }
 
 zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t length,
-                                        ed_packet_t * volatile packet) SECURITY_FAR
+                                        ed_packet_t * volatile packet) WIRE_FAR
 {
     zigbee_security_result_t result;
     uint8_t offset, size;
@@ -158,7 +158,7 @@ zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t
 }
 
 zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uint8_t * volatile frame,
-                                        uint16_t capacity, uint8_t * volatile length) SECURITY_FAR
+                                        uint16_t capacity, uint8_t * volatile length) WIRE_FAR
 {
     volatile uint8_t n, control;
     uint8_t total, encoded_length;
@@ -250,7 +250,7 @@ static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * volatile 
 }
 
 zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile frame, uint16_t length,
-                                        zigbee_security_meta_t * volatile meta) SECURITY_FAR
+                                        zigbee_security_meta_t * volatile meta) WIRE_FAR
 {
     zigbee_security_result_t result;
     if (!frame || !meta) return finish(ZIGBEE_SECURITY_ARGUMENT);
@@ -263,7 +263,7 @@ zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile
 
 zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t layer,
     const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
-    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) SECURITY_FAR
+    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) WIRE_FAR
 {
     zigbee_security_result_t result;
     ccm_star_result_t encrypted;

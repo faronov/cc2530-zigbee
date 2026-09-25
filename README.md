@@ -7,8 +7,8 @@ An experimental, open C/SDCC project aiming to implement a small Zigbee end
 device and, subsequently, a sleepy end device on the TI CC2530.
 
 **Current status: bootstrap, guarded hardware-debugging tools, bounded passive RX
-and single-frame TX fixtures, and offline protocol components.
-This is not yet a working Zigbee stack.** Default `bringup` does not enable radio.
+and single-frame TX fixtures, and an offline banked MCU authenticated join.
+This is not yet a real-radio Zigbee firmware release.** Default `bringup` does not enable radio.
 Separately selected fixtures have [hardware-observed TX/RX results](docs/DEBUGGING.md#2026-09-21-lg-tx-and-passive-rx-demonstration);
 they do not implement network join, a sensor application or display refresh.
 The project does not require IAR or proprietary TI stack libraries.
@@ -66,14 +66,21 @@ and confirm the hardware first.
 The separate [banked CODE foundation](docs/BANKED_CODE.md) prepares full
 256-KiB flash placement through the CC2530's banked CPU view, rather than
 raising existing images' limits. It is an offline ABI/image/mapping fixture,
-not a banked Zigbee firmware release. Full-stack DATA/stack fit and physical
-banked debugger/flash acceptance remain separate work.
+not a banked Zigbee firmware release. Its isolated result does not establish
+full-stack DATA/stack fit or physical banked debugger/flash acceptance.
 
 The [banked key/crypto/NV composition](docs/BANKED_SECURITY.md) now places
 real services in common CODE and two switchable banks. Its offline fixture
 executes authenticated key exchange, protected sending, persistent reopen,
 replay rejection and Leave. This is not yet the complete MCU MAC/BDB join
 image, a real-radio adapter or a hardware interoperability result.
+
+The separate [complete banked MCU composition](docs/ED_JOIN.md#complete-banked-mcu-execution)
+now reaches authenticated READY and exchanges protected data in an8051
+simulation using a synthetic PHY/coordinator and actual production services.
+It fits7512/7680 ordinary XDATA bytes and peaks atSP7B under the unchanged7C
+cap. This is host-tested, image-checked and simulated, not hardware-observed;
+full integration acceptance and physical network operation remain distinct.
 
 ## M1 debugger fixture
 

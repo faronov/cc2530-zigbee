@@ -27,9 +27,13 @@ not a manually guessed source-name mapping. This includes nested C helpers:
 changing `test_radio_autoack.c` selects the real interval/clock-radio and
 board-fixture consumers as well as the standalone owner. Both board definitions
 are retained. The full catalog is mechanically compared with the original
-`test-common` partition and contains all54 original workers,28 board/image
+`test-common` partition and retains all54 original workers,28 board/image
 checks, the complete tool/PyUSB checks and the seven-path board upload policy.
-Only the two selection/acceptance control jobs are added.
+Eight complete-join workers add four independent fresh-reset scenarios per
+board: success/data/update/restart, missing network key, retained radio fault
+and retained busy-flash failure. There are62 workers plus the two
+selection/acceptance control jobs. Their existing15-minute deadlines and
+no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
 CI requires an already successful exact previous/base main commit before
 narrowing a push/PR. Otherwise it selects full acceptance, including when
@@ -39,14 +43,20 @@ release events are always full. Shared headers/build/verification/runtime
 changes and unknown dependency mappings also select full.
 
 The expensive banked-key artifact corruption campaign is explicit:
-`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all246324
-mutations. A selected affected run may defer this campaign, **not** the
-immutable CODE/address/raw-CDB/map/listing/object identities, physical
+`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all246199
+current CODE/address and complete metadata mutations. A selected affected run
+may defer this campaign, **not** the immutable
+CODE/address/raw-CDB/map/listing/object identities, physical
 DATA/libc/IRAM-alias ownership or actual CPU/peripheral execution.
-It still requires all22 operations,10354 outcome negatives, SP7B/7C and the
-retained busy-flash RAM failure. The full tier retains every mutation;
+It still requires all22 operations,10345 outcome mutations,
+the measured SP77 under the unchanged7C cap, and retained busy-flash RAM failure.
+The full tier retains every mutation;
 there is no sampling, weakened validator or simulated-outcome cache.
-These current counts include the [returning wire-work reduction](BANKED_SECURITY.md#returning-wire-work-ownership).
+The new complete-join profile separately retains all715479 artifact
+mutations in its missing-key worker. Full raw identities, complete DATA/OSEG
+liveness, native/sanitized transcript identity and actual CPU/alias
+observations precede every scenario. Explicit Make-generated CDB observation
+headers are dependency inputs, not permissive missing-include fallbacks.
 The smaller counts and timings below describe the earlier accepted revision;
 they are not updated measurements of the new image.
 
@@ -131,12 +141,15 @@ replace the historical Actions record nor establish whole-target acceptance.
 
 The current partition also includes eight resident crypto/NV caller jobs,
 six authenticated-join host jobs, two isolated banked-CODE jobs and two
-banked key/crypto/NV jobs.
+banked key/crypto/NV jobs, plus eight complete banked join jobs.
 Together with the earlier thirty-six-job partition described below,
-these retain all old cases in fifty-four full-tier worker jobs. Both banked profiles are
-separate from every unbanked board image; it has no hardware/artifact upload
+these retain all old cases in sixty-two full-tier worker jobs. All banked profiles are
+separate from every unbanked board image; they have no hardware/artifact upload
 step. See [the banked memory-model boundaries](BANKED_CODE.md) and the
 [real key-service execution contract](BANKED_SECURITY.md).
+The [complete MCU join evidence](ED_JOIN.md#complete-banked-mcu-execution)
+distinguishes linked/simulated READY and protected exchange from still
+unaccepted physical radio/timing and broad target edge-case coverage.
 
 `make test-local` now covers all twenty-eight board/image checks while running
 the Python tool suite once and each standalone component corpus once per

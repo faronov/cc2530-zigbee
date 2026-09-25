@@ -162,9 +162,10 @@ security_counter_result_t security_counter_create(
 }
 
 security_counter_result_t security_counter_take(
-    uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit)
+    volatile uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit)
 {
-    uint32_t end, taken;
+    volatile uint32_t end;
+    uint32_t taken;
     security_counter_result_t result = ready();
     if (result != SECURITY_COUNTER_OK)
         return result;

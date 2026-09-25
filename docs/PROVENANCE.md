@@ -40,6 +40,16 @@ DMA and actual flash-RAM models; no external cryptographic or networking
 implementation is imported. No new wire/specification revision is selected.
 Compiler/ABI measurements and synthetic execution are not hardware evidence.
 
+The [complete banked join caller](ED_JOIN.md#complete-banked-mcu-execution),
+typed native/SDCC observation bridge and linked DATA/OSEG byte-liveness proof
+are original BSD-3-Clause work. They reuse the same production services,
+public synthetic coordinator corpus and AES/flash models. Compiler identities
+come from emitted SDCC4.2 artifacts; complete memory observations come from
+uCsim, including its binary-dump interface. No vendor implementation,
+SDK binary, private key/capture, new wire revision or hardware observation
+is imported. Volatile copies change compiler storage lifetimes, not security
+or persistence semantics.
+
 ## Reviewed reference candidates
 
 The original [authenticated ED integration](ED_JOIN.md) uses functional facts
@@ -94,6 +104,13 @@ producing the NPDU; no external packet builder or authentication result is
 imported. Tests use public synthetic wire packets, actual save/read failure
 and the existing physical-retirement model. No lower hardware implementation,
 wire revision, NV schema/frequency, timing limit or stack cap is changed.
+
+The later grouped transport configuration and BDB/NWK/ZDO returning-view
+unions are original refactoring of those same services. They preserve
+separate key-status snapshots and simultaneously live parser/server arguments.
+Their evidence is native execution and actual SDCC object/type allocation,
+not a complete linked MCU join. Exploratory banking/external-stack compiler
+outputs were not promoted to a supported ABI or used to relax existing guards.
 
 | Reference | Status and permitted use |
 | --- | --- |

@@ -19,30 +19,32 @@ SOURCES = ("mac_frame.c", "nwk_beacon.c", "nwk_candidates.c", "test_nwk_candidat
 # Separate composed-corpus budgets, NOT increases to existing codec budgets.
 CODE_BUDGET = 20480
 XDATA_BUDGET = 1280
-CODE_SIZE = 18476
-CODE_SHA256 = 'd6bd2fb14e5815892ae03d6aa9f662028b1525dcaffb20ef5b3062e75dcc8408'
-PRIVATE_SHA256 = '609d82fb2492154c1642b73cc774882b0d2bb7d371aeef76aa14f87d913de3bd'
-CALLER_SHA256 = '05ff62dab66731a727588c8eb126726bf51e98b26c665ed43abd63692e15f90a'
+# Codec lowering reviewed in boot_mac_tx: -43 CODE/-3 object DATA, unchanged
+# collector/caller ABI, ordinary XDATA and actual linked stack start.
+CODE_SIZE = 18433
+CODE_SHA256 = '857e1f5f9cc670610268987417e192cfc8909dbfe9d335b387704816982a650f'
+PRIVATE_SHA256 = '94d4e5046b120832e25918832f42c538d96d39973ccebf33239c18a09a4e789e'
+CALLER_SHA256 = '0eed6c75e32427ef35a592f4ec3473c925ea66819302c4e2e89992d5451109ad'
 FIELDS_SHA256 = 'ff3aa08d250d6bd3d54c9a021d1a81dfe64fbea00541d7cebae177a3cdda8014'
 PUBLIC = {'mac_command_decode': ('mac_frame', 554),
- 'mac_command_encode': ('mac_frame', 1061),
- 'mac_beacon_decode': ('mac_frame', 2272),
- 'mac_frame_decode': ('mac_frame', 5814),
- 'mac_frame_encode': ('mac_frame', 6619),
- 'nwk_beacon_decode': ('nwk_beacon', 7234),
- 'nwk_candidates_init': ('nwk_candidates', 8057),
- 'nwk_candidates_consider': ('nwk_candidates', 8633),
- 'nwk_candidates_get': ('nwk_candidates', 9966),
- 'main': ('nwk_candidates_test', 17876),
- 'mac_frame_decode_profile': ('mac_frame', 4644)}
-DONE = 17932
+ 'mac_command_encode': ('mac_frame', 1018),
+ 'mac_beacon_decode': ('mac_frame', 2229),
+ 'mac_frame_decode': ('mac_frame', 5771),
+ 'mac_frame_encode': ('mac_frame', 6576),
+ 'nwk_beacon_decode': ('nwk_beacon', 7191),
+ 'nwk_candidates_init': ('nwk_candidates', 8014),
+ 'nwk_candidates_consider': ('nwk_candidates', 8590),
+ 'nwk_candidates_get': ('nwk_candidates', 9923),
+ 'main': ('nwk_candidates_test', 17833),
+ 'mac_frame_decode_profile': ('mac_frame', 4601)}
+DONE = 17889
 # Per module: complete ordered instruction count, byte coverage, digest.
-LISTINGS = {'mac_frame': (4253, 7136, 'f5a28b08489ec5888e1fbf4a8134bcbb13e4c7a20bc6ca93558686466dcae87a'),
- 'nwk_beacon': (353, 601, '6c8fc277d70a85221e0fdd27299e3f25da855099a08d783e6cbdca873ed36baf'),
- 'nwk_candidates': (1519, 2334, '3d1704d8e2aaac0b58f271d179d420d3c455a38c842a3774911ca110d4426a21'),
- 'nwk_candidates_test': (4173, 7776, '5b9f8712e44e36f75db92ac8d60aee5b7915a41ebd98185ba2fe78cdc516f5db')}
+LISTINGS = {'mac_frame': (4262, 7093, 'b5348652d47961d79d551262faa9f5e17a45e0a5de97d99b32c44a41b72e0f3a'),
+ 'nwk_beacon': (353, 601, 'e5ad4cc3fbcb7b4c7031d32e92b28a5b53de49ef3f675c5b11c7d3118ee7867b'),
+ 'nwk_candidates': (1519, 2334, '09db951b18b9e2dc6a0900b163e436c14544aca716a2499f982a6f2d33632930'),
+ 'nwk_candidates_test': (4173, 7776, '1246096cda54985da5643cea67afcab1fb6df9530a017b14c43d16a93756c644')}
 # CODE (including CONST/startup contributions), XSEG, DSEG, OSEG.
-OBJECTS = {'mac_frame': (7136, 216, 15, 10),
+OBJECTS = {'mac_frame': (7093, 216, 12, 10),
  'nwk_beacon': (601, 27, 9, 0),
  'nwk_candidates': (2334, 111, 4, 0),
  'nwk_candidates_test': (7846, 612, 0, 0)}

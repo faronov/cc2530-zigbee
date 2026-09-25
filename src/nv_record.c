@@ -161,10 +161,11 @@ static nv_record_result_t program(uint8_t page, uint16_t offset, uint16_t limit)
 }
 
 nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * volatile data, uint8_t length,
-                                    uint16_t poll_limit, uint8_t allow_recovery)
+                                    volatile uint16_t poll_limit, uint8_t allow_recovery)
 {
     uint16_t position;
-    uint8_t i, page, value;
+    volatile uint8_t page;
+    uint8_t i, value;
     nv_record_result_t result;
     if (nv_record_fault) return (nv_record_result_t)nv_record_fault;
     if (data == NULL || !length || length > NV_RECORD_MAX || !poll_limit || allow_recovery > 1)

@@ -21,11 +21,12 @@ class SelectionTests(unittest.TestCase):
     def names(self, selected):
         return {(row["board"], row["directory"]) for row in selected["matrix"]["include"]}
 
-    def test_full_preserves_both_boards_all_54_workers_and_upload_boundary(self):
+    def test_full_preserves_54_original_workers_and_adds_eight_join_workers(self):
         selected = plan.full_plan("test")
         rows = selected["matrix"]["include"]
-        self.assertEqual(len(rows), 54)
-        self.assertEqual(len({r["name"] for r in rows}), 54)
+        self.assertEqual(len(rows), 62)
+        self.assertEqual(len({r["name"] for r in rows}), 62)
+        self.assertEqual(sum(row["directory"].startswith("banked-join-") for row in rows), 8)
         self.assertEqual({(r["board"], r["image"]) for r in rows if r["image"]},
                          {(b, i) for b in plan.BOARDS for i in plan.IMAGES})
         self.assertEqual({(r["board"], r["directory"]) for r in rows if not r["image"]},
@@ -54,7 +55,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 selected = self.select("README.md", path)
                 self.assertEqual(selected["tier"], "full")
-                self.assertEqual(len(selected["matrix"]["include"]), 54)
+                self.assertEqual(len(selected["matrix"]["include"]), 62)
                 self.assertEqual(selected["campaign"], "full")
 
     def test_failed_dependency_derivation_is_explicit_full_not_an_empty_pass(self):
@@ -65,9 +66,12 @@ class SelectionTests(unittest.TestCase):
 
     def test_actual_shared_c_consumers_not_filename_matching(self):
         cases = {
-            "src/bdb_join.c": {"ed-bdb-join"},
+            "src/bdb_join.c": {"ed-bdb-join", "banked-join-success", "banked-join-missing-key",
+                               "banked-join-radio-fault", "banked-join-flash-fault"},
             "tests/bdb_join_layout.c": {"ed-bdb-join"},
-            "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security"},
+            "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security",
+                                    "banked-join-success", "banked-join-missing-key",
+                                    "banked-join-radio-fault", "banked-join-flash-fault"},
             "src/zcl_temperature.c": {"compositions"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},
         }
@@ -120,6 +124,33 @@ class SelectionTests(unittest.TestCase):
                 source.write_text(content)
                 with self.subTest(content=content), self.assertRaises(ValueError):
                     plan.include_closure([source.relative_to(plan.ROOT).as_posix()], {plan.ROOT})
+
+    def test_only_an_explicit_make_generated_header_can_be_absent(self):
+        with tempfile.TemporaryDirectory(prefix="generated-include-") as temp, \
+                patch.object(plan, "ROOT", Path(temp)):
+            root = Path(temp)
+            source, generated = root/"input.c", root/"layout.h"
+            source.write_text('#include "layout.h"\n')
+            with self.assertRaisesRegex(ValueError, "Missing project include"):
+                plan.include_closure(["input.c"], {root})
+            self.assertEqual(plan.include_closure(["input.c"], {root}, {generated}), {"input.c"})
+            generated.write_text('#include "stale-cache.h"\n')
+            self.assertEqual(plan.include_closure(["input.c"], {root}, {generated}), {"input.c"})
+            source.write_text('#include "unowned.h"\n')
+            with self.assertRaisesRegex(ValueError, "Missing project include"):
+                plan.include_closure(["input.c"], {root}, {generated})
+
+    def test_target_coupled_join_recorder_cannot_silently_run_as_a_fast_host_test(self):
+        row = next(row for row in plan.full_plan("test")["matrix"]["include"]
+                   if row["board"] == "generic" and row["directory"] == "banked-join-success")
+        planned = plan.recipe("generic", "banked-join-success", "build/fast/generic/banked-join-success")
+        with patch.object(plan, "recipe", return_value=planned), \
+                patch.object(plan.subprocess, "run") as run, patch("builtins.print") as output:
+            with self.assertRaisesRegex(ValueError, "No host tests executed"):
+                plan.run_fast({"matrix": {"include": [row]}})
+            run.assert_called_once_with([plan.sys.executable, "-B", "tools/check_repository.py"],
+                                        cwd=plan.ROOT, check=True)
+            self.assertIn("No direct host test", output.call_args.args[0])
 
     def test_nightly_manual_and_release_are_always_full(self):
         with patch.object(plan, "accepted_base", side_effect=AssertionError("not needed")):

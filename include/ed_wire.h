@@ -29,11 +29,11 @@ typedef struct {
 zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t length,
                                      nwk_frame_info_t * volatile info) SECURITY_FAR;
 zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t length,
-                                     aps_frame_info_t * volatile info) SECURITY_FAR;
+                                     aps_frame_info_t * volatile info) WIRE_FAR;
 zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t length,
-                                        ed_packet_t * volatile packet) SECURITY_FAR;
+                                        ed_packet_t * volatile packet) WIRE_FAR;
 zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet,
-    uint8_t * volatile frame, uint16_t capacity, uint8_t * volatile length) SECURITY_FAR;
+    uint8_t * volatile frame, uint16_t capacity, uint8_t * volatile length) WIRE_FAR;
 
 /* Real CCM*, selected R22 ENC-MIC32 only. inspect is untrusted syntax; crypt
  * checks MIC and selected source/identifier/sequence, never replay or membership.
@@ -42,10 +42,10 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet,
  * with trusted level5 for authentication and zeroed after sealing.
  */
 zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile frame,
-    uint16_t length, zigbee_security_meta_t * volatile meta) SECURITY_FAR;
+    uint16_t length, zigbee_security_meta_t * volatile meta) WIRE_FAR;
 zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t layer,
     const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
-    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) SECURITY_FAR;
+    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) WIRE_FAR;
 
 /* All six public operations share returning ordinary-XDATA work. Serialize
  * them in foreground, with no ISR/reentrant use and no retained private

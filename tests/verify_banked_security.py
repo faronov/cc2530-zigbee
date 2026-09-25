@@ -13,19 +13,27 @@ LOWER = ("flash_exec", "flash", "flash_write", "nv_record", "security_counter", 
          "aes", "ccm_star", "zigbee_mmo", "zigbee_key_hash", "nwk_frame", "aps_frame")
 RESERVATIONS = ("banked_security_iram_low", "banked_security_iram_high")
 MODULES = RESERVATIONS+LOWER+("banked", "ed_wire", "security_keys", "banked_security_fixture")
-FRAMES = dict(zip(LOWER+("ed_wire", "security_keys", "banked_security_fixture"), (
-    ("BS_EXEC", 8, 8), ("BS_READ", 16, 4), ("BS_WRITE", 20, 5), ("BS_NV", 35, 23),
-    ("BS_COUNTER", 58, 14), ("BS_TIME", 8, 0), ("BS_AES", 35, 32), ("BS_CCM", 8, 0),
-    ("BS_MMO", 8, 18), ("BS_HASH", 67, 3), ("BS_NWK", 35, 12), ("BS_APS", 35, 8),
-    ("BS_WIRE", 8, 9), ("BS_KEYS", 26, 4), ("BS_CALLER", 26, 0))))
-PINS = (
-    "4a34660071d0a6014d0f2b55c8d225fa5469fac57f4f1d813ea11a5a7c9378c0",
-    "9ab6b704a317c0c0a53d4e6ff6cd9a7883676ffd10d889fd1a97b1cc4211d457",
-    "78a890a4657092589ca6a66a0383c3bdd4836462eaddeff893ec3378467ce5dd",
-    "e8c0022283b3007cd4ed17ca89785561c94205780f7bef05599de02d3e15e8cd",
-    "852ccf062a4f48df7c33ac613702c9215c4cde0afd983a92417c69ea7b9e8983",
-    "b9b4740f9dbe215e3e82fdfb551fd3cbdb24dd7fb4a29616df1a0d949a152ca8",
-)
+FRAMES = {'flash_exec': ('BS_EXEC', 8, 8),
+ 'flash': ('BS_READ', 16, 4),
+ 'flash_write': ('BS_WRITE', 20, 5),
+ 'nv_record': ('BS_NV', 35, 15),
+ 'security_counter': ('BS_COUNTER', 58, 14),
+ 'timebase': ('BS_TIME', 8, 0),
+ 'aes': ('BS_AES', 35, 32),
+ 'ccm_star': ('BS_CCM', 8, 0),
+ 'zigbee_mmo': ('BS_MMO', 8, 18),
+ 'zigbee_key_hash': ('BS_HASH', 67, 3),
+ 'nwk_frame': ('BS_NWK', 35, 12),
+ 'aps_frame': ('BS_APS', 35, 8),
+ 'ed_wire': ('BS_WIRE', 8, 9),
+ 'security_keys': ('BS_KEYS', 26, 4),
+ 'banked_security_fixture': ('BS_CALLER', 26, 0)}
+PINS = ('2f7a821e5ec260cbab0fd0cff8225338ff6f479bb5f073a79fea14b124c9634e',
+ '897b00a1865f8f953f145165a11b9d75533d9f253c56f69fe603fbe0c1395268',
+ '60a17906914edf5153fba0097f6c164f353f21a030a1dcc64035ba2d14fea5b7',
+ 'fba3d29da20f6959937938b8eccee0e8bf8a50ef134d780b32080722d1ff49cb',
+ 'c02b15c66c7974c8930f8daf95a0579e8aa39e50ab7011ddf201673cac5b6979',
+ '915c323e1df9e5cd3da5906f7063dd7dec502fb8e857cc2e3a0396429dc70ac7')
 EDGES = (resident.EDGES - {e for e in resident.EDGES if e[0] == "zigbee_security"}) | {
     ("ed_wire", "nwk_frame"), ("ed_wire", "aps_frame"), ("ed_wire", "ccm_star"),
     ("security_keys", "security_counter"), ("security_keys", "zigbee_key_hash"),
@@ -49,7 +57,7 @@ def artifact_bytes(*artifacts):
 def verify(image, symbols, debug_raw, memory, listings, objects):
     banking.pin_artifacts(artifact_bytes(image, symbols, debug_raw, memory, listings, objects), PINS)
     require(len(image) <= 51200 and symbols["l_XSEG"]+64 <= 4096, "Banked key image exceeds its own budgets")
-    require(len(image) == len(banking.pack(image)) == 49261, "Complete banked security CODE extent changed")
+    require(len(image) == len(banking.pack(image)) == 49236, "Complete banked security CODE extent changed")
     areas = ("HOME", "GSINIT0", "GSINIT1", "GSINIT2", "GSINIT3", "GSINIT4", "GSINIT5",
              "GSINIT", "GSFINAL", "CSEG", "CONST", "BK_KEYS", "BK_WIRE")
     covered = set()
@@ -63,7 +71,7 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
     require((symbols["s_XSEG"], symbols["l_XSEG"], symbols["s_SSEG"], symbols["l_SSEG"],
              symbols["s_OSEG"], symbols["l_OSEG"], symbols["s_BSEG_BYTES"], symbols["l_BSEG_BYTES"],
              symbols["_banked_depth"], symbols["_banked_fault"], symbols["_fixture_status"]) ==
-            (0, 3555, 0x52, 43, 0x48, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00),
+            (0, 3564, 0x52, 43, 0x48, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00),
             "Physical banked security IRAM/XDATA allocation changed")
     require(b"16 bit mode initial stack starts at: 0x52 (sp set to 0x51) with 43 bytes available." in memory,
             "CPU stack/return-address ABI changed")
@@ -116,10 +124,10 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
             owned |= span; storage |= span
         require(owned == set(range(offset, offset+len(owned))), "Noncontiguous source XDATA ownership")
         offset += len(owned)
-    require(offset == 3535 and symbols["___memcpy_PARM_2"] == offset,
+    require(offset == 3544 and symbols["___memcpy_PARM_2"] == offset,
             "Complete source/libc scratch boundary changed")
     require(storage == set(range(offset)), "Source XDATA has an ownership hole")
-    require(symbols["l_XSEG"]-offset == 20 and symbols["__gptrput_PARM_2"] == 3546,
+    require(symbols["l_XSEG"]-offset == 20 and symbols["__gptrput_PARM_2"] == 3555,
             "Complete libc scratch (not only gptrput) changed")
     pc = symbols["___memcpy"]
     end = symbols["s_CSEG"]+symbols["l_CSEG"]

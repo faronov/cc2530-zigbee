@@ -22,11 +22,11 @@ Full acceptance belongs to the completed Actions run, not merely compilation.
 
 | Region | Placement | Populated bytes |
 | --- | --- | ---: |
-| Common CODE | Startup, runtime, real crypto/NV, codecs, caller and libc | 25017 |
+| Common CODE | Startup, runtime, real crypto/NV, codecs, caller and libc | 24992 |
 | Bank1 | `security_keys`, virtual `18000..1C28E` | 17039 |
 | Bank2 | `ed_wire`, virtual `28000..29C24` | 7205 |
-| Complete executable | Sparse canonical bank identities | 49261 |
-| Ordinary XDATA | All production/caller/compiler/libc storage | 3555 |
+| Complete executable | Sparse canonical bank identities | 49236 |
+| Ordinary XDATA | All production/caller/compiler/libc storage | 3564 |
 | Status | Separately reserved at `1E00` | 64 |
 
 The composition budgets remain 51200 populated CODE bytes and 4096 total
@@ -77,7 +77,7 @@ XDATA `1F00..1FFF` remains the IRAM alias, never additional memory.
 | Reusable module frame | Base, hex | Bytes |
 | --- | ---: | ---: |
 | Flash executor / reader / writer |08 /10 /14|8 /4 /5|
-| Journal / counter owner |23 /3A|23 /14|
+| Journal / counter owner |23 /3A|15 /14|
 | AES / NWK codec / APS codec |23|32 /12 /8|
 | MMO / keyed hash |08 /43|18 /3|
 | Wire / key owner |08 /1A|9 /4|
@@ -132,12 +132,22 @@ small-output failures and malformed headers without private-state overrides.
 Including added compiler parameter storage, this saves331 ordinary-XDATA
 bytes and costs325 banked CODE bytes (344 ordinary CSEG bytes). DATA9/OSEG4, real reservations, libc20-byte
 suffix, all lower-service objects, and the original fixture/scenarios remain
-unchanged. The source/libc boundary is now3535, with `__gptrput_PARM_2` at3546.
+unchanged at that step. Its source/libc boundary was3535, with
+`__gptrput_PARM_2` at3546.
 The complete generic/LG artifact identities match. Earlier accepted
 48936-CODE/3886-XDATA images and their244699/9941 mutation counts remain
 historical evidence, not the current layout contract. The reduced layout has
 passed the complete **local** both-board checks below; a later completed
 Actions run is still required for published acceptance.
+
+The subsequent complete-join stack work shortens register-save lifetimes in
+CCM, counter reservation and journal replacement. The isolated key image is
+now49236 CODE /3564 ordinary XDATA, with source/libc boundary3544 and
+`__gptrput_PARM_2` at3555. Journal DATA falls from23 to15 bytes; physical
+reservations and the20-byte libc suffix remain unchanged. Both board
+artifact identities match, and the genuine22-operation lifecycle and
+retained busy-flash case pass locally with peakSP77. This is separate from
+the larger complete-join caller's SP7B result and pending full CI.
 
 ## Executed contract
 
@@ -179,21 +189,22 @@ command in the real RAM fail-stop and stays there after later synthetic idle,
 without successful publication or media replacement.
 
 The regular lifecycle executes128 actual AES calls and532 flash-RAM commands.
-Its maximum SP is `7B` under the unchanged `7C` cap. Full acceptance requires
-246324 artifact and10354 outcome negatives, without sampling either count.
+Its maximum SP is `77` under the unchanged `7C` cap. Full acceptance requires
+246199 artifact and10345 outcome negatives, without sampling either count.
 The explicit affected tier may defer only the exhaustive artifact corruption
 campaign (`ARTIFACT_CAMPAIGN=deferred`); complete immutable artifact/layout
-checks, all real execution,10354 outcome negatives, aliases/stack and retained
+checks, all real execution,10345 outcome negatives, aliases/stack and retained
 busy failure still run. The Make default remains `full`, and CI runs the
 complete campaign on full/nightly/release/verification changes. See the
 [tier and coverage contract](VALIDATION.md#risk-based-selection-and-host-coverage).
 
 Wipe checks cover the complete named key/crypto work areas, not durable
 counter/journal payloads or retained lower AES/DMA/compiler copies.
-The additional1625 artifact mutations cover every byte of the325 added CODE
-bytes in all five existing address-sensitive mutations. The additional413
-outcome mutations cover331 newly unowned XDATA bytes and82 net additional
-named wipe bytes (354 rather than272). No old scenario class is removed.
+Relative to the original accepted image, the additional1500 artifact
+mutations cover every byte of the net300 added CODE bytes in all five
+existing address-sensitive mutations. The additional404 outcome mutations
+cover322 newly unowned XDATA bytes and82 net additional named wipe bytes
+(354 rather than272). No old scenario class is removed.
 Artifact comparisons cache only immutable bytes already authenticated
 against the fixed expected digest; every address/byte mutation still runs.
 Static CDB location caching never caches a simulated observation.
@@ -201,6 +212,7 @@ Static CDB location caching never caches a simulated observation.
 Evidence is **host-tested, image-checked and simulated**, not
 hardware-observed. This is not a claim of electrical interruption/endurance,
 entropy quality, general TC/router-parent support, complete MCU join,
-application interoperability or conformance. The next placement step is the
-real MAC/NWK/APS/ZDO/BDB composition; the radio adapter, secure restart and
-separate hardware gates remain necessary.
+application interoperability or conformance. The separate
+[complete MAC/NWK/APS/ZDO/BDB caller](ED_JOIN.md#complete-banked-mcu-execution)
+now has simulated join evidence; its remaining acceptance, the radio adapter,
+secure restart and separate hardware gates remain necessary.

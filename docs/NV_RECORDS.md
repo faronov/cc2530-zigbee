@@ -150,13 +150,20 @@ its only external calls are the real reader, erase and program APIs.
 
 | Item | Measured/checkable value |
 | --- | --- |
-| CODE | 7,046 bytes, unbanked |
-| Ordinary XDATA + status reservation | 797 +64 =861, within a separate 1,024-byte budget |
-| Complete private/compiler prefix | `0000..0294` |
+| CODE | 6,937 bytes, unbanked |
+| Ordinary XDATA + status reservation | 798 +64 =862, within a separate 1,024-byte budget |
+| Complete private/compiler prefix | `0000..0295` |
 | Diagnostic / staging / reader chunk / program word | `0195` / `01A4` / `0224` / `0244` |
-| Caller buffer | `0295..0314`, 128 bytes |
-| Stack | Starts `38`; observed peak `57`; upper IRAM remains guarded |
-| CODE SHA-256 | `7214d763451bc53d74ca14f9a29fe06e8eb1524cf6088c5db41b97754ffc6d12` |
+| Caller buffer | `0296..0315`, 128 bytes |
+| Stack | Starts `30`; observed peak `4C`; upper IRAM remains guarded |
+| CODE SHA-256 | `f99475c308cdca64589fc3a7e2772cb84549ccc5da5c3c8df752f32123aade12` |
+
+The complete-join stack work makes the replacement poll/page copies volatile,
+shortening SDCC register saves and reducing journal DATA from23 to15 bytes.
+The actual module has3585 CSEG bytes plus8 CONST bytes,258 XDATA bytes and
+4 OSEG bytes. The refreshed ordinary replay passes all original cases and
+6968 artifact negatives; record format, commit ordering and wear limits
+are unchanged.
 
 The 69,623 counted native checks cover every payload length and every byte
 of both pages as corruption, independent full-record CRC/format comparison,

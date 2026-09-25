@@ -29,6 +29,13 @@ typedef struct {
 } nwk_aps_duplicate_t;
 
 typedef struct {
+    ccm_star_limits_t limits;
+    uint32_t ack_wait, broadcast_time;
+    uint16_t nv_polls, profile;
+    uint8_t endpoint;
+} nwk_aps_config_t;
+
+typedef struct {
     ed_packet_t outgoing, incoming, acknowledgment;
     nwk_aps_duplicate_t duplicate[NWK_APS_DUPLICATES];
     nwk_aps_duplicate_t broadcast[NWK_APS_DUPLICATES];
@@ -60,32 +67,33 @@ typedef struct {
  * security processing. Protected TX is constructed after the fixed short/
  * short compressed MAC prefix, then the real codec emits only that header.
  * No overlapping payload/output is passed to a codec.
+ * init copies a complete, disjoint configuration; it retains no pointer to
+ * that input. The grouped input avoids an eleven-argument SDCC caller frame.
  */
-nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner, volatile uint8_t endpoint,
-    volatile uint16_t profile, const ccm_star_limits_t * volatile limits, volatile uint16_t nv_polls,
-    volatile uint32_t ack_wait, volatile uint32_t broadcast_time, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner,
+    const nwk_aps_config_t * volatile config, volatile uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * volatile packet,
-                               volatile uint8_t aps_secure, volatile uint32_t now);
+                               volatile uint8_t aps_secure, volatile uint32_t now) JOIN_FAR;
 /* which1=Request-Key, which2=Verify-Key, which3=local Leave. quiet explicitly
  * records keyless abandonment without a PHY transmission.
  * Key selection/phase/counters belong
  * exclusively to the real security owner, never to a caller-supplied boolean.
  */
-nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
-    const mac_tx_event_t * volatile event, mac_tx_action_t * volatile action);
+    const mac_tx_event_t * volatile event, mac_tx_action_t * volatile action) JOIN_FAR;
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
-    volatile uint16_t length, volatile uint32_t now);
-nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event);
-nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile result);
+    volatile uint16_t length, volatile uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event) JOIN_FAR;
+nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile result) JOIN_FAR;
 /* Request cancellation; step must still establish physical quiescence. */
-nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now) JOIN_FAR;
 /* Stop ordinary TX and priority ACK without releasing an active MAC lease.
  * step drains cancellation/QUIESCED before clearing stopping. A failed ACK
  * with confirmed MAC release returns ACK_FAILED and records its MAC outcome
  * in reply_result; it is not an uncertain radio fault or membership loss.
  */
-nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now);
+nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now) JOIN_FAR;
 
 /* Nonreentrant, disjoint complete ordinary caller objects only. Applications
  * remain blocked until a genuine network announcement, verified TC key and

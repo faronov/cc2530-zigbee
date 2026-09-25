@@ -19,19 +19,21 @@ from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, 
 
 MODULES = ("mac_frame", "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_parent_test")
 SOURCES = ("mac_frame.c", "nwk_beacon.c", "nwk_candidates.c", "nwk_parent.c", "test_nwk_parent.c")
-CODE_SIZE = 15580
-CODE_SHA = "88d823c98f15096a7f464c1743006e4b0acb629414c332f5e46c6b78b494cdec"
-CDB_SHA = "658b204473ab46ccc24b310d390e360b21d3d6521181500764bec359433b937b"
-MAP_SHA = "77cbdcd02c72eb29e8b376c456726ebf572027e179e4bd57c16efb931d7815bc"
+# Codec lowering reviewed in boot_mac_tx; selector/caller objects and physical
+# XDATA/stack boundaries are unchanged. Full 42-case replay still peaks at 4D.
+CODE_SIZE = 15537
+CODE_SHA = "b26a669f36ebefbca106b8b003f6d59039d24441ce5ab2dfa2334a8fd2fd7c11"
+CDB_SHA = "d6cd227fae732c01c70c52865f19b275614382c3445bbf9f64a4927771263523"
+MAP_SHA = "b71ffe384ac4389feeae3238e17054232687cd99ea3fec4e9ec425040a920bd9"
 LISTINGS = {
-    "mac_frame": (4253, 7136, "42e1472393ff92c6ed7917a2df5479d508c709bfa62a15d461d9da4b2378626b"),
-    "nwk_beacon": (353, 601, "de3b7e7938b360eff7ef39decd263b78e0bde30d11e11874e7d35027a9ab68eb"),
-    "nwk_candidates": (1519, 2334, "ce1e10a807a9b5471c687308d5faebcba0bf6635ff48c11b60357343254490b0"),
-    "nwk_parent": (915, 1428, "3201ae9a2fac0c8656a6c896d6d78862ef5357b316ff2c58f354a4031d742242"),
-    "nwk_parent_test": (1810, 3463, "ac37a0ae60216185e0ac6a32fd14b020fcd1aca1cd88372a97f1df17f284f524"),
+    "mac_frame": (4262, 7093, "89dc930bbb49521fc667b676cd31025972fffd73b8b9c32721e60dce064154c0"),
+    "nwk_beacon": (353, 601, "e3704bfd032c37bd24601acc3091b571f2f6240da9053f4e3a0e6555c8a4f6a6"),
+    "nwk_candidates": (1519, 2334, "bcc5dd440dfd8e6f54efb91771a1983428177c7d24c28f8fcdebdc33fab3de31"),
+    "nwk_parent": (915, 1428, "24b53f1320703ece0e815e8b37f99695c456faf5dd074b132ae383fd10993af2"),
+    "nwk_parent_test": (1810, 3463, "2b0222a15806ef6c203cf8039c3c5763f0864f4191ad3c3ed5f59f7b7c11a2af"),
 }
 OBJECTS = {
-    "mac_frame": (7136, 216, 15, 10),
+    "mac_frame": (7093, 216, 12, 10),
     "nwk_beacon": (601, 27, 9, 0),
     "nwk_candidates": (2334, 111, 4, 0),
     "nwk_parent": (1428, 57, 0, 0),
@@ -83,13 +85,13 @@ def verify(image, symbols, debug, memory, listings, objects):
         spans.update(span)
     require(spans == set(range(411, 847)), "Parent caller/private-prefix boundary changed")
     require(instructions.get(symbols["_nwk_parent_test_done"]) == b"\0" and
-            symbols["_nwk_parent_test_done"] == 15047 and
-            cdb_address(debug, "L:XG$main$0$0") == 15050, "Parent checkpoint changed")
+            symbols["_nwk_parent_test_done"] == 15004 and
+            cdb_address(debug, "L:XG$main$0$0") == 15007, "Parent checkpoint changed")
     selector_calls = {int.from_bytes(data[1:], "big") for address, data in instructions.items()
-                      if 10169 <= address < 11597 and len(data) == 3 and data[0] == 0x12}
+                      if 10126 <= address < 11554 and len(data) == 3 and data[0] == 0x12}
     require(symbols["_nwk_candidates_get"] in selector_calls, "Parent bypasses real collector getter")
     caller_calls = {int.from_bytes(data[1:], "big") for address, data in instructions.items()
-                    if 11597 <= address <= 15047 and len(data) == 3 and data[0] == 0x12}
+                    if 11554 <= address <= 15004 and len(data) == 3 and data[0] == 0x12}
     require(all(symbols[name] in caller_calls for name in
                 ("_nwk_parent_select", "_nwk_candidates_init", "_nwk_candidates_consider")),
             "Parent corpus no longer calls actual selector/collector")

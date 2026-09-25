@@ -21,7 +21,7 @@ the exploratory genuine HMAC path exceeded the unchanged SP7C cap.
 The checked profile keeps the large-model ABI and uses SDCC's `--dataseg`
 to name complete module DATA frames. After replacing just that area name
 with `DSEG`, **every production and caller relocatable object must match its
-already accepted original hash**. This covers instructions, relocations,
+reviewed standalone hash**. This covers instructions, relocations,
 private/public metadata, argument representation and all storage classes.
 Only the assembler output-directory header is excluded as before.
 
@@ -35,7 +35,7 @@ buffers or additional RAM. The bit-addressable bytes20..21 remain separate.
 | flash executor |08|8|
 | flash reader |10|4|
 | flash writer |14|5|
-| journal |22|23|
+| journal |22|15|
 | outgoing counter owner |39|14|
 | timebase / CCM |08|0 each|
 | AES |22|32|
@@ -72,7 +72,7 @@ indirect transfers and RETI fail; reset's fixed startup jump is separate.
 Transitive inter-module paths must be acyclic and have disjoint active DATA
 frames. Tail transfers are conservatively treated as retaining ancestors.
 Same-module allocation and calling conventions remain byte-for-byte those
-of the original accepted compiler objects.
+of the corresponding standalone compiler objects.
 
 For example, counter -> journal -> writer -> executor has disjoint frames,
 as does keyed hash -> MMO -> AES -> timebase. The counter and keyed-hash
@@ -101,26 +101,39 @@ continuations. Only peripherals/media are explicitly synthetic.
 
 | Resident caller | Complete CODE | Ordinary XDATA | Maximum SP, hex | Original corpus |
 | --- | ---: | ---: | ---: | --- |
-| Security envelopes |31786|3101|78|23 cases,220 checks,345 AES calls|
-| MMO/install code |29421|2367|6C|39 cases,117 checks,58 AES calls|
-| Keyed hash |29775|2370|76|15 cases,45 checks,51 AES calls|
-| Outgoing counters |28231|2425|79|56 sequences,36695 flash calls,919 RAM commands,162 continuations|
+| Security envelopes |31761|3110|73|23 cases,220 checks,345 AES calls|
+| MMO/install code |29396|2376|6C|39 cases,117 checks,58 AES calls|
+| Keyed hash |29750|2379|76|15 cases,45 checks,51 AES calls|
+| Outgoing counters |28206|2434|75|56 sequences,36695 flash calls,919 RAM commands,162 continuations|
+
+These are refreshed compiler identities and measured execution after the
+complete-join CCM/counter/journal register-lifetime changes. Both boards'
+full artifacts match. The security/MMO/key-hash executions and every
+profile's exhaustive artifact proof pass locally. The counter corpus also
+executed all original operations atSP75, but the final combined counter
+command twice exceeded the unchanged900-second local limit. Its full
+deadline acceptance remains open for CI; the table does not claim that
+worker passed. No corpus, continuation, artifact mutation or deadline was
+removed or relaxed.
 
 The new profile caps are32768 CODE and3200 total XDATA including64 reserved
 status bytes; executed SP remains at or below the original7C cap. These
 are new full-resident image budgets, **not relaxed original component caps**.
-The largest image leaves982 CODE bytes below8000; this is not demonstrated
+The largest image leaves1007 CODE bytes below8000; this is not demonstrated
 space for the remaining stack. Every existing standalone image identity,
 case, diagnostic, negative control and15-second simulator deadline remains.
 
 Each image consumes sixteen listings captured immediately after its own
 link, before a subsequent link can overwrite relocated listings. All source
 storage extents, complete libc boundaries and artifact identities are pinned.
-Artifact-negative counts are99456/93116/92761/89734 respectively. The
+Artifact-negative counts are99497/93157/92802/89775 respectively. The
 existing snapshot/continuation negatives remain; exact shifted peak checks
 are added for every crypto case. Every call also checks inactive services'
-XDATA, with1194/1941/1864/1305 individual inactive-byte mutations.
+XDATA, with1199/1950/1873/1309 individual inactive-byte mutations.
 Missing IRAM aliasing is independently rejected.
+Raw CDB is SHA-authenticated once, then every invocation compares its
+complete immutable bytes, including every mutant. No decoded-subset,
+simulator-state or execution-result cache replaces these checks.
 
 Eight additional CI jobs, one per board/caller, run all four resident corpora.
 The exact partition is `test-security-resident-{security,mmo,key-hash,counter}`;

@@ -244,6 +244,10 @@ budgets/guards. All21 public entries, including the explicit decoder, are
 pinned;221 artifact negatives and the missing-alias negative are retained.
 See the [current evidence summary](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63);
 these RX-header alternatives do not broaden scan admission.
+The subsequent complete-join decoder lowering gives29524 CODE and the same
+1501+64 XDATA, with stack start3D and observed SP59 on both boards. All28
+scenarios,221 artifact negatives and the alias negative remain unchanged;
+the older detailed hashes below are not the refreshed image identities.
 
 Both board definitions passed strict native C99, ASan/UBSan and the genuine
 six-module SDCC image. Native additions cover all256 duration values, all32

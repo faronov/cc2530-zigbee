@@ -5,6 +5,7 @@
 #define ZDO_NODE_H
 
 #include <stdint.h>
+#include "banked_join.h"
 
 #define ZDO_NODE_REQUEST_CLUSTER 0x0002u
 #define ZDO_NODE_RESPONSE_CLUSTER 0x8002u
@@ -68,12 +69,12 @@ typedef struct {
  * Errors preserve ALL outputs. No pointers retained and no heap or I/O.
  */
 zdo_node_result_t zdo_node_req_decode(const uint8_t *body, uint16_t size,
-                                     zdo_node_request_t *output);
+                                     zdo_node_request_t *output) JOIN_FAR;
 zdo_node_result_t zdo_node_req_encode(const zdo_node_request_t *request,
-                                     uint8_t *body, uint16_t capacity, uint8_t *size);
+                                     uint8_t *body, uint16_t capacity, uint8_t *size) JOIN_FAR;
 zdo_node_result_t zdo_node_rsp_decode(const uint8_t *body, uint16_t size,
-                                     zdo_node_response_t *output);
+                                     zdo_node_response_t *output) JOIN_FAR;
 zdo_node_result_t zdo_node_rsp_encode(const zdo_node_response_t *response,
-                                     uint8_t *body, uint16_t capacity, uint8_t *size);
+                                     uint8_t *body, uint16_t capacity, uint8_t *size) JOIN_FAR;
 
 #endif

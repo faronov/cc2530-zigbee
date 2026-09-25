@@ -5,24 +5,62 @@
 #include <stddef.h>
 #include <string.h>
 
+#if defined(CC2530_JOIN_WORKSPACE)
+/* Full-profile binding only: the integrator must back this direct-address
+ * symbol with a real, disjoint, complete mac_join_t allocation. It is live
+ * through each init/start/step/release and all nested calls, not just start.
+ * No fallback pool, pointer indirection or abbreviated snapshot is supplied.
+ * See MAC_JOIN.md for the separate aggregate/linker/lifetime proof gate. */
+extern mac_join_t MAC_JOIN_RAM mac_join_staged;
+#define staged mac_join_staged
+#else
 static mac_join_t MAC_JOIN_RAM staged;
+#endif
 #define j (&staged)
 static mac_tx_t MAC_JOIN_RAM * volatile owner;
 static mac_tx_t * volatile tx_argument;
-static mac_join_event_t MAC_JOIN_RAM input;
-static mac_join_action_t MAC_JOIN_RAM output;
-static mac_poll_event_t MAC_JOIN_RAM pe;
-static mac_poll_action_t MAC_JOIN_RAM pa;
-static mac_association_request_t MAC_JOIN_RAM ar;
-static mac_association_event_t MAC_JOIN_RAM ae;
-static mac_poll_request_t MAC_JOIN_RAM pr;
-static mac_join_request_t MAC_JOIN_RAM proposed;
+/* Returning foreground work, never retained by a lower service. start and
+ * step cannot overlap. Within step, pr is consumed before pe, pe before ar,
+ * and ar before ae. pa, input and output remain live across those calls and
+ * MUST NOT share the nested slot. In particular ae.body borrows the retained
+ * staged.record.poll.body, not this union. The full transactional context
+ * remains separate, including every nested receipt and diagnostic byte. */
+static union {
+    struct {
+        mac_join_request_t proposed;
+        mac_header_t header;
+        uint8_t command[2], body[25], length;
+    } start;
+    struct {
+        mac_join_event_t input;
+        mac_join_action_t output;
+        mac_poll_action_t pa;
+        union {
+            mac_poll_event_t pe;
+            mac_association_request_t ar;
+            mac_association_event_t ae;
+            mac_poll_request_t pr;
+        } nested;
+    } step;
+} MAC_JOIN_RAM work;
+#define input work.step.input
+#define output work.step.output
+#define pa work.step.pa
+#define pe work.step.nested.pe
+#define ar work.step.nested.ar
+#define ae work.step.nested.ae
+#define pr work.step.nested.pr
+#define proposed work.start.proposed
+#define header work.start.header
+#define command work.start.command
+#define start_body work.start.body
+#define start_length work.start.length
 static volatile uint32_t MAC_JOIN_RAM time;
 static volatile uint32_t MAC_JOIN_RAM remaining;
 static const mac_tx_event_t * volatile source;
 static const mac_poll_event_t MAC_JOIN_RAM * volatile poll_event;
 static volatile uint16_t MAC_JOIN_RAM admitted;
-static uint8_t MAC_JOIN_RAM observation, body[25], length;
+static uint8_t MAC_JOIN_RAM observation;
 typedef char identity_contiguous[
     offsetof(mac_join_record_t, generation) == offsetof(mac_join_record_t, epoch) + sizeof(uint32_t)
     && offsetof(mac_join_action_t, epoch) == 0
@@ -155,8 +193,7 @@ mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile
 mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t MAC_JOIN_RAM * volatile tx,
     const mac_join_request_t MAC_JOIN_RAM * volatile request, volatile uint32_t now)
 {
-    mac_header_t header;
-    uint8_t command[2], i;
+    uint8_t i;
     volatile uint32_t generation;
     if (ctx == NULL || tx == NULL || request == NULL)
         return MAC_JOIN_INVALID;
@@ -195,7 +232,10 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_
     if (staged.generation == UINT32_MAX || tx->generation >= UINT32_MAX - 1u
             || staged.poll.control.generation == UINT32_MAX || staged.association.generation == UINT32_MAX)
         return MAC_JOIN_LIMIT;
-    memset(&header, 0, sizeof(header));
+    /* Every field is assigned, including the two zero-valued wire fields;
+     * the start member may previously have held arbitrary step bytes. */
+    header.version = 0;
+    header.sequence = 0;
     header.type = MAC_FRAME_COMMAND;
     header.flags = MAC_FLAG_ACK_REQUEST;
     header.destination_mode = proposed.extraction.coordinator_mode;
@@ -206,7 +246,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_
     memcpy(header.source, proposed.extraction.local, 8);
     command[0] = MAC_COMMAND_ASSOCIATION_REQUEST;
     command[1] = proposed.capability;
-    if (mac_frame_encode(&header, command, 2, body, sizeof(body), &length) != MAC_CODEC_OK)
+    if (mac_frame_encode(&header, command, 2, start_body, sizeof(start_body), &start_length) != MAC_CODEC_OK)
         return MAC_JOIN_UNSUPPORTED;
     generation = staged.generation + 1u;
     /* Nested contexts retain their generations; only new-attempt control resets. */
@@ -224,8 +264,8 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_
     staged.deadline = now + proposed.extraction.lifetime;
     staged.steps = proposed.extraction.work;
     /* Request bytes must survive unrelated foreground codec/controller calls. */
-    memcpy(staged.outgoing, body, length);
-    staged.length = length;
+    memcpy(staged.outgoing, start_body, start_length);
+    staged.length = start_length;
     *ctx = staged;
     return MAC_JOIN_OK;
 }

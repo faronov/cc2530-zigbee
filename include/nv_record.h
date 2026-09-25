@@ -66,7 +66,7 @@ typedef struct {
  */
 nv_record_result_t nv_record_load(uint8_t MCU_XDATA * volatile output, uint8_t capacity);
 nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * volatile data, uint8_t length,
-                                    uint16_t poll_limit, uint8_t allow_recovery);
+                                    volatile uint16_t poll_limit, uint8_t allow_recovery);
 /* Read-only diagnostic; phase0 means no admitted operation since reset.
  * Phases: scan1, load recheck2, erase3, body4, integrity5, commit6, verify7, done8.
  * selected=FF means no record selected; reader/writer=FF means not invoked.

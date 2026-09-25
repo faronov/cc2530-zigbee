@@ -14,11 +14,19 @@ from boot_image import (
 )
 from verify_firmware import cdb_address, parse_ihex, parse_symbols, require, xdata_ranges
 
-SIZE = 25515
-DIGEST = '2d8cf43e6f538343b0c175b1dc1ec9d287f4dd3a35ae34b7ab6cc2e0abfd1373'
-PRIVATE_DIGEST = '5b6976bb216df50af6a82a056e59b385426410bde325056df0a9c8ec311f8e46'
-CALLER_DIGEST = '04031a37717c9f3722d0d8011de3ab04e19a0e969ed0e31b49045edef489491f'
-PUBLIC_DIGEST = '78a00ef5de725ae72e2bbf5121ed0bc5596a73e8de7c3a8fad2a68ed54f65e2f'
+# Reviewed SDCC 4.2 volatile-copy lowering in mac_command_decode: its two
+# DATA spills (1+2 bytes) disappear, and it no longer emits PUSH/POP. The
+# generic payload/result pointers remain 3 bytes and length remains 16 bits;
+# the full raw ADB differs only by those spill declarations. Other functions'
+# assembly is unchanged. mac_frame CSEG/XSEG/DSEG/OSEG/BSEG is now
+# 7093/216/12/10/1 (formerly 7136/216/15/10/1). Below and in the dependent
+# profiles, linked addresses and observed peaks are remeasured, not inferred
+# by subtracting the object DATA saving from SP.
+SIZE = 25472
+DIGEST = 'febe0d42277a3901b6b8cad2bdf066d9cb8fea9aea09006bca987e72f2fff51c'
+PRIVATE_DIGEST = '36dba04ad851f8efdaa987a63459572a5bba15501d581ffc207bbfe5fac6b240'
+CALLER_DIGEST = '0f8094c3ea752b2c7af0c7c9222cf02aa1950f275c163f176ba3a18c3adf4fcd'
+PUBLIC_DIGEST = '15c7e842e46d791f63173113084266d40c7e396b4c1604f8438b1d0734b71c9c'
 # Dedicated composition, NOT changes to codec/platform/board budgets.
 CODE_BUDGET = 28672
 XDATA_BUDGET = 1280
@@ -28,25 +36,25 @@ INSTRUCTION_RE = re.compile(
 # Ordered normalized records are "six-hex-address:lowercase-byte-hex\n".
 # Pin every reviewed instruction, not an arbitrary surviving subset of a listing.
 # The harness also contains non-CSEG startup instructions in listing order.
-LISTING_PROOFS = {'mac_frame': (4253, 7136, '00668a64d3b0c972fa8e3312b8bd5da97b667ef2affe065a484540bee50951d4', ((98, 7234),)),
- 'mac_tx': (3729, 5650, '65c994b5f08608b63354180fdff821b188fb56f9b2154c8e74bf2b4fac1fff6b', ((7234, 12884),)),
+LISTING_PROOFS = {'mac_frame': (4262, 7093, 'e9c13b6e77f16258a6ca82ceb8088cf4e44b2d383ff14ff5af9ba124591b5d10', ((98, 7191),)),
+ 'mac_tx': (3729, 5650, '412ca2f140fc8022e88e09fddd7ce1f885171316fd4cdecfd7e3595c8eea52ec', ((7191, 12841),)),
  'mac_tx_test': (6998,
                  11934,
-                 '9f7442bac474dc66fa124c487c915264da9785e004982104161f6cdc607a0b72',
-                 ((0, 6), (95, 98), (12884, 24809)))}
+                 '7857be577d677166f2e13de675bbaa8a935b13b7af165804ff99c282e6aeb0dc',
+                 ((0, 6), (95, 98), (12841, 24766)))}
 ENTRY_POINTS = {'_mac_command_decode': ('mac_frame', 554),
- '_mac_command_encode': ('mac_frame', 1061),
- '_mac_beacon_decode': ('mac_frame', 2272),
- '_mac_frame_decode': ('mac_frame', 5814),
- '_mac_frame_encode': ('mac_frame', 6619),
- '_mac_tx_init': ('mac_tx', 7430),
- '_mac_tx_submit': ('mac_tx', 7636),
- '_mac_tx_copy': ('mac_tx', 8750),
- '_mac_tx_step': ('mac_tx', 9339),
- '_mac_tx_release': ('mac_tx', 12799),
- '_main': ('mac_tx_test', 24516),
- '_mac_tx_done': ('mac_tx_test', 24805),
- '_mac_frame_decode_profile': ('mac_frame', 4644)}
+ '_mac_command_encode': ('mac_frame', 1018),
+ '_mac_beacon_decode': ('mac_frame', 2229),
+ '_mac_frame_decode': ('mac_frame', 5771),
+ '_mac_frame_encode': ('mac_frame', 6576),
+ '_mac_tx_init': ('mac_tx', 7387),
+ '_mac_tx_submit': ('mac_tx', 7593),
+ '_mac_tx_copy': ('mac_tx', 8707),
+ '_mac_tx_step': ('mac_tx', 9296),
+ '_mac_tx_release': ('mac_tx', 12756),
+ '_main': ('mac_tx_test', 24473),
+ '_mac_tx_done': ('mac_tx_test', 24762),
+ '_mac_frame_decode_profile': ('mac_frame', 4601)}
 CALLER_OBJECTS = {'tx': (407, 168),
  'saved': (575, 168),
  'event': (743, 17),
@@ -376,7 +384,7 @@ def main():
     require(all(sfr[a - 0x80] == 0 for a in (0xa8, 0xb8, 0x9a)),
             "MAC-TX enabled interrupts")
     peaks = re.findall(r"Max value of stack pointer=\s*0x([0-9a-f]+)", indexed[1])
-    require(len(peaks) == 1 and int(peaks[0], 16) == 0x5e
+    require(len(peaks) == 1 and int(peaks[0], 16) == 0x55
             and int(peaks[0], 16) <= 0x7c, f"MAC-TX reviewed stack peak/budget changed: {peaks}")
     ordinary = sum(end - start for start, end in xdata_ranges(symbols))
     print(f"MAC-TX: {SIZE} CODE SHA256={DIGEST}; {ordinary}+64/{XDATA_BUDGET} XDATA; "

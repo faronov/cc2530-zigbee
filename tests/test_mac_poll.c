@@ -593,6 +593,50 @@ static void native(void)
         send(); free(exact);
         CHECK((poll.record.cause == MAC_POLL_COMMAND) == (n == sizeof(response_r22)));
     }
+    /* Alternate decoded-frame -> encoder-header -> decoded-frame lifetimes,
+     * and FRAME -> output -> rejected input, without disturbing a receipt or
+     * reinitializing either world's live owner. All lower calls are genuine. */
+    {
+        mac_tx_t other_tx;
+        mac_poll_request_t other_request;
+        mac_poll_event_t other_event;
+        mac_poll_action_t other_action, saved_action;
+        mac_poll_record_t other_record;
+        mac_frame_info_t decoded;
+        scenario = 0;
+        setup(); mode = 0; request_ack(); pump(); make_data(2);
+        now++; frame_event(); send(); take();
+        saved = poll; saved_tx = tx; old = record; before = action;
+        other_request = request;
+        other_request.epoch = 0x87654321UL;
+        other_request.pan = 0x4567;
+        CHECK(mac_tx_init(&other_tx, 0x5a, 0) == MAC_TX_OK);
+        CHECK(mac_poll_init(&other) == MAC_POLL_OK);
+        CHECK(mac_poll_start(&other, &other_tx, &other_request, 0) == MAC_POLL_OK);
+        CHECK(mac_frame_decode(other.control.outgoing, other.control.outgoing_length, &decoded) == MAC_CODEC_OK);
+        CHECK(decoded.header.version == 0 && decoded.header.sequence == 0);
+        CHECK(decoded.header.destination_pan == 0x4567 && decoded.header.source_pan == 0x4567);
+        CHECK(other.control.outgoing[decoded.payload_offset] == MAC_COMMAND_DATA_REQUEST);
+        memset(&other_event, 0, sizeof(other_event));
+        other_event.epoch = other_request.epoch; other_event.generation = other.control.generation;
+        other_event.kind = MAC_POLL_CANCEL;
+        CHECK(mac_poll_step(&other, &other_tx, 0, &other_event, &other_action) == MAC_POLL_OK);
+        CHECK(other_action.kind == MAC_POLL_ACTION_CLOSE);
+        other_event.kind = MAC_POLL_CLOSED; other_event.token = other_action.token;
+        CHECK(mac_poll_step(&other, &other_tx, 0, &other_event, &other_action) == MAC_POLL_OK);
+        CHECK(other.control.phase == MAC_POLL_DONE && other_action.kind == MAC_POLL_ACTION_NONE);
+        saved_action = other_action;
+        other_event.kind = 255;
+        CHECK(mac_poll_step(&other, &other_tx, 0, &other_event, &other_action) == MAC_POLL_INVALID);
+        CHECK(!memcmp(&other_action, &saved_action, sizeof(other_action)));
+        CHECK(mac_poll_take(&other, &other_record) == MAC_POLL_OK);
+        CHECK(mac_poll_release(&other, &other_tx) == MAC_POLL_OK);
+        CHECK(!memcmp(&poll, &saved, sizeof(poll)) && !memcmp(&tx, &saved_tx, sizeof(tx)));
+        CHECK(!memcmp(&record, &old, sizeof(record)) && !memcmp(&action, &before, sizeof(action)));
+        close_poll();
+        CHECK(!memcmp(&poll.record, &saved.record, sizeof(poll.record)));
+        CHECK(mac_poll_release(&poll, &tx) == MAC_POLL_OK);
+    }
 }
 int main(void)
 {

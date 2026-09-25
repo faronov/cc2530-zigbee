@@ -95,11 +95,15 @@ Both board definitions passed **host, image and alias-aware simulator** checks:
 
 | Actual SDCC4.2.0 composition | Resources |
 | --- | --- |
-| `mac_frame -> nwk_beacon -> nwk_candidates -> nwk_parent -> test` | 15,580/16,384 CODE;875 ordinary XDATA +64 reserved within1,024 |
+| `mac_frame -> nwk_beacon -> nwk_candidates -> nwk_parent -> test` | 15,537/16,384 CODE;875 ordinary XDATA +64 reserved within1,024 |
 | Production parent object | 1,428 CODE;57 XDATA;0 permanent DATA/overlay |
 | Policy / copied choice | 15 /37 target bytes |
 | Private modules / test caller / libc | 411 /442 /22 XDATA bytes |
 | Stack | Start2F, checkpoint SP2E, full-run observed peak4D; unchanged cap7C |
+
+The current43-byte CODE reduction comes only from complete-join decoder
+pointer/length-copy lowering. Both boards retain all42 target cases and
+53 artifact/8 result/1 alias negatives; parent-selection policy is unchanged.
 
 The test image contains all real codecs, not successful decoder substitutes.
 Both-board IHX/CDB are byte-identical. Reserved status tail, unallocated XDATA,

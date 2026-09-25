@@ -141,7 +141,7 @@ PENDING without publishing a counter.
 
 The genuine target links all six objects with immediate relocated-listing
 snapshots. The three lower flash modules retain their complete published
-instruction identities. The journal is unchanged production C, with its
+instruction identities. The journal is the real production C, with its
 relocated constant addresses checked for this composition. Actual NV calls,
 RAM commands, FCTL/FADDR/FWDATA instructions and every programmed byte are
 checked by the shared journal replay, not substituted API results.
@@ -150,22 +150,28 @@ across162 complete-state segments.
 
 | Resource | Measured / limit |
 | --- | --- |
-|Complete isolated CODE|9941 /12288 bytes|
-|Ordinary XDATA plus status reservation|1120+64 /1280 bytes|
-|Counter module CODE / XDATA|2746 /329 bytes|
-|Stack allocation / checkpoint SP|4A /4B hex|
-|Maximum full-run stack / cap|72 /7C hex|
+|Complete isolated CODE|9907 /12288 bytes|
+|Ordinary XDATA plus status reservation|1125+64 /1280 bytes|
+|Counter module CODE / XDATA|2821 /333 bytes|
+|Stack allocation / checkpoint SP|42 /43 hex|
+|Maximum full-run stack / cap|66 /7C hex|
 
-The journal/private prefix ends at0294; the counter/private compiler fence
-is03DD; caller storage is03DE..045F. There is no linked generic-pointer/libc
+The journal/private prefix ends at0295; the counter/private compiler fence
+is03E2; caller storage is03E3..0464. There is no linked generic-pointer/libc
 scratch in this composition. Complete CODE, raw CDB before decoding, map,
 memory, objects, listing order/metrics, fields, parameter storage, fences and
 real call chains are pinned; every CODE byte and every F/S/L/T record has
 negative controls. Caller publication, upper IRAM, status tails, unallocated
 XDATA, NV neighbors and unowned peripherals remain guarded.
-There are32255 artifact negatives,204 snapshot/continuation negatives and
+There are32257 artifact negatives,204 snapshot/continuation negatives and
 one missing-IRAM-alias negative; exact sequence/call/segment/peak totals
 are required, not merely printed.
+The complete-join stack reduction uses volatile domain/end/poll/page copies
+to shorten compiler register-save lifetimes, without changing counter floors,
+reservation frequency, journal format or flash history. The refreshed
+standalone execution passes locally; its larger
+[resident composition](SECURITY_RESIDENT.md#execution-and-resource-contract)
+still needs combined deadline acceptance.
 
 Longer multi-operation sequences use complete-state continuations at genuine
 operation boundaries, following the existing offline proof pattern. Each

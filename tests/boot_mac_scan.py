@@ -20,46 +20,48 @@ MODULES = ("mac_frame", "mac_tx", "nwk_beacon", "nwk_candidates", "mac_scan", "m
 SOURCES = tuple(m + ".c" for m in MODULES[:-1]) + ("test_mac_scan.c",)
 # A new composition budget only. Existing MAC-TX/codec/platform caps are unchanged.
 CODE_BUDGET, XDATA_BUDGET = 32768, 2048
-SIZE, XDATA, PRIVATE_END = (29567, 1501, 624)
-DIGEST = 'b7cd7de8f7d65a8947d0d9cf5f665dc39055f17441d4b73bffcfd448ff0c7f2f'
-PRIVATE_DIGEST = '4cd43dbe1fe247b33a6dcb03e16b858acb3ab56242c6d963e04a6e20d5a7bc33'
-CALLER_DIGEST = '1b63792254c1c83193592011bd1d0e716589ac4a3d7c98901cbcedba55a77446'
-PUBLIC_DIGEST = 'f0e4b9743298d1bf4d5e007d552cfe2b49def7c0525c056e21309c9c145c6d09'
+# Codec lowering reviewed in boot_mac_tx; actual DATA packing moves stack
+# start 41->3D and the complete 28-case replay measures peak 66->59.
+SIZE, XDATA, PRIVATE_END = (29524, 1501, 624)
+DIGEST = '378d9e05ddc9d342680851411e5de81d48e92c4044160d95a29d0a12a1f617b0'
+PRIVATE_DIGEST = 'b0f1a4001f9be61c0223b2aaae1c4211f348645f7e901d285664cc1c37131b58'
+CALLER_DIGEST = '628695e1a67dad1e9d0320f28ed8c0af4b1e375ae141837e4276beee62ec004c'
+PUBLIC_DIGEST = '342bd01b8abd7ddc8162c5ef5a3e20070397a6c5fc1031e22fbc061983c3e67f'
 FIELD_DIGEST = '659464f7b5d96ba06e79f413f6a255d76b148b1fcf94f83ef341f6e56e0a6a88'
-LISTINGS = {'mac_frame': (4253, 7136, '57bcc5353c828abab7ec0980b1f8933eafce4e3b71d1df6a641ebfd3515dada4'),
- 'mac_tx': (3729, 5650, 'e7e7e7297e5b54e67341ec7b20b7890fd683f3abe922bed08bbbe1e1c2ed7609'),
- 'nwk_beacon': (353, 601, '651a0dbc54d34506bee1bdc0dba2f13eca32242c43893224fc5c7820d8038cc4'),
- 'nwk_candidates': (1519, 2334, '6e777928c2e6a3af47f09ef582036cb1bb493e4c7b4332ad118bb717158b12b0'),
- 'mac_scan': (6230, 8590, 'dfefce2d53a32f4d0de221153f44086b0d7dcd7a13b123a1ec5ff77ef3c269a5'),
- 'mac_scan_test': (2686, 4483, 'dc28154510bbd9f4def2ba2761eb233e75517a0f551c13ea1ae7ae5147322f25')}
-OBJECTS = {'mac_frame': (7136, 216, 15, 10),
+LISTINGS = {'mac_frame': (4262, 7093, 'a4a45a08f16e4d65a3bb84b3697a7162a467e4c544ef140f1c1d18860bee0ded'),
+ 'mac_tx': (3729, 5650, '01d8bf35e4178cf03c02503db849f0a9d674c15e0f1c13dd8dbaa53d5b32d618'),
+ 'nwk_beacon': (353, 601, '80855fc3dd1fefebae2fac31369908baaf7186738b86f871a628886d5f788844'),
+ 'nwk_candidates': (1519, 2334, '3135bc0d2d1988399925ae1dc80a140e9d574830a44262561d6e11ec4a834888'),
+ 'mac_scan': (6230, 8590, 'd6b78064a6ebc60d02da9278a1517519abaf292d708b64d75d8e2a7a1af12603'),
+ 'mac_scan_test': (2686, 4483, 'dcf1b4ffbc5efa954e9ff478d8605464709e1c5b582983f3a58085512ebc602c')}
+OBJECTS = {'mac_frame': (7093, 216, 12, 10),
  'mac_tx': (5650, 191, 8, 0),
  'nwk_beacon': (601, 27, 9, 0),
  'nwk_candidates': (2334, 111, 4, 0),
  'mac_scan': (8598, 79, 4, 0),
  'mac_scan_test': (4581, 851, 4, 0)}
 ENTRIES = {'mac_command_decode': ('mac_frame', 554),
- 'mac_command_encode': ('mac_frame', 1061),
- 'mac_beacon_decode': ('mac_frame', 2272),
- 'mac_frame_decode': ('mac_frame', 5814),
- 'mac_frame_encode': ('mac_frame', 6619),
- 'mac_tx_init': ('mac_tx', 7430),
- 'mac_tx_submit': ('mac_tx', 7636),
- 'mac_tx_copy': ('mac_tx', 8750),
- 'mac_tx_step': ('mac_tx', 9339),
- 'mac_tx_release': ('mac_tx', 12799),
- 'nwk_beacon_decode': ('nwk_beacon', 12884),
- 'nwk_candidates_init': ('nwk_candidates', 13707),
- 'nwk_candidates_consider': ('nwk_candidates', 14283),
- 'nwk_candidates_get': ('nwk_candidates', 15616),
- 'mac_scan_init': ('mac_scan', 17075),
- 'mac_scan_start': ('mac_scan', 17159),
- 'mac_scan_step': ('mac_scan', 18616),
- 'mac_scan_get': ('mac_scan', 24010),
- 'mac_scan_release': ('mac_scan', 24159),
- 'main': ('mac_scan_test', 24409),
- 'mac_frame_decode_profile': ('mac_frame', 4644)}
-DONE = 28879
+ 'mac_command_encode': ('mac_frame', 1018),
+ 'mac_beacon_decode': ('mac_frame', 2229),
+ 'mac_frame_decode': ('mac_frame', 5771),
+ 'mac_frame_encode': ('mac_frame', 6576),
+ 'mac_tx_init': ('mac_tx', 7387),
+ 'mac_tx_submit': ('mac_tx', 7593),
+ 'mac_tx_copy': ('mac_tx', 8707),
+ 'mac_tx_step': ('mac_tx', 9296),
+ 'mac_tx_release': ('mac_tx', 12756),
+ 'nwk_beacon_decode': ('nwk_beacon', 12841),
+ 'nwk_candidates_init': ('nwk_candidates', 13664),
+ 'nwk_candidates_consider': ('nwk_candidates', 14240),
+ 'nwk_candidates_get': ('nwk_candidates', 15573),
+ 'mac_scan_init': ('mac_scan', 17032),
+ 'mac_scan_start': ('mac_scan', 17116),
+ 'mac_scan_step': ('mac_scan', 18573),
+ 'mac_scan_get': ('mac_scan', 23967),
+ 'mac_scan_release': ('mac_scan', 24116),
+ 'main': ('mac_scan_test', 24366),
+ 'mac_frame_decode_profile': ('mac_frame', 4601)}
+DONE = 28836
 CALLER = {'scan': (624, 212),
  'saved': (836, 212),
  'tx': (1048, 168),
@@ -167,7 +169,7 @@ def verify(image, symbols, debug, memory, listings, objects):
         image, symbols, debug, memory, "mac_scan_result", SOURCES, xdata_budget=XDATA_BUDGET,
     )
     require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == XDATA
-            and symbols["s_SSEG"] == 0x41 and symbols["__gptrput_PARM_2"] == 0x5ce,
+            and symbols["s_SSEG"] == 0x3d and symbols["__gptrput_PARM_2"] == 0x5ce,
             "Exact ordinary/stack/runtime allocation changed")
     require(digest(private_records(debug)) == PRIVATE_DIGEST, "Private ABI changed")
     require(digest(caller_records(debug)) == CALLER_DIGEST, "Caller ABI changed")
@@ -328,8 +330,8 @@ def negatives(image, symbols, debug, memory, listings, objects):
     reject("object extent", objects=altered)
     changed = dict(symbols); changed["s_XSEG"] = 0x1f00
     reject("aliased XDATA", symbols=changed)
-    require("191 bytes available" in memory, "Stack negative did not apply")
-    reject("stack report", memory=memory.replace("191 bytes available", "190 bytes available"))
+    require("195 bytes available" in memory, "Stack negative did not apply")
+    reject("stack report", memory=memory.replace("195 bytes available", "194 bytes available"))
     return count
 
 
@@ -354,11 +356,11 @@ def run(simulator, path, symbols, allocated):
     require(ram[CALLER["scenario"][0]] == 28, "Did not execute the complete scenario corpus")
     require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated),
             "Unallocated/status-tail write")
-    require(iram[128:] == b"\xc7" * 128 and sfr[1] == 0x40, "Upper IRAM/unwind guard failed")
+    require(iram[128:] == b"\xc7" * 128 and sfr[1] == 0x3c, "Upper IRAM/unwind guard failed")
     require(sfr[0xa8 - 0x80] == sfr[0xb8 - 0x80] == sfr[0x9a - 0x80] == 0,
             "Interrupts became enabled")
     peak = re.search(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", sections[1])
-    require(peak is not None and int(peak[1], 16) == 0x66
+    require(peak is not None and int(peak[1], 16) == 0x59
             and int(peak[1], 16) <= 0x7c,
             f"Reviewed stack high-water/cap changed: {peak[1] if peak else 'missing'}")
 
@@ -383,7 +385,7 @@ def main():
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, alias=False), "missing alias")
     run(args.simulator, path, symbols, allocated)
-    print(f"MAC scan: {SIZE} CODE, {XDATA}+64 XDATA, context212, SP66; "
+    print(f"MAC scan: {SIZE} CODE, {XDATA}+64 XDATA, context212, SP59; "
           f"28 real composition scenarios, whole ABI/listings and {count}+1 negatives "
           "PASS (simulation only).")
 

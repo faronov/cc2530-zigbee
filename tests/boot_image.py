@@ -83,15 +83,18 @@ def section(text, number):
 
 
 def memory_dump(text, start, size):
-    values = {}
+    values, present = bytearray(size), bytearray(size)
     for line in text.splitlines():
         match = re.match(r"^0x([0-9a-fA-F]+)\s+((?:[0-9a-fA-F]{2}(?:\s+|$))+)", line)
         if match:
             address = int(match[1], 16)
-            for offset, value in enumerate(match[2].split()):
-                values[address + offset] = int(value, 16)
-    require(all(address in values for address in range(start, start + size)), "Incomplete simulator memory dump")
-    return bytes(values[address] for address in range(start, start + size))
+            raw = bytes.fromhex(match[2])
+            first, last = max(start, address), min(start+size, address+len(raw))
+            if first < last:
+                values[first-start:last-start] = raw[first-address:last-address]
+                present[first-start:last-start] = b"\1"*(last-first)
+    require(all(present), "Incomplete simulator memory dump")
+    return bytes(values)
 
 
 def simulate(simulator, commands, image=None):
@@ -111,6 +114,30 @@ def simulate(simulator, commands, image=None):
     require(not any(error in folded for error in ("unknown command", "no such command", "syntax error", "error:")),
             "Simulator rejected a command")
     return result.stdout
+
+
+def simulate_binary_dumps(simulator, commands):
+    """Capture the same complete memory ranges without uCsim's text-dump cost."""
+    with tempfile.TemporaryDirectory(prefix="cc2530-dumps-") as directory:
+        rewritten, dumps = [], []
+        for command in commands:
+            match = re.fullmatch(r"dump /h ([a-z][a-z0-9_]*) (0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+)", command)
+            if match and int(match[3], 0)-int(match[2], 0)+1 >= 256:
+                first, last = int(match[2], 0), int(match[3], 0)
+                path = Path(directory)/f"{len(dumps)}.bin"
+                replacement = f'dump /b {match[1]} {first:#x} {last:#x} >"{path}"'
+                dumps.append((replacement, path, first, last-first+1))
+                rewritten.append(replacement)
+            else:
+                rewritten.append(command)
+        text = simulate(simulator, rewritten)
+        for command, path, first, size in dumps:
+            require(path.is_file() and path.stat().st_size == size, "Incomplete raw simulator memory dump")
+            require(text.count(command+"\n") == 1, "Ambiguous raw memory observation boundary")
+            raw = path.read_bytes()
+            formatted = "".join(f"0x{first+i:06x} "+raw[i:i+32].hex(" ")+"\n" for i in range(0, size, 32))
+            text = text.replace(command+"\n", formatted, 1)
+        return text
 
 
 def check_alias(simulator, alias=True):

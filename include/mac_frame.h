@@ -128,8 +128,8 @@ mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
 /* Command payloads include their identifier. Unused fields decode as zero.
  * Payload-only success does not validate a frame header or perform a procedure.
  */
-mac_codec_result_t mac_command_decode(const uint8_t *payload, uint16_t length,
-                                      mac_command_t *result);
+mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
+                                      mac_command_t * volatile result);
 mac_codec_result_t mac_command_encode(const mac_command_t * volatile command,
                                       uint8_t * volatile payload, uint16_t capacity, uint8_t * volatile length);
 

@@ -14,6 +14,7 @@ from boot_image import (
     verify_component_layout,
 )
 from boot_nwk_candidates import label, records
+from boot_mac_poll import returning_work
 from boot_zcl_basic import canonical, sha
 from boot_zcl_temperature import cpu_only
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, require
@@ -23,47 +24,69 @@ MODULES = ("mac_frame", "mac_tx", "mac_association", "mac_poll", "mac_join")
 CODE_BUDGET, XDATA_BUDGET = 32768, 3200
 # One digest per complete artifact manifest: ALL CODE, raw CDB bytes, complete
 # parsed map, ALL ordered object-area declarations and six full raw snapshots.
+# Includes the ordinary static-shadow branch and the codec lowering reviewed
+# in boot_mac_tx. Only mac_frame executable/allocation changed in this refresh:
+# -43 CODE, -3 object DATA, no XDATA change. Stack start/checkpoint remain
+# 51/50; PEAKS below are actual uninterrupted observations for all 22 images.
+# Compile-only WORKSPACE_PINS remain byte-identical, not regenerated.
 PINS = (
-    (32703, 32045, "4b7f31b7b7e8e19b01b7fbc59e8068bf23c27cb62eb66be15a662f512cc4ed95"),
-    (32704, 32046, "6302fd134a885ea88e1e306580993cdbfd67cb1c9ded5747866e7f3035be500f"),
-    (32704, 32046, "f46bfb69cb456713a30ff8cd46fa40a271047d38be5d28ec2ce63b6a76c666c4"),
-    (32704, 32046, "6b09254e433612b720939b9d657702e497baabd7af1fc79edafe8042c386b73e"),
-    (32704, 32044, "db69b1ec878290a81c0ccd46f48c479a98c74070c9224c49479b61872a79c040"),
-    (32347, 31689, "dfd66cf3b0d353e473c0aa20734c6a1d272813bc3d4e12b0653f9b50d85a9f09"),
-    (32335, 31677, "5b90da048038e760cd1859c66cc82d0d50ca792bd4137b2c2a2d3b67659c7542"),
-    (32329, 31671, "252b8400546df3b1a7bcc8d2f81fab4e2f77c43e8cce1e2858fc776d4b5e0f66"),
-    (32373, 31715, "587764bbfa90da76aae72e20b559770255a6d4b2f4d14edeb2134346fbab5b9c"),
-    (32621, 31963, "bc9e978769fb64077eb25b09023de39d345f3051a842f0b9f1807bb5cdf19c8d"),
-    (32370, 31712, "35a273d8c476c6e968572c6f688d4ef27a050fa8ef005b44db8f4005ffded7dc"),
-    (32610, 31952, "01031976b74f21bba254fb1b79dec3e50f0c35e1d706a23121077bad794a1d2f"),
-    (32746, 32088, "e7078c46430ed90244fd73c0c64ce4a62aaa03186c6c69694c3d915453e3953a"),
-    (32740, 32082, "4e5b17bf3f9eb3e2cb89145f11fb88d7c618711ae855d656f9c69e576da19ad2"),
-    (32606, 31948, "81f26f0906cbffb642ea4b8f839f2bdf5c5d099626cad0008e8899996c73f62e"),
-    (32699, 32041, "9452810782b273faeec1cafbea42a4eb30d75de6235971eda4ee9d02a77c9611"),
-    (32348, 31690, "f7533c15ffee5ae73afc08c944ce85b3582e90b04dc617e3e399bfb235b2f901"),
-    (32638, 31980, "15cb41d8f025950ba94694c93af03541dbd0d962ac83be22355910208953ce50"),
-    (32343, 31685, "4ac538119cfd5d61b83b5fd2f12e222a7fba9512505883b18b7aee64f6c6ece6"),
-    (32329, 31671, "f22cd9351105c40ebdae7f5dbab1b6237b74b9d4c76139fa1231c935489bc2b7"),
-    (32763, 32105, "8ab9be43aa2b71e40094b57ef038061a6c1eeaa2f2662daddb70d32722f0f4e6"),
-    (32435, 31777, "a818dc63f443d1621a45b427b0260b093ea00db797ecf3424b167d475ccf4dd0"),
+    (32641, 31983, "ba66d45ed829f19bb2a372a64420c692471dc9f6fa02a2c67267f548dcb346e8"),
+    (32642, 31984, "2b8123802ea7af1ab3d11c68cd08bb6e12ee294318fda48aa319de7bf41c2b5a"),
+    (32642, 31984, "ac29beb73cdab27c82fa74bc78d8c6e9e9becd54a781b7901e692f113679e322"),
+    (32642, 31984, "c58c0e1fc3a349847b313ec01b71f26fcc0a6526692890899590da4f85c54a19"),
+    (32642, 31982, "ad433254be030838623ee472c410de9571ed779f489d62f70ba430e180e9a09c"),
+    (32285, 31627, "64bd2d2c16ddc59e9f8c7a4755b6007ce261209acdff378a4f4ba259ddbece36"),
+    (32273, 31615, "35bee17ac0c4238e8150e1c4bfcf4d22f89da6b2020c3dfa039838a28e3e40da"),
+    (32267, 31609, "7b49f694af9a1ec4e047f8370eec52015547356c3f41d54634b28de29317e5a7"),
+    (32311, 31653, "564c975f20b7b44aa85d6897c0d9829751ae7dbfbd0c98c855d699766cddf2d2"),
+    (32559, 31901, "a6082807a64375d881303dc8602f36554c88df0262a0b85a7a4f766e52784705"),
+    (32308, 31650, "508064564661526c1044514773a1053c7b224aa5ddfda73db44bf168a5ede0f4"),
+    (32548, 31890, "454dc4063dd1185460a270900963c954ce4c16b1b2afc34f8a57f1358ce474fa"),
+    (32684, 32026, "bb2f4461652c0f90658d739796ca52e2d98158fb0506deb305ac5c723ae41658"),
+    (32678, 32020, "7bef0869e2c3aee72e29ea48ec4416a5a6584e0d4f7d73281a865f4251b7f39d"),
+    (32544, 31886, "d79fa0b77d7bab6a73486ac042cb3256b8fa8559afcc36770fb340a1652fdaa6"),
+    (32637, 31979, "bd70130426e5e0242401106516a381a5f231de905db98e462e9c25665e417c81"),
+    (32286, 31628, "a1d0f14e576854342e837745c4b04bb76916928f7b7d7ffc67ff18b33348f89a"),
+    (32576, 31918, "3f97016f5cf890973ff6ab4627f6f467bce141a69b284a5350de739271c4d7c0"),
+    (32281, 31623, "0cbb8d34afc1745d0f586fa90836d72ef6844e391578112ab471d7bbc4a26ce7"),
+    (32267, 31609, "810ccf0abf24b24eb4893cb7ae2ae131c69ac5e2f5353519439fc99e7c148a3b"),
+    (32701, 32043, "f74ce899ff3fb69a5626169823d93d8d6b08ab22fdcc5c80282cb66a959ea6f5"),
+    (32373, 31715, "54e68112e2e42c2de247af28214a6835e29546eb85480afb9af5fdd361c399ef"),
 )
 CALLS = (15, 15, 15, 15, 15, 21, 7, 7, 5, 15, 6, 29, 16, 15, 14, 15, 16, 15, 2, 2, 15, 9)
-PEAKS = (0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x76, 0x76, 0x76, 0x76, 0x7c, 0x76,
-         0x7a, 0x7c, 0x7a, 0x7a, 0x7c, 0x76, 0x7a, 0x6e, 0x6e, 0x7c, 0x76)
+PEAKS = (0x73, 0x73, 0x73, 0x73, 0x73, 0x6d, 0x6d, 0x6d, 0x6d, 0x73, 0x6d,
+         0x71, 0x73, 0x71, 0x71, 0x73, 0x6d, 0x71, 0x65, 0x65, 0x73, 0x6d)
 # CSEG, XSEG, DSEG, OSEG, BSEG bits; no allocation is an extra IRAM alias pool.
-OBJECTS = ((7136, 216, 15, 10, 1), (5650, 191, 8, 0, 3), (2839, 76, 27, 0, 1),
-           (7619, 350, 5, 0, 4), (7184, 1067, 5, 0, 1))
-CALLER = {
-    "join": (1900, 645), "config": (2545, 43), "tx": (2588, 168), "event": (2756, 48),
-    "action": (2804, 44), "radio": (2848, 22), "record": (2870, 194), "ack": (3064, 3),
-    "source_kind": (3067, 1), "frames": (3068, 1), "now": (3069, 4), "boundary": (3073, 4),
-    "duration": (3077, 2), "supplied": (3079, 3), "operation": (3082, 1), "phase": (3083, 1),
-    "transmitter": (3084, 1), "calls": (3085, 1), "failure": (3086, 1),
-    "release_result": (3087, 1), "grant": (3088, 2), "seen": (3090, 1),
+OBJECTS = ((7093, 216, 12, 10, 1), (5650, 191, 8, 0, 3), (2839, 76, 27, 0, 1),
+           (7614, 299, 5, 0, 3), (7170, 885, 5, 0, 1))
+# Compile-only external-shadow evidence, NOT an allocation/link/simulation
+# proof for the full composition. All raw files are pinned; only the .rel
+# first-line build-path comment is excluded, never any object/relocation data.
+WORKSPACE_PINS = {
+    "ordinary": {
+        "rel": "10d32d59dbfa1381fc2698ee602e47171604c43beb36888f810724e7530decb4",
+        "asm": "bffd505714b7de3c7840685cfda1ba326727d9076098c56651f962a70e4a8076",
+        "lst": "9e0b63008504ad7ffe6a7a5a77bad2c46573b78d91b1a4ae266a78cca9d4e1bc",
+        "adb": "48445e14480dc1155fec670957c9253f456c9fe9b2fcaf0d35030fbac1ef127c",
+    },
+    "external": {
+        "rel": "c51031a8324e56f846414ba17682d30d6c9e1f190b01a004967d07eeafdc74fb",
+        "asm": "b2cf764cf459e921fce11b695ed50ae53ea7700d5451101a7c449fade7d40b04",
+        "lst": "d41214d00e07873ca4d85859bf0080c7b3de3dff25c5e0f01e43e45870a94aaa",
+        "adb": "52be57f03a919c0dd1ade88913153376f513d6e3512e38561314b67558b43978",
+    },
 }
-RUNTIME = {"___memcpy_PARM_2": 3091, "___memcpy_PARM_3": 3094, "_memset_PARM_2": 3099,
-           "_memset_PARM_3": 3100, "__gptrput_PARM_2": 3102, "__mulint_PARM_2": 3103,
-           "__mullong_PARM_2": 3105, "_memcmp_PARM_2": 3109, "_memcmp_PARM_3": 3112}
+CALLER = {
+    "join": (1667, 645), "config": (2312, 43), "tx": (2355, 168), "event": (2523, 48),
+    "action": (2571, 44), "radio": (2615, 22), "record": (2637, 194), "ack": (2831, 3),
+    "source_kind": (2834, 1), "frames": (2835, 1), "now": (2836, 4), "boundary": (2840, 4),
+    "duration": (2844, 2), "supplied": (2846, 3), "operation": (2849, 1), "phase": (2850, 1),
+    "transmitter": (2851, 1), "calls": (2852, 1), "failure": (2853, 1),
+    "release_result": (2854, 1), "grant": (2855, 2), "seen": (2857, 1),
+}
+RUNTIME = {"___memcpy_PARM_2": 2858, "___memcpy_PARM_3": 2861, "_memset_PARM_2": 2866,
+           "_memset_PARM_3": 2867, "__gptrput_PARM_2": 2869, "__mulint_PARM_2": 2870,
+           "__mullong_PARM_2": 2872, "_memcmp_PARM_2": 2876, "_memcmp_PARM_3": 2879}
 PUBLIC = {
     "mac_frame": ("mac_command_decode", "mac_command_encode", "mac_beacon_decode",
                   "mac_frame_decode_profile", "mac_frame_decode", "mac_frame_encode"),
@@ -91,6 +114,11 @@ FIELDS = {
          (634, "child_token", 2), (636, "version", 1), (637, "phase", 1), (638, "issued", 1),
          (639, "stopping", 1), (640, "stop_steps", 1), (641, "taken", 1), (642, "window", 1),
          (643, "restored", 1), (644, "uncertain", 1)),
+    22: ((0, "start", 97), (0, "step", 165)),
+    23: ((0, "proposed", 43), (43, "header", 26), (69, "command", 2),
+         (71, "body", 25), (96, "length", 1)),
+    24: ((0, "input", 48), (48, "output", 44), (92, "pa", 25), (117, "nested", 48)),
+    25: ((0, "pe", 48), (0, "ar", 30), (0, "ae", 20), (0, "pr", 35)),
 }
 
 
@@ -127,12 +155,13 @@ def verify(number, image, symbols, debug_raw, memory, listings, objects):
                 "listings": {m: sha(listings[m]) for m in modules}}
     require(sha(canonical(manifest)) == digest, "Join complete CODE/raw-CDB/map/object/snapshot identity changed")
     debug = debug_raw.decode("ascii")  # No F/S/L/T/helper/source-line filtering before the raw proof.
+    returning_work(debug)
     allocated = verify_component_layout(image, symbols, debug, memory, "mac_join_result",
         tuple(m + ".c" for m in MODULES) + ("test_mac_join.c",), xdata_budget=XDATA_BUDGET)
-    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 3117 and symbols["s_SSEG"] == 0x51,
+    require(symbols["s_XSEG"] == 0 and symbols["l_XSEG"] == 2884 and symbols["s_SSEG"] == 0x51,
             "Join exact XDATA/IRAM allocation changed")
     require(re.findall(r"EXTERNAL RAM\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(\d+)\s+(\d+)", memory) ==
-            [("0x0000", "0x0c2c", "3117", "7680")], "Join ordinary RAM accounting changed")
+            [("0x0000", "0x0b43", "2884", "7680")], "Join ordinary RAM accounting changed")
     instructions, coverage, offset = {}, set(), 0
     for index, m in enumerate(modules):
         text = listings[m].decode("ascii")
@@ -150,21 +179,23 @@ def verify(number, image, symbols, debug_raw, memory, listings, objects):
         else:
             require(a["XSEG"] == 1191 and a["DSEG"] == 0 and a["CONST"] == (78 if number == 4 else 76),
                     "Join actual caller allocation changed")
-    require(offset == 1900, "Join private/caller boundary changed")
+    require(offset == 1667, "Join private/caller boundary changed")
     for name, (address, length) in CALLER.items():
         key = f"Ftest_mac_join${name}$0_0$0"
         require(cdb_address(debug, "L:" + key) == address and f"S:{key}({{{length}}}" in debug,
                 "Join caller field/storage ABI changed")
-    require(span(debug, "test_mac_join") == set(range(1900, 3091)), "Join unaccounted caller/private allocation")
+    require(span(debug, "test_mac_join") == set(range(1667, 2858)), "Join unaccounted caller/private allocation")
     require(all(symbols[k] == v for k, v in RUNTIME.items()), "Join compiler/libc scratch overlaps caller")
-    require(allocated == set(range(3117)) | set(range(0x1e00, 0x1e08)), "Join unaccounted allocation/status write region")
+    require(allocated == set(range(2884)) | set(range(0x1e00, 0x1e08)), "Join unaccounted allocation/status write region")
     for index, expected in FIELDS.items():
         found = re.findall(rf"^T:Fmac_join\$__{index:08d}\[(.*)\]$", debug, re.MULTILINE)
         require(len(found) == 1, "Join missing/duplicate field declaration")
         actual = re.findall(r"\(\{(\d+)\}S:S\$([^$]+)\$0_0\$0\(\{(\d+)\}", found[0])
         require(tuple((int(o), n, int(s)) for o, n, s in actual) == expected, "Join nested field ABI changed")
     # Alias is the genuine POLL event type, not a cast between lookalike layouts.
-    require("S:Fmac_join$input$0_0$0({48}ST__00000009:S),F,0,0\n" in debug
+    require("S:Fmac_join$work$0_0$0({165}ST__00000022:S),F,0,0\n" in debug
+            and "({0}S:S$input$0_0$0({48}ST__00000009:S),Z,0,0)" in debug
+            and "({0}S:S$pe$0_0$0({48}ST__00000009:S),Z,0,0)" in debug
             and "S:Fmac_join$staged$0_0$0({645}ST__00000021:S),F,0,0\n" in debug,
             "Join real event/staging type changed")
     types = {"ctx": "{2}DX,ST__00000021:S", "tx": "{2}DX,ST__00000004:S",
@@ -229,7 +260,7 @@ def verify(number, image, symbols, debug_raw, memory, listings, objects):
     if number not in (5, 6, 7, 8, 10, 16, 18, 19, 21):
         require(symbols["_mac_tx_step"] in calls("G$main"), "Join POLL caller bypasses its real TX grant")
     cpu_only(instructions)
-    require(symbols["_main"] == 30526 and symbols["_mac_join_done"] == done
+    require(symbols["_main"] == 30464 and symbols["_mac_join_done"] == done
             and code_bytes(image, size)[done:done+3] == b"\0\x80\xfe"
             and cdb_address(debug, "L:XG$main$0$0") == done+3, "Join checkpoint ABI changed")
     return allocated
@@ -283,30 +314,30 @@ def check_result(n, ram, iram, sfr, initial_sfr, allocated):
     early = n in (18, 19)
     request_only = n in (5, 6, 7, 8, 10, 16, 18, 19, 21)
     require(ram[0x1e00:0x1e08] == b"MJN1\x01\x08\0" + bytes((n,)), "Join target did not complete its real script")
-    require(ram[3085] == CALLS[n] and ram[3087] == (2 if faulted else 0)
-            and ram[3090] == (3 if n in (12, 21) else 0), "Join skipped event/return/observation checks")
+    require(ram[2852] == CALLS[n] and ram[2854] == (2 if faulted else 0)
+            and ram[2857] == (3 if n in (12, 21) else 0), "Join skipped event/return/observation checks")
     expected = expected_record(n)
-    require(ram[2870:3064] == expected, f"Join {n} complete retained record differs from independent wire/time oracle")
-    require(ram[1900+382:1900+576] == expected, "Join take/public retained record mismatch")
-    require(ram[1900+637] == (7 if faulted else 0) and ram[1900+641] == 1,
+    require(ram[2637:2831] == expected, f"Join {n} complete retained record differs from independent wire/time oracle")
+    require(ram[1667+382:1667+576] == expected, "Join take/public retained record mismatch")
+    require(ram[1667+637] == (7 if faulted else 0) and ram[1667+641] == 1,
             "Join terminal/taken lifecycle changed")
-    require(int.from_bytes(ram[1900+602:1900+604], "little") == (2588 if faulted else 0),
+    require(int.from_bytes(ram[1667+602:1667+604], "little") == (2355 if faulted else 0),
             "Join released an uncertain lease or retained a completed lease")
-    require(ram[1900+643] == (0 if faulted else 1) and ram[1900+644] == int(faulted),
+    require(ram[1667+643] == (0 if faulted else 1) and ram[1667+644] == int(faulted),
             "Join restoration/uncertainty boundary changed")
-    require(ram[2588+155] == (7 if n == 8 else 6 if n == 20 else 0)
-            and ram[2588+156] == (255 if early else 0 if request_only else 1)
-            and int.from_bytes(ram[2588+145:2588+149], "little") == (0 if early else 1 if request_only else 2),
+    require(ram[2355+155] == (7 if n == 8 else 6 if n == 20 else 0)
+            and ram[2355+156] == (255 if early else 0 if request_only else 1)
+            and int.from_bytes(ram[2355+145:2355+149], "little") == (0 if early else 1 if request_only else 2),
             "Join reset/replaced the genuine device-wide DSN owner")
     if not early:
-        require(ram[1900+576:1900+601] == (bytes.fromhex(
+        require(ram[1667+576:1667+601] == (bytes.fromhex(
             "23 c8 00 34 12 44 33 ff ff 01 02 03 04 05 06 07 08 01 88") + bytes(6) if n == 4 else
             bytes.fromhex("23 cc 00 34 12 11 12 13 14 15 16 17 18 ff ff 01 02 03 04 05 06 07 08 01 88")),
             "Join canonical Association Request changed")
     if not request_only:
         expected_tx = (bytes.fromhex("63 c8 00 34 12 44 33 01 02 03 04 05 06 07 08 04") if n == 4 else
                        bytes.fromhex("63 cc 00 34 12 11 12 13 14 15 16 17 18 01 02 03 04 05 06 07 08 04"))
-        require(ram[2588:2588+len(expected_tx)] == expected_tx, "Join Data Request is not extended-source/current DSN")
+        require(ram[2355:2355+len(expected_tx)] == expected_tx, "Join Data Request is not extended-source/current DSN")
     require(all(v == 0xa5 for a, v in enumerate(ram) if a not in allocated), "Join unallocated/alias/status-tail write")
     require(iram[0x7d:] == b"\xc7" * 131 and sfr[1] == 0x50, "Join SP7C guard/checkpoint unwind failed")
     require(all(sfr[a-0x80] == 0 for a in (0xa8, 0xb8, 0x9a)), "Join enabled interrupts")
@@ -346,7 +377,7 @@ def negatives(n, args):
     reject(debug_raw=raw.replace(b"\n", b"\r\n"))
     reject(debug_raw=raw + b"\xff")
     reject(memory=args["memory"].replace("175 bytes available", "174 bytes available"))
-    reject(memory=args["memory"].replace("3117", "3118"))
+    reject(memory=args["memory"].replace("2884", "2885"))
     for m, listing in args["listings"].items():
         lines = listing.splitlines(keepends=True)
         indexes = [i for i, line in enumerate(lines) if records(line.decode("ascii"))]
@@ -375,11 +406,97 @@ def load(directory, n):
         objects={m: (directory / f"{m}.rel").read_text(encoding="ascii") for m in modules})
 
 
+def workspace_artifacts(directory):
+    return {suffix: (directory / f"mac_join.{suffix}").read_bytes()
+            for suffix in ("rel", "asm", "lst", "adb")}
+
+
+def verify_workspace(ordinary, external):
+    """Compare real compiler outputs; never create/patch an object or bind RAM."""
+    for profile, files in (("ordinary", ordinary), ("external", external)):
+        require(tuple(files) == tuple(WORKSPACE_PINS[profile]), "Workspace artifact inventory changed")
+        for suffix, digest in WORKSPACE_PINS[profile].items():
+            raw = files[suffix]
+            require(isinstance(raw, bytes), "Workspace artifacts must be raw bytes")
+            if suffix == "rel":
+                first, newline, raw = raw.partition(b"\n")
+                require(newline and first.startswith(b";!FILE ") and len(first) > 8
+                        and all(32 <= b < 127 for b in first), "Workspace object path comment malformed")
+            require(sha(raw) == digest, f"Workspace complete {profile} {suffix} identity changed")
+
+    old = [(n, int(s, 16), f, a) for n, s, f, a in areas(ordinary["rel"].decode("ascii"))]
+    new = [(n, int(s, 16), f, a) for n, s, f, a in areas(external["rel"].decode("ascii"))]
+    require([entry for entry in old if entry[0] == "XSEG"] == [("XSEG", 885, "40", "0")]
+            and new == [(n, s - 645 if n == "XSEG" else s, f, a) for n, s, f, a in old],
+            "Workspace changes more than the complete 645-byte XDATA allocation")
+    require(re.findall(rb"^S _mac_join_staged (Ref|Def)([0-9A-F]+)$", external["rel"], re.M)
+            == [(b"Ref", b"000000")], "Workspace is not an unresolved external binding obligation")
+
+    # All types, parameters, locals, returns and qualifiers must stay identical.
+    # The only raw compiler metadata change is this complete object's linkage.
+    local = b"S:Fmac_join$staged$0_0$0({645}ST__00000021:S),F,0,0\n"
+    exported = b"S:G$mac_join_staged$0_0$0({645}ST__00000021:S),F,0,0\n"
+    require(ordinary["adb"].count(local) == 1
+            and ordinary["adb"].replace(local, exported) == external["adb"],
+            "Workspace full type/public/private/parameter ABI differs")
+
+    # Compare the ENTIRE emitted assembly, not just selected mnemonic lines.
+    # Precisely one real allocation disappears; every instruction, argument,
+    # label, other allocation and helper remains, with the same static-symbol
+    # operands. The separately pinned .rel/.lst bind actual assembled bytes
+    # and relocation records. Nothing here resolves the external address.
+    allocation = b"Fmac_join$staged$0_0$0==.\n_staged:\n\t.ds 645\n"
+    require(ordinary["asm"].count(allocation) == 1, "Workspace ordinary full shadow allocation missing")
+    expected = ordinary["asm"].replace(allocation, b"").replace(b"_staged", b"_mac_join_staged")
+    require(expected == external["asm"], "Workspace introduces pointer indirection or different instructions/storage")
+    require(len(re.findall(rb"^\t[a-z][a-z0-9]*(?:\t[^\n]*)?$", expected, re.M)) == 4640
+            and expected.count(b"_mac_join_staged") == 235, "Workspace instruction/direct-symbol inventory changed")
+
+
+def workspace_negatives(ordinary, external):
+    case, count = unittest.TestCase(), 0
+
+    def reject(which, suffix, value):
+        nonlocal count
+        changed = dict(ordinary if which == 0 else external)
+        changed[suffix] = value
+        with case.assertRaises(ValueError):
+            verify_workspace(changed if which == 0 else ordinary, changed if which == 1 else external)
+        count += 1
+
+    for which, files in enumerate((ordinary, external)):
+        for suffix, raw in files.items():
+            bad = bytearray(raw); bad[len(bad) // 2] ^= 1
+            for changed in (b"", raw[:-1], bytes(bad)):
+                reject(which, suffix, changed)
+    reject(1, "rel", external["rel"].replace(b"S _mac_join_staged Ref", b"S _mac_join_staged Def", 1))
+    reject(1, "rel", external["rel"].replace(b"A XSEG size F0", b"A XSEG size 375", 1))
+    reject(1, "rel", external["rel"].replace(b";!FILE ", b";OTHER ", 1))
+    reject(1, "adb", external["adb"].replace(b"{645}ST__00000021", b"{2}DX,ST__00000021", 1))
+    reject(1, "asm", external["asm"].replace(b"_mac_join_staged", b"_work", 1))
+    reject(1, "asm", ordinary["asm"])
+    reject(1, "asm", external["asm"].replace(b"\t.area XSEG    (XDATA)", b"\t.area XSEG    (XDATA)\n\t.ds 645", 1))
+    with case.assertRaises(ValueError):
+        verify_workspace(ordinary, ordinary)
+    return count + 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--simulator", default="s51")
+    parser.add_argument("--check-workspace-object", type=Path, metavar="DIRECTORY",
+                        help="explicit compile-only comparison with --output's ordinary mac_join object; no simulation")
     args = parser.parse_args()
+    if args.check_workspace_object is not None:
+        ordinary = workspace_artifacts(args.output)
+        external = workspace_artifacts(args.check_workspace_object)
+        verify_workspace(ordinary, external)
+        count = workspace_negatives(ordinary, external)
+        print(f"Join workspace object: XSEG885->240, CSEG7170/DSEG5/BSEG1 unchanged; "
+              f"4640 identical instructions, 235 direct-symbol operands, {count} artifact negatives PASS. "
+              "Compile-only: external 645-byte backing, full-profile link/lifetimes/stack/alias execution NOT proved.")
+        return
     test = unittest.TestCase()
     check_alias(args.simulator)
     with test.assertRaises(ValueError): check_alias(args.simulator, False)
@@ -391,22 +508,22 @@ def main():
         count = negatives(n, artifacts)
         setup = [ALIAS, "fill xram 0 0x1eff 0xa5",
                  "set memory sfr 0xa8 0", "set memory sfr 0xb8 0", "set memory sfr 0x9a 0"]
-        text = simulate(args.simulator, setup + ["run 0 0x773e", "fill iram 0x7d 0xff 0xc7"]
-            + snapshot_commands(1) + [f"run 0x773e {done:#x}"] + snapshot_commands(5), path)
+        text = simulate(args.simulator, setup + ["run 0 0x7700", "fill iram 0x7d 0xff 0xc7"]
+            + snapshot_commands(1) + [f"run 0x7700 {done:#x}"] + snapshot_commands(5), path)
         initial = snapshot(text, 1)[2]
         check_pc(section(text, 5), done)
         ram, iram, sfr = snapshot(text, 5)
         check_result(n, ram, iram, sfr, initial, allocated)
         full = simulate(args.simulator, setup + [f"run 0 {done:#x}"] + snapshot_commands(1), path)
         check_pc(section(full, 1), done); check_peak(n, section(full, 1))
-        for region, address in ((0, 0x1e00), (0, 0x1e06), (0, 0x1e3f), (0, 0x1dff), (0, 3117),
-                                (0, 3085), (0, 2870), (0, 1900+637), (0, 2588+156), (1, 0x7d), (2, 1), (2, 0x10)):
+        for region, address in ((0, 0x1e00), (0, 0x1e06), (0, 0x1e3f), (0, 0x1dff), (0, 2884),
+                                (0, 2852), (0, 2637), (0, 1667+637), (0, 2355+156), (1, 0x7d), (2, 1), (2, 0x10)):
             bad = [bytearray(ram), bytearray(iram), bytearray(sfr)]
             bad[region][address] ^= 1
             with test.assertRaises(ValueError): check_result(n, *bad, initial, allocated)
         for bad in ("", "Max value of stack pointer= 0x7d", "Max value of stack pointer= 0x50"):
             with test.assertRaises(ValueError): check_peak(n, bad)
-        print(f"Join {n}: {size}/{CODE_BUDGET} CODE, 3117+64/{XDATA_BUDGET} XDATA, "
+        print(f"Join {n}: {size}/{CODE_BUDGET} CODE, 2884+64/{XDATA_BUDGET} XDATA, "
               f"{CALLS[n]} scripted events, full SP{PEAKS[n]:02X}/cap7C, checkpoint50; "
               f"{count} artifact +12 guard +3 peak negatives PASS.")
     print("Join: 22 complete real compositions, 1 alias +4 MMIO negatives PASS; no physical adapter or MLME conformance claim.")

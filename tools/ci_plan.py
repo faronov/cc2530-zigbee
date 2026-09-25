@@ -29,6 +29,9 @@ COMPONENTS = {
        for p in ("ed-wire", "security-keys", "bdb-join")},
     "banking": ("Offline banked CODE ({board})", ("test-banked",)),
     "banked-security": ("Offline banked key lifecycle ({board})", ("test-banked-security",)),
+    **{f"banked-join-{case}": (f"Offline complete MCU join ({{board}}, {case})",
+                             (f"test-banked-join-{case}",))
+       for case in ("success", "missing-key", "radio-fault", "flash-fault")},
 }
 COMMON_RUNTIME = {"src/startup.c", "src/status.c", "src/banked.c"}
 SOURCE = re.compile(r"(?:src|tests|boards|examples)/[A-Za-z0-9_/-]+\.c\Z")
@@ -56,14 +59,15 @@ def recipe(board, unit, build="build/ci-plan"):
     text = command(["make", "--no-print-directory", "-n", "-B", "-j1",
                     "HOST_CC=cc", "SDCC=sdcc", "PYTHON=python3",
                     f"BOARD={board}", f"IMAGE={image}", f"BUILD={build}", *units()[unit]])
-    return tuple(tuple(shlex.split(line)) for line in text.splitlines() if line.strip())
+    return tuple(tuple(shlex.split(line)) for line in text.replace("\\\n", " ").splitlines() if line.strip())
 
 
 def source_index():
     index = {}
     for board in BOARDS:
         for unit in units():
-            compile_commands = [args for args in recipe(board, unit) if args[0] in ("cc", "sdcc")]
+            commands = recipe(board, unit)
+            compile_commands = [args for args in commands if args[0] in ("cc", "sdcc")]
             inputs = {arg for args in compile_commands for arg in args if SOURCE.fullmatch(arg)}
             if not inputs:
                 raise ValueError(f"No compiler inputs found for {board}/{unit}")
@@ -72,11 +76,14 @@ def source_index():
                 for i, arg in enumerate(args):
                     if arg.startswith("-I"):
                         directories.add(ROOT / (arg[2:] or args[i + 1]))
-            index[board, unit] = include_closure(inputs, directories)
+            generated = {(ROOT/args[args.index("--emit-header")+1]).resolve()
+                         for args in commands
+                         if "tests/verify_banked_join.py" in args and "--emit-header" in args}
+            index[board, unit] = include_closure(inputs, directories, generated)
     return index
 
 
-def include_closure(inputs, directories):
+def include_closure(inputs, directories, generated=frozenset()):
     pending = [ROOT / p for p in inputs]
     seen = set()
     while pending:
@@ -98,8 +105,8 @@ def include_closure(inputs, directories):
             candidates = {(d / match[2]).resolve() for d in (*directories, source.parent)}
             if any(not p.is_relative_to(ROOT) for p in candidates):
                 raise ValueError("Include dependency escapes the repository")
-            found = {p for p in candidates if p.is_file()}
-            if not found and match[1] == '"':
+            found = {p for p in candidates if p.is_file() and p not in generated}
+            if not found and match[1] == '"' and not candidates & generated:
                 raise ValueError(f"Missing project include: {match[2]}")
             pending.extend(found - seen)
     return {p.relative_to(ROOT).as_posix() for p in seen}

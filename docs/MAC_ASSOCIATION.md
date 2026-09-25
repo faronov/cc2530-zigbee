@@ -136,7 +136,13 @@ profile atomicity. Native tests additionally cover24,576 command FCFs,
 exact allocations0..126, all254 unknown profiles, raw/context distinction
 and unchanged encoder/Pending rejection. ASan/UBSan exercise exact spans.
 
-| Current genuine composition | Value |
+The following ledger records the #63 compiler baseline. Subsequent
+complete-join decoder lowering gives15043 CODE, unchanged696+64 XDATA,
+stack start3C/unwind3B/peak5E on both boards. `mac_frame` becomes7093
+CODE/216 XDATA/12 DATA; all108 cases and110+1 negatives are retained.
+The current complete identities are pinned in `tests/boot_mac_association.py`.
+
+| Earlier #63 genuine composition | Value |
 | --- | --- |
 | CODE / ordinary XDATA / reserved status |15086 /696 /64 bytes |
 | Production object CODE/XSEG/DSEG | mac_frame7136/216/15; mac_association2839/76/27 |

@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 from verify_firmware import BOARDS, IMAGES, ROOT
-from ci_plan import COMPONENTS
+from ci_plan import COMPONENTS, recipe
 
 
 @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
@@ -35,8 +35,8 @@ class LocalChecksTests(unittest.TestCase):
             commands = self.dry_run("test-bdb-join", BOARD=board, include_build=True)
             compiles = [args for args in commands if args[0] == "sdcc"]
             self.assertEqual({args[args.index("-c")+1] for args in compiles},
-                             {"src/nwk_aps.c", "src/zdo_runtime.c", "src/bdb_join.c",
-                              "tests/bdb_join_layout.c"})
+                             {"src/nwk_aps.c", "src/nwk_aps_transmit.c", "src/zdo_runtime.c",
+                              "src/bdb_join.c", "src/bdb_join_init.c", "tests/bdb_join_layout.c"})
             self.assertTrue(all("--model-large" in args and "--std-c99" in args and
                                 args[args.index("-o")+1].endswith(".rel") for args in compiles))
             self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
@@ -80,6 +80,8 @@ class LocalChecksTests(unittest.TestCase):
             "zigbee_key_hash", "security_counter", "security_resident_security", "security_resident_mmo",
             "security_resident_key_hash", "security_resident_counter",
             "banked", "banked_security",
+            "banked_join_joined-data-update-loss-restart", "banked_join_missing-network-key",
+            "banked_join_retained-radio-fault", "banked_join_retained-flash-fault",
         }
         components = Counter()
         images = Counter()
@@ -98,6 +100,8 @@ class LocalChecksTests(unittest.TestCase):
                 component = Path(args[2]).stem.removeprefix("boot_")
                 if component == "security_resident":
                     component += "_" + args[args.index("--profile")+1]
+                if component == "banked_join":
+                    component += "_" + args[args.index("--case")+1]
                 components[output.parent.name, component] += 1
         self.assertEqual(images, Counter({(b, i): 1 for b in BOARDS for i in IMAGES}))
         self.assertEqual(components, Counter({(b, c): 1 for b in BOARDS for c in expected_components}))
@@ -339,7 +343,8 @@ class LocalChecksTests(unittest.TestCase):
                                      or "/resident/" in arg for args in commands for arg in args))
 
     def test_ed_integration_keeps_real_services_and_host_only_models(self):
-        new_modules = {"ed_wire", "security_keys", "nwk_aps", "zdo_runtime", "bdb_join"}
+        new_modules = {"ed_wire", "security_keys", "nwk_aps", "nwk_aps_transmit",
+                       "zdo_runtime", "bdb_join", "bdb_join_init"}
         target_modules = new_modules | {"bdb_join_layout"}
         for board in BOARDS:
             commands = self.dry_run("test-ed-integration", include_build=True, BOARD=board)
@@ -463,6 +468,44 @@ class LocalChecksTests(unittest.TestCase):
             for args in builds:
                 self.assertNotIn("-DCC2530_BANKED_SECURITY", args)
                 self.assertNotIn("-DNDEBUG", args)
+
+    def test_complete_join_profile_keeps_every_service_alias_reservation_and_snapshot(self):
+        modules = ("banked_join_iram_low", "banked_join_iram_high", "flash_exec", "flash",
+                   "flash_write", "nv_record", "security_counter", "timebase", "aes", "ccm_star",
+                   "zigbee_mmo", "zigbee_key_hash", "mac_frame", "banked", "nwk_frame", "aps_frame",
+                   "ed_wire", "security_keys", "mac_tx", "mac_poll", "mac_association", "mac_join",
+                   "zdo_node", "zdo_srv", "nwk_beacon", "nwk_candidates", "nwk_parent", "mac_scan",
+                   "bdb_join", "bdb_join_init", "nwk_aps", "nwk_aps_transmit", "zdo_runtime",
+                   "banked_join_fixture")
+        for board in BOARDS:
+            commands = recipe(board, "banked-join-success")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles), modules)
+            for args in compiles:
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_JOIN",
+                                 "-DCC2530_JOIN_WORKSPACE", "-DBANKED_STACK_FIRST=0x50"} <= set(args))
+                self.assertFalse({"--model-huge", "--stack-auto", "--xstack",
+                                  "--parms-in-bank1", "-DCC2530_HOST_TEST"} & set(args))
+            link = next(args for args in commands if args[0] == "sdcc" and "-c" not in args)
+            self.assertEqual(tuple(Path(arg).stem for arg in link if arg.endswith(".rel")), modules)
+            for option, expected in (("--stack-size", "0x2d"), ("--xram-size", "0x1e00"),
+                                     ("--code-size", "0x80000")):
+                self.assertEqual(link[link.index(option)+1], expected)
+            for bank in range(1, 5):
+                self.assertIn(f"-Wl-bBJ_BANK{bank}=0x{bank}8000", link)
+            directory = Path(link[link.index("-o")+1]).parent
+            copies = commands[commands.index(link)+1]
+            self.assertEqual(copies, tuple(arg for module in modules for arg in
+                             ("cp", str(directory/f"{module}.rst"), str(directory/f"banked_join.{module}.rst")+";")))
+            generated = [args for args in commands if "tests/verify_banked_join.py" in args]
+            self.assertEqual(len(generated), 1)
+            self.assertIn("--emit-header", generated[0])
+            native = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(native), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 1)
+            self.assertTrue(all("-DCC2530_BANKED_JOIN" not in args and "-DNDEBUG" not in args for args in native))
+            for args in recipe(board, "bringup"):
+                self.assertFalse(any("banked-join" in arg or "-DCC2530_BANKED_JOIN" == arg for arg in args))
 
     def test_attempt_profile_is_separate_from_radio_and_legacy_objects(self):
         for board in BOARDS:

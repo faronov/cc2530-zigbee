@@ -37,9 +37,13 @@ def capture(number):
 
 
 def captured(text, number, pc):
-    parts = sections(text)
+    return captured_sections(sections(text), number, pc)
+
+
+def captured_sections(parts, number, pc):
     check_pc(parts[number], pc)
-    cpu = snapshot(text, number)
+    cpu = (memory_dump(parts[number], 0, 0x1f00), memory_dump(parts[number+1], 0, 256),
+           memory_dump(parts[number+2], 0x80, 128))
     require(memory_dump(parts[number+8], 0x1f00, 256) == cpu[1],
             "Actual composition lost XDATA/IRAM aliasing")
     return (*cpu, memory_dump(parts[number+4], 0x2000, 0x6000),
@@ -62,16 +66,18 @@ def restore(state, pc):
     return commands+[f"pc {pc:#x}"]
 
 
-def simulate_chunks(simulator, image, symbols, commands, boundaries):
+def simulate_chunks(simulator, image, symbols, commands, boundaries, *, after_symbol="_banked_security_after",
+                    model_commands=None, runner=simulate):
     state, previous, pc, texts = None, 0, None, []
     for index, (end, stop) in enumerate(boundaries):
         n = 60000+index*20
         prefix = []
         if state is not None:
-            prefix = banking.model(image)+[aes.AES_ALIAS]+restore(state, pc)+capture(n)
-            prefix += [f"break {symbols['_banked_security_after']:#x}",
+            model = banking.model(image) if model_commands is None else model_commands
+            prefix = model+[aes.AES_ALIAS]+restore(state, pc)+capture(n)
+            prefix += [f"break {symbols[after_symbol]:#x}",
                        f"break {symbols['_banked_stop']:#x}"]
-        text = simulate(simulator, prefix+commands[previous:end]+capture(n+10))
+        text = runner(simulator, prefix+commands[previous:end]+capture(n+10))
         if state is not None:
             require(captured(text, n, pc) == state, "Banked continuation changed CPU/RAM/peripheral/NV state")
         state = captured(text, n+10, stop)
@@ -138,10 +144,11 @@ def reference(executable):
 
 
 class Replay:
-    def __init__(self, commands, symbols, sites, code, image):
+    def __init__(self, commands, symbols, sites, code, image, *, flash_polls=3):
         self.commands, self.symbols, self.sites, self.code = commands, symbols, sites, code
         self.template = bytes(image[a] for a in range(0x62, 0xdd))
         self.serial, self.current, self.points, self.dumps = 10, None, [], []
+        self.flash_polls = flash_polls
 
     def at(self, pc):
         if self.current != pc:
@@ -182,7 +189,7 @@ class Replay:
         self.at(flash.RAM)
         self.dump("rom", flash.RAM, self.template)
         self.dump("xram", 9, self.template)
-        self.dump("xram", 0, bytes((4 | operation,))+word+b"\x03\0\xff\0")
+        self.dump("xram", 0, bytes((4 | operation,))+word+self.flash_polls.to_bytes(2, "little")+b"\xff\0")
         self.dump("sfr", 0x9f, b"\x01")
         self.step(flash.COMMAND)
         self.dump("xram", 0x6270, bytes((4 | operation,)) +
@@ -404,7 +411,9 @@ def run(output, simulator, artifacts=None, reference_calls=None, *, failure=Fals
 def artifact_campaign(artifacts, campaign):
     if campaign == "full":
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        require(count == 246324, "Banked key artifact-negative coverage changed")
+        # All five address-sensitive mutations per populated byte, plus 19:
+        # 49236 * 5 + 19. This is executed, not a sampled/formula-only campaign.
+        require(count == 246199, "Banked key artifact-negative coverage changed")
         return f"{count} artifact negatives"
     require(campaign == "deferred", "Unknown artifact campaign")
     return "artifact corruption explicitly deferred to full tier"
@@ -425,7 +434,10 @@ def main():
     campaign = artifact_campaign(artifacts, args.artifact_campaign)
     check_alias(args.simulator)
     peak, negatives = run(args.output, args.simulator, artifacts, calls)
-    require((peak, negatives) == (0x7b, 10354), "Banked key peak/negative coverage changed")
+    # Measured complete 22-call replay. Nine added compiler XDATA bytes remove
+    # nine unowned-byte mutations; all named outputs/wipes/media remain checked.
+    require((peak, negatives) == (0x77, 10345),
+            f"Banked key peak/negative coverage changed: SP{peak:02X}, {negatives} negatives")
     run(args.output, args.simulator, artifacts, calls, failure=True)
     print(f"Banked security: 22 real lifecycle operations, {campaign}, "
           f"{negatives} outcome negatives, peak SP {peak:02x}/7c; synthetic, never flash.")

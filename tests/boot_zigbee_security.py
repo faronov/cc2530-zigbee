@@ -24,36 +24,33 @@ from verify_firmware import (
 MODULES = ("timebase", "aes", "ccm_star", "nwk_frame", "aps_frame", "zigbee_security", "security_test")
 SOURCES = tuple(m + ".c" for m in MODULES[:-1]) + ("test_zigbee_security.c",)
 CODE_BUDGET, XDATA_BUDGET = 24576, 2048
-SIZE, XDATA, STACK = 20250, 1907, 0x55
-CODE_SHA = "d996988b24338e02f0725ea30ebcc737566ecbd0ccd3ddfac125f7bd4c1aa42f"
-CDB_SHA = "068db367a39e80573bab8501ca5873dadc4992c1f5f1122edc74e1fa482ba2a5"
-MAP_SHA = "0caf5377ee9ad163028eec3b2c7981fc0ed22013bb20411a69afe3a5316c1435"
-MEM_SHA = "78ab04bc4ca235aa683e89cc6efe75f977bfe14e4655276f13051c8dfbafbd7a"
-LISTINGS = {
-    "timebase": ("d47088c626cb6732eeff97a7b0de061a4f4ea1e20be69feca1a5cc17f43d40d6",
-                 (265, 404, "83eb3a8d0352bcc0531b63d7562a28fef03c35737248736d9ffbd42d0c2e2a84")),
-    "aes": ("fa2039230be750ab0213eb834612401a1c8c6953e989984945271a2d7072d9f8",
-            (3098, 5254, "bf23d0b4a47874fc81a1378b9e02d98dc7ffde1ae0461b2d43f46ba66b744986")),
-    "ccm_star": ("0978bc9eab6780f54483d63e4b6e208a4c976414d213f028f7cbba6e5b4fc04b",
-                 (1308, 2103, "155b162a318680fdcdadb49554985cddd6c17d0ca7e36744e8de9288f70c6f61")),
-    "nwk_frame": ("37b8a36001e125475c4338763e5360fd9a3c97b9cdae717a5d082cb05a4a125f",
-                  (1344, 2294, "45fbe8a63096ca9796d8d1b84a3fec69355b7aff8dfa0c3363785c1d7a722099")),
-    "aps_frame": ("a06658f78b5906e2dc4f36ede07764437175d0bd57697df7fe16ee7939037df4",
-                  (939, 1626, "1907fcda928b27c77430308efa106b8a70f33598de74f9fb53bdc6db40730826")),
-    "zigbee_security": ("892966b96530d741cc9844d34e9b7df2e4ce18bd9d076f5086d25d03d4e3ff6a",
-                        (2650, 4124, "2ff4955261da8215ec8ec3bbacd5ade9c7885c0343a2e69a67d1bef842100fda")),
-    "security_test": ("01457342f277ca9f7a6c300a07fd0dd232468bf0546a3d946acd3add7221d928",
-                      (2087, 3477, "a852940d6ae70966adbe5ebc4956e336de41c24380e23648e41bbc68526298c4")),
-}
-OBJECTS = {
-    "timebase": ("0f110e21445dc0b93ebdf51b98af4e96f29d208abff27d604bc67c01c334d968", (404, 25, 0, 3, 1)),
-    "aes": ("473d9a9bcd8b8e45e8ecf10990c6259cb1c5bb4eff79161209f610701bfb8765", (5254, 182, 32, 0, 3)),
-    "ccm_star": ("bcbaf24e1c79201ad27b2d77d6ec78a47271784d4acf64a54ce96dcdf2a4460d", (2103, 314, 0, 0, 1)),
-    "nwk_frame": ("a68a2c6fd719dc398c33cfaaab73311be5d646b056e18ac21a23482580ce6171", (2294, 96, 12, 10, 0)),
-    "aps_frame": ("98103aafd255517b26d841dc2322f0c3732ad696f93c3af08767e0ac8fb639b2", (1626, 69, 8, 7, 0)),
-    "zigbee_security": ("600cf878a4e643abf6a3def25e293f2fdb85ff144da26ea06747e341bf422117", (4124, 395, 9, 4, 1)),
-    "security_test": ("f7ab1e9ed796c35bd38954ca9725722e91071d05e409012d000b256644790077", (3605, 794, 0, 0, 3)),
-}
+SIZE, XDATA, STACK = (20259, 1911, 85)
+CODE_SHA = '0bf576083f3b05b56abbb768e1f1d2ca58a5b826f7b34e21095a6a8fa766181a'
+CDB_SHA = '023e502e7a2233af142bc26954a887e2cf2b08bdbf5f8d5e04cd41f2e275c3b2'
+MAP_SHA = '8b1742e44cedc6ab26a5b4e15f3730ebf9d1931de73b8ab72e9e620ea9693a94'
+MEM_SHA = '48d73a7dd133caba85ca59ab43fd6a9b73b0a7739b02ec7efdb97a651ab79178'
+LISTINGS = {'timebase': ('b35a319f53b7c1679b70403b86232ee5771911b190c94767e0fc26e8cc7f3ea8',
+              (265, 404, 'd546b7603e431ff22e69d8cbf49215ea3823ce3dc010deff94cac753c2d3bef2')),
+ 'aes': ('223a30c3d0bb0aba93cc0db8eda6b9320176f95eea619cf1e279a32d53875a48',
+         (3098, 5254, '390d0d2ebdce7e69133ad808987703600f754c512eebce63409797a01040f3d0')),
+ 'ccm_star': ('862c3c8e369759403ea5cb7ef6d53df0add63a6016b184c6e73b0a568a2d35bc',
+              (1315, 2112, '69cb1abf4173f530139a0b11fdcea88a3702182b1f7b97ab340156b8a324497b')),
+ 'nwk_frame': ('767c5985e32814db81ee564892faa85f4dedd1b3b504992c0ae2732fe79aedcf',
+               (1344, 2294, 'fefcc55d47322f04e25a0c97ae73cfae480b724b6260deffd4576b03e8c95167')),
+ 'aps_frame': ('8b226673c018fe569b99a814e785dcaf08441a85e646326dc3b4eea05bc2e4b9',
+               (939, 1626, '9011ef50ce86d3a924fcf0ef2707945572379c8308c0fac7a3f39af26e834374')),
+ 'zigbee_security': ('bafed7b489467023cf15bcda7104ef5d316254ae41117a04bd20df38a245e6ae',
+                     (2650, 4124, 'd3df7b86a5c110f20fc165e31c4f127788757a7dbc186c8c955f118b7c00aad3')),
+ 'security_test': ('afdf5e449b807ceec0841bc36e6c799426e3e8e94331c1b1d12f58fcc36e9490',
+                   (2087, 3477, '22e89f7dfcbcbafdb224616e99fec25b35212b862aba5871e1dbaca888303d0e'))}
+OBJECTS = {'timebase': ('0f110e21445dc0b93ebdf51b98af4e96f29d208abff27d604bc67c01c334d968', (404, 25, 0, 3, 1)),
+ 'aes': ('473d9a9bcd8b8e45e8ecf10990c6259cb1c5bb4eff79161209f610701bfb8765', (5254, 182, 32, 0, 3)),
+ 'ccm_star': ('86870757c6b8f2302063f532b4ca5ef5cc3786721c88719d082e1983226db9b1', (2112, 318, 0, 0, 1)),
+ 'nwk_frame': ('a68a2c6fd719dc398c33cfaaab73311be5d646b056e18ac21a23482580ce6171', (2294, 96, 12, 10, 0)),
+ 'aps_frame': ('98103aafd255517b26d841dc2322f0c3732ad696f93c3af08767e0ac8fb639b2', (1626, 69, 8, 7, 0)),
+ 'zigbee_security': ('600cf878a4e643abf6a3def25e293f2fdb85ff144da26ea06747e341bf422117',
+                     (4124, 395, 9, 4, 1)),
+ 'security_test': ('f7ab1e9ed796c35bd38954ca9725722e91071d05e409012d000b256644790077', (3605, 794, 0, 0, 3))}
 TRACES = (
     "5a54e9e8a47becbd9d2a333a316e19f80459364226b14a88fbf913646f58e3de",
     "b86c9f25902ec960b11f280eea0221317138abb022893a80604776e9c29037a3",
@@ -79,18 +76,30 @@ TRACES = (
     "26bb00cc44d46b85a8a48535b9ca0a5e9091a891bc17aac9d752e94177e3d1d0",
     "3c11ee11806de8f1eb68404023e412da3fd6a8411139529f1c97972d394bbfda",
 )
-PEAKS = (0x79, 0x7b, 0x7b, 0x75) + (0x7c,) * 18 + (0x78,)
-RUNTIME = {
-    "__divuint_PARM_2": 1875, "___memcpy_PARM_2": 1882, "___memcpy_PARM_3": 1885,
-    "_memset_PARM_2": 1890, "_memset_PARM_3": 1891, "__gptrput_PARM_2": 1893,
-    "__moduint_PARM_2": 1894, "_memcmp_PARM_2": 1899, "_memcmp_PARM_3": 1902,
-}
-CALLER = {
-    "input": (1081, 132), "output": (1213, 134), "wire": (1347, 132),
-    "decoded": (1479, 132), "nonce": (1611, 13), "aad": (1624, 132),
-    "written": (1756, 1), "limits": (1757, 6), "crypto_info": (1763, 6),
-    "context": (1769, 38), "info": (1807, 26), "meta": (1833, 19),
-}
+# Actual complete 23-trace replay after CCM's top-level volatile-copy lowering.
+# Not a uniform SP subtraction: case 0 loses four bytes, the other paths five.
+PEAKS = (0x75, 0x76, 0x76, 0x70) + (0x77,) * 18 + (0x73,)
+RUNTIME = {'__divuint_PARM_2': 1879,
+ '___memcpy_PARM_2': 1886,
+ '___memcpy_PARM_3': 1889,
+ '_memset_PARM_2': 1894,
+ '_memset_PARM_3': 1895,
+ '__gptrput_PARM_2': 1897,
+ '__moduint_PARM_2': 1898,
+ '_memcmp_PARM_2': 1903,
+ '_memcmp_PARM_3': 1906}
+CALLER = {'input': (1085, 132),
+ 'output': (1217, 134),
+ 'wire': (1351, 132),
+ 'decoded': (1483, 132),
+ 'nonce': (1615, 13),
+ 'aad': (1628, 132),
+ 'written': (1760, 1),
+ 'limits': (1761, 6),
+ 'crypto_info': (1767, 6),
+ 'context': (1773, 38),
+ 'info': (1811, 26),
+ 'meta': (1837, 19)}
 FIELDS = {
     1: ((0, "block_timeout", 4), (4, "block_polls", 2)),
     2: ((0, "polls", 4), (4, "blocks", 1), (5, "aes_status", 1)),
@@ -217,8 +226,8 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         a, n = state_location(debug, module)
         require(symbols["_aes_reserved_end"] < a and a + n <= XDATA and
                 set(range(a, a+n)) <= allocated, "Security staging overlaps lower AES ownership")
-    for module, lo, hi in zip(MODULES, (0, 25, 207, 521, 617, 686, 1081),
-                              (25, 207, 521, 617, 686, 1081, 1875)):
+    for module, lo, hi in zip(MODULES, (0, 25, 207, 525, 621, 690, 1085),
+                              (25, 207, 525, 621, 690, 1085, 1879)):
         segment = listings[module].decode("ascii").split(".area XSEG    (XDATA)", 1)[1].split(".area XABS", 1)[0]
         covered = set()
         for a, n in re.findall(r"^\s+([0-9A-F]{6})\s+\d+\s+\.ds (\d+)$", segment, re.M):
@@ -254,14 +263,14 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
           ("aad_length", "{2}SI:U"), ("input", "{3}DG,SC:U"), ("length", "{2}SI:U"),
           ("tag_length", "{1}SC:U"), ("output", "{3}DG,SC:U"), ("capacity", "{2}SI:U"),
           ("written", "{3}DG,SC:U"), ("limits", "{3}DG,ST__00000001:S"), ("info", "{3}DG,ST__00000002:S")),
-         (487, 490, 493, 496, 498, 501, 503, 504, 507, 509, 512, 515)),
+         (489, 492, 495, 498, 500, 503, 505, 506, 509, 511, 514, 517)),
         ("zigbee_security", "zigbee_security_crypt",
          (("layer", "{1}SC:U"), ("key", "{3}DG,ST__00000003:S"), ("frame", "{3}DG,SC:U"),
           ("length", "{2}SI:U"), ("output", "{3}DG,SC:U"), ("capacity", "{2}SI:U"),
-          ("info", "{3}DG,ST__00000005:S")), (1050, 1051, 1054, 1057, 1059, 1062, 1064)),
+          ("info", "{3}DG,ST__00000005:S")), (1054, 1055, 1058, 1061, 1063, 1066, 1068)),
         ("zigbee_security", "zigbee_security_inspect",
          (("level", "{1}SC:U"), ("frame", "{3}DG,SC:U"), ("length", "{2}SI:U"),
-          ("meta", "{3}DG,ST__00000004:S")), (1040, 1041, 1044, 1046)),
+          ("meta", "{3}DG,ST__00000004:S")), (1044, 1045, 1048, 1050)),
     ):
         for i, ((name, spec), address) in enumerate(zip(params, addresses), 2):
             require(symbols.get(f"_{function}_PARM_{i}") == address and re.search(
@@ -269,7 +278,7 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
                 "Security generic/scalar parameter ABI changed")
     require((symbols["_main"], symbols["_security_before"], symbols["_security_done"],
              symbols["_security_checks"], symbols["_security_case"]) ==
-            (19312, 19357, 19367, 1852, 1856), "Security genuine caller/checkpoints changed")
+            (19321, 19366, 19376, 1856, 1860), "Security genuine caller/checkpoints changed")
     return allocated, sites, aes_code
 
 
@@ -442,7 +451,9 @@ def check_result(ram, iram, sfr, symbols, debug, expected):
 
 def check_peak(text, expected):
     peaks = [int(p, 16) for p in re.findall(r"Max value of stack pointer=\s*0x([0-9a-fA-F]+)", text)]
-    require(peaks and max(peaks) == expected <= 0x7c, "Security missing/changed full-run stack peak")
+    require(peaks and max(peaks) == expected <= 0x7c,
+            f"Security missing/changed full-run stack peak: "
+            f"{max(peaks) if peaks else None!r}, expected {expected:#x}")
     return max(peaks)
 
 
@@ -562,7 +573,7 @@ def main():
     path, image, symbols, debug_raw, memory, listings, objects = load(args.output)
     _, sites, code = verify(image, symbols, debug_raw, memory, listings, objects)
     bad = negatives(image, symbols, debug_raw, memory, listings, objects)
-    require(bad == 61685, "Security artifact-negative coverage changed")
+    require(bad == 61724, "Security artifact-negative coverage changed")
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, False))
     for text in ("", "Max value of stack pointer= 0x7d", "Max value of stack pointer= 0x78"):

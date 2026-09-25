@@ -60,8 +60,8 @@ static mac_codec_result_t command_policy(const mac_command_t *command)
     return MAC_CODEC_OK;
 }
 
-mac_codec_result_t mac_command_decode(const uint8_t *payload, uint16_t length,
-                                      mac_command_t *result)
+mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
+                                      mac_command_t * volatile result)
 {
     mac_command_t candidate;
     mac_codec_result_t status;

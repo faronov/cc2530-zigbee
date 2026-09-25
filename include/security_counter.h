@@ -66,7 +66,7 @@ security_counter_result_t security_counter_create(
     uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * volatile data,
     uint8_t length, uint16_t poll_limit);
 security_counter_result_t security_counter_take(
-    uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit);
+    volatile uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit);
 security_counter_result_t security_counter_save(
     const uint8_t MCU_XDATA * volatile data, uint8_t length, uint16_t poll_limit);
 security_counter_result_t security_counter_read(

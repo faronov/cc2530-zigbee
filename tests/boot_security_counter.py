@@ -15,45 +15,66 @@ from boot_zdo_node import rejected
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 MODULES = ("flash_exec", "flash", "flash_write", "nv_record", "security_counter", "security_counter_test")
-SIZE, XDATA, STACK = 9941, 1120, 0x4a
+SIZE, XDATA, STACK = (9907, 1125, 66)
 CODE_BUDGET, XDATA_BUDGET = 12288, 1280
-CODE_SHA = "466912c409a085aeaa4a8adb88a636f7e6bbad92f6f4dd20f971dd6bcf1f6618"
-CDB_SHA = "d3c5407af8f72baef24c865e1d1c71ebb8726630f66ff6ce992f72935789f3a3"
-MAP_SHA = "116dfd4c08eb15dfe3806d04826712c617b48ec5b9abcec49afce0c0fbeb2e70"
-MEM_SHA = "83ae5938cdad906ae4f712636d3c4bc9d117a41b472963f3253a00458ac16e73"
-LISTINGS = dict(zip(MODULES, (
-    ("bc959ef00d66fb516eeed570ad704ec146d8f7a2bd924adf0220302b7988e298", (661, 1176, "211c8531b18375463aba8749f024f76b705aafc128226106e2973c6413a69c5e")),
-    ("c431531677f617a045afd6b59d5ff38bd54c4568eeed754606a01e0286124bde", (416, 766, "186fbbf903d6e033e258a92d0f44cd921fcb73d82faca5ce4c5d63ec391022c6")),
-    ("2a1b23f452a57db0af0f229e01f8786bbd48c98611ba1db77125eb79ce95988f", (646, 1095, "7aa7bf21cd8e4b189d44cf0f84f8eb2006a22ca0d73e94484e1821477cb75ba3")),
-    ("a4bec338648583babd4d8c879a0ac7f435f0e33ec7f50df03b9eaec2f3dadf4c", (2204, 3694, "054a9b8d7deec81b7cd647ca9820ac412a087c6091b145d5655413e5a00db286")),
-    ("9cdf3f022e786a5316a5d3da39404a4caf8f28d9f04dca4782cb407fcd5c5a28", (1691, 2746, "f1e6bf4dc76c85748309bbaf1dfccefa227ae9bdf9d4bf820e927e0a4cc90e95")),
-    ("c4d4c04740304c086c82989e304091aac01f58d7377d2bc41a1c438c20440042", (209, 363, "965cdbc5c792bfc2bb81e7dcdb8e63fb2bfe3f93040eaa013e6b11881f8013c2")),
-)))
-OBJECTS = dict(zip(MODULES, (
-    ("52ceded037af553b1058950185143bb0175dfb7a7dcd350bf41f8c02e9dec2f2", (1176, 155, 8, 0, 1)),
-    ("13c294e54276d3d531379be0dc2430396fe44eff2fc236d4dcbbbe58c2346ce6", (766, 54, 4, 0, 0)),
-    ("84855d5adec79f79fce76664fa582048eec372717731340771c4b7fb399d8d29", (1095, 195, 5, 0, 0)),
-    ("9d80baba6a15d6cc06889220faedc10b8ab2a1938b9bdb92a6f84738811898ca", (3702, 257, 23, 4, 1)),
-    ("bdddf0667a01a908f496e7b9a1325abc4a176d837b4ac72706ecb3c440875789", (2746, 329, 14, 4, 1)),
-    ("7040dccdf71a2b35a6be41c55e7c8dede9b1b7e55e03285fa23d0591c726e95e", (363, 130, 4, 0, 0)),
-)))
-ABI = {
-    "_counter_before": 9575, "_counter_done": 9835, "_main": 9837,
-    "_counter_test_action": 1116, "_counter_test_aps": 1110, "_counter_test_buffer": 990,
-    "_counter_test_cycle": 9575, "_counter_test_domain": 1118, "_counter_test_length": 1117,
-    "_counter_test_limit": 1114, "_counter_test_nwk": 1106, "_counter_test_result": 7680,
-    "_counter_test_return": 1119, "_counter_test_value": 1102,
-    "_security_counter_blob": 685, "_security_counter_check": 813,
-    "_security_counter_create": 8166, "_security_counter_create_PARM_2": 961,
-    "_security_counter_create_PARM_3": 965, "_security_counter_create_PARM_4": 967,
-    "_security_counter_create_PARM_5": 968, "_security_counter_diagnostic": 661,
-    "_security_counter_open": 7750, "_security_counter_read": 9355,
-    "_security_counter_read_PARM_2": 984, "_security_counter_read_PARM_3": 985,
-    "_security_counter_reserved_end": 989, "_security_counter_save": 9115,
-    "_security_counter_save_PARM_2": 979, "_security_counter_save_PARM_3": 980,
-    "_security_counter_status": 9571, "_security_counter_take": 8595,
-    "_security_counter_take_PARM_2": 974, "_security_counter_take_PARM_3": 976,
-}
+CODE_SHA = '3b5ef880f8a88567d5eeea94b4f8ef2d2903403f00b718149b5eeb476da057ea'
+CDB_SHA = 'e059fc6fd3ad824ff47650522257f03ce39a735ffeb5301ebbe2e79ffccb568a'
+MAP_SHA = 'be591485d0f0f424ac44b4dd1c10ca177292cc06a878a35f1bd3f73a8c835788'
+MEM_SHA = '527dd87f14912c9d5eaf49a24b8febb6a2f840d4c9e3e78e5003839cef211879'
+LISTINGS = {'flash_exec': ('bc959ef00d66fb516eeed570ad704ec146d8f7a2bd924adf0220302b7988e298',
+                (661, 1176, '211c8531b18375463aba8749f024f76b705aafc128226106e2973c6413a69c5e')),
+ 'flash': ('c431531677f617a045afd6b59d5ff38bd54c4568eeed754606a01e0286124bde',
+           (416, 766, '186fbbf903d6e033e258a92d0f44cd921fcb73d82faca5ce4c5d63ec391022c6')),
+ 'flash_write': ('2a1b23f452a57db0af0f229e01f8786bbd48c98611ba1db77125eb79ce95988f',
+                 (646, 1095, '7aa7bf21cd8e4b189d44cf0f84f8eb2006a22ca0d73e94484e1821477cb75ba3')),
+ 'nv_record': ('bf78a3a222167f0d0626701199e082307b573b54dd4a3f69f9d050fa2ff58c55',
+               (2170, 3585, '69f79224e1cfc7ab7cdf64663680bf3e1636e41bcc81de790db370e8945b5e8b')),
+ 'security_counter': ('16a6354ff804e47eb26895a953b5ddff230d270013229bdf67b9237a4bf4420f',
+                      (1741, 2821, '62962473dacb51db8697e294bde34f5725a73c207d8dd3bc8d7ba784a316b0b5')),
+ 'security_counter_test': ('fc7c9133bdae2e0d4c1f960576d83aff4df48aa3cb83639b60797ddedc254933',
+                           (209, 363, 'e477312e3c7f507a3aa1d0c585d4637e4588c6a1f753ea6fc9e6b562964665f0'))}
+OBJECTS = {'flash_exec': ('52ceded037af553b1058950185143bb0175dfb7a7dcd350bf41f8c02e9dec2f2', (1176, 155, 8, 0, 1)),
+ 'flash': ('13c294e54276d3d531379be0dc2430396fe44eff2fc236d4dcbbbe58c2346ce6', (766, 54, 4, 0, 0)),
+ 'flash_write': ('84855d5adec79f79fce76664fa582048eec372717731340771c4b7fb399d8d29', (1095, 195, 5, 0, 0)),
+ 'nv_record': ('28a628faca818396cdbaefcc52f8cb148df49d83883582d1f496bc1ecc5f7425', (3593, 258, 15, 4, 1)),
+ 'security_counter': ('045a7b75d7c70a2000f9279aa135dd8b8679df9d373a1c182abc0562e691d1cd',
+                      (2821, 333, 14, 4, 1)),
+ 'security_counter_test': ('7040dccdf71a2b35a6be41c55e7c8dede9b1b7e55e03285fa23d0591c726e95e',
+                           (363, 130, 4, 0, 0))}
+ABI = {'_counter_before': 9541,
+ '_counter_done': 9801,
+ '_main': 9803,
+ '_counter_test_action': 1121,
+ '_counter_test_aps': 1115,
+ '_counter_test_buffer': 995,
+ '_counter_test_cycle': 9541,
+ '_counter_test_domain': 1123,
+ '_counter_test_length': 1122,
+ '_counter_test_limit': 1119,
+ '_counter_test_nwk': 1111,
+ '_counter_test_result': 7680,
+ '_counter_test_return': 1124,
+ '_counter_test_value': 1107,
+ '_security_counter_blob': 686,
+ '_security_counter_check': 814,
+ '_security_counter_create': 8057,
+ '_security_counter_create_PARM_2': 962,
+ '_security_counter_create_PARM_3': 966,
+ '_security_counter_create_PARM_4': 968,
+ '_security_counter_create_PARM_5': 969,
+ '_security_counter_diagnostic': 662,
+ '_security_counter_open': 7641,
+ '_security_counter_read': 9321,
+ '_security_counter_read_PARM_2': 989,
+ '_security_counter_read_PARM_3': 990,
+ '_security_counter_reserved_end': 994,
+ '_security_counter_save': 9081,
+ '_security_counter_save_PARM_2': 984,
+ '_security_counter_save_PARM_3': 985,
+ '_security_counter_status': 9537,
+ '_security_counter_take': 8486,
+ '_security_counter_take_PARM_2': 975,
+ '_security_counter_take_PARM_3': 977}
 
 
 def sha(data):
@@ -91,8 +112,8 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         if m in ("nv_record", "security_counter", "security_counter_test"):
             accesses = peripheral_accesses(dict(code))
             if m == "security_counter_test":
-                require(accesses == [(9837, b"\x75\xa8\x00", 0xa8), (9840, b"\x75\xb8\x00", 0xb8),
-                                     (9843, b"\x75\x9a\x00", 0x9a)], "Counter harness IRQ initialization changed")
+                require(accesses == [(9803, b"\x75\xa8\x00", 0xa8), (9806, b"\x75\xb8\x00", 0xb8),
+                                     (9809, b"\x75\x9a\x00", 0x9a)], "Counter harness IRQ initialization changed")
             else:
                 require(not accesses, "Counter/journal policy bypassed real flash APIs")
         for a, raw in code:
@@ -119,15 +140,15 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
     for start, end, digest in FLASH_MODULES.values():
         require(sha(bytes(image[a] for a in range(start, end))) == digest,
                 "Counter changed published actual flash backend instructions")
-    require(sha(bytes(image[a] for a in range(0xc3f, 0x1aad))) ==
-            "d7ca121e53c4f489ffbb8e67dedbbaaa4e4f95a3e5a4329eedc3e3c57d4063ac",
+    require(sha(bytes(image[a] for a in range(0xc3f, 0x1a40))) ==
+            "1c2406bee23c02986a516de7deabf98b05603e57c67302aa53d8aeb78e2ddd6d",
             "Counter journal linked code changed")
     calls = [(a, int.from_bytes(raw[1:], "big")) for a, raw in decoded.items() if raw[0] == 0x12]
-    require([(a, target) for a, target in calls if 0xc3f <= a < 0x1aad and target < 0xc3f] ==
-            [(journal.READ_CALL, 0x5e0), (journal.PROGRAM_CALL, 0xbf7), (0x1788, 0xbc6)],
+    require([(a, target) for a, target in calls if 0xc3f <= a < 0x1a40 and target < 0xc3f] ==
+            [(journal.READ_CALL, 0x5e0), (journal.PROGRAM_CALL, 0xbf7), (0x174c, 0xbc6)],
             "Counter journal no longer uses actual reader/program/erase calls")
-    require({target for a, target in calls if 0x1aad <= a < ABI["_counter_before"] and target < 0x1aad} ==
-            {0x131f, 0x14d7, 0x1aa9}, "Counter bypassed journal load/replace/status")
+    require({target for a, target in calls if 0x1a40 <= a < ABI["_counter_before"] and target < 0x1a40} ==
+            {0x131f, 0x14d7, 0x1a3c}, "Counter bypassed journal load/replace/status")
     fields = re.findall(r"^T:Fsecurity_counter\$__00000002\[(.*)\]$", debug, re.M)
     require(len(fields) == 1, "Counter status field record missing/duplicated")
     actual = re.findall(r"\(\{(\d+)\}S:S\$([^$]+)\$0_0\$0\(\{(\d+)\}", fields[0])
@@ -226,7 +247,7 @@ class CounterClient:
     signature = b"CTR1\x01\x08\0\0"
 
     def __init__(self, symbols=None):
-        self.caller, self.xdata, self.unwind = 990, XDATA, 0x4b
+        self.caller, self.xdata, self.unwind = 995, XDATA, STACK+1
         if symbols is not None:
             self.main, self.before, self.done = (symbols[n] for n in ("_main", "_counter_before", "_counter_done"))
             self.caller, self.xdata = symbols["_counter_test_buffer"], symbols["l_XSEG"]
@@ -244,7 +265,7 @@ class CounterClient:
             prefix = [] if carry is None else restore(carry, previous_pc, previous_map)+complete_commands(number)
             if carry is not None:
                 prefix.extend(f"break {a:#x}" for a in
-                              (journal.READ_CALL, journal.PROGRAM_CALL, 0x1788, self.done, 0x487))
+                              (journal.READ_CALL, journal.PROGRAM_CALL, 0x174c, self.done, 0x487))
             text = simulate(simulator, prefix+commands[previous:end]+complete_commands(number+8), path)
             parts = sections(text)
             if carry is not None:
@@ -278,7 +299,9 @@ class CounterClient:
             expected[:len(output)] = output
             expected[-3] = len(output)
         require(ram[self.caller:self.caller+130] == expected, "Counter caller output/tail/arguments changed")
-        require(ram[661:685] == options["diag"], "Counter allocation/reservation/fault diagnostic changed")
+        # NV's new one-byte returning local moves this complete 24-byte object;
+        # do not compare the old fence byte and silently omit its final field.
+        require(ram[662:686] == options["diag"], "Counter allocation/reservation/fault diagnostic changed")
         require(iram[0x7d:] == b"\xc7"*(256-0x7d), "Counter crossed upper-IRAM guard")
         require(ram[0x1e00:0x1e08] == self.signature and
                 ram[self.xdata:0x1e00] == b"\xa5"*(0x1e00-self.xdata) and ram[0x1e08:] == b"\xa5"*248,
@@ -389,7 +412,7 @@ def negatives(image, symbols, debug_raw, memory, listings, objects):
 def runtime_negatives(client):
     options, *memory = client.snapshots[-1]
     count = 0
-    for space, addresses in ((0, (*range(661, 685), *range(client.caller, client.caller+130),
+    for space, addresses in ((0, (*range(662, 686), *range(client.caller, client.caller+130),
                                  client.xdata, 0x1dff, 0x1e00, 0x1e08, 0x1eff)),
                              (1, (0x7d, 0xff)), (2, (1,))):
         for address in addresses:
@@ -426,14 +449,14 @@ def main():
     path, *artifacts = load(args.output)
     allocated = verify(*artifacts)
     bad = negatives(*artifacts)
-    require(bad == 32255, "Counter artifact-negative coverage changed")
+    require(bad == 32257, "Counter artifact-negative coverage changed")
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, False))
     calls = commands = peak = total = runtime = segments = 0
     for number, (media, operations) in enumerate(cases()):
         client = CounterClient()
         try:
-            observed, count, physical = journal.execute(args.simulator, path, artifacts[0], allocated, 0x1788,
+            observed, count, physical = journal.execute(args.simulator, path, artifacts[0], allocated, 0x174c,
                                                          media, operations, client)
         except (ValueError, KeyError) as exc:
             raise ValueError(f"Counter sequence {number}: {exc}") from exc
@@ -442,8 +465,10 @@ def main():
             runtime = runtime_negatives(client)
         segments += len(client.continuations)
         peak = max(peak, observed); calls += count; commands += physical; total += 1
-    require((total, calls, commands, segments, peak, runtime) == (56, 36695, 919, 162, 0x72, 204),
-            "Counter exact sequence/call/command/continuation/peak/negative coverage changed")
+    # Full 56-sequence observation, not a subtraction from the object DATA sum.
+    require((total, calls, commands, segments, peak, runtime) == (56, 36695, 919, 162, 0x66, 204),
+            f"Counter exact sequence/call/command/continuation/peak/negative coverage changed: "
+            f"{(total, calls, commands, segments, peak, runtime)}")
     print(f"Security counters: {total} linked sequences, {calls} actual flash calls/{commands} RAM commands; "
           f"{SIZE}/{CODE_BUDGET} CODE, {XDATA}+64/{XDATA_BUDGET} XDATA, SP {peak:02X}/7C; "
           f"{bad} artifact + {runtime} snapshot/continuation + 1 alias negatives; "

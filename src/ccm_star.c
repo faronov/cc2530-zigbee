@@ -43,9 +43,9 @@ static uint8_t flush(void)
     return 1;
 }
 
-static uint8_t feed(const uint8_t * volatile data, uint8_t count)
+static uint8_t feed(const uint8_t * volatile data, volatile uint8_t count)
 {
-    uint8_t i;
+    volatile uint8_t i;
     for (i = 0; i < count; i++) {
         state.block[state.position++] = data[i];
         if (state.position == 16 && !flush())
@@ -54,8 +54,8 @@ static uint8_t feed(const uint8_t * volatile data, uint8_t count)
     return 1;
 }
 
-static uint8_t authenticate(const uint8_t * volatile aad, uint8_t aad_length,
-                            uint8_t size, uint8_t tag_length)
+static uint8_t authenticate(const uint8_t * volatile aad, volatile uint8_t aad_length,
+                            volatile uint8_t size, uint8_t tag_length)
 {
     memset(state.mac, 0, 16);
     state.block[0] = 1u | (uint8_t)(((tag_length - 2u) / 2u) << 3);
@@ -85,9 +85,10 @@ static uint8_t counter(uint8_t number)
     return encrypt();
 }
 
-static uint8_t transform(uint8_t size)
+static uint8_t transform(volatile uint8_t size)
 {
-    uint8_t offset = 0, number = 1, i;
+    volatile uint8_t offset = 0, number = 1;
+    uint8_t i;
     while (offset < size) {
         if (!counter(number++))
             return 0;
@@ -112,7 +113,8 @@ ccm_star_result_t ccm_star_crypt(
     uint8_t * volatile output, uint16_t capacity, uint8_t * volatile written,
     const ccm_star_limits_t * volatile limits, ccm_star_info_t * volatile info)
 {
-    uint8_t size, total, i, different = 0;
+    volatile uint8_t size, total;
+    uint8_t i, different = 0;
     ccm_star_result_t result = CCM_STAR_AES;
     if (open > 1 || key == NULL || nonce == NULL || output == NULL ||
         written == NULL || limits == NULL || info == NULL ||

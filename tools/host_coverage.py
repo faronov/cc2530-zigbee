@@ -14,7 +14,8 @@ from verify_firmware import BOARDS, ROOT
 
 
 PROFILES = ("ed-wire", "security-keys", "bdb-join")
-CORE = ("ed_wire", "security_keys", "nwk_aps", "zdo_runtime", "bdb_join")
+CORE = ("ed_wire", "security_keys", "nwk_aps", "nwk_aps_transmit",
+        "zdo_runtime", "bdb_join", "bdb_join_init")
 
 
 def merge(reports):

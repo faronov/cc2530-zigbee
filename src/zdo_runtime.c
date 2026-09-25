@@ -7,11 +7,19 @@
 #include <string.h>
 
 static MCU_XDATA security_keys_status_t keys;
-static MCU_XDATA zdo_srv_local_t local;
-static MCU_XDATA zdo_srv_rx_t rx;
-static MCU_XDATA zdo_srv_info_t info;
-static MCU_XDATA zdo_node_response_t node;
-static MCU_XDATA uint8_t descriptor_bytes[17];
+/* Descriptor validation needs disjoint node/output storage. Descriptor
+ * reception returns before the server branch can use its own three views. */
+static MCU_XDATA union {
+    struct {
+        zdo_srv_local_t local;
+        zdo_srv_rx_t rx;
+        zdo_srv_info_t info;
+    } server;
+    struct {
+        zdo_node_response_t node;
+        uint8_t descriptor_bytes[17];
+    } descriptor;
+} work;
 
 static uint16_t little(const uint8_t *p)
 {
@@ -44,8 +52,8 @@ zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
 {
     uint8_t length;
     if (!ctx || !descriptor || descriptor->logical_type != 2) return ZDO_RUNTIME_ARGUMENT;
-    memset(&node, 0, sizeof(node)); node.descriptor = *descriptor; node.address = 1;
-    if (zdo_node_rsp_encode(&node, descriptor_bytes, sizeof(descriptor_bytes), &length) != ZDO_NODE_OK)
+    memset(&work.descriptor.node, 0, sizeof(work.descriptor.node)); work.descriptor.node.descriptor = *descriptor; work.descriptor.node.address = 1;
+    if (zdo_node_rsp_encode(&work.descriptor.node, work.descriptor.descriptor_bytes, sizeof(work.descriptor.descriptor_bytes), &length) != ZDO_NODE_OK)
         return ZDO_RUNTIME_ARGUMENT;
     memset(ctx, 0, sizeof(*ctx));
     ctx->local = *descriptor; ctx->last = now; ctx->version = ZDO_RUNTIME_VERSION;
@@ -185,10 +193,10 @@ static zdo_runtime_result_t received(zdo_runtime_t * volatile ctx, nwk_aps_t * v
             p->aps.source_endpoint || p->aps.delivery_mode || p->aps.cluster_id != cluster ||
             p->payload[0] != ctx->sequence) return ZDO_RUNTIME_IGNORED;
         if (ctx->query == ZDO_RUNTIME_NODE) {
-            if (zdo_node_rsp_decode(p->payload, p->length, &node) != ZDO_NODE_OK ||
-                (node.has_address && node.address)) return ZDO_RUNTIME_FORMAT;
-            ctx->result = node.status ? ZDO_RUNTIME_REMOTE : ZDO_RUNTIME_OK;
-            if (!node.status) ctx->tc = node.descriptor;
+            if (zdo_node_rsp_decode(p->payload, p->length, &work.descriptor.node) != ZDO_NODE_OK ||
+                (work.descriptor.node.has_address && work.descriptor.node.address)) return ZDO_RUNTIME_FORMAT;
+            ctx->result = work.descriptor.node.status ? ZDO_RUNTIME_REMOTE : ZDO_RUNTIME_OK;
+            if (!work.descriptor.node.status) ctx->tc = work.descriptor.node.descriptor;
         } else {
             if (p->length < 12 || (p->payload[1] && p->payload[1] != ZDO_NODE_DEVICE_NOT_FOUND &&
                 p->payload[1] != ZDO_NODE_INVALID_REQUEST)) return ZDO_RUNTIME_FORMAT;
@@ -204,15 +212,15 @@ static zdo_runtime_result_t received(zdo_runtime_t * volatile ctx, nwk_aps_t * v
         return ZDO_RUNTIME_DROPPED;
     }
     if (p->aps.cluster_id < 2) return address_request(ctx, p);
-    local.descriptor = ctx->local; local.address = keys.config.address;
-    rx.header = p->aps; rx.broadcast = p->nwk.destination >= 0xfffbu || p->aps.delivery_mode == 2;
+    work.server.local.descriptor = ctx->local; work.server.local.address = keys.config.address;
+    work.server.rx.header = p->aps; work.server.rx.broadcast = p->nwk.destination >= 0xfffbu || p->aps.delivery_mode == 2;
     base(&ctx->response, p->nwk.source, 0);
-    if (zdo_srv_handle(&local, &rx, p->payload, p->length, ctx->response.payload,
-        sizeof(ctx->response.payload), &info) != ZDO_SRV_OK) return ZDO_RUNTIME_FORMAT;
-    if (info.kind != ZDO_SRV_REPLY) return ZDO_RUNTIME_IGNORED;
-    ctx->response.aps.cluster_id = info.cluster_id;
-    ctx->response.aps.destination_endpoint = info.endpoint;
-    ctx->response.length = info.length; ctx->response_pending = 1;
+    if (zdo_srv_handle(&work.server.local, &work.server.rx, p->payload, p->length, ctx->response.payload,
+        sizeof(ctx->response.payload), &work.server.info) != ZDO_SRV_OK) return ZDO_RUNTIME_FORMAT;
+    if (work.server.info.kind != ZDO_SRV_REPLY) return ZDO_RUNTIME_IGNORED;
+    ctx->response.aps.cluster_id = work.server.info.cluster_id;
+    ctx->response.aps.destination_endpoint = work.server.info.endpoint;
+    ctx->response.length = work.server.info.length; ctx->response_pending = 1;
     return ZDO_RUNTIME_OK;
 }
 

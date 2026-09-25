@@ -393,10 +393,14 @@ they add no over-the-air identity or security guarantee.
 
 The detailed ledger below records the earlier control-staging baseline.
 With #63's explicit receive profile in the shared codec, this unchanged
-transmitter/corpus measures **25515 CODE,1114+64 XDATA, SP5E**, still within
+transmitter/corpus measured **25515 CODE,1114+64 XDATA, SP5E**, still within
 all original limits. Default decoding and TX admission are unchanged.
 The [current shared refresh](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63)
 distinguishes this from the historical hashes/addresses below.
+The later complete-join decoder lowering gives25472 CODE, unchanged1114+64
+XDATA, stack start39 and observed SP55 on both boards. The complete original
+corpus and125 metadata negatives remain; only emitted pointer/length-copy
+lifetimes change, not TX admission or wire rules.
 
 The dedicated composition links **mac_frame, mac_tx, then test caller** with
 unchanged strict native/SDCC flags. SDCC 4.2.0 model-large, both board definitions:

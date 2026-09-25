@@ -45,11 +45,29 @@ configuration/I/O raises it to8090. Both-board81722-check native/sanitizer
 evidence and retained exact key-image identities do not establish complete
 target fit or execution.
 
+The subsequent [returning-controller reduction](ED_JOIN.md#returning-controller-views-and-grouped-initialization)
+shares only sequential private parser/constructor views, not retained owner
+state. A copied19-byte transport configuration replaces the long initializer
+argument list. Across BDB/NWK/ZDO this removes106 XDATA and12 compiler DATA
+bytes; context sizes remain unchanged. It is host-tested and object-checked,
+not a full-call stack/IRAM proof. The existing banking ABI and SP7C cap remain
+unchanged; zero DATA from an unaccepted external-stack experiment is not
+usable stack headroom.
+
 The [banked security target profile](BANKED_SECURITY.md) now separately proves
 real key/wire/crypto/NV placement and mixed execution. Common lower services,
 bank1 key ownership and bank2 wire protection use physically reserved shared
 DATA and the original far-call ABI. It has no board/radio or full MAC/BDB
 caller, no ISR headroom claim, and no automatic persistence-to-READY path.
+
+The subsequent [complete banked MCU caller](ED_JOIN.md#complete-banked-mcu-execution)
+now fits and executes those production owners together:143092 populated CODE
+bytes,7512 ordinary XDATA andSP7B under7C. Actual association context/shadow
+storage, DATA/OSEG/libc liveness and all bank/alias boundaries are checked.
+It reaches authenticated READY and protected exchange with synthetic PHY
+events, not a real-radio driver. Earlier allocation figures above are
+historical steps; no extra RAM, ISR headroom or persisted-to-READY shortcut
+was introduced.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

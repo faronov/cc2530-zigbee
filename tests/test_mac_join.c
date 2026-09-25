@@ -5,6 +5,11 @@
 #include "mac_join.h"
 #include "cc2530_mmio.h"
 #include <string.h>
+#if defined(CC2530_HOST_TEST) && defined(CC2530_JOIN_WORKSPACE)
+/* Real host allocation for the same full external shadow. This is not the
+ * target BDB aggregate, a linker binding or a full-profile MCU fit proof. */
+mac_join_t mac_join_staged;
+#endif
 #ifndef MAC_JOIN_CASE
 #define MAC_JOIN_CASE 0
 #endif
@@ -77,6 +82,11 @@ static volatile uint8_t calls;
 static uint8_t failure, release_result;
 static uint16_t grant;
 static uint8_t seen;
+#ifndef __SDCC
+static uint8_t interleaving;
+static unsigned interleaved;
+static int other_attempt(void);
+#endif
 
 #ifdef __SDCC
 volatile MCU_XDATA MCU_AT(0x1e00) uint8_t mac_join_result[8];
@@ -128,6 +138,12 @@ static void run(void)
     if (mac_join_step(&join, &tx, now, NULL, &action) != MAC_JOIN_OK)
         goto complete;
     for (calls = 0; calls < 100 && join.phase < MAC_JOIN_DONE; calls++) {
+#ifndef __SDCC
+        if (interleaving && other_attempt()) {
+            failure = 3;
+            goto complete;
+        }
+#endif
         operation = action.kind;
         phase = join.phase;
         transmitter = tx.phase;
@@ -341,6 +357,48 @@ complete:
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) return __LINE__; } while (0)
 
+/* An independent synthetic device world, serialized between real foreground
+ * calls. Its start overwrites all returning step work. Cancel/restore/take/
+ * release retire its own lease; no live context or fault is reset to proceed. */
+static int other_attempt(void)
+{
+    mac_join_t other, saved = join, before;
+    mac_tx_t transmitter, saved_tx = tx;
+    mac_join_request_t request_copy = request;
+    mac_join_event_t input_copy, saved_event = event;
+    mac_join_action_t output_copy, saved_action = action, old_output;
+    mac_join_record_t receipt_copy, saved_record = record;
+    CHECK(mac_tx_init(&transmitter, 0x5a, 0) == MAC_TX_OK);
+    CHECK(mac_join_init(&other, 0) == MAC_JOIN_OK);
+    request_copy.extraction.epoch = 0x87654321UL;
+    request_copy.extraction.channel = 26;
+    request_copy.extraction.pan = 0x4567;
+    request_copy.extraction.local[0] = 0x77;
+    CHECK(mac_join_start(&other, &transmitter, &request_copy, 0) == MAC_JOIN_OK);
+    memset(&input_copy, 0, sizeof(input_copy));
+    input_copy.epoch = request_copy.extraction.epoch;
+    input_copy.generation = other.generation;
+    input_copy.kind = MAC_JOIN_CANCEL;
+    CHECK(mac_join_step(&other, &transmitter, 0, &input_copy, &output_copy) == MAC_JOIN_OK);
+    CHECK(output_copy.kind == MAC_JOIN_ACTION_RESTORE);
+    input_copy.kind = MAC_JOIN_RESTORED;
+    input_copy.token = output_copy.token;
+    CHECK(mac_join_step(&other, &transmitter, 0, &input_copy, &output_copy) == MAC_JOIN_OK);
+    CHECK(mac_join_take(&other, &receipt_copy) == MAC_JOIN_OK);
+    CHECK(receipt_copy.reason == MAC_JOIN_CANCELLED);
+    CHECK(mac_join_release(&other, &transmitter) == MAC_JOIN_OK);
+    before = other; old_output = output_copy;
+    input_copy.kind = 255;
+    CHECK(mac_join_step(&other, &transmitter, 0, &input_copy, &output_copy) == MAC_JOIN_INVALID);
+    CHECK(!memcmp(&other, &before, sizeof(other)));
+    CHECK(!memcmp(&output_copy, &old_output, sizeof(output_copy)));
+    CHECK(!memcmp(&join, &saved, sizeof(join)) && !memcmp(&tx, &saved_tx, sizeof(tx)));
+    CHECK(!memcmp(&event, &saved_event, sizeof(event)) && !memcmp(&action, &saved_action, sizeof(action)));
+    CHECK(!memcmp(&record, &saved_record, sizeof(record)));
+    interleaved++;
+    return 0;
+}
+
 static int expected(void)
 {
     uint8_t faulted = SC == 8 || SC == 9 || SC == 10 || SC == 20;
@@ -509,6 +567,11 @@ int main(void)
         rc = expected();
         if (rc) break;
     }
+    interleaving = 1;
+    for (scenario = 0; !rc && scenario <= 21; scenario++) {
+        run();
+        rc = expected();
+    }
     if (!rc) rc = exact_arguments();
     if (rc) {
         fprintf(stderr, "Join case %u line %d: failure %u phase %u reason %u poll %u/%u, %u calls\n",
@@ -517,6 +580,7 @@ int main(void)
     }
     printf("Join: 22 genuine sequence cases, 5 F boundaries, 256 response waits, "
            "254 rejected profiles, exact TX-copy and ACK spans PASS.\n");
+    printf("Join: all 22 sequences repeated with %u interleaved retired attempts PASS.\n", interleaved);
     return 0;
 }
 #endif

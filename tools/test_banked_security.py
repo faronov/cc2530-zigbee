@@ -11,7 +11,7 @@ import boot_banked_security as lifecycle
 from boot_banked_security import restore
 from boot_banked import normalized_object, pin_artifacts, sha
 from boot_nwk_candidates import records
-from boot_security_resident import active_frames
+from boot_security_resident import active_frames, pin_cdb, _pinned_cdb
 from verify_banked_security import EDGES, FRAMES, wire_work
 
 
@@ -59,17 +59,35 @@ def wire_work_fixture():
 
 
 class BankedSecurityTests(unittest.TestCase):
+    def test_resident_raw_pin_compares_complete_immutable_content(self):
+        raw = b"F:synthetic\nS:synthetic\nL:synthetic\nT:synthetic\n"
+        digest = sha(raw)
+        with patch.dict(_pinned_cdb, clear=True):
+            with self.assertRaises(ValueError):
+                pin_cdb(raw + b"!", digest)
+            self.assertNotIn(digest, _pinned_cdb)
+            pin_cdb(raw, digest)
+            copied = bytes(bytearray(raw))
+            self.assertIsNot(copied, raw)
+            pin_cdb(copied, digest)
+            for changed in (b"", raw[:-1], raw + b"\n", raw.replace(b"L:", b"X:"),
+                            raw[:-1] + b"!", bytearray(raw)):
+                with self.subTest(changed=changed), self.assertRaises(ValueError):
+                    pin_cdb(changed, digest)
+            self.assertEqual(_pinned_cdb[digest], raw)
+
     def test_artifact_campaign_is_explicit_and_complete_for_current_image(self):
         with patch.object(lifecycle.layout, "artifact_bytes", return_value=()), \
-                patch.object(lifecycle.banking, "artifact_negatives", return_value=246324) as negative:
-            self.assertEqual(lifecycle.artifact_campaign((), "full"), "246324 artifact negatives")
+                patch.object(lifecycle.banking, "artifact_negatives", return_value=246199) as negative:
+            self.assertEqual(lifecycle.artifact_campaign((), "full"), "246199 artifact negatives")
             negative.assert_called_once()
             negative.reset_mock()
             self.assertIn("explicitly deferred", lifecycle.artifact_campaign((), "deferred"))
             negative.assert_not_called()
-            negative.return_value = 246323
-            with self.assertRaises(ValueError):
-                lifecycle.artifact_campaign((), "full")
+            for count in (246198, 246200, 246323):
+                negative.return_value = count
+                with self.subTest(count=count), self.assertRaises(ValueError):
+                    lifecycle.artifact_campaign((), "full")
         with self.assertRaises(ValueError):
             lifecycle.artifact_campaign((), "unknown")
 
@@ -81,7 +99,7 @@ class BankedSecurityTests(unittest.TestCase):
                 patch.object(lifecycle.banking, "artifact_negatives", side_effect=AssertionError("deferred")), \
                 patch.object(lifecycle, "reference", return_value=["calls"]) as reference, \
                 patch.object(lifecycle, "check_alias") as alias, \
-                patch.object(lifecycle, "run", return_value=(0x7b, 10354)) as run, \
+                patch.object(lifecycle, "run", return_value=(0x77, 10345)) as run, \
                 patch("builtins.print"):
             lifecycle.main()
             verify.assert_called_once_with("artifacts")

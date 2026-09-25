@@ -1,10 +1,84 @@
 # Bounded authenticated end-device integration
 
-This is original C for a **host-exercised R22/BDB3.0.1 join**, not a networking
-CC2530 firmware image. The synthetic coordinator and PHY adapter supply
+This is original C for a **host-exercised and banked8051-simulated
+R22/BDB3.0.1 join**, not a flashable networking board image.
+The synthetic coordinator and PHY adapter supply
 explicit public identities, frames, CRC results and captured times. They do
 not replace the production MAC controllers, key owner, CCM, HMAC, AES, counter,
 journal or flash services with successful stubs.
+
+## Complete banked MCU execution
+
+The complete `banked_join` composition now executes the real MAC scan,
+parent selection, association, NWK/APS, ZDO, BDB, key owner, CCM/HMAC/AES,
+durable counter, journal and flash-RAM services together. The synthetic PHY
+and coordinator supply external events and public packets only; they never
+write expected controller state or supply authentication-success flags.
+
+The measured image has143092 populated CODE bytes:28483 common bytes and
+four bank windows containing28018,28001,29185 and29405 bytes. Ordinary
+XDATA is7512/7680, leaving168 bytes before the status block. Both board
+definitions produce the same six pinned complete artifact identities.
+The actual physical DATA reservations are08..1D and26..45, banking state
+1E..1F, bit storage20..25, compiler overlay46..4F and stack50..7C.
+XDATA1F00..1FFF still aliases IRAM; no allocation boundary or SP7C limit
+was increased.
+
+The full target caller allocates an actual1290-byte association phase:
+645-byte live controller plus645-byte error-atomic shadow. Its statically
+linked shadow is `fixture_device+645`, not additional independent RAM or a
+borrowed stack buffer. Successful association take/release precedes runtime
+reuse; faults retain their live phase. Splitting BDB initialization and
+NWK transmission into translation units permits reviewed DATA placement.
+Volatile scalar/pointer copies shorten emitted register-save lifetimes in
+MAC decoding, CCM, counter reservation and journal replacement; they do not
+change wire rules, counter floors, NV schema or persistence frequency.
+
+The linked proof decodes every source/runtime instruction, checks far
+entries/returns and analyzes279 functions with1262 live-byte/callee-write
+pairs, including OSEG and transitive libc scratch. Raw CDB, complete map,
+memory report, ordered relocated listings, relocatable objects and all
+CODE addresses/bytes are pinned before execution. The complete image
+corruption campaign covers715479 mutations.
+
+The native and nonrecovering-sanitizer transcript contains415 public calls
+and2791 real modeled AES/flash events. The generic MCU run executes all415:
+READY after scan/association, authenticated network-key receipt,
+Device_annce, the updated TC exchange/HMAC03/Confirm, parent negotiation,
+and final permit broadcast/quiescence; then protected TX with APS retry,
+RX/replay rejection, endpoint-zero address and unsupported replies,
+authenticated PAN update/reinstallation, operational retirement, and
+cold-restart denial of automatic READY. Separate cases cover missing keys
+and retained radio fault. Observed peak isSP7B under the unchanged7C cap.
+The added nested Device_annce flash-failure case retains the actual RAM
+fail-stop even after later idle: authenticated membership is distinct from
+READY, and no completed caller status or new NV image is published.
+
+Each continuation preserves and rechecks complete CPU, IRAM/alias, XDATA,
+peripheral and physical-flash state. Binary simulator dumps preserve every
+observed byte; batching retains an observation after every public call.
+The15-second subprocess deadline is unchanged. CI has four independent
+fresh-reset scenarios per board, each under the existing15-minute worker
+limit; no key/NV/image artifact from this fixture is uploaded.
+
+Reproduce with `make BOARD=generic test-banked-join`, or a bounded
+`test-banked-join-success`, `-missing-key`, `-radio-fault` or `-flash-fault`
+target. A runner `--limit` is explicitly a development prefix, never full
+acceptance. Full CI and the remaining #26 transport/endpoint-zero edge-case
+acceptance must finish before closing that tracker. Real-radio/timing,
+entropy, electrical NV durability and secure restart/rejoin remain separate
+gates. The earlier allocation sections below record successive historical
+steps, not the current complete-image size.
+
+The same compiler-lifetime changes refresh the original MAC/NWK and
+NV/counter/crypto/resident/key-only images, rather than replacing them with
+the new complete caller. Both-board artifacts and original corpora remain
+required. The lower local executions pass except the final combined
+[resident-counter deadline](SECURITY_RESIDENT.md#execution-and-resource-contract):
+its full corpus executed atSP75 and its exhaustive artifact proof passed
+separately, but the combined run twice exceeded900 seconds. Full Actions
+acceptance must resolve that gate without shrinking the corpus or raising
+the15-minute deadline.
 
 ## Selected configuration and boundaries
 
@@ -560,3 +634,54 @@ git diff --check
 All fixture identities and key material are deliberately public synthetic
 values. No key-bearing firmware/NV dumps or captures are uploaded by these
 CI jobs. No equipment access, flashing or RF tests are performed.
+
+### Returning controller views and grouped initialization
+
+The next bounded reduction preserves the retained BDB/NWK/ZDO contexts and
+their occupied slots. It reuses only private returning views:
+
+| Owner | Shared work | Required separation |
+| --- | --- | --- |
+| BDB |57-byte union:15-byte parent policy or simultaneous28-byte MAC and29-byte NWK views|Parent selection returns before runtime reception. Both receive views remain live through destination validation|
+| NWK/APS |29-byte union:26-byte MAC header,17-byte cancellation event or29-byte receive hint|An active-MAC step returns before any transmit construction. A receive call is separate; lower services do not retain these views|
+| ZDO |37-byte descriptor/node-output pair or35-byte server views|Node response and its encoded bytes remain disjoint. Descriptor reception returns before the server branch uses its three simultaneous arguments|
+
+Each module's key-status snapshot stays separate: it may be needed before
+and after lower calls. No key/counter/journal state, pending packet,
+association diagnostic or MAC lease is overlaid.
+
+`nwk_aps_init` now accepts a copied `nwk_aps_config_t`, rather than eleven
+separate arguments. BDB embeds it at `config.transport`; crypto limits are
+`config.transport.limits`. The input is complete and disjoint from the
+destination context; no input pointer survives initialization. This reduces
+SDCC argument-evaluation pressure without a reentrant/software-stack ABI.
+Actual SDCC sizes remain19 bytes for the transport configuration,93 for
+the BDB configuration and1428 for the BDB context.
+
+| Module | CSEG before / after | XSEG before / after | DATA before / after |
+| --- | ---: | ---: | ---: |
+| BDB |16272 /16012|213 /198|46 /34|
+| NWK/APS |17367 /17748|320 /264|35 /35|
+| ZDO runtime |11473 /11473|246 /211|20 /20|
+
+This controller-only change saves106 ordinary-XDATA bytes and12 compiler
+DATA bytes, at121 more CODE bytes. These deltas are independent of the
+subsequent MAC-work measurements; do not mistake them for a complete link.
+Both-board native/nonrecovering sanitizer callers pass81791 checks.
+Added cases cover null/grouped configuration, all ten invalid selector/
+limit boundaries, both legal interval extremes, unchanged inputs/owner/
+failed outputs, copied input lifetime, and no cryptographic or NV side
+effect during initialization. The existing interleaved commissioning,
+ACK, application/server and failure corpus remains.
+
+The whole-MCU gate is still open. Placement probes compiled the real services
+into separate CODE banks, but have not produced an accepted complete image.
+Their function-frame investigation exposed a separate live DATA/call-depth
+problem; removing an XDATA deficit alone cannot close #26.
+The existing banking ABI still rejects stack-auto/xstack. An isolated
+alternative upper-owner experiment was not adopted: SDCC's external-stack
+mode still emits hardware-stack `_bp` spill slots, so zero module DATA in
+that experiment is **not** a proof of meeting SP7C. No new banking macro,
+relaxed guard, larger stack or synthetic successful service is enabled.
+The next complete-image work must prove actual active-call lifetimes and
+stack use, then execute the authentic join/data/failure transcript.

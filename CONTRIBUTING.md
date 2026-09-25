@@ -59,7 +59,7 @@ linked-image/ABI/alias guard and simulator deadline.
 | --- | --- | --- |
 | Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
 | Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
-| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora, including every246324 banked-key artifact mutation |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora plus eight complete-join workers; exhaustive current banked-key and join artifact mutations |
 
 Selection uses actual forced Make dry-run compiler inputs and recursively
 follows project includes, including C test helpers included by other C tests.
@@ -68,6 +68,9 @@ definitions, build/workflow/verification/tool changes and unknown consumers
 select full acceptance. No dependency result persists across invocations.
 Fast builds force fresh selected host executables, including embedded C
 helpers; target-only callers are reported rather than counted as host tests.
+The complete-join native observation header is an explicit Make-generated
+input derived from the actual target CDB; it is not guessed from native
+padding or accepted from a stale build cache.
 `test-fast` compares HEAD with staged/unstaged/untracked source by default.
 It is a development aid, never a substitute for the affected integration gate.
 
@@ -134,10 +137,12 @@ The isolated banked CODE foundation runs in two more board jobs without
 uploads; it does not expand any old image's CODE limit or debugger API.
 Two banked key-lifecycle jobs add real mixed crypto/NV execution and checked
 physical DATA ownership, also without uploads or hardware actions.
-The exact component union is still `test-common`; fifty-four worker jobs retain
+Eight complete-join jobs add independent success/data/update/restart,
+missing-key, radio-fault and retained busy-flash scenarios for both boards.
+The exact component union is still `test-common`; sixty-two worker jobs retain
 all twenty-eight board/image checks and the unchanged simulator deadlines.
 Selection and the stable acceptance gate add two control jobs. A full run has
-56 jobs, not fewer cases; an affected run contains only its selected workers.
+64 jobs, not fewer cases; an affected run contains only its selected workers.
 The generic BDB host worker also reports fresh host coverage.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
@@ -149,6 +154,7 @@ For focused iteration, the explicit parts are:
 make test-tools
 make BOARD=generic test-banked
 make BOARD=generic test-banked-security
+make BOARD=generic test-banked-join
 make BOARD=generic test-ed-integration
 make BOARD=generic test-common
 make BOARD=generic IMAGE=radio_rx_fixture test-board
@@ -181,6 +187,12 @@ extend the BDB corpus to81722 and the mandatory allocation assertions to
 1428-byte context,55-byte event and51-byte action layouts. Do not omit either
 board, the original runtime negatives or the exact-frame/backpressure and
 durable-nonpublication cases. These are not a whole-MCU fixture or stack proof.
+The separate [complete banked caller](docs/ED_JOIN.md#complete-banked-mcu-execution)
+adds the actual645-byte association shadow inside a1290-byte phase union,
+making its BDB context1676 bytes. Its whole-image proof and genuine MCU
+transcript are required independently of the earlier host/layout checks.
+No target state may be supplied from the native model; only public call
+inputs and synthetic peripheral events cross that boundary.
 
 `test-zdo-node` composes the real Node Descriptor and APS codecs, runs the
 native/nonrecovering sanitizer corpus, and takes three immediate listing

@@ -76,6 +76,6 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
                                const zdo_srv_rx_t * volatile rx,
                                const uint8_t * volatile body, uint16_t length,
                                uint8_t * volatile response, uint16_t capacity,
-                               zdo_srv_info_t * volatile info);
+                               zdo_srv_info_t * volatile info) JOIN_FAR;
 
 #endif

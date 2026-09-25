@@ -15,22 +15,28 @@ from boot_timebase import GUARD_SFRS
 from radio_fifo_fixture import instructions
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
-SIZE = 7046
-DIGEST = "7214d763451bc53d74ca14f9a29fe06e8eb1524cf6088c5db41b97754ffc6d12"
-PRIVATE = "30f1fc54fab8362424fc7028b9df6bc829f20786a99e4e0db57dd4eebb5ac99f"
-BEFORE, DONE, MAIN = 0x1aad, 0x1b0c, 0x1b0e
-READ_CALL, PROGRAM_CALL = 0xe92, 0x14bc
+SIZE = 6937
+DIGEST = 'f99475c308cdca64589fc3a7e2772cb84549ccc5da5c3c8df752f32123aade12'
+PRIVATE = '958b8877f419e0e439e367fd8c545c7cbad6080bc6ad7ce62f204dd1b54a64ef'
+BEFORE, DONE, MAIN = (6720, 6815, 6817)
+READ_CALL, PROGRAM_CALL = (3730, 5308)
 LENGTHS = engine.LENGTHS | {
     0xc8: 1, 0x68: 1, 0x5a: 1, 0x6b: 1, 0x6c: 1, 0x6d: 1, 0x6e: 1,
     0xdf: 2, 0x63: 3, 0xa4: 1, 0x6f: 1, 0x3c: 1, 0x69: 1, 0x2b: 1,
 }
-OBJECTS = {
-    "fault": (0x194, 1), "diagnostic": (0x195, 15), "stage": (0x1a4, 128),
-    "chunk": (0x224, 32), "word": (0x244, 4), "reserved_end": (0x294, 1),
-    "test_buffer": (0x295, 128), "test_action": (0x315, 1), "test_length": (0x316, 1),
-    "test_recovery": (0x317, 1), "test_return": (0x318, 1),
-    "test_limit": (0x319, 2), "test_pointer": (0x31b, 2),
-}
+OBJECTS = {'fault': (404, 1),
+ 'diagnostic': (405, 15),
+ 'stage': (420, 128),
+ 'chunk': (548, 32),
+ 'word': (580, 4),
+ 'reserved_end': (661, 1),
+ 'test_buffer': (662, 128),
+ 'test_action': (790, 1),
+ 'test_length': (791, 1),
+ 'test_recovery': (792, 1),
+ 'test_return': (793, 1),
+ 'test_limit': (794, 2),
+ 'test_pointer': (796, 2)}
 
 
 def verify(image, symbols, debug, memory, listings):
@@ -61,7 +67,7 @@ def verify(image, symbols, debug, memory, listings):
             require(not peripheral_accesses(code), "NV policy bypassed flash services")
             external = [(pc, int.from_bytes(raw[1:], "big")) for pc, raw in code.items()
                         if raw[0] == 0x12 and not start <= int.from_bytes(raw[1:], "big") < end]
-    require(covered == set(range(0x295)), "NV compiler-private prefix escaped fence")
+    require(covered == set(range(0x296)), "NV compiler-private prefix escaped fence")
     require([(pc, target) for pc, target in external if target != 0xbc6] ==
             [(READ_CALL, 0x5e0), (PROGRAM_CALL, 0xbf7)] and
             len([pc for pc, target in external if target == 0xbc6]) == 1,
@@ -71,9 +77,9 @@ def verify(image, symbols, debug, memory, listings):
         "_flash_exec_command": 0x1cf, "_flash_exec_template_end": 0xdd,
         "_flash_nv_read": 0x5e0, "_flash_nv_erase": 0xbc6, "_flash_nv_program": 0xbf7,
         "_flash_write_reserved_end": 0x193, "_nv_record_load": 0x131f,
-        "_nv_record_replace": 0x14d7, "_nv_record_status": 0x1aa9,
+        "_nv_record_replace": 0x14d7, "_nv_record_status": 0x1a3c,
         "_nv_record_before": BEFORE, "_nv_record_done": DONE, "_main": MAIN,
-        "s_XSEG": 0, "l_XSEG": 797, "s_SSEG": 0x38, "l_OSEG": 4, "s_OSEG": 0x19, "l_BSEG": 2,
+        "s_XSEG": 0, "l_XSEG": 798, "s_SSEG": 0x30, "l_OSEG": 4, "s_OSEG": 0x19, "l_BSEG": 2,
         "_nv_record_load_PARM_2": 0x284, "_nv_record_replace_PARM_2": 0x28c,
         "_nv_record_replace_PARM_3": 0x28d, "_nv_record_replace_PARM_4": 0x28f,
         "_flash_nv_read_PARM_2": 0xc9, "_flash_nv_read_PARM_3": 0xcb, "_flash_nv_read_PARM_4": 0xcd,
@@ -269,11 +275,11 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations, 
         if client is None:
             body = options.get("body", bytes(i ^ 0x69 for i in range(128)))
             action, length, recovery = options.get("action", 0), options.get("length", 128), options.get("recovery", 0)
-            pointer, limit = options.get("pointer", 0x295), options.get("limit", 3)
+            pointer, limit = options.get("pointer", 0x296), options.get("limit", 3)
             args = bytes((action, length, recovery, 0xaa))+limit.to_bytes(2, "little")+pointer.to_bytes(2, "little")
             caller = body+b"\xa5"*(128-len(body)) if action else b"\xa5"*128
-            commands.extend(["set memory xram 0x315 "+" ".join(hex(b) for b in args),
-                             "set memory xram 0x295 "+" ".join(hex(b) for b in caller), "step 1"])
+            commands.extend(["set memory xram 0x316 "+" ".join(hex(b) for b in args),
+                             "set memory xram 0x296 "+" ".join(hex(b) for b in caller), "step 1"])
             terminal, caller = journal(options, caller)
         else:
             client.configure(options, commands)
@@ -357,9 +363,9 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations, 
             registers = memory_dump(blocks[number+2], 0x80, 128)
             d = ram[0x195:0x1a4]
             if client is None:
-                require(ram[0x295:0x315] == caller, "NV caller publication/tail differs")
-                require(ram[0x318] == (0xaa if options["result"] == 13 else options["result"]),
-                        f"NV public result differs: {ram[0x318]} expected {options['result']}")
+                require(ram[0x296:0x316] == caller, "NV caller publication/tail differs")
+                require(ram[0x319] == (0xaa if options["result"] == 13 else options["result"]),
+                        f"NV public result differs: {ram[0x319]} expected {options['result']}")
             else:
                 client.check(options, ram, iram, registers)
             require(d[13:] == bytes(quota), "NV runtime erase accounting differs")
@@ -374,8 +380,10 @@ def execute(simulator, path, image, allocated, erase_call, initial, operations, 
             require(ram[0x1e00:0x1e08] == (b"NVR1\x01\x08\0\0" if client is None else client.signature) and
                     all(b == 0xa5 for a, b in enumerate(ram) if a not in allocated),
                     "NV escaped allocated/status XDATA")
+            # Measured caller checkpoint: linked stack starts at 30, with the
+            # genuine two-byte cycle return still present (SP31).
             require(iram[128:] == b"\xc7"*128 and
-                    (client is not None or options["result"] == 13 or registers[1] == 0x39),
+                    (client is not None or options["result"] == 13 or registers[1] == 0x31),
                     "NV upper IRAM/alias/stack unwind failed")
             expected_sfr = sfr | {0xc7: expected_mapping}
             mismatches = [(a, registers[a-0x80], v) for a, v in expected_sfr.items() if registers[a-0x80] != v]
@@ -436,7 +444,7 @@ def main():
         cases.append((old, [dict(action=1, length=128, body=body, page=1, generation=4, result=13,
                                 mode="cut", at=at),
                             dict(reset=True, result=0 if at in (1, 38) else 1, page=1 if at == 38 else 0)]))
-    for options, result in ((dict(pointer=0), 3), (dict(pointer=0x294), 4),
+    for options, result in ((dict(pointer=0), 3), (dict(pointer=0x295), 4),
                             (dict(pointer=0x1f00), 4), (dict(pointer=0x1d81), 4),
                             (dict(length=0), 3), (dict(action=1, length=129), 3),
                             (dict(action=1, limit=0), 3), (dict(action=1, recovery=2), 3)):
@@ -450,7 +458,7 @@ def main():
         peak = max(peak, observed); calls += count; commands += physical
     print(f"NV record: {len(cases)} linked sequences, {calls} actual flash API calls/{commands} RAM commands; "
           f"whole CODE/private ABI, byte-identical published backend, commit/recovery/retained RAM stop and alias "
-          f"guards PASS; 797 ordinary XDATA+64 reserved, peak SP {peak:#x}. Synthetic, not power-loss/counter evidence.")
+          f"guards PASS; 798 ordinary XDATA+64 reserved, peak SP {peak:#x}. Synthetic, not power-loss/counter evidence.")
 
 
 if __name__ == "__main__":

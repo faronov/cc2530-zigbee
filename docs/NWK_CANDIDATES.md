@@ -182,6 +182,10 @@ The #63 shared-code refresh leaves its source and corpus unchanged:
 by an explicit Association Response receive profile. The
 [current shared summary](VALIDATION.md#r22-response-profile-and-shared-proof-refresh-63)
 supersedes historical addresses/hashes below; all original budgets remain.
+The later complete-join decoder lowering reduces CODE to18433; XDATA988+64,
+stack start2F and peak4E remain unchanged on both boards. The complete
+original corpus and37 artifact plus1 alias negatives pass with refreshed
+identities, without broadening Beacon admission.
 
 Both `generic` (`CC2530_BOARD=0`) and `lg_esl29_rev03` (`=1`) passed:
 

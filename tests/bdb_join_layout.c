@@ -11,6 +11,8 @@
 #endif
 
 typedef char transport_size[sizeof(nwk_aps_t) == 703 ? 1 : -1];
+typedef char transport_config_size[sizeof(nwk_aps_config_t) == 19 ? 1 : -1];
+typedef char config_size[sizeof(bdb_join_config_t) == 93 ? 1 : -1];
 typedef char endpoint_zero_size[sizeof(zdo_runtime_t) == 339 ? 1 : -1];
 typedef char work_size[sizeof(bdb_join_work_t) == 1042 ? 1 : -1];
 typedef char context_size[sizeof(bdb_join_t) == 1428 ? 1 : -1];

@@ -1,21 +1,27 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
-#include "bdb_join.h"
+#include "bdb_join_internal.h"
 #include <stddef.h>
 #include <string.h>
 
-static MCU_XDATA security_keys_status_t keys;
-static MCU_XDATA nwk_parent_policy_t policy;
-static MCU_XDATA mac_frame_info_t mac;
-static MCU_XDATA nwk_frame_info_t nwk;
+MCU_XDATA security_keys_status_t bdb_join_keys;
+/* Parent selection and runtime reception are separate returning operations.
+ * MAC and NWK views remain simultaneously live during destination checks. */
+static MCU_XDATA union {
+    nwk_parent_policy_t policy;
+    struct {
+        mac_frame_info_t mac;
+        nwk_frame_info_t nwk;
+    } receive;
+} work;
 
 static uint8_t expired(uint32_t now, uint32_t until)
 {
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-static bdb_join_result_t advance(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now)
+bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now)
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return BDB_JOIN_CLOCK;
@@ -35,69 +41,6 @@ static void fail(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint8_t result
     }
 }
 
-bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now)
-{
-    if (!ctx) return BDB_JOIN_ARGUMENT;
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->version = BDB_JOIN_VERSION; ctx->last = ctx->work_at = now;
-    return BDB_JOIN_OK;
-}
-
-/* No owner reset, admission, counter/NV operation or retained borrowed span.
- * At start this validates into unused storage before any scan lease exists.
- * The later call is legal only after successful association take AND release.
- * Both initializations finish before any runtime API can be admitted.
- */
-static bdb_join_result_t runtime_init(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    mac_tx_t BDB_JOIN_RAM * volatile owner, const bdb_join_config_t * volatile config,
-    volatile uint32_t now)
-{
-    ctx->workspace = BDB_JOIN_WORK_NONE;
-    if (nwk_aps_init(&ctx->work.runtime.transport, owner, config->endpoint, config->profile, &config->crypto,
-        config->nv_polls, config->ack_wait, config->broadcast_time, now) != NWK_APS_OK ||
-        zdo_runtime_init(&ctx->work.runtime.zdo, &config->descriptor, now) != ZDO_RUNTIME_OK)
-        return BDB_JOIN_ARGUMENT;
-    ctx->workspace = BDB_JOIN_WORK_RUNTIME;
-    return BDB_JOIN_OK;
-}
-
-bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_t BDB_JOIN_RAM * volatile owner,
-    const bdb_join_config_t * volatile config, volatile uint32_t now)
-{
-    bdb_join_result_t result = advance(ctx, now);
-    if (result) return result;
-    if (!owner || !config || config->link_cost < 1 || config->link_cost > 3 ||
-        !config->association.extraction.epoch || config->descriptor.logical_type != 2 ||
-        config->descriptor.mac_capability != config->association.capability ||
-        config->scan.saved.pan != config->association.saved.pan ||
-        config->scan.saved.channel != config->association.saved.channel ||
-        config->scan.saved.filter != config->association.saved.filter ||
-        config->scan.saved.rx_on != config->association.saved.rx_on) return BDB_JOIN_ARGUMENT;
-    if (ctx->phase != BDB_JOIN_IDLE || owner->phase != MAC_TX_IDLE) return BDB_JOIN_STATE;
-    if (security_keys_status(&keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
-    if (keys.phase != SECURITY_KEYS_PROVISIONED) return BDB_JOIN_RECOVERY_REQUIRED;
-    if (config->scan.channels != (1UL << keys.config.channel) ||
-        config->association.extraction.pan != keys.config.pan ||
-        config->association.extraction.channel != keys.config.channel ||
-        config->association.extraction.local_mode != MAC_ADDRESS_EXTENDED ||
-        config->association.extraction.coordinator_mode != MAC_ADDRESS_EXTENDED ||
-        memcmp(config->association.extraction.local, keys.config.own_ieee, 8) ||
-        memcmp(config->association.extraction.coordinator, keys.config.tc_ieee, 8))
-        return BDB_JOIN_ARGUMENT;
-    if (runtime_init(ctx, owner, config, now) != BDB_JOIN_OK)
-        return BDB_JOIN_ARGUMENT;
-    ctx->config = *config; ctx->owner = owner; ctx->epoch = config->association.extraction.epoch;
-    /* The just-validated runtime has never admitted work. Discard it before
-     * starting scan; no initialized runtime survives in an inactive member. */
-    ctx->workspace = BDB_JOIN_WORK_NONE;
-    if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK) return BDB_JOIN_STATE;
-    ctx->workspace = BDB_JOIN_WORK_SCAN;
-    if (mac_scan_start(&ctx->work.scan, owner, &ctx->config.scan, now) != MAC_SCAN_OK)
-        return BDB_JOIN_SCAN_FAILED;
-    ctx->phase = BDB_JOIN_SCANNING;
-    return BDB_JOIN_OK;
-}
-
 static void scan_result(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 {
     ctx->scan_result.generation = ctx->work.scan.generation;
@@ -113,20 +56,20 @@ static void scan_result(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 {
     uint8_t i;
-    memset(&policy, 0, sizeof(policy));
-    if (security_keys_status(&keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
-    memcpy(policy.extended_pan_id, keys.config.extended_pan, 8);
-    policy.minimum_known = 1; policy.minimum_update_id = keys.config.update_id;
+    memset(&work.policy, 0, sizeof(work.policy));
+    if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
+    memcpy(work.policy.extended_pan_id, bdb_join_keys.config.extended_pan, 8);
+    work.policy.minimum_known = 1; work.policy.minimum_update_id = bdb_join_keys.config.update_id;
     for (i = 0; i < ctx->work.scan.candidates.count; i++) {
         const nwk_candidate_t * volatile c = &ctx->work.scan.candidates.entries[i];
-        policy.link_cost[i] = ctx->config.link_cost;
-        if (c->address_mode == MAC_ADDRESS_EXTENDED && c->pan_id == keys.config.pan &&
-            c->channel == keys.config.channel && c->network.update_id == keys.config.update_id &&
+        work.policy.link_cost[i] = ctx->config.link_cost;
+        if (c->address_mode == MAC_ADDRESS_EXTENDED && c->pan_id == bdb_join_keys.config.pan &&
+            c->channel == bdb_join_keys.config.channel && c->network.update_id == bdb_join_keys.config.update_id &&
             (c->superframe & MAC_SUPERFRAME_PAN_COORDINATOR) &&
-            !memcmp(c->coordinator, keys.config.tc_ieee, 8)) policy.potential_mask |= 1u << i;
+            !memcmp(c->coordinator, bdb_join_keys.config.tc_ieee, 8)) work.policy.potential_mask |= 1u << i;
     }
     if (ctx->work.scan.reason != MAC_SCAN_FINISHED ||
-        nwk_parent_select(&ctx->work.scan.candidates, &policy, &ctx->parent) != NWK_PARENT_OK)
+        nwk_parent_select(&ctx->work.scan.candidates, &work.policy, &ctx->parent) != NWK_PARENT_OK)
         return BDB_JOIN_NO_PARENT;
     return BDB_JOIN_OK;
 }
@@ -266,9 +209,10 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
 {
     bdb_join_result_t result;
     nwk_aps_result_t transported;
-    uint8_t outcome, which, handled = 0, ignored = 0;
+    uint8_t outcome, which;
+    volatile uint8_t handled = 0, ignored = 0;
     if (!action) return BDB_JOIN_ARGUMENT;
-    result = advance(ctx, now);
+    result = bdb_join_advance(ctx, now);
     if (result) return result;
     if (!ctx->owner || ctx->phase == BDB_JOIN_IDLE) return BDB_JOIN_STATE;
     memset(action, 0, sizeof(*action));
@@ -305,9 +249,9 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
                 /* No scan lease remains. No runtime or association was live
                  * in this storage; initialize association once, not per retry. */
                 ctx->workspace = BDB_JOIN_WORK_NONE;
-                if (mac_join_init(&ctx->work.association, now) != MAC_JOIN_OK) return BDB_JOIN_STATE;
+                if (mac_join_init(&ctx->work.association.context, now) != MAC_JOIN_OK) return BDB_JOIN_STATE;
                 ctx->workspace = BDB_JOIN_WORK_ASSOCIATION;
-                if (mac_join_start(&ctx->work.association, ctx->owner, &ctx->config.association, now) != MAC_JOIN_OK) {
+                if (mac_join_start(&ctx->work.association.context, ctx->owner, &ctx->config.association, now) != MAC_JOIN_OK) {
                     ctx->phase = BDB_JOIN_FAILED; ctx->result = BDB_JOIN_ASSOCIATION_FAILED;
                 } else { ctx->phase = BDB_JOIN_ASSOCIATING; ctx->attempts = 1; }
             }
@@ -316,30 +260,30 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
     }
     if (ctx->phase == BDB_JOIN_ASSOCIATING) {
         if (event && event->kind != BDB_JOIN_EVENT_ASSOCIATION) return BDB_JOIN_IGNORED;
-        if (mac_join_step(&ctx->work.association, ctx->owner, now, event ? &event->data.association : NULL,
+        if (mac_join_step(&ctx->work.association.context, ctx->owner, now, event ? &event->data.association : NULL,
             &action->data.association) != MAC_JOIN_OK) return BDB_JOIN_STATE;
         if (action->data.association.kind) action->kind = BDB_JOIN_ACTION_ASSOCIATION;
-        if (ctx->work.association.phase == MAC_JOIN_FAULT) {
+        if (ctx->work.association.context.phase == MAC_JOIN_FAULT) {
             ctx->phase = BDB_JOIN_FAULT; ctx->result = BDB_JOIN_ASSOCIATION_FAILED;
         }
-        if (ctx->work.association.phase == MAC_JOIN_DONE) {
-            if (mac_join_take(&ctx->work.association, &ctx->record) != MAC_JOIN_OK ||
-                mac_join_release(&ctx->work.association, ctx->owner) != MAC_JOIN_OK) return BDB_JOIN_STATE;
+        if (ctx->work.association.context.phase == MAC_JOIN_DONE) {
+            if (mac_join_take(&ctx->work.association.context, &ctx->record) != MAC_JOIN_OK ||
+                mac_join_release(&ctx->work.association.context, ctx->owner) != MAC_JOIN_OK) return BDB_JOIN_STATE;
             if (ctx->record.association.outcome != MAC_ASSOCIATION_RESPONSE || ctx->record.association.status ||
                 ctx->record.association.address_kind != MAC_ASSOCIATION_ALLOCATED ||
                 ctx->record.association.source_relation != MAC_ASSOCIATION_SOURCE_MATCHED ||
                 ctx->record.reason || ctx->record.cleanup_error) {
                 if (ctx->attempts == BDB_JOIN_ATTEMPTS ||
-                    mac_join_start(&ctx->work.association, ctx->owner, &ctx->config.association, now) != MAC_JOIN_OK) {
+                    mac_join_start(&ctx->work.association.context, ctx->owner, &ctx->config.association, now) != MAC_JOIN_OK) {
                     ctx->phase = BDB_JOIN_FAILED; ctx->result = BDB_JOIN_ASSOCIATION_FAILED;
                 } else ctx->attempts++;
             } else {
                 /* take copied the full outcome/stamp outside the union;
                  * release confirmed restoration and the unchanged MAC owner.
                  * Runtime initialization cannot reset its DSN/generation/IFS. */
-                if (runtime_init(ctx, ctx->owner, &ctx->config, now) != BDB_JOIN_OK) {
+                if (bdb_join_runtime_init(ctx, ctx->owner, &ctx->config, now) != BDB_JOIN_OK) {
                     ctx->phase = BDB_JOIN_FAILED; ctx->result = BDB_JOIN_STATE;
-                } else if (security_keys_associate(ctx->record.association.short_address, ctx->config.nv_polls) != SECURITY_KEYS_OK)
+                } else if (security_keys_associate(ctx->record.association.short_address, ctx->config.transport.nv_polls) != SECURITY_KEYS_OK)
                     fail(ctx, BDB_JOIN_SECURITY);
                 else {
                     ctx->member = 0; ctx->commission_until = now+6250000UL;
@@ -350,14 +294,14 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
         return BDB_JOIN_OK;
     }
     if (ctx->phase == BDB_JOIN_INSTALLING) {
-        if (security_keys_status(&keys) != SECURITY_KEYS_OK) { fail(ctx, BDB_JOIN_SECURITY); return BDB_JOIN_OK; }
+        if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) { fail(ctx, BDB_JOIN_SECURITY); return BDB_JOIN_OK; }
         if (event && event->kind == BDB_JOIN_EVENT_INSTALLED && event->epoch == ctx->epoch &&
             event->token == ctx->token && ctx->issued && !expired(now, ctx->until) &&
-            event->data.installed.pan == keys.config.pan && event->data.installed.address == keys.config.address &&
-            event->data.installed.channel == keys.config.channel &&
-            !memcmp(event->data.installed.own_ieee, keys.config.own_ieee, 8)) {
+            event->data.installed.pan == bdb_join_keys.config.pan && event->data.installed.address == bdb_join_keys.config.address &&
+            event->data.installed.channel == bdb_join_keys.config.channel &&
+            !memcmp(event->data.installed.own_ieee, bdb_join_keys.config.own_ieee, 8)) {
             if (ctx->member) {
-                if (keys.phase != SECURITY_KEYS_VERIFIED || !ctx->work.runtime.transport.announced ||
+                if (bdb_join_keys.phase != SECURITY_KEYS_VERIFIED || !ctx->work.runtime.transport.announced ||
                     !ctx->work.runtime.transport.permit_sent)
                     fail(ctx, BDB_JOIN_SECURITY);
                 else {
@@ -372,7 +316,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
             ctx->phase = BDB_JOIN_FAULT; ctx->result = BDB_JOIN_INSTALL_FAILED;
         } else if (!ctx->issued) {
             action->kind = BDB_JOIN_ACTION_INSTALL; action->epoch = ctx->epoch;
-            action->token = ctx->token; action->data.install = keys.config; ctx->issued = 1;
+            action->token = ctx->token; action->data.install = bdb_join_keys.config; ctx->issued = 1;
         }
         return BDB_JOIN_OK;
     }
@@ -413,7 +357,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
                 ctx->application_result = outcome; ctx->application_pending = 0; ctx->application_done = 1;
             }
         }
-        if (!ctx->abandon || security_keys_status(&keys) != SECURITY_KEYS_OK || keys.phase == SECURITY_KEYS_LEFT)
+        if (!ctx->abandon || security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK || bdb_join_keys.phase == SECURITY_KEYS_LEFT)
             ctx->phase = BDB_JOIN_FAILED;
         else if (nwk_aps_key_exchange(&ctx->work.runtime.transport, 3, now) != NWK_APS_OK) {
             ctx->phase = BDB_JOIN_FAILED; ctx->cleanup_error = BDB_JOIN_SECURITY;
@@ -427,28 +371,28 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
 bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now)
 {
-    bdb_join_result_t result = advance(ctx, now);
+    bdb_join_result_t result = bdb_join_advance(ctx, now);
     nwk_aps_result_t received;
     if (result) return result;
     if (!body || crc_valid > 1) return BDB_JOIN_ARGUMENT;
     if (!crc_valid) return BDB_JOIN_MALFORMED;
     if (ctx->phase < BDB_JOIN_WAIT_KEY || ctx->phase >= BDB_JOIN_UPDATING ||
         ctx->workspace != BDB_JOIN_WORK_RUNTIME) return BDB_JOIN_STATE;
-    if (security_keys_status(&keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
-    if (mac_frame_decode(body, length, &mac) != MAC_CODEC_OK || mac.header.type != MAC_FRAME_DATA ||
-        mac.header.destination_mode != MAC_ADDRESS_SHORT || mac.header.destination_pan != keys.config.pan ||
-        mac.header.source_pan != keys.config.pan ||
-        !((mac.header.source_mode == MAC_ADDRESS_SHORT && !mac.header.source[0] && !mac.header.source[1]) ||
-          (mac.header.source_mode == MAC_ADDRESS_EXTENDED && !memcmp(mac.header.source, keys.config.tc_ieee, 8))) ||
-        !((mac.header.destination[0] == (uint8_t)keys.config.address &&
-           mac.header.destination[1] == (uint8_t)(keys.config.address >> 8)) ||
-          (mac.header.destination[0] == 255 && mac.header.destination[1] == 255)))
+    if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
+    if (mac_frame_decode(body, length, &work.receive.mac) != MAC_CODEC_OK || work.receive.mac.header.type != MAC_FRAME_DATA ||
+        work.receive.mac.header.destination_mode != MAC_ADDRESS_SHORT || work.receive.mac.header.destination_pan != bdb_join_keys.config.pan ||
+        work.receive.mac.header.source_pan != bdb_join_keys.config.pan ||
+        !((work.receive.mac.header.source_mode == MAC_ADDRESS_SHORT && !work.receive.mac.header.source[0] && !work.receive.mac.header.source[1]) ||
+          (work.receive.mac.header.source_mode == MAC_ADDRESS_EXTENDED && !memcmp(work.receive.mac.header.source, bdb_join_keys.config.tc_ieee, 8))) ||
+        !((work.receive.mac.header.destination[0] == (uint8_t)bdb_join_keys.config.address &&
+           work.receive.mac.header.destination[1] == (uint8_t)(bdb_join_keys.config.address >> 8)) ||
+          (work.receive.mac.header.destination[0] == 255 && work.receive.mac.header.destination[1] == 255)))
         return BDB_JOIN_MALFORMED;
-    if (ed_wire_nwk(body+mac.payload_offset, mac.payload_length, &nwk) != ZIGBEE_SECURITY_OK)
+    if (ed_wire_nwk(body+work.receive.mac.payload_offset, work.receive.mac.payload_length, &work.receive.nwk) != ZIGBEE_SECURITY_OK)
         return BDB_JOIN_MALFORMED;
-    if (mac.header.destination[0] == 255 && mac.header.destination[1] == 255 && nwk.header.destination < 0xfffbu)
+    if (work.receive.mac.header.destination[0] == 255 && work.receive.mac.header.destination[1] == 255 && work.receive.nwk.header.destination < 0xfffbu)
         return BDB_JOIN_MALFORMED;
-    received = nwk_aps_receive(&ctx->work.runtime.transport, body+mac.payload_offset, mac.payload_length, now);
+    received = nwk_aps_receive(&ctx->work.runtime.transport, body+work.receive.mac.payload_offset, work.receive.mac.payload_length, now);
     if (received == NWK_APS_OK) return BDB_JOIN_OK;
     if (received == NWK_APS_FULL) return BDB_JOIN_FULL;
     if (received == NWK_APS_DUPLICATE || received == NWK_APS_IGNORED) return BDB_JOIN_IGNORED;
@@ -466,8 +410,8 @@ bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
         !ctx->work.runtime.transport.ready) return BDB_JOIN_STATE;
     if (ctx->application_pending || ctx->application_done || ctx->work.runtime.zdo.query || ctx->work.runtime.zdo.response_tx)
         return BDB_JOIN_FULL;
-    if (packet->nwk.type || packet->aps.type || packet->aps.source_endpoint != ctx->config.endpoint ||
-        packet->aps.profile_id != ctx->config.profile) return BDB_JOIN_ARGUMENT;
+    if (packet->nwk.type || packet->aps.type || packet->aps.source_endpoint != ctx->config.transport.endpoint ||
+        packet->aps.profile_id != ctx->config.transport.profile) return BDB_JOIN_ARGUMENT;
     result = nwk_aps_queue(&ctx->work.runtime.transport, packet, aps_secure, now);
     if (result != NWK_APS_OK) return result == NWK_APS_FULL ? BDB_JOIN_FULL : BDB_JOIN_TRANSMIT_FAILED;
     ctx->application_pending = 1;

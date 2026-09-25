@@ -37,7 +37,7 @@ $(error IMAGE must be one of $(BOARD_IMAGES))
 endif
 
 TARGET := $(BUILD)/$(IMAGE)
-HEADERS := $(wildcard include/*.h)
+HEADERS := $(wildcard include/*.h src/*_internal.h)
 DEFINES := -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
 SDCC_FLAGS := -mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror $(DEFINES)
 LINK_FLAGS := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 --code-size 0x8000
@@ -91,7 +91,8 @@ endif
 .PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
 .PHONY: test-security-resident-security test-security-resident-mmo test-security-resident-key-hash test-security-resident-counter
 .PHONY: test-ed-wire test-security-keys test-bdb-join test-ed-integration
-.PHONY: test-banked test-banked-security
+.PHONY: test-banked test-banked-security test-banked-join
+.PHONY: test-banked-join-success test-banked-join-missing-key test-banked-join-radio-fault test-banked-join-flash-fault
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
@@ -1040,7 +1041,8 @@ ED_CRYPTO_SRC := src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zi
 ED_KEY_SRC := $(COUNTER_SRC) $(ED_CRYPTO_SRC) src/security_keys.c
 ED_JOIN_SRC := $(ED_KEY_SRC) src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c \
 	src/nwk_parent.c src/mac_scan.c src/mac_poll.c src/mac_association.c src/mac_join.c \
-	src/nwk_aps.c src/zdo_node.c src/zdo_srv.c src/zdo_runtime.c src/bdb_join.c
+	src/nwk_aps.c src/nwk_aps_transmit.c src/zdo_node.c src/zdo_srv.c src/zdo_runtime.c \
+	src/bdb_join.c src/bdb_join_init.c
 ED_MODEL_SRC := tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c \
 	tests/host_mmio.c tests/aes_reference.c
 ED_WIRE_SRC := tests/test_ed_wire.c $(ED_CRYPTO_SRC) src/zigbee_security.c \
@@ -1066,7 +1068,7 @@ test-$(1): $(BUILD)/host-$(1)-tests $(BUILD)/host-$(1)-tests-sanitize $(addprefi
 endef
 $(eval $(call ED_HOST_TEST,ed-wire,$(ED_WIRE_SRC),ed_wire.rel))
 $(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),security_keys.rel))
-$(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel zdo_runtime.rel bdb_join.rel bdb_join_layout.rel))
+$(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel nwk_aps_transmit.rel zdo_runtime.rel bdb_join.rel bdb_join_init.rel bdb_join_layout.rel))
 test-ed-integration: test-ed-wire test-security-keys test-bdb-join
 
 BANKED_DIR := $(BUILD)/banked
@@ -1167,6 +1169,68 @@ $(BUILD)/host-banked-security-vectors-sanitize: tests/banked_security_vectors.c 
 
 test-banked-security: $(BANKED_SECURITY_DIR)/banked_security.ihx $(BUILD)/host-banked-security-vectors $(BUILD)/host-banked-security-vectors-sanitize
 	$(PYTHON) -B tests/boot_banked_security.py --output $(BUILD) --simulator "$(S51)" --artifact-campaign "$(ARTIFACT_CAMPAIGN)"
+
+BANKED_JOIN_DIR := $(BUILD)/banked-join
+BANKED_JOIN_COMMON := flash_exec flash flash_write nv_record security_counter timebase \
+	aes ccm_star zigbee_mmo zigbee_key_hash mac_frame banked
+BANKED_JOIN_BANK1 := nwk_frame aps_frame ed_wire security_keys
+BANKED_JOIN_BANK2 := mac_tx mac_poll mac_association mac_join zdo_node zdo_srv
+BANKED_JOIN_BANK3 := nwk_beacon nwk_candidates nwk_parent mac_scan bdb_join bdb_join_init
+BANKED_JOIN_BANK4 := nwk_aps nwk_aps_transmit zdo_runtime
+BANKED_JOIN_MODULES := $(BANKED_JOIN_COMMON) $(BANKED_JOIN_BANK1) $(BANKED_JOIN_BANK2) \
+	$(BANKED_JOIN_BANK3) $(BANKED_JOIN_BANK4)
+BANKED_JOIN_BASES := 0x0e 0x12 0x16 0x26 0x08 0x08 0x26 0x08 0x08 0x08 0x08 0 \
+	0x08 0x09 0x08 0x08 0x08 0x08 0x26 0x08 0x26 0x08 \
+	0x08 0x08 0x08 0x08 0x08 0x08 0x08 0x08 0x08
+BANKED_JOIN_OBJECTS := $(addprefix $(BANKED_JOIN_DIR)/,banked_join_iram_low.rel \
+	banked_join_iram_high.rel $(addsuffix .rel,$(BANKED_JOIN_MODULES)) banked_join_fixture.rel)
+BANKED_JOIN_FLAGS := $(SDCC_FLAGS) -DCC2530_BANKED_JOIN -DCC2530_JOIN_WORKSPACE -DBANKED_STACK_FIRST=0x50
+BANKED_JOIN_LINK := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 \
+	--code-size 0x80000 --stack-size 0x2d -Wl-r -Wl-bBJ_CALLER=0x08 \
+	-Wl-bBJ_BANK1=0x18000 -Wl-bBJ_BANK2=0x28000 -Wl-bBJ_BANK3=0x38000 -Wl-bBJ_BANK4=0x48000
+
+$(BANKED_JOIN_DIR):
+	mkdir -p $@
+
+define BANKED_JOIN_MODULE
+$(BANKED_JOIN_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile | $(BANKED_JOIN_DIR)
+	$$(SDCC) $$(BANKED_JOIN_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,BJ_$(1)) \
+		$(foreach b,1 2 3 4,$(if $(filter $(1),$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) -c $$< -o $$@
+$(if $(filter-out banked,$(1)),BANKED_JOIN_LINK += -Wl-bBJ_$(1)=$(2))
+endef
+$(foreach n,1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31,$(eval $(call BANKED_JOIN_MODULE,$(word $(n),$(BANKED_JOIN_MODULES)),$(word $(n),$(BANKED_JOIN_BASES)))))
+
+$(BANKED_JOIN_DIR)/banked_join_iram_%.rel: tests/banked_join_iram_%.c Makefile | $(BANKED_JOIN_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) -c $< -o $@
+
+$(BANKED_JOIN_DIR)/banked_join_fixture.rel: tests/banked_join_fixture.c $(HEADERS) Makefile | $(BANKED_JOIN_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) --dataseg BJ_CALLER -c $< -o $@
+
+$(BANKED_JOIN_DIR)/banked_join.ihx: $(BANKED_JOIN_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(BANKED_JOIN_LINK) -o $@ $(BANKED_JOIN_OBJECTS)
+	$(foreach m,banked_join_iram_low banked_join_iram_high $(BANKED_JOIN_MODULES) banked_join_fixture,cp $(BANKED_JOIN_DIR)/$(m).rst $(BANKED_JOIN_DIR)/banked_join.$(m).rst;)
+
+$(BANKED_JOIN_DIR)/banked_join_layout.h: $(BANKED_JOIN_DIR)/banked_join.ihx tests/verify_banked_join.py
+	PYTHONPATH=tools:tests $(PYTHON) -B tests/verify_banked_join.py --output $(BUILD) --emit-header $@
+
+BANKED_JOIN_HOST_INPUTS := tests/banked_join_vectors.c tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) \
+	$(HEADERS) tests/security_joint_model.h tests/security_aes_model.h $(BANKED_JOIN_DIR)/banked_join_layout.h Makefile
+$(BUILD)/host-banked-join-vectors: $(BANKED_JOIN_HOST_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -I$(BANKED_JOIN_DIR) tests/banked_join_vectors.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) -o $@
+
+$(BUILD)/host-banked-join-vectors-sanitize: $(BANKED_JOIN_HOST_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -I$(BANKED_JOIN_DIR) -fsanitize=address,undefined -fno-sanitize-recover=all \
+		-fno-omit-frame-pointer -fno-pie -no-pie tests/banked_join_vectors.c $(ED_MODEL_SRC) $(ED_JOIN_SRC) -o $@
+
+define BANKED_JOIN_CASE
+test-banked-join-$(1): $(BANKED_JOIN_DIR)/banked_join.ihx $(BUILD)/host-banked-join-vectors $(BUILD)/host-banked-join-vectors-sanitize
+	$(PYTHON) -B tests/boot_banked_join.py --output $(BUILD) --simulator "$(S51)" --case $(2)
+endef
+$(eval $(call BANKED_JOIN_CASE,success,joined-data-update-loss-restart))
+$(eval $(call BANKED_JOIN_CASE,missing-key,missing-network-key))
+$(eval $(call BANKED_JOIN_CASE,radio-fault,retained-radio-fault))
+$(eval $(call BANKED_JOIN_CASE,flash-fault,retained-flash-fault))
+test-banked-join: test-banked-join-success test-banked-join-missing-key test-banked-join-radio-fault test-banked-join-flash-fault
 
 $(BUILD)/mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
@@ -1498,7 +1562,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
