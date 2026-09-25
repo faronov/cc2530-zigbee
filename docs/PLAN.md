@@ -49,7 +49,14 @@ execution index; the milestone exit requirements below remain unchanged.
 The bounded testing/coverage/run-selection work (#87) is accepted. The current
 sequence has accepted the READY failure/backpressure/work-budget corrections
 and the complete banked MAC/NWK/APS/ZDO/BDB MCU composition (#26).
-Secure persisted restart/rejoin (#27) follows.
+The next implementation priority is real radio/MAC and scan/association
+integration (#13/#14), followed by secure persisted restart/rejoin (#27).
+The explicit [interval MAC-TX profile](MAC_TX.md#explicit-interval-profile)
+is a prerequisite increment, not completion of that radio adapter: continuous
+response RX/AUTOACK, loss-free closure and interval-aware scan/POLL/association
+integration still remain. #45's complete MLME timing/revision reconciliation
+does not prevent bounded staged-success work, but prevents a full conformance
+claim. No new hardware/RF authorization follows from this ordering.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

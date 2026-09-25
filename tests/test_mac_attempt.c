@@ -76,6 +76,13 @@ static unsigned equal_arm, arm_pending;
 static uint16_t shared_address = 0x500, radio_end = 0x700, owner_end = 0xb00;
 static uint16_t raw_address = 0x510, config_staging = 0x530, attempt_raw_address = 0x710;
 static uint16_t epoch_address = 0x900, receipt_address = 0xc00, normal_receipt = 0xc00;
+#if defined(CC2530_MAC_INTERVAL)
+#include "mac_tx_interval.h"
+static mac_epoch_stamp_t interval_live;
+static mac_tx_interval_t interval_tx;
+static mac_tx_interval_event_t interval_event;
+static mac_tx_interval_action_t interval_action;
+#endif
 
 static void advance_clocks(uint32_t delta)
 {
@@ -240,6 +247,9 @@ static void attempt_xstore(uint16_t a, uint8_t value)
 }
 static uint16_t attempt_address(const volatile void *p)
 {
+#if defined(CC2530_MAC_INTERVAL)
+    if (p == &interval_live) return 0xf00;
+#endif
     if (p == &mac_radio_shared_end) return shared_address;
     if (p == &mac_radio_reserved_end) return radio_end;
     if (p == &mac_attempt_reserved_end) return owner_end;
@@ -436,6 +446,120 @@ finished:
         for (op = 0; op < 6; op++) attempt_call(op, mac_attempt_diagnostic()->fault);
     if (printing_vector) puts("]}");
 }
+#if defined(CC2530_MAC_INTERVAL)
+static uint32_t interval_now(void)
+{
+    uint32_t after = mac_attempt_diagnostic()->last_live.symbols + 1u;
+    unsigned budget = 1000, result;
+    do {
+        assert(budget--);
+        result = mac_radio_now(bound, cap, &interval_live);
+        if (result != MAC_RADIO_READY)
+            fprintf(stderr, "interval clock result%u phase%u radio%u timer%u\n", result,
+                    mac_attempt_diagnostic()->phase, radio_autoack_state, mac_time_diagnostic()->result);
+        assert(result == MAC_RADIO_READY);
+    } while ((uint32_t)(interval_live.symbols - after) >= MAC_TX_HALF);
+    return interval_live.symbols;
+}
+
+static void interval_source(uint8_t kind, uint32_t now)
+{
+    memset(&interval_event, 0, sizeof(interval_event));
+    interval_event.source.kind = kind;
+    interval_event.source.stamp = now;
+    interval_event.source.generation = interval_tx.engine.generation;
+    interval_event.source.retry = interval_tx.engine.retries;
+    interval_event.source.nb = interval_tx.engine.nb;
+}
+
+static void interval_radio_case(unsigned selected)
+{
+    static const uint8_t packet[] = {
+        0x61, 0x98, 0, 0x34, 0x12, 0x78, 0x56, 0xbc, 0x9a, 0xaa, 0x55, 0xcc
+    };
+    uint32_t now;
+    uint64_t scheduled;
+    unsigned result;
+    attempt_reset();
+    attempt_call(0, MAC_RADIO_READY);
+    attempt_call(1, MAC_RADIO_STOPPED);
+    now = interval_now();
+    assert(mac_tx_interval_init(&interval_tx, selected == 4 ? 0x5b : 0x5a, now) == MAC_TX_OK);
+    assert(mac_tx_interval_submit(&interval_tx, packet, sizeof(packet), now, 100000, 1000) == MAC_TX_OK);
+    assert(mac_tx_interval_copy(&interval_tx, (uint8_t *)&frame.value,
+                               sizeof(frame.value), &body_length) == MAC_TX_OK);
+    now = interval_now();
+    assert(mac_tx_interval_step(&interval_tx, now, NULL, &interval_action) == MAC_TX_OK);
+    assert(interval_action.control.kind == MAC_TX_ACTION_RANDOM);
+    interval_source(MAC_TX_EVENT_RANDOM, now);
+    interval_event.source.value = 7;
+    assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+    assert(interval_action.control.kind == MAC_TX_ACTION_ATTEMPT);
+    attempt_call(2, MAC_RADIO_READY);
+    /* The synthetic caller schedules invocation, not a production prepared-
+     * state clock API or proof of the physical CCA-start instant.
+     */
+    scheduled = epoch_origin + (uint64_t)interval_action.control.at * 512u;
+    assert(model_clocks <= scheduled && scheduled - model_clocks <= UINT32_MAX);
+    advance_clocks((uint32_t)(scheduled - model_clocks));
+    window = MAC_TX_ACK_SYMBOLS;
+    if (selected == 1) extra_rx = 40u * 512u;
+    if (selected == 2) reply_after_tx = 0;
+    if (selected == 3) bad_reply = 1;
+    if (selected == 5) cca_clear = 0;
+    if (selected == 6) extra_arm = 1000u * 512u;
+    result = mac_attempt_run((uint16_t)window, bound, cap, &receipt);
+    if (selected == 6) {
+        assert(result == MAC_RADIO_DRIVER_ERROR);
+        now = (uint32_t)((model_clocks - epoch_origin) / 512u);
+        interval_source(MAC_TX_EVENT_FAILURE, now);
+        assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+        assert(interval_tx.engine.phase == MAC_TX_FAULT && mac_attempt_diagnostic()->fault);
+        return;
+    }
+    assert(result == (selected == 5 ? MAC_RADIO_CCA_BUSY : selected == 3 ? MAC_RADIO_BAD_CRC
+                      : selected == 2 ? MAC_RADIO_EMPTY : MAC_RADIO_FRAME));
+    now = interval_now();
+    if (selected == 5) {
+        assert(!receipt.transmitted && radio_autoack_state == RADIO_AUTOACK_RX_NOACK);
+        attempt_call(1, MAC_RADIO_STOPPED);
+        now = interval_now();
+        interval_source(MAC_TX_EVENT_BUSY, now);
+        assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+        assert(interval_tx.engine.phase == MAC_TX_DRAW && interval_tx.engine.nb == 1);
+        return;
+    }
+    assert(receipt.transmitted);
+    interval_source(MAC_TX_EVENT_SENT_INTERVAL, now);
+    interval_event.lower = receipt.tx_lower;
+    interval_event.upper = receipt.tx_upper;
+    assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+    assert(interval_action.control.kind == MAC_TX_ACTION_COLLECT);
+    if (result == MAC_RADIO_FRAME) {
+        interval_source(MAC_TX_EVENT_ACK_INTERVAL, now);
+        interval_event.lower = receipt.tx_lower;
+        interval_event.upper = receipt.rx_upper;
+        interval_event.source.bytes = receipt.frame.body;
+        interval_event.source.length = receipt.frame.length;
+        assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+        assert(interval_tx.engine.outcome == (selected == 1 ? MAC_TX_TIMING_UNCERTAIN
+                                              : selected == 4 ? MAC_TX_NO_ACK : MAC_TX_ACKED));
+    } else {
+        assert(mac_tx_interval_step(&interval_tx, now, NULL, &interval_action) == MAC_TX_OK);
+        assert(interval_tx.engine.phase == MAC_TX_ACK_WAIT && !interval_tx.engine.outcome);
+        /* An EMPTY/BAD_CRC receipt is not a loss-free closure certificate. */
+        interval_source(MAC_TX_EVENT_CANCEL, now);
+        assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+        assert(interval_tx.engine.outcome == MAC_TX_CANCELLED);
+    }
+    assert(interval_action.control.kind == MAC_TX_ACTION_QUIESCE);
+    attempt_call(1, MAC_RADIO_STOPPED);
+    now = interval_now();
+    interval_source(MAC_TX_EVENT_QUIESCED, now);
+    assert(mac_tx_interval_step(&interval_tx, now, &interval_event, &interval_action) == MAC_TX_OK);
+    assert(interval_tx.engine.phase == (selected == 4 ? MAC_TX_DRAW : MAC_TX_DONE));
+}
+#endif
 int main(int argc, char **argv)
 {
     unsigned n;
@@ -469,6 +593,10 @@ int main(int argc, char **argv)
     }
     printf("MAC attempt: %u sequences/%u real-service calls PASS; synthetic hardware only.\n",
            ATTEMPT_CASES, calls);
+#if defined(CC2530_MAC_INTERVAL)
+    for (n = 0; n < 7; n++) interval_radio_case(n);
+    puts("Interval MAC: seven real-service/MMIO receipt consumers PASS; no continuous POLL lease.");
+#endif
     return 0;
 }
 #endif

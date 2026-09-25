@@ -96,6 +96,7 @@ endif
 .PHONY: test-protocol-budget
 .PHONY: test-mac-radio
 .PHONY: test-mac-attempt
+.PHONY: test-mac-tx-interval
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1256,6 +1257,24 @@ test-mac-tx: $(BUILD)/host-mac-tx-tests $(BUILD)/mac_tx_test.ihx
 	$(BUILD)/host-mac-tx-tests
 	$(PYTHON) -B tests/boot_mac_tx.py --output $(BUILD) --simulator "$(S51)"
 
+$(BUILD)/mti_mac_tx.rel: src/mac_tx.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DCC2530_MAC_INTERVAL -c $< -o $@
+
+$(BUILD)/mti_test_mac_tx_interval.rel: tests/test_mac_tx_interval.c $(HEADERS) Makefile | $(BUILD)
+	$(SDCC) $(SDCC_FLAGS) -DCC2530_MAC_INTERVAL -c $< -o $@
+
+$(BUILD)/mac_tx_interval_test.ihx: $(BUILD)/mac_frame.rel $(BUILD)/mti_mac_tx.rel $(BUILD)/mti_test_mac_tx_interval.rel force-link
+	$(SDCC) $(SDCC_FLAGS) $(LINK_FLAGS) -o $@ $(BUILD)/mac_frame.rel $(BUILD)/mti_mac_tx.rel $(BUILD)/mti_test_mac_tx_interval.rel
+	cp $(BUILD)/mac_frame.rst $(BUILD)/mac_tx_interval_test.mac_frame.rst
+	cp $(BUILD)/mti_mac_tx.rst $(BUILD)/mac_tx_interval_test.mac_tx.rst
+	cp $(BUILD)/mti_test_mac_tx_interval.rst $(BUILD)/mac_tx_interval_test.test_mac_tx_interval.rst
+
+$(BUILD)/host-mac-tx-interval-tests: tests/test_mac_tx_interval.c src/mac_tx.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_INTERVAL tests/test_mac_tx_interval.c src/mac_tx.c src/mac_frame.c -o $@
+
+$(BUILD)/host-mac-tx-interval-tests-sanitize: tests/test_mac_tx_interval.c src/mac_tx.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_INTERVAL -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_tx_interval.c src/mac_tx.c src/mac_frame.c -o $@
+
 $(BUILD)/nwk_candidates.rel: src/nwk_candidates.c $(HEADERS) Makefile | $(BUILD)
 	$(SDCC) $(SDCC_FLAGS) -c $< -o $@
 
@@ -1367,6 +1386,19 @@ test-mac-attempt: $(BUILD)/host-mac-attempt-tests $(BUILD)/host-mac-attempt-test
 	$(BUILD)/host-mac-attempt-tests
 	$(BUILD)/host-mac-attempt-tests-sanitize
 	$(PYTHON) -B tests/boot_mac_attempt.py --output $(BUILD) --simulator "$(S51)"
+
+$(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
+
+$(BUILD)/host-mac-interval-radio-tests-sanitize: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
+
+test-mac-tx-interval: $(BUILD)/host-mac-tx-interval-tests $(BUILD)/host-mac-tx-interval-tests-sanitize $(BUILD)/mac_tx_interval_test.ihx $(BUILD)/host-mac-interval-radio-tests $(BUILD)/host-mac-interval-radio-tests-sanitize
+	$(BUILD)/host-mac-tx-interval-tests
+	$(BUILD)/host-mac-tx-interval-tests-sanitize
+	$(BUILD)/host-mac-interval-radio-tests
+	$(BUILD)/host-mac-interval-radio-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_tx_interval.py --output $(BUILD) --simulator "$(S51)"
 
 .PHONY: test-mac-epoch
 $(BUILD)/mac_epoch.rel: src/mac_epoch.c $(HEADERS) Makefile | $(BUILD)
@@ -1567,7 +1599,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

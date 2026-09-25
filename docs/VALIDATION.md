@@ -33,7 +33,8 @@ Forty-four complete-join workers add twenty-two independent fresh-reset
 scenarios per board: the original success/data/update/restart, missing network
 key, retained radio fault and retained busy-flash cases, plus eighteen
 [transport/ZDO/deadline cases](ED_JOIN.md#whole-target-edge-corpus).
-There are98 workers plus the two
+Two interval-MAC workers add the separate fractional scheduler and native
+real-service receipt-consumption checks. There are100 workers plus the two
 selection/acceptance control jobs. Their existing15-minute deadlines and
 no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
@@ -198,12 +199,14 @@ the two debug-fixture jobs run `test-common-core`, and two dedicated composition
 jobs run `test-mac-radio test-mac-stamp test-zcl-temperature test-mac-join
 test-zdo-node test-zdo-srv`.
 Two further dedicated jobs run `test-mac-attempt` and its longer genuine
-MMIO replay, another pair runs `test-zigbee-security test-zigbee-mmo
+MMIO replay. The separate `test-mac-tx-interval` pair preserves all52 target
+case groups and the native/sanitizer real-service receipt consumers without
+extending the already long core workers. Another pair runs `test-zigbee-security test-zigbee-mmo
 test-zigbee-key-hash` with real AES/DMA,
 and a final pair runs `test-security-counter` with the real journal/flash backend.
 Their exact union is the complete
 `test-common` corpus, once per board definition, as `test-local` already does.
-This thirty-six-job partition preserves all 28 board/image jobs without adding
+That original thirty-six-job partition preserves all 28 board/image jobs without adding
 the new composed replay to debug-fixture jobs already taking about13 minutes.
 This removes identical repeated work, not cases, while retaining the15-minute job and
 15-second simulator limits and the seven-path artifact whitelist.
@@ -223,6 +226,14 @@ immediate per-image snapshots and unpartitioned native/sanitizer runs on
 both boards. Its full artifact/ABI/call, alias, SFR, guard and uninterrupted
 stack proofs run in those same composed-service jobs. The raw interval owner
 remains separate; neither corpus converts interval bounds to captured events.
+The newer [interval MAC-TX profile](MAC_TX.md#explicit-interval-profile) is
+explicitly typed and separately composed; it does not relax either existing
+contract. Both-board prepared artifacts are26797 CODE and1285+64/1536 XDATA,
+with targeted SP67/7C observations. Full52-group execution, complete immutable
+CODE/raw-CDB/allocation/listing checks, artifact negatives, physical aliases
+and the unchanged15-second subprocess bound are required in the new worker.
+Its native seven-case lower-service consumer is not a combined8051 radio
+adapter, prepared-state clock API or physical acceptance.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

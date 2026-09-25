@@ -30,6 +30,25 @@ class LocalChecksTests(unittest.TestCase):
                     if line.startswith(("python3 ", directory + "/")) or
                     include_build and line.startswith(("cc ", "sdcc ", "cp "))]
 
+    def test_interval_profile_keeps_native_sanitizer_radio_and_target_proofs(self):
+        for board in BOARDS:
+            commands = self.dry_run("test-mac-tx-interval", BOARD=board, include_build=True)
+            hosts = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(hosts), 4)
+            self.assertTrue(all("-DCC2530_MAC_INTERVAL" in args for args in hosts))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in hosts), 2)
+            radio = [args for args in hosts if "tests/test_mac_attempt.c" in args]
+            self.assertEqual(len(radio), 2)
+            for args in radio:
+                self.assertTrue({"src/mac_tx.c", "src/mac_frame.c", "src/mac_attempt.c",
+                                 "src/mac_radio.c", "src/mac_time.c", "src/radio_autoack.c",
+                                 "-DCC2530_MAC_RADIO", "-DCC2530_MAC_ATTEMPT"} <= set(args))
+            links = [i for i, args in enumerate(commands)
+                     if args[0] == "sdcc" and args[args.index("-o")+1].endswith(".ihx")]
+            self.assertEqual(len(links), 1)
+            self.assertTrue(all(args[0] == "cp" for args in commands[links[0]+1:links[0]+4]))
+            self.assertEqual(sum("tests/boot_mac_tx_interval.py" in args for args in commands), 1)
+
     def test_bdb_object_layout_is_mandatory_but_not_an_executable_claim(self):
         for board in BOARDS:
             commands = self.dry_run("test-bdb-join", BOARD=board, include_build=True)
@@ -72,7 +91,7 @@ class LocalChecksTests(unittest.TestCase):
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt",
+            "mac_frame", "mac_tx", "mac_tx_interval", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt",
             "mac_scan", "mac_association", "mac_poll", "mac_join",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",

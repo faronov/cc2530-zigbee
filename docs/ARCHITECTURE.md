@@ -74,6 +74,17 @@ runtime state. ZDO replies to nonzero remote endpoints retain local
 endpoint0/profile0 ownership after READY; pre-READY and application
 source/profile restrictions remain.
 
+The [explicit interval MAC-TX profile](MAC_TX.md#explicit-interval-profile)
+separates report time from fractional physical-end bounds. It shares the
+existing immutable slot, admission, DSN, backoff and cleanup engine but never
+feeds a bound to its captured-end entry point. Proven timely ACK, definitely
+late ACK and locally uncertain timing have distinct handling; absent-ACK
+retry additionally requires loss-free coverage through the latest possible
+deadline. Its context is not interchangeable with the exact-event POLL/join
+contexts. The isolated linked scheduler and native lower-service receipt
+composition do not establish a full-MCU radio adapter or continuous AUTOACK
+handoff; the accepted banked join still uses synthetic PHY events.
+
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
 probe is confined to the target example. It shares existing startup/board

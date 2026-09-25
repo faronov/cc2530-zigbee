@@ -669,6 +669,15 @@ be chained. The isolated image's
 measured IRAM headroom is not full-stack or ISR-nesting acceptance.
 No board image links this scheduler; never flash `mac_tx_test.ihx`.
 
+The separate [explicit interval profile](docs/MAC_TX.md#explicit-interval-profile)
+accepts fractional TX/ACK bounds without calling them captured timestamps.
+It keeps uncertain ACK timing distinct from delivery and requires loss-free
+receive coverage before an absent-ACK retry. It reuses admission, DSN,
+backoff and cleanup rather than weakening the existing exact-event API.
+Its standalone target corpus and native real-radio-service receipt consumer
+are separate evidence: the latter does not provide a complete MCU radio
+adapter or continuous POLL/receiver-ACK service. Neither profile is a board image.
+
 The separate [Beacon candidate collector](docs/NWK_CANDIDATES.md) keeps four
 copied preliminary records using the real MAC/NWK Beacon decoders. It requires
 explicit channel/CRC metadata, PRO profile2, BO15, Association Permit and ED

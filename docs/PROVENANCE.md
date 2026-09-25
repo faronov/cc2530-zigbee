@@ -55,6 +55,27 @@ sequence numbers without inventing transmissions. The endpoint-admission
 correction aligns the existing ZDO reply contract with its local source
 endpoint/profile ownership; it imports no wire rule or external code.
 
+The [explicit interval MAC-TX profile](MAC_TX.md#explicit-interval-profile)
+is original BSD-3-Clause work reusing the existing scheduler and MAC codec.
+Closed-interval comparisons and conservative rounding apply the already
+reviewed IEEE2006 ACK/IFS rules; they do not select IEEE2015 defaults, supply
+a captured timestamp or resolve #45. Its native radio receipt consumer uses
+the existing original synthetic MMIO model and real C services, not vendor
+code, physical traffic or injected protocol-success state.
+The separate target image proves the interval scheduler, not that complete
+radio composition.
+
+For the next real-adapter boundary, SWRU191F (revised April2014),
+sections23.9.5/23.9.7, printed pp224-227/231, were re-read directly.
+ACK type/length filtering does not bypass global addressing/minimum-length
+conditions. Live filter/address changes need not turn RX off, but changes
+between SFD and address acceptance can use either value for that frame.
+Manual SACK/SACKPEND must be issued during reception; they are not a
+post-receipt software ACK workaround. These facts do not establish a safe
+continuous handoff or justify narrowing ignored ACK FCF fields. Public PDF
+SHA256 remains `a8fe8e92db33ad79c7f371075b0a464602a6db747614625d9f8d3e6be990b877`;
+no document or external implementation is vendored.
+
 ## Reviewed reference candidates
 
 The original [authenticated ED integration](ED_JOIN.md) uses functional facts

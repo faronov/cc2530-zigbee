@@ -123,6 +123,86 @@ mode is `MAC_ADDRESS_NONE`; `mac_frame_decode()` applies that check, and
 `mac_tx_submit()` rejects any non-OK decode before admitting a candidate.
 The source-less Beacon Request exception does not relax DATA admission.
 
+## Explicit interval profile
+
+`CC2530_MAC_INTERVAL` adds the separate `mac_tx_interval_*` API in
+`include/mac_tx_interval.h`. This is an interval-aware transmitter state
+machine, **not a completed #13 radio adapter**. With the flag absent, the
+original API, context, CODE and private ABI are unchanged. Its dedicated
+legacy image still passes the existing immutable image/ABI checks.
+
+The new context contains the existing immutable frame/DSN/control engine and
+two six-byte target TX bounds. Only the new entry points may operate that
+context; passing its embedded engine to `mac_tx_step`, `mac_poll`, `mac_join`
+or the current BDB controller is unsupported. `engine.tx_end` stays unused:
+no bound is installed there as a purported physical end. Admission, frame
+copying, DSN allocation, backoff, busy-CCA limits, retries, work/lifetime and
+confirmed cleanup reuse the existing implementation and strict codec.
+
+Every fractional point is `(uint32 symbols, fine0..511)` in the same
+continuous epoch. Comparisons require true intervals below the half range;
+numeric order cannot establish that history. SENT/ACK report time is distinct
+from the physical interval and must be at a symbol boundary no earlier than
+the upward-rounded upper bound. Thus a delayed report can carry an earlier
+physical interval without pretending that foreground processing was PHY end.
+The driver must additionally establish action identity, unique own TX,
+early RX arm, post-TX receive causality and valid CRC. Arithmetic cannot
+establish any of those facts.
+
+For TX end in `[L,U]` and causally post-TX ACK end in `[A,B]`:
+
+| Evidence | Result |
+| --- | --- |
+| `B <= L+54`, exact three-byte ACK and matching DSN | ACKED, with original Pending retained |
+| Same proven window, wrong DSN | Failed attempt, with the original retry/cleanup policy |
+| `A > U+54` | Definitely late; no delivery or failed-attempt assertion from that frame |
+| Neither timing proof holds | Local `TIMING_UNCERTAIN`, no invented ACKED/NO_ACK and no automatic retry |
+| Time passes without an accepted ACK | Continue waiting for coverage, subject to real work/lifetime bounds |
+| Loss-free RX_CLOSED watermark through `U+54`, inclusive | NO_ACK and bounded retry, still requiring confirmed quiescence |
+
+All8192 legacy ACK FCF combinations with type2 retain the old ignored-bit
+behavior through the actual canonical codec; the hardware filter is not
+allowed to silently narrow it. Bounds incompatible with causal post-TX
+reception fail locally. A too-early closure is an adapter fault. EMPTY,
+physical STOPPED, or a missing foreground event is not a closure certificate.
+IFS is at least12/40 symbols after the upward-rounded ACK/TX upper bound;
+retry spacing covers the latest possible ACK deadline. This may wait longer
+than an exact-capture implementation, never shorter. QUIESCE and its original
+1024-symbol/16-step limit remain mandatory.
+
+`make test-mac-tx-interval` includes native/nonrecovering-sanitizer boundary
+tests and a separate SDCC image with52 independent fresh-reset case groups:
+all fractional phases and symbol wrap, all ignored ACK FCF bits, exact and
+one-fine-tick-outside deadlines, delayed reports, short/long/max-body IFS,
+DSN wrap, complete retries, closure, stale identities, atomic invalid input,
+work/time exhaustion and retained cleanup faults. No case writes a private
+controller field to establish protocol progress.
+The new composition reserves28672 CODE and1536 total XDATA bytes, without
+changing any old budget. Both-board compiler artifacts agree at26797 CODE,
+1285 ordinary XDATA plus64 reserved status bytes, initialSP4E and targeted
+observed peakSP67 under7C. The checker pins the complete image, raw CDB
+(including file-scope helpers), parsed linked allocations and all instruction
+records; it executes every group with physical IRAM aliases and the unchanged
+15-second subprocess deadline. Full acceptance is the Actions gate, not those
+preparatory measurements.
+
+The same target also runs a **native-only composed receipt consumer** with
+the genuine clock/Timer2/epoch/radio/attempt C services and the existing MMIO
+model. Seven cases consume real returned intervals/bytes: timely ACK,
+uncertain timing, EMPTY, bad CRC, wrong DSN, busy CCA after actual stop, and
+retained late-arm failure. It does not substitute return values or populate
+the MAC context. Its synthetic caller schedules invocation using the model;
+that is not a production prepared-state clock API, a proof of exact hardware
+CCA start, or a combined8051 radio/scheduler image.
+
+Remaining #13/#14 work includes that actual action/clock binding, safe live
+RX/AUTOACK handoff, continuous response ACK service, frame preservation and
+loss-aware closure, then explicit interval-aware scan/POLL/association
+contracts and the complete banked composition. The current raw attempt's
+AUTOACK-off receive phase cannot be relabeled as any of these.
+The physical, entropy/NV and #45 full-MLME conformance gates remain separate.
+Never flash or publish `mac_tx_interval_test.ihx` as board firmware.
+
 ## Bounded Association Request admission (#14 prerequisite)
 
 This addition is **transmit admission only**, not an MLME-ASSOCIATE primitive.

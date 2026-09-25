@@ -378,3 +378,224 @@ mac_tx_result_t mac_tx_release(mac_tx_t *tx)
     tx->phase = MAC_TX_IDLE;
     return MAC_TX_OK;
 }
+
+#if defined(CC2530_MAC_INTERVAL)
+#include "mac_tx_interval.h"
+
+static TX_RAM mac_epoch_stamp_t interval_end;
+static TX_RAM mac_frame_info_t interval_decoded;
+static TX_RAM uint8_t interval_ack[3];
+static TX_RAM uint32_t interval_previous;
+
+static uint8_t interval_ordered(const mac_epoch_stamp_t *first,
+                                const mac_epoch_stamp_t *last)
+{
+    uint32_t symbols = last->symbols - first->symbols;
+    return symbols == 0u ? last->fine >= first->fine : symbols < MAC_TX_HALF;
+}
+
+static uint32_t interval_ceil(const mac_epoch_stamp_t *point)
+{
+    return point->symbols + (point->fine != 0u);
+}
+
+static uint8_t interval_stop(uint8_t outcome)
+{
+    control.outcome = outcome;
+    control.phase = MAC_TX_STOPPING;
+    control.stop_at = input.now + MAC_TX_STOP_SYMBOLS;
+    control.stop_steps = MAC_TX_STOP_STEPS;
+    return MAC_TX_ACTION_QUIESCE;
+}
+
+static uint8_t interval_no_ack(const mac_tx_interval_t *tx)
+{
+    spacing(interval_ceil(&tx->tx_upper) + MAC_TX_ACK_SYMBOLS);
+    control.retry_pending = control.retries < MAC_TX_MAX_RETRIES;
+    return interval_stop(MAC_TX_NO_ACK);
+}
+
+static void interval_publish(const mac_tx_interval_t *tx,
+                              mac_tx_interval_action_t *action, uint8_t emitted)
+{
+    action->control.kind = emitted;
+    action->control.generation = control.generation;
+    action->control.retry = control.retries;
+    action->control.nb = control.nb;
+    action->control.at = emitted == MAC_TX_ACTION_QUIESCE ? input.now : control.at;
+    action->control.until = control.phase == MAC_TX_STOPPING ? control.stop_at : control.deadline;
+    action->control.length = control.length;
+    action->control.ack_requested = control.ack_requested;
+    action->control.phase = control.phase;
+    action->control.outcome = control.outcome;
+    action->control.transmissions = control.transmissions;
+    action->control.uncertain = control.uncertain;
+    action->control.pending = control.pending;
+    action->through = tx->tx_upper;
+    action->through.symbols += MAC_TX_ACK_SYMBOLS;
+}
+
+mac_tx_result_t mac_tx_interval_init(mac_tx_interval_t *tx, uint8_t dsn, uint32_t now)
+{
+    mac_tx_result_t result;
+    if (tx == NULL)
+        return MAC_TX_INVALID;
+    result = mac_tx_init(&tx->engine, dsn, now);
+    memset(&tx->tx_lower, 0, sizeof(tx->tx_lower));
+    memset(&tx->tx_upper, 0, sizeof(tx->tx_upper));
+    return result;
+}
+
+mac_tx_result_t mac_tx_interval_submit(mac_tx_interval_t *tx,
+    const uint8_t *body, uint16_t length, uint32_t now, uint32_t lifetime, uint16_t work)
+{
+    mac_tx_result_t result;
+    if (tx == NULL)
+        return MAC_TX_INVALID;
+    result = mac_tx_submit(&tx->engine, body, length, now, lifetime, work);
+    if (result == MAC_TX_OK) {
+        memset(&tx->tx_lower, 0, sizeof(tx->tx_lower));
+        memset(&tx->tx_upper, 0, sizeof(tx->tx_upper));
+    }
+    return result;
+}
+
+mac_tx_result_t mac_tx_interval_copy(const mac_tx_interval_t *tx,
+    uint8_t *body, uint16_t capacity, uint8_t *length)
+{
+    return tx == NULL ? MAC_TX_INVALID : mac_tx_copy(&tx->engine, body, capacity, length);
+}
+
+mac_tx_result_t mac_tx_interval_release(mac_tx_interval_t *tx)
+{
+    return tx == NULL ? MAC_TX_INVALID : mac_tx_release(&tx->engine);
+}
+
+mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t now,
+    const mac_tx_interval_event_t * volatile event, mac_tx_interval_action_t * volatile action)
+{
+    uint8_t kind = 0;
+    uint8_t emitted = MAC_TX_ACTION_NONE;
+    mac_tx_result_t result;
+
+    if (tx == NULL || action == NULL)
+        return MAC_TX_INVALID;
+    if (event != NULL) {
+        kind = event->source.kind;
+        if (kind < MAC_TX_EVENT_RANDOM || kind > MAC_TX_EVENT_RX_CLOSED
+                || kind == MAC_TX_EVENT_SENT || kind == MAC_TX_EVENT_ACK
+                || (kind == MAC_TX_EVENT_ACK_INTERVAL && event->source.length != 0u
+                    && event->source.bytes == NULL))
+            return MAC_TX_INVALID;
+        if (kind >= MAC_TX_EVENT_SENT_INTERVAL) {
+            if (event->upper.fine >= 512u
+                    || !reached(event->source.stamp, interval_ceil(&event->upper)))
+                return MAC_TX_INVALID;
+            if (kind != MAC_TX_EVENT_RX_CLOSED
+                    && (event->lower.fine >= 512u
+                        || !interval_ordered(&event->lower, &event->upper)))
+                return MAC_TX_INVALID;
+        }
+    }
+    if (tx->engine.phase != MAC_TX_ACK_WAIT) {
+        interval_previous = tx->engine.last;
+        result = mac_tx_step(&tx->engine, now,
+            event != NULL && kind < MAC_TX_EVENT_SENT_INTERVAL ? &event->source : NULL,
+            &action->control);
+        if (result != MAC_TX_OK)
+            return result;
+        action->through = tx->tx_upper;
+        action->through.symbols += MAC_TX_ACK_SYMBOLS;
+        if (tx->engine.phase != MAC_TX_RADIO || kind != MAC_TX_EVENT_SENT_INTERVAL
+                || event->source.generation != tx->engine.generation
+                || event->source.retry != tx->engine.retries || event->source.nb != tx->engine.nb
+                || !reached(event->source.stamp, interval_previous)
+                || !reached(now, event->source.stamp))
+            return MAC_TX_OK;
+        load_control(&tx->engine);
+        interval_end.symbols = control.at + 24u + 2u * control.length;
+        interval_end.fine = 0;
+        if (!interval_ordered(&interval_end, &event->lower)) {
+            fault(MAC_TX_ADAPTER_ERROR);
+            goto interval_done;
+        }
+        tx->tx_lower = event->lower;
+        tx->tx_upper = event->upper;
+        control.transmissions++;
+        control.phase = MAC_TX_ACK_WAIT;
+        if (control.ack_requested)
+            emitted = MAC_TX_ACTION_COLLECT;
+        else {
+            spacing(interval_ceil(&tx->tx_upper));
+            emitted = interval_stop(MAC_TX_UNACKNOWLEDGED);
+        }
+        goto interval_done;
+    }
+
+    input.now = now;
+    load_control(&tx->engine);
+    if ((uint32_t)(now - control.last) >= MAC_TX_HALF) {
+        fault(MAC_TX_CLOCK_ERROR);
+        goto interval_done;
+    }
+    if (event == NULL || event->source.generation != control.generation
+            || event->source.retry != control.retries || event->source.nb != control.nb
+            || !reached(event->source.stamp, control.last) || !reached(now, event->source.stamp))
+        kind = 0;
+    if (reached(control.last, control.ready_at) || reached(now, control.ready_at))
+        control.ready_at = now;
+    control.last = now;
+    if (kind == MAC_TX_EVENT_FAILURE) {
+        fault(MAC_TX_ADAPTER_ERROR);
+        goto interval_done;
+    }
+    if (reached(now, control.deadline) || control.steps == 0u || kind == MAC_TX_EVENT_CANCEL) {
+        spacing(interval_ceil(&tx->tx_upper) + MAC_TX_ACK_SYMBOLS);
+        emitted = interval_stop(kind == MAC_TX_EVENT_CANCEL ? MAC_TX_CANCELLED
+                                : control.steps == 0u ? MAC_TX_WORK_LIMIT : MAC_TX_LIFETIME);
+        goto interval_done;
+    }
+    control.steps--;
+    if (kind == MAC_TX_EVENT_ACK_INTERVAL && event->source.length == 3u
+            && (event->source.bytes[0] & 7u) == MAC_FRAME_ACK) {
+        if (!interval_ordered(&tx->tx_lower, &event->lower)
+                || interval_ordered(&event->upper, &tx->tx_lower)) {
+            fault(MAC_TX_ADAPTER_ERROR);
+            goto interval_done;
+        }
+        interval_ack[0] = event->source.bytes[0] & (MAC_FLAG_PENDING | 7u);
+        interval_ack[1] = 0;
+        interval_ack[2] = event->source.bytes[2];
+        if (mac_frame_decode(interval_ack, sizeof(interval_ack), &interval_decoded) != MAC_CODEC_OK)
+            goto interval_done;
+        interval_end = tx->tx_lower;
+        interval_end.symbols += MAC_TX_ACK_SYMBOLS;
+        if (interval_ordered(&event->upper, &interval_end)) {
+            if (interval_decoded.header.sequence == tx->engine.frame[2]) {
+                control.pending = (interval_decoded.header.flags & MAC_FLAG_PENDING) != 0u;
+                spacing(interval_ceil(&event->upper));
+                emitted = interval_stop(MAC_TX_ACKED);
+            } else
+                emitted = interval_no_ack(tx);
+        } else {
+            interval_end = tx->tx_upper;
+            interval_end.symbols += MAC_TX_ACK_SYMBOLS;
+            if (interval_ordered(&event->lower, &interval_end)) {
+                spacing(interval_ceil(&tx->tx_upper) + MAC_TX_ACK_SYMBOLS);
+                emitted = interval_stop(MAC_TX_TIMING_UNCERTAIN);
+            }
+        }
+    } else if (kind == MAC_TX_EVENT_RX_CLOSED) {
+        interval_end = tx->tx_upper;
+        interval_end.symbols += MAC_TX_ACK_SYMBOLS;
+        if (!interval_ordered(&interval_end, &event->upper))
+            fault(MAC_TX_ADAPTER_ERROR);
+        else
+            emitted = interval_no_ack(tx);
+    }
+interval_done:
+    save_control(&tx->engine);
+    interval_publish(tx, action, emitted);
+    return MAC_TX_OK;
+}
+#endif
