@@ -555,7 +555,10 @@ static void handoff_mac(void)
 }
 #endif
 
-int main(int argc, char **argv)
+#ifndef MAC_HANDOFF_MAIN
+#define MAC_HANDOFF_MAIN main
+#endif
+int MAC_HANDOFF_MAIN(int argc, char **argv)
 {
     unsigned n, fcf;
     if (argc == 16 && !strcmp(argv[1], "--vector")) {

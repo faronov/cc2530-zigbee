@@ -98,3 +98,32 @@ class SimulatorOutputTests(unittest.TestCase):
         with patch("boot_image.simulate", side_effect=incomplete):
             with self.assertRaisesRegex(ValueError, "Incomplete raw simulator"):
                 simulate_binary_dumps("synthetic-s51", ["dump /h iram 0 255"])
+
+    def test_raw_boundaries_are_exact_unique_and_preserve_order(self):
+        for mode in ("exact", "missing", "duplicate", "embedded", "prefix"):
+            def output(simulator, commands):
+                emitted = []
+                for index, command in enumerate(commands):
+                    if command.startswith("dump /b "):
+                        Path(command.split('>"')[1][:-1]).write_bytes(bytes((index,))*256)
+                        if mode == "missing":
+                            continue
+                        if mode == "embedded":
+                            command = "echo "+command
+                        if mode == "prefix":
+                            command = command+" extra"
+                        emitted += [command]*(2 if mode == "duplicate" else 1)
+                    else:
+                        emitted.append(command)
+                return "\n".join(emitted)+"\n"
+            commands = ["first", "dump /h iram 0 255", "middle", "dump /h iram 0 255", "last"]
+            with self.subTest(mode=mode), patch("boot_image.simulate", side_effect=output):
+                if mode != "exact":
+                    with self.assertRaisesRegex(ValueError, "Ambiguous raw"):
+                        simulate_binary_dumps("synthetic-s51", commands)
+                else:
+                    result = simulate_binary_dumps("synthetic-s51", commands)
+                    first, second = result.split("middle\n")
+                    self.assertTrue(first.startswith("first\n") and second.endswith("last\n"))
+                    self.assertEqual(memory_dump(first, 0, 256), b"\x01"*256)
+                    self.assertEqual(memory_dump(second, 0, 256), b"\x03"*256)

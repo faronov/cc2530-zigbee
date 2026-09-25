@@ -54,7 +54,11 @@ def verify(*artifacts):
     require(check_layout(artifacts) == (279, 1262), "Complete join DATA/OSEG lifetime proof changed")
 
 
-def transfers(image, symbols, listings, debug):
+def transfers(image, symbols, listings, debug, *, modules=MODULES,
+              areas=("CSEG", "BJ_BANK1", "BJ_BANK2", "BJ_BANK3", "BJ_BANK4"),
+              library=("___memcpy", "_memset", "__gptrput", "__gptrget",
+                       "__mulint", "__mullong", "_memcmp"),
+              indirect_sites=((0xe5, b"\x73"),)):
     decoded, owners, covered = {}, {}, set()
     for module, listing in listings.items():
         for pc, raw in records(listing.decode("ascii")):
@@ -64,7 +68,6 @@ def transfers(image, symbols, listings, debug):
                     "Actual join instruction overlaps or differs from linked CODE")
             decoded[pc], owners[pc] = raw, module
             covered |= span
-    library = ("___memcpy", "_memset", "__gptrput", "__gptrget", "__mulint", "__mullong", "_memcmp")
     pc = min(symbols[n] for n in library)
     end = symbols["s_CSEG"]+symbols["l_CSEG"]
     while pc < end:
@@ -74,7 +77,7 @@ def transfers(image, symbols, listings, debug):
         decoded[pc], owners[pc] = bytes(image[a] for a in range(pc, pc+size)), "libc"
         covered |= span
         pc += size
-    for area in ("CSEG", "BJ_BANK1", "BJ_BANK2", "BJ_BANK3", "BJ_BANK4"):
+    for area in areas:
         require(set(range(symbols["s_"+area], symbols["s_"+area]+symbols["l_"+area])) <= covered,
                 "Incomplete actual join CODE decode")
     entries, functions = {}, {}
@@ -86,7 +89,7 @@ def transfers(image, symbols, listings, debug):
         require(scope == "G" or scope == "F"+module, "Private function/module identity differs")
         require(entry not in entries and entry <= last, "Duplicated/reversed function boundary")
         entries[entry] = (module, name, width == "3")
-    for module in MODULES:
+    for module in modules:
         starts = sorted(e for e, (m, _, _) in entries.items() if m == module)
         for i, start in enumerate(starts):
             stop = starts[i+1] if i+1 < len(starts) else max(p for p, m in owners.items() if m == module)+1
@@ -128,7 +131,7 @@ def transfers(image, symbols, listings, debug):
         elif target in functions and pc in functions and functions[target] != functions[pc]:
             require(target == symbols["__sdcc_banked_ret"] or source == "banked",
                     "Unreviewed inter-function tail transfer")
-    require(indirect == [(0xe5, b"\x73")], "Unreviewed indirect transfer/ISR")
+    require(tuple(indirect) == indirect_sites, "Unreviewed indirect transfer/ISR")
     for entry, (module, name, far) in entries.items():
         if far:
             body = [p for p, owner in functions.items() if owner == entry]
@@ -152,15 +155,18 @@ def direct_accesses(raw):
     return set(), set()
 
 
-def live_data(symbols, debug, listings, decoded, owners, functions, entries, targets, calls):
+def live_data(symbols, debug, listings, decoded, owners, functions, entries, targets, calls, *,
+              modules=MODULES, reservations=None, overlay=None, frame_areas=None,
+              physical=("banked_join_iram_low", "banked_join_iram_high")):
     """Backwards byte liveness at every actual linked call, not module overlap."""
-    reservations = set(range(8, 0x1e)) | set(range(0x26, 0x46))
-    overlay = set(range(0x46, 0x50))
-    frames, declared = {}, {m: set() for m in MODULES}
-    for module in MODULES:
-        if module in ("banked", "banked_join_iram_low", "banked_join_iram_high"):
+    reservations = set(range(8, 0x1e)) | set(range(0x26, 0x46)) if reservations is None else reservations
+    overlay = set(range(0x46, 0x50)) if overlay is None else overlay
+    frames, declared = {}, {m: set() for m in modules}
+    for module in modules:
+        if module == "banked" or module in physical:
             continue
-        area = "BJ_CALLER" if module == "banked_join_fixture" else "BJ_"+module
+        area = frame_areas[module] if frame_areas is not None else \
+            "BJ_CALLER" if module == "banked_join_fixture" else "BJ_"+module
         frames[module] = set(range(symbols["s_"+area], symbols["s_"+area]+symbols["l_"+area]))
         require(frames[module] <= reservations, "Compiler frame escapes physically allocated DATA")
     for key, module, size in re.findall(r"^S:(L([^.$]+)\.[^(]+)\(\{(\d+)\}.*\),E,0,0$", debug, re.M):
@@ -170,7 +176,7 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
         require(not declared[module] & span and span <= frames[module], "Spill declarations overlap/escape")
         declared[module] |= span
     require(all(declared[m] == f for m, f in frames.items()), "Undeclared compiler DATA frame bytes")
-    if "banked" in MODULES:
+    if "banked" in modules:
         frames["banked"] = set()
     for module, listing in listings.items():
         require(not re.search(rb"#\(?_\w+_sloc\d+", listing), "Compiler DATA address escapes to an indirect user")

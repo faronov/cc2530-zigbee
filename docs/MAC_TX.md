@@ -205,11 +205,15 @@ transition. Its new native composition drives the interval MAC through those
 actual calls and retains an independent receive/ACK lease after ordinary-TX
 retirement. It is not a combined8051 MAC/radio image.
 
-Remaining #13/#14 work includes the production/MCU action binding, integration
-of continuous response ACK service, frame preservation and
-loss-aware closure, then explicit interval-aware scan/POLL/association
-contracts and the complete banked composition. The current raw attempt's
-AUTOACK-off receive phase cannot be relabeled as any of these.
+The subsequent [banked action adapter](MAC_ADAPTER.md) supplies a distinct
+combined MCU action executor, frame preservation and pre-stop/drain closure.
+Its opt-in `mac_tx_observed_step` accepts bounded BUSY and retirement
+assertions while the existing interval step rejects those new kinds.
+It does not relax the captured-event contract, use a ceil-rounded future
+clock as now, or equate ordinary-TX retirement with physical RF-off.
+Remaining #13/#14 work includes explicit interval-aware scan/POLL/association
+contracts and actual integration into the complete banked join. The raw
+attempt's AUTOACK-off phase alone still cannot be called a complete POLL lease.
 The physical, entropy/NV and #45 full-MLME conformance gates remain separate.
 Never flash or publish `mac_tx_interval_test.ihx` as board firmware.
 

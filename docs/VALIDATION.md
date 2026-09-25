@@ -35,7 +35,8 @@ key, retained radio fault and retained busy-flash cases, plus eighteen
 [transport/ZDO/deadline cases](ED_JOIN.md#whole-target-edge-corpus).
 Two interval-MAC workers add the separate fractional scheduler and native
 real-service receipt-consumption checks. Two guarded-handoff workers add the
-opt-in live clock/RX transition and native MAC binding. There are102 workers plus the two
+opt-in live clock/RX transition and native MAC binding. Two banked-adapter
+workers add the complete real-scheduler/radio composition. There are104 workers plus the two
 selection/acceptance control jobs. Their existing15-minute deadlines and
 no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
@@ -204,7 +205,9 @@ MMIO replay. The separate `test-mac-tx-interval` pair preserves all52 target
 case groups and the native/sanitizer real-service receipt consumers without
 extending the already long core workers. `test-mac-handoff` has its own pair,
 with71 target sequences and four native/sanitizer binaries; synthetic handoff
-images are not uploaded. Another pair runs `test-zigbee-security test-zigbee-mmo
+images are not uploaded. `test-mac-adapter` adds two dedicated workers with
+eighteen complete banked scenarios and three native/sanitizer pairs, also
+without uploads. Another pair runs `test-zigbee-security test-zigbee-mmo
 test-zigbee-key-hash` with real AES/DMA,
 and a final pair runs `test-security-counter` with the real journal/flash backend.
 Their exact union is the complete
@@ -264,6 +267,24 @@ Commit `166b15c` passed
 104/104 jobs. Both handoff workers completed the full71-sequence corpus and
 86410 artifact negatives plus the alias control in5m03s/5m04s, preserving
 all100 previous workers and their deadlines.
+
+The next [banked action adapter](MAC_ADAPTER.md) has prepared genuine target
+evidence for2410 public calls/210988 MMIO events across18 fresh-reset
+sequences. The separate image uses55442 populated CODE,2848 ordinary XDATA
+plus64 status reservation bytes and peaks atSP78 under7C. Full pinning covers
+raw CDB, all14 relocated snapshots, map/memory/runtime and object identities;
+actual byte liveness covers146 functions/634 live-byte/write comparisons. Acceptance requires277229
+artifact mutations and missing-alias/live-bank rejection controls, every
+native/sanitizer transcript, all public output/retained-frame observations and
+complete unowned RAM/SFR/XREG/flash guards. A full-machine continuation resumes
+only a prior verified common-CODE boundary; it never supplies private MAC
+progress. Linear-time binary-dump reconstruction preserves exact byte ranges
+and rejects missing/duplicate boundaries. Initial local preparation of the
+whole18-case replay took401.18s without changing the15-second subprocess
+deadline, before the four added invalid-close checks; that measurement is
+not a completed CI job or hardware evidence.
+Full revision acceptance is pending publication/Actions. Interval procedure
+and complete authenticated-join/radio integration remain open.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

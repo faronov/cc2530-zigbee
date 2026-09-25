@@ -215,6 +215,15 @@ class BankedSecurityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 restore(state, pc)
 
+    def test_unmapped_adapter_continuation_does_not_change_security_defaults(self):
+        state = (bytes(0x1f00), bytes(256), bytes(128), bytes(0x6000), bytes(0x40000))
+        self.assertTrue(restore(state, 0x1234, memctr=0))
+        with self.assertRaises(ValueError):
+            restore(state, 0x1234)
+        for value in (1, 3, 8, 10, False, True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                restore(state, 0x1234, memctr=value)
+
 
 if __name__ == "__main__":
     unittest.main()

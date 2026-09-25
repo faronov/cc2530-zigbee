@@ -88,6 +88,17 @@ DATA/command ACK model import no external implementation, private identity
 or capture. All emitted-image and simulator measurements remain offline;
 no new hardware or conformance evidence is asserted.
 
+The [banked action adapter](MAC_ADAPTER.md), bounded busy/retirement sources,
+pre-stop coverage construction and public-call MCU replay are original
+BSD-3-Clause work. They reuse the same reviewed timer, CCA minimum, soft-stop,
+FIFO-retention and handoff facts, existing bank ABI and real MAC engine.
+They add no imported driver, wire revision, captured-time claim or vendor
+ABI. Typed observations come from actual SDCC CDB fields; all packets,
+addresses, configuration, cancellation/random commands and peripheral values
+are synthetic. Full-machine continuations preserve previously executed
+state, not initialized protocol progress. No private capture, identity,
+SDK binary or hardware activity is involved.
+
 ## Reviewed reference candidates
 
 The original [authenticated ED integration](ED_JOIN.md) uses functional facts

@@ -657,6 +657,15 @@ Commit `166b15c` passed
 [full CI,104/104 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),
 including all71 handoff sequences for each board.
 
+The subsequent [banked MAC action adapter](docs/MAC_ADAPTER.md) connects the
+real scheduler and radio services on the MCU model: busy CCA, TX/ACK,
+guarded AUTOACK handoff, retained frames and actual stop/drain coverage.
+Its18 prepared scenarios are **host-tested, image-checked and simulated**,
+with55442 CODE,2848 ordinary XDATA andSP78/7C; full revision CI is pending.
+It is not integrated into the complete authenticated-join image or the
+interval scan/POLL/association controllers. No hardware/RF result is claimed;
+never flash `mac-adapter/mac_adapter.ihx`.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

@@ -72,6 +72,13 @@ This bounded handoff at `166b15c` passed
 [full Actions36170918483](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),
 104/104 jobs, including both complete71-sequence target workers and all
 previous workers. No new hardware evidence is claimed.
+The subsequent [banked MAC action adapter](MAC_ADAPTER.md) now executes the
+real scheduler, clock and radio services together, including loss-aware
+pre-stop closure and retained faults. Its eighteen prepared MCU scenarios
+use55442 CODE,2848 ordinary XDATA andSP78/7C; full revision CI is pending.
+This is not the full7512-byte join image with a radio backend. Interval-aware
+scan/POLL/association and genuine combined RAM/ABI integration remain #13/#14
+work before #27; no milestone, timing or hardware gate is closed by it.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

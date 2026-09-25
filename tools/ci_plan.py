@@ -21,6 +21,7 @@ COMPONENTS = {
     "mac-attempt": ("Offline MAC interval owner ({board})", ("test-mac-attempt",)),
     "mac-tx-interval": ("Offline interval MAC transmitter ({board})", ("test-mac-tx-interval",)),
     "mac-handoff": ("Offline guarded RX handoff ({board})", ("test-mac-handoff",)),
+    "mac-adapter": ("Offline banked MAC radio adapter ({board})", ("test-mac-adapter",)),
     "security": ("Offline Zigbee security ({board})",
                  ("test-zigbee-security", "test-zigbee-mmo", "test-zigbee-key-hash")),
     "counters": ("Offline durable counters ({board})", ("test-security-counter",)),
@@ -85,7 +86,8 @@ def source_index():
                         directories.add(ROOT / (arg[2:] or args[i + 1]))
             generated = {(ROOT/args[args.index("--emit-header")+1]).resolve()
                          for args in commands
-                         if "tests/verify_banked_join.py" in args and "--emit-header" in args}
+                         if {"tests/verify_banked_join.py", "tests/verify_mac_adapter.py"} & set(args)
+                         and "--emit-header" in args}
             index[board, unit] = include_closure(inputs, directories, generated)
     return index
 

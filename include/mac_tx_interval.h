@@ -52,14 +52,14 @@ typedef struct {
     mac_epoch_stamp_t through;
 } mac_tx_interval_action_t;
 
-mac_tx_result_t mac_tx_interval_init(mac_tx_interval_t *tx, uint8_t dsn, uint32_t now);
+mac_tx_result_t mac_tx_interval_init(mac_tx_interval_t *tx, uint8_t dsn, uint32_t now) JOIN_FAR;
 mac_tx_result_t mac_tx_interval_submit(mac_tx_interval_t *tx,
-    const uint8_t *body, uint16_t length, uint32_t now, uint32_t lifetime, uint16_t work);
+    const uint8_t *body, uint16_t length, uint32_t now, uint32_t lifetime, uint16_t work) JOIN_FAR;
 mac_tx_result_t mac_tx_interval_copy(const mac_tx_interval_t *tx,
-    uint8_t *body, uint16_t capacity, uint8_t *length);
+    uint8_t *body, uint16_t capacity, uint8_t *length) JOIN_FAR;
 mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t now,
-    const mac_tx_interval_event_t * volatile event, mac_tx_interval_action_t * volatile action);
-mac_tx_result_t mac_tx_interval_release(mac_tx_interval_t *tx);
+    const mac_tx_interval_event_t * volatile event, mac_tx_interval_action_t * volatile action) JOIN_FAR;
+mac_tx_result_t mac_tx_interval_release(mac_tx_interval_t *tx) JOIN_FAR;
 
 /* now/report are symbol-boundary observations no earlier than upper (ceil).
  * A definitely timely matching ACK can establish ACKED. A matching or wrong-DSN

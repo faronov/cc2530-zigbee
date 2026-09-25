@@ -342,9 +342,10 @@ mutations plus the alias rejection; complete job durations were5m03s/5m04s.
 All100 previous workers remain accepted. This accepts the isolated handoff
 and native binding, not a combined/banked radio adapter.
 
-Remaining work is the production adapter and combined/banked MCU binding,
-loss-free receive closure, interval-aware scan/POLL/association and subsequent
-network integration. Handoff READY is not MAC ACKED, POLL CLOSED/NO_DATA,
+The subsequent [banked action adapter](MAC_ADAPTER.md) adds the production
+executor, combined scheduler/radio MCU binding and pre-stop/drain closure
+construction. Interval-aware scan/POLL/association and full network-image
+integration remain separate. Handoff READY is not MAC ACKED, POLL CLOSED/NO_DATA,
 a per-frame ACK attestation, calibrated PHY timing, arbitrary-input
 unicast-only ACK policy or full MLME conformance. #45's complete Association
 deadline/revision gate remains open.

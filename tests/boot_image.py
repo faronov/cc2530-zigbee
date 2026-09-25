@@ -131,12 +131,23 @@ def simulate_binary_dumps(simulator, commands):
             else:
                 rewritten.append(command)
         text = simulate(simulator, rewritten)
+        replacements, observed = {}, {}
         for command, path, first, size in dumps:
             require(path.is_file() and path.stat().st_size == size, "Incomplete raw simulator memory dump")
-            require(text.count(command+"\n") == 1, "Ambiguous raw memory observation boundary")
             raw = path.read_bytes()
-            formatted = "".join(f"0x{first+i:06x} "+raw[i:i+32].hex(" ")+"\n" for i in range(0, size, 32))
-            text = text.replace(command+"\n", formatted, 1)
+            replacements[command+"\n"] = "".join(
+                f"0x{first+i:06x} "+raw[i:i+32].hex(" ")+"\n" for i in range(0, size, 32))
+            observed[command+"\n"] = 0
+
+        def replace(match):
+            command = match[0]
+            if command not in replacements:
+                return command
+            observed[command] += 1
+            return replacements[command]
+
+        text = re.sub(r"^dump /b [^\n]*\n", replace, text, flags=re.MULTILINE)
+        require(all(count == 1 for count in observed.values()), "Ambiguous raw memory observation boundary")
         return text
 
 

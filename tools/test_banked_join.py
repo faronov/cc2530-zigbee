@@ -32,8 +32,7 @@ class JoinDataLivenessTests(unittest.TestCase):
         return [symbols, debug, {}, decoded, owners, functions, entries, targets, calls]
 
     def analyze(self, fixture):
-        with patch.object(layout, "MODULES", ("caller", "callee")):
-            return layout.live_data(*fixture)
+        return layout.live_data(*fixture, modules=("caller", "callee"))
 
     def test_dead_call_site_storage_can_share_physical_bytes(self):
         self.assertEqual(self.analyze(self.fixture(overwrite=True))[0], 2)

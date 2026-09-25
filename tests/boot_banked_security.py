@@ -50,13 +50,14 @@ def captured_sections(parts, number, pc):
             memory_dump(parts[number+6], 0, 0x40000))
 
 
-def restore(state, pc):
+def restore(state, pc, *, memctr=2):
     ram, iram, sfr, extended, media = state
     require(tuple(map(len, state)) == (0x1f00, 256, 128, 0x6000, 0x40000),
             "Incomplete banked continuation")
     require(type(pc) is int and 0 <= pc < 0x8000, "Continuation is not a common-CODE boundary")
-    require(sfr[0x19] == 0 and not sfr[0x18] & 3 and not sfr[8] & 0x50 and not sfr[0x48] & 4 and
-            sfr[0x47] == 2 and all(sfr[a-0x80] == 0 for a in (0xa8, 0xb8, 0x9a, 0xd1, 0xd6, 0xd7)),
+    require(type(memctr) is int and memctr in (0, 2) and sfr[0x19] == 0 and not sfr[0x18] & 3 and
+            not sfr[8] & 0x50 and not sfr[0x48] & 4 and
+            sfr[0x47] == memctr and all(sfr[a-0x80] == 0 for a in (0xa8, 0xb8, 0x9a, 0xd1, 0xd6, 0xd7)),
             "Continuation requires quiescent synthetic IRQ/DMA/UART/timers and restored XMAP")
     commands = store("flash", 0x3e800, media[0x3e800:0x3f800])
     for space, address, data in (("xram", 0, ram), ("iram", 0, iram),

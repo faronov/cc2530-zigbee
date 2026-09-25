@@ -95,6 +95,16 @@ Uncertainty retains the fault and physical ownership. Separate MCU
 lower-service execution and a native interval-MAC binding do not yet supply
 the production adapter, loss-free POLL closure or banked real-radio join.
 
+The subsequent [banked MAC adapter](MAC_ADAPTER.md) supplies a production
+foreground action executor and its own combined MCU proof. Protocol and
+hardware calls have separate lifetimes; the real scheduler consumes typed
+busy/retirement assertions without confusing them with captured edges.
+Frame backpressure and a preserved pre-first-stop watermark precede actual
+drain/closure. Faults retain the original frame and physical owner rather
+than fabricating timestamps or successful cleanup. Its isolated55442-CODE/
+2848-XDATA composition is not the complete join/radio placement, an interval
+scan/POLL/association implementation or full revision acceptance yet.
+
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
 probe is confined to the target example. It shares existing startup/board

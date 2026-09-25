@@ -21,13 +21,14 @@ class SelectionTests(unittest.TestCase):
     def names(self, selected):
         return {(row["board"], row["directory"]) for row in selected["matrix"]["include"]}
 
-    def test_full_preserves_100_workers_and_adds_two_handoff_workers(self):
+    def test_full_preserves_102_workers_and_adds_two_adapter_workers(self):
         selected = plan.full_plan("test")
         rows = selected["matrix"]["include"]
-        self.assertEqual(len(rows), 102)
-        self.assertEqual(len({r["name"] for r in rows}), 102)
+        self.assertEqual(len(rows), 104)
+        self.assertEqual(len({r["name"] for r in rows}), 104)
         self.assertEqual(sum(row["directory"] == "mac-tx-interval" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-handoff" for row in rows), 2)
+        self.assertEqual(sum(row["directory"] == "mac-adapter" for row in rows), 2)
         self.assertEqual(sum(row["directory"].startswith("banked-join-") for row in rows), 44)
         self.assertEqual({(r["board"], r["image"]) for r in rows if r["image"]},
                          {(b, i) for b in plan.BOARDS for i in plan.IMAGES})
@@ -57,7 +58,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 selected = self.select("README.md", path)
                 self.assertEqual(selected["tier"], "full")
-                self.assertEqual(len(selected["matrix"]["include"]), 102)
+                self.assertEqual(len(selected["matrix"]["include"]), 104)
                 self.assertEqual(selected["campaign"], "full")
 
     def test_failed_dependency_derivation_is_explicit_full_not_an_empty_pass(self):
@@ -74,8 +75,12 @@ class SelectionTests(unittest.TestCase):
                                   {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "tests/banked_join_edges.c": {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "src/zcl_temperature.c": {"compositions"},
-            "tests/test_mac_tx_interval.c": {"mac-tx-interval"},
-            "tests/test_mac_handoff.c": {"mac-handoff"},
+            "tests/test_mac_tx_interval.c": {"mac-tx-interval", "mac-adapter"},
+            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter"},
+            "src/mac_adapter.c": {"mac-adapter"},
+            "tests/test_mac_observed.c": {"mac-adapter"},
+            "tests/test_mac_adapter.c": {"mac-adapter"},
+            "tests/mac_adapter_fixture.c": {"mac-adapter"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},
         }
         for path, units in cases.items():
@@ -87,13 +92,13 @@ class SelectionTests(unittest.TestCase):
 
     def test_included_c_helpers_reach_all_compositions_and_fixtures(self):
         for board in plan.BOARDS:
-            for unit in ("core", "mac-attempt", "mac-tx-interval", "mac-handoff", "compositions", "radio_link_fixture"):
+            for unit in ("core", "mac-attempt", "mac-tx-interval", "mac-handoff", "mac-adapter", "compositions", "radio_link_fixture"):
                 self.assertIn("tests/test_radio_autoack.c", self.index[board, unit])
             for unit in ("core", "counters", "resident-counter", "flash_fixture"):
                 self.assertIn("tests/test_flash_write.c", self.index[board, unit])
         selected = self.select("tests/test_radio_autoack.c")
         self.assertTrue({(b, u) for b in plan.BOARDS
-                         for u in ("debug_fixture", "mac-attempt", "mac-tx-interval", "mac-handoff", "compositions", "radio_link_fixture")}
+                         for u in ("debug_fixture", "mac-attempt", "mac-tx-interval", "mac-handoff", "mac-adapter", "compositions", "radio_link_fixture")}
                         <= self.names(selected))
 
     def test_source_union_and_core_are_preserved_without_running_tools(self):

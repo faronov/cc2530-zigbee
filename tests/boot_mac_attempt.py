@@ -166,8 +166,14 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
                         "Handoff bypasses genuine API: "+name)
     verify_timebase_reader(image, symbols, debug, 0x1e00, 8)
     verify_clock_code(image, symbols, debug)
+    return allocated, mmio_sites(image, debug, listings, handoff=profile.handoff)
+
+
+def mmio_sites(image, debug, listings, *, handoff=False):
+    """Decode the actual common lower-service MMIO, including indexed settings."""
+    codes = {m: dict(records(listings[m])) for m in MODULES[:4]}
     sites = {}
-    for module in profile.modules[:4]:
+    for module in MODULES[:4]:
         code = codes[module]
         for pc, raw, reg in peripheral_accesses(code):
             write = raw[0] in (0x75, 0xf5) or 0x88 <= raw[0] <= 0x8f
@@ -207,7 +213,7 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
             sum(raw == b"\x12"+settle.to_bytes(2, "big") for raw in radio.values()) == 2,
             "Attempt unique destructive RFD / four pre-strobe NOPs")
     sites[settle] = ("c", 0, None)
-    if profile.handoff:
+    if handoff:
         clear = labels["_handoff_clear_sfd"]
         expected = bytes.fromhex("906193e020e50a75e9fde05420440180027420f58222")
         require(bytes(image[a] for a in range(clear, clear+len(expected))) == expected,
@@ -217,7 +223,7 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
         require(sites[clear+3] == ("r", 0x6193, 0xe0) and
                 sites[clear+7] == ("w", 0xe9, 0xe9), "Handoff SFD guard MMIO")
         sites[clear+10] = ("r", 0x6193, 0xe0)
-    return allocated, sites
+    return sites
 
 
 def rejected(function):

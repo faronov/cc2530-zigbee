@@ -98,6 +98,7 @@ endif
 .PHONY: test-mac-attempt
 .PHONY: test-mac-tx-interval
 .PHONY: test-mac-handoff
+.PHONY: test-mac-adapter
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1421,6 +1422,58 @@ test-mac-handoff: $(BUILD)/host-mac-handoff-tests $(BUILD)/host-mac-handoff-test
 	$(BUILD)/host-mac-handoff-mac-tests-sanitize
 	$(PYTHON) -B tests/boot_mac_handoff.py --output $(BUILD) --simulator "$(S51)"
 
+MAC_ADAPTER_DEFINES := $(MAC_HANDOFF_DEFINES) -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER
+MAC_ADAPTER_SRC := $(MAC_ATTEMPT_SRC) src/mac_frame.c src/mac_tx.c src/mac_adapter.c
+MAC_ADAPTER_MODULES := $(MAC_ATTEMPT_MODULES) mac_frame mac_tx mac_adapter
+MAC_ADAPTER_TEST_INPUTS := tests/test_mac_adapter.c tests/test_mac_handoff.c tests/test_mac_attempt.c tests/test_radio_autoack.c
+MAC_ADAPTER_BANK_DIR := $(BUILD)/mac-adapter
+MAC_ADAPTER_BANK_MODULES := banked $(MAC_ADAPTER_MODULES)
+MAC_ADAPTER_BANK_BASES := 0 0x08 0x2c 0x2c 0x37 0x3e 0x08 0x24 0x08 0x23 0x08
+MAC_ADAPTER_BANK_FLAGS := $(SDCC_FLAGS) $(MAC_ADAPTER_DEFINES) -DCC2530_BANKED_MAC -DBANKED_STACK_FIRST=0x56
+MAC_ADAPTER_BANK_LINK := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 --code-size 0x80000 \
+	--stack-size 0x27 -Wl-r -Wl-bMA_CALLER=0x08 -Wl-bMA_BANK1=0x18000 -Wl-bMA_BANK2=0x28000
+MAC_ADAPTER_BANK_OBJECTS := $(addprefix $(MAC_ADAPTER_BANK_DIR)/,mac_adapter_iram_low.rel banked.rel \
+	mac_adapter_iram_high.rel $(addsuffix .rel,$(MAC_ADAPTER_MODULES)) mac_adapter_fixture.rel)
+$(MAC_ADAPTER_BANK_DIR):
+	mkdir -p $@
+define MAC_ADAPTER_BANK_MODULE
+$(MAC_ADAPTER_BANK_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile | $(MAC_ADAPTER_BANK_DIR)
+	$$(SDCC) $$(MAC_ADAPTER_BANK_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,MA_$(1)) \
+		$(if $(filter mac_tx mac_frame,$(1)),--codeseg MA_BANK1) $(if $(filter mac_adapter,$(1)),--codeseg MA_BANK2) -c $$< -o $$@
+$(if $(filter-out banked,$(1)),MAC_ADAPTER_BANK_LINK += -Wl-bMA_$(1)=$(2))
+endef
+$(foreach n,1 2 3 4 5 6 7 8 9 10 11,$(eval $(call MAC_ADAPTER_BANK_MODULE,$(word $(n),$(MAC_ADAPTER_BANK_MODULES)),$(word $(n),$(MAC_ADAPTER_BANK_BASES)))))
+$(MAC_ADAPTER_BANK_DIR)/mac_adapter_iram_%.rel: tests/mac_adapter_iram_%.c Makefile | $(MAC_ADAPTER_BANK_DIR)
+	$(SDCC) $(MAC_ADAPTER_BANK_FLAGS) -c $< -o $@
+$(MAC_ADAPTER_BANK_DIR)/mac_adapter_fixture.rel: tests/mac_adapter_fixture.c $(HEADERS) Makefile | $(MAC_ADAPTER_BANK_DIR)
+	$(SDCC) $(MAC_ADAPTER_BANK_FLAGS) --dataseg MA_CALLER -c $< -o $@
+$(MAC_ADAPTER_BANK_DIR)/mac_adapter.ihx: $(MAC_ADAPTER_BANK_OBJECTS) force-link
+	$(SDCC) $(SDCC_FLAGS) $(MAC_ADAPTER_BANK_LINK) -o $@ $(MAC_ADAPTER_BANK_OBJECTS)
+	$(foreach m,mac_adapter_iram_low banked mac_adapter_iram_high $(MAC_ADAPTER_MODULES) mac_adapter_fixture,cp $(MAC_ADAPTER_BANK_DIR)/$(m).rst $(MAC_ADAPTER_BANK_DIR)/mac_adapter.$(m).rst;)
+$(MAC_ADAPTER_BANK_DIR)/mac_adapter_layout.h: $(MAC_ADAPTER_BANK_DIR)/mac_adapter.ihx tests/verify_mac_adapter.py
+	$(PYTHON) -B tests/verify_mac_adapter.py --output $(BUILD) --emit-header $@
+$(BUILD)/host-mac-adapter-vectors: $(MAC_ADAPTER_TEST_INPUTS) tests/mac_adapter_trace.h $(MAC_ADAPTER_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) $(MAC_ADAPTER_BANK_DIR)/mac_adapter_layout.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_ADAPTER_DEFINES) -DMAC_ADAPTER_TRACE -I$(MAC_ADAPTER_BANK_DIR) tests/test_mac_adapter.c $(MAC_ADAPTER_SRC) tests/host_mmio.c -o $@
+$(BUILD)/host-mac-adapter-vectors-sanitize: $(MAC_ADAPTER_TEST_INPUTS) tests/mac_adapter_trace.h $(MAC_ADAPTER_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) $(MAC_ADAPTER_BANK_DIR)/mac_adapter_layout.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_ADAPTER_DEFINES) -DMAC_ADAPTER_TRACE -I$(MAC_ADAPTER_BANK_DIR) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_adapter.c $(MAC_ADAPTER_SRC) tests/host_mmio.c -o $@
+$(BUILD)/host-mac-observed-tests: tests/test_mac_observed.c tests/test_mac_tx_interval.c src/mac_tx.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED tests/test_mac_observed.c src/mac_tx.c src/mac_frame.c -o $@
+$(BUILD)/host-mac-observed-tests-sanitize: tests/test_mac_observed.c tests/test_mac_tx_interval.c src/mac_tx.c src/mac_frame.c $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_observed.c src/mac_tx.c src/mac_frame.c -o $@
+$(BUILD)/host-mac-adapter-tests: $(MAC_ADAPTER_TEST_INPUTS) $(MAC_ADAPTER_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_ADAPTER_DEFINES) tests/test_mac_adapter.c $(MAC_ADAPTER_SRC) tests/host_mmio.c -o $@
+$(BUILD)/host-mac-adapter-tests-sanitize: $(MAC_ADAPTER_TEST_INPUTS) $(MAC_ADAPTER_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_ADAPTER_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_adapter.c $(MAC_ADAPTER_SRC) tests/host_mmio.c -o $@
+
+test-mac-adapter: $(BUILD)/host-mac-observed-tests $(BUILD)/host-mac-observed-tests-sanitize \
+	$(BUILD)/host-mac-adapter-tests $(BUILD)/host-mac-adapter-tests-sanitize \
+	$(BUILD)/host-mac-adapter-vectors $(BUILD)/host-mac-adapter-vectors-sanitize
+	$(BUILD)/host-mac-observed-tests
+	$(BUILD)/host-mac-observed-tests-sanitize
+	$(BUILD)/host-mac-adapter-tests
+	$(BUILD)/host-mac-adapter-tests-sanitize
+	$(PYTHON) -B tests/boot_mac_adapter.py --output $(BUILD) --simulator "$(S51)"
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1633,7 +1686,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

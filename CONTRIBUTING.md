@@ -59,7 +59,7 @@ linked-image/ABI/alias guard and simulator deadline.
 | --- | --- | --- |
 | Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
 | Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
-| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora plus44 complete-join, two interval-MAC and two guarded-handoff workers; exhaustive current banked-key and join artifact mutations |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora plus44 complete-join, two interval-MAC, two guarded-handoff and two banked-adapter workers; exhaustive current artifact mutations |
 
 Selection uses actual forced Make dry-run compiler inputs and recursively
 follows project includes, including C test helpers included by other C tests.
@@ -68,8 +68,8 @@ definitions, build/workflow/verification/tool changes and unknown consumers
 select full acceptance. No dependency result persists across invocations.
 Fast builds force fresh selected host executables, including embedded C
 helpers; target-only callers are reported rather than counted as host tests.
-The complete-join native observation header is an explicit Make-generated
-input derived from the actual target CDB; it is not guessed from native
+The complete-join and banked-adapter native observation headers are explicit
+Make-generated inputs derived from the actual target CDB; they are not guessed from native
 padding or accepted from a stale build cache.
 `test-fast` compares HEAD with staged/unstaged/untracked source by default.
 It is a development aid, never a substitute for the affected integration gate.
@@ -144,10 +144,14 @@ Forty-four complete-join jobs retain independent success/data/update/restart,
 missing-key, radio-fault and retained busy-flash scenarios, plus eighteen
 [transport/ZDO/deadline edge cases](docs/ED_JOIN.md#whole-target-edge-corpus)
 for each board. Each starts with genuine reset and real public calls.
-The exact component union is still `test-common`; one hundred worker jobs retain
+The guarded handoff and banked action adapter each have another worker per
+board. The adapter runs its entire eighteen-case genuine MCU corpus, three
+native/sanitizer pairs and complete artifact/alias/bank rejection controls,
+without uploads or equipment access.
+The exact component union is still `test-common`;104 worker jobs retain
 all twenty-eight board/image checks and the unchanged simulator deadlines.
 Selection and the stable acceptance gate add two control jobs. A full run has
-102 jobs, not fewer cases; an affected run contains only its selected workers.
+106 jobs, not fewer cases; an affected run contains only its selected workers.
 The generic BDB host worker also reports fresh host coverage.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.

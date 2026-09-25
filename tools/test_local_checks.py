@@ -81,6 +81,42 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual([Path(args[0]).name for args in commands if args[0] not in ("cc", "sdcc")],
                              ["host-bdb-join-tests", "host-bdb-join-tests-sanitize"])
 
+    def test_adapter_keeps_real_banked_services_six_native_builds_and_immediate_snapshots(self):
+        modules = ("mac_adapter_iram_low", "banked", "mac_adapter_iram_high", "timebase", "clock",
+                   "mac_time", "radio_autoack", "mac_epoch", "mac_radio", "mac_attempt", "mac_frame",
+                   "mac_tx", "mac_adapter", "mac_adapter_fixture")
+        for board in BOARDS:
+            commands = recipe(board, "mac-adapter")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles), modules)
+            for args in compiles:
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_MAC",
+                                 "-DBANKED_STACK_FIRST=0x56"} <= set(args))
+                self.assertFalse({"--model-huge", "--stack-auto", "--xstack",
+                                  "--parms-in-bank1", "-DCC2530_HOST_TEST"} & set(args))
+            link = next(args for args in commands if args[0] == "sdcc" and "-c" not in args)
+            self.assertEqual(tuple(Path(arg).stem for arg in link if arg.endswith(".rel")), modules)
+            for option, expected in (("--stack-size", "0x27"), ("--xram-size", "0x1e00"),
+                                     ("--code-size", "0x80000")):
+                self.assertEqual(link[link.index(option)+1], expected)
+            for bank in (1, 2):
+                self.assertIn(f"-Wl-bMA_BANK{bank}=0x{bank}8000", link)
+            directory = Path(link[link.index("-o")+1]).parent
+            self.assertEqual(commands[commands.index(link)+1],
+                             tuple(arg for module in modules for arg in
+                                   ("cp", str(directory/f"{module}.rst"), str(directory/f"mac_adapter.{module}.rst")+";")))
+            headers = [args for args in commands if "tests/verify_mac_adapter.py" in args]
+            self.assertEqual(len(headers), 1)
+            self.assertIn("--emit-header", headers[0])
+            native = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(native), 6)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 3)
+            self.assertEqual(sum("-DMAC_ADAPTER_TRACE" in args for args in native), 2)
+            self.assertTrue(all("-DCC2530_BANKED_MAC" not in args and "-DNDEBUG" not in args for args in native))
+            self.assertEqual(sum("tests/boot_mac_adapter.py" in args for args in commands), 1)
+            for args in recipe(board, "bringup"):
+                self.assertFalse(any("mac-adapter" in arg or "-DCC2530_BANKED_MAC" == arg for arg in args))
+
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
             for image in IMAGES:
@@ -88,7 +124,8 @@ class LocalChecksTests(unittest.TestCase):
                     full = self.dry_run("test", BOARD=board, IMAGE=image)
                     split = self.dry_run("test-common", "test-tools", "test-board", BOARD=board, IMAGE=image)
                     def normalize(commands):
-                        return Counter(tuple("OUTPUT" if i and args[i-1] == "--output" else arg
+                        return Counter(tuple("OUTPUT" if i and args[i-1] == "--output" else
+                                             Path(arg).name if i and args[i-1] == "--emit-header" else arg
                                              if i or arg == "python3" else Path(arg).name
                                              for i, arg in enumerate(args)) for args in commands)
                     self.assertEqual(normalize(full), normalize(split))
@@ -110,7 +147,7 @@ class LocalChecksTests(unittest.TestCase):
             "timebase", "clock", "irq", "radio_fifo", "dma", "aes", "prng", "radio_rx", "radio_autoack",
             "radio_queue", "radio_tx", "noise_health", "radio_noise",
             "flash", "flash_exec", "flash_write", "nv_record",
-            "mac_frame", "mac_tx", "mac_tx_interval", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt", "mac_handoff",
+            "mac_frame", "mac_tx", "mac_tx_interval", "mac_time", "mac_epoch", "mac_radio", "mac_stamp", "mac_attempt", "mac_handoff", "mac_adapter",
             "mac_scan", "mac_association", "mac_poll", "mac_join",
             "nwk_beacon", "nwk_candidates", "nwk_parent", "nwk_frame", "aps_frame", "protocol_frame",
             "protocol_budget", "zcl_frame", "zcl_value", "zcl_attributes", "zcl_dispatch", "zcl_basic",
@@ -155,7 +192,8 @@ class LocalChecksTests(unittest.TestCase):
         for board in BOARDS:
             def normalized(targets):
                 commands = self.dry_run(*targets, BOARD=board)
-                return Counter(tuple("OUTPUT" if i and args[i-1] == "--output" else arg
+                return Counter(tuple("OUTPUT" if i and args[i-1] == "--output" else
+                                     Path(arg).name if i and args[i-1] == "--emit-header" else arg
                                      if i or arg == "python3" else Path(arg).name
                                      for i, arg in enumerate(args)) for args in commands)
             self.assertEqual(normalized(("test-common",)),
@@ -167,6 +205,7 @@ class LocalChecksTests(unittest.TestCase):
             self.assertFalse(any("tests/boot_zcl_temperature.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_attempt.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_handoff.py" in args for args in core))
+            self.assertFalse(any("tests/boot_mac_adapter.py" in args for args in core))
             self.assertFalse(any("tests/boot_mac_join.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_node.py" in args for args in core))
             self.assertFalse(any("tests/boot_zdo_srv.py" in args for args in core))
@@ -303,12 +342,13 @@ class LocalChecksTests(unittest.TestCase):
     def test_bounded_sanitizers_and_no_board_linkage(self):
         for board, service in ((b, s) for b in BOARDS for s in
                                ("zcl-basic", "zcl-identify", "zcl-temperature", "radio-autoack",
-                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-handoff", "mac-join",
+                                "mac-epoch", "mac-radio", "mac-stamp", "mac-attempt", "mac-handoff", "mac-adapter", "mac-join",
                                 "zdo-node", "zdo-srv", "zigbee-security", "zigbee-mmo", "zigbee-key-hash",
                                 "security-counter")):
             commands = self.dry_run("test-" + service, include_build=True, BOARD=board)
             sanitize = next(args for args in commands
-                            if args[0] == "cc" and "-fsanitize=address,undefined" in args)
+                            if args[0] == "cc" and "-fsanitize=address,undefined" in args
+                            and Path(args[-1]).name == "host-" + service + "-tests-sanitize")
             self.assertIn("-fno-sanitize-recover=all", sanitize)
             self.assertEqual(Path(sanitize[-1]).name, "host-" + service + "-tests-sanitize")
             native = [Path(args[0]).name for args in commands]

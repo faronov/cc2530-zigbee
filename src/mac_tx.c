@@ -599,3 +599,65 @@ interval_done:
     return MAC_TX_OK;
 }
 #endif
+
+#if defined(CC2530_MAC_OBSERVED)
+#include "mac_tx_observed.h"
+static TX_RAM uint32_t observed_previous;
+static TX_RAM uint8_t observed_phase;
+static const mac_epoch_stamp_t * volatile TX_RAM observed_lower;
+static const mac_epoch_stamp_t * volatile TX_RAM observed_upper;
+
+mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * volatile tx, uint32_t now,
+    const mac_tx_interval_event_t * volatile event,
+    mac_tx_interval_action_t * volatile action)
+{
+    mac_tx_result_t result;
+    if (!event || (event->source.kind != MAC_TX_EVENT_BUSY_INTERVAL &&
+                   event->source.kind != MAC_TX_EVENT_RETIRED))
+        return mac_tx_interval_step(tx, now, event, action);
+    if (!tx || !action) return MAC_TX_INVALID;
+    observed_lower = &event->lower; observed_upper = &event->upper;
+    if (event->upper.fine >= 512u ||
+        !reached(event->source.stamp, interval_ceil(observed_upper)) ||
+        (event->source.kind == MAC_TX_EVENT_BUSY_INTERVAL &&
+         (event->lower.fine >= 512u || !interval_ordered(observed_lower, observed_upper))))
+        return MAC_TX_INVALID;
+    observed_previous = tx->engine.last;
+    observed_phase = tx->engine.phase;
+    result = mac_tx_interval_step(tx, now, NULL, action);
+    if (result != MAC_TX_OK) return result;
+    if (event->source.generation != tx->engine.generation ||
+        event->source.retry != tx->engine.retries || event->source.nb != tx->engine.nb ||
+        !reached(event->source.stamp, observed_previous) || !reached(now, event->source.stamp))
+        return MAC_TX_OK;
+    if (event->source.kind == MAC_TX_EVENT_BUSY_INTERVAL ?
+        (observed_phase != MAC_TX_RADIO || tx->engine.phase != MAC_TX_RADIO) :
+        (observed_phase != MAC_TX_STOPPING || tx->engine.phase != MAC_TX_STOPPING))
+        return MAC_TX_OK;
+    load_control(&tx->engine);
+    if (event->source.kind == MAC_TX_EVENT_BUSY_INTERVAL) {
+        interval_end.symbols = control.at + 8u; interval_end.fine = 0;
+        if (!interval_ordered(&interval_end, observed_lower))
+            fault(MAC_TX_ADAPTER_ERROR);
+        else {
+            control.nb++;
+            if (control.be < MAC_TX_MAX_BE) control.be++;
+            if (control.nb > MAC_TX_MAX_BACKOFFS) {
+                control.phase = MAC_TX_DONE; control.outcome = MAC_TX_CHANNEL_ACCESS;
+            } else control.phase = MAC_TX_DRAW;
+        }
+    } else {
+        if (control.uncertain)
+            spacing(interval_ceil(observed_upper) +
+                    (control.ack_requested ? MAC_TX_ACK_SYMBOLS : 0u));
+        if (control.retry_pending) {
+            control.retry_pending = 0; control.retries++; control.nb = 0;
+            control.be = MAC_TX_MIN_BE; control.outcome = MAC_TX_OUTCOME_NONE;
+            control.phase = MAC_TX_DRAW;
+        } else control.phase = MAC_TX_DONE;
+    }
+    save_control(&tx->engine);
+    interval_publish(tx, action, MAC_TX_ACTION_NONE);
+    return MAC_TX_OK;
+}
+#endif
