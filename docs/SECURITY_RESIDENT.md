@@ -111,10 +111,15 @@ complete-join CCM/counter/journal register-lifetime changes. Both boards'
 full artifacts match. The security/MMO/key-hash executions and every
 profile's exhaustive artifact proof pass locally. The counter corpus also
 executed all original operations atSP75, but the final combined counter
-command twice exceeded the unchanged900-second local limit. Its full
-deadline acceptance remains open for CI; the table does not claim that
-worker passed. No corpus, continuation, artifact mutation or deadline was
-removed or relaxed.
+command twice exceeded the unchanged900-second local limit. The actual
+counter workers then passed in
+[Actions36122466601](https://github.com/faronov/cc2530-zigbee/actions/runs/36122466601):
+generic in4m40s and LG in3m16s, retaining56 cases,36695 calls,
+162 continuations, SP75,89775 artifact and1513 runtime negatives.
+This resolves that component deadline gate without removing a corpus,
+continuation or mutation, or relaxing a deadline. The overall run still
+failed on the separate protocol-budget identity refresh; it is not full
+revision acceptance.
 
 The new profile caps are32768 CODE and3200 total XDATA including64 reserved
 status bytes; executed SP remains at or below the original7C cap. These

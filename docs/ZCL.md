@@ -432,6 +432,16 @@ savings >=512 bytes** against the9,614-byte baseline; synthetic tests reject
 both one-byte threshold failures and caller-only savings. Older module,
 whole-image, SP, alias and15-second limits are unchanged.
 
+The later complete-join MAC decoder lowering saves another43 CODE bytes and
+three persistent DATA bytes, without changing these ZCL objects or vectors.
+The current integrated image is23498 CODE /1639 ordinary XDATA plus64
+reserved, with66 persistent DATA bytes, stack start5A and measured peak6E.
+Both boards pass the genuine golden exchanges, raw-CDB/map/complete-listing
+identities and all rejection controls; integrated CODE saving is1077 bytes
+and production ZCL saving remains861. The dispatch-only image and its
+immutable identities remain unchanged. Earlier figures above describe the
+isolated #76 refactoring, not this shared-code refresh.
+
 The implementation uses a byte-valued internal kind/width classifier instead
 of two generic-pointer outputs, one bounded non-value-pattern loop, cached
 stable value fields and pointer-walking attribute lookup. Discover subtracts

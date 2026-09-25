@@ -35,6 +35,18 @@ and retained busy-flash failure. There are62 workers plus the two
 selection/acceptance control jobs. Their existing15-minute deadlines and
 no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
+The first complete-join run,
+[Actions36122466601](https://github.com/faronov/cc2530-zigbee/actions/runs/36122466601)
+at `f287ab015cb550a46bf9257b979cd8af7a19ccac`, passed all eight new MCU
+workers and both combined resident-counter workers. Its required gate
+correctly failed: both debug workers rejected stale `protocol_budget`
+raw-CDB identities after the shared MAC decoder change. The targeted refresh
+checks identical both-board artifacts, the already reviewed decoder object
+and unchanged dispatch-only identities before retaining every rejection
+control and executing both genuine protocol compositions. Current integrated
+resources are23498 CODE/1639+64 XDATA, stack5A/peak6E; no budget or deadline
+changes. The failed run is not full revision acceptance.
+
 CI requires an already successful exact previous/base main commit before
 narrowing a push/PR. Otherwise it selects full acceptance, including when
 the immediate change is only documentation. Cancelled/failed/in-progress

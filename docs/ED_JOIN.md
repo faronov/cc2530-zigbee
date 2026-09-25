@@ -77,8 +77,13 @@ required. The lower local executions pass except the final combined
 [resident-counter deadline](SECURITY_RESIDENT.md#execution-and-resource-contract):
 its full corpus executed atSP75 and its exhaustive artifact proof passed
 separately, but the combined run twice exceeded900 seconds. Full Actions
-acceptance must resolve that gate without shrinking the corpus or raising
-the15-minute deadline.
+then resolved this component gate without shrinking the corpus or raising
+the15-minute deadline: both hosted counter workers passed in
+[Actions36122466601](https://github.com/faronov/cc2530-zigbee/actions/runs/36122466601).
+All eight complete-join workers also passed, including success in9m05s
+on generic and8m05s on LG. The overall run failed only on stale
+`protocol_budget` compiler identities in both debug workers; full revision
+acceptance still requires the corrected follow-up gate.
 
 ## Selected configuration and boundaries
 

@@ -171,7 +171,8 @@ to shorten compiler register-save lifetimes, without changing counter floors,
 reservation frequency, journal format or flash history. The refreshed
 standalone execution passes locally; its larger
 [resident composition](SECURITY_RESIDENT.md#execution-and-resource-contract)
-still needs combined deadline acceptance.
+subsequently passed both hosted combined deadline checks without changing
+its corpus or15-minute limit.
 
 Longer multi-operation sequences use complete-state continuations at genuine
 operation boundaries, following the existing offline proof pattern. Each
