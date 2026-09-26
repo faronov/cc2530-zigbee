@@ -562,9 +562,8 @@ has stack50..7C, observed peak59 and an intact7D..FF canary with the real
 1F00..1FFF IRAM alias. It never calls AES, flash or radio; executor entry is a
 forbidden breakpoint. This is **image-checked and simulated ABI evidence
 only**, not a40-module join, common CODE placement or combined SP proof.
-The full profile remains **host-tested and object-checked**. Complete CI
-acceptance of this integration is pending; the two new workers retain every
-previous corpus.
+The full profile remains **host-tested and object-checked**. The two new
+workers retain every previous corpus.
 
 Integration reproduced all205 production/probe object artifacts per board
 (only differing REL output-path comments were excluded). It also preserved
@@ -580,6 +579,14 @@ with no non-source-line changes. Their exhaustive three-mutations-per-record
 coverage therefore increases by6,12 and18 respectively; the exact count
 guards are refreshed, not relaxed. MMO/key-hash standalone counts, runtime
 cases, stack limits and all existing mutation generators remain unchanged.
+
+Implementation `317e0f7`, with the exact mutation-count correction in
+`e286b72`, passed
+[full Actions36277911852](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852):
+**116/116 jobs**. This includes both CHILD workers, the retained UPPER and
+compact workers, every previous image/simulator corpus and the complete
+artifact campaigns. It accepts the experimental profile and narrow ABI
+proof, not a combined radio-backed MCU join or application headroom.
 
 ## Remaining #13/#14 work
 

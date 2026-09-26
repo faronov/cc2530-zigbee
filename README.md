@@ -695,7 +695,8 @@ saves another 581 bytes, reaching a 7644-byte floor. Its 36-byte remainder
 is **before runtime/additional caller storage**, not a demonstrated fit;
 the 1 KiB application-reserve target still needs 988 bytes plus overhead.
 The full profile is host/object-checked. A separate simulated pointer/parameter
-ABI image is not a combined radio-backed MCU join; CI integration is pending.
+ABI image is not a combined radio-backed MCU join. Code `e286b72` passed
+[full CI, 116/116 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852).
 
 ## Offline MAC transmission state
 

@@ -400,8 +400,12 @@ including poisoned-work retention. A separate four-module ABI image checks
 43098 outcomes, all256 pointer tags, actual parameter homes, terminal PC,
 stack/canary and the real IRAM alias without entering the flash executor.
 That narrow simulation is not a combined radio-backed join/SP proof.
-The expanded matrix has114 workers plus two control jobs; acceptance of
-this integration is pending.
+Code `e286b72` passed
+[full Actions36277911852](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852):
+**116/116 jobs**, all114 workers plus both controls. The first integration run
+exposed stale exact mutation totals after source-line record additions;
+both-board targeted executions confirmed the increased totals before this
+complete acceptance. No generator, runtime case or deadline was removed.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

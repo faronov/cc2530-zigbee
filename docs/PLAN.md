@@ -124,8 +124,10 @@ wire/hash/NV temporary storage under exact owner and role-specific admission.
 It saves581 more XDATA bytes, reaching a7644-byte floor at a6861-byte
 CODE/CONST and6-byte raw DATA cost. Only36 bytes remain before additional
 caller/runtime storage; the6656 application target still needs988 plus that
-overhead. Isolated host/object and narrow pointer-ABI simulator evidence do
-not establish a combined fit. Integration/full CI acceptance is pending.
+overhead. Host/object and narrow pointer-ABI simulator evidence do not
+establish a combined fit. Code `e286b72` passed
+[full Actions36277911852](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852),
+116/116 jobs, preserving every prior worker and adding both CHILD workers.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
