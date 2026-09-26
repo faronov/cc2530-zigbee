@@ -190,7 +190,9 @@ previous revision.
 Evidence level: **host-tested and SDCC compile-checked**. There is no linked
 driver image, MCU replay, hardware observation, production entropy,
 physical timing or NV measurement, secure restart/rejoin or conformance
-result. No hardware was accessed.
+result. No hardware was accessed. Code `6f648f5` passed
+[full Actions 36237016492](https://github.com/faronov/cc2530-zigbee/actions/runs/36237016492),
+**110/110 jobs**.
 
 ## Remaining #13/#14 work
 

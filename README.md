@@ -678,8 +678,9 @@ The [link driver](docs/MAC_LINK_DRIVER.md) binds the complete BDB join to the
 real adapter. Explicit ARM/DISARM handshakes keep preparation correlated. A
 host end-to-end test covers an authenticated READY join, protected data and
 keepalive through the real adapter/radio services over the host MMIO model,
-plus fourteen failure, retry and cancellation cases. It is host-tested and SDCC compile-checked only, not
-an MCU image or hardware result.
+plus fourteen failure, retry and cancellation cases. It is host-tested and
+SDCC compile-checked only, not an MCU image or hardware result. Code
+`6f648f5` passed [full CI, 110/110 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36237016492).
 
 ## Offline MAC transmission state
 

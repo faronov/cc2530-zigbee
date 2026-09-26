@@ -339,7 +339,11 @@ and listing bytes are again byte-identical. The refreshed pins cover only
 source-line records; split exact-profile conditions in `mac_join.c` and
 `mac_poll.c` add line records without changing instructions (486 relocated
 listings compared). The evidence is **host-tested and
-compile-checked**.
+compile-checked**. Code `6f648f5` passed
+[full Actions 36237016492](https://github.com/faronov/cc2530-zigbee/actions/runs/36237016492),
+**110/110 jobs**: both consumer workers with the driver E2E corpus (103 s
+generic, 87 s LG), all other workers with the refreshed pins, the plan job and
+the acceptance gate.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
