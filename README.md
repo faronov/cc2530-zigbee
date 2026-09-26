@@ -668,7 +668,8 @@ interval scan/POLL/association controllers. No hardware/RF result is claimed;
 never flash `mac-adapter/mac_adapter.ihx`. A separately gated
 [OFF-only reconfiguration](docs/MAC_ADAPTER.md#off-only-reconfiguration-and-reopen)
 installs PAN/short/channel and opens new RX episodes with explicit gaps; it is
-host-tested and compile-checked only, not linked into an MCU image.
+host-tested and compile-checked only, not linked into an MCU image. Code
+`b0a3712` passed [full CI,108/108 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36221496774).
 
 ## Offline MAC transmission state
 

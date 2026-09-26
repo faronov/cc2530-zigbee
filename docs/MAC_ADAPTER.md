@@ -170,6 +170,9 @@ objects compile under the banked SDCC flags with `--Werror`, and every existing
 profile's objects, relocations and debug records are byte-identical to the
 previous code. This increment is **host-tested and compile-checked** only:
 there is no linked RECONFIG image, MCU replay or hardware result yet.
+Code `b0a3712` passed [full Actions36221496774](https://github.com/faronov/cc2530-zigbee/actions/runs/36221496774), **108/108 jobs**:
+both new reconfiguration workers (48s generic, 52s LG) and all104 previous
+workers, including both unchanged adapter corpora. No hardware was accessed.
 
 ## Linked composition and evidence
 

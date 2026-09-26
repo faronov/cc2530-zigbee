@@ -302,6 +302,9 @@ channel, skipped FREQCTRL, missing normal-RX flag, weakened state guard and
 missing open stamp) all fail it. Existing-profile objects, relocations and
 debug records are byte-identical, so no earlier pin changes. The evidence is
 **host-tested and compile-checked**; there is no RECONFIG image or MCU replay.
+Code `b0a3712` passed [full Actions36221496774](https://github.com/faronov/cc2530-zigbee/actions/runs/36221496774), **108/108 jobs**;
+the new workers took48s (generic) and52s (LG). All104 previous workers and
+their limits remain accepted.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
