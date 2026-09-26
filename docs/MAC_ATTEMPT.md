@@ -108,6 +108,10 @@ canaries, retained faults and later handoff. Four mutations are rejected:
 publication before the last projection, copying the unused raw tail, a wrong
 final timestamp and clearing retained handoff state. No production fault
 hook or successful lower-service stub is added.
+Code `03bf9bb` passed
+[full Actions36255240167](https://github.com/faronov/cc2530-zigbee/actions/runs/36255240167),
+112/112 jobs. The compact projection remains host/object-checked; the
+unchanged ordinary profiles retain their separate full image/simulator gates.
 
 ## Critical order and interval proof
 

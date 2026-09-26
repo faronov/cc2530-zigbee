@@ -369,6 +369,11 @@ Production CODE is211892 plus55 CONST; the other raw sums above are unchanged.
 The profile still exceeds7680 by1272 bytes before runtime/additional caller
 storage. The sensor/streamed-display design target reserves a further1024
 bytes, so at least2296 bytes plus overhead remain to be removed.
+Projection code `03bf9bb` passed
+[full Actions36255240167](https://github.com/faronov/cc2530-zigbee/actions/runs/36255240167),
+**112/112 jobs**. Both compact workers include the new projection corpus;
+all previous host/image/ABI/alias/simulator cases remain. This is still
+host/object acceptance for the compact profile, not MCU placement.
 
 ## Remaining #13/#14 work
 

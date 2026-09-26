@@ -367,6 +367,11 @@ caller plus29 projection scenarios/22 injected failures to the same worker.
 The floor is8952, still1272 above the ordinary limit before banker/libc/
 additional caller storage. No compact linked image,
 physical IRAM layout or stack peak is accepted by these tests.
+Projection code `03bf9bb` passed
+[full Actions36255240167](https://github.com/faronov/cc2530-zigbee/actions/runs/36255240167),
+112/112 jobs, including both expanded compact workers and every previous
+worker. The ordinary attempt/handoff/adapter images retain their strict
+CODE, ABI, MMIO, physical DATA and alias-aware simulator gates.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
