@@ -122,6 +122,10 @@ uses typed join/POLL caller views after admission, with separate nested work
 and public-return wiping. It removes the association shadow from the phase
 union without reusing retained runtime state. Its9080-byte XDATA floor still
 exceeds the limit, and increased CODE/DATA require a separate placement proof.
+The later compact attempt projection removes a128-byte duplicate frame while
+preserving the raw record, atomic public receipt and retained handoff metadata.
+This lowers the floor to8952, still beyond the ordinary region and the later
+sensor/display application reserve; no combined placement is established.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

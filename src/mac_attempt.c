@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "mac_attempt.h"
+#include "mac_link_ram.h"
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
@@ -11,7 +12,19 @@
 #endif
 
 MCU_XDATA radio_autoack_attempt_t mac_attempt_raw;
+#if defined(CC2530_MAC_LINK_RAM)
+typedef struct {
+    mac_epoch_stamp_t tx_lower, tx_upper, rx_upper, armed, last;
+    uint16_t slot;
+    uint8_t length, transmitted, received, within_window;
+} mac_attempt_projection_t;
+static MCU_XDATA mac_attempt_projection_t staged;
+#if defined(__SDCC)
+typedef char projection_extent[sizeof(mac_attempt_projection_t) == 36 ? 1 : -1];
+#endif
+#else
 static MCU_XDATA mac_attempt_record_t staged;
+#endif
 MCU_XDATA mac_epoch_t mac_attempt_first;
 MCU_XDATA uint16_t mac_attempt_slot;
 MCU_XDATA uint8_t mac_attempt_fault;
@@ -97,11 +110,13 @@ mac_radio_result_t mac_attempt_run(uint16_t window, uint32_t timeout, uint16_t l
     } else memset(&staged.tx_lower, 0, sizeof(staged.tx_lower));
     if (mac_attempt_raw.received) {
         PROJECT(mac_attempt_raw.rx, staged.rx_upper);
+#if !defined(CC2530_MAC_LINK_RAM)
         staged.frame.length = mac_attempt_raw.frame.length;
         staged.frame.rssi_raw = mac_attempt_raw.frame.rssi_raw;
         staged.frame.crc_correlation = mac_attempt_raw.frame.crc_correlation;
         for (i = 0; i < staged.frame.length; i++)
             staged.frame.body[i] = mac_attempt_raw.frame.body[i];
+#endif
     }
     PROJECT(mac_attempt_raw.last, staged.last);
 #undef PROJECT
@@ -109,7 +124,29 @@ mac_radio_result_t mac_attempt_run(uint16_t window, uint32_t timeout, uint16_t l
     staged.transmitted = mac_attempt_raw.transmitted;
     staged.received = mac_attempt_raw.received;
     staged.within_window = mac_attempt_raw.within_window;
+#if defined(CC2530_MAC_LINK_RAM)
+    /* The last projection can still fail. Publish only after all of them. */
+    memset(receipt_output, 0, sizeof(*receipt_output));
+    receipt_output->tx_lower = staged.tx_lower;
+    receipt_output->tx_upper = staged.tx_upper;
+    receipt_output->rx_upper = staged.rx_upper;
+    receipt_output->armed = staged.armed;
+    receipt_output->last = staged.last;
+    receipt_output->slot = staged.slot;
+    receipt_output->length = staged.length;
+    receipt_output->transmitted = staged.transmitted;
+    receipt_output->received = staged.received;
+    receipt_output->within_window = staged.within_window;
+    if (staged.received) {
+        receipt_output->frame.length = mac_attempt_raw.frame.length;
+        receipt_output->frame.rssi_raw = mac_attempt_raw.frame.rssi_raw;
+        receipt_output->frame.crc_correlation = mac_attempt_raw.frame.crc_correlation;
+        for (i = 0; i < mac_attempt_raw.frame.length; i++)
+            receipt_output->frame.body[i] = mac_attempt_raw.frame.body[i];
+    }
+#else
     *receipt_output = staged;
+#endif
     return (mac_radio_result_t)last_result;
 }
 

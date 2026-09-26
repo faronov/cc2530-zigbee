@@ -92,6 +92,8 @@ class SelectionTests(unittest.TestCase):
             "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram"},
             "tests/test_mac_link_ram.c": {"mac-link-ram"},
             "tests/mac_link_ram_layout.c": {"mac-link-ram"},
+            "tests/test_mac_link_projection.c": {"mac-link-ram"},
+            "tests/mac_attempt_projection.c": {"mac-link-ram"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},
         }
         for path, units in cases.items():

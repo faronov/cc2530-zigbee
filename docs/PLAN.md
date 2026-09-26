@@ -102,6 +102,13 @@ removes364 bytes from that floor, to9080, while increasing CODE and summed
 DATA. It is opt-in and host/object-checked only: at least1400 bytes plus
 caller/runtime headroom, a combined bank partition and DATA/stack proof
 still remain. It does not close the MCU integration requirement.
+This first step at `00e4086` passed
+[full Actions36253122802](https://github.com/faronov/cc2530-zigbee/actions/runs/36253122802),
+112/112 jobs, retaining every prior worker.
+The subsequent [compact attempt projection](MAC_ATTEMPT.md#compact-projection-storage)
+saves128 more bytes without added DATA/OSEG, retaining receipt atomicity and
+post-return handoff metadata. The floor is now8952, still1272 beyond7680
+before runtime/additional caller storage and before the application reserve.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
@@ -180,6 +187,13 @@ tracked without blocking independent initial MCU join work.
 | Memory | Static pools and explicit bounds | No heap-dependent protocol or frame-sized display buffer |
 | Debugging | CC Debugger plus RAM trace and independent sniffer | An IDE or GDB integration is not assumed to exist |
 | License | BSD-3-Clause original code | Every imported file has its own provenance review |
+
+The current radio-backed memory work targets at least1024 bytes of the
+7680-byte ordinary allocation region for the later sensor/streamed-display
+application. Network services, persistent contexts, caller I/O and compiler
+runtime therefore need to total at most6656 bytes. This is a design target,
+not a measured fit or a relaxation of the independent DATA/stack gates.
+Reaching7680 with no application reserve is only an intermediate step.
 
 Initially excluded: coordinator/Trust Center server, router, child admission,
 mesh routing, Green Power proxy, Touchlink and OTA. Exclusion is not a claim

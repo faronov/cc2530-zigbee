@@ -208,20 +208,25 @@ class LocalChecksTests(unittest.TestCase):
             self.assertTrue(links[0][-1].endswith("/mac-adapter/mac_adapter_fixture.rel"))
             self.assertNotIn("-DCC2530_MAC_LINK_RAM", links[0])
             native = [args for args in commands if args[0] == "cc"]
-            self.assertEqual(len(native), 4)
+            self.assertEqual(len(native), 6)
             self.assertTrue(all("-DCC2530_MAC_LINK_RAM" in args and "-DCC2530_BANKED_JOIN" not in args
                                 for args in native))
-            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 3)
             self.assertEqual(sum("tests/test_mac_link_ram.c" in args for args in native), 2)
+            self.assertEqual(sum("tests/test_mac_link_projection.c" in args for args in native), 2)
             self.assertTrue(all("tests/test_mac_link_e2e.c" not in args for args in native))
             for args in native:
                 if "tests/test_mac_link_ram.c" in args:
                     self.assertEqual({Path(arg).stem for arg in args if arg.startswith("src/")},
                                      LINK_RAM_MODULES)
+                if "tests/test_mac_link_projection.c" in args:
+                    self.assertIn("tests/mac_attempt_projection.c", args)
+                    self.assertNotIn("src/mac_attempt.c", args)
             runs = [Path(args[0]).name for args in commands
                     if args[0] not in ("cc", "sdcc", "mkdir", "cp", "python3")]
             self.assertEqual(runs, ["host-mac-link-ram-tests", "host-mac-link-ram-tests-sanitize",
-                                   "host-mac-link-ram-join-tests", "host-mac-link-ram-join-tests-sanitize"])
+                                   "host-mac-link-ram-join-tests", "host-mac-link-ram-join-tests-sanitize",
+                                   "host-mac-link-projection-tests", "host-mac-link-projection-tests-sanitize"])
             self.assertEqual(sum("tools/link_ram_resources.py" in args for args in commands), 1)
             self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
             for unit in ("mac-link", "banked-join-success", "mac-adapter", "bringup"):

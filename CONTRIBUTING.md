@@ -151,7 +151,8 @@ without uploads or equipment access.
 Two OFF-only reconfiguration workers and two ordinary interval-consumer/driver
 workers remain separate from the two experimental compact-link workers.
 The compact workers compile all38 production objects, check the actual caller
-layout/resource ledger and run full host E2E/cleanup and POLL/join corpora;
+layout/resource ledger and run full host E2E/cleanup, POLL/join and attempt/
+handoff/projection corpora;
 they do not establish a compact linked image or stack fit.
 The exact component union is still `test-common`;110 worker jobs retain
 all twenty-eight board/image checks and the unchanged simulator deadlines.

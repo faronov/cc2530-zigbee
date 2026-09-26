@@ -1581,13 +1581,26 @@ $(BUILD)/host-mac-link-ram-join-tests-sanitize: tests/test_mac_link_join.c $(MAC
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_RAM_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all \
 		-fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) -o $@
 
+MAC_LINK_PROJECTION_SRC := tests/mac_attempt_projection.c $(filter-out src/mac_attempt.c,$(MAC_ATTEMPT_SRC)) tests/host_mmio.c
+MAC_LINK_PROJECTION_INPUTS := tests/test_mac_link_projection.c tests/test_mac_handoff.c tests/test_mac_attempt.c \
+	tests/test_radio_autoack.c src/mac_attempt.c $(MAC_LINK_PROJECTION_SRC) $(HEADERS) tests/host_mmio.h Makefile
+MAC_LINK_PROJECTION_DEFINES := $(MAC_HANDOFF_DEFINES) -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM
+$(BUILD)/host-mac-link-projection-tests: $(MAC_LINK_PROJECTION_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_PROJECTION_DEFINES) -Isrc tests/test_mac_link_projection.c $(MAC_LINK_PROJECTION_SRC) -o $@
+$(BUILD)/host-mac-link-projection-tests-sanitize: $(MAC_LINK_PROJECTION_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_PROJECTION_DEFINES) -Isrc -fsanitize=address,undefined -fno-sanitize-recover=all \
+		-fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_projection.c $(MAC_LINK_PROJECTION_SRC) -o $@
+
 test-mac-link-ram: $(BUILD)/host-mac-link-ram-tests $(BUILD)/host-mac-link-ram-tests-sanitize \
 		$(BUILD)/host-mac-link-ram-join-tests $(BUILD)/host-mac-link-ram-join-tests-sanitize \
+		$(BUILD)/host-mac-link-projection-tests $(BUILD)/host-mac-link-projection-tests-sanitize \
 		$(MAC_LINK_RAM_OBJECTS) $(MAC_LINK_RAM_DIR)/mac_link_ram_layout.rel
 	$(BUILD)/host-mac-link-ram-tests
 	$(BUILD)/host-mac-link-ram-tests-sanitize
 	$(BUILD)/host-mac-link-ram-join-tests
 	$(BUILD)/host-mac-link-ram-join-tests-sanitize
+	$(BUILD)/host-mac-link-projection-tests
+	$(BUILD)/host-mac-link-projection-tests-sanitize
 	$(PYTHON) -B tools/link_ram_resources.py --output $(MAC_LINK_RAM_DIR)
 
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)

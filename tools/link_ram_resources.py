@@ -18,7 +18,7 @@ zigbee_key_hash zigbee_mmo
 PROBE = "mac_link_ram_layout"
 CODE_AREAS = {"CSEG", "HOME", "GSINIT", "GSFINAL", "MA_BANK2",
               *(f"GSINIT{i}" for i in range(6)), *(f"BJ_BANK{i}" for i in range(1, 5))}
-LIMITS = {"code": 211469, "const": 55, "xdata": 7163,
+LIMITS = {"code": 211892, "const": 55, "xdata": 7035,
           "data_sum": 519, "overlay_sum": 77, "bits": 70}
 CONTEXT_BYTES = 1433 + 180 + 304
 

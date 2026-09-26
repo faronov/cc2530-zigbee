@@ -80,6 +80,35 @@ are failures, not NO_ACK. Radio diagnostics distinguish
 RF, the timer and ownership may remain active on failure. There is no retry,
 abort, reset, RX flush, recovery or implicit release.
 
+## Compact projection storage
+
+Under the opt-in
+[compact link profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile),
+the private attempt projection keeps only36 bytes of metadata, not a second
+128-byte receive frame. All projections, including the final sample, must
+succeed before any public receipt byte changes. Publication clears the caller
+record and copies only the admitted frame bytes from the retained raw record;
+unused body bytes remain zero. Slot/result/handoff metadata, the raw record,
+the complete public receipt and lower radio ownership remain independent.
+
+Both-board SDCC4.2 object measurements are XSEG439->311 and CODE2894->3317:
+128 fewer XDATA bytes for423 more CODE bytes, with DATA9/OSEG2/BSEG0 unchanged.
+This is not a compact linked-image or stack proof. The ordinary attempt and
+handoff images retain their CODE, memory, parsed maps, non-line CDB records
+and decoded listings; only source-line CDB/object pins change.
+
+The `test-mac-link-ram` worker adds native and nonrecovering sanitizer runs
+of `test_mac_link_projection.c`. It reuses the complete28-case attempt and
+43-case handoff callers, including every ACK FCF variant, then checks29
+projection scenarios with22 injected failures and3/4/64/125-byte received
+bodies. A host-only interception fixture delegates every projection to the
+real epoch engine; invalid fine512 input exercises each projection failure.
+Checks cover every published timestamp, receipt atomicity, unused-tail
+canaries, retained faults and later handoff. Four mutations are rejected:
+publication before the last projection, copying the unused raw tail, a wrong
+final timestamp and clearing retained handoff state. No production fault
+hook or successful lower-service stub is added.
+
 ## Critical order and interval proof
 
 1. While truly idle, disable filtering/AUTOACK, select raw CCA1/threshold,

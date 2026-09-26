@@ -355,11 +355,27 @@ The compact profile is **host-tested and object-checked only**: no compact
 linked image, physical DATA layout, stack peak, MCU replay or hardware
 observation is established.
 
+The initial364-byte reduction at `00e4086` passed
+[full Actions36253122802](https://github.com/faronov/cc2530-zigbee/actions/runs/36253122802),
+**112/112 jobs**, including both new compact workers and every existing
+worker. This accepts the host/object experiment, not combined MCU placement.
+
+The subsequent [compact attempt projection](MAC_ATTEMPT.md#compact-projection-storage)
+removes another128-byte private frame duplicate without dropping the raw
+record, public receipt or retained handoff metadata. Its CODE cost is423
+bytes, with no added DATA/OSEG. Together these two changes reduce the floor
+from9444 to8952 bytes:7035 production XDATA plus1917 caller-context bytes.
+Production CODE is211892 plus55 CONST; the other raw sums above are unchanged.
+The profile still exceeds7680 by1272 bytes before runtime/additional caller
+storage. The sensor/streamed-display design target reserves a further1024
+bytes, so at least2296 bytes plus overhead remain to be removed.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,
 driver and link consumers, within 7680 ordinary XDATA. It needs DATA/stack/ABI
-and alias proofs. The experimental first reduction lowers the excess from
-1764 to 1400 bytes before banker/libc/additional caller storage; further RAM
-reduction and a real bank partition are required. After that come the #45
+and alias proofs. The experimental returning-work and projection reductions
+lower the excess from1764 to1272 bytes before banker/libc/additional caller
+storage; further RAM reduction, application headroom and a real bank
+partition are required. After that come the #45
 decision, documentation and closure at the documented offline evidence level.
