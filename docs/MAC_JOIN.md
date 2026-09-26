@@ -412,6 +412,12 @@ reports are byte-identical. The 22 manifest pins and compile-only
 moved, and again for the ARM handshake (including one split exact-profile
 condition). Evidence level: **host-tested and SDCC compile-checked**.
 
+The optional [compact link profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+uses the admitted caller context directly instead of an association shadow.
+It preserves rejected-start atomicity and clears its private scratch and
+borrowed views before returning. This changes the BDB phase layout; all
+callers must use the same profile. It is not enabled in these exact images.
+
 ## Reproducible evidence and historical resources
 
 The following numeric ledger records the pre-union profile. The current

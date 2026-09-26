@@ -15,7 +15,22 @@
 #define release mac_tx_release
 #endif
 
+#if defined(CC2530_MAC_LINK_RAM)
+#include "mac_link_ram_internal.h"
+typedef char control_first[(offsetof(mac_poll_t, control) == 0) ? 1 : -1];
+static mac_poll_control_t MAC_POLL_RAM * MAC_POLL_RAM active;
+#define control (*active)
+/* C's structure-to-initial-member conversion, not a mirror/suffix cast:
+ * the pointed-to object is the actual mac_poll_control_t first member. */
+#define POLL_LOAD(p) (active = (mac_poll_control_t MAC_POLL_RAM *)(p))
+#define POLL_STORE(p) ((void)0)
+#define START_REQUEST (*request)
+#else
 static mac_poll_control_t MAC_POLL_RAM control;
+#define POLL_LOAD(p) memcpy(&control, &(p)->control, sizeof(control))
+#define POLL_STORE(p) memcpy(&(p)->control, &control, sizeof(control))
+#define START_REQUEST control.request
+#endif
 /* start's codec input and step's decoded frame have disjoint returning
  * lifetimes. Both stay separate from control, input, output and the receipt. */
 static union {
@@ -29,6 +44,11 @@ static union {
 static union {
     mac_poll_event_t input;
     mac_poll_action_t output;
+#if defined(CC2530_MAC_LINK_RAM)
+    struct {
+        uint8_t body[sizeof(((mac_poll_control_t *)0)->outgoing)], length;
+    } start;
+#endif
 } MAC_POLL_RAM io;
 #define input io.input
 #define output io.output
@@ -45,7 +65,43 @@ static mac_poll_action_t MAC_POLL_RAM * volatile step_action;
 static volatile uint32_t MAC_POLL_RAM step_now;
 static volatile uint8_t MAC_POLL_RAM step_profile;
 
+#if defined(CC2530_MAC_LINK_RAM)
+/* Each public return drops all borrowed views. The real control/receipt,
+ * including FAULT/late-cleanup reasons, stays exclusively in the caller.
+ * start's wire candidate shares only the disjoint step input/output slot.
+ */
+static mac_poll_result_t poll_return(mac_poll_result_t result)
+{
+    volatile uint8_t MAC_POLL_RAM *p = (volatile uint8_t MAC_POLL_RAM *)&syntax;
+    uint16_t i;
+    for (i = 0; i < sizeof(syntax); i++) p[i] = 0;
+    p = (volatile uint8_t MAC_POLL_RAM *)&io;
+    for (i = 0; i < sizeof(io); i++) p[i] = 0;
+    active = NULL; receipt = NULL; step_poll = NULL; step_tx = NULL;
+    step_event = NULL; step_action = NULL;
+    step_time = step_now = 0; step_profile = 0;
+    return result;
+}
+#define POLL_RETURN(result) poll_return(result)
+#if defined(CC2530_HOST_TEST)
+unsigned char mac_link_ram_poll_clean(void)
+{
+    const uint8_t *p = (const uint8_t *)&syntax;
+    size_t i;
+    for (i = 0; i < sizeof(syntax); i++) if (p[i]) return 0;
+    p = (const uint8_t *)&io;
+    for (i = 0; i < sizeof(io); i++) if (p[i]) return 0;
+    return !active && !receipt && !step_poll && !step_tx && !step_event && !step_action &&
+        !step_time && !step_now && !step_profile;
+}
+#endif
+#else
+#define POLL_RETURN(result) (result)
+#endif
+
+#if !defined(CC2530_MAC_LINK_RAM)
 typedef char control_first[(offsetof(mac_poll_t, control) == 0) ? 1 : -1];
+#endif
 typedef char request_first[(offsetof(mac_poll_control_t, request) == 0) ? 1 : -1];
 typedef char record_boundary[(offsetof(mac_poll_t, record) == sizeof(mac_poll_control_t)) ? 1 : -1];
 #ifdef __SDCC
@@ -178,10 +234,18 @@ static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * volatile tx)
 mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile p)
 {
     if (p == NULL)
-        return MAC_POLL_INVALID;
+        return POLL_RETURN(MAC_POLL_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_span(p, sizeof(*p))) return POLL_RETURN(MAC_POLL_INVALID);
+#endif
     memset(p, 0, sizeof(*p));
+#if defined(CC2530_MAC_LINK_RAM)
+    POLL_LOAD(p);
+    control.version = MAC_POLL_VERSION;
+#else
     p->control.version = MAC_POLL_VERSION;
-    return MAC_POLL_OK;
+#endif
+    return POLL_RETURN(MAC_POLL_OK);
 }
 
 mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
@@ -191,41 +255,62 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
     uint8_t command = MAC_COMMAND_DATA_REQUEST;
     volatile uint32_t generation;
     if (p == NULL || tx == NULL || request == NULL)
-        return MAC_POLL_INVALID;
-    memcpy(&control, &p->control, sizeof(control));
+        return POLL_RETURN(MAC_POLL_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(p, sizeof(*p), tx, sizeof(*tx)) ||
+        !link_ram_disjoint(p, sizeof(*p), request, sizeof(*request)) ||
+        !link_ram_disjoint(tx, sizeof(*tx), request, sizeof(*request)))
+        return POLL_RETURN(MAC_POLL_INVALID);
+#endif
+    POLL_LOAD(p);
+#if !defined(CC2530_MAC_LINK_RAM)
     memcpy(&control.request, request, sizeof(control.request));
-    if (!control.request.epoch
-            || !control.request.frame_wait || control.request.frame_wait > MAC_POLL_MAX_TIME
-            || !control.request.lifetime || control.request.lifetime > MAC_POLL_MAX_TIME
-            || !control.request.work || control.request.work > MAC_POLL_MAX_WORK
-            || control.request.pan == 0xffffu || control.request.channel < 11 || control.request.channel > 26
-            || !address(control.request.local_mode, control.request.local)
-            || !address(control.request.coordinator_mode, control.request.coordinator))
-        return MAC_POLL_INVALID;
+#endif
+    if (!START_REQUEST.epoch
+            || !START_REQUEST.frame_wait || START_REQUEST.frame_wait > MAC_POLL_MAX_TIME
+            || !START_REQUEST.lifetime || START_REQUEST.lifetime > MAC_POLL_MAX_TIME
+            || !START_REQUEST.work || START_REQUEST.work > MAC_POLL_MAX_WORK
+            || START_REQUEST.pan == 0xffffu || START_REQUEST.channel < 11 || START_REQUEST.channel > 26
+            || !address(START_REQUEST.local_mode, START_REQUEST.local)
+            || !address(START_REQUEST.coordinator_mode, START_REQUEST.coordinator))
+        return POLL_RETURN(MAC_POLL_INVALID);
     if (control.version != MAC_POLL_VERSION || control.phase != MAC_POLL_IDLE || ENGINE(tx)->phase != MAC_TX_IDLE)
-        return MAC_POLL_STATE;
+        return POLL_RETURN(MAC_POLL_STATE);
     if (!reached(now, ENGINE(tx)->last) || (control.generation && !reached(now, control.last)))
-        return MAC_POLL_INVALID;
+        return POLL_RETURN(MAC_POLL_INVALID);
     if (control.generation == UINT32_MAX || ENGINE(tx)->generation == UINT32_MAX)
-        return MAC_POLL_LIMIT;
+        return POLL_RETURN(MAC_POLL_LIMIT);
     /* Replace every field even when the union last held a decoded frame. */
     start_header.version = 0;
     start_header.sequence = 0;
     start_header.type = MAC_FRAME_COMMAND;
     start_header.flags = MAC_FLAG_ACK_REQUEST | MAC_FLAG_PAN_COMPRESSION;
-    start_header.destination_mode = control.request.coordinator_mode;
-    start_header.source_mode = control.request.local_mode;
-    start_header.source_pan = start_header.destination_pan = control.request.pan;
-    memcpy(start_header.destination, control.request.coordinator, 8);
-    memcpy(start_header.source, control.request.local, 8);
+    start_header.destination_mode = START_REQUEST.coordinator_mode;
+    start_header.source_mode = START_REQUEST.local_mode;
+    start_header.source_pan = start_header.destination_pan = START_REQUEST.pan;
+    memcpy(start_header.destination, START_REQUEST.coordinator, 8);
+    memcpy(start_header.source, START_REQUEST.local, 8);
     generation = control.generation + 1;
+#if defined(CC2530_MAC_LINK_RAM)
+    /* Complete the last fallible operation before any caller write. The
+     * pointer-valid request is disjoint from p/tx and is not retained. */
+    if (mac_frame_encode(&start_header, &command, 1, io.start.body,
+                         sizeof(io.start.body), &io.start.length) != MAC_CODEC_OK)
+        return POLL_RETURN(MAC_POLL_INVALID);
+    control.request = *request;
+    memset((uint8_t *)&control + sizeof(control.request), 0,
+           sizeof(control) - sizeof(control.request));
+    memcpy(control.outgoing, io.start.body, io.start.length);
+    control.outgoing_length = io.start.length;
+#else
     /* Preserve the copied request and clear the remaining object representation.
      * There is no mirror cast or assumed host pointer/padding layout. */
     memset((uint8_t *)&control + sizeof(control.request), 0,
            sizeof(control) - sizeof(control.request));
     if (mac_frame_encode(&start_header, &command, 1, control.outgoing,
                          sizeof(control.outgoing), &control.outgoing_length) != MAC_CODEC_OK)
-        return MAC_POLL_INVALID;
+        return POLL_RETURN(MAC_POLL_INVALID);
+#endif
     control.version = MAC_POLL_VERSION;
     control.phase = MAC_POLL_ARM;
     control.generation = generation;
@@ -238,8 +323,8 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
     memset(receipt, 0, sizeof(*receipt));
     receipt->epoch = control.request.epoch;
     receipt->generation = generation;
-    memcpy(&p->control, &control, sizeof(control));
-    return MAC_POLL_OK;
+    POLL_STORE(p);
+    return POLL_RETURN(MAC_POLL_OK);
 }
 
 static mac_poll_result_t step(void)
@@ -248,6 +333,15 @@ static mac_poll_result_t step(void)
     volatile uint32_t remaining;
     if (step_poll == NULL || step_tx == NULL || step_action == NULL || step_profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return MAC_POLL_INVALID;
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(step_poll, sizeof(*step_poll), step_tx, sizeof(*step_tx)) ||
+        !link_ram_disjoint(step_poll, sizeof(*step_poll), step_action, sizeof(*step_action)) ||
+        !link_ram_disjoint(step_tx, sizeof(*step_tx), step_action, sizeof(*step_action)) ||
+        (step_event && (!link_ram_disjoint(step_poll, sizeof(*step_poll), step_event, sizeof(*step_event)) ||
+                        !link_ram_disjoint(step_tx, sizeof(*step_tx), step_event, sizeof(*step_event)) ||
+                        !link_ram_disjoint(step_action, sizeof(*step_action), step_event, sizeof(*step_event)))))
+        return MAC_POLL_INVALID;
+#endif
     if (step_event != NULL) {
         memcpy(&input, step_event, sizeof(input));
         if (input.kind < MAC_POLL_PREPARED || input.kind > MAC_POLL_FAILURE
@@ -278,7 +372,7 @@ static mac_poll_result_t step(void)
 #endif
             return MAC_POLL_INVALID;
     }
-    memcpy(&control, &step_poll->control, sizeof(control));
+    POLL_LOAD(step_poll);
     if (control.version != MAC_POLL_VERSION || control.phase == MAC_POLL_IDLE
             || control.phase > MAC_POLL_FAULT || control.owner != step_tx)
         return MAC_POLL_STATE;
@@ -491,7 +585,7 @@ publish:
     output.reason = control.reason;
     output.cleanup_error = control.cleanup_error;
     output.ready = control.ready && !control.taken;
-    memcpy(&step_poll->control, &control, sizeof(control));
+    POLL_STORE(step_poll);
     memcpy(step_action, &output, sizeof(output));
     return MAC_POLL_OK;
 }
@@ -507,7 +601,7 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
     step_event = event;
     step_action = action;
     step_profile = MAC_RX_IEEE2006;
-    return step();
+    return POLL_RETURN(step());
 }
 
 mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
@@ -521,38 +615,46 @@ mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
     step_event = event;
     step_action = action;
     step_profile = profile;
-    return step();
+    return POLL_RETURN(step());
 }
 
 mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,
     mac_poll_record_t MAC_POLL_RAM * volatile record)
 {
     if (p == NULL || record == NULL)
-        return MAC_POLL_INVALID;
-    memcpy(&control, &p->control, sizeof(control));
+        return POLL_RETURN(MAC_POLL_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(p, sizeof(*p), record, sizeof(*record)))
+        return POLL_RETURN(MAC_POLL_INVALID);
+#endif
+    POLL_LOAD(p);
     if (control.version != MAC_POLL_VERSION || control.phase == MAC_POLL_IDLE || control.phase > MAC_POLL_FAULT
             || !control.ready || control.taken)
-        return MAC_POLL_STATE;
+        return POLL_RETURN(MAC_POLL_STATE);
     *record = p->record;
     control.taken = 1;
-    memcpy(&p->control, &control, sizeof(control));
-    return MAC_POLL_OK;
+    POLL_STORE(p);
+    return POLL_RETURN(MAC_POLL_OK);
 }
 
 mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile p,
     MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx)
 {
     if (p == NULL || tx == NULL)
-        return MAC_POLL_INVALID;
-    memcpy(&control, &p->control, sizeof(control));
+        return POLL_RETURN(MAC_POLL_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(p, sizeof(*p), tx, sizeof(*tx)))
+        return POLL_RETURN(MAC_POLL_INVALID);
+#endif
+    POLL_LOAD(p);
     if (control.version != MAC_POLL_VERSION || control.owner != tx || control.phase != MAC_POLL_DONE || !control.taken
             || ENGINE(tx)->generation != control.tx_generation
             || (control.submitted ? ENGINE(tx)->phase != MAC_TX_DONE : ENGINE(tx)->phase != MAC_TX_IDLE))
-        return MAC_POLL_STATE;
+        return POLL_RETURN(MAC_POLL_STATE);
     if (control.submitted)
         (void)release(tx);
     control.owner = NULL;
     control.phase = MAC_POLL_IDLE;
-    memcpy(&p->control, &control, sizeof(control));
-    return MAC_POLL_OK;
+    POLL_STORE(p);
+    return POLL_RETURN(MAC_POLL_OK);
 }

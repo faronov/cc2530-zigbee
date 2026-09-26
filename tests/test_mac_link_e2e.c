@@ -559,7 +559,10 @@ static void run(unsigned selected)
     total_steps += e2e_steps; total_random += random_inputs;
 }
 
-int main(void)
+#ifndef MAC_LINK_E2E_MAIN
+#define MAC_LINK_E2E_MAIN main
+#endif
+int MAC_LINK_E2E_MAIN(void)
 {
     unsigned i;
     for (i = 0; i < E2E_CASES; i++) run(i);

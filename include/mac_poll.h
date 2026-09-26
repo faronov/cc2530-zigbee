@@ -3,6 +3,7 @@
  */
 #ifndef MAC_POLL_H
 #define MAC_POLL_H
+#include "mac_link_ram.h"
 #include "mac_tx.h"
 #if defined(CC2530_MAC_LINK)
 #include "mac_link.h"
@@ -168,6 +169,8 @@ typedef struct {
 /* Caller-owned ordinary storage; public fields are read-only diagnostics.
  * Only control is staged. A previously retained receipt is never copied back
  * from scratch or overwritten by a later cancellation/cleanup failure.
+ * CC2530_MAC_LINK_RAM instead admits before mutating the actual typed control;
+ * it keeps the same retained receipt/ownership and public error atomicity.
  */
 typedef struct {
     mac_poll_control_t control;

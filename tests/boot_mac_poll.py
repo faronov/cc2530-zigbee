@@ -24,6 +24,7 @@ COMMON_MODULES = ("mac_frame", "mac_tx", "mac_association")
 # Codec lowering reviewed in boot_mac_tx. Both linked stack starts and all
 # caller/private XDATA extents stay unchanged; full-corpus observations are
 # POLL SP72 and independent floor SP68, with the same SP7C/15-second bounds.
+# Compact-profile pin refresh changes only source-line metadata, not CODE/ABI.
 COMMON_PUBLIC = {'mac_command_decode': ('mac_frame', 554, 1017),
  'mac_command_encode': ('mac_frame', 1018, 1551),
  'mac_beacon_decode': ('mac_frame', 2229, 2332),
@@ -60,7 +61,7 @@ POLL = {'name': 'mac_poll_test',
  'done': 31991,
  'boundary': 28103,
  'code': 'eabf45ebbff8419f443e73833e208999bf4d2b2773ce2bced8ada6a89fb67f66',
- 'metadata': (22457, '22ad1e06f07cd43019856659a256bad37f017c6cd3b89fe9425c6484d31f3182'),
+ 'metadata': (22457, 'd79cd8de829007be5f332200383594c17b824856369ea0faaa9fb0083b5cbde8'),
  'public': {**COMMON_PUBLIC, 'mac_poll_init': ('mac_poll', 16886, 16970),
  'mac_poll_start': ('mac_poll', 16971, 18196),
  'mac_poll_step': ('mac_poll', 22490, 22601),

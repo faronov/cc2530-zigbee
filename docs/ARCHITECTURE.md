@@ -117,6 +117,11 @@ a protocol decision. It is also host-tested and compile-checked only. The
 consumers; it contains no board GPIO code. It maps their actions onto the adapter,
 feeds observations back unchanged and never generates randomness. It is not
 linked into an MCU image.
+The further opt-in [compact profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+uses typed join/POLL caller views after admission, with separate nested work
+and public-return wiping. It removes the association shadow from the phase
+union without reusing retained runtime state. Its9080-byte XDATA floor still
+exceeds the limit, and increased CODE/DATA require a separate placement proof.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

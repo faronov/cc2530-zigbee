@@ -94,7 +94,7 @@ typedef struct {
 
 typedef struct {
     mac_join_t context;
-#if defined(CC2530_JOIN_WORKSPACE)
+#if defined(CC2530_JOIN_WORKSPACE) && !defined(CC2530_MAC_LINK_RAM)
     mac_join_t staged;
 #endif
 } bdb_join_association_t;

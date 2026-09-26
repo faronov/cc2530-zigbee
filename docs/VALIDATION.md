@@ -353,6 +353,15 @@ strict image/ABI gates and a fresh selected `network-key-late` simulation
 reaches SP7B/7C. Neither this object experiment nor that exact-profile
 simulation is combined LINK-image acceptance or new full-CI evidence.
 
+The opt-in [compact returning-work profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+adds `make BOARD=<board> test-mac-link-ram`: all15 E2E scenarios plus cleanup/
+admission/alias checks and the146-case POLL/join corpus, native and sanitized.
+All38 production modules and a separate actual-SDCC sizeof probe are compiled;
+the resource ledger checks the complete object set without claiming an image.
+The XDATA floor drops9444 to9080 bytes, still1400 above the ordinary limit
+before banker/libc/additional caller storage. No compact linked image,
+physical IRAM layout or stack peak is accepted by these tests.
+
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
 

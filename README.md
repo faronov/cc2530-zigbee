@@ -681,6 +681,10 @@ keepalive through the real adapter/radio services over the host MMIO model,
 plus fourteen failure, retry and cancellation cases. It is host-tested and
 SDCC compile-checked only, not an MCU image or hardware result. Code
 `6f648f5` passed [full CI, 110/110 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36237016492).
+An opt-in [compact returning-work profile](docs/MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+saves 364 XDATA bytes but still needs at least 9080 versus 7680 available,
+before additional caller/runtime storage. It is host-tested and object-checked,
+not a fitting or simulated combined MCU image.
 
 ## Offline MAC transmission state
 

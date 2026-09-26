@@ -12,6 +12,7 @@ import unittest
 
 from verify_firmware import BOARDS, IMAGES, ROOT
 from ci_plan import COMPONENTS, recipe
+from link_ram_resources import MODULES as LINK_RAM_MODULES
 
 
 @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
@@ -187,6 +188,44 @@ class LocalChecksTests(unittest.TestCase):
             self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
             for unit in ("compositions", "bringup", "banked-join-success", "mac-adapter", "mac-reconfig"):
                 self.assertFalse(any("-DCC2530_MAC_LINK" in args for args in recipe(board, unit)))
+
+    def test_compact_link_has_complete_objects_without_a_new_image_claim(self):
+        for board in BOARDS:
+            commands = recipe(board, "mac-link-ram")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args
+                        and "-DCC2530_MAC_LINK_RAM" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles),
+                             tuple(sorted(LINK_RAM_MODULES)) + ("mac_link_ram_layout",))
+            for args in compiles:
+                self.assertEqual(Path(args[-1]).parent.name, "mac-link-ram")
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_JOIN",
+                                 "-DCC2530_JOIN_WORKSPACE", "-DCC2530_MAC_LINK",
+                                 "-DCC2530_MAC_RECONFIG", "-DCC2530_MAC_ADAPTER"} <= set(args))
+                self.assertFalse({"--stack-auto", "--xstack", "-DCC2530_HOST_TEST",
+                                  "-DCC2530_BANKED_MAC"} & set(args))
+            links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
+            self.assertEqual(len(links), 1)
+            self.assertTrue(links[0][-1].endswith("/mac-adapter/mac_adapter_fixture.rel"))
+            self.assertNotIn("-DCC2530_MAC_LINK_RAM", links[0])
+            native = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(native), 4)
+            self.assertTrue(all("-DCC2530_MAC_LINK_RAM" in args and "-DCC2530_BANKED_JOIN" not in args
+                                for args in native))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 2)
+            self.assertEqual(sum("tests/test_mac_link_ram.c" in args for args in native), 2)
+            self.assertTrue(all("tests/test_mac_link_e2e.c" not in args for args in native))
+            for args in native:
+                if "tests/test_mac_link_ram.c" in args:
+                    self.assertEqual({Path(arg).stem for arg in args if arg.startswith("src/")},
+                                     LINK_RAM_MODULES)
+            runs = [Path(args[0]).name for args in commands
+                    if args[0] not in ("cc", "sdcc", "mkdir", "cp", "python3")]
+            self.assertEqual(runs, ["host-mac-link-ram-tests", "host-mac-link-ram-tests-sanitize",
+                                   "host-mac-link-ram-join-tests", "host-mac-link-ram-join-tests-sanitize"])
+            self.assertEqual(sum("tools/link_ram_resources.py" in args for args in commands), 1)
+            self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
+            for unit in ("mac-link", "banked-join-success", "mac-adapter", "bringup"):
+                self.assertFalse(any("-DCC2530_MAC_LINK_RAM" in args for args in recipe(board, unit)))
 
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:

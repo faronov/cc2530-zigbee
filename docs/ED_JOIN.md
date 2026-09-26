@@ -285,6 +285,12 @@ cancelled ordinary transmission after a retry. See the
 [link driver](MAC_LINK_DRIVER.md#preparation-handshakes); it is host-tested
 end to end and compile-checked, not linked into an MCU image.
 
+The experimental [compact link profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+removes the association shadow from the BDB phase union. With SDCC 4.2.0 the
+BDB context falls from1696 to1433 bytes because runtime becomes the largest
+phase. All translation units must agree on this layout. The complete link
+composition still exceeds ordinary XDATA and has no linked MCU proof.
+
 ## Endpoint zero
 
 `zdo_runtime` takes only packets admitted by the real transport. It supplies

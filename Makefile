@@ -99,7 +99,7 @@ endif
 .PHONY: test-mac-tx-interval
 .PHONY: test-mac-handoff
 .PHONY: test-mac-adapter
-.PHONY: test-mac-reconfig test-mac-link
+.PHONY: test-mac-reconfig test-mac-link test-mac-link-ram
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1554,6 +1554,42 @@ test-mac-link: $(BUILD)/host-mac-link-scan-tests $(BUILD)/host-mac-link-scan-tes
 	$(BUILD)/host-mac-link-e2e-tests
 	$(BUILD)/host-mac-link-e2e-tests-sanitize
 
+# Experimental returning-work reduction, not a linked MCU placement.
+MAC_LINK_RAM_DEFINES := $(MAC_LINK_DRIVER_DEFINES) -DCC2530_MAC_LINK_RAM
+MAC_LINK_RAM_DIR := $(BUILD)/mac-link-ram
+MAC_LINK_RAM_MODULES := $(sort $(patsubst src/%.c,%,$(MAC_LINK_E2E_SRC)))
+MAC_LINK_RAM_OBJECTS := $(addprefix $(MAC_LINK_RAM_DIR)/,$(addsuffix .rel,$(MAC_LINK_RAM_MODULES)))
+$(MAC_LINK_RAM_DIR):
+	mkdir -p $@
+$(MAC_LINK_RAM_OBJECTS): $(MAC_LINK_RAM_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(MAC_LINK_RAM_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_RAM_DEFINES) \
+		--dataseg $(if $(filter $*,$(BANKED_JOIN_MODULES) mac_link_driver),BJ,MA)_$* \
+		$(foreach b,1 2 3 4,$(if $(filter $*,$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) \
+		$(if $(filter mac_link_driver,$*),--codeseg BJ_BANK4) \
+		$(if $(filter mac_adapter,$*),--codeseg MA_BANK2) -c $< -o $@
+$(MAC_LINK_RAM_DIR)/mac_link_ram_layout.rel: tests/mac_link_ram_layout.c $(HEADERS) Makefile | $(MAC_LINK_RAM_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_RAM_DEFINES) -c $< -o $@
+$(BUILD)/host-mac-link-ram-tests: tests/test_mac_link_ram.c $(MAC_LINK_E2E_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_RAM_DEFINES) -Isrc -I$(MAC_ADAPTER_BANK_DIR) tests/test_mac_link_ram.c tests/mac_link_peer.c \
+		$(ED_MODEL_SRC) $(MAC_LINK_E2E_SRC) -o $@
+$(BUILD)/host-mac-link-ram-tests-sanitize: tests/test_mac_link_ram.c $(MAC_LINK_E2E_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_RAM_DEFINES) -Isrc -I$(MAC_ADAPTER_BANK_DIR) -fsanitize=address,undefined -fno-sanitize-recover=all \
+		-fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_ram.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_E2E_SRC) -o $@
+$(BUILD)/host-mac-link-ram-join-tests: tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_RAM_DEFINES) tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) -o $@
+$(BUILD)/host-mac-link-ram-join-tests-sanitize: tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_RAM_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all \
+		-fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) -o $@
+
+test-mac-link-ram: $(BUILD)/host-mac-link-ram-tests $(BUILD)/host-mac-link-ram-tests-sanitize \
+		$(BUILD)/host-mac-link-ram-join-tests $(BUILD)/host-mac-link-ram-join-tests-sanitize \
+		$(MAC_LINK_RAM_OBJECTS) $(MAC_LINK_RAM_DIR)/mac_link_ram_layout.rel
+	$(BUILD)/host-mac-link-ram-tests
+	$(BUILD)/host-mac-link-ram-tests-sanitize
+	$(BUILD)/host-mac-link-ram-join-tests
+	$(BUILD)/host-mac-link-ram-join-tests-sanitize
+	$(PYTHON) -B tools/link_ram_resources.py --output $(MAC_LINK_RAM_DIR)
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1766,7 +1802,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-link-ram test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

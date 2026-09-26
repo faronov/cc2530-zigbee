@@ -279,11 +279,87 @@ The measured recommendation is to retain 4.2.0 for the RAM-lifetime work:
 neither the tested upgrade nor `--nogcse` closes the deficit. Improving SDCC
 itself remains a separate compiler-development task, not an observed saving.
 
+## Experimental returning-work profile
+
+`CC2530_MAC_LINK_RAM` is an explicit, nondefault composition profile. It
+requires `CC2530_MAC_LINK` and, on SDCC, the banked join/workspace profile.
+All translation units and callers must agree: its BDB layout is incompatible
+with the ordinary LINK and exact layouts. Do not supply the old
+`mac_join_staged` linker binding in this profile.
+
+The first reduction changes only the join/POLL returning work:
+
+- Join uses a typed view of the actual caller context after admission instead
+  of a full shadow context.
+- POLL uses the caller's actual control. Its candidate Data Request is encoded
+  in the existing returning input/output union before the caller is changed.
+- Rejected admission preserves caller bytes. An admitted call's failure is
+  committed state, not rolled back or wiped.
+- Join, nested POLL, TX and Association work remain separate. An occupied or
+  faulted context is never scratch for another call.
+- Returning work is wiped and borrowed views dropped on public return.
+  Span/overlap checks reject incompatible caller aliases and target storage
+  outside ordinary XDATA. The existing serialized foreground, no-callback,
+  no-ISR and nonreentrant restrictions remain.
+
+Removing the 655-byte association shadow saves only 263 bytes in the BDB
+object: the unchanged 1047-byte runtime member becomes the phase union's
+largest member. The selected parent, outcome, security state, occupied
+queues and adapter frame/grant ownership are not removed.
+
+SDCC 4.2.0 measurements are identical on both boards:
+
+| Allocation | Ordinary LINK | Compact LINK | Delta |
+| --- | ---: | ---: | ---: |
+| 38 production modules: CODE | 204166 | 211469 | +7303 |
+| CONST | 55 | 55 | 0 |
+| XSEG | 7264 | 7163 | -101 |
+| DATA, raw sum | 497 | 519 | +22 |
+| OSEG, raw sum | 77 | 77 | 0 |
+| BSEG, bits | 66 | 70 | +4 |
+| `mac_poll`: CODE / XSEG / DATA | 8057 /319 /11 | 11341 /203 /18 | +3284 /-116 /+7 |
+| `mac_join`: CODE / XSEG / DATA | 7784 /270 /7 | 11803 /285 /22 | +4019 /+15 /+15 |
+| `bdb_join_t` | 1696 | 1433 | -263 |
+| Separate MAC / driver contexts | 180 /304 | 180 /304 | 0 |
+| Production + top-context XDATA floor | 9444 | **9080** | **-364** |
+
+This saves RAM at a significant CODE and DATA cost. It **still exceeds 7680
+by 1400 bytes**, before banker/libc/additional caller storage. DATA/OSEG sums
+do not prove simultaneous IRAM use or stack fit. The inherited standalone
+area assignments are also not a combined bank map: compact CSEG is 54168,
+BJ_BANK2 43733 and BJ_BANK4 48424 bytes, each beyond a 32 KiB CODE window.
+
+`make BOARD=<board> test-mac-link-ram` runs the compact E2E/cleanup test and
+the unchanged 146-case POLL/join corpus natively and with nonrecovering
+ASan/UBSan. The cleanup test includes all 15 original E2E scenarios and adds
+18172 checks/9030 public-return cleanup observations, including rejected
+admission, overlap, nested returning work and retained faults. Four isolated
+mutations are rejected: omitted join wipe, omitted POLL wipe, premature POLL
+caller write and omitted join alias rejection.
+
+The target also compiles all 38 unique production objects and the separate
+`mac_link_ram_layout` sizeof probe. `tools/link_ram_resources.py` checks the
+complete object set, allocation classes and experimental resource ceilings.
+It counts the probe's three caller objects once, outside production totals,
+and reports the floor explicitly as **object-only**, not MCU-fit acceptance.
+The probe is never linked into firmware. Two new CI workers retain the
+ordinary LINK workers and every existing target case.
+
+The exact and noncompact LINK profiles retain their emitted instructions and
+allocation areas. All 25 affected exact images per board, memory reports,
+parsed maps and non-line CDB records match the previous revision. The 22 join
+manifests, POLL metadata (still22457 records), join workspace rel/asm/lst and
+banked raw-CDB/listing/object pins were refreshed only for source-line changes;
+the calculation first reproduced every old pin from the unchanged baseline.
+The compact profile is **host-tested and object-checked only**: no compact
+linked image, physical DATA layout, stack peak, MCU replay or hardware
+observation is established.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,
 driver and link consumers, within 7680 ordinary XDATA. It needs DATA/stack/ABI
-and alias proofs. The measured current allocation floor exceeds the budget
-by 1764 bytes before banker/libc/additional caller storage, so a RAM reduction
-is required first. After that come the #45 decision, documentation and closure
-at the documented offline evidence level.
+and alias proofs. The experimental first reduction lowers the excess from
+1764 to 1400 bytes before banker/libc/additional caller storage; further RAM
+reduction and a real bank partition are required. After that come the #45
+decision, documentation and closure at the documented offline evidence level.

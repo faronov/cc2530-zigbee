@@ -21,6 +21,20 @@
 #define release mac_tx_release
 #endif
 
+#if defined(CC2530_MAC_LINK_RAM)
+#include "mac_link_ram_internal.h"
+/* After admission, step has exactly one publication return (MAC_JOIN_OK).
+ * Processed faults belong to the actual context, not a rolled-back shadow.
+ * start performs every fallible check/codec call before changing that context.
+ * No child retains this pointer, and no join entry calls another join entry.
+ */
+static mac_join_t MAC_JOIN_RAM * MAC_JOIN_RAM active;
+#define staged (*active)
+#define JOIN_LOAD(ctx) (active = (ctx))
+#define JOIN_STORE(ctx) ((void)0)
+#else
+#define JOIN_LOAD(ctx) (staged = *(ctx))
+#define JOIN_STORE(ctx) (*(ctx) = staged)
 #if defined(CC2530_JOIN_WORKSPACE)
 /* Full-profile binding only: the integrator must back this direct-address
  * symbol with a real, disjoint, complete mac_join_t allocation. It is live
@@ -31,6 +45,7 @@ extern mac_join_t MAC_JOIN_RAM mac_join_staged;
 #define staged mac_join_staged
 #else
 static mac_join_t MAC_JOIN_RAM staged;
+#endif
 #endif
 #define j (&staged)
 static MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile owner;
@@ -81,6 +96,31 @@ static const mac_tx_event_t * volatile source;
 static const mac_poll_event_t MAC_JOIN_RAM * volatile poll_event;
 static volatile uint16_t MAC_JOIN_RAM admitted;
 static uint8_t MAC_JOIN_RAM observation;
+#if defined(CC2530_MAC_LINK_RAM)
+static mac_join_result_t join_return(mac_join_result_t result)
+{
+    volatile uint8_t MAC_JOIN_RAM *p = (volatile uint8_t MAC_JOIN_RAM *)&work;
+    uint16_t i;
+    for (i = 0; i < sizeof(work); i++) p[i] = 0;
+    active = NULL; owner = NULL; tx_argument = NULL;
+    source = NULL; poll_event = NULL;
+    time = remaining = 0; admitted = 0; observation = 0;
+    return result;
+}
+#define JOIN_RETURN(result) join_return(result)
+#if defined(CC2530_HOST_TEST)
+unsigned char mac_link_ram_join_clean(void)
+{
+    const uint8_t *p = (const uint8_t *)&work;
+    size_t i;
+    for (i = 0; i < sizeof(work); i++) if (p[i]) return 0;
+    return !active && !owner && !tx_argument && !source && !poll_event &&
+        !time && !remaining && !admitted && !observation;
+}
+#endif
+#else
+#define JOIN_RETURN(result) (result)
+#endif
 typedef char identity_contiguous[
     offsetof(mac_join_record_t, generation) == offsetof(mac_join_record_t, epoch) + sizeof(uint32_t)
     && offsetof(mac_join_action_t, epoch) == 0
@@ -199,15 +239,21 @@ static void finish_window(void)
 mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile uint32_t now)
 {
     if (ctx == NULL)
-        return MAC_JOIN_INVALID;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_span(ctx, sizeof(*ctx))) return JOIN_RETURN(MAC_JOIN_INVALID);
+    active = ctx;
+    /* Both initializers reject only NULL and receive actual nested objects.
+     * They neither call hardware nor have a fallible post-admission path. */
+#endif
     memset(&staged, 0, sizeof(staged));
     if (mac_poll_init(&staged.poll) != MAC_POLL_OK
             || mac_association_init(&staged.association, now) != MAC_ASSOCIATION_OK)
-        return MAC_JOIN_STATE;
+        return JOIN_RETURN(MAC_JOIN_STATE);
     staged.version = MAC_JOIN_VERSION;
     staged.last = now;
-    *ctx = staged;
-    return MAC_JOIN_OK;
+    JOIN_STORE(ctx);
+    return JOIN_RETURN(MAC_JOIN_OK);
 }
 
 mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
@@ -216,8 +262,14 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POL
     uint8_t i;
     volatile uint32_t generation;
     if (ctx == NULL || tx == NULL || request == NULL)
-        return MAC_JOIN_INVALID;
-    staged = *ctx;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(ctx, sizeof(*ctx), tx, sizeof(*tx)) ||
+        !link_ram_disjoint(ctx, sizeof(*ctx), request, sizeof(*request)) ||
+        !link_ram_disjoint(tx, sizeof(*tx), request, sizeof(*request)))
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#endif
+    JOIN_LOAD(ctx);
     proposed = *request;
     if (!proposed.extraction.epoch || !proposed.extraction.lifetime
             || proposed.extraction.lifetime > MAC_POLL_MAX_TIME
@@ -228,30 +280,30 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POL
             || proposed.saved.filter > 1 || proposed.saved.rx_on > 1
             || proposed.response_wait < 2 || proposed.response_wait > 64
             || !proposed.extraction.frame_wait)
-        return MAC_JOIN_INVALID;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
     if (proposed.extraction.frame_wait > 65534UL
             || proposed.extraction.local_mode != MAC_ADDRESS_EXTENDED
             || (proposed.extraction.coordinator_mode != MAC_ADDRESS_SHORT
                 && proposed.extraction.coordinator_mode != MAC_ADDRESS_EXTENDED)
             || (proposed.capability != 0x88u && proposed.capability != 0x8cu)
             || proposed.profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
-        return MAC_JOIN_UNSUPPORTED;
+        return JOIN_RETURN(MAC_JOIN_UNSUPPORTED);
     if (proposed.extraction.coordinator_mode == MAC_ADDRESS_SHORT) {
         if (proposed.extraction.coordinator[1] == 255 && proposed.extraction.coordinator[0] >= 254)
-            return MAC_JOIN_INVALID;
+            return JOIN_RETURN(MAC_JOIN_INVALID);
         for (i = 2; i < 8; i++)
             if (proposed.extraction.coordinator[i])
-                return MAC_JOIN_INVALID;
+                return JOIN_RETURN(MAC_JOIN_INVALID);
     }
     if (staged.version != MAC_JOIN_VERSION || staged.phase != MAC_JOIN_IDLE
             || ENGINE(tx)->phase != MAC_TX_IDLE || staged.poll.control.phase != MAC_POLL_IDLE
             || staged.association.phase != MAC_ASSOCIATION_IDLE)
-        return MAC_JOIN_STATE;
+        return JOIN_RETURN(MAC_JOIN_STATE);
     if (!reached(now, staged.last) || !reached(now, ENGINE(tx)->last))
-        return MAC_JOIN_INVALID;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
     if (staged.generation == UINT32_MAX || ENGINE(tx)->generation >= UINT32_MAX - 1u
             || staged.poll.control.generation == UINT32_MAX || staged.association.generation == UINT32_MAX)
-        return MAC_JOIN_LIMIT;
+        return JOIN_RETURN(MAC_JOIN_LIMIT);
     /* Every field is assigned, including the two zero-valued wire fields;
      * the start member may previously have held arbitrary step bytes. */
     header.version = 0;
@@ -267,7 +319,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POL
     command[0] = MAC_COMMAND_ASSOCIATION_REQUEST;
     command[1] = proposed.capability;
     if (mac_frame_encode(&header, command, 2, start_body, sizeof(start_body), &start_length) != MAC_CODEC_OK)
-        return MAC_JOIN_UNSUPPORTED;
+        return JOIN_RETURN(MAC_JOIN_UNSUPPORTED);
     generation = staged.generation + 1u;
     /* Nested contexts retain their generations; only new-attempt control resets. */
     memset((uint8_t *)&staged + offsetof(mac_join_t, owner), 0, sizeof(staged) - offsetof(mac_join_t, owner));
@@ -286,8 +338,8 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POL
     /* Request bytes must survive unrelated foreground codec/controller calls. */
     memcpy(staged.outgoing, start_body, start_length);
     staged.length = start_length;
-    *ctx = staged;
-    return MAC_JOIN_OK;
+    JOIN_STORE(ctx);
+    return JOIN_RETURN(MAC_JOIN_OK);
 }
 
 mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
@@ -295,7 +347,16 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
 {
     volatile uint8_t kind, matched, before;
     if (ctx == NULL || tx == NULL || action == NULL)
-        return MAC_JOIN_INVALID;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(ctx, sizeof(*ctx), tx, sizeof(*tx)) ||
+        !link_ram_disjoint(ctx, sizeof(*ctx), action, sizeof(*action)) ||
+        !link_ram_disjoint(tx, sizeof(*tx), action, sizeof(*action)) ||
+        (event && (!link_ram_disjoint(ctx, sizeof(*ctx), event, sizeof(*event)) ||
+                   !link_ram_disjoint(tx, sizeof(*tx), event, sizeof(*event)) ||
+                   !link_ram_disjoint(action, sizeof(*action), event, sizeof(*event)))))
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#endif
     if (event != NULL) {
         input = *event;
         if (input.kind < MAC_JOIN_PREPARED ||
@@ -330,13 +391,13 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
                         || (input.kind == MAC_JOIN_SOURCE && !input.source.kind)
                         || (input.source.kind == MAC_TX_EVENT_ACK && input.source.length && input.source.bytes == NULL))))
 #endif
-            return MAC_JOIN_INVALID;
+            return JOIN_RETURN(MAC_JOIN_INVALID);
     } else
         memset(&input, 0, sizeof(input));
     if (ctx->version != MAC_JOIN_VERSION || ctx->owner != tx
             || (uint8_t)(ctx->phase - MAC_JOIN_PREPARE) > MAC_JOIN_FAULT - MAC_JOIN_PREPARE)
-        return MAC_JOIN_STATE;
-    staged = *ctx;
+        return JOIN_RETURN(MAC_JOIN_STATE);
+    JOIN_LOAD(ctx);
     owner = tx; tx_argument = tx; time = now;
     memset(&output, 0, sizeof(output));
     kind = 0;
@@ -610,34 +671,42 @@ publish:
     memcpy(&output, (const uint8_t *)&j->record + offsetof(mac_join_record_t, epoch),
            2u * sizeof(uint32_t));
     output.until = j->stopping ? j->stop_at : j->deadline;
-    *ctx = staged;
+    JOIN_STORE(ctx);
     *action = output;
-    return MAC_JOIN_OK;
+    return JOIN_RETURN(MAC_JOIN_OK);
 }
 
 mac_join_result_t mac_join_take(mac_join_t MAC_JOIN_RAM *ctx, mac_join_record_t MAC_JOIN_RAM *record)
 {
     if (ctx == NULL || record == NULL)
-        return MAC_JOIN_INVALID;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(ctx, sizeof(*ctx), record, sizeof(*record)))
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#endif
     if (ctx->version != MAC_JOIN_VERSION
             || (uint8_t)(ctx->phase - MAC_JOIN_DONE) > MAC_JOIN_FAULT - MAC_JOIN_DONE || ctx->taken)
-        return MAC_JOIN_STATE;
+        return JOIN_RETURN(MAC_JOIN_STATE);
     *record = ctx->record;
     ctx->taken = 1;
-    return MAC_JOIN_OK;
+    return JOIN_RETURN(MAC_JOIN_OK);
 }
 
 mac_join_result_t mac_join_release(mac_join_t MAC_JOIN_RAM *ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM *tx)
 {
     if (ctx == NULL || tx == NULL)
-        return MAC_JOIN_INVALID;
-    staged = *ctx;
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#if defined(CC2530_MAC_LINK_RAM)
+    if (!link_ram_disjoint(ctx, sizeof(*ctx), tx, sizeof(*tx)))
+        return JOIN_RETURN(MAC_JOIN_INVALID);
+#endif
+    JOIN_LOAD(ctx);
     if (staged.version != MAC_JOIN_VERSION || staged.owner != tx || staged.phase != MAC_JOIN_DONE
             || !staged.taken || !staged.restored || staged.issued || staged.uncertain
             || ENGINE(tx)->phase != MAC_TX_IDLE || ENGINE(tx)->generation != staged.tx_generation)
-        return MAC_JOIN_STATE;
+        return JOIN_RETURN(MAC_JOIN_STATE);
     staged.owner = NULL;
     staged.phase = MAC_JOIN_IDLE;
-    *ctx = staged;
-    return MAC_JOIN_OK;
+    JOIN_STORE(ctx);
+    return JOIN_RETURN(MAC_JOIN_OK);
 }

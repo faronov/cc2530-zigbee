@@ -59,7 +59,7 @@ linked-image/ABI/alias guard and simulator deadline.
 | --- | --- | --- |
 | Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
 | Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
-| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All54 original workers/corpora plus44 complete-join, two interval-MAC, two guarded-handoff and two banked-adapter workers; exhaustive current artifact mutations |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All110 workers/corpora, including two experimental compact-link workers; exhaustive current artifact mutations |
 
 Selection uses actual forced Make dry-run compiler inputs and recursively
 follows project includes, including C test helpers included by other C tests.
@@ -148,10 +148,15 @@ The guarded handoff and banked action adapter each have another worker per
 board. The adapter runs its entire eighteen-case genuine MCU corpus, three
 native/sanitizer pairs and complete artifact/alias/bank rejection controls,
 without uploads or equipment access.
-The exact component union is still `test-common`;104 worker jobs retain
+Two OFF-only reconfiguration workers and two ordinary interval-consumer/driver
+workers remain separate from the two experimental compact-link workers.
+The compact workers compile all38 production objects, check the actual caller
+layout/resource ledger and run full host E2E/cleanup and POLL/join corpora;
+they do not establish a compact linked image or stack fit.
+The exact component union is still `test-common`;110 worker jobs retain
 all twenty-eight board/image checks and the unchanged simulator deadlines.
 Selection and the stable acceptance gate add two control jobs. A full run has
-106 jobs, not fewer cases; an affected run contains only its selected workers.
+112 jobs, not fewer cases; an affected run contains only its selected workers.
 The generic BDB host worker also reports fresh host coverage.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.
@@ -175,6 +180,7 @@ make BOARD=generic test-mac-tx-interval
 make BOARD=generic test-mac-adapter
 make BOARD=generic test-mac-reconfig
 make BOARD=generic test-mac-link
+make BOARD=generic test-mac-link-ram
 make BOARD=generic test-mac-join
 make BOARD=generic test-zcl-temperature
 make BOARD=generic test-zdo-node

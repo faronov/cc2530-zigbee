@@ -97,6 +97,11 @@ finds no XDATA saving in the successfully compiled SDCC 4.6 subsets and no
 accepted 4.6 image. The current unmodified LINK allocation floor is 9444 bytes,
 before banker/libc/additional caller storage; upgrading alone is not the RAM
 reduction step.
+The first [experimental returning-work reduction](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+removes364 bytes from that floor, to9080, while increasing CODE and summed
+DATA. It is opt-in and host/object-checked only: at least1400 bytes plus
+caller/runtime headroom, a combined bank partition and DATA/stack proof
+still remain. It does not close the MCU integration requirement.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

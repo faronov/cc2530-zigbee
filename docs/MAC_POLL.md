@@ -496,6 +496,12 @@ complete F/S/L/T metadata digest was refreshed (22457 records).
 Evidence level: **host-tested and SDCC compile-checked**, with no linked
 link-profile image, adapter driver or hardware observation.
 
+The optional [compact link profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
+borrows the admitted caller control rather than copying it. A start request
+is fully validated and encoded into private returning scratch before any
+caller write. Scratch and borrowed views are cleared on public return.
+Its separate host/object checks do not establish combined MCU memory fit.
+
 ## Reproduction and integration
 
 Set `board=generic; number=0` or `board=lg_esl29_rev03; number=1`.
