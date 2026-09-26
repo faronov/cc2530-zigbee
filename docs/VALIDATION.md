@@ -385,9 +385,11 @@ publication mutations are rejected, as are three scalar ABI mutations and
 an SDCC mutation adding two PUSHes by removing the volatile parameter home.
 The isolated admission oracle covers1900544 cases. This remains host/object evidence:
 actual manager/private-fence placement, physical DATA/OSEG/libc/SP7C,
-banking and MCU execution are not established. The full matrix is now112
-workers plus two control jobs. Full114-job acceptance of this profile is
-still pending; the earlier112-job runs do not cover it.
+banking and MCU execution are not established. Code `84c0014` passed
+[full Actions36265427843](https://github.com/faronov/cc2530-zigbee/actions/runs/36265427843),
+**114/114 jobs**: all112 workers plus both control jobs. This includes both
+new shared-UPPER workers and every existing host/image/simulator corpus,
+not a new combined MCU image.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

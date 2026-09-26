@@ -477,10 +477,17 @@ affected Make-linked images plus the documented independent Association/TX
 floor. Ordinary/external join object probes retain complete ADB and emitted
 instructions too. The final code-generation promotion additionally preserves
 raw ADB/ASM/LST/SYM and REL (except its output-path comment) across162 old-profile
-module/board comparisons, with no further source-line shifts. These checks do not establish a UPPER
-image: UPPER evidence is **host-tested and object-checked only**. A real bank
-map, private-fence placement, DATA/OSEG/libc/SP7C proof, MCU replay and hardware
-observations remain absent.
+module/board comparisons, with no further source-line shifts. These checks
+do not establish a UPPER image: UPPER evidence is **host-tested and
+object-checked only**. A real bank map, private-fence placement,
+DATA/OSEG/libc/SP7C proof, MCU replay and hardware observations remain absent.
+
+Implementation `525172b`, with the tool-side fixture pin refresh in `84c0014`,
+passed [full Actions36265427843](https://github.com/faronov/cc2530-zigbee/actions/runs/36265427843):
+**114/114 jobs**, including both shared-UPPER workers, both ordinary compact
+workers and every previous corpus. This accepts the new host/object profile
+and preserves the existing image/simulator proofs; it does not establish a
+combined radio-backed MCU join or application-memory headroom.
 
 ## Remaining #13/#14 work
 
