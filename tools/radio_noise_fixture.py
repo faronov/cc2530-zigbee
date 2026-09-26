@@ -29,16 +29,16 @@ OBJECTS = {"state": (155, SIZE), "command": (175, COMMAND_SIZE), "request": (191
            "clock": (388, CLOCK_SIZE), "initialized": (407, 1)}
 HASHES = {
     "generic": (9426, "43e4e89625e5b421dc39e98d406877c9f6fa294cdf6aa54c6aa38999408791a6",
-                "2bc64f5f558e88cf55adbbb27b69810ad33bdc85ec6ef6e632d9683e3766ebf8",
+                "09111c81f902c15cd292fd87a444a46393766a9e99861ccaafb083fef94c38bf",
                 "b93e53bbc2a23573b8b265d13f16c023645a13394bfc1d614eef255bf634e0e2"),
     "lg_esl29_rev03": (9466, "c7d9ba504648c166a1368a3dc9500038c05169c9d29dcfcab51a57fa3b0ad9a7",
-                      "63d8ce4c94ef62eb4d7b2571d627fe24e9c4fbeac1ff6cedd1bfe553500aece7",
+                      "ce46b1bdacfd7259728dac2136bc22144c7a46c3ca691a5dad12eaef57134eb5",
                       "fb8137bd0442bc40936a06d8a54b21f5cff343107ee5075bba827a4a48351022"),
 }
 # Entire immediate .rst snapshots, not only public labels or selected opcodes.
 LISTINGS = {
     "generic": (
-        "35be0c94510bfd60c8342488737b6ed6f765e6aef08c4cca1a0ad715e472c323",
+        "0da7c4de56b79dc00bc83a57685e2d58952d617643a370c22cf09a201d65b755",
         "1e14e50751eaac4f70d0a93b9fca8eb6722241e8dbe793d0e6af3262c4242301",
         "19756d3c900135df2bc3ca0c728938bee429db50571736b913d86bef39c21c19",
         "59bc4e6f07ef0427e67af15cc01520267d67a9d0efaf50462d3318ae055fc362",
@@ -48,7 +48,7 @@ LISTINGS = {
         "13cdbb5977272c4ef6008cb7906fa2ced8bd1c1eb43338d9bc066d68c9748435",
         "cf0616ec8d44b1a1d30c7ea0f7f7107ceb54c7b2cb4c8e1fe3acad038d455b0f"),
     "lg_esl29_rev03": (
-        "8457199b8f6bb7e8dba39ca3bdf02a380fabb534a1827b7cb2bee8e3139be677",
+        "bcf5d2344aedcf2651e36e07470e4d27e6ffb0834d0a7f7edd4adfd088e96bf6",
         "66c6139ce68b3915f2df287e897db2f53426d7b0725ab9aefee55cb4240dd216",
         "2a161e2617f26319d3bb6c618f7638072055badaf3983b546d7656451cc17141",
         "4715cdfdcd302bba8f3d679786cfe43269fbd2ad415bdfad4f23709fcee3e1d7",

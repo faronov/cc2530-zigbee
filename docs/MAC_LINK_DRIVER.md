@@ -469,7 +469,8 @@ The sizeof probe additionally allocates copies of the617-byte arena and
 the real manager in production and adds only1917 caller bytes, never those
 probe copies again. Two new CI workers preserve the ordinary compact workers
 and every previous corpus. The162 old-profile module/board comparisons retain
-instructions and allocation areas. Before refreshing107 metadata digests,
+instructions and allocation areas. Before refreshing113 metadata digests
+across both `tests/` and the board-fixture guards in `tools/`,
 both boards reproduced the old pins and retained byte-identical IHX/memory,
 parsed maps, non-source-line CDB records and emitted instructions for all80
 affected Make-linked images plus the documented independent Association/TX
