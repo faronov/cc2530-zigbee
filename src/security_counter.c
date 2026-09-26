@@ -3,6 +3,9 @@
  */
 #include "security_counter.h"
 #include <stddef.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 MCU_XDATA security_counter_status_t security_counter_diagnostic;
 MCU_XDATA uint8_t security_counter_blob[128], security_counter_check[128];
@@ -12,6 +15,10 @@ extern MCU_XDATA uint8_t security_counter_reserved_end;
 
 static uint8_t caller(const void MCU_XDATA *object, uint8_t size)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    uint8_t permitted = link_work_counter_object(object, size);
+    if (permitted != 2) return permitted;
+#endif
     uint16_t address = MMIO_XADDRESS(object);
     return address > MMIO_XADDRESS(&security_counter_reserved_end) && address < 0x1e00u &&
         size <= 0x1e00u-address;
@@ -140,6 +147,10 @@ security_counter_result_t security_counter_create(
         return (security_counter_result_t)D.result;
     if (D.state != SECURITY_COUNTER_UNPROVISIONED)
         return SECURITY_COUNTER_STATE;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_counter_request(LW_COUNTER_CREATE, data, length, NULL))
+        return SECURITY_COUNTER_OWNERSHIP;
+#endif
     if (length > SECURITY_COUNTER_PAYLOAD_MAX || (!data && length) || !poll_limit)
         return SECURITY_COUNTER_ARGUMENT;
     if (length && !caller(data, length))
@@ -169,6 +180,10 @@ security_counter_result_t security_counter_take(
     security_counter_result_t result = ready();
     if (result != SECURITY_COUNTER_OK)
         return result;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_counter_request(LW_COUNTER_TAKE, value, 4, NULL))
+        return SECURITY_COUNTER_OWNERSHIP;
+#endif
     if (domain > 1 || value == NULL || !poll_limit)
         return SECURITY_COUNTER_ARGUMENT;
     if (!caller(value, 4))
@@ -199,6 +214,10 @@ security_counter_result_t security_counter_save(
     security_counter_result_t result = ready();
     if (result != SECURITY_COUNTER_OK)
         return result;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_counter_request(LW_COUNTER_SAVE, data, length, NULL))
+        return SECURITY_COUNTER_OWNERSHIP;
+#endif
     if (length > SECURITY_COUNTER_PAYLOAD_MAX || (!data && length) || !poll_limit)
         return SECURITY_COUNTER_ARGUMENT;
     if (length && !caller(data, length))
@@ -222,6 +241,10 @@ security_counter_result_t security_counter_read(
     security_counter_result_t result = ready();
     if (result != SECURITY_COUNTER_OK)
         return result;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_counter_request(LW_COUNTER_READ, data, capacity, length))
+        return SECURITY_COUNTER_OWNERSHIP;
+#endif
     if (length == NULL || (data == NULL && capacity))
         return SECURITY_COUNTER_ARGUMENT;
     if (!caller(length, 1) || (capacity && !caller(data, capacity)))

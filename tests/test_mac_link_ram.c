@@ -184,7 +184,10 @@ static void ram_return_lifetimes(void)
     ram_clean();
 }
 
-int main(void)
+#ifndef MAC_LINK_RAM_MAIN
+#define MAC_LINK_RAM_MAIN main
+#endif
+int MAC_LINK_RAM_MAIN(void)
 {
     ram_boundaries();
     ram_admission();

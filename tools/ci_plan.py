@@ -25,6 +25,7 @@ COMPONENTS = {
     "mac-reconfig": ("Offline MAC radio reconfiguration ({board})", ("test-mac-reconfig",)),
     "mac-link": ("Offline interval MAC consumers ({board})", ("test-mac-link",)),
     "mac-link-ram": ("Experimental compact MAC link ({board})", ("test-mac-link-ram",)),
+    "mac-link-workspace": ("Experimental shared MAC workspace ({board})", ("test-mac-link-workspace",)),
     "security": ("Offline Zigbee security ({board})",
                  ("test-zigbee-security", "test-zigbee-mmo", "test-zigbee-key-hash")),
     "counters": ("Offline durable counters ({board})", ("test-security-counter",)),

@@ -5,6 +5,9 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 static MCU_XDATA struct {
     uint8_t message[32], hash[16];
@@ -30,6 +33,10 @@ zigbee_mmo_result_t zigbee_key_hash(
     const uint8_t * volatile key, uint8_t purpose, uint8_t * volatile output,
     uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_HASH,key,16,0) || !LW_IO(LW_CHILD_HASH,output,16,1) ||
+        !LW_IO(LW_CHILD_HASH,info,sizeof(*info),1)) return ZIGBEE_MMO_ARGUMENT;
+#endif
     uint8_t i;
     zigbee_mmo_result_t result;
     if (key == NULL || output == NULL || info == NULL || !timeout ||

@@ -20,6 +20,10 @@ CODE_AREAS = {"CSEG", "HOME", "GSINIT", "GSFINAL", "MA_BANK2",
               *(f"GSINIT{i}" for i in range(6)), *(f"BJ_BANK{i}" for i in range(1, 5))}
 LIMITS = {"code": 211892, "const": 55, "xdata": 7035,
           "data_sum": 519, "overlay_sum": 77, "bits": 70}
+WORKSPACE_MODULES = MODULES | {"mac_link_workspace"}
+WORKSPACE_LIMITS = {"code": 230576, "const": 962, "xdata": 6308,
+                    "data_sum": 556, "overlay_sum": 74, "bits": 80}
+WORKSPACE_LAYOUT_BYTES = 617 + 31
 CONTEXT_BYTES = 1433 + 180 + 304
 
 
@@ -51,13 +55,16 @@ def object_areas(text, module):
             "overlay_sum": areas.get("OSEG", 0), "bits": areas["BSEG"]}
 
 
-def report(objects):
-    require(set(objects) == MODULES | {PROBE}, "Incomplete or extra compact object set")
+def report(objects, *, workspace=False):
+    modules = WORKSPACE_MODULES if workspace else MODULES
+    limits = WORKSPACE_LIMITS if workspace else LIMITS
+    probe_bytes = CONTEXT_BYTES + (WORKSPACE_LAYOUT_BYTES if workspace else 0)
+    require(set(objects) == modules | {PROBE}, "Incomplete or extra compact object set")
     rows = {m: object_areas(text, m) for m, text in objects.items()}
-    require(rows[PROBE] == dict.fromkeys(LIMITS, 0) | {"xdata": CONTEXT_BYTES},
-            "Caller-only allocation probe changed")
-    totals = {key: sum(rows[m][key] for m in MODULES) for key in LIMITS}
-    for key, limit in LIMITS.items():
+    require(rows[PROBE] == dict.fromkeys(limits, 0) | {"xdata": probe_bytes},
+            "Allocation-only layout probe changed")
+    totals = {key: sum(rows[m][key] for m in modules) for key in limits}
+    for key, limit in limits.items():
         require(totals[key] <= limit, f"Compact {key} regression ceiling exceeded")
     return totals | {"context_bytes": CONTEXT_BYTES,
                      "object_floor": totals["xdata"] + CONTEXT_BYTES}
@@ -66,9 +73,13 @@ def report(objects):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--workspace", action="store_true",
+                        help="Check the separate shared-UPPER profile, not the ordinary compact profile")
     args = parser.parse_args()
-    result = report({p.stem: p.read_text() for p in args.output.glob("*.rel")})
-    print(f"Compact LINK: {len(MODULES)} production objects, {result['code']} CODE + "
+    result = report({p.stem: p.read_text() for p in args.output.glob("*.rel")}, workspace=args.workspace)
+    label = "Shared UPPER LINK" if args.workspace else "Compact LINK"
+    modules = WORKSPACE_MODULES if args.workspace else MODULES
+    print(f"{label}: {len(modules)} production objects, {result['code']} CODE + "
           f"{result['const']} CONST, {result['xdata']} XDATA; "
           f"caller-inclusive floor {result['object_floor']}/7680. "
           "Object regression checks PASS; no linked placement/stack or MCU acceptance.")

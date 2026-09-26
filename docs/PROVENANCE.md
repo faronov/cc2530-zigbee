@@ -161,6 +161,16 @@ Their evidence is native execution and actual SDCC object/type allocation,
 not a complete linked MCU join. Exploratory banking/external-stack compiler
 outputs were not promoted to a supported ABI or used to relax existing guards.
 
+The shared UPPER workspace is original refactoring of these same services:
+typed C union storage, checked nested ownership and exact internal lower-I/O
+loans. Its tests use public synthetic packets and the existing genuine
+counter/journal/flash and AES models, not SDK data or successful service
+substitutes. The manager/private-fence ordering is a new composition
+obligation, not extra RAM or an imported memory model. Measured SDCC objects
+and native executions are not linked-image, stack or hardware evidence.
+No hardware sequencing, wire revision, NV format, counter policy or upstream
+implementation/license is changed.
+
 | Reference | Status and permitted use |
 | --- | --- |
 | [TI CC2530](https://www.ti.com/product/CC2530) and [SWRU191F](https://www.ti.com/lit/pdf/swru191) | Primary hardware facts; link/cite documentation rather than redistribute whole manuals |

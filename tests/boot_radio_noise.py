@@ -22,7 +22,7 @@ from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, 
 
 
 CODE_SHA = "5d6296ebee7490562d8e05b3b785abfe865f16e75af20987a905a29843dae0c8"
-CDB_SHA = "858bf684db4a441d9b39e64526148e28393349437a28ef30fc7bff474bc4203d"
+CDB_SHA = "1fc578e6a8b098c861bee3db821bc712a00b73a413b19860dfa91c15620e5825"
 MAP_SHA = "00cf2d2249e3fbb423f5fbd2eeb27a154c5114f6d13d02ca46bcefc0585bc256"
 LENGTHS = PRNG_LENGTHS | {
     op: 1 for op in (0xa4, 0x5b, 0x23, 0x49, 0x2b, 0x3c, 0xc8, 0x68, 0x5d, 0x59, 0x1b, 0x1c, 0xca, 0x6a, 0x13)

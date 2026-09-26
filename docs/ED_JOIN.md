@@ -290,6 +290,11 @@ removes the association shadow from the BDB phase union. With SDCC 4.2.0 the
 BDB context falls from1696 to1433 bytes because runtime becomes the largest
 phase. All translation units must agree on this layout. The complete link
 composition still exceeds ordinary XDATA and has no linked MCU proof.
+The additional [shared UPPER profile](MAC_LINK_DRIVER.md#shared-upper-workspace)
+keeps that public BDB layout while alternating private key/protocol work.
+Nested protocol regions and separate key-status outputs remain disjoint;
+exact lower-I/O loans do not make retained contexts or queues reusable.
+Its8225-byte floor still lacks a complete memory/bank/stack proof.
 
 ## Endpoint zero
 

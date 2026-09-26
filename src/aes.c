@@ -4,6 +4,9 @@
 #include "aes.h"
 #include "timebase.h"
 #include <stddef.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 /* SWRU191F 2.2.2-2.2.3 pp.27-29; 8.3 pp.97-98; 15.9-15.10 pp.150-151. */
 volatile MCU_XDATA uint8_t aes_dma0[8], aes_dma1[32];
@@ -187,6 +190,11 @@ aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
     if (key == NULL || input == NULL || output == NULL || d == NULL || !timeout ||
         timeout >= TIMEBASE_HALF_RANGE || !limit)
         return AES_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_external(key, 16) || !link_work_external(input, 16) ||
+        !link_work_external(output, 16) || !link_work_external(d, sizeof(*d)))
+        return AES_BUFFER_OWNERSHIP;
+#endif
     key_location = pointer_location(key); input_location = pointer_location(input);
     result = source_range(key_location);
     if (result != AES_OK) return result;

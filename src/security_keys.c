@@ -7,6 +7,24 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#define w link_work_arena.keys
+#define KEY_ENTER() LW_ENTER(LW_KEYS, SECURITY_KEYS_STATE)
+#define KEY_EXTERNAL(p,n) (!(p) || link_work_external((p),(n)))
+#define KEY_WRITE(p,n) (!(p) || LW_IO(LW_NONE,(p),(n),1))
+#define KEY_CALL(g,e) LW_CALL(g,e)
+#define ed_wire_nwk(...) KEY_CALL(LW_WIRE_NWK, ed_wire_nwk(__VA_ARGS__))
+#define ed_wire_decode(...) KEY_CALL(LW_WIRE_DECODE, ed_wire_decode(__VA_ARGS__))
+#define ed_wire_encode(...) KEY_CALL(LW_WIRE_ENCODE, ed_wire_encode(__VA_ARGS__))
+#define ed_wire_inspect(...) KEY_CALL(LW_WIRE_INSPECT, ed_wire_inspect(__VA_ARGS__))
+#define ed_wire_crypt(...) KEY_CALL(LW_WIRE_CRYPT, ed_wire_crypt(__VA_ARGS__))
+#else
+#define KEY_ENTER() ((void)0)
+#define KEY_EXTERNAL(p,n) 1
+#define KEY_WRITE(p,n) 1
+#define KEY_CALL(g,e) (e)
+#endif
 
 /* Serialized schema, never a native struct image. See SECURITY_KEYS.md. */
 #define OWN 0u
@@ -14,6 +32,9 @@
 #define NK 16u
 #define LK 48u
 #define PK 64u
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_OFFSET) ? 1 : -1];
+#endif
 #define NF 80u
 #define AF 88u
 #define EP 92u
@@ -37,6 +58,7 @@
 
 /* No operational secrets survive a returning public call in this module.
  * The counter/journal still retain their real persistent/cached payloads. */
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 static MCU_XDATA struct {
     uint8_t record[112], a[116], b[116], hash_key[16];
     ed_packet_t packet;
@@ -50,6 +72,7 @@ static MCU_XDATA struct {
     uint16_t polls;
     uint8_t size, event, pending, slot, secured, aps_secured, key_id;
 } w;
+#endif
 typedef char phase_fits_packed_byte[(SECURITY_KEYS_REJOINING <= PHASE_MASK) ? 1 : -1];
 typedef char payload_stays_112[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
 static MCU_XDATA uint8_t security_keys_phase, security_keys_result;
@@ -105,11 +128,17 @@ static void set_phase(uint8_t value)
 
 static security_keys_result_t finish(security_keys_result_t result)
 {
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
     volatile uint8_t MCU_XDATA *p = (volatile uint8_t MCU_XDATA *)&w;
     uint16_t i;
     for (i = 0; i < sizeof(w); i++) p[i] = 0;
+#endif
     if (security_keys_phase != SECURITY_KEYS_FAILED) security_keys_result = (uint8_t)result;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    return LW_RETURN(LW_KEYS, result);
+#else
     return result;
+#endif
 }
 #if defined(CC2530_HOST_TEST)
 /* Host peripheral harness only: emulate CPU static-storage initialization,
@@ -118,7 +147,12 @@ static security_keys_result_t finish(security_keys_result_t result)
 void security_keys_host_power_cycle(void)
 {
     security_keys_phase = SECURITY_KEYS_COLD;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    security_keys_result = SECURITY_KEYS_OK;
+    link_work_host_reset();
+#else
     (void)finish(SECURITY_KEYS_OK);
+#endif
 }
 #endif
 static security_keys_result_t fault(security_keys_result_t result)
@@ -190,7 +224,7 @@ static security_keys_result_t load(void)
         return (security_keys_result_t)security_keys_result;
     if (security_keys_phase < SECURITY_KEYS_PROVISIONED)
         return SECURITY_KEYS_STATE;
-    if (security_counter_read(w.record, 112, &w.size) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
         return fault(SECURITY_KEYS_STORAGE);
     if (!valid_record() || phase() != security_keys_phase)
         return fault(SECURITY_KEYS_FORMAT);
@@ -198,7 +232,7 @@ static security_keys_result_t load(void)
 }
 static security_keys_result_t save(void)
 {
-    if (security_counter_save(w.record, 112, w.polls) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
         return fault(SECURITY_KEYS_STORAGE);
     security_keys_phase = phase();
     return SECURITY_KEYS_OK;
@@ -228,15 +262,15 @@ static security_keys_result_t key(volatile uint8_t offset, volatile uint8_t iden
     if (identifier == 2 || identifier == 3) {
         memcpy(w.hash_key, w.record+offset, 16);
         purpose = identifier == 2 ? ZIGBEE_HASH_TRANSPORT : ZIGBEE_HASH_LOAD;
-        if (zigbee_key_hash(w.hash_key, purpose,
-            w.key.key, w.limits.block_timeout, w.limits.block_polls, &w.hash_info) != ZIGBEE_MMO_OK)
+        if (KEY_CALL(LW_HASH_KEY, zigbee_key_hash(w.hash_key, purpose,
+            w.key.key, w.limits.block_timeout, w.limits.block_polls, &w.hash_info)) != ZIGBEE_MMO_OK)
             return SECURITY_KEYS_CRYPTO;
     } else memcpy(w.key.key, w.record+offset, 16);
     return SECURITY_KEYS_OK;
 }
 static inline security_keys_result_t take(uint8_t domain)
 {
-    security_counter_result_t r = security_counter_take(domain, &w.counter, w.polls);
+    security_counter_result_t r = KEY_CALL(LW_COUNTER_TAKE, security_counter_take(domain, &w.counter, w.polls));
     if (r == SECURITY_COUNTER_EXHAUSTED) return SECURITY_KEYS_EXHAUSTED;
     if (r != SECURITY_COUNTER_OK) return fault(SECURITY_KEYS_STORAGE);
     w.key.counter = w.counter;
@@ -245,6 +279,9 @@ static inline security_keys_result_t take(uint8_t domain)
 
 security_keys_result_t security_keys_open(void) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
     security_counter_result_t r;
     security_keys_result_t result;
     if (security_keys_phase != SECURITY_KEYS_COLD) return finish(SECURITY_KEYS_STATE);
@@ -256,7 +293,7 @@ security_keys_result_t security_keys_open(void) SECURITY_FAR
     }
     if (r != SECURITY_COUNTER_OK) return finish(fault(SECURITY_KEYS_STORAGE));
     result = SECURITY_KEYS_OK;
-    if (security_counter_read(w.record, 112, &w.size) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
         result = fault(SECURITY_KEYS_STORAGE);
     else if (!valid_record()) result = fault(SECURITY_KEYS_FORMAT);
     else security_keys_phase = phase();
@@ -268,6 +305,11 @@ security_keys_result_t security_keys_provision(
     volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_EXTERNAL(config, sizeof(*config)) || !KEY_EXTERNAL(install_code18, 18) ||
+        !KEY_EXTERNAL(limits, sizeof(*limits))) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     if (security_keys_phase != SECURITY_KEYS_UNPROVISIONED) return finish(SECURITY_KEYS_STATE);
     if (!config || !install_code18 || !limits_ok(limits, nv_polls) ||
         nwk_floor == 0xffffffffUL || aps_floor == 0xffffffffUL)
@@ -279,12 +321,12 @@ security_keys_result_t security_keys_provision(
     w.record[CHANNEL] = config->channel; w.record[UPDATE] = config->update_id;
     if (!valid_config()) return finish(SECURITY_KEYS_ARGUMENT);
     memcpy(w.a, install_code18, 18);
-    if (install_code_derive(w.a, 18, w.record+LK,
-        w.limits.block_timeout, w.limits.block_polls, &w.hash_info) != ZIGBEE_MMO_OK)
+    if (KEY_CALL(LW_INSTALL_CODE, install_code_derive(w.a, 18, w.record+LK,
+        w.limits.block_timeout, w.limits.block_polls, &w.hash_info)) != ZIGBEE_MMO_OK)
         return finish(SECURITY_KEYS_CRYPTO);
     w.record[MAGIC] = 'K'; w.record[MAGIC+1] = 2;
     set_phase(SECURITY_KEYS_PROVISIONED);
-    if (security_counter_create(nwk_floor, aps_floor, w.record, 112, w.polls) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_CREATE, security_counter_create(nwk_floor, aps_floor, w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
         return finish(fault(SECURITY_KEYS_STORAGE));
     security_keys_phase = SECURITY_KEYS_PROVISIONED;
     return finish(SECURITY_KEYS_OK);
@@ -292,6 +334,9 @@ security_keys_result_t security_keys_provision(
 
 security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (phase() != SECURITY_KEYS_PROVISIONED) return finish(SECURITY_KEYS_STATE);
@@ -538,6 +583,12 @@ security_keys_result_t security_keys_receive(
     ed_packet_t * volatile output, uint8_t * volatile event,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_EXTERNAL(raw_npdu, length) || !KEY_WRITE(output, sizeof(*output)) ||
+        !KEY_WRITE(event, 1) || !KEY_EXTERNAL(limits, sizeof(*limits)))
+        return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     security_keys_result_t r = load();
     volatile uint8_t i;
     if (r != SECURITY_KEYS_OK) return finish(r);
@@ -666,6 +717,11 @@ security_keys_result_t security_keys_request(
     uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
     uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_WRITE(out, capacity) || !KEY_WRITE(written, 1) ||
+        !KEY_EXTERNAL(limits, sizeof(*limits))) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!out || !written || !limits_ok(limits, nv_polls)) return finish(SECURITY_KEYS_ARGUMENT);
@@ -685,6 +741,11 @@ security_keys_result_t security_keys_verify(
     uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
     uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_WRITE(out, capacity) || !KEY_WRITE(written, 1) ||
+        !KEY_EXTERNAL(limits, sizeof(*limits))) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!out || !written || !limits_ok(limits, nv_polls)) return finish(SECURITY_KEYS_ARGUMENT);
@@ -694,8 +755,8 @@ security_keys_result_t security_keys_verify(
     command_packet(nwk_seq, aps_counter);
     w.packet.length = 26; w.packet.payload[0] = 15; w.packet.payload[1] = 4;
     memcpy(w.packet.payload+2, w.record+OWN, 8);
-    if (zigbee_key_hash(w.record+PK, ZIGBEE_HASH_VERIFY, w.packet.payload+10,
-        w.limits.block_timeout, w.limits.block_polls, &w.hash_info) != ZIGBEE_MMO_OK)
+    if (KEY_CALL(LW_HASH_VERIFY, zigbee_key_hash(w.record+PK, ZIGBEE_HASH_VERIFY, w.packet.payload+10,
+        w.limits.block_timeout, w.limits.block_polls, &w.hash_info)) != ZIGBEE_MMO_OK)
         return finish(SECURITY_KEYS_CRYPTO);
     r = seal(0);
     if (r == SECURITY_KEYS_OK) { set_phase(SECURITY_KEYS_WAIT_CONFIRM); r = save(); }
@@ -706,6 +767,11 @@ security_keys_result_t security_keys_leave(
     uint8_t nwk_seq, uint8_t * volatile out, volatile uint16_t capacity, uint8_t * volatile written,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_WRITE(out, capacity) || !KEY_WRITE(written, 1) ||
+        !KEY_EXTERNAL(limits, sizeof(*limits))) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!out || !written || !limits_ok(limits, nv_polls)) return finish(SECURITY_KEYS_ARGUMENT);
@@ -733,6 +799,12 @@ security_keys_result_t security_keys_send(
     const ed_packet_t * volatile packet, uint8_t aps_secure, uint8_t * volatile out, volatile uint16_t capacity,
     uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_EXTERNAL(packet, sizeof(*packet)) || !KEY_WRITE(out, capacity) ||
+        !KEY_WRITE(written, 1) || !KEY_EXTERNAL(limits, sizeof(*limits)))
+        return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     security_keys_result_t r = load();
     uint8_t transition = 0;
     if (r != SECURITY_KEYS_OK) return finish(r);
@@ -802,6 +874,10 @@ security_keys_result_t security_keys_send(
 }
 security_keys_result_t security_keys_status(security_keys_status_t * volatile output) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_WRITE(output, sizeof(*output))) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
     security_keys_result_t r;
     uint8_t prior = security_keys_result;
     if (!output) return finish(SECURITY_KEYS_ARGUMENT);

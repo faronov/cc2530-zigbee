@@ -8,7 +8,9 @@
 MCU_XDATA security_keys_status_t nwk_aps_keys;
 /* The active-MAC step returns before transmit construction. Receive parsing
  * is a separate foreground call; no lower service retains these views. */
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 MCU_XDATA nwk_aps_work_t nwk_aps_work;
+#endif
 
 static uint8_t reached(uint32_t now, uint32_t until)
 {
@@ -17,6 +19,9 @@ static uint8_t reached(uint32_t now, uint32_t until)
 
 static nwk_aps_result_t advance(nwk_aps_t * volatile ctx, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
+#endif
     if (!ctx || ctx->version != NWK_APS_VERSION || !ctx->owner) return NWK_APS_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return NWK_APS_CLOCK;
     ctx->last = now;
@@ -26,6 +31,11 @@ static nwk_aps_result_t advance(nwk_aps_t * volatile ctx, volatile uint32_t now)
 nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, NWK_APS_TX_T * volatile owner,
     const nwk_aps_config_t * volatile config, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, owner, sizeof(*owner), 1) ||
+        !LW_IO(LW_NONE, config, sizeof(*config), 0)) return NWK_APS_ARGUMENT;
+#endif
     if (!ctx || !owner || !config || !config->endpoint || config->endpoint == 255 || !config->profile ||
         !config->limits.block_timeout || !config->limits.block_polls || !config->nv_polls ||
         config->ack_wait < 93750UL || config->ack_wait >= MAC_TX_HALF/8u ||
@@ -68,6 +78,10 @@ static void allocated(nwk_aps_t * volatile ctx, volatile uint32_t now, volatile 
 nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * volatile packet,
                                volatile uint8_t aps_secure, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, packet, sizeof(*packet), 0)) return NWK_APS_ARGUMENT;
+#endif
     nwk_aps_result_t result;
     if (!packet || aps_secure > 1 || packet->length > ED_PAYLOAD_MAX) return NWK_APS_ARGUMENT;
     result = reserve(ctx, now, !packet->nwk.type);
@@ -86,6 +100,9 @@ nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * vol
 
 nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+#endif
     nwk_aps_result_t result;
     if (which < 1 || which > 3) return NWK_APS_ARGUMENT;
     result = reserve(ctx, now, which != 3);
@@ -158,6 +175,9 @@ static void arm(nwk_aps_t *ctx, NWK_APS_ACTION_T *action)
 nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
     uint8_t retry, uint8_t nb)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
+#endif
     if (!ctx || ctx->version != NWK_APS_VERSION) return NWK_APS_ARGUMENT;
     if (!ctx->active || ctx->arm_issued != 1 || ctx->armed ||
         ctx->owner->engine.phase != MAC_TX_DRAW ||
@@ -172,6 +192,9 @@ nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
 nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
     uint8_t retry, uint8_t nb)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
+#endif
     if (!ctx || ctx->version != NWK_APS_VERSION) return NWK_APS_ARGUMENT;
     if (!ctx->active || ctx->arm_issued != 2 || ctx->disarmed ||
         ctx->owner->engine.phase != MAC_TX_DONE ||
@@ -187,6 +210,11 @@ nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
     const NWK_APS_EVENT_T * volatile event, NWK_APS_ACTION_T * volatile action)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, action, sizeof(*action), 1) ||
+        !LW_IO(LW_NONE, event, event ? sizeof(*event) : 0, 0)) return NWK_APS_ARGUMENT;
+#endif
     nwk_aps_result_t result;
     uint8_t outcome;
     if (!action) return NWK_APS_ARGUMENT;
@@ -205,6 +233,9 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
             return event ? NWK_APS_IGNORED : NWK_APS_OK;
         }
 #endif
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+        LW_ENTER(LW_NWK_CANCEL, NWK_APS_STATE);
+#endif
         if ((ctx->stopping || (ctx->cancel && !ctx->active_ack)) && !ctx->cancel_sent && !event) {
             memset(&nwk_aps_work.cancellation, 0, sizeof(nwk_aps_work.cancellation));
             NWK_APS_CANCEL_SOURCE.kind = MAC_TX_EVENT_CANCEL;
@@ -212,7 +243,11 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
             NWK_APS_CANCEL_SOURCE.retry = NWK_APS_ENGINE(ctx->owner)->retries; NWK_APS_CANCEL_SOURCE.nb = NWK_APS_ENGINE(ctx->owner)->nb;
             NWK_APS_CANCEL_SOURCE.stamp = now; event = &nwk_aps_work.cancellation; ctx->cancel_sent = 1;
         }
-        if (NWK_APS_STEP(ctx->owner, now, event, action) != MAC_TX_OK) return NWK_APS_RADIO;
+        if (NWK_APS_STEP(ctx->owner, now, event, action) != MAC_TX_OK)
+            return LW_RETURN(LW_NWK_CANCEL, NWK_APS_RADIO);
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+        if (!LW_LEAVE(LW_NWK_CANCEL)) return NWK_APS_STATE;
+#endif
 #if defined(CC2530_MAC_LINK)
         if (ctx->owner->engine.phase == MAC_TX_DRAW && !ctx->stopping && !(ctx->cancel && !ctx->active_ack)) arm(ctx, action);
 #endif
@@ -317,6 +352,10 @@ static void acknowledgment(nwk_aps_t * volatile ctx, const ed_packet_t * volatil
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
     volatile uint16_t length, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, npdu, length, 0)) return NWK_APS_ARGUMENT;
+#endif
     nwk_aps_result_t result;
     security_keys_result_t accepted;
     uint8_t event, i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0, slot = 0;
@@ -326,12 +365,19 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
     if (result) return result;
     if (ctx->stopping) return NWK_APS_STATE;
     if (ctx->receive_ready || ctx->reply) return NWK_APS_FULL;
-    if (ed_wire_nwk(npdu, length, &nwk_aps_work.hint) != ZIGBEE_SECURITY_OK) return NWK_APS_WIRE;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_NWK_HINT, NWK_APS_STATE);
+#endif
+    if (LW_CALL(LW_HINT, ed_wire_nwk(npdu, length, &nwk_aps_work.hint)) != ZIGBEE_SECURITY_OK)
+        return LW_RETURN(LW_NWK_HINT, NWK_APS_WIRE);
     if (nwk_aps_work.hint.header.destination >= 0xfffbu) {
         result = nwk_aps_broadcast_slot(ctx, nwk_aps_work.hint.header.source, nwk_aps_work.hint.header.sequence, now, &slot);
-        if (result) return result;
+        if (result) return LW_RETURN(LW_NWK_HINT, result);
         broadcast = 1;
     }
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_LEAVE(LW_NWK_HINT)) return NWK_APS_STATE;
+#endif
     /* The slot is unoccupied and all lower operations are synchronous. The
      * key owner publishes into it only after authentication AND durable save.
      * Transport admission still owns receive_ready; no packet escapes early. */
@@ -405,6 +451,10 @@ discard:
 
 nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, packet, sizeof(*packet), 1) ||
+        !LW_IO(LW_NONE, event, 1, 1)) return NWK_APS_ARGUMENT;
+#endif
     if (!ctx || ctx->version != NWK_APS_VERSION || !packet || !event) return NWK_APS_ARGUMENT;
     if (!ctx->receive_ready) return NWK_APS_STATE;
     *packet = ctx->incoming; *event = ctx->event;
@@ -414,6 +464,9 @@ nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile p
 
 nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile result)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, result, 1, 1)) return NWK_APS_ARGUMENT;
+#endif
     if (!ctx || ctx->version != NWK_APS_VERSION || !result) return NWK_APS_ARGUMENT;
     if (!ctx->completed) return NWK_APS_STATE;
     *result = ctx->result; ctx->completed = 0;
@@ -422,6 +475,9 @@ nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile re
 
 nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+#endif
     nwk_aps_result_t result = advance(ctx, now);
     if (result) return result;
     if (!ctx->queued) return NWK_APS_STATE;
@@ -431,6 +487,9 @@ nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now)
 
 nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+#endif
     nwk_aps_result_t result = advance(ctx, now);
     if (result) return result;
     ctx->ready = 0; ctx->stopping = 1;

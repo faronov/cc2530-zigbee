@@ -4,6 +4,12 @@
 #include "ed_wire.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#define WIRE_IO(op,p,n,wr) LW_IO(op,p,n,wr)
+#else
+#define WIRE_IO(op,p,n,wr) 1
+#endif
 
 static MCU_XDATA struct {
     nwk_frame_info_t nwk;
@@ -120,18 +126,30 @@ static zigbee_security_result_t read_aps(const uint8_t * volatile frame, uint16_
 zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t length,
                                      nwk_frame_info_t * volatile info) SECURITY_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!WIRE_IO(LW_CHILD_WIRE_NWK, frame, length, 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_NWK, info, sizeof(*info), 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
     return finish(read_nwk(frame, length, info));
 }
 
 zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t length,
                                      aps_frame_info_t * volatile info) WIRE_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!WIRE_IO(LW_CHILD_WIRE_APS, frame, length, 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_APS, info, sizeof(*info), 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
     return finish(read_aps(frame, length, info));
 }
 
 zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t length,
                                         ed_packet_t * volatile packet) WIRE_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!WIRE_IO(LW_CHILD_WIRE_DECODE, frame, length, 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_DECODE, packet, sizeof(*packet), 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
     zigbee_security_result_t result;
     uint8_t offset, size;
     if (!packet) return finish(ZIGBEE_SECURITY_ARGUMENT);
@@ -160,6 +178,11 @@ zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t
 zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uint8_t * volatile frame,
                                         uint16_t capacity, uint8_t * volatile length) WIRE_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!WIRE_IO(LW_CHILD_WIRE_ENCODE, packet, sizeof(*packet), 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_ENCODE, frame, capacity, 1) ||
+        !WIRE_IO(LW_CHILD_WIRE_ENCODE, length, 1, 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
     volatile uint8_t n, control;
     uint8_t total, encoded_length;
     if (!packet || !frame || !length) return finish(ZIGBEE_SECURITY_ARGUMENT);
@@ -252,6 +275,10 @@ static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * volatile 
 zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile frame, uint16_t length,
                                         zigbee_security_meta_t * volatile meta) WIRE_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!WIRE_IO(LW_CHILD_WIRE_INSPECT, frame, length, 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_INSPECT, meta, sizeof(*meta), 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
     zigbee_security_result_t result;
     if (!frame || !meta) return finish(ZIGBEE_SECURITY_ARGUMENT);
     memset(&crypto, 0, sizeof(crypto));
@@ -265,6 +292,12 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
     const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
     uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) WIRE_FAR
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!WIRE_IO(LW_CHILD_WIRE_CRYPT, key, sizeof(*key), 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_CRYPT, frame, length, 0) ||
+        !WIRE_IO(LW_CHILD_WIRE_CRYPT, output, capacity, 1) ||
+        !WIRE_IO(LW_CHILD_WIRE_CRYPT, info, sizeof(*info), 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
     zigbee_security_result_t result;
     ccm_star_result_t encrypted;
     volatile uint8_t h, a, p, total;

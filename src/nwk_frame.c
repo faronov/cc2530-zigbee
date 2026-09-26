@@ -5,6 +5,9 @@
 
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 static inline uint16_t read_le16(const uint8_t *bytes)
 {
@@ -49,6 +52,10 @@ static nwk_codec_result_t header_shape(const nwk_header_t *header, uint8_t *size
 nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
                                     nwk_frame_info_t *result)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_NWK, body, length, 0) || !LW_IO(LW_CHILD_NWK, result, sizeof(*result), 1))
+        return NWK_CODEC_INVALID_ARGUMENT;
+#endif
     nwk_frame_info_t candidate;
     nwk_codec_result_t status;
     uint16_t control;
@@ -115,6 +122,12 @@ nwk_codec_result_t nwk_frame_encode(const nwk_header_t *header,
                                     const uint8_t *payload, uint16_t payload_length,
                                     uint8_t *body, uint16_t capacity, uint8_t *length)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_NWK, header, sizeof(*header), 0) ||
+        !LW_IO(LW_CHILD_NWK, payload, payload_length, 0) ||
+        !LW_IO(LW_CHILD_NWK, body, capacity, 1) || !LW_IO(LW_CHILD_NWK, length, 1, 1))
+        return NWK_CODEC_INVALID_ARGUMENT;
+#endif
     nwk_codec_result_t status;
     uint8_t size;
 

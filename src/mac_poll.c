@@ -4,6 +4,21 @@
 #include "mac_poll.h"
 #include <stddef.h>
 #include <string.h>
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#define active (link_work_arena.protocol.poll.active)
+#define syntax (link_work_arena.protocol.poll.syntax)
+#define io (link_work_arena.protocol.poll.io)
+#define receipt (link_work_arena.protocol.poll.receipt)
+#define step_time (link_work_arena.protocol.poll.step_time)
+#define step_poll (link_work_arena.protocol.poll.step_poll)
+#define step_tx (link_work_arena.protocol.poll.step_tx)
+#define step_event (link_work_arena.protocol.poll.step_event)
+#define step_action (link_work_arena.protocol.poll.step_action)
+#define step_now (link_work_arena.protocol.poll.step_now)
+#define step_profile (link_work_arena.protocol.poll.step_profile)
+#endif
 
 #if defined(CC2530_MAC_LINK)
 #define ENGINE(tx) (&(tx)->engine)
@@ -18,7 +33,9 @@
 #if defined(CC2530_MAC_LINK_RAM)
 #include "mac_link_ram_internal.h"
 typedef char control_first[(offsetof(mac_poll_t, control) == 0) ? 1 : -1];
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 static mac_poll_control_t MAC_POLL_RAM * MAC_POLL_RAM active;
+#endif
 #define control (*active)
 /* C's structure-to-initial-member conversion, not a mirror/suffix cast:
  * the pointed-to object is the actual mac_poll_control_t first member. */
@@ -33,14 +50,17 @@ static mac_poll_control_t MAC_POLL_RAM control;
 #endif
 /* start's codec input and step's decoded frame have disjoint returning
  * lifetimes. Both stay separate from control, input, output and the receipt. */
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 static union {
     mac_header_t header;
     mac_frame_info_t frame;
 } MAC_POLL_RAM syntax;
+#endif
 #define start_header syntax.header
 #define decoded syntax.frame
 /* No input field is read after publish. In particular the real ACK witness
  * and FRAME/CLOSED checks finish before output takes ownership of this slot. */
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 static union {
     mac_poll_event_t input;
     mac_poll_action_t output;
@@ -50,8 +70,10 @@ static union {
     } start;
 #endif
 } MAC_POLL_RAM io;
+#endif
 #define input io.input
 #define output io.output
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 static mac_poll_record_t MAC_POLL_RAM *receipt;
 static uint32_t MAC_POLL_RAM step_time;
 
@@ -64,6 +86,7 @@ static const mac_poll_event_t MAC_POLL_RAM * volatile step_event;
 static mac_poll_action_t MAC_POLL_RAM * volatile step_action;
 static volatile uint32_t MAC_POLL_RAM step_now;
 static volatile uint8_t MAC_POLL_RAM step_profile;
+#endif
 
 #if defined(CC2530_MAC_LINK_RAM)
 /* Each public return drops all borrowed views. The real control/receipt,
@@ -72,6 +95,9 @@ static volatile uint8_t MAC_POLL_RAM step_profile;
  */
 static mac_poll_result_t poll_return(mac_poll_result_t result)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    return link_work_finish_group(LW_POLL_INIT, LW_POLL_OTHER, result);
+#else
     volatile uint8_t MAC_POLL_RAM *p = (volatile uint8_t MAC_POLL_RAM *)&syntax;
     uint16_t i;
     for (i = 0; i < sizeof(syntax); i++) p[i] = 0;
@@ -81,11 +107,15 @@ static mac_poll_result_t poll_return(mac_poll_result_t result)
     step_event = NULL; step_action = NULL;
     step_time = step_now = 0; step_profile = 0;
     return result;
+#endif
 }
 #define POLL_RETURN(result) poll_return(result)
 #if defined(CC2530_HOST_TEST)
 unsigned char mac_link_ram_poll_clean(void)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    return link_work_clean();
+#else
     const uint8_t *p = (const uint8_t *)&syntax;
     size_t i;
     for (i = 0; i < sizeof(syntax); i++) if (p[i]) return 0;
@@ -93,6 +123,7 @@ unsigned char mac_link_ram_poll_clean(void)
     for (i = 0; i < sizeof(io); i++) if (p[i]) return 0;
     return !active && !receipt && !step_poll && !step_tx && !step_event && !step_action &&
         !step_time && !step_now && !step_profile;
+#endif
 }
 #endif
 #else
@@ -233,6 +264,10 @@ static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * volatile tx)
 
 mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile p)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_POLL_INIT, MAC_POLL_INVALID);
+    if (!LW_IO(LW_POLL_INIT, p, sizeof(*p), 1)) return LW_RETURN(LW_POLL_INIT, MAC_POLL_INVALID);
+#endif
     if (p == NULL)
         return POLL_RETURN(MAC_POLL_INVALID);
 #if defined(CC2530_MAC_LINK_RAM)
@@ -252,6 +287,12 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
     MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx,
     const mac_poll_request_t MAC_POLL_RAM * volatile request, uint32_t volatile now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_POLL_START, MAC_POLL_INVALID);
+    if (!LW_IO(LW_POLL_START, p, sizeof(*p), 1) ||
+        !LW_IO(LW_POLL_START, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_POLL_START, request, sizeof(*request), 0)) return LW_RETURN(LW_POLL_START, MAC_POLL_INVALID);
+#endif
     uint8_t command = MAC_COMMAND_DATA_REQUEST;
     volatile uint32_t generation;
     if (p == NULL || tx == NULL || request == NULL)
@@ -595,6 +636,13 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_POLL_STEP, MAC_POLL_INVALID);
+    if (!LW_IO(LW_POLL_STEP, p, sizeof(*p), 1) ||
+        !LW_IO(LW_POLL_STEP, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_POLL_STEP, action, sizeof(*action), 1) ||
+        !LW_IO(LW_POLL_STEP, event, event ? sizeof(*event) : 0, 0)) return LW_RETURN(LW_POLL_STEP, MAC_POLL_INVALID);
+#endif
     step_poll = p;
     step_tx = tx;
     step_now = now;
@@ -609,6 +657,13 @@ mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_POLL_STEP, MAC_POLL_INVALID);
+    if (!LW_IO(LW_POLL_STEP, p, sizeof(*p), 1) ||
+        !LW_IO(LW_POLL_STEP, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_POLL_STEP, action, sizeof(*action), 1) ||
+        !LW_IO(LW_POLL_STEP, event, event ? sizeof(*event) : 0, 0)) return LW_RETURN(LW_POLL_STEP, MAC_POLL_INVALID);
+#endif
     step_poll = p;
     step_tx = tx;
     step_now = now;
@@ -621,6 +676,11 @@ mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
 mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,
     mac_poll_record_t MAC_POLL_RAM * volatile record)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_POLL_OTHER, MAC_POLL_INVALID);
+    if (!LW_IO(LW_POLL_OTHER, p, sizeof(*p), 1) ||
+        !LW_IO(LW_POLL_OTHER, record, sizeof(*record), 1)) return LW_RETURN(LW_POLL_OTHER, MAC_POLL_INVALID);
+#endif
     if (p == NULL || record == NULL)
         return POLL_RETURN(MAC_POLL_INVALID);
 #if defined(CC2530_MAC_LINK_RAM)
@@ -640,6 +700,11 @@ mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,
 mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile p,
     MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_POLL_OTHER, MAC_POLL_INVALID);
+    if (!LW_IO(LW_POLL_OTHER, p, sizeof(*p), 1) ||
+        !LW_IO(LW_POLL_OTHER, tx, sizeof(*tx), 1)) return LW_RETURN(LW_POLL_OTHER, MAC_POLL_INVALID);
+#endif
     if (p == NULL || tx == NULL)
         return POLL_RETURN(MAC_POLL_INVALID);
 #if defined(CC2530_MAC_LINK_RAM)

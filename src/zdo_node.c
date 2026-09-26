@@ -5,6 +5,10 @@
 
 #include <stddef.h>
 #include <string.h>
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#endif
 
 static uint16_t read_le16(const uint8_t *p)
 {
@@ -69,6 +73,10 @@ static void write_descriptor(const zdo_node_descriptor_t *d, uint8_t *p)
 zdo_node_result_t zdo_node_req_decode(const uint8_t *body, uint16_t size,
                                      zdo_node_request_t *output)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, body, size, 0) || !LW_IO(LW_NONE, output, sizeof(*output), 1))
+        return ZDO_NODE_INVALID_ARGUMENT;
+#endif
     zdo_node_request_t candidate;
     if (body == NULL || output == NULL)
         return ZDO_NODE_INVALID_ARGUMENT;
@@ -87,6 +95,11 @@ zdo_node_result_t zdo_node_req_decode(const uint8_t *body, uint16_t size,
 zdo_node_result_t zdo_node_req_encode(const zdo_node_request_t *request,
                                      uint8_t *body, uint16_t capacity, uint8_t *size)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, request, sizeof(*request), 0) ||
+        !LW_IO(LW_NONE, body, capacity, 1) || !LW_IO(LW_NONE, size, 1, 1))
+        return ZDO_NODE_INVALID_ARGUMENT;
+#endif
     if (request == NULL || body == NULL || size == NULL)
         return ZDO_NODE_INVALID_ARGUMENT;
     if (capacity < 3)
@@ -100,19 +113,28 @@ zdo_node_result_t zdo_node_req_encode(const zdo_node_request_t *request,
 zdo_node_result_t zdo_node_rsp_decode(const uint8_t *body, uint16_t size,
                                      zdo_node_response_t *output)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_ZDO_DECODE, ZDO_NODE_INVALID_ARGUMENT);
+    if (!LW_IO(LW_ZDO_DECODE, body, size, 0) || !LW_IO(LW_ZDO_DECODE, output, sizeof(*output), 1))
+        return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_INVALID_ARGUMENT);
+#endif
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#define candidate (link_work_arena.protocol.parent.zdo.node)
+#else
     zdo_node_response_t candidate;
+#endif
     uint8_t needed;
     if (body == NULL || output == NULL)
-        return ZDO_NODE_INVALID_ARGUMENT;
+        return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_INVALID_ARGUMENT);
     if (size > ZDO_NODE_MAX_BODY)
-        return ZDO_NODE_TOO_LONG;
+        return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_TOO_LONG);
     if (size < 2)
-        return ZDO_NODE_TRUNCATED;
+        return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_TRUNCATED);
     needed = response_size(body[1]);
     if (!needed)
-        return ZDO_NODE_UNSUPPORTED_STATUS;
+        return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_UNSUPPORTED_STATUS);
     if (size < needed)
-        return ZDO_NODE_TRUNCATED;
+        return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_TRUNCATED);
     memset(&candidate, 0, sizeof(candidate));
     candidate.sequence = body[0];
     candidate.status = body[1];
@@ -125,28 +147,35 @@ zdo_node_result_t zdo_node_rsp_decode(const uint8_t *body, uint16_t size,
         /* Reserved bits must be checked before unpacking discards them. */
         if ((body[4] & 0xe0u) || (body[5] & 7u)
                 || (body[12] & 0x80u) || (body[13] & 1u))
-            return ZDO_NODE_INVALID_DESCRIPTOR;
+            return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_INVALID_DESCRIPTOR);
         read_descriptor(body + 4, &candidate.descriptor);
         if (!descriptor_valid(&candidate.descriptor))
-            return ZDO_NODE_INVALID_DESCRIPTOR;
+            return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_INVALID_DESCRIPTOR);
     }
     *output = candidate;
-    return ZDO_NODE_OK;
+    return LW_RETURN(LW_ZDO_DECODE, ZDO_NODE_OK);
 }
+#undef candidate
 
 zdo_node_result_t zdo_node_rsp_encode(const zdo_node_response_t *response,
                                      uint8_t *body, uint16_t capacity, uint8_t *size)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_ZDO_ENCODE, ZDO_NODE_INVALID_ARGUMENT);
+    if (!LW_IO(LW_ZDO_ENCODE, response, sizeof(*response), 0) ||
+        !LW_IO(LW_ZDO_ENCODE, body, capacity, 1) || !LW_IO(LW_ZDO_ENCODE, size, 1, 1))
+        return LW_RETURN(LW_ZDO_ENCODE, ZDO_NODE_INVALID_ARGUMENT);
+#endif
     uint8_t needed;
     if (response == NULL || body == NULL || size == NULL)
-        return ZDO_NODE_INVALID_ARGUMENT;
+        return LW_RETURN(LW_ZDO_ENCODE, ZDO_NODE_INVALID_ARGUMENT);
     needed = response_size(response->status);
     if (!needed)
-        return ZDO_NODE_UNSUPPORTED_STATUS;
+        return LW_RETURN(LW_ZDO_ENCODE, ZDO_NODE_UNSUPPORTED_STATUS);
     if (response->status == ZDO_NODE_SUCCESS && !descriptor_valid(&response->descriptor))
-        return ZDO_NODE_INVALID_DESCRIPTOR;
+        return LW_RETURN(LW_ZDO_ENCODE, ZDO_NODE_INVALID_DESCRIPTOR);
     if (capacity < needed)
-        return ZDO_NODE_SPACE;
+        return LW_RETURN(LW_ZDO_ENCODE, ZDO_NODE_SPACE);
     body[0] = response->sequence;
     body[1] = response->status;
     if (needed >= 4)
@@ -154,5 +183,5 @@ zdo_node_result_t zdo_node_rsp_encode(const zdo_node_response_t *response,
     if (response->status == ZDO_NODE_SUCCESS)
         write_descriptor(&response->descriptor, body + 4);
     *size = needed;
-    return ZDO_NODE_OK;
+    return LW_RETURN(LW_ZDO_ENCODE, ZDO_NODE_OK);
 }

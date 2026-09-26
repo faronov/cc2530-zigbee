@@ -5,6 +5,9 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 static MCU_XDATA struct {
     uint8_t key[16], nonce[13], mac[16], block[16], cipher[16];
@@ -113,6 +116,13 @@ ccm_star_result_t ccm_star_crypt(
     uint8_t * volatile output, uint16_t capacity, uint8_t * volatile written,
     const ccm_star_limits_t * volatile limits, ccm_star_info_t * volatile info)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_CCM,key,16,0) || !LW_IO(LW_CHILD_CCM,nonce,13,0) ||
+        !LW_IO(LW_CHILD_CCM,aad,aad_length,0) || !LW_IO(LW_CHILD_CCM,input,length,0) ||
+        !LW_IO(LW_CHILD_CCM,output,capacity,1) || !LW_IO(LW_CHILD_CCM,written,1,1) ||
+        !LW_IO(LW_CHILD_CCM,limits,sizeof(*limits),0) ||
+        !LW_IO(LW_CHILD_CCM,info,sizeof(*info),1)) return CCM_STAR_ARGUMENT;
+#endif
     volatile uint8_t size, total;
     uint8_t i, different = 0;
     ccm_star_result_t result = CCM_STAR_AES;

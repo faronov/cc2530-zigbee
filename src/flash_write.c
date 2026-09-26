@@ -4,6 +4,9 @@
 #include "flash_write.h"
 #include "flash_exec.h"
 #include <stddef.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 MCU_XDATA flash_write_diagnostic_t flash_write_status;
 MCU_XDATA uint8_t flash_write_known, flash_write_used[128];
@@ -25,6 +28,9 @@ static flash_write_result_t operate(uint8_t operation, uint8_t page, uint16_t of
     index = (uint8_t)((page << 6) + (offset >> 5));
     mask = (uint8_t)(1u << ((offset >> 2) & 7u));
     if (operation == FLASH_EXEC_PROGRAM) {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+        if (!link_work_external(word, 4)) return FLASH_WRITE_BUFFER_OWNERSHIP;
+#endif
         address = MMIO_XADDRESS(word);
         if (address > 0x1dfcu) return FLASH_WRITE_INVALID_RANGE;
         if (address <= MMIO_XADDRESS(&flash_write_reserved_end)) return FLASH_WRITE_BUFFER_OWNERSHIP;

@@ -3,6 +3,9 @@
  */
 #include "flash_exec.h"
 #include <stddef.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 #define FCTL 0x6270u
 
@@ -165,6 +168,9 @@ flash_exec_result_t flash_exec_command(uint8_t operation, uint8_t page,
         return FLASH_EXEC_INVALID_ARGUMENT;
     if (operation == FLASH_EXEC_PROGRAM) {
         if (word == NULL) return FLASH_EXEC_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+        if (!link_work_external(word, 4)) return FLASH_EXEC_INVALID_ARGUMENT;
+#endif
         address = MMIO_XADDRESS(word);
         if (address > 0x1dfcu || address <= MMIO_XADDRESS(&flash_exec_reserved_end))
             return FLASH_EXEC_INVALID_ARGUMENT;

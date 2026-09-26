@@ -113,6 +113,16 @@ status/MMIO and IRAM aliases. Calls are serialized foreground-only and inherit
 the real flash clock, mapping, IRQ/DMA and genuine-reset/history constraints.
 There are no callbacks, heap, automatic retry or successful persistence mocks.
 
+The opt-in [shared UPPER profile](MAC_LINK_DRIVER.md#shared-upper-workspace)
+adds a narrowly scoped internal exception: the actual KEY owner may grant
+READ to its exact112-byte record and size-byte outputs, CREATE/SAVE to that
+record, or TAKE to its exact four-byte counter. The entire manager XDATA
+allocation must be linked before the lower private fences. No external caller
+acquires a general arena exemption; FREE/JOIN, missing/wrong grants, shifted/partial
+objects and aliased outputs are rejected without changing caller data or
+diagnostics. The real journal/flash path and this owner's exclusive NV,
+ceiling, reset and wear policies are unchanged.
+
 Journal generations never wrap. The underlying32 erase-attempts/page runtime
 limit remains unchanged; provisioning and payload changes consume it too.
 At most64 replacements are therefore admitted in an epoch, and fewer ranges

@@ -5,6 +5,13 @@
 
 #include <stddef.h>
 #include <string.h>
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#define reply (link_work_arena.protocol.parent.zdo.server.reply)
+#define staged (link_work_arena.protocol.parent.zdo.server.staged)
+#define candidate (link_work_arena.protocol.parent.zdo.server.candidate)
+#endif
 
 zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
                                const zdo_srv_rx_t * volatile rx,
@@ -12,13 +19,27 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
                                uint8_t * volatile response, uint16_t capacity,
                                zdo_srv_info_t * volatile info)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_ZDO_SERVER, ZDO_SRV_ARGUMENT);
+    if (!LW_IO(LW_ZDO_SERVER, local, sizeof(*local), 0) ||
+        !LW_IO(LW_ZDO_SERVER, rx, sizeof(*rx), 0) ||
+        !LW_IO(LW_ZDO_SERVER, body, length, 0) ||
+        !LW_IO(LW_ZDO_SERVER, response, capacity, 1) ||
+        !LW_IO(LW_ZDO_SERVER, info, sizeof(*info), 1)) return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_ARGUMENT);
+#endif
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
     zdo_node_response_t reply;
+#endif
     zdo_node_request_t request;
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
     zdo_srv_info_t candidate;
     uint8_t staged[17], size;
+#else
+    uint8_t size;
+#endif
 
     if (local == NULL || rx == NULL || body == NULL || response == NULL || info == NULL)
-        return ZDO_SRV_ARGUMENT;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_ARGUMENT);
     if (rx->broadcast > 1 || rx->header.type != APS_FRAME_DATA
             || rx->header.profile_id != 0 || rx->header.destination_endpoint != 0
             || rx->header.source_endpoint == 0xff
@@ -26,24 +47,24 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
             || (rx->header.delivery_mode != APS_DELIVERY_UNICAST
                 && rx->header.delivery_mode != APS_DELIVERY_BROADCAST)
             || (rx->header.delivery_mode == APS_DELIVERY_BROADCAST && rx->header.flags))
-        return ZDO_SRV_CONTEXT;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_CONTEXT);
     if (!local->address || local->address >= 0xfff8u || local->descriptor.logical_type != 2)
-        return ZDO_SRV_LOCAL;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_LOCAL);
     if (length > ZDO_NODE_MAX_BODY)
-        return ZDO_SRV_TOO_LONG;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_TOO_LONG);
     if (!length)
-        return ZDO_SRV_TRUNCATED;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_TRUNCATED);
     memset(&reply, 0, sizeof(reply));
     reply.descriptor = local->descriptor;
     reply.sequence = body[0];
     reply.address = local->address;
     if (zdo_node_rsp_encode(&reply, staged, sizeof(staged), &size) != ZDO_NODE_OK)
-        return ZDO_SRV_LOCAL;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_LOCAL);
     if (rx->header.cluster_id & 0x8000u)
-        return ZDO_SRV_NOT_REQUEST;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_NOT_REQUEST);
     if (rx->header.cluster_id == ZDO_SRV_DEVICE_ANNCE
             || rx->header.cluster_id == ZDO_SRV_UPDATE_NOTIFY)
-        return ZDO_SRV_NOTIFICATION;
+        return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_NOTIFICATION);
     memset(&candidate, 0, sizeof(candidate));
     candidate.sequence = body[0];
     candidate.consumed = 1;
@@ -54,7 +75,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
     } else {
         if (rx->header.cluster_id == ZDO_NODE_REQUEST_CLUSTER) {
             if (zdo_node_req_decode(body, length, &request) != ZDO_NODE_OK)
-                return ZDO_SRV_TRUNCATED;
+                return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_TRUNCATED);
             candidate.consumed = request.consumed;
             reply.address = request.address;
             if (request.address != local->address)
@@ -64,9 +85,9 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
         }
         /* The descriptor and all other codec arguments were validated above. */
         if (zdo_node_rsp_encode(&reply, staged, sizeof(staged), &size) != ZDO_NODE_OK)
-            return ZDO_SRV_LOCAL;
+            return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_LOCAL);
         if (capacity < size)
-            return ZDO_SRV_SPACE;
+            return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_SPACE);
         candidate.kind = ZDO_SRV_REPLY;
         candidate.cluster_id = rx->header.cluster_id | 0x8000u;
         candidate.endpoint = rx->header.source_endpoint;
@@ -75,5 +96,5 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
         memcpy(response, staged, size);
     }
     *info = candidate;
-    return ZDO_SRV_OK;
+    return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_OK);
 }

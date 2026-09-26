@@ -24,7 +24,7 @@ COMMON_MODULES = ("mac_frame", "mac_tx", "mac_association")
 # Codec lowering reviewed in boot_mac_tx. Both linked stack starts and all
 # caller/private XDATA extents stay unchanged; full-corpus observations are
 # POLL SP72 and independent floor SP68, with the same SP7C/15-second bounds.
-# Compact-profile pin refresh changes only source-line metadata, not CODE/ABI.
+# Compact/UPPER refreshes change only source-line metadata, not CODE/ABI.
 COMMON_PUBLIC = {'mac_command_decode': ('mac_frame', 554, 1017),
  'mac_command_encode': ('mac_frame', 1018, 1551),
  'mac_beacon_decode': ('mac_frame', 2229, 2332),
@@ -61,7 +61,7 @@ POLL = {'name': 'mac_poll_test',
  'done': 31991,
  'boundary': 28103,
  'code': 'eabf45ebbff8419f443e73833e208999bf4d2b2773ce2bced8ada6a89fb67f66',
- 'metadata': (22457, 'd79cd8de829007be5f332200383594c17b824856369ea0faaa9fb0083b5cbde8'),
+ 'metadata': (22457, 'ed80444ec33510f7f9be1c9703de97b340681ed8d941d404d40e8a957957372a'),
  'public': {**COMMON_PUBLIC, 'mac_poll_init': ('mac_poll', 16886, 16970),
  'mac_poll_start': ('mac_poll', 16971, 18196),
  'mac_poll_step': ('mac_poll', 22490, 22601),
@@ -118,7 +118,7 @@ FLOOR = {'name': 'association_tx_floor',
  'gptrput': 878,
  'done': 20199,
  'code': '3124213e67eb6e48bc954e4affdca26bac739093d62a326d9224bfae4ed7ab30',
- 'metadata': (14010, 'f5200e076c5569e7bbe6225ec89d429905d25f4e93bbeca0a6d8e515af2206d1'),
+ 'metadata': (14010, 'b52b689f7756efb708845ff181a2e1a13ed9c07c61c955a81a9aaef3cbb6f12c'),
  'public': {**COMMON_PUBLIC, 'main': ('mac_association_test', 20143, 20202)},
  'listings': {'mac_frame': (4262, 7093, '465215adb5eb7ae57ce17703f0bedcdc5a6470a87081a00c64ad50abace77d97'),
               'mac_tx': (3729, 5650, 'b299cba6b441bdfceac728bc894ade497e920c8f7ed1125c72b89357649bfd0f'),

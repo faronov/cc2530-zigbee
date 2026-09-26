@@ -6,6 +6,11 @@
 
 #include "nwk_aps.h"
 #include "security_keys.h"
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#define nwk_aps_work (link_work_arena.protocol.parent.nwk)
+#endif
 
 #if defined(CC2530_MAC_LINK)
 #define NWK_APS_ENGINE(tx) (&(tx)->engine)
@@ -28,7 +33,9 @@ typedef union {
 } nwk_aps_work_t;
 
 extern MCU_XDATA security_keys_status_t nwk_aps_keys;
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
 extern MCU_XDATA nwk_aps_work_t nwk_aps_work;
+#endif
 void nwk_aps_complete(nwk_aps_t * volatile ctx, volatile uint8_t result);
 nwk_aps_result_t nwk_aps_broadcast_slot(nwk_aps_t * volatile ctx, volatile uint16_t source,
     volatile uint8_t sequence, volatile uint32_t now, uint8_t * volatile slot);

@@ -3,6 +3,15 @@
  * Allocation-only SDCC probe, excluded from production totals and images.
  */
 #include "mac_link_driver.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+typedef char upper_key_size[sizeof(link_work_keys_t) == 617 ? 1 : -1];
+typedef char upper_protocol_size[sizeof(((link_work_arena_t *)0)->protocol) == 499 ? 1 : -1];
+typedef char upper_payload_size[sizeof(link_work_arena_t) == 617 ? 1 : -1];
+typedef char upper_metadata_size[sizeof(link_work_ownership_t) == 31 ? 1 : -1];
+link_work_arena_t MCU_XDATA mac_link_workspace_layout_arena;
+link_work_ownership_t MCU_XDATA mac_link_workspace_layout_metadata;
+#endif
 #if !defined(__SDCC_mcs51) || !defined(CC2530_MAC_LINK_RAM)
 #error This layout record requires the explicit target compact profile
 #endif

@@ -16,7 +16,7 @@ from verify_firmware import parse_ihex, parse_symbols, require, xdata_ranges
 
 SIZE = 26797
 IMAGE_SHA = "9b3188b25a30c1c5d47c6b95981ff89726fcb4e18e4a30240a99589a99df2991"
-CDB_SHA = "ebc6de5abd9e1273a7ee4b3cfbab741bbec7a5cff24daa1c37d93317ccd99070"
+CDB_SHA = "14cf83af18aff70cfbfbfb53abd3da82caea4cbefbd34bdc6e790e1bfd02a45c"
 MAP_SHA = "6d447a1a16c03a84b4018be6320c70eb66722ef5acb73680bcd1702b9e425946"
 CASES = 52
 LISTINGS = {

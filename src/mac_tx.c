@@ -5,6 +5,10 @@
 
 #include <stddef.h>
 #include <string.h>
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#endif
 
 #if defined(__SDCC)
 #define TX_RAM __xdata
@@ -44,11 +48,23 @@ typedef char control_layout_frame[
  * Byte copies preserve inactive members; frame alignment and tail padding in
  * the public object are untouched, including the native compiler's padding.
  */
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+typedef char work_control_size[sizeof(control_t) == sizeof(link_work_tx_control_t) ? 1 : -1];
+typedef char action_control_first[offsetof(mac_tx_interval_action_t, control) == 0 ? 1 : -1];
+#define control (link_work_arena.protocol.operation.tx.control)
+#define input (link_work_arena.protocol.operation.tx.input)
+#define decoded (link_work_arena.protocol.operation.tx.decoded)
+/* C structure-to-initial-member conversion, with the real first member.
+ * Keeps the private control lvalue macro out of public member spelling. */
+#define ACTION_CONTROL(p) (*(mac_tx_action_t *)(p))
+#else
+#define ACTION_CONTROL(p) ((p)->control)
 static TX_RAM control_t control;
 static TX_RAM volatile struct {
     uint32_t now, lifetime;
     uint16_t length, limit;
 } input;
+#endif
 
 static void load_control(const mac_tx_t *tx)
 {
@@ -67,6 +83,9 @@ static uint8_t reached(uint32_t now, uint32_t at)
 
 mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1)) return MAC_TX_INVALID;
+#endif
     if (tx == NULL)
         return MAC_TX_INVALID;
     memset(tx, 0, sizeof(*tx));
@@ -80,7 +99,14 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                               const uint8_t * volatile body, uint16_t length,
                               uint32_t now, uint32_t lifetime, uint16_t work_limit)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_TX_SUBMIT, MAC_TX_INVALID);
+    if (!LW_IO(LW_TX_SUBMIT, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_TX_SUBMIT, body, length, 0)) return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
+#endif
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
     mac_frame_info_t decoded;
+#endif
     volatile uint8_t command;
 
     input.now = now;
@@ -89,18 +115,18 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
     input.limit = work_limit;
     if (tx == NULL || body == NULL || input.lifetime == 0u
             || input.lifetime >= MAC_TX_HALF || input.limit == 0u)
-        return MAC_TX_INVALID;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
     load_control(tx);
     if (control.phase != MAC_TX_IDLE)
-        return MAC_TX_FULL;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_FULL);
     if ((uint32_t)(input.now - control.last) >= MAC_TX_HALF)
-        return MAC_TX_INVALID;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
     if (control.generation == UINT32_MAX)
-        return MAC_TX_GENERATION_EXHAUSTED;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_GENERATION_EXHAUSTED);
     if (mac_frame_decode(body, input.length, &decoded) != MAC_CODEC_OK)
-        return MAC_TX_UNSUPPORTED;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_UNSUPPORTED);
     if (decoded.header.flags & MAC_FLAG_PENDING)
-        return MAC_TX_UNSUPPORTED;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_UNSUPPORTED);
     /* The unchanged codec establishes command lengths/addressing/ACK, including
      * Association Request source PAN FFFF and no compression.
      * DATA behavior is unchanged: compressed equality is guaranteed by decode.
@@ -119,7 +145,7 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                          && (uint8_t)(body[(uint8_t)(input.length - 1u)] & 0xfbu) == 0x88u)
                         || (command == MAC_COMMAND_DATA_REQUEST
                             && decoded.header.destination_mode != MAC_ADDRESS_NONE)))))
-            return MAC_TX_UNSUPPORTED;
+            return LW_RETURN(LW_TX_SUBMIT, MAC_TX_UNSUPPORTED);
     } else if (decoded.header.type != MAC_FRAME_DATA
             || decoded.header.source_pan == 0xffffu
             || decoded.header.destination_pan == 0xffffu
@@ -129,7 +155,7 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
                 && decoded.header.source[0] == 0xfeu && decoded.header.source[1] == 0xffu)
             || (decoded.header.destination_mode == MAC_ADDRESS_SHORT
                 && decoded.header.destination[0] == 0xfeu && decoded.header.destination[1] == 0xffu))
-        return MAC_TX_UNSUPPORTED;
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_UNSUPPORTED);
     memcpy(tx->frame, body, input.length);
     tx->frame[2] = control.next_dsn++;
     control.length = (uint8_t)input.length;
@@ -150,13 +176,18 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
     memset((unsigned char *)&control + offsetof(control_t, retries), 0,
            offsetof(control_t, stop_steps) - offsetof(control_t, retries));
     save_control(tx);
-    return MAC_TX_OK;
+    return LW_RETURN(LW_TX_SUBMIT, MAC_TX_OK);
 }
 
 mac_tx_result_t mac_tx_copy(const mac_tx_t * volatile tx,
                             uint8_t * volatile body, uint16_t capacity,
                             uint8_t * volatile length)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 0) ||
+        !LW_IO(LW_NONE, body, capacity, 1) ||
+        !LW_IO(LW_NONE, length, 1, 1)) return MAC_TX_INVALID;
+#endif
     TX_RAM volatile uint8_t size;
 
     if (tx == NULL || body == NULL || length == NULL)
@@ -217,11 +248,19 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
                             const mac_tx_event_t * volatile event,
                             mac_tx_action_t * volatile action)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_TX_STEP, MAC_TX_INVALID);
+    if (!LW_IO(LW_TX_STEP, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_TX_STEP, event, event ? sizeof(*event) : 0, 0) ||
+        !LW_IO(LW_TX_STEP, action, sizeof(*action), 1)) return LW_RETURN(LW_TX_STEP, MAC_TX_INVALID);
+#endif
     uint8_t emitted = MAC_TX_ACTION_NONE;
     uint8_t kind = 0;
     uint8_t phase;
     uint8_t normalized[3];
+#if !defined(CC2530_MAC_LINK_WORKSPACE)
     mac_frame_info_t decoded;
+#endif
 
     input.now = now;
     if (tx == NULL || action == NULL
@@ -229,11 +268,11 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
                 || event->kind > MAC_TX_EVENT_CANCEL
                 || (event->kind == MAC_TX_EVENT_ACK && event->length != 0u
                     && event->bytes == NULL))))
-        return MAC_TX_INVALID;
+        return LW_RETURN(LW_TX_STEP, MAC_TX_INVALID);
     load_control(tx);
     phase = control.phase;
     if (phase == MAC_TX_IDLE)
-        return MAC_TX_STATE;
+        return LW_RETURN(LW_TX_STEP, MAC_TX_STATE);
     if (phase == MAC_TX_DONE || phase == MAC_TX_FAULT)
         goto publish;
     if ((uint32_t)(input.now - control.last) >= MAC_TX_HALF) {
@@ -366,11 +405,14 @@ publish:
     action->transmissions = control.transmissions;
     action->uncertain = control.uncertain;
     action->pending = control.pending;
-    return MAC_TX_OK;
+    return LW_RETURN(LW_TX_STEP, MAC_TX_OK);
 }
 
 mac_tx_result_t mac_tx_release(mac_tx_t *tx)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1)) return MAC_TX_INVALID;
+#endif
     if (tx == NULL)
         return MAC_TX_INVALID;
     if (tx->phase != MAC_TX_DONE)
@@ -382,10 +424,17 @@ mac_tx_result_t mac_tx_release(mac_tx_t *tx)
 #if defined(CC2530_MAC_INTERVAL)
 #include "mac_tx_interval.h"
 
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#define interval_end (link_work_arena.protocol.operation.tx.interval_end)
+#define interval_decoded (link_work_arena.protocol.operation.tx.interval_decoded)
+#define interval_ack (link_work_arena.protocol.operation.tx.interval_ack)
+#define interval_previous (link_work_arena.protocol.operation.tx.interval_previous)
+#else
 static TX_RAM mac_epoch_stamp_t interval_end;
 static TX_RAM mac_frame_info_t interval_decoded;
 static TX_RAM uint8_t interval_ack[3];
 static TX_RAM uint32_t interval_previous;
+#endif
 
 static uint8_t interval_ordered(const mac_epoch_stamp_t *first,
                                 const mac_epoch_stamp_t *last)
@@ -418,25 +467,28 @@ static uint8_t interval_no_ack(const mac_tx_interval_t *tx)
 static void interval_publish(const mac_tx_interval_t *tx,
                               mac_tx_interval_action_t *action, uint8_t emitted)
 {
-    action->control.kind = emitted;
-    action->control.generation = control.generation;
-    action->control.retry = control.retries;
-    action->control.nb = control.nb;
-    action->control.at = emitted == MAC_TX_ACTION_QUIESCE ? input.now : control.at;
-    action->control.until = control.phase == MAC_TX_STOPPING ? control.stop_at : control.deadline;
-    action->control.length = control.length;
-    action->control.ack_requested = control.ack_requested;
-    action->control.phase = control.phase;
-    action->control.outcome = control.outcome;
-    action->control.transmissions = control.transmissions;
-    action->control.uncertain = control.uncertain;
-    action->control.pending = control.pending;
+    ACTION_CONTROL(action).kind = emitted;
+    ACTION_CONTROL(action).generation = control.generation;
+    ACTION_CONTROL(action).retry = control.retries;
+    ACTION_CONTROL(action).nb = control.nb;
+    ACTION_CONTROL(action).at = emitted == MAC_TX_ACTION_QUIESCE ? input.now : control.at;
+    ACTION_CONTROL(action).until = control.phase == MAC_TX_STOPPING ? control.stop_at : control.deadline;
+    ACTION_CONTROL(action).length = control.length;
+    ACTION_CONTROL(action).ack_requested = control.ack_requested;
+    ACTION_CONTROL(action).phase = control.phase;
+    ACTION_CONTROL(action).outcome = control.outcome;
+    ACTION_CONTROL(action).transmissions = control.transmissions;
+    ACTION_CONTROL(action).uncertain = control.uncertain;
+    ACTION_CONTROL(action).pending = control.pending;
     action->through = tx->tx_upper;
     action->through.symbols += MAC_TX_ACK_SYMBOLS;
 }
 
 mac_tx_result_t mac_tx_interval_init(mac_tx_interval_t *tx, uint8_t dsn, uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1)) return MAC_TX_INVALID;
+#endif
     mac_tx_result_t result;
     if (tx == NULL)
         return MAC_TX_INVALID;
@@ -449,6 +501,9 @@ mac_tx_result_t mac_tx_interval_init(mac_tx_interval_t *tx, uint8_t dsn, uint32_
 mac_tx_result_t mac_tx_interval_submit(mac_tx_interval_t *tx,
     const uint8_t *body, uint16_t length, uint32_t now, uint32_t lifetime, uint16_t work)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1)) return MAC_TX_INVALID;
+#endif
     mac_tx_result_t result;
     if (tx == NULL)
         return MAC_TX_INVALID;
@@ -463,47 +518,61 @@ mac_tx_result_t mac_tx_interval_submit(mac_tx_interval_t *tx,
 mac_tx_result_t mac_tx_interval_copy(const mac_tx_interval_t *tx,
     uint8_t *body, uint16_t capacity, uint8_t *length)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 0) ||
+        !LW_IO(LW_NONE, body, capacity, 1) ||
+        !LW_IO(LW_NONE, length, 1, 1)) return MAC_TX_INVALID;
+#endif
     return tx == NULL ? MAC_TX_INVALID : mac_tx_copy(&tx->engine, body, capacity, length);
 }
 
 mac_tx_result_t mac_tx_interval_release(mac_tx_interval_t *tx)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1)) return MAC_TX_INVALID;
+#endif
     return tx == NULL ? MAC_TX_INVALID : mac_tx_release(&tx->engine);
 }
 
 mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t now,
     const mac_tx_interval_event_t * volatile event, mac_tx_interval_action_t * volatile action)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_TX_INTERVAL, MAC_TX_INVALID);
+    if (!LW_IO(LW_TX_INTERVAL, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_TX_INTERVAL, event, event ? sizeof(*event) : 0, 0) ||
+        !LW_IO(LW_TX_INTERVAL, action, sizeof(*action), 1)) return LW_RETURN(LW_TX_INTERVAL, MAC_TX_INVALID);
+#endif
     uint8_t kind = 0;
     uint8_t emitted = MAC_TX_ACTION_NONE;
     mac_tx_result_t result;
 
     if (tx == NULL || action == NULL)
-        return MAC_TX_INVALID;
+        return LW_RETURN(LW_TX_INTERVAL, MAC_TX_INVALID);
     if (event != NULL) {
         kind = event->source.kind;
         if (kind < MAC_TX_EVENT_RANDOM || kind > MAC_TX_EVENT_RX_CLOSED
                 || kind == MAC_TX_EVENT_SENT || kind == MAC_TX_EVENT_ACK
                 || (kind == MAC_TX_EVENT_ACK_INTERVAL && event->source.length != 0u
                     && event->source.bytes == NULL))
-            return MAC_TX_INVALID;
+            return LW_RETURN(LW_TX_INTERVAL, MAC_TX_INVALID);
         if (kind >= MAC_TX_EVENT_SENT_INTERVAL) {
             if (event->upper.fine >= 512u
                     || !reached(event->source.stamp, interval_ceil(&event->upper)))
-                return MAC_TX_INVALID;
+                return LW_RETURN(LW_TX_INTERVAL, MAC_TX_INVALID);
             if (kind != MAC_TX_EVENT_RX_CLOSED
                     && (event->lower.fine >= 512u
                         || !interval_ordered(&event->lower, &event->upper)))
-                return MAC_TX_INVALID;
+                return LW_RETURN(LW_TX_INTERVAL, MAC_TX_INVALID);
         }
     }
     if (tx->engine.phase != MAC_TX_ACK_WAIT) {
         interval_previous = tx->engine.last;
         result = mac_tx_step(&tx->engine, now,
             event != NULL && kind < MAC_TX_EVENT_SENT_INTERVAL ? &event->source : NULL,
-            &action->control);
+            &ACTION_CONTROL(action));
         if (result != MAC_TX_OK)
-            return result;
+            return LW_RETURN(LW_TX_INTERVAL, result);
         action->through = tx->tx_upper;
         action->through.symbols += MAC_TX_ACK_SYMBOLS;
         if (tx->engine.phase != MAC_TX_RADIO || kind != MAC_TX_EVENT_SENT_INTERVAL
@@ -511,7 +580,7 @@ mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t n
                 || event->source.retry != tx->engine.retries || event->source.nb != tx->engine.nb
                 || !reached(event->source.stamp, interval_previous)
                 || !reached(now, event->source.stamp))
-            return MAC_TX_OK;
+            return LW_RETURN(LW_TX_INTERVAL, MAC_TX_OK);
         load_control(&tx->engine);
         interval_end.symbols = control.at + 24u + 2u * control.length;
         interval_end.fine = 0;
@@ -596,44 +665,57 @@ mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t n
 interval_done:
     save_control(&tx->engine);
     interval_publish(tx, action, emitted);
-    return MAC_TX_OK;
+    return LW_RETURN(LW_TX_INTERVAL, MAC_TX_OK);
 }
 #endif
 
 #if defined(CC2530_MAC_OBSERVED)
 #include "mac_tx_observed.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#define observed_previous (link_work_arena.protocol.operation.tx.observed_previous)
+#define observed_phase (link_work_arena.protocol.operation.tx.observed_phase)
+#define observed_lower (link_work_arena.protocol.operation.tx.observed_lower)
+#define observed_upper (link_work_arena.protocol.operation.tx.observed_upper)
+#else
 static TX_RAM uint32_t observed_previous;
 static TX_RAM uint8_t observed_phase;
 static const mac_epoch_stamp_t * volatile TX_RAM observed_lower;
 static const mac_epoch_stamp_t * volatile TX_RAM observed_upper;
+#endif
 
 mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * volatile tx, uint32_t now,
     const mac_tx_interval_event_t * volatile event,
     mac_tx_interval_action_t * volatile action)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_TX_OBSERVED, MAC_TX_INVALID);
+    if (!LW_IO(LW_TX_OBSERVED, tx, sizeof(*tx), 1) ||
+        !LW_IO(LW_TX_OBSERVED, event, event ? sizeof(*event) : 0, 0) ||
+        !LW_IO(LW_TX_OBSERVED, action, sizeof(*action), 1)) return LW_RETURN(LW_TX_OBSERVED, MAC_TX_INVALID);
+#endif
     mac_tx_result_t result;
     if (!event || (event->source.kind != MAC_TX_EVENT_BUSY_INTERVAL &&
                    event->source.kind != MAC_TX_EVENT_RETIRED))
-        return mac_tx_interval_step(tx, now, event, action);
-    if (!tx || !action) return MAC_TX_INVALID;
+        return LW_RETURN(LW_TX_OBSERVED, mac_tx_interval_step(tx, now, event, action));
+    if (!tx || !action) return LW_RETURN(LW_TX_OBSERVED, MAC_TX_INVALID);
     observed_lower = &event->lower; observed_upper = &event->upper;
     if (event->upper.fine >= 512u ||
         !reached(event->source.stamp, interval_ceil(observed_upper)) ||
         (event->source.kind == MAC_TX_EVENT_BUSY_INTERVAL &&
          (event->lower.fine >= 512u || !interval_ordered(observed_lower, observed_upper))))
-        return MAC_TX_INVALID;
+        return LW_RETURN(LW_TX_OBSERVED, MAC_TX_INVALID);
     observed_previous = tx->engine.last;
     observed_phase = tx->engine.phase;
     result = mac_tx_interval_step(tx, now, NULL, action);
-    if (result != MAC_TX_OK) return result;
+    if (result != MAC_TX_OK) return LW_RETURN(LW_TX_OBSERVED, result);
     if (event->source.generation != tx->engine.generation ||
         event->source.retry != tx->engine.retries || event->source.nb != tx->engine.nb ||
         !reached(event->source.stamp, observed_previous) || !reached(now, event->source.stamp))
-        return MAC_TX_OK;
+        return LW_RETURN(LW_TX_OBSERVED, MAC_TX_OK);
     if (event->source.kind == MAC_TX_EVENT_BUSY_INTERVAL ?
         (observed_phase != MAC_TX_RADIO || tx->engine.phase != MAC_TX_RADIO) :
         (observed_phase != MAC_TX_STOPPING || tx->engine.phase != MAC_TX_STOPPING))
-        return MAC_TX_OK;
+        return LW_RETURN(LW_TX_OBSERVED, MAC_TX_OK);
     load_control(&tx->engine);
     if (event->source.kind == MAC_TX_EVENT_BUSY_INTERVAL) {
         interval_end.symbols = control.at + 8u; interval_end.fine = 0;
@@ -658,6 +740,6 @@ mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * volatile tx, uint32_t n
     }
     save_control(&tx->engine);
     interval_publish(tx, action, MAC_TX_ACTION_NONE);
-    return MAC_TX_OK;
+    return LW_RETURN(LW_TX_OBSERVED, MAC_TX_OK);
 }
 #endif

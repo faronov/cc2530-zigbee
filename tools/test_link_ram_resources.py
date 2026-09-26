@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Compact resource accounting rejects missing modules and hidden allocations."""
+import re
 import unittest
 
 import link_ram_resources as ram
@@ -19,9 +20,11 @@ def object_text(module, xdata=1, code=1):
 
 
 class LinkRamResourcesTests(unittest.TestCase):
-    def objects(self):
-        return {m: object_text(m) for m in ram.MODULES} | {
-            ram.PROBE: object_text(ram.PROBE, ram.CONTEXT_BYTES, 0)}
+    def objects(self, workspace=False):
+        modules = ram.WORKSPACE_MODULES if workspace else ram.MODULES
+        probe = ram.CONTEXT_BYTES + (ram.WORKSPACE_LAYOUT_BYTES if workspace else 0)
+        return {m: object_text(m) for m in modules} | {
+            ram.PROBE: object_text(ram.PROBE, probe, 0)}
 
     def test_probe_counts_contexts_once_outside_production(self):
         result = ram.report(self.objects())
@@ -29,6 +32,45 @@ class LinkRamResourcesTests(unittest.TestCase):
         self.assertEqual(result["xdata"], 38)
         self.assertEqual(result["object_floor"], 38 + 1433 + 180 + 304)
         self.assertEqual(result["code"], 38)
+
+    def test_workspace_probe_does_not_double_count_the_production_arena(self):
+        result = ram.report(self.objects(True), workspace=True)
+        self.assertEqual(len(ram.WORKSPACE_MODULES), 39)
+        self.assertEqual(ram.WORKSPACE_LAYOUT_BYTES, 617 + 31)
+        self.assertEqual(result["xdata"], 39)
+        self.assertEqual(result["context_bytes"], 1917)
+        self.assertEqual(result["object_floor"], 39 + 1917)
+
+    def test_workspace_and_compact_profiles_are_not_interchangeable(self):
+        for objects, workspace in ((self.objects(True), False), (self.objects(), True)):
+            with self.assertRaisesRegex(ValueError, "object set"):
+                ram.report(objects, workspace=workspace)
+
+    def test_workspace_probe_requires_both_payload_and_ownership_layout(self):
+        objects = self.objects(True)
+        for extra in (0, 31, 617, ram.WORKSPACE_LAYOUT_BYTES - 1, ram.WORKSPACE_LAYOUT_BYTES + 1):
+            bad = objects | {ram.PROBE: object_text(ram.PROBE, ram.CONTEXT_BYTES + extra, 0)}
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "probe"):
+                ram.report(bad, workspace=True)
+
+    def test_workspace_ceilings_accept_the_limit_but_reject_one_more(self):
+        objects = self.objects(True)
+        areas = {"code": "CSEG", "const": "CONST", "xdata": "XSEG",
+                 "data_sum": "DSEG", "overlay_sum": "OSEG", "bits": "BSEG"}
+        for metric, area in areas.items():
+            remaining = 38 if metric in ("code", "xdata") else 0
+            size = ram.WORKSPACE_LIMITS[metric] - remaining
+            for extra in (0, 1):
+                text = re.sub(rf"(A {area} size )[0-9A-F]+",
+                              lambda m: m[1] + f"{size + extra:X}", object_text("mac_link_workspace"))
+                candidate = objects | {"mac_link_workspace": text}
+                with self.subTest(metric=metric, extra=extra):
+                    if extra:
+                        with self.assertRaisesRegex(ValueError, "ceiling"):
+                            ram.report(candidate, workspace=True)
+                    else:
+                        self.assertEqual(ram.report(candidate, workspace=True)[metric],
+                                         ram.WORKSPACE_LIMITS[metric])
 
     def test_missing_or_extra_module_is_not_a_smaller_composition(self):
         original = self.objects()

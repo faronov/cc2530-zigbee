@@ -27,14 +27,14 @@ RUNTIME = ("___memcpy", "_memset", "__gptrput", "__gptrget", "__mullong")
 SCALARS = {**dict.fromkeys(("op", "return", "policy", "selector", "random_byte", "length", "dsn"), 1),
            **dict.fromkeys(("limit", "work", "config_ptr", "tx_ptr", "action_ptr", "clock_ptr", "through_ptr"), 2),
            **dict.fromkeys(("timeout", "lifetime", "token"), 4)}
-# Compact-only attempt projection shifts source lines; CODE/map/memory stay fixed.
+# Compact projection and UPPER shift source lines; CODE/map/memory stay fixed.
 PINS = (
     "f839c6115d93846fd7dc97bed1b1b461fe0c8420f8cb766cc3192e769992118f",
     "b2993132dc575a5f5612f9f396e9c9254fc926a12d2360ddeb8d9dff7760c55d",
-    "e3255e97b8f380355d4764a1451a2bfd2f99167ce80adecf9902fc3d23553865",
+    "b382df4ab87cec02c386087104d474a3e574b6a82cceaedac425de0d0cb7d6b3",
     "f92082525df19d7f6fb49a5f9ff5d9c583140b02eb6b5cfec1098fd1595b892e",
-    "72eb392b4ff25ec7a9690fab6689cfb0516d3f24d3d5c1a34d68fc9917ec4a53",
-    "61c67ae518eab581eadd2421295f9b95f2768b2c168cb4336ce813ac050bdb0b",
+    "3ea4e2d8368e3e35b8eaed7f63941cf8dab7465f65f7aca67e882f11d2e30547",
+    "1d10b19a791d7ce3051adebc79eba2a651a43affdee5cccadc079e44973a76fc",
 )
 
 

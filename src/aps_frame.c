@@ -5,6 +5,9 @@
 
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 static inline uint16_t read_le16(const uint8_t *bytes)
 {
@@ -39,6 +42,10 @@ static aps_codec_result_t validate_header(const aps_header_t *header)
 aps_codec_result_t aps_frame_decode(const uint8_t *body, uint16_t length,
                                     aps_frame_info_t *result)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_APS, body, length, 0) || !LW_IO(LW_CHILD_APS, result, sizeof(*result), 1))
+        return APS_CODEC_INVALID_ARGUMENT;
+#endif
     aps_frame_info_t candidate;
     aps_codec_result_t status;
 
@@ -89,6 +96,12 @@ aps_codec_result_t aps_frame_encode(const aps_header_t *header,
                                     const uint8_t *payload, uint16_t payload_length,
                                     uint8_t *body, uint16_t capacity, uint8_t *length)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_APS, header, sizeof(*header), 0) ||
+        !LW_IO(LW_CHILD_APS, payload, payload_length, 0) ||
+        !LW_IO(LW_CHILD_APS, body, capacity, 1) || !LW_IO(LW_CHILD_APS, length, 1, 1))
+        return APS_CODEC_INVALID_ARGUMENT;
+#endif
     aps_codec_result_t status;
 
     if (header == NULL || body == NULL || length == NULL

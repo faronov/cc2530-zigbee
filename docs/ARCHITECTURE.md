@@ -126,6 +126,14 @@ The later compact attempt projection removes a128-byte duplicate frame while
 preserving the raw record, atomic public receipt and retained handoff metadata.
 This lowers the floor to8952, still beyond the ordinary region and the later
 sensor/display application reserve; no combined placement is established.
+The separate [shared UPPER experiment](MAC_LINK_DRIVER.md#shared-upper-workspace)
+alternates whole key work with disjoint nested protocol regions. Exact loans
+protect lower-service access instead of treating the arena as a general
+caller buffer. The entire manager XDATA allocation, including compiler
+storage, must be linked before every lower private fence; runtime checks
+are not placement evidence. It saves727 net XDATA bytes, reaching an8225-byte
+floor, at a19591-byte CODE/CONST and37-byte raw DATA cost. Child crypto/NV work and
+retained contexts remain separate; no new MCU-fit or stack proof follows.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

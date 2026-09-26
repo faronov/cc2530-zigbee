@@ -27,16 +27,16 @@ RUNTIME_XDATA = {
     "__mulint_PARM_2": 12, "__mullong_PARM_2": 14,
     "_memcmp_PARM_2": 18, "_memcmp_PARM_3": 21,
 }
-# CC2530_MAC_LINK, link-driver ARM and compact-profile refreshes: CODE, parsed
+# LINK, link-driver ARM and compact/UPPER refreshes: CODE, parsed
 # map and memory pins unchanged; raw CDB, listing and object pins differ only
 # in source-line records.
 PINS = (
     "91ea23b1b068e8fa913dba7e0537a2524b7ed0506d9e174b25b7d456c370fcf7",
     "58cea0511650c88eeabfc063c4bba41a3e7307d35c807385475c73b74342d7e0",
-    "26e78d7653dea48065a034b1aa1ea28cb3c3e05490c3157f668eaeae3d3d6795",
+    "f462a3a4bd735a4cb76166bd8b42b768b3563d40e42b633633c0bca84c9ca201",
     "eba2323d9f2b2b4a34158005e6de57bf08ee568192fe7e5834c810cc1e437bda",
-    "eaef7a1afa503a350f80c51375fdfba28cd67220ded7d526ff57950bcefd1d84",
-    "f623d71dd2451ec9a36bcb225e9bc473ec80e26c1aa9ea72d49c37e223ff1b8a",
+    "9b3baaec4d24faf83ed050b10f96cadfc592b9c3eb475b2a8c32604047e1b236",
+    "b21f0a4f069b75624012cff40efc4a93fc96da18a347ec1aa26b368706e07745",
 )
 
 

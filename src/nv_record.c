@@ -3,6 +3,9 @@
  */
 #include "nv_record.h"
 #include <stddef.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 MCU_XDATA uint8_t nv_record_fault;
 MCU_XDATA nv_record_status_t nv_record_diagnostic;
@@ -15,6 +18,9 @@ static const MCU_CODE uint8_t commit[4] = {'C', 'M', 'T', '1'};
 
 static uint8_t caller(const void MCU_XDATA *object, uint8_t size)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_external(object, size)) return 0;
+#endif
     uint16_t address = MMIO_XADDRESS(object);
     return address > MMIO_XADDRESS(&nv_record_reserved_end) && address < 0x1e00u &&
         size <= 0x1e00u-address;

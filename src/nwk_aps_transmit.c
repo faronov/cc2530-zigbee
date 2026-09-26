@@ -14,6 +14,10 @@ typedef char mac_payload_extent[MAC_PREFIX+NWK_FRAME_MAX_BODY == MAC_FRAME_MAX_B
 
 nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t acknowledgment, volatile uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
+#endif
     ed_packet_t * volatile p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
     security_keys_result_t secured;
     nwk_aps_result_t btr;
@@ -47,6 +51,9 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t ack
         if (btr) return btr == NWK_APS_DUPLICATE ? NWK_APS_EXHAUSTED : btr;
         nwk_aps_broadcast_put(ctx, slot, nwk_aps_keys.config.address, p->nwk.sequence, now);
     }
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_NWK_BUILD, NWK_APS_STATE);
+#endif
     memset(&nwk_aps_work.mac_header, 0, sizeof(nwk_aps_work.mac_header));
     nwk_aps_work.mac_header.type = MAC_FRAME_DATA; nwk_aps_work.mac_header.flags = MAC_FLAG_PAN_COMPRESSION;
     nwk_aps_work.mac_header.source_mode = nwk_aps_work.mac_header.destination_mode = MAC_ADDRESS_SHORT;
@@ -61,12 +68,12 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t ack
         mac_frame_encode(&nwk_aps_work.mac_header, NULL, 0, ctx->mac,
                          MAC_PREFIX, &ctx->mac_length) != MAC_CODEC_OK ||
         ctx->mac_length != MAC_PREFIX)
-        return NWK_APS_WIRE;
+        return LW_RETURN(LW_NWK_BUILD, NWK_APS_WIRE);
     ctx->mac_length += ctx->length;
     if (NWK_APS_SUBMIT(ctx->owner, ctx->mac, ctx->mac_length, now,
                       NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
-        return NWK_APS_RADIO;
+        return LW_RETURN(LW_NWK_BUILD, NWK_APS_RADIO);
     ctx->active = 1; ctx->active_ack = acknowledgment;
     if (!acknowledgment) ctx->sent = 0;
-    return NWK_APS_OK;
+    return LW_RETURN(LW_NWK_BUILD, NWK_APS_OK);
 }

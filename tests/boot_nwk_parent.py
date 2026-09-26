@@ -23,7 +23,7 @@ SOURCES = ("mac_frame.c", "nwk_beacon.c", "nwk_candidates.c", "nwk_parent.c", "t
 # XDATA/stack boundaries are unchanged. Full 42-case replay still peaks at 4D.
 CODE_SIZE = 15537
 CODE_SHA = "b26a669f36ebefbca106b8b003f6d59039d24441ce5ab2dfa2334a8fd2fd7c11"
-CDB_SHA = "d6cd227fae732c01c70c52865f19b275614382c3445bbf9f64a4927771263523"
+CDB_SHA = "70a8955db1165b3dca159e2564136abea1ddbfc4a46e357147ae860b79a1dd88"
 MAP_SHA = "b71ffe384ac4389feeae3238e17054232687cd99ea3fec4e9ec425040a920bd9"
 LISTINGS = {
     "mac_frame": (4262, 7093, "89dc930bbb49521fc667b676cd31025972fffd73b8b9c32721e60dce064154c0"),

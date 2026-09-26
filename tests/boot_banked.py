@@ -22,10 +22,10 @@ MODULES = ("flash_exec", "banked", "banked_fixture", "banked_fixture_bank1",
 PINS = (
     "b4a5af47d10eb028d8458b93306688180956c111b871cdea38722ffffae9dc60",
     "75238f64a69072c50e23d09b55aeec6af0e789b57e7d5923100f5cac5aecedc4",
-    "abf0685f316f9041c584fb5eb821b1bc25785a4a6b25cab555c89b8e6662f2b3",
+    "8d6a65bc1720b5db8aa78dd22d754fe21def9ea7032dab05f61606edb761e155",
     "279382bf8bcb05ea2f55f071cd176b87b327c851b706c6d00271581e8381933c",
-    "20d7c4dff73f3ffe64416f44d51fd4ab6adce0a3a7f95497e31c8a2885ba53d5",
-    "ca895cc0bc1e4132056c22b40d65685ec0cd5a9a2a9982ff02927965c60d31be",
+    "ddf496709f7589c988fff0bbfc0f8229283283965367aa19b6dcac4d96b42ddc",
+    "6ff2871ad3fa87d87bcbacb0b43657ed36beca1de561b01c0837d3070a122546",
 )
 _pinned_artifacts = {}
 
@@ -131,7 +131,7 @@ def verify(image, symbols, debug, memory, listings, objects):
             "87ac19a19ee72052c542b9b159adc1d1f2618e506324522ffb0ebfd8db504f8d",
             "Genuine copied flash engine changed")
     require(sha(objects["flash_exec"].split(b"\n", 1)[1]) ==
-            "52ceded037af553b1058950185143bb0175dfb7a7dcd350bf41f8c02e9dec2f2",
+            "be36ace42e071daa925d78eaf4790de1470383b0e7fe4d3410d2475d1a43d100",
             "Banked profile changed the production flash object")
     return decoded
 

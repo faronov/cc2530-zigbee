@@ -6,6 +6,10 @@
 
 #include <stddef.h>
 #include <string.h>
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#endif
 
 static uint8_t valid_mask(uint32_t mask)
 {
@@ -21,6 +25,9 @@ static uint8_t valid_table(const nwk_candidates_t * volatile table)
 nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * volatile table,
                                             uint32_t channel_mask)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, table, sizeof(*table), 1)) return NWK_CANDIDATES_INVALID_ARGUMENT;
+#endif
     if (table == NULL || !valid_mask(channel_mask))
         return NWK_CANDIDATES_INVALID_ARGUMENT;
     memset(table, 0, sizeof(*table));
@@ -43,32 +50,43 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile tabl
                                                 const uint8_t * volatile body,
                                                 uint16_t length)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_SCAN, NWK_CANDIDATES_INVALID_ARGUMENT);
+    if (!LW_IO(LW_SCAN, table, sizeof(*table), 1) || !LW_IO(LW_SCAN, body, length, 0))
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_INVALID_ARGUMENT);
+#endif
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#define frame (link_work_arena.protocol.parent.scan.frame)
+#define beacon (link_work_arena.protocol.parent.scan.beacon)
+#define candidate (link_work_arena.protocol.parent.scan.candidate)
+#else
     mac_frame_info_t frame;
     mac_beacon_info_t beacon;
     nwk_candidate_t candidate;
+#endif
     uint8_t eligible;
     volatile uint8_t i;
 
     if (table == NULL || body == NULL || channel < 11u || channel > 26u
             || crc_valid > 1u)
-        return NWK_CANDIDATES_INVALID_ARGUMENT;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_INVALID_ARGUMENT);
     if (!valid_table(table))
-        return NWK_CANDIDATES_INVALID_TABLE;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_INVALID_TABLE);
     if (!crc_valid)
-        return NWK_CANDIDATES_BAD_CRC;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_BAD_CRC);
     if (!(table->channel_mask & (UINT32_C(1) << channel)))
-        return NWK_CANDIDATES_OUTSIDE_MASK;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_OUTSIDE_MASK);
     if (mac_frame_decode(body, length, &frame) != MAC_CODEC_OK)
-        return NWK_CANDIDATES_MAC_REJECTED;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_MAC_REJECTED);
     if (frame.header.type != MAC_FRAME_BEACON)
-        return NWK_CANDIDATES_NOT_BEACON;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_NOT_BEACON);
     if (mac_beacon_decode(body + frame.payload_offset, frame.payload_length,
                           &beacon) != MAC_CODEC_OK)
-        return NWK_CANDIDATES_MAC_REJECTED;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_MAC_REJECTED);
     memset(&candidate, 0, sizeof(candidate));
     if (nwk_beacon_decode(body + frame.payload_offset + beacon.payload_offset,
                           beacon.payload_length, &candidate.network) != NWK_BEACON_OK)
-        return NWK_CANDIDATES_NWK_REJECTED;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_NWK_REJECTED);
     candidate.channel = channel;
     candidate.pan_id = frame.header.source_pan;
     candidate.address_mode = frame.header.source_mode;
@@ -90,28 +108,35 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile tabl
         if (same_identity(&table->entries[i], &candidate)) {
             if (eligible) {
                 table->entries[i] = candidate;
-                return NWK_CANDIDATES_UPDATED;
+                return LW_RETURN(LW_SCAN, NWK_CANDIDATES_UPDATED);
             }
             for (; i + 1u < table->count; i++)
                 table->entries[i] = table->entries[i + 1u];
             table->count--;
             memset(&table->entries[table->count], 0, sizeof(candidate));
-            return NWK_CANDIDATES_WITHDRAWN;
+            return LW_RETURN(LW_SCAN, NWK_CANDIDATES_WITHDRAWN);
         }
     }
     if (!eligible)
-        return NWK_CANDIDATES_NOT_ELIGIBLE;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_NOT_ELIGIBLE);
     if (table->count == NWK_CANDIDATES_CAPACITY)
-        return NWK_CANDIDATES_FULL;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_FULL);
     table->entries[table->count] = candidate;
     table->count++;
-    return NWK_CANDIDATES_ADDED;
+    return LW_RETURN(LW_SCAN, NWK_CANDIDATES_ADDED);
 }
+#undef frame
+#undef beacon
+#undef candidate
 
 nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * volatile table,
                                            uint8_t index,
                                            nwk_candidate_t * volatile result)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, table, sizeof(*table), 0) ||
+        !LW_IO(LW_PARENT, result, sizeof(*result), 1)) return NWK_CANDIDATES_INVALID_ARGUMENT;
+#endif
     if (table == NULL || result == NULL)
         return NWK_CANDIDATES_INVALID_ARGUMENT;
     if (!valid_table(table))

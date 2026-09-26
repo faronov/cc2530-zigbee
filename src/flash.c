@@ -3,6 +3,9 @@
  */
 #include "flash.h"
 #include <stddef.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 #define FCTL 0x6270u
 #define CHIPID 0x624au
@@ -56,6 +59,9 @@ flash_result_t flash_nv_read(uint8_t page, uint16_t offset,
         return FLASH_INVALID_RANGE;
     if (address <= MMIO_XADDRESS(&flash_reserved_end))
         return FLASH_BUFFER_OWNERSHIP;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_external(output, length)) return FLASH_BUFFER_OWNERSHIP;
+#endif
 
     saved_bank = MMIO_READ(SOC_MEMCTR);
     saved_clock = MMIO_READ(SOC_CLKCONCMD);

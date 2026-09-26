@@ -23,10 +23,10 @@ from verify_firmware import (
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio", "test_mac_radio")
 SIZE, XDATA, CASES = 15040, 758, 52
 CODE_SHA = "8d402707573bf0c436a03b2d6aaf7a48c82c38b28127e64c78cb0ec9f9b06e90"
-CDB_SHA = "16a41beecb3b729fb25d958b8400a0b6cb1de42f1c1734e9cd1c3d895f989ba4"
+CDB_SHA = "d5860121f20c868796a603358e5de1bb9206e49888b581fd4278c2e9a6ef1a9a"
 MAP_SHA = "030b66f1d4a9aecebb8f6ff0d2da7448703ea5dd5379fdccc33d60a817939520"
 LIST_SHA = "46e0004f4f68b0d9ba076e05595322fc6c50d8f82621b7a1dd274432184b2a9c"
-OBJECT_SHA = "53605c5bf762dfa3b6e57f38f7ce358b4f25dc1b70d97bc66a5807fee046bad0"
+OBJECT_SHA = "fc0017c6729e27de97f0b8ed6066bb9a9f6e4a9ffef53af8440139046a8f3670"
 CALLER = {"config": (585, 14), "frame": (599, 128), "stamp": (727, 6),
           "operation": (733, 1), "return": (734, 1), "length": (735, 1),
           "input": (736, 2), "output": (738, 2), "limit": (740, 2), "timeout": (742, 4)}

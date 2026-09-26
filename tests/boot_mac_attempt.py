@@ -23,12 +23,12 @@ MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch",
 CASES = 28
 SIZE, XDATA, STACK = 24621, 1475, 0x5a
 CODE_SHA = "64acf106f577d774b333cfb063c26f0b4a6f092b2901a1db343e052eb6191cbc"
-# Compact-only projection changes source lines, not this image's CODE/ABI.
-CDB_SHA = "ad7f4d1a86951e64be41899eb26fd253adae4a23a02ad05326ca151e74f6c399"
+# Compact projection and UPPER change source lines, not this image's CODE/ABI.
+CDB_SHA = "ea4f0b821e6eba5d590640574992f0fd44233b7748794a7f991c897a28bab3f2"
 MAP_SHA = "822ec1514503e149578cb17132d92e9ddb2a46be5ba4619ee9cbabe98763aba6"
 MEM_SHA = "3a9a8cd7acb4a495df6504761e0bef4e015590f03be0ca5e5270288f39914a55"
 LIST_SHA = "dbc898ee53bb6f58333751bebc2dc8ad8c28405b445c93f029c8d3fb371fab11"
-OBJECT_SHA = "9a1dfc2ccf2278917b14f475e3e85cbc5316a0f9ef21ae153c59079b95df64f7"
+OBJECT_SHA = "cc2819f1064a8f9c895e07964a49a89de342cd197b04e851d91583bee42ba5b5"
 INVENTORY = (326, 148638, 119, 121)
 NEGATIVES = 77713
 CALLER_SIZES = {"config": 14, "frame": 128, "record": 164, "operation": 1,

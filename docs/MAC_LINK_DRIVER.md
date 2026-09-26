@@ -375,12 +375,118 @@ Projection code `03bf9bb` passed
 all previous host/image/ABI/alias/simulator cases remain. This is still
 host/object acceptance for the compact profile, not MCU placement.
 
+## Shared upper workspace
+
+`CC2530_MAC_LINK_WORKSPACE` is a separate opt-in experiment requiring the
+consistent compact RAM/LINK profile. It does not enable a board image or
+change the ordinary compact profile. The source-owned typed union in
+`src/mac_link_workspace_internal.h` alternates the complete617-byte key work
+with499 bytes of protocol work:
+
+| Simultaneously live protocol region | Bytes |
+| --- | ---: |
+| Parent: join, scan, NWK or nested ZDO work | 218 |
+| POLL | 109 |
+| TX plus decoder, or Association decoder | 135 |
+| MAC decoder and beacon fields | 37 |
+
+JOIN -> POLL -> TX -> codec retains all four regions. Observed -> interval ->
+exact TX borrows the same TX region; only its outer owner may wipe it.
+Association parsing follows POLL return. NWK releases its header hint before
+key processing; ZDO queries key status before acquiring its protocol work.
+The three separate37-byte key-status outputs, persistent contexts, occupied
+queues, frame/grant receipts, counters and retained outcomes stay outside.
+The complete key work, including post-seal packet intent, remains intact
+until its own secret-wiping return.
+
+The manager checks acquisition, nesting, return, exact I/O loans and scoped
+child grants. A rejected acquisition or release cannot clear another owner.
+Lower services reject UPPER overlap by default. Counter READ requires the
+exact KEY-owned record112 and length-byte outputs; CREATE/SAVE require
+record112 and TAKE requires counter4, all under the corresponding grant.
+Readonly bounded slices exist only for actual nested inputs, including
+`ed_wire_encode` -> `aps_frame_encode` reading the key packet payload.
+Neither the entire arena nor the entire KEY variant is a caller whitelist.
+Child wire/hash/CCM/AES/NV/flash work is not pooled by this change.
+
+**Target placement is still an obligation.** The entire manager XDATA
+allocation, including compiler/parameter storage, must precede
+`flash_exec_reserved_end` and every other lower private fence. Its arena must
+be nonzero ordinary XDATA below1E00. Runtime entry rejects wrong placement;
+source declaration order or native synthetic addresses do not prove the
+linked order. No linker aliases or absolute-address arena are supplied.
+Other lower-service buffers passed between modules must lie above the
+manager. Its CODE and CODE-qualified constant tables also require a valid
+common-memory placement; `--codeseg` alone does not bank CONST.
+
+Both-board SDCC4.2 measurements after the combined code-generation lowering:
+
+| Allocation | Compact projection | Shared UPPER | Delta |
+| --- | ---: | ---: | ---: |
+| Production CODE | 211892 | 230576 | +18684 |
+| CONST | 55 | 962 | +907 |
+| Production XSEG | 7035 | 6308 | -727 |
+| Raw DATA sum | 519 | 556 | +37 |
+| Raw OSEG sum | 77 | 74 | -3 |
+| BSEG bits | 70 | 80 | +10 |
+| Top-level caller contexts | 1917 | 1917 | 0 |
+| Object-plus-context floor | 8952 | **8225** | **-727** |
+
+The selected1429 bytes become617 payload +31 ownership +54 compiler/
+parameter bytes. Gross saving812 therefore becomes727 net. XISEG remains
+zero. This is an expensive CODE/DATA tradeoff, not the hoped-for low-cost
+overlay. The floor remains545 above7680 and1569 above the6656 application-
+reserve target, before banker/libc/additional caller storage. Raw DATA/OSEG
+sums are not physical concurrent IRAM or a stack measurement.
+
+The measured combination saves967 CODE, one XDATA and four DATA bytes versus
+the initial UPPER implementation. Its packed16-bit return ABI preserves both
+full8-bit arguments and their original conversions, with a volatile parameter
+home preventing extra SDCC PUSHes. Byte lookup into the same caller-mask
+table and typed traversal of the same loan array preserve all907 manager
+CONST bytes. No local PUSH envelope or saved bytes at a call edge increase;
+the I/O helper's local envelope falls8->5. This is not a physical SP proof.
+
+`make BOARD=<board> test-mac-link-workspace` separately compiles all39
+production modules and runs native/nonrecovering-sanitizer workspace and
+146-case POLL/join tests. The workspace test embeds all15 E2E scenarios,
+18172 compact checks/9030 cleanup observations and1815278 workspace checks,
+including the original1656 ownership, alias, fault and canary checks. The
+scalar cases cover every frame/result byte pair, single argument evaluation,
+grant-held rejection and borrowed TX releases. The real counter/journal/flash admission
+regression provisions through38 modeled flash commands, then checks
+precise legitimate handoffs and unchanged FREE/JOIN/wrong-size/offset/alias
+rejections. Retained NV-read failure, reset recovery and AES-stall secret
+wiping are covered. Six compiled mutations are rejected: malformed READ
+length, wrong-owner release, inner TX wipe, missing KEY wipe, unloaned arena
+I/O and partial output.
+The isolated code-generation study also rejects three scalar ABI mutations
+and an actual SDCC mutation removing the volatile parameter home, which adds
+two PUSHes. An additional1900544-case admission oracle passes.
+
+The sizeof probe additionally allocates copies of the617-byte arena and
+31-byte ownership type. These are layout evidence only: the ledger counts
+the real manager in production and adds only1917 caller bytes, never those
+probe copies again. Two new CI workers preserve the ordinary compact workers
+and every previous corpus. The162 old-profile module/board comparisons retain
+instructions and allocation areas. Before refreshing107 metadata digests,
+both boards reproduced the old pins and retained byte-identical IHX/memory,
+parsed maps, non-source-line CDB records and emitted instructions for all80
+affected Make-linked images plus the documented independent Association/TX
+floor. Ordinary/external join object probes retain complete ADB and emitted
+instructions too. The final code-generation promotion additionally preserves
+raw ADB/ASM/LST/SYM and REL (except its output-path comment) across162 old-profile
+module/board comparisons, with no further source-line shifts. These checks do not establish a UPPER
+image: UPPER evidence is **host-tested and object-checked only**. A real bank
+map, private-fence placement, DATA/OSEG/libc/SP7C proof, MCU replay and hardware
+observations remain absent.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,
 driver and link consumers, within 7680 ordinary XDATA. It needs DATA/stack/ABI
-and alias proofs. The experimental returning-work and projection reductions
-lower the excess from1764 to1272 bytes before banker/libc/additional caller
-storage; further RAM reduction, application headroom and a real bank
+and alias proofs. The experimental returning-work, projection and shared
+UPPER reductions lower the excess from1764 to545 bytes before banker/libc/
+additional caller storage; further RAM reduction, application headroom and a real bank
 partition are required. After that come the #45
 decision, documentation and closure at the documented offline evidence level.

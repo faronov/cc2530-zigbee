@@ -373,6 +373,22 @@ Projection code `03bf9bb` passed
 worker. The ordinary attempt/handoff/adapter images retain their strict
 CODE, ABI, MMIO, physical DATA and alias-aware simulator gates.
 
+The separate [shared UPPER profile](MAC_LINK_DRIVER.md#shared-upper-workspace)
+adds `test-mac-link-workspace` and two CI workers without replacing the
+compact-profile workers. Its39-object ledger is230576 CODE +962 CONST and6308
+XSEG; unchanged caller contexts add1917, for a floor of8225. The probe's extra
+617-byte arena and31-byte ownership copies are not counted a second time.
+Both-board native/sanitizer evidence covers the15 E2E scenarios, compact
+cleanup checks,1815278 workspace/scalar checks, real38-command
+counter provisioning and the146-case POLL/join corpus. Six ownership/
+publication mutations are rejected, as are three scalar ABI mutations and
+an SDCC mutation adding two PUSHes by removing the volatile parameter home.
+The isolated admission oracle covers1900544 cases. This remains host/object evidence:
+actual manager/private-fence placement, physical DATA/OSEG/libc/SP7C,
+banking and MCU execution are not established. The full matrix is now112
+workers plus two control jobs. Full114-job acceptance of this profile is
+still pending; the earlier112-job runs do not cover it.
+
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
 

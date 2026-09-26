@@ -5,6 +5,9 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_guard_internal.h"
+#endif
 
 static MCU_XDATA struct {
     uint8_t hash[16], block[16], cipher[16];
@@ -45,6 +48,10 @@ zigbee_mmo_result_t zigbee_mmo_hash(
     const uint8_t * volatile input, uint16_t length, uint8_t * volatile output,
     uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_MMO,input,length,0) || !LW_IO(LW_CHILD_MMO,output,16,1) ||
+        !LW_IO(LW_CHILD_MMO,info,sizeof(*info),1)) return ZIGBEE_MMO_ARGUMENT;
+#endif
     uint8_t i, offset = 0, remaining;
     zigbee_mmo_result_t result = ZIGBEE_MMO_AES;
     if ((input == NULL && length) || output == NULL || info == NULL ||
@@ -88,6 +95,10 @@ zigbee_mmo_result_t install_code_derive(
     const uint8_t * volatile code, uint16_t length, uint8_t * volatile output,
     uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_CHILD_INSTALL,code,length,0) || !LW_IO(LW_CHILD_INSTALL,output,16,1) ||
+        !LW_IO(LW_CHILD_INSTALL,info,sizeof(*info),1)) return ZIGBEE_MMO_ARGUMENT;
+#endif
     uint16_t crc = 0xffffu;
     uint8_t i, bit;
     if (code == NULL)

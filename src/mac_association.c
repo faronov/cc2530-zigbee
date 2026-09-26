@@ -5,6 +5,10 @@
 
 #include <stddef.h>
 #include <string.h>
+#include "mac_link_workspace_guard_internal.h"
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#include "mac_link_workspace_internal.h"
+#endif
 
 static uint8_t valid(const mac_association_t MAC_ASSOCIATION_RAM *ctx)
 {
@@ -15,6 +19,9 @@ static uint8_t valid(const mac_association_t MAC_ASSOCIATION_RAM *ctx)
 mac_association_result_t mac_association_init(mac_association_t MAC_ASSOCIATION_RAM *ctx,
                                                uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return MAC_ASSOCIATION_INVALID;
+#endif
     if (ctx == NULL)
         return MAC_ASSOCIATION_INVALID;
     memset(ctx, 0, sizeof(*ctx));
@@ -27,6 +34,10 @@ mac_association_result_t mac_association_start(mac_association_t MAC_ASSOCIATION
                     const mac_association_request_t MAC_ASSOCIATION_RAM *request,
                     uint32_t now)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_ASSOCIATION, ctx, sizeof(*ctx), 1) ||
+        !LW_IO(LW_ASSOCIATION, request, sizeof(*request), 0)) return MAC_ASSOCIATION_INVALID;
+#endif
     uint8_t i;
     if (!valid(ctx) || request == NULL || request->epoch == 0
             || request->lifetime == 0 || request->lifetime > MAC_ASSOCIATION_MAX_LIFETIME
@@ -65,21 +76,32 @@ mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATI
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
                     uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t volatile profile)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_ASSOCIATION, MAC_ASSOCIATION_INVALID);
+    if (!LW_IO(LW_ASSOCIATION, ctx, sizeof(*ctx), 1) ||
+        !LW_IO(LW_ASSOCIATION, event, event ? sizeof(*event) : 0, 0) ||
+        !LW_IO(LW_ASSOCIATION, observation, 1, 1))
+        return LW_RETURN(LW_ASSOCIATION, MAC_ASSOCIATION_INVALID);
+#endif
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+#define frame (link_work_arena.protocol.operation.association)
+#else
     mac_frame_info_t frame;
+#endif
     mac_command_t command;
     uint8_t decision = MAC_ASSOCIATION_WAITING;
 
     if (!valid(ctx) || observation == NULL || profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
-        return MAC_ASSOCIATION_INVALID;
+        return LW_RETURN(LW_ASSOCIATION, MAC_ASSOCIATION_INVALID);
     if (ctx->phase != MAC_ASSOCIATION_WAIT)
-        return MAC_ASSOCIATION_STATE;
+        return LW_RETURN(LW_ASSOCIATION, MAC_ASSOCIATION_STATE);
     if ((uint32_t)(now - ctx->last) >= MAC_ASSOCIATION_HALF
             || (event != NULL
                 && (event->kind != MAC_ASSOCIATION_FRAME && event->kind != MAC_ASSOCIATION_CANCEL))
             || (event != NULL && event->kind == MAC_ASSOCIATION_FRAME
                 && (event->body == NULL || event->crc_valid > 1
                     || event->channel < 11 || event->channel > 26)))
-        return MAC_ASSOCIATION_INVALID;
+        return LW_RETURN(LW_ASSOCIATION, MAC_ASSOCIATION_INVALID);
 
     if ((uint32_t)(now - ctx->opened) >= ctx->request.lifetime)
         decision = MAC_ASSOCIATION_EXPIRED;
@@ -147,8 +169,9 @@ mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATI
             ctx->record.stamp = now;
     }
     *observation = decision;
-    return MAC_ASSOCIATION_OK;
+    return LW_RETURN(LW_ASSOCIATION, MAC_ASSOCIATION_OK);
 }
+#undef frame
 
 mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * volatile ctx,
                     uint32_t now,
@@ -161,6 +184,10 @@ mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_
 mac_association_result_t mac_association_take(mac_association_t MAC_ASSOCIATION_RAM *ctx,
                     mac_association_record_t MAC_ASSOCIATION_RAM *record)
 {
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) ||
+        !LW_IO(LW_NONE, record, sizeof(*record), 1)) return MAC_ASSOCIATION_INVALID;
+#endif
     if (!valid(ctx) || record == NULL)
         return MAC_ASSOCIATION_INVALID;
     if (ctx->phase != MAC_ASSOCIATION_DONE)

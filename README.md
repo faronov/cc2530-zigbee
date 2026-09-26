@@ -686,6 +686,10 @@ saves 492 XDATA bytes, including the compact attempt projection, but still
 needs at least 8952 versus 7680 available,
 before additional caller/runtime storage. It is host-tested and object-checked,
 not a fitting or simulated combined MCU image.
+The additional [shared upper workspace](docs/MAC_LINK_DRIVER.md#shared-upper-workspace)
+reaches an 8225-byte object-plus-context floor, trading 727 more XDATA bytes
+for substantial CODE/DATA growth. It is another host/object experiment,
+still above the ordinary limit and not enabled in a board image.
 
 ## Offline MAC transmission state
 

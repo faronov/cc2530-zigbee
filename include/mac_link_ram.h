@@ -4,6 +4,10 @@
 #ifndef MAC_LINK_RAM_H
 #define MAC_LINK_RAM_H
 
+#if defined(CC2530_MAC_LINK_WORKSPACE) && !defined(CC2530_MAC_LINK_RAM)
+#error CC2530_MAC_LINK_WORKSPACE requires the compact LINK profile
+#endif
+
 /* Experimental composition only, not a default or a complete MCU image.
  * The existing serialized/disjoint-object foreground contracts still apply.
  * No ISR, callback, recursive entry, stack-auto or linker scratch alias.

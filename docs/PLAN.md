@@ -109,6 +109,13 @@ The subsequent [compact attempt projection](MAC_ATTEMPT.md#compact-projection-st
 saves128 more bytes without added DATA/OSEG, retaining receipt atomicity and
 post-return handoff metadata. The floor is now8952, still1272 beyond7680
 before runtime/additional caller storage and before the application reserve.
+The further [shared upper workspace](MAC_LINK_DRIVER.md#shared-upper-workspace)
+alternates typed key/protocol working regions with checked nested ownership
+and exact lower-service loans. Its net727-byte reduction lowers the floor
+to8225, still545 beyond7680 and1569 beyond the6656 application-reserve target,
+before further overhead. CODE/CONST grow19591 bytes and raw DATA grows37;
+actual bank, private-fence placement and DATA/stack proof remain mandatory.
+This separate profile is host/object-checked, not a combined MCU image.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
