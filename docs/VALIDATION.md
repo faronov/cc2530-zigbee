@@ -306,6 +306,20 @@ Code `b0a3712` passed [full Actions36221496774](https://github.com/faronov/cc253
 the new workers took48s (generic) and52s (LG). All104 previous workers and
 their limits remain accepted.
 
+The gated [interval consumer profile](MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
+adds `make BOARD=<board> test-mac-link`: the scan corpus and the
+POLL/Association/join corpus (136 cases), natively and under nonrecovering
+sanitizers, plus SDCC `--Werror` banked compilation of the five link-profile
+objects. Eight scan and seven POLL/join mutations fail it. Without the flag, all
+25 affected exact images (`mac_scan_test`, `mac_poll_test`, 22
+`mac_join_<n>_test` and `banked_join`), their parsed maps and memory reports are
+byte-identical. The compiled instructions are also identical. Only source-line
+records moved, so the POLL F/S/L/T digest, 22 join manifests, join
+`WORKSPACE_PINS` and banked raw-CDB/listing/object pins were refreshed. The
+same calculation reproduces every previous pin from the previous revision. The evidence is
+**host-tested and compile-checked**; there is no link-profile image or MCU
+replay.
+
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
 

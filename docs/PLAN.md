@@ -83,9 +83,12 @@ scan/POLL/association and genuine combined RAM/ABI integration remain #13/#14
 work before #27; no milestone, timing or hardware gate is closed by it.
 The gated [OFF-only reconfiguration](MAC_ADAPTER.md#off-only-reconfiguration-and-reopen)
 is the first of those steps: real PAN/short/channel installation and explicit
-new RX episodes, host-tested and compile-checked only. Remaining #13/#14 order:
-interval scan/POLL/association consumers, a link driver with host end-to-end
-join, one combined banked MCU image within7680 XDATA, then documented closure.
+new RX episodes, host-tested and compile-checked only. The gated
+[interval consumer profile](MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
+is the second: scan, POLL, Association and join over the observed interval
+owner, also host-tested and SDCC compile-checked only. Remaining #13/#14 order:
+a link driver with host end-to-end join, one combined banked MCU image within
+7680 XDATA, then documented closure.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

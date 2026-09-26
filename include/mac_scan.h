@@ -6,6 +6,16 @@
 
 #include "mac_tx.h"
 #include "nwk_candidates.h"
+#include "mac_link.h"
+
+/* CC2530_MAC_LINK binds the observed interval owner; see MAC_SCAN.md. The
+ * exact profile keeps mac_tx_t and every original rule.
+ */
+#if defined(CC2530_MAC_LINK)
+typedef mac_tx_interval_t mac_scan_tx_t;
+#else
+typedef mac_tx_t mac_scan_tx_t;
+#endif
 
 /* Caller records live in ordinary XDATA on SDCC, never the IRAM alias/MMIO.
  * This address-space qualifier is not a physical-pointer validity check.
@@ -108,7 +118,7 @@ typedef struct {
  */
 typedef struct {
     nwk_candidates_t candidates;
-    mac_tx_t MAC_SCAN_RAM *owner;
+    mac_scan_tx_t MAC_SCAN_RAM *owner;
     mac_scan_radio_state_t saved;
     uint32_t generation, tx_generation, last, deadline, dwell, window_start;
     uint32_t window_end, remaining, unscanned, sent;
@@ -125,7 +135,7 @@ mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * volatile scan);
  * its DSN/generation to start a scan. The lease lasts until successful release.
  */
 mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                 mac_tx_t MAC_SCAN_RAM * volatile tx,
+                                 mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
                                  const mac_scan_request_t MAC_SCAN_RAM * volatile request,
                                  uint32_t volatile now);
 /* NULL event polls. One-shot actions require real confirmations; see MAC_SCAN.md.
@@ -139,9 +149,12 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
  * Time is the same abstract uint32 symbol epoch as mac_tx, NOT a live timer read
  * substituted for an event capture. Deliver ordered events before advancing the
  * foreground watermark. No gap or transaction interval may reach half-range.
+ * CC2530_MAC_LINK instead grants one mac_tx_observed_step with interval input.
+ * OPENED is then a post-open observation, BEACON is ordered delivery before
+ * CLOSED, and CLOSED carries a loss-free watermark at or after window_end.
  */
 mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                mac_tx_t MAC_SCAN_RAM * volatile tx,
+                                mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
                                 uint32_t volatile now,
                                 const mac_scan_event_t MAC_SCAN_RAM * volatile event,
                                 mac_scan_action_t MAC_SCAN_RAM * volatile action);
@@ -149,7 +162,7 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
 mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t index,
                                nwk_candidate_t MAC_SCAN_RAM * volatile result);
 mac_scan_result_t mac_scan_release(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                   mac_tx_t MAC_SCAN_RAM * volatile tx);
+                                   mac_scan_tx_t MAC_SCAN_RAM * volatile tx);
 
 /* All arguments denote accessible disjoint ordinary caller objects, never
  * invented MMIO/compiler-private/status/alias pointers. All storage, including

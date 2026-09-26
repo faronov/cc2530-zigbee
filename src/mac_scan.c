@@ -10,6 +10,16 @@
  */
 static const uint8_t beacon_request[8] = {3, 8, 0, 255, 255, 255, 255, 7};
 
+#if defined(CC2530_MAC_LINK)
+#define ENGINE(tx) (&(tx)->engine)
+#define SUBMIT mac_tx_interval_submit
+#define RELEASE mac_tx_interval_release
+#else
+#define ENGINE(tx) (tx)
+#define SUBMIT mac_tx_submit
+#define RELEASE mac_tx_release
+#endif
+
 static uint8_t reached(uint32_t now, uint32_t at)
 {
     return (uint32_t)(now - at) < MAC_TX_HALF;
@@ -88,7 +98,7 @@ mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * volatile scan)
 }
 
 mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                 mac_tx_t MAC_SCAN_RAM * volatile tx,
+                                 mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
                                  const mac_scan_request_t MAC_SCAN_RAM * volatile request,
                                  uint32_t volatile now)
 {
@@ -99,18 +109,18 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
             || !request->lifetime
             || request->lifetime > MAC_SCAN_MAX_LIFETIME || !radio_state(&request->saved))
         return MAC_SCAN_INVALID;
-    if (!valid(scan) || scan->phase != MAC_SCAN_IDLE || tx->phase != MAC_TX_IDLE)
+    if (!valid(scan) || scan->phase != MAC_SCAN_IDLE || ENGINE(tx)->phase != MAC_TX_IDLE)
         return MAC_SCAN_STATE;
-    if ((uint32_t)(now - tx->last) >= MAC_TX_HALF)
+    if ((uint32_t)(now - ENGINE(tx)->last) >= MAC_TX_HALF)
         return MAC_SCAN_INVALID;
-    if (scan->generation == UINT32_MAX || tx->generation == UINT32_MAX)
+    if (scan->generation == UINT32_MAX || ENGINE(tx)->generation == UINT32_MAX)
         return MAC_SCAN_EXHAUSTED;
     /* All validation precedes mutation. This cannot fail for the checked mask. */
     (void)nwk_candidates_init(&scan->candidates, request->channels);
     scan->owner = tx;
     scan->saved = request->saved;
     scan->generation++;
-    scan->tx_generation = tx->generation;
+    scan->tx_generation = ENGINE(tx)->generation;
     scan->last = now;
     scan->deadline = now + request->lifetime;
     dwell = UINT32_C(960) * ((UINT32_C(1) << request->duration) + 1u);
@@ -132,7 +142,7 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
 }
 
 mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                mac_tx_t MAC_SCAN_RAM * volatile tx,
+                                mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
                                 uint32_t volatile now,
                                 const mac_scan_event_t MAC_SCAN_RAM * volatile event,
                                 mac_scan_action_t MAC_SCAN_RAM * volatile action)
@@ -164,8 +174,8 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
             && (uint32_t)(now - event->stamp) < MAC_TX_HALF)
         kind = event->kind;
     scan->last = now;
-    if (tx->generation != scan->tx_generation
-            || (scan->phase != MAC_SCAN_TX && tx->phase != MAC_TX_IDLE)) {
+    if (ENGINE(tx)->generation != scan->tx_generation
+            || (scan->phase != MAC_SCAN_TX && ENGINE(tx)->phase != MAC_TX_IDLE)) {
         fault(scan, MAC_SCAN_TX_ERROR);
         goto publish;
     }
@@ -198,11 +208,11 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
                 scan->phase = MAC_SCAN_SUBMIT;
         }
     } else if (scan->phase == MAC_SCAN_SUBMIT) {
-        if (mac_tx_submit(tx, beacon_request, sizeof(beacon_request), now,
+        if (SUBMIT(tx, beacon_request, sizeof(beacon_request), now,
                           MAC_SCAN_TX_SYMBOLS, MAC_SCAN_TX_STEPS) != MAC_TX_OK)
             stop(scan, MAC_SCAN_TX_ERROR, now);
         else {
-            scan->tx_generation = tx->generation;
+            scan->tx_generation = ENGINE(tx)->generation;
             scan->phase = MAC_SCAN_TX;
             scan->token++;
             scan->issued = 0;
@@ -210,21 +220,21 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
     } else if (scan->phase == MAC_SCAN_TX) {
         if (scan->issued && kind == MAC_SCAN_EVENT_TX) {
             scan->issued = 0;
-            scan->tx_outcome = tx->outcome;
-            if (tx->transmissions) {
+            scan->tx_outcome = ENGINE(tx)->outcome;
+            if (ENGINE(tx)->transmissions) {
                 bits = UINT32_C(1) << scan->channel;
                 bits |= scan->sent;
                 scan->sent = bits;
             }
-            if (tx->uncertain)
+            if (ENGINE(tx)->uncertain)
                 scan->uncertain = 1;
-            if (event->tx_result != MAC_TX_OK || tx->phase == MAC_TX_FAULT
-                    || tx->phase == MAC_TX_IDLE || tx->last != event->stamp) {
+            if (event->tx_result != MAC_TX_OK || ENGINE(tx)->phase == MAC_TX_FAULT
+                    || ENGINE(tx)->phase == MAC_TX_IDLE || ENGINE(tx)->last != event->stamp) {
                 fault(scan, MAC_SCAN_TX_ERROR);
                 goto publish;
             }
-            if (tx->phase == MAC_TX_DONE) {
-                (void)mac_tx_release(tx); /* Exact DONE precondition checked above. */
+            if (ENGINE(tx)->phase == MAC_TX_DONE) {
+                (void)RELEASE(tx); /* Exact DONE precondition checked above. */
                 scan->phase = MAC_SCAN_OPEN;
                 if (scan->stopping)
                     stop(scan, scan->reason, now);
@@ -238,8 +248,8 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
             scan->issued = 1;
             scan->token++;
             action->kind = MAC_SCAN_ACTION_TX;
-            action->tx_cancel = scan->stopping && tx->phase != MAC_TX_STOPPING
-                && tx->phase != MAC_TX_DONE && tx->phase != MAC_TX_FAULT;
+            action->tx_cancel = scan->stopping && ENGINE(tx)->phase != MAC_TX_STOPPING
+                && ENGINE(tx)->phase != MAC_TX_DONE && ENGINE(tx)->phase != MAC_TX_FAULT;
         }
     } else if (scan->phase == MAC_SCAN_OPEN) {
         if (!scan->issued) {
@@ -259,7 +269,12 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
         }
     } else if (scan->phase == MAC_SCAN_RX) {
         if (kind == MAC_SCAN_EVENT_CLOSED) {
-            if (event->stamp != scan->window_end || !scan_state(&event->state, scan->channel, 0))
+#if defined(CC2530_MAC_LINK)
+            if (!reached(event->stamp, scan->window_end)
+#else
+            if (event->stamp != scan->window_end
+#endif
+                    || !scan_state(&event->state, scan->channel, 0))
                 stop(scan, MAC_SCAN_ADAPTER_ERROR, now);
             else {
                 bits = ~(UINT32_C(1) << scan->channel);
@@ -268,8 +283,12 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
                 next_channel(scan, now);
             }
         } else if (kind == MAC_SCAN_EVENT_BEACON
+#if defined(CC2530_MAC_LINK)
+                && event->state.channel == scan->channel) {
+#else
                 && event->state.channel == scan->channel
                 && (uint32_t)(event->stamp - scan->window_start) < scan->dwell) {
+#endif
             candidate = nwk_candidates_consider(&scan->candidates, scan->channel,
                                                 event->crc_valid, event->body, event->length);
             action->observed = 1;
@@ -325,12 +344,12 @@ mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * volatile scan, ui
 }
 
 mac_scan_result_t mac_scan_release(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                   mac_tx_t MAC_SCAN_RAM * volatile tx)
+                                   mac_scan_tx_t MAC_SCAN_RAM * volatile tx)
 {
     if (scan == NULL || tx == NULL)
         return MAC_SCAN_INVALID;
     if (!valid(scan) || scan->phase != MAC_SCAN_DONE || scan->owner != tx
-            || tx->phase != MAC_TX_IDLE || tx->generation != scan->tx_generation)
+            || ENGINE(tx)->phase != MAC_TX_IDLE || ENGINE(tx)->generation != scan->tx_generation)
         return MAC_SCAN_STATE;
     scan->phase = MAC_SCAN_IDLE;
     return MAC_SCAN_OK;

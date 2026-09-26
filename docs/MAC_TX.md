@@ -211,8 +211,10 @@ Its opt-in `mac_tx_observed_step` accepts bounded BUSY and retirement
 assertions while the existing interval step rejects those new kinds.
 It does not relax the captured-event contract, use a ceil-rounded future
 clock as now, or equate ordinary-TX retirement with physical RF-off.
-Remaining #13/#14 work includes explicit interval-aware scan/POLL/association
-contracts and actual integration into the complete banked join. The raw
+Remaining #13/#14 work after the opt-in
+[interval consumer profile](MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
+is a link driver that binds scan/POLL/association to the adapter and actual
+integration into the complete banked join. The raw
 attempt's AUTOACK-off phase alone still cannot be called a complete POLL lease.
 The physical, entropy/NV and #45 full-MLME conformance gates remain separate.
 Never flash or publish `mac_tx_interval_test.ihx` as board firmware.

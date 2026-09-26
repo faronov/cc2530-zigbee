@@ -5,6 +5,22 @@
 #include <stddef.h>
 #include <string.h>
 
+#if defined(CC2530_MAC_LINK)
+#define ENGINE(tx) (&(tx)->engine)
+#define SOURCE(e) e.source.source
+#define RADIO output.radio.control
+#define submit mac_tx_interval_submit
+#define tx_step mac_tx_observed_step
+#define release mac_tx_interval_release
+#else
+#define ENGINE(tx) tx
+#define SOURCE(e) e.source
+#define RADIO output.radio
+#define submit mac_tx_submit
+#define tx_step mac_tx_step
+#define release mac_tx_release
+#endif
+
 #if defined(CC2530_JOIN_WORKSPACE)
 /* Full-profile binding only: the integrator must back this direct-address
  * symbol with a real, disjoint, complete mac_join_t allocation. It is live
@@ -17,8 +33,8 @@ extern mac_join_t MAC_JOIN_RAM mac_join_staged;
 static mac_join_t MAC_JOIN_RAM staged;
 #endif
 #define j (&staged)
-static mac_tx_t MAC_JOIN_RAM * volatile owner;
-static mac_tx_t * volatile tx_argument;
+static MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile owner;
+static MAC_POLL_OWNER_T * volatile tx_argument;
 /* Returning foreground work, never retained by a lower service. start and
  * step cannot overlap. Within step, pr is consumed before pe, pe before ar,
  * and ar before ae. pa, input and output remain live across those calls and
@@ -57,7 +73,11 @@ static union {
 #define start_length work.start.length
 static volatile uint32_t MAC_JOIN_RAM time;
 static volatile uint32_t MAC_JOIN_RAM remaining;
+#if defined(CC2530_MAC_LINK)
+static const mac_tx_interval_event_t * volatile source;
+#else
 static const mac_tx_event_t * volatile source;
+#endif
 static const mac_poll_event_t MAC_JOIN_RAM * volatile poll_event;
 static volatile uint16_t MAC_JOIN_RAM admitted;
 static uint8_t MAC_JOIN_RAM observation;
@@ -107,7 +127,7 @@ static void finish_window(void);
 
 static void window(void)
 {
-    if (!j->window && j->poll.control.ack_seen && owner->pending) {
+    if (!j->window && j->poll.control.ack_seen && ENGINE(owner)->pending) {
         memset(&ar, 0, sizeof(ar));
         ar.epoch = j->request.extraction.epoch;
         ar.lifetime = j->request.extraction.frame_wait + 1u;
@@ -190,7 +210,7 @@ mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile
     return MAC_JOIN_OK;
 }
 
-mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t MAC_JOIN_RAM * volatile tx,
+mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
     const mac_join_request_t MAC_JOIN_RAM * volatile request, volatile uint32_t now)
 {
     uint8_t i;
@@ -224,12 +244,12 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_
                 return MAC_JOIN_INVALID;
     }
     if (staged.version != MAC_JOIN_VERSION || staged.phase != MAC_JOIN_IDLE
-            || tx->phase != MAC_TX_IDLE || staged.poll.control.phase != MAC_POLL_IDLE
+            || ENGINE(tx)->phase != MAC_TX_IDLE || staged.poll.control.phase != MAC_POLL_IDLE
             || staged.association.phase != MAC_ASSOCIATION_IDLE)
         return MAC_JOIN_STATE;
-    if (!reached(now, staged.last) || !reached(now, tx->last))
+    if (!reached(now, staged.last) || !reached(now, ENGINE(tx)->last))
         return MAC_JOIN_INVALID;
-    if (staged.generation == UINT32_MAX || tx->generation >= UINT32_MAX - 1u
+    if (staged.generation == UINT32_MAX || ENGINE(tx)->generation >= UINT32_MAX - 1u
             || staged.poll.control.generation == UINT32_MAX || staged.association.generation == UINT32_MAX)
         return MAC_JOIN_LIMIT;
     /* Every field is assigned, including the two zero-valued wire fields;
@@ -257,7 +277,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_
     staged.record.generation = staged.generation = generation;
     staged.record.tx_rc = staged.record.poll_rc = staged.record.association_rc = MAC_JOIN_UNCALLED;
     staged.owner = tx;
-    staged.tx_generation = tx->generation;
+    staged.tx_generation = ENGINE(tx)->generation;
     staged.version = MAC_JOIN_VERSION;
     staged.phase = MAC_JOIN_PREPARE;
     staged.last = now;
@@ -270,7 +290,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_
     return MAC_JOIN_OK;
 }
 
-mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t MAC_JOIN_RAM * volatile tx,
+mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
     uint32_t now, const mac_join_event_t MAC_JOIN_RAM * volatile event, mac_join_action_t MAC_JOIN_RAM * volatile action)
 {
     volatile uint8_t kind, matched, before;
@@ -282,9 +302,28 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t
                 || (input.kind == MAC_JOIN_FRAME && (input.body == NULL || !input.serial
                     || input.channel < 11 || input.channel > 26))
                 || ((input.kind == MAC_JOIN_TX || input.kind == MAC_JOIN_SOURCE)
+#if defined(CC2530_MAC_LINK)
+                    && (SOURCE(input).kind > MAC_TX_EVENT_RETIRED
+                        || SOURCE(input).kind == MAC_TX_EVENT_SENT
+                        || SOURCE(input).kind == MAC_TX_EVENT_ACK
+                        || (input.kind == MAC_JOIN_SOURCE && !SOURCE(input).kind)
+                        || (SOURCE(input).kind == MAC_TX_EVENT_ACK_INTERVAL
+                            && SOURCE(input).length && SOURCE(input).bytes == NULL)
+                        || (SOURCE(input).kind >= MAC_TX_EVENT_SENT_INTERVAL
+                            && (input.source.upper.fine >= 512u
+                                || !reached(SOURCE(input).stamp, MAC_LINK_CEIL(input.source.upper))))
+                        || ((SOURCE(input).kind == MAC_TX_EVENT_SENT_INTERVAL
+                             || SOURCE(input).kind == MAC_TX_EVENT_ACK_INTERVAL
+                             || SOURCE(input).kind == MAC_TX_EVENT_BUSY_INTERVAL)
+                            && (input.source.lower.fine >= 512u
+                                || !reached(input.source.upper.symbols, input.source.lower.symbols)
+                                || (input.source.upper.symbols == input.source.lower.symbols
+                                    && input.source.upper.fine < input.source.lower.fine))))))
+#else
                     && (input.source.kind > MAC_TX_EVENT_CANCEL
                         || (input.kind == MAC_JOIN_SOURCE && !input.source.kind)
                         || (input.source.kind == MAC_TX_EVENT_ACK && input.source.length && input.source.bytes == NULL))))
+#endif
             return MAC_JOIN_INVALID;
     } else
         memset(&input, 0, sizeof(input));
@@ -301,7 +340,7 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t
         fault(MAC_JOIN_CLOCK_ERROR);
         goto publish;
     }
-    if (owner->generation != j->tx_generation) {
+    if (ENGINE(owner)->generation != j->tx_generation) {
         fault(MAC_JOIN_TX_ERROR);
         goto publish;
     }
@@ -343,13 +382,13 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t
             j->issued = 0;
             remaining = j->deadline - time;
             admitted = j->length;
-            j->record.tx_rc = mac_tx_submit(tx_argument, j->outgoing, admitted,
+            j->record.tx_rc = submit(tx_argument, j->outgoing, admitted,
                 time, remaining, MAC_POLL_TX_STEPS);
             if (j->record.tx_rc != MAC_TX_OK) {
                 abort_attempt(MAC_JOIN_TX_ERROR);
                 j->phase = MAC_JOIN_RESTORE;
             } else {
-                j->tx_generation = owner->generation;
+                j->tx_generation = ENGINE(owner)->generation;
                 j->phase = MAC_JOIN_REQUEST;
             }
         } else if (!j->issued) {
@@ -361,39 +400,52 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t
     }
     if (j->phase == MAC_JOIN_REQUEST) {
         source = NULL;
+#if defined(CC2530_MAC_LINK)
+        if (kind == MAC_JOIN_SOURCE && (SOURCE(input).kind != MAC_TX_EVENT_ACK_INTERVAL || input.crc_valid))
+#else
         if (kind == MAC_JOIN_SOURCE && (input.source.kind != MAC_TX_EVENT_ACK || input.crc_valid))
+#endif
             source = &input.source;
-        if (j->stopping && owner->phase != MAC_TX_STOPPING) {
+        if (j->stopping && ENGINE(owner)->phase != MAC_TX_STOPPING) {
             memset(&pe.source, 0, sizeof(pe.source));
-            pe.source.kind = MAC_TX_EVENT_CANCEL;
-            pe.source.generation = owner->generation;
-            pe.source.retry = owner->retries;
-            pe.source.nb = owner->nb;
-            pe.source.stamp = time;
+            SOURCE(pe).kind = MAC_TX_EVENT_CANCEL;
+            SOURCE(pe).generation = ENGINE(owner)->generation;
+            SOURCE(pe).retry = ENGINE(owner)->retries;
+            SOURCE(pe).nb = ENGINE(owner)->nb;
+            SOURCE(pe).stamp = time;
             source = &pe.source;
         }
-        before = owner->phase;
+        before = ENGINE(owner)->phase;
         if (before != MAC_TX_DONE && before != MAC_TX_FAULT) {
-            j->record.tx_rc = mac_tx_step(tx_argument, time, source, &output.radio);
-            j->record.tx_outcome = owner->outcome;
+            j->record.tx_rc = tx_step(tx_argument, time, source, &output.radio);
+            j->record.tx_outcome = ENGINE(owner)->outcome;
             if (j->record.tx_rc != MAC_TX_OK) {
                 fault(MAC_JOIN_TX_ERROR);
                 goto publish;
             }
-            if (output.radio.kind)
+            if (RADIO.kind)
                 output.kind = MAC_JOIN_ACTION_RADIO;
-            if (before == MAC_TX_ACK_WAIT && owner->phase == MAC_TX_STOPPING && owner->outcome == MAC_TX_ACKED) {
+            if (before == MAC_TX_ACK_WAIT && ENGINE(owner)->phase == MAC_TX_STOPPING && ENGINE(owner)->outcome == MAC_TX_ACKED) {
+#if defined(CC2530_MAC_LINK)
+                j->record.request_ack = MAC_LINK_CEIL(input.source.upper);
+                j->wait_until = j->record.request_ack + (uint16_t)((uint16_t)j->request.response_wait * 960u);
+#else
                 j->record.request_ack = input.source.stamp;
                 j->wait_until = input.source.stamp + (uint16_t)((uint16_t)j->request.response_wait * 960u);
+#endif
             }
+#if defined(CC2530_MAC_LINK)
+            if (owner->engine.outcome == MAC_TX_TIMING_UNCERTAIN)
+                abort_attempt(MAC_JOIN_TIMING_UNCERTAIN);
+#endif
         }
-        if (owner->phase == MAC_TX_FAULT) {
+        if (ENGINE(owner)->phase == MAC_TX_FAULT) {
             fault(MAC_JOIN_TX_ERROR);
             goto publish;
         }
-        if (owner->phase == MAC_TX_DONE) {
-            j->record.tx_outcome = owner->outcome;
-            j->record.tx_rc = mac_tx_release(owner);
+        if (ENGINE(owner)->phase == MAC_TX_DONE) {
+            j->record.tx_outcome = ENGINE(owner)->outcome;
+            j->record.tx_rc = release(owner);
             if (j->record.tx_rc != MAC_TX_OK) {
                 fault(MAC_JOIN_TX_ERROR);
                 goto publish;
@@ -450,13 +502,17 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t
         }
         poll_event = pe.kind ? &pe : NULL;
         j->record.poll_rc = mac_poll_step_rx(&j->poll, owner, time, poll_event, &pa, j->request.profile);
-        j->tx_generation = owner->generation;
+        j->tx_generation = ENGINE(owner)->generation;
         if (j->record.poll_rc != MAC_POLL_OK) {
             fault(MAC_JOIN_POLL_ERROR);
             goto publish;
         }
         if (pa.observation)
             output.observation = pa.observation;
+#if defined(CC2530_MAC_LINK)
+        if (j->poll.control.reason == MAC_POLL_TIMING_UNCERTAIN)
+            abort_attempt(MAC_JOIN_TIMING_UNCERTAIN);
+#endif
         window();
         receipt();
         j->record.poll_reason = j->poll.control.reason;
@@ -493,12 +549,12 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t
             j->stop_at = time + MAC_JOIN_STOP_TIME;
             j->stop_steps = MAC_JOIN_STOP_WORK;
         }
-        if (owner->phase != MAC_TX_IDLE || j->poll.control.phase != MAC_POLL_IDLE) {
+        if (ENGINE(owner)->phase != MAC_TX_IDLE || j->poll.control.phase != MAC_POLL_IDLE) {
             fault(MAC_JOIN_CLEANUP_FAILED);
             goto publish;
         }
         if (matched && kind == MAC_JOIN_RESTORED && j->issued == MAC_JOIN_ACTION_RESTORE) {
-            if (!reached(input.stamp, owner->ready_at)) {
+            if (!reached(input.stamp, ENGINE(owner)->ready_at)) {
                 fault(MAC_JOIN_CLEANUP_FAILED);
                 goto publish;
             }
@@ -532,14 +588,14 @@ mac_join_result_t mac_join_take(mac_join_t MAC_JOIN_RAM *ctx, mac_join_record_t 
     return MAC_JOIN_OK;
 }
 
-mac_join_result_t mac_join_release(mac_join_t MAC_JOIN_RAM *ctx, mac_tx_t MAC_JOIN_RAM *tx)
+mac_join_result_t mac_join_release(mac_join_t MAC_JOIN_RAM *ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM *tx)
 {
     if (ctx == NULL || tx == NULL)
         return MAC_JOIN_INVALID;
     staged = *ctx;
     if (staged.version != MAC_JOIN_VERSION || staged.owner != tx || staged.phase != MAC_JOIN_DONE
             || !staged.taken || !staged.restored || staged.issued || staged.uncertain
-            || tx->phase != MAC_TX_IDLE || tx->generation != staged.tx_generation)
+            || ENGINE(tx)->phase != MAC_TX_IDLE || ENGINE(tx)->generation != staged.tx_generation)
         return MAC_JOIN_STATE;
     staged.owner = NULL;
     staged.phase = MAC_JOIN_IDLE;

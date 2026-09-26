@@ -4,6 +4,12 @@
 #ifndef MAC_POLL_H
 #define MAC_POLL_H
 #include "mac_tx.h"
+#if defined(CC2530_MAC_LINK)
+#include "mac_link.h"
+#define MAC_POLL_OWNER_T mac_tx_interval_t
+#else
+#define MAC_POLL_OWNER_T mac_tx_t
+#endif
 #ifdef __SDCC
 #define MAC_POLL_RAM __xdata
 #else
@@ -57,6 +63,9 @@
 #define MAC_POLL_UNSUPPORTED 8u
 #define MAC_POLL_CLEANUP_FAILED 9u
 #define MAC_POLL_TX_ABORT 10u
+#if defined(CC2530_MAC_LINK)
+#define MAC_POLL_TIMING_UNCERTAIN 11u
+#endif
 /* Per-step observations; ignored input still consumes bounded work. */
 #define MAC_POLL_OBS_NONE 0u
 #define MAC_POLL_OBS_STALE 1u
@@ -92,12 +101,24 @@ typedef struct {
  * A record is a logical result; reason/cleanup failure remain in step/ctx even
  * if they occur AFTER take. No membership, PIB change or ACK success implied.
  */
+#if defined(CC2530_MAC_LINK)
+/* Delivery stamp is the conservative observation upper bound, not a capture. */
+#endif
 typedef struct {
     uint32_t epoch, generation, stamp;
     uint8_t protocol, cause, length, payload_offset, payload_length, source_relation;
     uint8_t body[MAC_FRAME_MAX_BODY];
 } mac_poll_record_t;
 
+#if defined(CC2530_MAC_LINK)
+/* TX reports exactly one granted mac_tx_observed_step at stamp (= step now).
+ * source is its ORIGINAL interval input (kind=0 for NULL); CRC truth is required.
+ * FRAME stamp is ceil(observation trailing-end upper bound), never a capture.
+ * Reports are serially ordered after the ACK report and previous watermark.
+ * CLOSED through is loss-free coverage through the latest deadline, <= stamp;
+ * all owned RX/ACK activity and local TX IFS are finished/handed off.
+ */
+#else
 /* TX reports exactly one granted real mac_tx_step at stamp (foreground time).
  * source is its ORIGINAL input (kind=0 for NULL), including ACK physical end.
  * crc_valid must be true for an ACK source. Do not feed failed CRC to mac_tx.
@@ -106,9 +127,14 @@ typedef struct {
  * CLOSED: through is a loss-free drained receive watermark, <= stamp; all
  * owned RX/ACK activity and applicable local TX IFS are finished/handed off.
  */
+#endif
 typedef struct {
     uint32_t epoch, generation, stamp, serial, through;
+#if defined(CC2530_MAC_LINK)
+    mac_tx_interval_event_t source;
+#else
     mac_tx_event_t source;
+#endif
     const uint8_t *body;
     uint16_t length, token;
     uint8_t kind, crc_valid, channel, tx_result;
@@ -124,8 +150,13 @@ typedef struct {
  * owner is persistent caller storage, not a borrowed payload/pool pointer. */
 typedef struct {
     mac_poll_request_t request;
-    mac_tx_t MAC_POLL_RAM *owner;
+    MAC_POLL_OWNER_T MAC_POLL_RAM *owner;
     uint32_t generation, tx_generation, last, deadline, ack_end, receive_end;
+#if defined(CC2530_MAC_LINK)
+    /* ack_end=A=floor(lower), ack_upper=B=ceil(upper), neither is captured.
+     * accept_end=A+F; receive_end=B+F is the loss-free closure deadline. */
+    uint32_t ack_upper, accept_end;
+#endif
     uint32_t stop_at, rx_serial, tx_mark;
     uint16_t steps, token, tx_token, close_token;
     uint8_t outgoing[22], outgoing_length;
@@ -145,10 +176,10 @@ typedef struct {
 
 mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile poll);
 mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile poll,
-    mac_tx_t MAC_POLL_RAM * volatile tx,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx,
     const mac_poll_request_t MAC_POLL_RAM * volatile request, uint32_t volatile now);
 mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile poll,
-    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action);
 /* Per-call profile, not stored in the context. Only an R22 Association
@@ -156,13 +187,13 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile poll,
  * The legacy step always uses IEEE2006; all lease/timing/ACK duties are intact.
  */
 mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile poll,
-    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile);
 mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile poll,
     mac_poll_record_t MAC_POLL_RAM * volatile record);
 mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile poll,
-    mac_tx_t MAC_POLL_RAM * volatile tx);
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx);
 
 /* Fresh memory init is never radio recovery. All API errors are atomic.
  * PREPARE establishes a continuous independent poll RX/ACK lease through the
@@ -170,12 +201,23 @@ mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile poll,
  * operation's QUIESCED contract or its 1024-symbol/16-step bound.
  * No radio/PAN/channel changes, CRC, timestamp capture or immediate ACK engine
  * are implemented. Current reset-exclusive platform services cannot compose it.
- * step grants one foreground mac_tx_step, never repeats it. Deliver its report
+ */
+#if defined(CC2530_MAC_LINK)
+/* step grants one observed step; never operate the embedded exact engine.
+ * Accept addressed frames only through A+F; later upper bounds are uncertain,
+ * not late proofs. Timeout requires loss-free CLOSED through B+F.
+ * Deliver the original grant report before later-time input; no retimestamping.
+ * CLOSED retires prior PREPARE/CLOSE rights even after cancellation.
+ */
+#else
+/* step grants one foreground mac_tx_step, never repeats it. Deliver its report
  * before any later-time poll/cancel/frame; no retimestamping. copy is permitted.
  * Frames end in (accepted ACK end, ACK end+F], inclusive at the upper boundary
  * before timeout. Timeout NO_DATA requires CLOSED; elapsed time alone is not
  * coverage. CLOSED retires prior PREPARE/CLOSE rights even after cancellation.
- * Local aborts have no protocol confirmation; established receipts survive
+ */
+#endif
+/* Local aborts have no protocol confirmation; established receipts survive
  * later errors. take can be prompt during DRAIN; release requires DONE+taken.
  * FAULT retains ownership. No caller may use/reset the bound tx during a lease.
  * All objects are disjoint, accessible ordinary RAM (never MMIO/compiler

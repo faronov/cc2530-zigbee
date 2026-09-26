@@ -21,15 +21,16 @@ class SelectionTests(unittest.TestCase):
     def names(self, selected):
         return {(row["board"], row["directory"]) for row in selected["matrix"]["include"]}
 
-    def test_full_preserves_104_workers_and_adds_two_reconfiguration_workers(self):
+    def test_full_preserves_106_workers_and_adds_two_interval_consumer_workers(self):
         selected = plan.full_plan("test")
         rows = selected["matrix"]["include"]
-        self.assertEqual(len(rows), 106)
-        self.assertEqual(len({r["name"] for r in rows}), 106)
+        self.assertEqual(len(rows), 108)
+        self.assertEqual(len({r["name"] for r in rows}), 108)
         self.assertEqual(sum(row["directory"] == "mac-tx-interval" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-handoff" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-adapter" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-reconfig" for row in rows), 2)
+        self.assertEqual(sum(row["directory"] == "mac-link" for row in rows), 2)
         self.assertEqual(sum(row["directory"].startswith("banked-join-") for row in rows), 44)
         self.assertEqual({(r["board"], r["image"]) for r in rows if r["image"]},
                          {(b, i) for b in plan.BOARDS for i in plan.IMAGES})
@@ -59,7 +60,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 selected = self.select("README.md", path)
                 self.assertEqual(selected["tier"], "full")
-                self.assertEqual(len(selected["matrix"]["include"]), 106)
+                self.assertEqual(len(selected["matrix"]["include"]), 108)
                 self.assertEqual(selected["campaign"], "full")
 
     def test_failed_dependency_derivation_is_explicit_full_not_an_empty_pass(self):
@@ -82,6 +83,8 @@ class SelectionTests(unittest.TestCase):
             "tests/test_mac_observed.c": {"mac-adapter"},
             "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig"},
             "tests/test_mac_reconfig.c": {"mac-reconfig"},
+            "tests/test_mac_link_scan.c": {"mac-link"},
+            "tests/test_mac_link_join.c": {"mac-link"},
             "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},
         }

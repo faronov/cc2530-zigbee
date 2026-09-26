@@ -99,7 +99,7 @@ endif
 .PHONY: test-mac-tx-interval
 .PHONY: test-mac-handoff
 .PHONY: test-mac-adapter
-.PHONY: test-mac-reconfig
+.PHONY: test-mac-reconfig test-mac-link
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1496,6 +1496,34 @@ test-mac-reconfig: $(BUILD)/host-mac-reconfig-tests $(BUILD)/host-mac-reconfig-t
 	$(BUILD)/host-mac-reconfig-tests
 	$(BUILD)/host-mac-reconfig-tests-sanitize
 
+# Interval-aware scan/POLL/association consumers over the observed MAC owner.
+# Native corpora plus banked SDCC compile checks; no linked link-profile image yet.
+MAC_LINK_DEFINES := -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_LINK
+MAC_LINK_DIR := $(BUILD)/mac-link
+MAC_LINK_OBJECTS := $(addprefix $(MAC_LINK_DIR)/,mac_tx.rel mac_scan.rel mac_poll.rel mac_association.rel mac_join.rel)
+MAC_LINK_SCAN_SRC := src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/mac_scan.c
+MAC_LINK_JOIN_SRC := src/mac_frame.c src/mac_tx.c src/mac_poll.c src/mac_association.c src/mac_join.c
+$(MAC_LINK_DIR):
+	mkdir -p $@
+$(MAC_LINK_OBJECTS): $(MAC_LINK_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(MAC_LINK_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_DEFINES) --dataseg BJ_$* \
+		$(foreach b,1 2 3 4,$(if $(filter $*,$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) -c $< -o $@
+$(BUILD)/host-mac-link-scan-tests: tests/test_mac_link_scan.c $(MAC_LINK_SCAN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DEFINES) tests/test_mac_link_scan.c $(MAC_LINK_SCAN_SRC) -o $@
+$(BUILD)/host-mac-link-scan-tests-sanitize: tests/test_mac_link_scan.c $(MAC_LINK_SCAN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_scan.c $(MAC_LINK_SCAN_SRC) -o $@
+$(BUILD)/host-mac-link-join-tests: tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DEFINES) tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) -o $@
+$(BUILD)/host-mac-link-join-tests-sanitize: tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) -o $@
+
+test-mac-link: $(BUILD)/host-mac-link-scan-tests $(BUILD)/host-mac-link-scan-tests-sanitize \
+		$(BUILD)/host-mac-link-join-tests $(BUILD)/host-mac-link-join-tests-sanitize $(MAC_LINK_OBJECTS)
+	$(BUILD)/host-mac-link-scan-tests
+	$(BUILD)/host-mac-link-scan-tests-sanitize
+	$(BUILD)/host-mac-link-join-tests
+	$(BUILD)/host-mac-link-join-tests-sanitize
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1708,7 +1736,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

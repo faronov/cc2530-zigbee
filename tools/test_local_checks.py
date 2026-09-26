@@ -143,6 +143,33 @@ class LocalChecksTests(unittest.TestCase):
             for unit in ("mac-adapter", "bringup"):
                 self.assertFalse(any("-DCC2530_MAC_RECONFIG" in args for args in recipe(board, unit)))
 
+    def test_interval_consumers_gate_only_their_own_objects_and_native_builds(self):
+        gated = ("mac_tx", "mac_scan", "mac_poll", "mac_association", "mac_join")
+        banks = {"mac_scan": "BJ_BANK3"}
+        for board in BOARDS:
+            commands = recipe(board, "mac-link")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles), gated)
+            for args in compiles:
+                stem = Path(args[-1]).stem
+                self.assertEqual(Path(args[-1]).parent.name, "mac-link")
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_JOIN",
+                                 "-DCC2530_MAC_INTERVAL", "-DCC2530_MAC_OBSERVED",
+                                 "-DCC2530_MAC_LINK"} <= set(args))
+                self.assertEqual(args[args.index("--codeseg") + 1], banks.get(stem, "BJ_BANK2"))
+                self.assertEqual(args[args.index("--dataseg") + 1], "BJ_" + stem)
+            native = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(native), 4)
+            self.assertTrue(all({"-DCC2530_MAC_INTERVAL", "-DCC2530_MAC_OBSERVED", "-DCC2530_MAC_LINK"}
+                                <= set(args) for args in native))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 2)
+            runs = [Path(args[0]).name for args in commands if args[0] not in ("cc", "sdcc", "mkdir")]
+            self.assertEqual(runs, ["host-mac-link-scan-tests", "host-mac-link-scan-tests-sanitize",
+                                    "host-mac-link-join-tests", "host-mac-link-join-tests-sanitize"])
+            self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
+            for unit in ("compositions", "bringup", "banked-join-success", "mac-adapter"):
+                self.assertFalse(any("-DCC2530_MAC_LINK" in args for args in recipe(board, unit)))
+
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
             for image in IMAGES:

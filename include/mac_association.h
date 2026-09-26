@@ -61,11 +61,20 @@ typedef struct {
     uint8_t coordinator[8], local[8];
 } mac_association_request_t;
 
+#if defined(CC2530_MAC_LINK)
+/* FRAME stamp (and copied RESPONSE stamp) is the conservative upward-rounded
+ * observation upper bound, not a captured end. The interval POLL caller proves
+ * its acceptance window before forwarding. Context lifetime stays local policy.
+ * Body is an unretained FCS-free CODE/RAM span with truthful CRC/channel/epoch.
+ * CANCEL uses correlation only.
+ */
+#else
 /* FRAME: complete FCS-free body, truthful CRC indication, selected radio epoch
  * and actual captured trailing-PPDU-end stamp. No PHY CRC/timestamp is produced
  * here. CANCEL uses correlation only; other fields are ignored.
  * Body is a generic read-only CODE/RAM span, never retained after step.
  */
+#endif
 typedef struct {
     uint32_t epoch, generation, stamp;
     const uint8_t *body;

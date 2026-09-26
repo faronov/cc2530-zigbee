@@ -670,6 +670,10 @@ never flash `mac-adapter/mac_adapter.ihx`. A separately gated
 installs PAN/short/channel and opens new RX episodes with explicit gaps; it is
 host-tested and compile-checked only, not linked into an MCU image. Code
 `b0a3712` passed [full CI,108/108 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36221496774).
+The gated [interval consumer profile](docs/MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
+runs scan, POLL, Association and join over the observed interval MAC owner;
+it is host-tested and SDCC compile-checked only, without an adapter driver or
+linked image.
 
 ## Offline MAC transmission state
 

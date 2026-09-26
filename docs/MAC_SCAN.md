@@ -453,6 +453,54 @@ genuine scenarios, all76 artifact negatives and the missing-alias negative with 
 15-second per-simulator deadline. The51 Make/artifact regressions also pass.
 No firmware rebuild, hardware access or new dependency was needed.
 
+## Interval consumer profile (`CC2530_MAC_LINK`)
+
+`CC2530_MAC_LINK` (which requires `CC2530_MAC_OBSERVED`/`CC2530_MAC_INTERVAL`,
+see `include/mac_link.h`) binds the same controller to the observed interval
+owner `mac_tx_interval_t`. Without the flag the exact profile and its
+compiled SDCC instructions and allocations are unchanged: both boards' standalone and
+banked-join `.asm` files match the previous revision after removing comments and
+source-line debug labels. Only line-number metadata moves.
+
+The profile changes only what the time model requires:
+
+| Item | Exact profile | Interval profile |
+| --- | --- | --- |
+| Owner/submit/release | `mac_tx_t`, `mac_tx_submit/release` | `mac_tx_interval_t`, `mac_tx_interval_submit/release` |
+| ACTION_TX grant | one `mac_tx_step` with captured events | one `mac_tx_observed_step` with interval/BUSY/RETIRED input |
+| OPENED stamp | captured receive-on edge | foreground observation after receive-on was confirmed, so the dwell window starts at or after the physical opening |
+| BEACON | captured end inside `[start, start+dwell)` | ordered delivery on the scan channel between OPENED and CLOSED |
+| CLOSED stamp | exactly `window_end` | loss-free drained watermark at or after `window_end` |
+
+A beacon delivered after the dwell but before confirmed closure was still
+received on the tuned channel with the beacon filter. Accepting it lengthens
+the listening period and does not create a timing fact. An earlier
+closure watermark is an adapter error, and the unchanged 1024-symbol grace still
+reports a missing closure. The TX report must still echo the engine's
+current foreground time. A Beacon Request never requests an ACK, so its
+normal outcome is `UNACKNOWLEDGED` after `SENT_INTERVAL` and `RETIRED`.
+Five bounded `BUSY_INTERVAL` results still move to the next channel.
+
+`tests/test_mac_link_scan.c` drives the real observed interval engine, codecs,
+beacon parser and candidate table with synthetic interval events. It covers
+the ordinary two-channel scan with in-window, post-dwell and wrong-channel
+beacons. It also covers an exact-boundary closure, early and missing closure, busy channels, RX
+cancellation, lifetime cancellation of a pending attempt, a TX report whose
+stamp differs from the engine step and scan reuse with a continuing DSN. Invalid input
+is atomic. Every case runs at fine phases 0/1/256/511, both from epoch 0 and
+across the 32-bit symbol wrap, natively and under ASan/UBSan. Eight targeted
+link-profile mutations were killed: exact-equality closure, closure one symbol later,
+unconditional closure, restored dwell filter, any-channel beacons, dropped
+engine uncertainty, dropped report identity and a skipped release.
+With the banked-join flags, SDCC 4.2.0 compiles the link profile to 8504
+`BJ_BANK3` bytes, compared with 8602 for the exact profile. It also uses the same
+4-byte data segment.
+
+This is **host-tested and SDCC compile-checked** only. It is not an adapter
+driver, a linked MCU image or a hardware observation. The link driver that
+maps these actions to `mac_adapter` configure/open/close calls is still
+separate #13/#14 work.
+
 ## Reproduction and integration
 
 Run the canonical targets from the repository root:

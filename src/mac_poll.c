@@ -5,6 +5,16 @@
 #include <stddef.h>
 #include <string.h>
 
+#if defined(CC2530_MAC_LINK)
+#define ENGINE(tx) (&(tx)->engine)
+#define submit mac_tx_interval_submit
+#define release mac_tx_interval_release
+#else
+#define ENGINE(tx) tx
+#define submit mac_tx_submit
+#define release mac_tx_release
+#endif
+
 static mac_poll_control_t MAC_POLL_RAM control;
 /* start's codec input and step's decoded frame have disjoint returning
  * lifetimes. Both stay separate from control, input, output and the receipt. */
@@ -29,7 +39,7 @@ static uint32_t MAC_POLL_RAM step_time;
  * spills. Both entries replace every argument, including the RX profile.
  */
 static mac_poll_t MAC_POLL_RAM * volatile step_poll;
-static mac_tx_t MAC_POLL_RAM * volatile step_tx;
+static MAC_POLL_OWNER_T MAC_POLL_RAM * volatile step_tx;
 static const mac_poll_event_t MAC_POLL_RAM * volatile step_event;
 static mac_poll_action_t MAC_POLL_RAM * volatile step_action;
 static volatile uint32_t MAC_POLL_RAM step_now;
@@ -39,9 +49,14 @@ typedef char control_first[(offsetof(mac_poll_t, control) == 0) ? 1 : -1];
 typedef char request_first[(offsetof(mac_poll_control_t, request) == 0) ? 1 : -1];
 typedef char record_boundary[(offsetof(mac_poll_t, record) == sizeof(mac_poll_control_t)) ? 1 : -1];
 #ifdef __SDCC
+#if defined(CC2530_MAC_LINK)
+typedef char control_size[(sizeof(mac_poll_control_t) == 131) ? 1 : -1];
+typedef char context_size[(sizeof(mac_poll_t) == 274) ? 1 : -1];
+#else
 typedef char control_size[(sizeof(mac_poll_control_t) == 123) ? 1 : -1];
-typedef char record_size[(sizeof(mac_poll_record_t) == 143) ? 1 : -1];
 typedef char context_size[(sizeof(mac_poll_t) == 266) ? 1 : -1];
+#endif
+typedef char record_size[(sizeof(mac_poll_record_t) == 143) ? 1 : -1];
 #endif
 
 static uint8_t reached(uint32_t now, uint32_t at)
@@ -99,6 +114,34 @@ static void decide(uint8_t protocol, uint8_t cause, uint32_t stamp)
     drain(0);
 }
 
+#if defined(CC2530_MAC_LINK)
+static uint8_t accept_ack(mac_tx_interval_t MAC_POLL_RAM * volatile tx)
+{
+    if (!(control.tx_phase == MAC_TX_ACK_WAIT && tx->engine.phase == MAC_TX_STOPPING
+        && tx->engine.outcome == MAC_TX_ACKED
+        && input.source.source.kind == MAC_TX_EVENT_ACK_INTERVAL && input.crc_valid
+        && input.source.source.generation == control.tx_generation
+        && input.source.source.retry == control.tx_retry && input.source.source.nb == control.tx_nb
+        && input.source.source.length == 3 && (input.source.source.bytes[0] & 7u) == MAC_FRAME_ACK
+        && input.source.source.bytes[2] == tx->engine.frame[2]
+        && ((input.source.source.bytes[0] & MAC_FLAG_PENDING) != 0u) == tx->engine.pending
+        && reached(MAC_LINK_FLOOR(input.source.lower), control.tx_mark)
+        && reached(input.stamp, MAC_LINK_CEIL(input.source.upper))))
+        return 0;
+    control.ack_seen = 1;
+    control.ack_end = MAC_LINK_FLOOR(input.source.lower);
+    control.ack_upper = MAC_LINK_CEIL(input.source.upper);
+    control.accept_end = control.ack_end + control.request.frame_wait;
+    control.receive_end = control.ack_upper + control.request.frame_wait;
+    if (control.phase != MAC_POLL_DRAIN) {
+        if (tx->engine.pending)
+            control.phase = MAC_POLL_RECEIVE;
+        else
+            decide(MAC_POLL_NO_DATA, MAC_POLL_PENDING_ZERO, control.ack_upper);
+    }
+    return 1;
+}
+#else
 static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * volatile tx)
 {
     if (!(control.tx_phase == MAC_TX_ACK_WAIT && tx->phase == MAC_TX_STOPPING
@@ -124,6 +167,7 @@ static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * volatile tx)
     }
     return 1;
 }
+#endif
 
 mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile p)
 {
@@ -135,7 +179,7 @@ mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile p)
 }
 
 mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
-    mac_tx_t MAC_POLL_RAM * volatile tx,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx,
     const mac_poll_request_t MAC_POLL_RAM * volatile request, uint32_t volatile now)
 {
     uint8_t command = MAC_COMMAND_DATA_REQUEST;
@@ -152,11 +196,11 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
             || !address(control.request.local_mode, control.request.local)
             || !address(control.request.coordinator_mode, control.request.coordinator))
         return MAC_POLL_INVALID;
-    if (control.version != MAC_POLL_VERSION || control.phase != MAC_POLL_IDLE || tx->phase != MAC_TX_IDLE)
+    if (control.version != MAC_POLL_VERSION || control.phase != MAC_POLL_IDLE || ENGINE(tx)->phase != MAC_TX_IDLE)
         return MAC_POLL_STATE;
-    if (!reached(now, tx->last) || (control.generation && !reached(now, control.last)))
+    if (!reached(now, ENGINE(tx)->last) || (control.generation && !reached(now, control.last)))
         return MAC_POLL_INVALID;
-    if (control.generation == UINT32_MAX || tx->generation == UINT32_MAX)
+    if (control.generation == UINT32_MAX || ENGINE(tx)->generation == UINT32_MAX)
         return MAC_POLL_LIMIT;
     /* Replace every field even when the union last held a decoded frame. */
     start_header.version = 0;
@@ -180,7 +224,7 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
     control.phase = MAC_POLL_ARM;
     control.generation = generation;
     control.owner = tx;
-    control.tx_generation = tx->generation;
+    control.tx_generation = ENGINE(tx)->generation;
     control.last = now;
     control.deadline = control.last + control.request.lifetime;
     control.steps = control.request.work;
@@ -204,9 +248,28 @@ static mac_poll_result_t step(void)
                 || input.crc_valid > 1
                 || (input.kind == MAC_POLL_FRAME && (input.body == NULL || !input.serial
                     || input.channel < 11 || input.channel > 26))
+#if defined(CC2530_MAC_LINK)
+                || (input.kind == MAC_POLL_TX
+                    && (input.source.source.kind > MAC_TX_EVENT_RETIRED
+                        || input.source.source.kind == MAC_TX_EVENT_SENT
+                        || input.source.source.kind == MAC_TX_EVENT_ACK
+                        || (input.source.source.kind == MAC_TX_EVENT_ACK_INTERVAL
+                            && input.source.source.length && input.source.source.bytes == NULL)
+                        || (input.source.source.kind >= MAC_TX_EVENT_SENT_INTERVAL
+                            && (input.source.upper.fine >= 512u
+                                || !reached(input.source.source.stamp, MAC_LINK_CEIL(input.source.upper))))
+                        || ((input.source.source.kind == MAC_TX_EVENT_SENT_INTERVAL
+                             || input.source.source.kind == MAC_TX_EVENT_ACK_INTERVAL
+                             || input.source.source.kind == MAC_TX_EVENT_BUSY_INTERVAL)
+                            && (input.source.lower.fine >= 512u
+                                || !reached(input.source.upper.symbols, input.source.lower.symbols)
+                                || (input.source.upper.symbols == input.source.lower.symbols
+                                    && input.source.upper.fine < input.source.lower.fine))))))
+#else
                 || (input.kind == MAC_POLL_TX && input.source.kind > MAC_TX_EVENT_CANCEL)
                 || (input.kind == MAC_POLL_TX && input.source.kind == MAC_TX_EVENT_ACK
                     && input.source.length && input.source.bytes == NULL))
+#endif
             return MAC_POLL_INVALID;
     }
     memcpy(&control, &step_poll->control, sizeof(control));
@@ -236,7 +299,7 @@ static mac_poll_result_t step(void)
         }
     }
     control.last = step_now;
-    if (step_tx->generation != control.tx_generation || (!control.submitted && step_tx->phase != MAC_TX_IDLE)) {
+    if (ENGINE(step_tx)->generation != control.tx_generation || (!control.submitted && ENGINE(step_tx)->phase != MAC_TX_IDLE)) {
         fault(MAC_POLL_TX_ERROR);
         goto publish;
     }
@@ -260,30 +323,34 @@ static mac_poll_result_t step(void)
             && input.token == control.token) {
         control.prepared = 1;
         remaining = control.deadline - step_now;
-        if (mac_tx_submit(step_tx, control.outgoing, control.outgoing_length, step_now,
+        if (submit(step_tx, control.outgoing, control.outgoing_length, step_now,
                          remaining, MAC_POLL_TX_STEPS) != MAC_TX_OK)
             drain(MAC_POLL_TX_ERROR);
         else {
             control.submitted = 1;
-            control.tx_generation = step_tx->generation;
+            control.tx_generation = ENGINE(step_tx)->generation;
             control.phase = MAC_POLL_REQUEST;
         }
     }
     if (kind == MAC_POLL_TX && control.tx_issued && input.token == control.tx_token) {
         control.tx_issued = 0;
-        control.tx_outcome = step_tx->outcome;
-        if (input.tx_result != MAC_TX_OK || step_tx->phase == MAC_TX_IDLE
-                || step_tx->last != input.stamp || step_tx->phase == MAC_TX_FAULT) {
+        control.tx_outcome = ENGINE(step_tx)->outcome;
+        if (input.tx_result != MAC_TX_OK || ENGINE(step_tx)->phase == MAC_TX_IDLE
+                || ENGINE(step_tx)->last != input.stamp || ENGINE(step_tx)->phase == MAC_TX_FAULT) {
             drain(MAC_POLL_TX_ERROR);
-        } else if (!control.ack_seen && step_tx->outcome == MAC_TX_ACKED) {
+#if defined(CC2530_MAC_LINK)
+        } else if (step_tx->engine.outcome == MAC_TX_TIMING_UNCERTAIN) {
+            drain(MAC_POLL_TIMING_UNCERTAIN);
+#endif
+        } else if (!control.ack_seen && ENGINE(step_tx)->outcome == MAC_TX_ACKED) {
             /* Witness the ORIGINAL event used by the real granted MAC call.
              * Parsing/ignored ACK bits belong to mac_tx, not another decoder.
              */
             if (!accept_ack(step_tx))
                 drain(MAC_POLL_TX_ERROR);
-        } else if (step_tx->phase == MAC_TX_DONE && !control.ack_seen && control.phase != MAC_POLL_DRAIN) {
-            if (step_tx->outcome == MAC_TX_NO_ACK || step_tx->outcome == MAC_TX_CHANNEL_ACCESS)
-                decide(step_tx->outcome == MAC_TX_NO_ACK ? MAC_POLL_NO_ACK : MAC_POLL_CHANNEL_ACCESS,
+        } else if (ENGINE(step_tx)->phase == MAC_TX_DONE && !control.ack_seen && control.phase != MAC_POLL_DRAIN) {
+            if (ENGINE(step_tx)->outcome == MAC_TX_NO_ACK || ENGINE(step_tx)->outcome == MAC_TX_CHANNEL_ACCESS)
+                decide(ENGINE(step_tx)->outcome == MAC_TX_NO_ACK ? MAC_POLL_NO_ACK : MAC_POLL_CHANNEL_ACCESS,
                        MAC_POLL_TX_RESULT, input.stamp);
             else
                 drain(MAC_POLL_TX_ABORT);
@@ -292,12 +359,17 @@ static mac_poll_result_t step(void)
     if (kind == MAC_POLL_FRAME) {
         control.rx_serial = input.serial;
         observation = MAC_POLL_OBS_LATE;
+#if defined(CC2530_MAC_LINK)
+        if (control.phase == MAC_POLL_RECEIVE
+                || (control.phase == MAC_POLL_DRAIN && control.timeout_pending)) {
+#else
         if (control.phase == MAC_POLL_DRAIN && control.timeout_pending
                 && reached(input.stamp, control.ack_end + 1u)
                 && reached(control.receive_end, input.stamp))
             drain(MAC_POLL_ORDER_ERROR); /* Timeout poll preceded completed frame. */
         if (control.phase == MAC_POLL_RECEIVE && reached(input.stamp, control.ack_end + 1u)
                 && reached(control.receive_end, input.stamp)) {
+#endif
             if (input.channel != control.request.channel)
                 observation = MAC_POLL_OBS_FOREIGN;
             else if (!input.crc_valid)
@@ -327,6 +399,12 @@ static mac_poll_result_t step(void)
                             || (!unbound && (decoded.header.source_mode != control.request.coordinator_mode
                                 || memcmp(decoded.header.source, control.request.coordinator, 8))))
                         observation = MAC_POLL_OBS_FOREIGN;
+#if defined(CC2530_MAC_LINK)
+                    else if (!reached(control.accept_end, input.stamp))
+                        drain(MAC_POLL_TIMING_UNCERTAIN);
+                    else if (control.timeout_pending)
+                        drain(MAC_POLL_ORDER_ERROR);
+#endif
                     else {
                         memcpy(receipt->body, input.body, input.length);
                         receipt->length = (uint8_t)input.length;
@@ -357,8 +435,8 @@ static mac_poll_result_t step(void)
             control.closed = 1;
     }
     if (control.phase == MAC_POLL_DRAIN && control.closed && !control.tx_issued
-            && (!control.submitted || step_tx->phase == MAC_TX_DONE || step_tx->phase == MAC_TX_FAULT)) {
-        if (control.uncertain || step_tx->phase == MAC_TX_FAULT)
+            && (!control.submitted || ENGINE(step_tx)->phase == MAC_TX_DONE || ENGINE(step_tx)->phase == MAC_TX_FAULT)) {
+        if (control.uncertain || ENGINE(step_tx)->phase == MAC_TX_FAULT)
             fault(MAC_POLL_CLEANUP_FAILED);
         else {
             if (control.timeout_pending)
@@ -374,18 +452,18 @@ publish:
         output.kind = MAC_POLL_ACTION_PREPARE;
         output.token = ++control.token;
     } else if (control.phase < MAC_POLL_DONE && control.submitted && !control.tx_issued
-            && step_tx->phase != MAC_TX_DONE && step_tx->phase != MAC_TX_FAULT) {
+            && ENGINE(step_tx)->phase != MAC_TX_DONE && ENGINE(step_tx)->phase != MAC_TX_FAULT) {
         control.tx_issued = 1;
-        control.tx_phase = step_tx->phase;
-        control.tx_retry = step_tx->retries;
-        control.tx_nb = step_tx->nb;
-        control.tx_mark = step_tx->last;
+        control.tx_phase = ENGINE(step_tx)->phase;
+        control.tx_retry = ENGINE(step_tx)->retries;
+        control.tx_nb = ENGINE(step_tx)->nb;
+        control.tx_mark = ENGINE(step_tx)->last;
         control.tx_token = ++control.token;
         output.token = control.tx_token;
         output.kind = MAC_POLL_ACTION_TX;
-        output.tx_cancel = control.phase == MAC_POLL_DRAIN && step_tx->phase != MAC_TX_STOPPING;
+        output.tx_cancel = control.phase == MAC_POLL_DRAIN && ENGINE(step_tx)->phase != MAC_TX_STOPPING;
     } else if (control.phase == MAC_POLL_DRAIN && !control.close_issued && !control.tx_issued
-            && (!control.submitted || step_tx->phase == MAC_TX_DONE || step_tx->phase == MAC_TX_FAULT)) {
+            && (!control.submitted || ENGINE(step_tx)->phase == MAC_TX_DONE || ENGINE(step_tx)->phase == MAC_TX_FAULT)) {
         control.close_issued = 1;
         control.close_token = ++control.token;
         output.token = control.close_token;
@@ -406,7 +484,7 @@ publish:
 }
 
 mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
-    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action)
 {
@@ -420,7 +498,7 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
 }
 
 mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
-    mac_tx_t MAC_POLL_RAM * volatile tx, uint32_t volatile now,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
     const mac_poll_event_t MAC_POLL_RAM * volatile event,
     mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile)
 {
@@ -449,17 +527,17 @@ mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,
 }
 
 mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile p,
-    mac_tx_t MAC_POLL_RAM * volatile tx)
+    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx)
 {
     if (p == NULL || tx == NULL)
         return MAC_POLL_INVALID;
     memcpy(&control, &p->control, sizeof(control));
     if (control.version != MAC_POLL_VERSION || control.owner != tx || control.phase != MAC_POLL_DONE || !control.taken
-            || tx->generation != control.tx_generation
-            || (control.submitted ? tx->phase != MAC_TX_DONE : tx->phase != MAC_TX_IDLE))
+            || ENGINE(tx)->generation != control.tx_generation
+            || (control.submitted ? ENGINE(tx)->phase != MAC_TX_DONE : ENGINE(tx)->phase != MAC_TX_IDLE))
         return MAC_POLL_STATE;
     if (control.submitted)
-        (void)mac_tx_release(tx);
+        (void)release(tx);
     control.owner = NULL;
     control.phase = MAC_POLL_IDLE;
     memcpy(&p->control, &control, sizeof(control));

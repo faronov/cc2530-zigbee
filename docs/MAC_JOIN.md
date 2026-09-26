@@ -374,6 +374,29 @@ This is original BSD storage/linkage work using the same SWRU191F §2.2.2
 memory-space basis cited above. No wire, peripheral, physical or #40/#45
 acceptance boundary changes.
 
+## Interval consumer profile (`CC2530_MAC_LINK`)
+
+Under [`CC2530_MAC_LINK`](MAC_POLL.md#interval-consumer-profile-cc2530_mac_link),
+the join owner is `mac_tx_interval_t` and the `radio` action is a
+`mac_tx_interval_action_t`. The internal Association Request runs through
+`mac_tx_observed_step` with interval/BUSY/RETIRED input. The TX grant of a POLL is the
+observed step described in MAC_POLL.md. `record.request_ack` is the Request
+ACK's `ceil(upper)` rather than a captured end. Extraction preparation waits
+until at least `request_ack + R`, so the true ACK end plus
+macResponseWaitTime has elapsed. A Request `TIMING_UNCERTAIN` or POLL
+`MAC_POLL_TIMING_UNCERTAIN` is a local abort,
+`MAC_JOIN_TIMING_UNCERTAIN` (10). It is never a fabricated protocol
+outcome. Retries, refusal and Response semantics are unchanged.
+
+The shared corpus is `tests/test_mac_link_join.c`. With banked-join flags,
+the SDCC 4.2.0 link profile is 7579 `BJ_BANK2` CODE bytes (exact 7189),
+XSEG 270 (240) and DATA 7 (5). The external workspace grows from 645 to 653
+bytes. The exact profile's compiled instructions are unchanged for both boards
+and banked flags. All 22 `mac_join_<n>_test.ihx`, parsed maps and memory
+reports are byte-identical. The 22 manifest pins and compile-only
+`WORKSPACE_PINS` (rel/asm/lst) were refreshed only because source-line records
+moved. Evidence level: **host-tested and SDCC compile-checked**.
+
 ## Reproducible evidence and historical resources
 
 The following numeric ledger records the pre-union profile. The current

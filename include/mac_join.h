@@ -45,6 +45,9 @@
 #define MAC_JOIN_POLL_ERROR 7u
 #define MAC_JOIN_CONTEXT_ERROR 8u
 #define MAC_JOIN_CLEANUP_FAILED 9u
+#if defined(CC2530_MAC_LINK)
+#define MAC_JOIN_TIMING_UNCERTAIN 10u
+#endif
 #define MAC_JOIN_OBS_NONE 0u
 #define MAC_JOIN_OBS_STALE 1u
 #define MAC_JOIN_OBS_DUPLICATE 2u
@@ -70,11 +73,22 @@ typedef struct {
 typedef struct {
     mac_poll_record_t poll;
     mac_association_record_t association;
+#if defined(CC2530_MAC_LINK)
+    /* Request ACK ceil(upper), never a captured end. */
+#endif
     uint32_t epoch, generation, request_ack;
     uint8_t result, stage, reason, error_stage, cleanup_error;
     uint8_t tx_outcome, tx_rc, poll_rc, poll_reason, poll_cleanup, association_rc, observation;
 } mac_join_record_t;
 
+#if defined(CC2530_MAC_LINK)
+/* SOURCE supplies the original interval input for internal observed stepping.
+ * TX reports exactly one granted POLL observed step, source and stamp (= now).
+ * FRAME stamp is an upward-rounded trailing-end observation upper bound.
+ * PREPARED/CLOSED/RESTORED echo one-shot tokens. RESTORED affirms retirement
+ * of all old rights, IFS completion/handoff and exact saved-state restoration.
+ */
+#else
 /* SOURCE supplies an original adapter event for the Request's internal real
  * mac_tx_step. TX reports a granted POLL mac_tx_step input/result instead.
  * source.stamp is its actual captured physical event time, not stamp/now.
@@ -83,11 +97,16 @@ typedef struct {
  * RESTORED affirms all old preparation/RX/ACK/buffer rights retired, applicable
  * IFS finished/handed off, and the exact saved state physically restored.
  */
+#endif
 typedef mac_poll_event_t mac_join_event_t;
 
 typedef struct {
     uint32_t epoch, generation, until;
+#if defined(CC2530_MAC_LINK)
+    mac_tx_interval_action_t radio;
+#else
     mac_tx_action_t radio;
+#endif
     mac_join_radio_t state;
     uint16_t token;
     uint8_t kind, tx_cancel, observation;
@@ -99,7 +118,7 @@ typedef struct {
     mac_join_request_t request;
     mac_join_record_t record;
     uint8_t outgoing[25], length;
-    mac_tx_t MAC_JOIN_RAM *owner;
+    MAC_POLL_OWNER_T MAC_JOIN_RAM *owner;
     uint32_t generation, tx_generation, last, deadline, wait_until, stop_at;
     uint16_t steps, token, issued_token, child_token;
     uint8_t version, phase, issued;
@@ -118,7 +137,14 @@ typedef struct {
  */
 mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile uint32_t now) JOIN_FAR;
 mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx,
-    mac_tx_t MAC_JOIN_RAM * volatile tx, const mac_join_request_t MAC_JOIN_RAM * volatile request, volatile uint32_t now) JOIN_FAR;
+    MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx, const mac_join_request_t MAC_JOIN_RAM * volatile request, volatile uint32_t now) JOIN_FAR;
+#if defined(CC2530_MAC_LINK)
+/* RADIO is an observed Request action; TX grants one POLL observed step.
+ * Only interval submit/copy/release and observed stepping may use this owner.
+ * tx_cancel asks for a current-identity CANCEL; SOURCE is never retimestamped.
+ * RECEIVE/CLOSE retain the continuous RX/ACK/loss-free drain obligations.
+ */
+#else
 /* RADIO contains one actual Request mac_tx_step action; SOURCE returns its real
  * adapter event. TX action grants one POLL mac_tx_step, then its exact report before
  * later-time events. tx_cancel requests a current-identity CANCEL. mac_tx_copy
@@ -127,10 +153,11 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx,
  * All local events echo attempt epoch/generation; action completions echo token.
  * NULL polls; ignored input still consumes work. See MAC_JOIN.md.
  */
-mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, mac_tx_t MAC_JOIN_RAM * volatile tx,
+#endif
+mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
     uint32_t now, const mac_join_event_t MAC_JOIN_RAM * volatile event, mac_join_action_t MAC_JOIN_RAM * volatile action) JOIN_FAR;
 mac_join_result_t mac_join_take(mac_join_t MAC_JOIN_RAM *ctx, mac_join_record_t MAC_JOIN_RAM *record) JOIN_FAR;
-mac_join_result_t mac_join_release(mac_join_t MAC_JOIN_RAM *ctx, mac_tx_t MAC_JOIN_RAM *tx) JOIN_FAR;
+mac_join_result_t mac_join_release(mac_join_t MAC_JOIN_RAM *ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM *tx) JOIN_FAR;
 
 /* Disjoint ordinary storage only; persistent contexts cannot move while leased.
  * Foreground/nonreentrant with all real dependencies. Frame/ACK spans may be

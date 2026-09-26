@@ -431,6 +431,54 @@ full non-public-entry F/S/L/T SHA256
 0bbb6ecc06b894e87de2d58d24cda8e049877f6edc1fd3a8e1ec2f285b5e7072
 ```
 
+## Interval consumer profile (`CC2530_MAC_LINK`)
+
+`CC2530_MAC_LINK` binds POLL, and the Association context it forwards to, to
+the observed interval owner `mac_tx_interval_t`. The shared gate, which
+requires `CC2530_MAC_OBSERVED`/`CC2530_MAC_INTERVAL`, lives in `include/mac_link.h`.
+`MAC_POLL_OWNER_T` selects the owner type. Each ACTION_TX grant is one
+`mac_tx_observed_step`; its report carries the original
+`mac_tx_interval_event_t`. Submit, copy and release use the interval
+functions. The embedded exact engine is never stepped directly.
+
+Let `A = floor(ACK lower)` and `B = ceil(ACK upper)` in whole symbols, and let
+`F` be the same macMaxFrameTotalWaitTime used by the exact profile. The
+context stores `ack_end = A`, `ack_upper = B`, `accept_end = A+F` and
+`receive_end = B+F`:
+
+| Item | Exact profile | Interval profile |
+| --- | --- | --- |
+| Frame acceptance | captured end in `(ACK end, ACK end+F]` | observation upper bound `<= A+F`, so the true end is inside the window |
+| Later addressed frame | NO_DATA after timeout | local `MAC_POLL_TIMING_UNCERTAIN` (11); an upper bound after A+F is not a late proof |
+| NO_DATA timeout | CLOSED through `>= ACK end+F` | loss-free CLOSED through `>= B+F` |
+| Delivery stamp | captured PPDU end | conservative upward-rounded observation bound |
+
+CRC, channel, codec and address classification happen before the timing
+check, so an unrelated or corrupt frame is still ignored instead of becoming
+uncertain. `MAC_ASSOCIATION` is unchanged in code. Under the profile, its forwarded FRAME
+and RESPONSE stamps are the same conservative upper bounds, and the
+contextual window still intersects POLL's proven acceptance window.
+
+`tests/test_mac_link_join.c` drives the real observed interval engine,
+codecs, POLL, Association and join controllers: 136 cases and 7248 checks,
+natively and under nonrecovering ASan/UBSan. It covers the successful
+Association sequence, Pending 0, closure and boundaries, fine phases, wrap,
+retries, stale/duplicate reports, classification, cancellation, budgets,
+atomic rejection, exact spans and retained faults. Seven targeted
+mutations were killed. They were B+F acceptance, ceil ACK lower,
+exclusive acceptance, ambiguity reported as NO_DATA, a missing closure-coverage
+check, and Request ACK lower or floor used as the upper bound.
+
+With the banked-join flags and SDCC 4.2.0, the link profile's `BJ_BANK2`
+CODE is 7864 bytes versus 7626, with XSEG 319 versus 299 and DATA 11 versus 5.
+The context is 274 bytes and the control structure is 131 bytes. The
+additional DATA must be proved in the combined image. Without the flag the
+compiled SDCC instructions are unchanged for both boards and banked flags;
+`mac_poll_test.ihx` is byte-identical, and only the source-line part of the
+complete F/S/L/T metadata digest was refreshed (22456 records).
+Evidence level: **host-tested and SDCC compile-checked**, with no linked
+link-profile image, adapter driver or hardware observation.
+
 ## Reproduction and integration
 
 Set `board=generic; number=0` or `board=lg_esl29_rev03; number=1`.
