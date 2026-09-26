@@ -2,6 +2,13 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "ed_wire.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CRYPTO crypto
+#define CW_CALL(f,e) (e)
+#endif
 #include <stddef.h>
 #include <string.h>
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -11,25 +18,36 @@
 #define WIRE_IO(op,p,n,wr) 1
 #endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define syntax (child_work_arena.wire.engine.parse.syntax)
+#else
 static MCU_XDATA struct {
     nwk_frame_info_t nwk;
     aps_frame_info_t aps;
     nwk_header_t transmit;
     aps_header_t application;
 } syntax;
+#endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define CW_CRYPTO (child_work_arena.wire.crypto)
+#else
 static MCU_XDATA struct {
     uint8_t nonce[13], written;
     zigbee_security_info_t info;
-} crypto;
+} CW_CRYPTO;
+#endif
 
 /* Serialized, returning work only. Syntax metadata remains separate while
  * crypt() consumes it. Header parsing returns before the same wire storage
- * becomes the crypto frame; CCM's input frame and output text stay disjoint.
+ * becomes the CW_CRYPTO frame; CCM's input frame and output text stay disjoint.
  * encode/decode/crypt are never nested in each other. Their only nested wire
  * calls are private header readers, which touch wire.header and syntax only.
  * No pointer into these unions is returned or retained by a lower service.
  */
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define buffers (child_work_arena.wire.buffers)
+#else
 static MCU_XDATA struct {
     union {
         uint8_t header[NWK_FRAME_MAX_BODY];
@@ -41,28 +59,42 @@ static MCU_XDATA struct {
         uint8_t text[NWK_FRAME_MAX_BODY];
     } body;
 } buffers;
+#endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define nwk_frame_decode(...) CW_CALL(CW_NWK_DECODE,nwk_frame_decode(__VA_ARGS__))
+#define aps_frame_decode(...) CW_CALL(CW_APS_DECODE,aps_frame_decode(__VA_ARGS__))
+#define nwk_frame_encode(...) CW_CALL(CW_NWK_ENCODE,nwk_frame_encode(__VA_ARGS__))
+#define aps_frame_encode(...) CW_CALL(CW_APS_ENCODE,aps_frame_encode(__VA_ARGS__))
+#define ccm_star_crypt(...) CW_CALL(CW_CCM,ccm_star_crypt(__VA_ARGS__))
+#endif
 static uint32_t counter_value(const uint8_t *p)
 {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 static void wipe(void)
 {
-    volatile uint8_t MCU_XDATA *p = (volatile uint8_t MCU_XDATA *)&crypto;
+    volatile uint8_t MCU_XDATA *p = (volatile uint8_t MCU_XDATA *)&CW_CRYPTO;
     uint16_t i;
-    for (i = 0; i < sizeof(crypto); i++) p[i] = 0;
+    for (i = 0; i < sizeof(CW_CRYPTO); i++) p[i] = 0;
     p = (volatile uint8_t MCU_XDATA *)&syntax;
     for (i = 0; i < sizeof(syntax); i++) p[i] = 0;
     p = (volatile uint8_t MCU_XDATA *)&buffers;
     for (i = 0; i < sizeof(buffers); i++) p[i] = 0;
 }
 
+#endif
 static zigbee_security_result_t finish(volatile zigbee_security_result_t result)
 {
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    return CW_RETURN(child_work_phase(),result);
+#else
     wipe();
     return result;
+#endif
 }
 
 static zigbee_security_result_t read_nwk(const uint8_t * volatile frame, uint16_t length,
@@ -130,6 +162,11 @@ zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t le
     if (!WIRE_IO(LW_CHILD_WIRE_NWK, frame, length, 0) ||
         !WIRE_IO(LW_CHILD_WIRE_NWK, info, sizeof(*info), 1)) return ZIGBEE_SECURITY_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_WIRE_NWK)) return ZIGBEE_SECURITY_ARGUMENT;
+#else
+
+#endif
     return finish(read_nwk(frame, length, info));
 }
 
@@ -140,6 +177,11 @@ zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t le
     if (!WIRE_IO(LW_CHILD_WIRE_APS, frame, length, 0) ||
         !WIRE_IO(LW_CHILD_WIRE_APS, info, sizeof(*info), 1)) return ZIGBEE_SECURITY_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_WIRE_APS)) return ZIGBEE_SECURITY_ARGUMENT;
+#else
+
+#endif
     return finish(read_aps(frame, length, info));
 }
 
@@ -149,6 +191,11 @@ zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_DECODE, frame, length, 0) ||
         !WIRE_IO(LW_CHILD_WIRE_DECODE, packet, sizeof(*packet), 1)) return ZIGBEE_SECURITY_ARGUMENT;
+#endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_WIRE_DECODE)) return ZIGBEE_SECURITY_ARGUMENT;
+#else
+
 #endif
     zigbee_security_result_t result;
     uint8_t offset, size;
@@ -183,8 +230,17 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uin
         !WIRE_IO(LW_CHILD_WIRE_ENCODE, frame, capacity, 1) ||
         !WIRE_IO(LW_CHILD_WIRE_ENCODE, length, 1, 1)) return ZIGBEE_SECURITY_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(frame,capacity,length,1)) return ZIGBEE_SECURITY_ARGUMENT;
+    if (!child_work_enter(CW_WIRE_ENCODE)) return ZIGBEE_SECURITY_ARGUMENT;
+#else
+
+#endif
     volatile uint8_t n, control;
     uint8_t total, encoded_length;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    total=encoded_length=0;
+#endif
     if (!packet || !frame || !length) return finish(ZIGBEE_SECURITY_ARGUMENT);
     if (packet->length > ED_PAYLOAD_MAX || packet->nwk.type > ED_NWK_COMMAND ||
         (packet->nwk.flags & NWK_FLAG_SECURITY) || (packet->aps.flags & APS_FLAG_SECURITY))
@@ -255,19 +311,19 @@ static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * volatile 
     if (length < h+5u) return ZIGBEE_SECURITY_LENGTH;
     c = frame[h]; a = (uint8_t)(5u+((c & 0x20u) ? 8u : 0u)+(((c >> 3) & 3u) == 1));
     if ((c & 0xc0u) || length < h+a+4u) return ZIGBEE_SECURITY_LENGTH;
-    crypto.info.meta.header_length = h; crypto.info.meta.auxiliary_length = a;
-    crypto.info.meta.key_identifier = (c >> 3) & 3u;
-    crypto.info.meta.extended_nonce = (c >> 5) & 1u;
-    crypto.info.meta.counter = counter_value(frame+h+1);
-    crypto.info.meta.key_sequence = crypto.info.meta.key_identifier == 1 ? frame[h+a-1] : 0;
-    if (c & 0x20u) memcpy(crypto.info.meta.source, frame+h+5, 8);
-    crypto.info.meta.level = 5;
-    crypto.info.meta.payload_length = (uint8_t)(length-h-a-4u);
-    if (crypto.info.meta.counter == 0xffffffffUL) return ZIGBEE_SECURITY_COUNTER;
-    if (!layer && (crypto.info.meta.key_identifier != 1 || !(c & 0x20)))
+    CW_CRYPTO.info.meta.header_length = h; CW_CRYPTO.info.meta.auxiliary_length = a;
+    CW_CRYPTO.info.meta.key_identifier = (c >> 3) & 3u;
+    CW_CRYPTO.info.meta.extended_nonce = (c >> 5) & 1u;
+    CW_CRYPTO.info.meta.counter = counter_value(frame+h+1);
+    CW_CRYPTO.info.meta.key_sequence = CW_CRYPTO.info.meta.key_identifier == 1 ? frame[h+a-1] : 0;
+    if (c & 0x20u) memcpy(CW_CRYPTO.info.meta.source, frame+h+5, 8);
+    CW_CRYPTO.info.meta.level = 5;
+    CW_CRYPTO.info.meta.payload_length = (uint8_t)(length-h-a-4u);
+    if (CW_CRYPTO.info.meta.counter == 0xffffffffUL) return ZIGBEE_SECURITY_COUNTER;
+    if (!layer && (CW_CRYPTO.info.meta.key_identifier != 1 || !(c & 0x20)))
         return ZIGBEE_SECURITY_SELECTOR;
-    if (layer && (crypto.info.meta.key_identifier == 1 || !(c & 0x20) ||
-                  (syntax.aps.header.type != ED_APS_COMMAND && crypto.info.meta.key_identifier)))
+    if (layer && (CW_CRYPTO.info.meta.key_identifier == 1 || !(c & 0x20) ||
+                  (syntax.aps.header.type != ED_APS_COMMAND && CW_CRYPTO.info.meta.key_identifier)))
         return ZIGBEE_SECURITY_SELECTOR;
     return ZIGBEE_SECURITY_OK;
 }
@@ -279,12 +335,17 @@ zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile
     if (!WIRE_IO(LW_CHILD_WIRE_INSPECT, frame, length, 0) ||
         !WIRE_IO(LW_CHILD_WIRE_INSPECT, meta, sizeof(*meta), 1)) return ZIGBEE_SECURITY_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_WIRE_INSPECT)) return ZIGBEE_SECURITY_ARGUMENT;
+#else
+
+#endif
     zigbee_security_result_t result;
     if (!frame || !meta) return finish(ZIGBEE_SECURITY_ARGUMENT);
-    memset(&crypto, 0, sizeof(crypto));
+    memset(&CW_CRYPTO, 0, sizeof(CW_CRYPTO));
     memset(&buffers, 0, sizeof(buffers));
     result = inspect(layer, frame, length);
-    if (!result) *meta = crypto.info.meta;
+    if (!result) *meta = CW_CRYPTO.info.meta;
     return finish(result);
 }
 
@@ -298,6 +359,14 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
         !WIRE_IO(LW_CHILD_WIRE_CRYPT, output, capacity, 1) ||
         !WIRE_IO(LW_CHILD_WIRE_CRYPT, info, sizeof(*info), 1)) return ZIGBEE_SECURITY_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(output,capacity,info,sizeof(*info))) return ZIGBEE_SECURITY_ARGUMENT;
+    if (!child_work_disjoint(key,sizeof(*key),output,capacity)) return ZIGBEE_SECURITY_ARGUMENT;
+    if (!child_work_disjoint(key,sizeof(*key),info,sizeof(*info))) return ZIGBEE_SECURITY_ARGUMENT;
+    if (!child_work_enter(CW_WIRE_CRYPT)) return ZIGBEE_SECURITY_ARGUMENT;
+#else
+
+#endif
     zigbee_security_result_t result;
     ccm_star_result_t encrypted;
     volatile uint8_t h, a, p, total;
@@ -308,18 +377,18 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
     if ((!layer && key->key_identifier != 1) ||
         (layer && (key->key_identifier == 1 || key->key_identifier > 3)))
         return finish(ZIGBEE_SECURITY_SELECTOR);
-    memset(&crypto, 0, sizeof(crypto));
+    memset(&CW_CRYPTO, 0, sizeof(CW_CRYPTO));
     memset(&buffers, 0, sizeof(buffers));
-    result = open ? inspect(layer, frame, length) : header(layer, frame, length, &crypto.info.meta.header_length);
+    result = open ? inspect(layer, frame, length) : header(layer, frame, length, &CW_CRYPTO.info.meta.header_length);
     if (result) goto done;
-    h = crypto.info.meta.header_length;
+    h = CW_CRYPTO.info.meta.header_length;
     if (open) {
-        if (crypto.info.meta.key_identifier != key->key_identifier ||
-            (key->key_identifier == 1 && crypto.info.meta.key_sequence != key->key_sequence) ||
-            memcmp(crypto.info.meta.source, key->source, 8)) {
+        if (CW_CRYPTO.info.meta.key_identifier != key->key_identifier ||
+            (key->key_identifier == 1 && CW_CRYPTO.info.meta.key_sequence != key->key_sequence) ||
+            memcmp(CW_CRYPTO.info.meta.source, key->source, 8)) {
             result = ZIGBEE_SECURITY_SOURCE; goto done;
         }
-        a = crypto.info.meta.auxiliary_length; p = crypto.info.meta.payload_length;
+        a = CW_CRYPTO.info.meta.auxiliary_length; p = CW_CRYPTO.info.meta.payload_length;
         total = h+p;
         memcpy(buffers.wire.frame, frame, length);
         buffers.wire.frame[h] = (buffers.wire.frame[h] & 0xf8u) | 5u;
@@ -343,22 +412,22 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
         memcpy(buffers.wire.frame+h+5, key->source, 8);
         if (key->key_identifier == 1) buffers.wire.frame[h+a-1] = key->key_sequence;
         memcpy(buffers.wire.frame+h+a, frame+h, p);
-        crypto.info.meta.counter = key->counter; crypto.info.meta.key_identifier = key->key_identifier;
-        crypto.info.meta.key_sequence = key->key_identifier == 1 ? key->key_sequence : 0;
-        crypto.info.meta.extended_nonce = 1; crypto.info.meta.level = 5;
-        crypto.info.meta.auxiliary_length = a; crypto.info.meta.payload_length = p;
-        memcpy(crypto.info.meta.source, key->source, 8);
+        CW_CRYPTO.info.meta.counter = key->counter; CW_CRYPTO.info.meta.key_identifier = key->key_identifier;
+        CW_CRYPTO.info.meta.key_sequence = key->key_identifier == 1 ? key->key_sequence : 0;
+        CW_CRYPTO.info.meta.extended_nonce = 1; CW_CRYPTO.info.meta.level = 5;
+        CW_CRYPTO.info.meta.auxiliary_length = a; CW_CRYPTO.info.meta.payload_length = p;
+        memcpy(CW_CRYPTO.info.meta.source, key->source, 8);
     }
     if (layer && ((syntax.aps.header.type == ED_APS_COMMAND && !p) ||
                   (syntax.aps.header.type == ED_APS_ACK && p))) {
         result = ZIGBEE_SECURITY_LENGTH; goto done;
     }
     if (capacity < total) { result = ZIGBEE_SECURITY_SPACE; goto done; }
-    memcpy(crypto.nonce, key->source, 8);
-    memcpy(crypto.nonce+8, buffers.wire.frame+h+1, 4); crypto.nonce[12] = buffers.wire.frame[h];
-    encrypted = ccm_star_crypt(open, key->key, crypto.nonce, buffers.wire.frame, h+a,
+    memcpy(CW_CRYPTO.nonce, key->source, 8);
+    memcpy(CW_CRYPTO.nonce+8, buffers.wire.frame+h+1, 4); CW_CRYPTO.nonce[12] = buffers.wire.frame[h];
+    encrypted = ccm_star_crypt(open, key->key, CW_CRYPTO.nonce, buffers.wire.frame, h+a,
         buffers.wire.frame+h+a, p+(open ? 4u : 0u), 4, buffers.body.text, sizeof(buffers.body.text),
-        &crypto.written, &key->limits, &crypto.info.crypto);
+        &CW_CRYPTO.written, &key->limits, &CW_CRYPTO.info.crypto);
     if (encrypted) {
         result = encrypted == CCM_STAR_AUTH ? ZIGBEE_SECURITY_AUTH :
                  encrypted == CCM_STAR_AES ? ZIGBEE_SECURITY_AES : ZIGBEE_SECURITY_CCM;
@@ -368,10 +437,10 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
         buffers.wire.frame[layer ? 0 : 1] &= (uint8_t)~(layer ? APS_FLAG_SECURITY : 2u);
         memcpy(buffers.wire.frame+h, buffers.body.text, p);
     } else {
-        memcpy(buffers.wire.frame+h+a, buffers.body.text, crypto.written);
+        memcpy(buffers.wire.frame+h+a, buffers.body.text, CW_CRYPTO.written);
         buffers.wire.frame[h] &= 0xf8u;
     }
-    memcpy(output, buffers.wire.frame, total); crypto.info.length = total; *info = crypto.info;
+    memcpy(output, buffers.wire.frame, total); CW_CRYPTO.info.length = total; *info = CW_CRYPTO.info;
     result = ZIGBEE_SECURITY_OK;
 done:
     return finish(result);

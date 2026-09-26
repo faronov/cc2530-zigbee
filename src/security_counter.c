@@ -2,15 +2,31 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "security_counter.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#define CW_READ_HOME(type,home) (home)
+#endif
 #include <stddef.h>
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_guard_internal.h"
 #endif
 
 MCU_XDATA security_counter_status_t security_counter_diagnostic;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+MCU_XDATA uint8_t security_counter_blob[128];
+#define security_counter_check (child_work_arena.nv.counter_check)
+#else
 MCU_XDATA uint8_t security_counter_blob[128], security_counter_check[128];
+#endif
 extern MCU_XDATA uint8_t security_counter_reserved_end;
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define nv_record_load(...) CW_CALL(CW_RECORD_LOAD,nv_record_load(__VA_ARGS__))
+#define nv_record_replace(...) CW_CALL(CW_RECORD_REPLACE,nv_record_replace(__VA_ARGS__))
+#endif
 #define D security_counter_diagnostic
 
 static uint8_t caller(const void MCU_XDATA *object, uint8_t size)
@@ -44,6 +60,9 @@ static security_counter_result_t finish(security_counter_result_t result)
 
 static security_counter_result_t fail(security_counter_result_t result)
 {
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    (void)child_work_poison((uint8_t)result);
+#endif
     D.state = SECURITY_COUNTER_FAILED;
     return finish(result);
 }
@@ -112,30 +131,34 @@ security_counter_result_t security_counter_open(void)
         return (security_counter_result_t)D.result;
     if (D.state != SECURITY_COUNTER_COLD)
         return SECURITY_COUNTER_STATE;
-    D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_COUNTER_OPEN)) return SECURITY_COUNTER_OWNERSHIP;
+#endif
+D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
     if (D.nv_result == NV_RECORD_EMPTY) {
         D.state = SECURITY_COUNTER_UNPROVISIONED;
-        return finish(SECURITY_COUNTER_EMPTY);
+        return CW_RETURN(CW_COUNTER_OPEN,finish(SECURITY_COUNTER_EMPTY));
     }
     if (D.nv_result != NV_RECORD_OK)
-        return fail(D.nv_result == NV_RECORD_RECOVERED ?
-                    SECURITY_COUNTER_RECOVERY : SECURITY_COUNTER_NV);
+        return CW_RETURN(CW_COUNTER_OPEN,fail(D.nv_result == NV_RECORD_RECOVERED ?
+                    SECURITY_COUNTER_RECOVERY : SECURITY_COUNTER_NV));
     if (nv_record_status()->length < 16 || security_counter_blob[0] != 'C' ||
         security_counter_blob[1] != 'T' || security_counter_blob[2] != 'R' ||
         security_counter_blob[3] != '1')
-        return fail(SECURITY_COUNTER_FORMAT);
+        return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
     if (security_counter_blob[4] != 1)
-        return fail(SECURITY_COUNTER_VERSION);
+        return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_VERSION));
     if (security_counter_blob[5] > SECURITY_COUNTER_PAYLOAD_MAX ||
         nv_record_status()->length != 16u+security_counter_blob[5] ||
         security_counter_blob[6] || security_counter_blob[7])
-        return fail(SECURITY_COUNTER_FORMAT);
+        return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
     for (i = 0; i < 2; i++)
         D.next[i] = D.until[i] = decode(security_counter_blob+8u+4u*i);
     D.generation = nv_record_status()->generation;
     D.payload_length = security_counter_blob[5];
     D.state = SECURITY_COUNTER_READY;
-    return finish(SECURITY_COUNTER_OK);
+    return CW_RETURN(CW_COUNTER_OPEN,finish(SECURITY_COUNTER_OK));
 }
 
 security_counter_result_t security_counter_create(
@@ -155,9 +178,13 @@ security_counter_result_t security_counter_create(
         return SECURITY_COUNTER_ARGUMENT;
     if (length && !caller(data, length))
         return SECURITY_COUNTER_OWNERSHIP;
-    D.nv_result = (uint8_t)nv_record_load(security_counter_check, NV_RECORD_MAX);
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_COUNTER_CREATE)) return SECURITY_COUNTER_OWNERSHIP;
+#endif
+D.nv_result = (uint8_t)nv_record_load(security_counter_check, NV_RECORD_MAX);
     if (D.nv_result != NV_RECORD_EMPTY)
-        return fail(SECURITY_COUNTER_ROLLBACK);
+        return CW_RETURN(CW_COUNTER_CREATE,fail(SECURITY_COUNTER_ROLLBACK));
     security_counter_blob[0] = 'C'; security_counter_blob[1] = 'T';
     security_counter_blob[2] = 'R'; security_counter_blob[3] = '1';
     security_counter_blob[4] = 1; security_counter_blob[6] = security_counter_blob[7] = 0;
@@ -169,7 +196,7 @@ security_counter_result_t security_counter_create(
         D.next[0] = D.until[0] = nwk_floor;
         D.next[1] = D.until[1] = aps_floor;
     }
-    return result;
+    return CW_RETURN(CW_COUNTER_CREATE,result);
 }
 
 security_counter_result_t security_counter_take(
@@ -188,24 +215,28 @@ security_counter_result_t security_counter_take(
         return SECURITY_COUNTER_ARGUMENT;
     if (!caller(value, 4))
         return SECURITY_COUNTER_OWNERSHIP;
-    if (D.next[domain] == D.until[domain]) {
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_COUNTER_TAKE)) return SECURITY_COUNTER_OWNERSHIP;
+#endif
+if (D.next[domain] == D.until[domain]) {
         if (D.until[domain] == 0xffffffffUL)
-            return finish(SECURITY_COUNTER_EXHAUSTED);
+            return CW_RETURN(CW_COUNTER_TAKE,finish(SECURITY_COUNTER_EXHAUSTED));
         result = current();
         if (result != SECURITY_COUNTER_OK)
-            return result;
+            return CW_RETURN(CW_COUNTER_TAKE,result);
         end = D.until[domain] > 0xffffffffUL-SECURITY_COUNTER_RANGE ?
             0xffffffffUL : D.until[domain]+SECURITY_COUNTER_RANGE;
         encode(security_counter_blob+8u+4u*domain, end);
         result = commit(poll_limit);
         if (result != SECURITY_COUNTER_OK)
-            return result;
+            return CW_RETURN(CW_COUNTER_TAKE,result);
         D.until[domain] = end;
     }
     taken = D.next[domain];
     D.next[domain]++;
     *value = taken;
-    return finish(SECURITY_COUNTER_OK);
+    return CW_RETURN(CW_COUNTER_TAKE,finish(SECURITY_COUNTER_OK));
 }
 
 security_counter_result_t security_counter_save(
@@ -222,16 +253,20 @@ security_counter_result_t security_counter_save(
         return SECURITY_COUNTER_ARGUMENT;
     if (length && !caller(data, length))
         return SECURITY_COUNTER_OWNERSHIP;
-    result = current();
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_COUNTER_SAVE)) return SECURITY_COUNTER_OWNERSHIP;
+#endif
+result = current();
     if (result != SECURITY_COUNTER_OK)
-        return result;
+        return CW_RETURN(CW_COUNTER_SAVE,result);
     payload(data, length);
     result = commit(poll_limit);
     if (result == SECURITY_COUNTER_OK) {
         D.next[0] = D.until[0];
         D.next[1] = D.until[1];
     }
-    return result;
+    return CW_RETURN(CW_COUNTER_SAVE,result);
 }
 
 security_counter_result_t security_counter_read(
@@ -242,19 +277,25 @@ security_counter_result_t security_counter_read(
     if (result != SECURITY_COUNTER_OK)
         return result;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
-    if (!link_work_counter_request(LW_COUNTER_READ, data, capacity, length))
+    if (!link_work_counter_request(LW_COUNTER_READ, data, CW_READ_HOME(uint8_t,capacity), length))
         return SECURITY_COUNTER_OWNERSHIP;
 #endif
-    if (length == NULL || (data == NULL && capacity))
+    if (length == NULL || (data == NULL && CW_READ_HOME(uint8_t,capacity)))
         return SECURITY_COUNTER_ARGUMENT;
-    if (!caller(length, 1) || (capacity && !caller(data, capacity)))
+    if (!caller(length, 1) ||
+        (CW_READ_HOME(uint8_t,capacity) && !caller(data, CW_READ_HOME(uint8_t,capacity))))
         return SECURITY_COUNTER_OWNERSHIP;
-    if (capacity < D.payload_length)
+    if (CW_READ_HOME(uint8_t,capacity) < D.payload_length)
         return SECURITY_COUNTER_SPACE;
-    for (i = 0; i < D.payload_length; i++)
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(data,CW_READ_HOME(uint8_t,capacity),length,1)) return SECURITY_COUNTER_OWNERSHIP;
+    if (!child_work_enter(CW_COUNTER_READ)) return SECURITY_COUNTER_OWNERSHIP;
+#endif
+for (i = 0; i < D.payload_length; i++)
         data[i] = security_counter_blob[16u+i];
     *length = D.payload_length;
-    return finish(SECURITY_COUNTER_OK);
+    return CW_RETURN(CW_COUNTER_READ,finish(SECURITY_COUNTER_OK));
 }
 
 const security_counter_status_t MCU_XDATA *security_counter_status(void)

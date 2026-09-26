@@ -24,6 +24,11 @@ WORKSPACE_MODULES = MODULES | {"mac_link_workspace"}
 WORKSPACE_LIMITS = {"code": 230576, "const": 962, "xdata": 6308,
                     "data_sum": 556, "overlay_sum": 74, "bits": 80}
 WORKSPACE_LAYOUT_BYTES = 617 + 31
+CHILD_MODULES = WORKSPACE_MODULES | {"mac_link_child_workspace"}
+CHILD_PROBE = "mac_link_child_layout"
+CHILD_LIMITS = {"code": 236892, "const": 1507, "xdata": 5727,
+                "data_sum": 562, "overlay_sum": 74, "bits": 86}
+CHILD_LAYOUT_BYTES = WORKSPACE_LAYOUT_BYTES + 543 + 31
 CONTEXT_BYTES = 1433 + 180 + 304
 
 
@@ -55,13 +60,18 @@ def object_areas(text, module):
             "overlay_sum": areas.get("OSEG", 0), "bits": areas["BSEG"]}
 
 
-def report(objects, *, workspace=False):
-    modules = WORKSPACE_MODULES if workspace else MODULES
-    limits = WORKSPACE_LIMITS if workspace else LIMITS
-    probe_bytes = CONTEXT_BYTES + (WORKSPACE_LAYOUT_BYTES if workspace else 0)
-    require(set(objects) == modules | {PROBE}, "Incomplete or extra compact object set")
+def report(objects, *, workspace=False, child_workspace=False):
+    require(not (workspace and child_workspace), "Conflicting workspace profiles")
+    if child_workspace:
+        modules, limits, probe = CHILD_MODULES, CHILD_LIMITS, CHILD_PROBE
+        probe_bytes = CONTEXT_BYTES + CHILD_LAYOUT_BYTES
+    else:
+        modules = WORKSPACE_MODULES if workspace else MODULES
+        limits = WORKSPACE_LIMITS if workspace else LIMITS
+        probe, probe_bytes = PROBE, CONTEXT_BYTES + (WORKSPACE_LAYOUT_BYTES if workspace else 0)
+    require(set(objects) == modules | {probe}, "Incomplete or extra compact object set")
     rows = {m: object_areas(text, m) for m, text in objects.items()}
-    require(rows[PROBE] == dict.fromkeys(limits, 0) | {"xdata": probe_bytes},
+    require(rows[probe] == dict.fromkeys(limits, 0) | {"xdata": probe_bytes},
             "Allocation-only layout probe changed")
     totals = {key: sum(rows[m][key] for m in modules) for key in limits}
     for key, limit in limits.items():
@@ -73,12 +83,18 @@ def report(objects, *, workspace=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--workspace", action="store_true",
-                        help="Check the separate shared-UPPER profile, not the ordinary compact profile")
+    profiles = parser.add_mutually_exclusive_group()
+    profiles.add_argument("--workspace", action="store_true",
+                          help="Check the shared-UPPER profile, not the ordinary compact profile")
+    profiles.add_argument("--child-workspace", action="store_true",
+                          help="Check the combined UPPER/CHILD profile, not UPPER alone")
     args = parser.parse_args()
-    result = report({p.stem: p.read_text() for p in args.output.glob("*.rel")}, workspace=args.workspace)
-    label = "Shared UPPER LINK" if args.workspace else "Compact LINK"
-    modules = WORKSPACE_MODULES if args.workspace else MODULES
+    result = report({p.stem: p.read_text() for p in args.output.glob("*.rel")},
+                    workspace=args.workspace, child_workspace=args.child_workspace)
+    label = "Shared UPPER/CHILD LINK" if args.child_workspace else (
+        "Shared UPPER LINK" if args.workspace else "Compact LINK")
+    modules = CHILD_MODULES if args.child_workspace else (
+        WORKSPACE_MODULES if args.workspace else MODULES)
     print(f"{label}: {len(modules)} production objects, {result['code']} CODE + "
           f"{result['const']} CONST, {result['xdata']} XDATA; "
           f"caller-inclusive floor {result['object_floor']}/7680. "

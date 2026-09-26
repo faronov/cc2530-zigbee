@@ -134,6 +134,15 @@ storage, must be linked before every lower private fence; runtime checks
 are not placement evidence. It saves727 net XDATA bytes, reaching an8225-byte
 floor, at a19591-byte CODE/CONST and37-byte raw DATA cost. Child crypto/NV work and
 retained contexts remain separate; no new MCU-fit or stack proof follows.
+The additional [CHILD profile](MAC_LINK_DRIVER.md#shared-child-workspace)
+uses a543-byte wire/hash/NV arena. Nested NV counter, journal, writer and
+reader work remain simultaneous struct members; operational failure pins
+that branch through unwind. Retained service state and flash execution/DMA
+storage remain outside. Both arenas are excluded from general spans; exact
+roles and grants admit only real lower-service arguments. The581-byte net
+reduction yields a7644-byte floor, leaving36 before uncounted overhead and
+still988 above the application target. The separate simulated pointer/
+parameter ABI image does not establish the full40-module placement or SP.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

@@ -18,26 +18,26 @@ MODULES = ("flash_exec", "flash", "flash_write", "nv_record", "security_counter"
 SIZE, XDATA, STACK = (9907, 1125, 66)
 CODE_BUDGET, XDATA_BUDGET = 12288, 1280
 CODE_SHA = '3b5ef880f8a88567d5eeea94b4f8ef2d2903403f00b718149b5eeb476da057ea'
-CDB_SHA = 'f17bca30d574d8e38cf20b21ef9073c8bcb981f49e8a419f6ccf54bc47271d99'
+CDB_SHA = '425a164844935e71796e3eb35e99995ab394b88f58f7d9ab2050ee582fac3be7'
 MAP_SHA = 'be591485d0f0f424ac44b4dd1c10ca177292cc06a878a35f1bd3f73a8c835788'
 MEM_SHA = '527dd87f14912c9d5eaf49a24b8febb6a2f840d4c9e3e78e5003839cef211879'
-LISTINGS = {'flash_exec': ('eacf1686fa1e60845d4ea95c199624137eb12a1136192664314ea7b6234b17f3',
+LISTINGS = {'flash_exec': ('9b4c30e079f9ea8a9c68405650ec151ef6d80ff93ed111cb650697551dc59135',
                 (661, 1176, '211c8531b18375463aba8749f024f76b705aafc128226106e2973c6413a69c5e')),
- 'flash': ('a9a3fbfeb27861e0591c06522d7226786b5823304313785e1157d5e15f952833',
+ 'flash': ('8ecb7ef189c05ca9692e3fc3f44b4a78bd537a7e6d421c1f53fd04a5fbc7ed94',
            (416, 766, '186fbbf903d6e033e258a92d0f44cd921fcb73d82faca5ce4c5d63ec391022c6')),
- 'flash_write': ('931fd16bbe4bff1b4e9a3177f638c0aee7ca19d0796d7ba9bf7fa3939d598e7a',
+ 'flash_write': ('8f67a4532acfa1d7f39fac56eb3110b39bd5290c2d15353fc0039efc736e7698',
                  (646, 1095, '7aa7bf21cd8e4b189d44cf0f84f8eb2006a22ca0d73e94484e1821477cb75ba3')),
- 'nv_record': ('7fb1fa467fea810982b5f939891fd27e1d32e75b63107bf727fff97b8370a53d',
+ 'nv_record': ('b846fd6db24e353a10f14e915cf3df84abba0e294e16d2564ef5c2e5c8e9b63f',
                (2170, 3585, '69f79224e1cfc7ab7cdf64663680bf3e1636e41bcc81de790db370e8945b5e8b')),
- 'security_counter': ('a60bc054f03432958cfe3c2583895fb395576a9db18ca55cd4a74093481af067',
+ 'security_counter': ('bc45722ea83ec9f5655edf75d2a2e5c3483e0d967c619dae953c4b0a0c4465b0',
                       (1741, 2821, '62962473dacb51db8697e294bde34f5725a73c207d8dd3bc8d7ba784a316b0b5')),
  'security_counter_test': ('fc7c9133bdae2e0d4c1f960576d83aff4df48aa3cb83639b60797ddedc254933',
                            (209, 363, 'e477312e3c7f507a3aa1d0c585d4637e4588c6a1f753ea6fc9e6b562964665f0'))}
-OBJECTS = {'flash_exec': ('be36ace42e071daa925d78eaf4790de1470383b0e7fe4d3410d2475d1a43d100', (1176, 155, 8, 0, 1)),
- 'flash': ('5aa08e12698b547e83186f1716727166e7e63eb5e0d1c169ea716b6d2d439ca4', (766, 54, 4, 0, 0)),
- 'flash_write': ('ddd7f14a6771b79e349b5cb0dde71ad0c815f519390104d5103df3f047d8569e', (1095, 195, 5, 0, 0)),
- 'nv_record': ('baa88c4c79fae8ecec89d1abcc99ed143895a04780bbf42c51c285eaba7a451b', (3593, 258, 15, 4, 1)),
- 'security_counter': ('dae9936d09f67fdd2a350207b06f78762866840f1ad6a43f385984d3c7f80afd',
+OBJECTS = {'flash_exec': ('98711f81d8fe9838dd51bcde5923cb3cf63624fc5f8bcb5a44c03cf43aa367a0', (1176, 155, 8, 0, 1)),
+ 'flash': ('bb970f1337bbdc7730ffa2734aecbd41a52d1d1ad0c4d2cd219a3e50d18a8f85', (766, 54, 4, 0, 0)),
+ 'flash_write': ('d24057529069d239a3a4f126162a8d02ba90c8e19bb5b2a96c9cb2c2dd6f717b', (1095, 195, 5, 0, 0)),
+ 'nv_record': ('bc31e9f9e22a9478e5bd1dc0b92211127ae31d1d1b6a6bd8156fe5d52ddb777a', (3593, 258, 15, 4, 1)),
+ 'security_counter': ('0fb47dadab0ec559769ab4721c77d278f9e3219f6a5dc83aff0beb8cab2f9354',
                       (2821, 333, 14, 4, 1)),
  'security_counter_test': ('7040dccdf71a2b35a6be41c55e7c8dede9b1b7e55e03285fa23d0591c726e95e',
                            (363, 130, 4, 0, 0))}

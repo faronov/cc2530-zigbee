@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "security_keys.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 #include "security_counter.h"
 #include "zigbee_key_hash.h"
 #include "timebase.h"
@@ -150,6 +156,9 @@ void security_keys_host_power_cycle(void)
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     security_keys_result = SECURITY_KEYS_OK;
     link_work_host_reset();
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    child_work_full_reset();
+#endif
 #else
     (void)finish(SECURITY_KEYS_OK);
 #endif

@@ -30,10 +30,10 @@ FRAMES = {'flash_exec': ('BS_EXEC', 8, 8),
  'banked_security_fixture': ('BS_CALLER', 26, 0)}
 PINS = ('2f7a821e5ec260cbab0fd0cff8225338ff6f479bb5f073a79fea14b124c9634e',
  '897b00a1865f8f953f145165a11b9d75533d9f253c56f69fe603fbe0c1395268',
- '61083ca641d5505a1e4199991ba02403b945ef487c02f8c748c21e32a7f1d569',
+ 'add141c76980f464cb94be2f830891e1ca22fe40b9d3be345245c156f96e0f6f',
  'fba3d29da20f6959937938b8eccee0e8bf8a50ef134d780b32080722d1ff49cb',
- '74f7494ae88a9b26f620ceb63cf1ed571afde66474557dddbcdb7d664290c71a',
- '5788426478f9fc568ee91a094d9cb9a69e73eeb311d0db1c6798bfa71a86b4e5')
+ 'e53594855467a5b4dcb2028853f738859e7d39c29cb69cfa906fa3fd2dae4b25',
+ '125ec42b0fb641211ca7f83ac9859e7596f538266549f34950d26d75cc8d46b4')
 EDGES = (resident.EDGES - {e for e in resident.EDGES if e[0] == "zigbee_security"}) | {
     ("ed_wire", "nwk_frame"), ("ed_wire", "aps_frame"), ("ed_wire", "ccm_star"),
     ("security_keys", "security_counter"), ("security_keys", "zigbee_key_hash"),

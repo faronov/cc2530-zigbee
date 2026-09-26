@@ -14,6 +14,7 @@ from verify_firmware import BOARDS, IMAGES, ROOT
 from ci_plan import COMPONENTS, recipe
 from link_ram_resources import MODULES as LINK_RAM_MODULES
 from link_ram_resources import WORKSPACE_MODULES as LINK_WORKSPACE_MODULES
+from link_ram_resources import CHILD_MODULES as LINK_CHILD_MODULES
 
 
 @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
@@ -276,6 +277,73 @@ class LocalChecksTests(unittest.TestCase):
             for unit in ("mac-link-ram", "mac-link", "banked-join-success", "mac-adapter", "bringup"):
                 self.assertFalse(any("-DCC2530_MAC_LINK_WORKSPACE" in args for args in recipe(board, unit)))
 
+    def test_child_keeps_all_corpora_and_only_a_bounded_abi_image(self):
+        for board in BOARDS:
+            commands = recipe(board, "mac-link-child-workspace")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args
+                        and "-DCC2530_MAC_LINK_CHILD_WORKSPACE" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles),
+                             tuple(sorted(LINK_CHILD_MODULES)) +
+                             ("mac_link_child_layout", "mac_link_child_abi"))
+            for args in compiles:
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_JOIN",
+                                 "-DCC2530_JOIN_WORKSPACE", "-DCC2530_MAC_LINK_RAM",
+                                 "-DCC2530_MAC_LINK_WORKSPACE", "-DCC2530_MAC_RECONFIG",
+                                 "-DCC2530_MAC_ADAPTER"} <= set(args))
+                self.assertFalse({"--stack-auto", "--xstack", "-DCC2530_HOST_TEST"} & set(args))
+                if Path(args[-1]).stem in ("mac_link_workspace", "mac_link_child_workspace"):
+                    self.assertNotIn("--dataseg", args)
+                    self.assertNotIn("--codeseg", args)
+                self.assertEqual(Path(args[-1]).parent.name,
+                                 "abi" if Path(args[-1]).stem == "mac_link_child_abi"
+                                 else "mac-link-child-workspace")
+            native = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(native), 8)
+            self.assertTrue(all("-DCC2530_MAC_LINK_CHILD_WORKSPACE" in args and "-Isrc" in args
+                                and "-DCC2530_BANKED_JOIN" not in args for args in native))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 4)
+            for args in native:
+                self.assertIn("src/mac_link_workspace.c", args)
+                self.assertIn("src/mac_link_child_workspace.c", args)
+                self.assertNotIn("tests/test_mac_link_ram.c", args)
+                self.assertNotIn("tests/test_mac_link_e2e.c", args)
+                if {"tests/test_mac_link_child_nv.c", "tests/test_mac_link_workspace.c"} & set(args):
+                    self.assertEqual({Path(arg).stem for arg in args if arg.startswith("src/")},
+                                     LINK_CHILD_MODULES)
+                    self.assertIn("tests/security_joint_model.c", args)
+                if "tests/test_mac_link_child_workspace.c" in args:
+                    self.assertNotIn("tests/security_joint_model.c", args)
+            links = [i for i, args in enumerate(commands) if args[0] == "sdcc" and "-c" not in args]
+            self.assertEqual(len(links), 2)
+            self.assertNotIn("-DCC2530_MAC_LINK_CHILD_WORKSPACE", commands[links[0]])
+            abi = commands[links[1]]
+            self.assertEqual([Path(arg).stem for arg in abi if arg.endswith(".rel")],
+                             ["mac_link_child_workspace", "mac_link_workspace", "flash_exec",
+                              "mac_link_child_abi"])
+            self.assertEqual(abi[abi.index("--stack-size")+1], "45")
+            self.assertEqual(abi[abi.index("--idata-loc")+1], "0x4f")
+            for args, module in zip(commands[links[1]+1:links[1]+5],
+                                    ("mac_link_child_workspace", "mac_link_workspace",
+                                     "flash_exec", "mac_link_child_abi")):
+                self.assertEqual(args[0], "cp")
+                self.assertEqual(Path(args[-1]).name, f"child_abi.{module}.rst")
+            runs = [Path(args[0]).name for args in commands
+                    if args[0] not in ("cc", "sdcc", "mkdir", "cp", "python3")]
+            self.assertEqual(runs, [f"host-mac-link-child-{case}-tests{suffix}"
+                                    for case in ("crypto", "nv", "upper", "join")
+                                    for suffix in ("", "-sanitize")])
+            self.assertEqual(sum("tools/link_ram_resources.py" in args and "--child-workspace" in args
+                                 for args in commands), 1)
+            guards = [args for args in commands if "tools/test_mac_link_child_abi.py" in args]
+            self.assertEqual(len(guards), 1)
+            self.assertEqual(Path(guards[0][guards[0].index("--output")+1]).parts[-2:],
+                             ("mac-link-child-workspace", "abi"))
+            self.assertEqual(sum("tests/boot_mac_link_child_abi.py" in args for args in commands), 1)
+            for unit in ("mac-link-workspace", "mac-link-ram", "mac-link", "banked-join-success",
+                         "mac-adapter", "bringup"):
+                self.assertFalse(any("-DCC2530_MAC_LINK_CHILD_WORKSPACE" in args
+                                     for args in recipe(board, unit)))
+
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
             for image in IMAGES:
@@ -313,7 +381,7 @@ class LocalChecksTests(unittest.TestCase):
             "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security", "zigbee_mmo",
             "zigbee_key_hash", "security_counter", "security_resident_security", "security_resident_mmo",
             "security_resident_key_hash", "security_resident_counter",
-            "banked", "banked_security",
+            "banked", "banked_security", "mac_link_child_abi",
             "banked_join_joined-data-update-loss-restart", "banked_join_missing-network-key",
             "banked_join_retained-radio-fault", "banked_join_retained-flash-fault",
             "banked_join_rx-queues", "banked_join_wrap-quarantine", "banked_join_ack-correlation",
@@ -335,6 +403,9 @@ class LocalChecksTests(unittest.TestCase):
                 self.assertEqual(output.parts[-2:], (board, image))
                 images[board, image] += 1
                 outputs.add(output)
+            elif args[2] == "tests/boot_mac_link_child_abi.py":
+                self.assertEqual(output.parts[-3:], ("components", "mac-link-child-workspace", "abi"))
+                components[output.parents[2].name, "mac_link_child_abi"] += 1
             else:
                 self.assertEqual(output.name, "components")
                 component = Path(args[2]).stem.removeprefix("boot_")

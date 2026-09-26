@@ -2,6 +2,13 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "ccm_star.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#define CW_READ_HOME(type,home) (home)
+#endif
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
@@ -9,6 +16,9 @@
 #include "mac_link_workspace_guard_internal.h"
 #endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define state (child_work_arena.wire.engine.ccm)
+#else
 static MCU_XDATA struct {
     uint8_t key[16], nonce[13], mac[16], block[16], cipher[16];
     uint8_t work[CCM_STAR_MAX_MESSAGE + 16], tag[16];
@@ -17,7 +27,11 @@ static MCU_XDATA struct {
     ccm_star_info_t info;
     uint8_t position;
 } state;
+#endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define aes128_encrypt_block(...) CW_CALL(CW_AES,aes128_encrypt_block(__VA_ARGS__))
+#endif
 static void account(void)
 {
     state.info.polls += state.diagnostics.polls;
@@ -118,29 +132,42 @@ ccm_star_result_t ccm_star_crypt(
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_CHILD_CCM,key,16,0) || !LW_IO(LW_CHILD_CCM,nonce,13,0) ||
-        !LW_IO(LW_CHILD_CCM,aad,aad_length,0) || !LW_IO(LW_CHILD_CCM,input,length,0) ||
-        !LW_IO(LW_CHILD_CCM,output,capacity,1) || !LW_IO(LW_CHILD_CCM,written,1,1) ||
+        !LW_IO(LW_CHILD_CCM,aad,CW_READ_HOME(uint16_t,aad_length),0) ||
+        !LW_IO(LW_CHILD_CCM,input,CW_READ_HOME(uint16_t,length),0) ||
+        !LW_IO(LW_CHILD_CCM,output,CW_READ_HOME(uint16_t,capacity),1) ||
+        !LW_IO(LW_CHILD_CCM,written,1,1) ||
         !LW_IO(LW_CHILD_CCM,limits,sizeof(*limits),0) ||
         !LW_IO(LW_CHILD_CCM,info,sizeof(*info),1)) return CCM_STAR_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(output,CW_READ_HOME(uint16_t,capacity),written,1)) return CCM_STAR_ARGUMENT;
+    if (!child_work_disjoint(output,CW_READ_HOME(uint16_t,capacity),info,sizeof(*info))) return CCM_STAR_ARGUMENT;
+    if (!child_work_disjoint(written,1,info,sizeof(*info))) return CCM_STAR_ARGUMENT;
+    if (!child_work_disjoint(key,16,info,sizeof(*info))) return CCM_STAR_ARGUMENT;
+    if (!child_work_disjoint(nonce,13,info,sizeof(*info))) return CCM_STAR_ARGUMENT;
+    if (!child_work_enter(CW_CCM)) return CCM_STAR_ARGUMENT;
+#endif
+
     volatile uint8_t size, total;
     uint8_t i, different = 0;
     ccm_star_result_t result = CCM_STAR_AES;
     if (open > 1 || key == NULL || nonce == NULL || output == NULL ||
         written == NULL || limits == NULL || info == NULL ||
-        (aad == NULL && aad_length) || (input == NULL && length) ||
+        (aad == NULL && CW_READ_HOME(uint16_t,aad_length)) ||
+        (input == NULL && CW_READ_HOME(uint16_t,length)) ||
         !limits->block_timeout || limits->block_timeout >= TIMEBASE_HALF_RANGE ||
         !limits->block_polls)
-        return CCM_STAR_ARGUMENT;
+        return CW_RETURN(CW_CCM,CCM_STAR_ARGUMENT);
     if (tag_length != 4 && tag_length != 8 && tag_length != 16)
-        return CCM_STAR_TAG;
-    if (aad_length > CCM_STAR_MAX_AAD || (open && length < tag_length) ||
-        length > CCM_STAR_MAX_MESSAGE + (open ? tag_length : 0u))
-        return CCM_STAR_LENGTH;
-    size = (uint8_t)(length - (open ? tag_length : 0u));
+        return CW_RETURN(CW_CCM,CCM_STAR_TAG);
+    if (CW_READ_HOME(uint16_t,aad_length) > CCM_STAR_MAX_AAD ||
+        (open && CW_READ_HOME(uint16_t,length) < tag_length) ||
+        CW_READ_HOME(uint16_t,length) > CCM_STAR_MAX_MESSAGE + (open ? tag_length : 0u))
+        return CW_RETURN(CW_CCM,CCM_STAR_LENGTH);
+    size = (uint8_t)(CW_READ_HOME(uint16_t,length) - (open ? tag_length : 0u));
     total = size + (open ? 0u : tag_length);
-    if (capacity < total)
-        return CCM_STAR_SPACE;
+    if (CW_READ_HOME(uint16_t,capacity) < total)
+        return CW_RETURN(CW_CCM,CCM_STAR_SPACE);
     memset(&state, 0, sizeof(state));
     memcpy(state.key, key, 16);
     memcpy(state.nonce, nonce, 13);
@@ -152,7 +179,7 @@ ccm_star_result_t ccm_star_crypt(
         if (!transform(size))
             goto done;
     }
-    if (!authenticate(aad, (uint8_t)aad_length, size, tag_length) || !counter(0))
+    if (!authenticate(aad, (uint8_t)CW_READ_HOME(uint16_t,aad_length), size, tag_length) || !counter(0))
         goto done;
     for (i = 0; i < tag_length; i++) {
         state.mac[i] ^= state.cipher[i];
@@ -175,5 +202,5 @@ ccm_star_result_t ccm_star_crypt(
 done:
     *info = state.info;
     wipe();
-    return result;
+    return CW_RETURN(CW_CCM,result);
 }

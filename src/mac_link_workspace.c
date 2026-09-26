@@ -2,6 +2,11 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "mac_link_workspace_internal.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_guard_internal.h"
+#else
+
+#endif
 #include <stddef.h>
 #include <string.h>
 
@@ -163,8 +168,14 @@ uint8_t link_work_external(const void * volatile p, uint16_t volatile size)
     if (!p) return 0;
     space = location(p, size, &a);
     if (!space) return 0;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (space==3) return 0;
+#endif
     if (space != 1) return 1;
     if (OWNER_OVERLAP(a,size)) return 0;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (child_work_address(0,a,size,0)!=2) return 0;
+#endif
     return (a <= b ? b-a >= size : a-b >= sizeof(A)) && outside_prefix(a);
 }
 
@@ -265,8 +276,17 @@ uint8_t link_work_io(uint8_t operation, const void * volatile p, uint16_t volati
     if (!p) return 0;
     space = location(p, size, &a);
     if (!space || (writing && space == 2)) return 0;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (space==3) return 0;
+#endif
     if (space != 1) return 1;
     if (OWNER_OVERLAP(a,size)) return 0;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    {
+        uint8_t admitted=child_work_address(operation,a,size,writing);
+        if (admitted!=2) return admitted;
+    }
+#endif
     if (a <= base ? base-a >= size : a-base >= sizeof(A)) return outside_prefix(a);
     if (a < base || a-base > sizeof(A) || size > sizeof(A)-(a-base)) return 0;
     offset = (uint16_t)(a-base);

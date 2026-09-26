@@ -26,28 +26,28 @@ SOURCES = tuple(m + ".c" for m in MODULES[:-1]) + ("test_zigbee_security.c",)
 CODE_BUDGET, XDATA_BUDGET = 24576, 2048
 SIZE, XDATA, STACK = (20259, 1911, 85)
 CODE_SHA = '0bf576083f3b05b56abbb768e1f1d2ca58a5b826f7b34e21095a6a8fa766181a'
-CDB_SHA = 'd74cd1e3f64bfe2deb2d31dbd4ad3df0a0fa0922339b7bcbe3d28d37ea4fb182'
+CDB_SHA = '8a1fde9f1cf05a146964852fbf75ee70fecf029bc7a29e0db8f43e998f88ba35'
 MAP_SHA = '8b1742e44cedc6ab26a5b4e15f3730ebf9d1931de73b8ab72e9e620ea9693a94'
 MEM_SHA = '48d73a7dd133caba85ca59ab43fd6a9b73b0a7739b02ec7efdb97a651ab79178'
 LISTINGS = {'timebase': ('bc99d4a3a3dd0e36763d8ea0aea05ee31b84ac65fee61caca8bb4e7cda9dbde6',
               (265, 404, 'd546b7603e431ff22e69d8cbf49215ea3823ce3dc010deff94cac753c2d3bef2')),
- 'aes': ('ce17bd99162387d59e1efca14a48e2b5e9e766e18df0c89ac34be8743ea9c74d',
+ 'aes': ('2cd03df3f20ff16717f5126d7fd24e1faa28056ea180a79f2bbe7b184e0a8cfb',
          (3098, 5254, '390d0d2ebdce7e69133ad808987703600f754c512eebce63409797a01040f3d0')),
- 'ccm_star': ('d00483744a78af244d367e7ef085d3f1b177c4c88d2065b0bfca4530b01b4ff0',
+ 'ccm_star': ('0aaa063502d3b9d52310c7d7c2326f08ff9cc1a7039bf9756f49c5eb9d484f2e',
               (1315, 2112, '69cb1abf4173f530139a0b11fdcea88a3702182b1f7b97ab340156b8a324497b')),
- 'nwk_frame': ('dd459ef0b2da5af58baa3c71deef21721f6bcd75e30d530e0842e0b123ad8625',
+ 'nwk_frame': ('18c5b1d2b13edda682a3462c8032ea516d0ae04427f7b12ec16c8f1286694307',
                (1344, 2294, 'fefcc55d47322f04e25a0c97ae73cfae480b724b6260deffd4576b03e8c95167')),
- 'aps_frame': ('f3f121054739898f26d4293446e781e0de8eaf5a159b8390526870f2bde5cccd',
+ 'aps_frame': ('f8b454c943494f4a414178a07b5f17a3391c6fc82972613b606be5fa2b1a9974',
                (939, 1626, '9011ef50ce86d3a924fcf0ef2707945572379c8308c0fac7a3f39af26e834374')),
  'zigbee_security': ('bafed7b489467023cf15bcda7104ef5d316254ae41117a04bd20df38a245e6ae',
                      (2650, 4124, 'd3df7b86a5c110f20fc165e31c4f127788757a7dbc186c8c955f118b7c00aad3')),
  'security_test': ('afdf5e449b807ceec0841bc36e6c799426e3e8e94331c1b1d12f58fcc36e9490',
                    (2087, 3477, '22e89f7dfcbcbafdb224616e99fec25b35212b862aba5871e1dbaca888303d0e'))}
 OBJECTS = {'timebase': ('11e376b9aa9e8c4c6d94dfb9685d15bed0b455019a023476540150eaabec6a08', (404, 25, 0, 3, 1)),
- 'aes': ('6d6b8b5c8ae74993767f70e98bcdbdad8e2e11c85a51d5c4caaa07ff1ac27baa', (5254, 182, 32, 0, 3)),
- 'ccm_star': ('76e237c9338ee7bc395f7b0f9883a272c692176d44ba038f5b562f90501cff78', (2112, 318, 0, 0, 1)),
- 'nwk_frame': ('22d323dfa42c55c4d1580e8f07a57ce81ad43e4a584c9670f7bae1ead0eda9c7', (2294, 96, 12, 10, 0)),
- 'aps_frame': ('cd608cbdde403a47d096463cb2aad6b9e136a338e41832cb00e7a1639c44aad7', (1626, 69, 8, 7, 0)),
+ 'aes': ('c111d08d2a189183dab1fc8ab9eb3477e6a204174ed7922f8e26e005d894a7d2', (5254, 182, 32, 0, 3)),
+ 'ccm_star': ('ed016debc0c6426794e0f4dbf6d3365918de5abb159f4e36d43bd2152e215b78', (2112, 318, 0, 0, 1)),
+ 'nwk_frame': ('f1d39e71ec25fe27d8f4e269a09810541fcfc830705ea37c640fcd4611d4341a', (2294, 96, 12, 10, 0)),
+ 'aps_frame': ('2031d4073e18f89511f9b2894efaf586d1e7e4a5f9f5ceb7d3ef11d422cc2340', (1626, 69, 8, 7, 0)),
  'zigbee_security': ('600cf878a4e643abf6a3def25e293f2fdb85ff144da26ea06747e341bf422117',
                      (4124, 395, 9, 4, 1)),
  'security_test': ('f7ab1e9ed796c35bd38954ca9725722e91071d05e409012d000b256644790077', (3605, 794, 0, 0, 3))}

@@ -2,6 +2,13 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "flash_exec.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#define CW_READ_HOME(type,home) (home)
+#endif
 #include <stddef.h>
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_guard_internal.h"
@@ -162,17 +169,33 @@ flash_exec_result_t flash_exec_command(uint8_t operation, uint8_t page,
     uint8_t i, chip, info0, info1;
     flash_exec_result_t result;
     if (flash_exec_work[7]) return (flash_exec_result_t)flash_exec_work[7];
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_leaf(CW_EXEC)) return FLASH_EXEC_INVALID_ARGUMENT;
+#endif
     if ((operation != FLASH_EXEC_ERASE && operation != FLASH_EXEC_PROGRAM) ||
-        page >= FLASH_NV_PAGE_COUNT || !poll_limit || offset >= FLASH_PAGE_SIZE ||
-        (offset & 3u) || (operation == FLASH_EXEC_ERASE && offset))
+        CW_READ_HOME(uint8_t,page) >= FLASH_NV_PAGE_COUNT ||
+        !CW_READ_HOME(uint16_t,poll_limit) || CW_READ_HOME(uint16_t,offset) >= FLASH_PAGE_SIZE ||
+        (CW_READ_HOME(uint16_t,offset) & 3u) ||
+        (operation == FLASH_EXEC_ERASE && CW_READ_HOME(uint16_t,offset)))
         return FLASH_EXEC_INVALID_ARGUMENT;
     if (operation == FLASH_EXEC_PROGRAM) {
-        if (word == NULL) return FLASH_EXEC_INVALID_ARGUMENT;
+        if (CW_READ_HOME(const uint8_t MCU_XDATA *,word) == NULL) return FLASH_EXEC_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+        if (!LW_IO(CW_EXEC_WORD,CW_READ_HOME(const uint8_t MCU_XDATA *,word),4,0))
+            return FLASH_EXEC_INVALID_ARGUMENT;
+#else
 #if defined(CC2530_MAC_LINK_WORKSPACE)
-        if (!link_work_external(word, 4)) return FLASH_EXEC_INVALID_ARGUMENT;
+        if (!link_work_external(CW_READ_HOME(const uint8_t MCU_XDATA *,word), 4))
+            return FLASH_EXEC_INVALID_ARGUMENT;
 #endif
-        address = MMIO_XADDRESS(word);
+#endif
+        address = MMIO_XADDRESS(CW_READ_HOME(const uint8_t MCU_XDATA *,word));
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+        if (address>0x1dfcu || (!child_work_inside(CW_READ_HOME(const uint8_t MCU_XDATA *,word),4) &&
+            address<=MMIO_XADDRESS(&flash_exec_reserved_end)))
+#else
         if (address > 0x1dfcu || address <= MMIO_XADDRESS(&flash_exec_reserved_end))
+#endif
             return FLASH_EXEC_INVALID_ARGUMENT;
     }
     mapping = MMIO_READ(SOC_MEMCTR);
@@ -194,12 +217,15 @@ flash_exec_result_t flash_exec_command(uint8_t operation, uint8_t page,
     for (i = 0; i < code_size; i++)
         if (flash_exec_ram[i] != TEMPLATE[i]) { result = FLASH_EXEC_CODE_CHANGED; goto failed; }
     flash_exec_work[0] = cache_mode | operation;
-    for (i = 0; i < 4; i++) flash_exec_work[1+i] = operation == FLASH_EXEC_PROGRAM ? word[i] : 0;
-    flash_exec_work[5] = (uint8_t)poll_limit;
-    flash_exec_work[6] = (uint8_t)(poll_limit >> 8);
+    for (i = 0; i < 4; i++)
+        flash_exec_work[1+i] = operation == FLASH_EXEC_PROGRAM ?
+            CW_READ_HOME(const uint8_t MCU_XDATA *,word)[i] : 0;
+    flash_exec_work[5] = (uint8_t)CW_READ_HOME(uint16_t,poll_limit);
+    flash_exec_work[6] = (uint8_t)(CW_READ_HOME(uint16_t,poll_limit) >> 8);
     flash_exec_work[8] = 0;
     if (!idle(mapping)) { result = FLASH_EXEC_UNSUPPORTED_STATE; goto failed; }
-    target = (uint16_t)(FLASH_NV_BASE >> 2) + ((uint16_t)page << 9) + (offset >> 2);
+    target = (uint16_t)(FLASH_NV_BASE >> 2) +
+        ((uint16_t)CW_READ_HOME(uint8_t,page) << 9) + (CW_READ_HOME(uint16_t,offset) >> 2);
     MMIO_XWRITE(0x6271u, target);
     MMIO_XWRITE(0x6272u, target >> 8);
     if (MMIO_XREAD(0x6271u) != (uint8_t)target || MMIO_XREAD(0x6272u) != (uint8_t)(target >> 8)) {

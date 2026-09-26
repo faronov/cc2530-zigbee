@@ -19,7 +19,7 @@ MODULES = ("zdo_node", "aps_frame", "zdo_node_test")
 SIZE, XDATA, CHECKS, PEAK = 13639, 574, 2559, 0x5e
 CODE_BUDGET, XDATA_BUDGET = 16384, 768
 CODE_SHA = "a8b2cacd2d011de1aef451dae3f3ab1e2535a6aef6fae5ad3e4faac5db1ebc15"
-CDB_SHA = "5dcb4b1862fc4ee23bbbe4ba8d3c7d584dfb1e209dcbb2721fb073e25e47c40d"
+CDB_SHA = "48e5e3b2a00c1fbc22c39042ec4e9146eb3da82976175678b111dfb20d9ecc33"
 MAP_SHA = "9b8e1b6734e04b115af45f0950f8e8ad2c19fcc499267d516e0522a422efe2be"
 LISTINGS = {
     "zdo_node": (1758, 3133, "dc0432ca24829f497b9e3dfd39c123c8a129cf73f9af3880a3c4b4564ea0432f"),
@@ -28,13 +28,13 @@ LISTINGS = {
 }
 LIST_SHA = {
     "zdo_node": "ccb041a4350f5f99f44a713b96aec796aaa6624bdb45f4b41434eed16f1d9748",
-    "aps_frame": "d31cda23b0b60bcc95e08dc85a2d9fd5492f8c232b59cebac38fad0a6f34f1e8",
+    "aps_frame": "0352346b560fed3bcb47aef40c01c9292a065f20c45a0c82bf8bf0ea668ead44",
     "zdo_node_test": "30eec909c7fa9aa9f0b675db893babb7f41940ee74e3b5096d6dfc410deee7cd",
 }
 # Total CODE, XSEG, DSEG, OSEG, BSEG; complete object except its build-path line.
 OBJECTS = {
     "zdo_node": ((3133, 86, 32, 0, 1), "af85944cbd01dcbf67f610e3e831b19e4b199d88ec1ae0bda23e4684ff3ae5ba"),
-    "aps_frame": ((1626, 69, 8, 7, 0), "cd608cbdde403a47d096463cb2aad6b9e136a338e41832cb00e7a1639c44aad7"),
+    "aps_frame": ((1626, 69, 8, 7, 0), "2031d4073e18f89511f9b2894efaf586d1e7e4a5f9f5ceb7d3ef11d422cc2340"),
     "zdo_node_test": ((8353, 399, 6, 0, 3), "9079a302304582db7ccf4a23e2263998e7b0b7a9aa74d8df458d743e8ef14aaa"),
 }
 PUBLIC = {

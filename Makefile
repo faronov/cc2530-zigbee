@@ -99,7 +99,7 @@ endif
 .PHONY: test-mac-tx-interval
 .PHONY: test-mac-handoff
 .PHONY: test-mac-adapter
-.PHONY: test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace
+.PHONY: test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1644,6 +1644,91 @@ test-mac-link-workspace: $(BUILD)/host-mac-link-workspace-tests $(BUILD)/host-ma
 	$(BUILD)/host-mac-link-workspace-join-tests-sanitize
 	$(PYTHON) -B tools/link_ram_resources.py --output $(MAC_LINK_WORKSPACE_DIR) --workspace
 
+# Shared UPPER/CHILD experiment; the small ABI image is not a complete MCU join.
+MAC_LINK_CHILD_DEFINES := $(MAC_LINK_WORKSPACE_DEFINES) -DCC2530_MAC_LINK_CHILD_WORKSPACE
+MAC_LINK_CHILD_DIR := $(BUILD)/mac-link-child-workspace
+MAC_LINK_CHILD_SRC := $(MAC_LINK_WORKSPACE_SRC) src/mac_link_child_workspace.c
+MAC_LINK_CHILD_MODULES := $(sort $(MAC_LINK_WORKSPACE_MODULES) mac_link_child_workspace)
+MAC_LINK_CHILD_OBJECTS := $(addprefix $(MAC_LINK_CHILD_DIR)/,$(addsuffix .rel,$(MAC_LINK_CHILD_MODULES)))
+MAC_LINK_CHILD_INPUTS := $(MAC_LINK_WORKSPACE_INPUTS) src/mac_link_child_workspace.c
+MAC_LINK_CHILD_CRYPTO_SRC := src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c \
+	src/ed_wire.c src/nwk_frame.c src/aps_frame.c src/mac_link_workspace.c src/mac_link_child_workspace.c \
+	tests/host_mmio.c tests/aes_reference.c tests/security_aes_model.c
+MAC_LINK_CHILD_CRYPTO_INPUTS := tests/test_mac_link_child_workspace.c $(MAC_LINK_CHILD_CRYPTO_SRC) \
+	$(HEADERS) tests/host_mmio.h tests/security_aes_model.h Makefile
+MAC_LINK_CHILD_JOIN_SRC := $(MAC_LINK_JOIN_SRC) src/mac_link_workspace.c src/mac_link_child_workspace.c
+$(MAC_LINK_CHILD_DIR):
+	mkdir -p $@
+$(MAC_LINK_CHILD_OBJECTS): $(MAC_LINK_CHILD_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(MAC_LINK_CHILD_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_CHILD_DEFINES) \
+		$(if $(filter-out mac_link_workspace mac_link_child_workspace,$*),--dataseg $(if $(filter $*,$(BANKED_JOIN_MODULES) mac_link_driver),BJ,MA)_$*) \
+		$(foreach b,1 2 3 4,$(if $(filter $*,$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) \
+		$(if $(filter mac_link_driver,$*),--codeseg BJ_BANK4) \
+		$(if $(filter mac_adapter,$*),--codeseg MA_BANK2) -c $< -o $@
+$(MAC_LINK_CHILD_DIR)/mac_link_child_layout.rel: tests/mac_link_child_layout.c tests/mac_link_ram_layout.c $(HEADERS) Makefile | $(MAC_LINK_CHILD_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_CHILD_DEFINES) -Isrc -c $< -o $@
+$(BUILD)/host-mac-link-child-crypto-tests: $(MAC_LINK_CHILD_CRYPTO_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -Isrc tests/test_mac_link_child_workspace.c $(MAC_LINK_CHILD_CRYPTO_SRC) -o $@
+$(BUILD)/host-mac-link-child-crypto-tests-sanitize: $(MAC_LINK_CHILD_CRYPTO_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -Isrc \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_child_workspace.c $(MAC_LINK_CHILD_CRYPTO_SRC) -o $@
+$(BUILD)/host-mac-link-child-nv-tests: tests/test_mac_link_child_nv.c $(MAC_LINK_CHILD_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		tests/test_mac_link_child_nv.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_CHILD_SRC) -o $@
+$(BUILD)/host-mac-link-child-nv-tests-sanitize: tests/test_mac_link_child_nv.c $(MAC_LINK_CHILD_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_child_nv.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_CHILD_SRC) -o $@
+$(BUILD)/host-mac-link-child-upper-tests: $(MAC_LINK_CHILD_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		tests/test_mac_link_workspace.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_CHILD_SRC) -o $@
+$(BUILD)/host-mac-link-child-upper-tests-sanitize: $(MAC_LINK_CHILD_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_workspace.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_CHILD_SRC) -o $@
+$(BUILD)/host-mac-link-child-join-tests: tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -Isrc tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) -o $@
+$(BUILD)/host-mac-link-child-join-tests-sanitize: tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_CHILD_DEFINES) -Isrc \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) -o $@
+
+MAC_LINK_CHILD_ABI_DIR := $(MAC_LINK_CHILD_DIR)/abi
+MAC_LINK_CHILD_ABI_MODULES := mac_link_child_workspace mac_link_workspace flash_exec
+$(MAC_LINK_CHILD_ABI_DIR):
+	mkdir -p $@
+$(MAC_LINK_CHILD_ABI_DIR)/mac_link_child_abi.rel: tests/mac_link_child_abi.c $(HEADERS) Makefile | $(MAC_LINK_CHILD_ABI_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_CHILD_DEFINES) -Isrc --dataseg BJ_CHILD_ABI -c $< -o $@
+$(MAC_LINK_CHILD_ABI_DIR)/child_abi.ihx: $(addprefix $(MAC_LINK_CHILD_DIR)/,$(addsuffix .rel,$(MAC_LINK_CHILD_ABI_MODULES))) \
+		$(MAC_LINK_CHILD_ABI_DIR)/mac_link_child_abi.rel force-link
+	cp $(foreach ext,rel adb asm lst sym,$(addprefix $(MAC_LINK_CHILD_DIR)/,$(addsuffix .$(ext),$(MAC_LINK_CHILD_ABI_MODULES)))) $(MAC_LINK_CHILD_ABI_DIR)/
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_CHILD_DEFINES) --code-size 0x8000 \
+		--xram-loc 1 --xram-size 0x1dff --iram-size 256 --data-loc 0x30 --idata-loc 0x4f --stack-size 45 \
+		-Wl-w -Wl-bBJ_flash_exec=0x08 -Wl-bBJ_CHILD_ABI=0x10 -o $@ \
+		$(addprefix $(MAC_LINK_CHILD_ABI_DIR)/,$(addsuffix .rel,$(MAC_LINK_CHILD_ABI_MODULES))) $(MAC_LINK_CHILD_ABI_DIR)/mac_link_child_abi.rel
+	cp $(MAC_LINK_CHILD_ABI_DIR)/mac_link_child_workspace.rst $(MAC_LINK_CHILD_ABI_DIR)/child_abi.mac_link_child_workspace.rst
+	cp $(MAC_LINK_CHILD_ABI_DIR)/mac_link_workspace.rst $(MAC_LINK_CHILD_ABI_DIR)/child_abi.mac_link_workspace.rst
+	cp $(MAC_LINK_CHILD_ABI_DIR)/flash_exec.rst $(MAC_LINK_CHILD_ABI_DIR)/child_abi.flash_exec.rst
+	cp $(MAC_LINK_CHILD_ABI_DIR)/mac_link_child_abi.rst $(MAC_LINK_CHILD_ABI_DIR)/child_abi.mac_link_child_abi.rst
+
+test-mac-link-child-workspace: $(BUILD)/host-mac-link-child-crypto-tests $(BUILD)/host-mac-link-child-crypto-tests-sanitize \
+		$(BUILD)/host-mac-link-child-nv-tests $(BUILD)/host-mac-link-child-nv-tests-sanitize \
+		$(BUILD)/host-mac-link-child-upper-tests $(BUILD)/host-mac-link-child-upper-tests-sanitize \
+		$(BUILD)/host-mac-link-child-join-tests $(BUILD)/host-mac-link-child-join-tests-sanitize \
+		$(MAC_LINK_CHILD_OBJECTS) $(MAC_LINK_CHILD_DIR)/mac_link_child_layout.rel $(MAC_LINK_CHILD_ABI_DIR)/child_abi.ihx
+	$(BUILD)/host-mac-link-child-crypto-tests
+	$(BUILD)/host-mac-link-child-crypto-tests-sanitize
+	$(BUILD)/host-mac-link-child-nv-tests
+	$(BUILD)/host-mac-link-child-nv-tests-sanitize
+	$(BUILD)/host-mac-link-child-upper-tests
+	$(BUILD)/host-mac-link-child-upper-tests-sanitize
+	$(BUILD)/host-mac-link-child-join-tests
+	$(BUILD)/host-mac-link-child-join-tests-sanitize
+	$(PYTHON) -B tools/link_ram_resources.py --output $(MAC_LINK_CHILD_DIR) --child-workspace
+	$(PYTHON) -B tools/test_mac_link_child_abi.py --output $(MAC_LINK_CHILD_ABI_DIR)
+	$(PYTHON) -B tests/boot_mac_link_child_abi.py --output $(MAC_LINK_CHILD_ABI_DIR) --simulator "$(S51)"
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1856,7 +1941,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

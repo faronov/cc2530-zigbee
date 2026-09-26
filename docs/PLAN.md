@@ -119,6 +119,13 @@ This separate profile is host/object-checked, not a combined MCU image.
 Code `84c0014` passed
 [full Actions36265427843](https://github.com/faronov/cc2530-zigbee/actions/runs/36265427843),
 114/114 jobs, including both UPPER workers and every existing corpus.
+The next [CHILD workspace](MAC_LINK_DRIVER.md#shared-child-workspace) pools
+wire/hash/NV temporary storage under exact owner and role-specific admission.
+It saves581 more XDATA bytes, reaching a7644-byte floor at a6861-byte
+CODE/CONST and6-byte raw DATA cost. Only36 bytes remain before additional
+caller/runtime storage; the6656 application target still needs988 plus that
+overhead. Isolated host/object and narrow pointer-ABI simulator evidence do
+not establish a combined fit. Integration/full CI acceptance is pending.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

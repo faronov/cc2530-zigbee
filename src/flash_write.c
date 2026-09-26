@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "flash_write.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 #include "flash_exec.h"
 #include <stddef.h>
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -10,9 +16,18 @@
 
 MCU_XDATA flash_write_diagnostic_t flash_write_status;
 MCU_XDATA uint8_t flash_write_known, flash_write_used[128];
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define flash_write_word (child_work_arena.nv.writer.word)
+#define flash_write_check (child_work_arena.nv.writer.check)
+#else
 MCU_XDATA uint8_t flash_write_word[4], flash_write_check[FLASH_READ_MAX];
+#endif
 extern MCU_XDATA uint8_t flash_write_reserved_end;
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define flash_nv_read(...) CW_CALL(CW_READ,flash_nv_read(__VA_ARGS__))
+#define flash_exec_command(...) CW_CALL(CW_EXEC,flash_exec_command(__VA_ARGS__))
+#endif
 static flash_write_result_t operate(uint8_t operation, uint8_t page, uint16_t offset,
                                    const uint8_t MCU_XDATA *word, uint16_t poll_limit)
 {
@@ -28,17 +43,34 @@ static flash_write_result_t operate(uint8_t operation, uint8_t page, uint16_t of
     index = (uint8_t)((page << 6) + (offset >> 5));
     mask = (uint8_t)(1u << ((offset >> 2) & 7u));
     if (operation == FLASH_EXEC_PROGRAM) {
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+        if (!LW_IO(CW_WRITE_WORD,word,4,0)) return FLASH_WRITE_BUFFER_OWNERSHIP;
+#else
 #if defined(CC2530_MAC_LINK_WORKSPACE)
         if (!link_work_external(word, 4)) return FLASH_WRITE_BUFFER_OWNERSHIP;
 #endif
+#endif
         address = MMIO_XADDRESS(word);
         if (address > 0x1dfcu) return FLASH_WRITE_INVALID_RANGE;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+        if (!child_work_inside(word,4) && address<=MMIO_XADDRESS(&flash_write_reserved_end))
+            return FLASH_WRITE_BUFFER_OWNERSHIP;
+#else
         if (address <= MMIO_XADDRESS(&flash_write_reserved_end)) return FLASH_WRITE_BUFFER_OWNERSHIP;
+#endif
         if (!(flash_write_known & page_mask)) return FLASH_WRITE_HISTORY_UNKNOWN;
         if (flash_write_used[index] & mask) return FLASH_WRITE_WORD_USED;
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
         for (i = 0; i < 4; i++) flash_write_word[i] = word[i];
+#endif
     }
-    flash_write_status.result = FLASH_WRITE_PENDING;
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_WRITE)) return FLASH_WRITE_BUFFER_OWNERSHIP;
+    if (operation==FLASH_EXEC_PROGRAM)
+        for (i = 0; i < 4; i++) flash_write_word[i] = word[i];
+#endif
+flash_write_status.result = FLASH_WRITE_PENDING;
     flash_write_status.operation = operation;
     flash_write_status.page = page;
     flash_write_status.offset_low = (uint8_t)offset;
@@ -77,10 +109,13 @@ static flash_write_result_t operate(uint8_t operation, uint8_t page, uint16_t of
     }
     flash_write_status.phase = FLASH_WRITE_DONE;
     flash_write_status.result = FLASH_WRITE_OK;
-    return FLASH_WRITE_OK;
+    return CW_RETURN(CW_WRITE,FLASH_WRITE_OK);
 failed:
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    (void)child_work_poison((uint8_t)result);
+#endif
     flash_write_status.result = result;
-    return result;
+    return CW_RETURN(CW_WRITE,result);
 }
 
 flash_write_result_t flash_nv_erase(uint8_t page, uint16_t poll_limit)

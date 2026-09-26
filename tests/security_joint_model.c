@@ -11,6 +11,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "src/mac_link_child_workspace_internal.h"
+#endif
 
 #if defined(__SDCC)
 #error Host peripheral model must not enter target firmware.
@@ -19,12 +22,21 @@
 extern uint8_t flash_exec_work[9], flash_exec_reserved_end, flash_fault, flash_reserved_end;
 extern volatile uint8_t flash_exec_ram[FLASH_EXEC_RAM_SIZE];
 extern flash_write_diagnostic_t flash_write_status;
-extern uint8_t flash_write_known, flash_write_used[128], flash_write_word[4], flash_write_check[32];
+extern uint8_t flash_write_known, flash_write_used[128];
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+extern uint8_t flash_write_word[4], flash_write_check[32];
+#endif
 extern uint8_t flash_write_reserved_end;
-extern uint8_t nv_record_fault, nv_record_reserved_end, nv_record_chunk[32], nv_record_word[4];
+extern uint8_t nv_record_fault, nv_record_reserved_end;
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+extern uint8_t nv_record_chunk[32], nv_record_word[4];
+#endif
 extern nv_record_status_t nv_record_diagnostic;
 extern security_counter_status_t security_counter_diagnostic;
-extern uint8_t security_counter_blob[128], security_counter_check[128], security_counter_reserved_end;
+extern uint8_t security_counter_blob[128], security_counter_reserved_end;
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+extern uint8_t security_counter_check[128];
+#endif
 extern void security_keys_host_power_cycle(void);
 extern volatile uint8_t aes_dma0[8], aes_dma1[32], aes_key[16], aes_iv[16], aes_input[16], aes_output[16];
 extern uint8_t aes_reserved_end, _gptrput_PARM_2;
@@ -47,6 +59,18 @@ static void logs(void)
 static uint16_t address(const volatile void *p)
 {
     unsigned i;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    /* Contiguous synthetic HOST storage: use actual native offsets so every
+     * overlap is preserved, including native alignment/padding. These are
+     * deliberately NOT target offsets. The separate genuine SDCC probe/CDB
+     * establishes target543-byte layout, not this synthetic address map.
+     * No DMA/executable work is moved here or mapped through this arena. */
+    uintptr_t a=(uintptr_t)p, base=(uintptr_t)&child_work_arena;
+    if (a>=base && a-base<sizeof(child_work_arena)) {
+        assert(sizeof(child_work_arena)<=0x800u);
+        return (uint16_t)(0x1600u+a-base);
+    }
+#endif
     if (p == &aes_reserved_end) return 0x1ff;
     if (p == &_gptrput_PARM_2) return 0x1d00;
     if (p == aes_dma0) return 0x20;
@@ -58,14 +82,20 @@ static uint16_t address(const volatile void *p)
     if (p == flash_exec_ram) return 0x200;
     if (p == &flash_exec_reserved_end) return 0x2ff;
     if (p == &flash_reserved_end) return 0x3ff;
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (p == flash_write_word) return 0x420;
     if (p == flash_write_check) return 0x424;
+#endif
     if (p == &flash_write_reserved_end) return 0x500;
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (p == nv_record_chunk) return 0x600;
     if (p == nv_record_word) return 0x624;
+#endif
     if (p == &nv_record_reserved_end) return 0x700;
     if (p == security_counter_blob) return 0x800;
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (p == security_counter_check) return 0x880;
+#endif
     if (p == &security_counter_reserved_end) return 0xc00;
     /* Borrowed generic objects are resolved by C pointers by the real driver;
      * no controller DMA descriptor uses this synthetic admission-only address.
@@ -187,7 +217,12 @@ void security_joint_reset(uint8_t erase)
     memset(flash_write_used, 0, sizeof(flash_write_used));
     nv_record_fault = 0; memset(&nv_record_diagnostic, 0, sizeof(nv_record_diagnostic));
     memset(&security_counter_diagnostic, 0, sizeof(security_counter_diagnostic));
-    memset(security_counter_blob, 0, 128); memset(security_counter_check, 0, 128);
+    memset(security_counter_blob, 0, 128);
+#if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    memset(security_counter_check, 0, 128);
+#endif
+    /* CHILD work/poison is reset by the existing complete key-owner power
+     * cycle below. No public counter/key re-init becomes a reset boundary. */
     security_keys_host_power_cycle();
     SOC_MEMCTR = 2; controller = 4; active = accepting = 0;
     commands = data_writes = polls = reads_nv = fail_read = stop_command = 0;

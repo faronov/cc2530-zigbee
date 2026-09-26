@@ -171,6 +171,15 @@ and native executions are not linked-image, stack or hardware evidence.
 No hardware sequencing, wire revision, NV format, counter policy or upstream
 implementation/license is changed.
 
+The CHILD extension is likewise original typed C storage and admission work,
+not an imported overlay or SDK implementation. It preserves simultaneous NV
+lifetimes, first-cause/retained-failure behavior and existing hardware command
+sequencing. Public synthetic cases use the actual relocated journal/counter/
+flash services and existing controller model. The narrow ABI image links
+real SDCC runtime helpers and verifies actual pointer tags/parameter homes;
+it contains no substitute hardware result. No equipment was accessed and
+no complete radio-backed MCU fit or hardware observation follows.
+
 | Reference | Status and permitted use |
 | --- | --- |
 | [TI CC2530](https://www.ti.com/product/CC2530) and [SWRU191F](https://www.ti.com/lit/pdf/swru191) | Primary hardware facts; link/cite documentation rather than redistribute whole manuals |

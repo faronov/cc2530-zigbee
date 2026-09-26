@@ -18,22 +18,22 @@ MODULES = ("timebase", "aes", "zigbee_mmo", "mmo_test")
 SIZE, XDATA, STACK = 9060, 426, 0x41
 CODE_BUDGET, XDATA_BUDGET = 10240, 512
 CODE_SHA = "0bec8d01430e85ea203849995d0744cefc68ced9d38d27008f19e352a1479eae"
-CDB_SHA = "3bcf00559246501ee150ab3e9973413eed476fdb8961ce4a4609fd16207fab83"
+CDB_SHA = "3bea2e100100f82fea17d565e654d3ba407f342d66979de439d5ac140497fd64"
 MAP_SHA = "fd4ff1264257d4a6f7237250be1e3358607cd9980b0e2a3482d9c2d1f645009e"
 MEM_SHA = "47688b2014baad9b78a8ea098e5f0546f50f8ddb5d70957f68a7c2a65f01cb25"
 LISTINGS = {
     "timebase": ("c95bbc27f257eb9ba15adf8312ffa1a55f813512a1749f6e841bb1d96b8e75ac",
                  (265, 404, "1ec42c5a71e7c3d723ac26eaa4692fb222b7eac37031613b5684cafb1d651aae")),
-    "aes": ("674e1782100d8feb6d629781337237ffe844adbbe4eba2a002bdcd18986954f0",
+    "aes": ("ae8d317615005fe9d21f74bc2e6a6cd0f4fb6f15e0f5cd2a7ed34d8cb1e08a4f",
             (3098, 5254, "ee8b87b51eb66d8d70e3a42a98facde861330681eaaeb51e8bd936d480b1ba4a")),
-    "zigbee_mmo": ("25030befc53ede6b209c301f0b0818f73963c8f38e747ee0ee4b32280f7bcdcf",
+    "zigbee_mmo": ("f6d79ac5483bb61d7b2bf5496b6227a929fa496af6cbc7c2923924a3e120e68a",
                    (853, 1322, "952905050e70f3ad3ecb9d81e5be28ebf1b14dbe29f6d2066f5331a3f811bc81")),
     "mmo_test": ("42ccd39f44da5da9f3e8438cc057c10c3ad24e56987686af9af691251b20531d",
                  (887, 1519, "327bf72f565e9ec24be94ce61f638b2fd389c5cf54dd75a98af887b6ea6b350d")),
 }
 OBJECTS = {
     "timebase": aes.OBJECTS["timebase"], "aes": aes.OBJECTS["aes"],
-    "zigbee_mmo": ("b49789cf1ada884df16b5e311eb685a6119eb6f1c8b66219c30692e3e3228e51", (1322, 127, 18, 0, 0)),
+    "zigbee_mmo": ("c79ed0a9f3b5d1948b24a0ac7081dad5c4a3cf7dfba8c42e1d28423e7e6243bf", (1322, 127, 18, 0, 0)),
     "mmo_test": ("31d177a340923589c6886c056de0da94fe80c4828f9abea7a04efcaa113b2332", (1553, 72, 0, 0, 1)),
 }
 CALLER = {"input": (334, 33), "output": (367, 18), "info": (385, 6)}

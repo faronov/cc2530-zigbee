@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "nwk_frame.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 
 #include <stddef.h>
 #include <string.h>
@@ -56,17 +62,25 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     if (!LW_IO(LW_CHILD_NWK, body, length, 0) || !LW_IO(LW_CHILD_NWK, result, sizeof(*result), 1))
         return NWK_CODEC_INVALID_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_NWK_DECODE)) return NWK_CODEC_INVALID_ARGUMENT;
+#endif
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define candidate (child_work_arena.wire.engine.parse.nwk)
+#else
     nwk_frame_info_t candidate;
+#endif
     nwk_codec_result_t status;
     uint16_t control;
     uint8_t size, position;
 
     if (body == NULL || result == NULL)
-        return NWK_CODEC_INVALID_ARGUMENT;
+        return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_INVALID_ARGUMENT);
     if (length > NWK_FRAME_MAX_BODY)
-        return NWK_CODEC_TOO_LONG;
+        return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_TOO_LONG);
     if (length < NWK_FRAME_MIN_HEADER)
-        return NWK_CODEC_TRUNCATED;
+        return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_TRUNCATED);
     memset(&candidate, 0, sizeof(candidate));
     control = read_le16(body);
     candidate.header.type = (uint8_t)(control & 3u);
@@ -79,9 +93,9 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     candidate.header.sequence = body[7];
     status = header_shape(&candidate.header, &size);
     if (status != NWK_CODEC_OK)
-        return status;
+        return CW_RETURN(CW_NWK_DECODE,status);
     if (length < size)
-        return NWK_CODEC_TRUNCATED;
+        return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_TRUNCATED);
     position = NWK_FRAME_MIN_HEADER;
     if (candidate.header.flags & NWK_FLAG_DESTINATION_IEEE) {
         memcpy(candidate.header.destination_ieee, body + position, 8);
@@ -92,8 +106,12 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     candidate.payload_offset = size;
     candidate.payload_length = (uint8_t)(length - size);
     *result = candidate;
-    return NWK_CODEC_OK;
+    return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_OK);
 }
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#undef candidate
+#endif
+
 
 /* Keep emission a leaf so SDCC can overlay its temporary IRAM. */
 static void emit_frame(const nwk_header_t *header, const uint8_t *payload, uint8_t payload_length,
@@ -128,20 +146,25 @@ nwk_codec_result_t nwk_frame_encode(const nwk_header_t *header,
         !LW_IO(LW_CHILD_NWK, body, capacity, 1) || !LW_IO(LW_CHILD_NWK, length, 1, 1))
         return NWK_CODEC_INVALID_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(body,capacity,length,1)) return NWK_CODEC_INVALID_ARGUMENT;
+    if (!child_work_enter(CW_NWK_ENCODE)) return NWK_CODEC_INVALID_ARGUMENT;
+#endif
+
     nwk_codec_result_t status;
     uint8_t size;
 
     if (header == NULL || body == NULL || length == NULL
             || (payload == NULL && payload_length != 0u))
-        return NWK_CODEC_INVALID_ARGUMENT;
+        return CW_RETURN(CW_NWK_ENCODE,NWK_CODEC_INVALID_ARGUMENT);
     status = header_shape(header, &size);
     if (status != NWK_CODEC_OK)
-        return status;
+        return CW_RETURN(CW_NWK_ENCODE,status);
     if (payload_length > NWK_FRAME_MAX_BODY - size)
-        return NWK_CODEC_TOO_LONG;
+        return CW_RETURN(CW_NWK_ENCODE,NWK_CODEC_TOO_LONG);
     if (capacity < size + payload_length)
-        return NWK_CODEC_BUFFER_TOO_SMALL;
+        return CW_RETURN(CW_NWK_ENCODE,NWK_CODEC_BUFFER_TOO_SMALL);
     emit_frame(header, payload, (uint8_t)payload_length, body);
     *length = (uint8_t)(size + payload_length);
-    return NWK_CODEC_OK;
+    return CW_RETURN(CW_NWK_ENCODE,NWK_CODEC_OK);
 }

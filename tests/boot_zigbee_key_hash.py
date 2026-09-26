@@ -19,24 +19,24 @@ MODULES = ("timebase", "aes", "zigbee_mmo", "zigbee_key_hash", "key_hash_test")
 SIZE, XDATA, STACK = 10143, 506, 0x4c
 CODE_BUDGET, XDATA_BUDGET = 12288, 640
 CODE_SHA = "30dd0b9dcdab02854072dda67ff5e5a96e7a01e1fe36d69b2f87cd61e53d278b"
-CDB_SHA = "0cea123d719c48c06bba0dc64b648bbab27f0b6b7ba80c00217d38414fd34b4b"
+CDB_SHA = "e4860743b9200cc29d84fb46da075b81418fbad6df1a232c8850d6208bc0f7e0"
 MAP_SHA = "0abd112ac4ebabca3c068856022c43c5793085307efcbcf5cb19559dbc191a4d"
 MEM_SHA = "7e3d9180d0ac037b25e8e0e0dc8691d06302460793444f1c40ae3a0b27572a06"
 LISTINGS = {
     "timebase": ("3399555b82c9c20ed5e40cb159462db6a32206953611678d5eb362ca17cb002e",
                  (265, 404, "0a1faf691bb8914da95e51e68b8169189d803fa0abf8c19863d8a19c8c1516da")),
-    "aes": ("a7dd2fde6fd8141e60685ae3b8e798183ba373a01822b425275940861df92fc2",
+    "aes": ("d5b77ae9258ba9a08561facd33d1e21dae354753205fa34a8db6693b192efa45",
             (3098, 5254, "06ce9ff6b2162190c45baf702bf40e5ce88e871137ec3150249cc4b8cedbf29b")),
-    "zigbee_mmo": ("75ffcfa9eec3ca05328dcee30c03811adf113b48035deb57697258116be091bf",
+    "zigbee_mmo": ("1747eb90dd006d1c967d1f6e3fbf2599944c43aa37b0571d4cf4f463973bb309",
                    (853, 1322, "8b0f8f5abd85ffa686f001bb98b32ef01cd6ec3862101bd7ed67f03a645600c4")),
-    "zigbee_key_hash": ("d88f0787d671df3ab6ca749587ad41f1a83daba115387f9f58039c2081df5be4",
+    "zigbee_key_hash": ("420cfba8d03cf7bdb0ea4ddd89e6efd5aabd5698a0025e43de3b392569e92775",
                         (474, 729, "9d257ef2cb15fefef5811f70ba906559ef12337db57b8654358abedeed0d8b5a")),
     "key_hash_test": ("60e81c9778527c97f83e0d28fb98b9dbfc813923f6d3debbaaaf5b4cda463360",
                       (653, 1181, "4ad08be982d7ec26c76bbec305224341577b89bed481e6cde598d1638a2f5ef6")),
 }
 OBJECTS = {
     **{m: mmo.OBJECTS[m] for m in ("timebase", "aes", "zigbee_mmo")},
-    "zigbee_key_hash": ("68f181b19b4fc8823dfc547cead225ae7a0f8858d1a3d082a6cf28ccea108df4", (729, 77, 3, 0, 0)),
+    "zigbee_key_hash": ("9143405e5804c63c37c783d96208ef86118c6af6b828ba902c6553d71ee5371a", (729, 77, 3, 0, 0)),
     "key_hash_test": ("cf40afda56e7864aa99160962afa270caa4847dd06b2638e9fe07a1ccb398790", (1376, 55, 6, 0, 1)),
 }
 CALLER = {"key": (411, 16), "output": (427, 18), "info": (445, 6)}

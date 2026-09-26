@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zigbee_key_hash.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
@@ -9,11 +15,18 @@
 #include "mac_link_workspace_guard_internal.h"
 #endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define state (child_work_arena.hash.key)
+#else
 static MCU_XDATA struct {
     uint8_t message[32], hash[16];
     zigbee_mmo_info_t step, total;
 } state;
+#endif
 
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define zigbee_mmo_hash(...) CW_CALL(CW_MMO,zigbee_mmo_hash(__VA_ARGS__))
+#endif
 static void account(void)
 {
     state.total.polls += state.step.polls;
@@ -37,13 +50,18 @@ zigbee_mmo_result_t zigbee_key_hash(
     if (!LW_IO(LW_CHILD_HASH,key,16,0) || !LW_IO(LW_CHILD_HASH,output,16,1) ||
         !LW_IO(LW_CHILD_HASH,info,sizeof(*info),1)) return ZIGBEE_MMO_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(output,16,info,sizeof(*info))) return ZIGBEE_MMO_ARGUMENT;
+    if (!child_work_enter(CW_KEY_HASH)) return ZIGBEE_MMO_ARGUMENT;
+#endif
+
     uint8_t i;
     zigbee_mmo_result_t result;
     if (key == NULL || output == NULL || info == NULL || !timeout ||
         timeout >= TIMEBASE_HALF_RANGE || !poll_limit ||
         (purpose != ZIGBEE_HASH_TRANSPORT && purpose != ZIGBEE_HASH_LOAD &&
          purpose != ZIGBEE_HASH_VERIFY))
-        return ZIGBEE_MMO_ARGUMENT;
+        return CW_RETURN(CW_KEY_HASH,ZIGBEE_MMO_ARGUMENT);
     memset(&state, 0, sizeof(state));
     for (i = 0; i < 16; i++)
         state.message[i] = key[i] ^ 0x36u;
@@ -62,5 +80,5 @@ zigbee_mmo_result_t zigbee_key_hash(
     }
     *info = state.total;
     wipe();
-    return result;
+    return CW_RETURN(CW_KEY_HASH,result);
 }

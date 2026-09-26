@@ -391,6 +391,18 @@ banking and MCU execution are not established. Code `84c0014` passed
 new shared-UPPER workers and every existing host/image/simulator corpus,
 not a new combined MCU image.
 
+The additional [CHILD profile](MAC_LINK_DRIVER.md#shared-child-workspace)
+adds two workers and eight native/sanitizer runs per board without replacing
+UPPER or compact coverage. The40-object ledger is236892 CODE +1507 CONST,
+5727 XSEG and1917 caller bytes: a7644-byte floor, not a fitting combined
+image. Real NV failure/retirement cases exercise the relocated storage,
+including poisoned-work retention. A separate four-module ABI image checks
+43098 outcomes, all256 pointer tags, actual parameter homes, terminal PC,
+stack/canary and the real IRAM alias without entering the flash executor.
+That narrow simulation is not a combined radio-backed join/SP proof.
+The expanded matrix has114 workers plus two control jobs; acceptance of
+this integration is pending.
+
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
 

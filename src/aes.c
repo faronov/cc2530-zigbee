@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "aes.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 #include "timebase.h"
 #include <stddef.h>
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -190,20 +196,37 @@ aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
     if (key == NULL || input == NULL || output == NULL || d == NULL || !timeout ||
         timeout >= TIMEBASE_HALF_RANGE || !limit)
         return AES_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_leaf(CW_AES) || !LW_IO(CW_AES_KEY,key,16,0) ||
+        !LW_IO(CW_AES_INPUT,input,16,0) || !LW_IO(CW_AES_OUTPUT,output,16,1) ||
+        !LW_IO(CW_AES_INFO,d,sizeof(*d),1)) return AES_BUFFER_OWNERSHIP;
+#else
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!link_work_external(key, 16) || !link_work_external(input, 16) ||
         !link_work_external(output, 16) || !link_work_external(d, sizeof(*d)))
         return AES_BUFFER_OWNERSHIP;
 #endif
+#endif
     key_location = pointer_location(key); input_location = pointer_location(input);
     result = source_range(key_location);
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (result==AES_BUFFER_OWNERSHIP && child_work_inside(key,16)) result=AES_OK;
+#endif
     if (result != AES_OK) return result;
     result = source_range(input_location);
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (result==AES_BUFFER_OWNERSHIP && child_work_inside(input,16)) result=AES_OK;
+#endif
     if (result != AES_OK) return result;
     out = MMIO_XADDRESS(output); diag = MMIO_XADDRESS(d);
     if (!ordinary(out, 16) || !ordinary(diag, sizeof(*d)))
         return AES_INVALID_RANGE;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if ((!owned(out,16) && !child_work_inside(output,16)) ||
+        (!owned(diag,sizeof(*d)) && !child_work_inside(d,sizeof(*d))) || overlaps(out,16,diag,sizeof(*d)) ||
+#else
     if (!owned(out, 16) || !owned(diag, sizeof(*d)) || overlaps(out, 16, diag, sizeof(*d)) ||
+#endif
         (!(key_location >> 16) && (overlaps((uint16_t)key_location, 16, out, 16) ||
                                  overlaps((uint16_t)key_location, 16, diag, sizeof(*d)))) ||
         (!(input_location >> 16) && overlaps((uint16_t)input_location, 16, diag, sizeof(*d))))

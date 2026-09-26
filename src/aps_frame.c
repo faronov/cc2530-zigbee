@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "aps_frame.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 
 #include <stddef.h>
 #include <string.h>
@@ -46,19 +52,27 @@ aps_codec_result_t aps_frame_decode(const uint8_t *body, uint16_t length,
     if (!LW_IO(LW_CHILD_APS, body, length, 0) || !LW_IO(LW_CHILD_APS, result, sizeof(*result), 1))
         return APS_CODEC_INVALID_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_APS_DECODE)) return APS_CODEC_INVALID_ARGUMENT;
+#endif
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define candidate (child_work_arena.wire.engine.parse.aps)
+#else
     aps_frame_info_t candidate;
+#endif
     aps_codec_result_t status;
 
     if (body == NULL || result == NULL)
-        return APS_CODEC_INVALID_ARGUMENT;
+        return CW_RETURN(CW_APS_DECODE,APS_CODEC_INVALID_ARGUMENT);
     if (length > APS_FRAME_MAX_BODY)
-        return APS_CODEC_TOO_LONG;
+        return CW_RETURN(CW_APS_DECODE,APS_CODEC_TOO_LONG);
     if (length == 0)
-        return APS_CODEC_TRUNCATED;
+        return CW_RETURN(CW_APS_DECODE,APS_CODEC_TRUNCATED);
     if ((body[0] & 3u) != APS_FRAME_DATA)
-        return APS_CODEC_UNSUPPORTED_TYPE;
+        return CW_RETURN(CW_APS_DECODE,APS_CODEC_UNSUPPORTED_TYPE);
     if (length < APS_FRAME_HEADER_SIZE)
-        return APS_CODEC_TRUNCATED;
+        return CW_RETURN(CW_APS_DECODE,APS_CODEC_TRUNCATED);
     memset(&candidate, 0, sizeof(candidate));
     candidate.header.type = body[0] & 3u;
     candidate.header.delivery_mode = (body[0] >> 2) & 3u;
@@ -70,12 +84,16 @@ aps_codec_result_t aps_frame_decode(const uint8_t *body, uint16_t length,
     candidate.header.counter = body[7];
     status = validate_header(&candidate.header);
     if (status != APS_CODEC_OK)
-        return status;
+        return CW_RETURN(CW_APS_DECODE,status);
     candidate.payload_offset = APS_FRAME_HEADER_SIZE;
     candidate.payload_length = (uint8_t)(length - APS_FRAME_HEADER_SIZE);
     *result = candidate;
-    return APS_CODEC_OK;
+    return CW_RETURN(CW_APS_DECODE,APS_CODEC_OK);
 }
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#undef candidate
+#endif
+
 
 /* Keep emission a leaf so SDCC can overlay its temporary IRAM. */
 static void emit_frame(const aps_header_t *header, const uint8_t *payload, uint8_t payload_length,
@@ -102,19 +120,24 @@ aps_codec_result_t aps_frame_encode(const aps_header_t *header,
         !LW_IO(LW_CHILD_APS, body, capacity, 1) || !LW_IO(LW_CHILD_APS, length, 1, 1))
         return APS_CODEC_INVALID_ARGUMENT;
 #endif
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_disjoint(body,capacity,length,1)) return APS_CODEC_INVALID_ARGUMENT;
+    if (!child_work_enter(CW_APS_ENCODE)) return APS_CODEC_INVALID_ARGUMENT;
+#endif
+
     aps_codec_result_t status;
 
     if (header == NULL || body == NULL || length == NULL
             || (payload == NULL && payload_length != 0u))
-        return APS_CODEC_INVALID_ARGUMENT;
+        return CW_RETURN(CW_APS_ENCODE,APS_CODEC_INVALID_ARGUMENT);
     status = validate_header(header);
     if (status != APS_CODEC_OK)
-        return status;
+        return CW_RETURN(CW_APS_ENCODE,status);
     if (payload_length > APS_FRAME_MAX_BODY - APS_FRAME_HEADER_SIZE)
-        return APS_CODEC_TOO_LONG;
+        return CW_RETURN(CW_APS_ENCODE,APS_CODEC_TOO_LONG);
     if (capacity < APS_FRAME_HEADER_SIZE + payload_length)
-        return APS_CODEC_BUFFER_TOO_SMALL;
+        return CW_RETURN(CW_APS_ENCODE,APS_CODEC_BUFFER_TOO_SMALL);
     emit_frame(header, payload, (uint8_t)payload_length, body);
     *length = (uint8_t)(APS_FRAME_HEADER_SIZE + payload_length);
-    return APS_CODEC_OK;
+    return CW_RETURN(CW_APS_ENCODE,APS_CODEC_OK);
 }

@@ -20,11 +20,14 @@ def object_text(module, xdata=1, code=1):
 
 
 class LinkRamResourcesTests(unittest.TestCase):
-    def objects(self, workspace=False):
-        modules = ram.WORKSPACE_MODULES if workspace else ram.MODULES
-        probe = ram.CONTEXT_BYTES + (ram.WORKSPACE_LAYOUT_BYTES if workspace else 0)
+    def objects(self, workspace=False, child_workspace=False):
+        modules = ram.CHILD_MODULES if child_workspace else (
+            ram.WORKSPACE_MODULES if workspace else ram.MODULES)
+        probe_name = ram.CHILD_PROBE if child_workspace else ram.PROBE
+        extra = ram.CHILD_LAYOUT_BYTES if child_workspace else (
+            ram.WORKSPACE_LAYOUT_BYTES if workspace else 0)
         return {m: object_text(m) for m in modules} | {
-            ram.PROBE: object_text(ram.PROBE, probe, 0)}
+            probe_name: object_text(probe_name, ram.CONTEXT_BYTES + extra, 0)}
 
     def test_probe_counts_contexts_once_outside_production(self):
         result = ram.report(self.objects())
@@ -46,6 +49,47 @@ class LinkRamResourcesTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "object set"):
                 ram.report(objects, workspace=workspace)
 
+    def test_child_probe_counts_both_arenas_only_as_layout_evidence(self):
+        result = ram.report(self.objects(child_workspace=True), child_workspace=True)
+        self.assertEqual(len(ram.CHILD_MODULES), 40)
+        self.assertEqual(ram.CHILD_LAYOUT_BYTES, 617 + 31 + 543 + 31)
+        self.assertEqual(result["context_bytes"], 1917)
+        self.assertEqual(result["xdata"], 40)
+        self.assertEqual(result["object_floor"], 40 + 1917)
+
+    def test_child_profile_cannot_be_mixed_with_previous_profiles(self):
+        profiles = ({}, {"workspace": True}, {"child_workspace": True})
+        for actual in profiles:
+            for selected in profiles:
+                if actual == selected:
+                    continue
+                with self.subTest(actual=actual, selected=selected):
+                    with self.assertRaisesRegex(ValueError, "object set"):
+                        ram.report(self.objects(**actual), **selected)
+        with self.assertRaisesRegex(ValueError, "Conflicting"):
+            ram.report(self.objects(child_workspace=True), workspace=True, child_workspace=True)
+
+    def test_child_probe_requires_payload_and_ownership_for_both_arenas(self):
+        objects = self.objects(child_workspace=True)
+        for extra in (0, 31, 543, 543 + 31, ram.WORKSPACE_LAYOUT_BYTES,
+                      ram.CHILD_LAYOUT_BYTES - 1, ram.CHILD_LAYOUT_BYTES + 1):
+            bad = objects | {ram.CHILD_PROBE: object_text(
+                ram.CHILD_PROBE, ram.CONTEXT_BYTES + extra, 0)}
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "probe"):
+                ram.report(bad, child_workspace=True)
+
+    def test_child_missing_manager_extra_object_and_probe_code_are_rejected(self):
+        objects = self.objects(child_workspace=True)
+        for bad in (
+            {m: text for m, text in objects.items() if m != "mac_link_child_workspace"},
+            {m: text for m, text in objects.items() if m != "mac_link_workspace"},
+            objects | {"extra": object_text("extra")},
+            objects | {ram.CHILD_PROBE: object_text(
+                ram.CHILD_PROBE, ram.CONTEXT_BYTES + ram.CHILD_LAYOUT_BYTES, 1)},
+        ):
+            with self.assertRaises(ValueError):
+                ram.report(bad, child_workspace=True)
+
     def test_workspace_probe_requires_both_payload_and_ownership_layout(self):
         objects = self.objects(True)
         for extra in (0, 31, 617, ram.WORKSPACE_LAYOUT_BYTES - 1, ram.WORKSPACE_LAYOUT_BYTES + 1):
@@ -54,23 +98,26 @@ class LinkRamResourcesTests(unittest.TestCase):
                 ram.report(bad, workspace=True)
 
     def test_workspace_ceilings_accept_the_limit_but_reject_one_more(self):
-        objects = self.objects(True)
         areas = {"code": "CSEG", "const": "CONST", "xdata": "XSEG",
                  "data_sum": "DSEG", "overlay_sum": "OSEG", "bits": "BSEG"}
-        for metric, area in areas.items():
-            remaining = 38 if metric in ("code", "xdata") else 0
-            size = ram.WORKSPACE_LIMITS[metric] - remaining
-            for extra in (0, 1):
-                text = re.sub(rf"(A {area} size )[0-9A-F]+",
-                              lambda m: m[1] + f"{size + extra:X}", object_text("mac_link_workspace"))
-                candidate = objects | {"mac_link_workspace": text}
-                with self.subTest(metric=metric, extra=extra):
-                    if extra:
-                        with self.assertRaisesRegex(ValueError, "ceiling"):
-                            ram.report(candidate, workspace=True)
-                    else:
-                        self.assertEqual(ram.report(candidate, workspace=True)[metric],
-                                         ram.WORKSPACE_LIMITS[metric])
+        for options, limits, manager in (
+            ({"workspace": True}, ram.WORKSPACE_LIMITS, "mac_link_workspace"),
+            ({"child_workspace": True}, ram.CHILD_LIMITS, "mac_link_child_workspace"),
+        ):
+            objects = self.objects(**options)
+            for metric, area in areas.items():
+                remaining = len(objects) - 2 if metric in ("code", "xdata") else 0
+                size = limits[metric] - remaining
+                for extra in (0, 1):
+                    text = re.sub(rf"(A {area} size )[0-9A-F]+",
+                                  lambda m: m[1] + f"{size + extra:X}", object_text(manager))
+                    candidate = objects | {manager: text}
+                    with self.subTest(profile=options, metric=metric, extra=extra):
+                        if extra:
+                            with self.assertRaisesRegex(ValueError, "ceiling"):
+                                ram.report(candidate, **options)
+                        else:
+                            self.assertEqual(ram.report(candidate, **options)[metric], limits[metric])
 
     def test_missing_or_extra_module_is_not_a_smaller_composition(self):
         original = self.objects()

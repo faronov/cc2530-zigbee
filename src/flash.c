@@ -2,6 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "flash.h"
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#include "mac_link_child_workspace_internal.h"
+#else
+#define CW_RETURN(f,r) (r)
+#define CW_CALL(f,e) (e)
+#endif
 #include <stddef.h>
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_guard_internal.h"
@@ -14,7 +20,12 @@
 #define NV_WINDOW 0xe800u
 
 MCU_XDATA uint8_t flash_fault;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#define staging (child_work_arena.nv.reader)
+static MCU_XDATA uint8_t saved_bank, saved_clock, saved_cache;
+#else
 static MCU_XDATA uint8_t staging[FLASH_READ_MAX], saved_bank, saved_clock, saved_cache;
+#endif
 extern MCU_XDATA uint8_t flash_reserved_end;
 
 static flash_result_t observe(uint8_t bank)
@@ -57,13 +68,23 @@ flash_result_t flash_nv_read(uint8_t page, uint16_t offset,
     address = MMIO_XADDRESS(output);
     if (address >= 0x1e00u || length > 0x1e00u - address)
         return FLASH_INVALID_RANGE;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (address<=MMIO_XADDRESS(&flash_reserved_end) && !child_work_inside(output,length))
+        return FLASH_BUFFER_OWNERSHIP;
+    if (!LW_IO(CW_READ_OUTPUT,output,length,1)) return FLASH_BUFFER_OWNERSHIP;
+#else
     if (address <= MMIO_XADDRESS(&flash_reserved_end))
         return FLASH_BUFFER_OWNERSHIP;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!link_work_external(output, length)) return FLASH_BUFFER_OWNERSHIP;
 #endif
+#endif
 
-    saved_bank = MMIO_READ(SOC_MEMCTR);
+
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_READ)) return FLASH_BUFFER_OWNERSHIP;
+#endif
+saved_bank = MMIO_READ(SOC_MEMCTR);
     saved_clock = MMIO_READ(SOC_CLKCONCMD);
     saved_cache = MMIO_XREAD(FCTL) & 0x0cu;
     if (saved_bank & 0xf8u) { result = FLASH_UNSUPPORTED_STATE; goto failed; }
@@ -88,10 +109,13 @@ flash_result_t flash_nv_read(uint8_t page, uint16_t offset,
     result = observe(saved_bank);
     if (result != FLASH_OK) goto failed;
     for (i = 0; i < length; i++) output[i] = staging[i];
-    return FLASH_OK;
+    return CW_RETURN(CW_READ,FLASH_OK);
 failed:
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    (void)child_work_poison((uint8_t)result);
+#endif
     flash_fault = result;
-    return result;
+    return CW_RETURN(CW_READ,result);
 }
 
 MCU_XDATA uint8_t flash_reserved_end;

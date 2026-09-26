@@ -20,14 +20,14 @@ MODULES = ("zdo_srv", "zdo_node", "aps_frame", "nwk_frame", "zdo_srv_test")
 SIZE, XDATA, CHECKS, PEAK = 15802, 834, 1694, 0x65
 CODE_BUDGET, XDATA_BUDGET = 16384, 1024
 CODE_SHA = "2f0bf8dbddd7a755a1cbee35d99c87f51189dd3cb31202ddffab9f4fe7a8b9f0"
-CDB_SHA = "fc6281aebed5c6412c8f37ce37f3d6ecde4d832d3f01c2422850db9c089c11ac"
+CDB_SHA = "1539763f76bb53b34243679d8f8fc65a745064063cfd4a3c55710abd83193f0e"
 MAP_SHA = "bd006cf2f138aee6dfdbb22efeb3c6c3e525e828be88e579bc459d561bc5365e"
 MEM_SHA = "5154f2237e9fd2b5998f449c3113681c02f3c242440c4ced35b87b20131f3a09"
 LIST_SHA = dict(zip(MODULES, (
     "b95b4ea964938cbfa35e6bdf36ff580f21210d62e4ae0384be16ac27f115550a",
     "76dfc437b842e35e4f5b04ce27881ef39e53ec3d6c5e81fdd0bd0adb445a27af",
-    "fac2f4d838989f0db3cb18b2735928c8a35f943115e69785f7ae2f86c0d1e6cb",
-    "97cac3db98f1e1375c41cfdb143a9a94ebe418f1b80ab8b5d77b8722e229e922",
+    "1bf2f7dceb33652e1e181e72cb701e75f51b2f302021597a808678a56a577077",
+    "6c1d498597a76069788f5f39d0c965adc02f58b63ebcb73321848aa928b7e567",
     "252e1fca66c01802f6cc4c219f5d60c3afee8d3200b734dc30760c8656cd6daf",
 )))
 METRICS = dict(zip(MODULES, (
@@ -42,7 +42,7 @@ OBJECTS = {
     "zdo_srv": ((1534, 69, 0, 0, 0), "70efeb82d281ea28f30936dc85c2abbdf3282bb168d56f3f63a59d009edc9197"),
     "zdo_node": NODE_OBJECTS["zdo_node"],
     "aps_frame": NODE_OBJECTS["aps_frame"],
-    "nwk_frame": ((2294, 96, 12, 10, 0), "22d323dfa42c55c4d1580e8f07a57ce81ad43e4a584c9670f7bae1ead0eda9c7"),
+    "nwk_frame": ((2294, 96, 12, 10, 0), "f1d39e71ec25fe27d8f4e269a09810541fcfc830705ea37c640fcd4611d4341a"),
     "zdo_srv_test": ((6688, 494, 4, 0, 1), "ad87dcb65d83a27a69fecd73c73718a5eaaee9e1ac41f2d21389ad3f59d7da5e"),
 }
 PUBLIC = {

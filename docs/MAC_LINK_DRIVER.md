@@ -489,12 +489,100 @@ workers and every previous corpus. This accepts the new host/object profile
 and preserves the existing image/simulator proofs; it does not establish a
 combined radio-backed MCU join or application-memory headroom.
 
+## Shared child workspace
+
+`CC2530_MAC_LINK_CHILD_WORKSPACE` additionally pools temporary wire, hash and
+NV work. It requires the UPPER/compact/LINK profile and remains opt-in.
+Retained keys, counters, diagnostics, flash history, DMA descriptors and
+executable flash RAM are not pooled. The typed543-byte arena contains these
+alternative branches:
+
+| Branch | Simultaneously live storage |
+| --- | --- |
+| Wire543 | Buffers236 + crypto40 + engine267 |
+| Engine within wire | Parser119 (wire78 + NWK29 + APS12), or CCM267 |
+| Hash149 | Key-hash60 + nested MMO89 |
+| NV394 | Counter check128 + journal198 + writer36 + reader32 |
+
+NV is a struct, not a union of its four nested users. All final wire syntax
+reads precede the parser-to-CCM transition, after which parser reuse is
+rejected. Exact source-issued grants constrain owner edges and I/O direction;
+AES key/input/info/output roles are not interchangeable. The flash executor
+may read only the writer's exact word. Readonly slices and reader prefixes
+are admitted only where the real call requires them. Both complete managers,
+including ownership and compiler homes, remain excluded from general caller
+spans and subject to the existing private-fence placement obligations.
+
+A returning operational NV failure pins the NV branch through owner unwind:
+work and the first failure cause survive subsequent calls and failed reopen.
+Only the existing host full-power-cycle hook resets this experimental owner;
+there is no target software poison-clear API. The actual flash RAM fail-stop
+remains nonreturning. Generation exhaustion remains a policy rejection, not
+a new flash operation. The real joint model binds five relocated arrays to
+typed slots with a contiguous synthetic address mapping that preserves native
+padding and overlap; target layout is checked separately, never inferred from
+host offsets.
+
+Both-board SDCC4.2 object measurements:
+
+| Allocation | Shared UPPER | UPPER + CHILD | Delta |
+| --- | ---: | ---: | ---: |
+| Production CODE | 230576 | 236892 | +6316 |
+| CONST | 962 | 1507 | +545 |
+| Production XSEG | 6308 | 5727 | -581 |
+| Raw DATA sum | 556 | 562 | +6 |
+| Raw OSEG sum | 74 | 74 | 0 |
+| BSEG bits | 80 | 86 | +6 |
+| Caller contexts | 1917 | 1917 | 0 |
+| Object-plus-context floor | 8225 | **7644** | **-581** |
+
+The1205 selected bytes become543 arena +31 ownership +50 compiler/marker
+bytes. The net saving is581, or1800 versus the original9444-byte LINK floor.
+The3139-byte layout probe contains1917 caller bytes plus both arena/owner
+copies; only the callers are added to production. **The remaining36 bytes
+below7680 are before runtime/additional caller storage, not a proven fit.**
+The6656 application-reserve target still requires988 more bytes plus overhead.
+Raw DATA/OSEG sums do not measure physical simultaneous IRAM.
+
+`make BOARD=<board> test-mac-link-child-workspace` retains all40 production
+objects and eight native/nonrecovering-sanitizer executions: focused
+ownership/crypto, real NV/fault/retirement, the accepted UPPER/E2E corpus,
+and146-case POLL/join. Isolated both-board evidence covers297852 focused
+checks,2737 NV checks, all15 E2E scenarios,18172 compact checks,
+1815278 UPPER checks and8185 POLL/join checks per corresponding run.
+Six focused mutations and four real-NV mutations were killed; unsuccessful
+compilation attempts are not counted as kills. The retirement case reaches
+FINISHED and explicitly closes RX through the public adapter; FINISHED alone
+does not imply RX is off.
+
+The separate four-module `child_abi` image exercises actual SDCC generic
+pointers and typed volatile reads of already allocated parameter homes,
+including all256 pointer tags and43098 checks. Its11105 CODE/1551 XSEG image
+has stack50..7C, observed peak59 and an intact7D..FF canary with the real
+1F00..1FFF IRAM alias. It never calls AES, flash or radio; executor entry is a
+forbidden breakpoint. This is **image-checked and simulated ABI evidence
+only**, not a40-module join, common CODE placement or combined SP proof.
+The full profile remains **host-tested and object-checked**. Complete CI
+acceptance of this integration is pending; the two new workers retain every
+previous corpus.
+
+Integration reproduced all205 production/probe object artifacts per board
+(only differing REL output-path comments were excluded). It also preserved
+full IHX, memory, parsed maps, complete non-source-line CDB and emitted
+instructions/areas for26 affected legacy images per board before refreshing
+54 metadata digests in11 verifier files. Both `tests/` and `tools/` were
+scanned; no tool-side pin needed changing. The21 applicable existing static
+image/fixture guards per board remain intact. Each new CI worker explicitly
+runs all18 ABI-verifier regressions, including wrong counts/PC, stack/canary,
+malformed raw metadata and missing/swapped artifacts.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,
 driver and link consumers, within 7680 ordinary XDATA. It needs DATA/stack/ABI
-and alias proofs. The experimental returning-work, projection and shared
-UPPER reductions lower the excess from1764 to545 bytes before banker/libc/
-additional caller storage; further RAM reduction, application headroom and a real bank
-partition are required. After that come the #45
+and alias proofs. The returning-work, projection, UPPER and CHILD experiments
+lower the floor from9444 to7644 before banker/libc/additional caller storage.
+The36-byte arithmetic remainder is not sufficient evidence of a combined
+fit; further application headroom and a real bank partition are required.
+After that come the #45
 decision, documentation and closure at the documented offline evidence level.

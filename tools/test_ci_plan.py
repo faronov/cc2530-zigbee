@@ -21,11 +21,11 @@ class SelectionTests(unittest.TestCase):
     def names(self, selected):
         return {(row["board"], row["directory"]) for row in selected["matrix"]["include"]}
 
-    def test_full_preserves_110_workers_and_adds_two_workspace_workers(self):
+    def test_full_preserves_112_workers_and_adds_two_child_workers(self):
         selected = plan.full_plan("test")
         rows = selected["matrix"]["include"]
-        self.assertEqual(len(rows), 112)
-        self.assertEqual(len({r["name"] for r in rows}), 112)
+        self.assertEqual(len(rows), 114)
+        self.assertEqual(len({r["name"] for r in rows}), 114)
         self.assertEqual(sum(row["directory"] == "mac-tx-interval" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-handoff" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-adapter" for row in rows), 2)
@@ -33,6 +33,7 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(sum(row["directory"] == "mac-link" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-link-ram" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-link-workspace" for row in rows), 2)
+        self.assertEqual(sum(row["directory"] == "mac-link-child-workspace" for row in rows), 2)
         self.assertEqual(sum(row["directory"].startswith("banked-join-") for row in rows), 44)
         self.assertEqual({(r["board"], r["image"]) for r in rows if r["image"]},
                          {(b, i) for b in plan.BOARDS for i in plan.IMAGES})
@@ -62,7 +63,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 selected = self.select("README.md", path)
                 self.assertEqual(selected["tier"], "full")
-                self.assertEqual(len(selected["matrix"]["include"]), 112)
+                self.assertEqual(len(selected["matrix"]["include"]), 114)
                 self.assertEqual(selected["campaign"], "full")
 
     def test_failed_dependency_derivation_is_explicit_full_not_an_empty_pass(self):
@@ -73,28 +74,33 @@ class SelectionTests(unittest.TestCase):
 
     def test_actual_shared_c_consumers_not_filename_matching(self):
         cases = {
-            "src/bdb_join.c": {"ed-bdb-join", "mac-link", "mac-link-ram", "mac-link-workspace"} | {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
+            "src/bdb_join.c": {"ed-bdb-join", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"} | {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "tests/bdb_join_layout.c": {"ed-bdb-join"},
-            "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security", "mac-link", "mac-link-ram", "mac-link-workspace"} |
+            "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"} |
                                   {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "tests/banked_join_edges.c": {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "src/zcl_temperature.c": {"compositions"},
             "tests/test_mac_tx_interval.c": {"mac-tx-interval", "mac-adapter"},
-            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace"},
-            "src/mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace"},
+            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "src/mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/test_mac_observed.c": {"mac-adapter"},
-            "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace"},
+            "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/test_mac_reconfig.c": {"mac-reconfig"},
             "tests/test_mac_link_scan.c": {"mac-link"},
-            "tests/test_mac_link_join.c": {"mac-link", "mac-link-ram", "mac-link-workspace"},
-            "tests/test_mac_link_e2e.c": {"mac-link", "mac-link-ram", "mac-link-workspace"},
-            "tests/mac_link_peer.c": {"mac-link", "mac-link-ram", "mac-link-workspace"},
-            "src/mac_link_driver.c": {"mac-link", "mac-link-ram", "mac-link-workspace"},
-            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace"},
-            "tests/test_mac_link_ram.c": {"mac-link-ram", "mac-link-workspace"},
-            "tests/mac_link_ram_layout.c": {"mac-link-ram", "mac-link-workspace"},
-            "src/mac_link_workspace.c": {"mac-link-workspace"},
-            "tests/test_mac_link_workspace.c": {"mac-link-workspace"},
+            "tests/test_mac_link_join.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/test_mac_link_e2e.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/mac_link_peer.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "src/mac_link_driver.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/test_mac_link_ram.c": {"mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/mac_link_ram_layout.c": {"mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "src/mac_link_workspace.c": {"mac-link-workspace", "mac-link-child-workspace"},
+            "tests/test_mac_link_workspace.c": {"mac-link-workspace", "mac-link-child-workspace"},
+            "src/mac_link_child_workspace.c": {"mac-link-child-workspace"},
+            "tests/test_mac_link_child_workspace.c": {"mac-link-child-workspace"},
+            "tests/test_mac_link_child_nv.c": {"mac-link-child-workspace"},
+            "tests/mac_link_child_layout.c": {"mac-link-child-workspace"},
+            "tests/mac_link_child_abi.c": {"mac-link-child-workspace"},
             "tests/test_mac_link_projection.c": {"mac-link-ram"},
             "tests/mac_attempt_projection.c": {"mac-link-ram"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},

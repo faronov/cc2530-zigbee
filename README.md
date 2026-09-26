@@ -690,6 +690,12 @@ The additional [shared upper workspace](docs/MAC_LINK_DRIVER.md#shared-upper-wor
 reaches an 8225-byte object-plus-context floor, trading 727 more XDATA bytes
 for substantial CODE/DATA growth. It is another host/object experiment,
 still above the ordinary limit and not enabled in a board image.
+The opt-in [CHILD workspace](docs/MAC_LINK_DRIVER.md#shared-child-workspace)
+saves another 581 bytes, reaching a 7644-byte floor. Its 36-byte remainder
+is **before runtime/additional caller storage**, not a demonstrated fit;
+the 1 KiB application-reserve target still needs 988 bytes plus overhead.
+The full profile is host/object-checked. A separate simulated pointer/parameter
+ABI image is not a combined radio-backed MCU join; CI integration is pending.
 
 ## Offline MAC transmission state
 
