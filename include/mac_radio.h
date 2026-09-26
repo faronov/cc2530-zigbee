@@ -89,4 +89,12 @@ mac_radio_result_t mac_radio_attempt_now(uint32_t timeout, uint16_t limit,
                                         mac_epoch_stamp_t MCU_XDATA *output);
 mac_radio_result_t mac_radio_handoff(uint32_t timeout, uint16_t limit);
 #endif
+#if defined(CC2530_MAC_RECONFIG)
+/* Same-owner OFF-only filter address/channel update. The IEEE address and
+ * power must equal the acquired configuration; mismatch is INVALID_ARGUMENT
+ * before any MMIO. The live epoch is refreshed first. Success keeps OFF.
+ */
+mac_radio_result_t mac_radio_configure(const radio_autoack_config_t MCU_XDATA *configuration,
+                                       uint32_t timeout, uint16_t limit);
+#endif
 #endif

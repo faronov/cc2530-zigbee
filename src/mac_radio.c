@@ -262,4 +262,28 @@ mac_radio_result_t mac_radio_handoff(uint32_t timeout, uint16_t limit)
     return MAC_RADIO_READY;
 }
 #endif
+#if defined(CC2530_MAC_RECONFIG)
+mac_radio_result_t mac_radio_configure(const radio_autoack_config_t MCU_XDATA *configuration,
+                                       uint32_t timeout, uint16_t limit)
+{
+    uint8_t i;
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (!configuration) return MAC_RADIO_INVALID_ARGUMENT;
+    if (status.phase != MAC_RADIO_OFF) return MAC_RADIO_STATE;
+    result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
+    if (result != MAC_RADIO_READY) return result;
+    if (configuration->channel < 11 || configuration->channel > 26 ||
+        configuration->power != mac_radio_config.power) return MAC_RADIO_INVALID_ARGUMENT;
+    for (i = 0; i < 8; i++)
+        if (configuration->ieee[i] != mac_radio_config.ieee[i]) return MAC_RADIO_INVALID_ARGUMENT;
+    result = sample(timeout, limit, 0);
+    if (result != MAC_RADIO_READY) return result;
+    status.radio_result = radio_autoack_configure(configuration, timeout, limit);
+    if (status.radio_result != RADIO_AUTOACK_READY) return fail(MAC_RADIO_DRIVER_ERROR);
+    mac_radio_config = *configuration;
+    status.result = MAC_RADIO_READY;
+    return MAC_RADIO_READY;
+}
+#endif
 MCU_XDATA uint8_t mac_radio_reserved_end;

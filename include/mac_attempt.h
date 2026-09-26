@@ -66,5 +66,12 @@ mac_radio_result_t mac_attempt_now(uint32_t timeout, uint16_t limit,
  */
 mac_radio_result_t mac_attempt_handoff(uint32_t timeout, uint16_t limit);
 #endif
+#if defined(CC2530_MAC_RECONFIG)
+/* OFF-only PAN/short/channel update under the complete top-level storage and
+ * retained-fault guards. It invalidates any earlier handoff eligibility.
+ */
+mac_radio_result_t mac_attempt_configure(const radio_autoack_config_t MCU_XDATA *configuration,
+                                         uint32_t timeout, uint16_t limit);
+#endif
 #endif
 #endif

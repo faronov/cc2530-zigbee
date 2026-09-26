@@ -160,4 +160,16 @@ mac_radio_result_t mac_attempt_handoff(uint32_t timeout, uint16_t limit)
     return mac_radio_handoff(timeout, limit);
 }
 #endif
+#if defined(CC2530_MAC_RECONFIG)
+mac_radio_result_t mac_attempt_configure(const radio_autoack_config_t MCU_XDATA *configuration,
+                                         uint32_t timeout, uint16_t limit)
+{
+    mac_radio_result_t result = bounds(timeout, limit);
+    if (result != MAC_RADIO_READY) return result;
+    if (!configuration) return MAC_RADIO_INVALID_ARGUMENT;
+    result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
+    if (result != MAC_RADIO_READY) return result;
+    return mac_radio_configure(configuration, timeout, limit);
+}
+#endif
 MCU_XDATA uint8_t mac_attempt_reserved_end;

@@ -36,7 +36,9 @@ key, retained radio fault and retained busy-flash cases, plus eighteen
 Two interval-MAC workers add the separate fractional scheduler and native
 real-service receipt-consumption checks. Two guarded-handoff workers add the
 opt-in live clock/RX transition and native MAC binding. Two banked-adapter
-workers add the complete real-scheduler/radio composition. There are104 workers plus the two
+workers add the complete real-scheduler/radio composition. Two reconfiguration
+workers add the native OFF-only retune/address-install/reopen corpus and
+compile the gated banked objects. There are106 workers plus the two
 selection/acceptance control jobs. Their existing15-minute deadlines and
 no-upload boundary for synthetic key/NV artifacts remain unchanged.
 
@@ -288,9 +290,18 @@ Code `3cc26b0` then passed
 **106/106 jobs**. Both new workers executed the entire18-case corpus and
 277229 artifact mutations plus three mapping/alias controls; their complete
 job durations were3m43s (generic) and2m58s (LG). All102 previous workers and
-their limits remain accepted. Interval procedures, independent RX reopening/
-retuning/address installation and complete authenticated-join/radio
-integration remain open; no hardware result is implied.
+their limits remain accepted. Interval procedures and complete
+authenticated-join/radio integration remain open; no hardware result is implied.
+
+The gated [OFF-only reconfiguration](MAC_ADAPTER.md#off-only-reconfiguration-and-reopen)
+adds `make BOARD=<board> test-mac-reconfig`: six native sequences plus all18
+adapter sequences with the profile compiled in, in normal and nonrecovering
+sanitizer builds, and SDCC `--Werror` compilation of the four gated banked
+objects. Six targeted source mutations (unconditional writes, stale owned
+channel, skipped FREQCTRL, missing normal-RX flag, weakened state guard and
+missing open stamp) all fail it. Existing-profile objects, relocations and
+debug records are byte-identical, so no earlier pin changes. The evidence is
+**host-tested and compile-checked**; there is no RECONFIG image or MCU replay.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

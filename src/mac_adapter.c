@@ -365,4 +365,53 @@ mac_adapter_result_t mac_adapter_consume(uint32_t token)
 const mac_adapter_observation_t MCU_XDATA *mac_adapter_observation(void) { return &observation; }
 const mac_adapter_diagnostics_t MCU_XDATA *mac_adapter_diagnostic(void) { return &status; }
 const mac_attempt_record_t MCU_XDATA *mac_adapter_record(void) { return &mac_adapter_receipt; }
+#if defined(CC2530_MAC_RECONFIG)
+static mac_adapter_result_t idle_off(uint32_t timeout, uint16_t limit)
+{
+    mac_adapter_result_t result = bounds(timeout, limit);
+    if (result != MAC_ADAPTER_OK) return result;
+    if (status.phase != MAC_ADAPTER_OFF || status.ready || status.held ||
+        status.goal != CLOSE_NONE) return MAC_ADAPTER_STATE;
+    return MAC_ADAPTER_OK;
+}
+
+mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDATA * volatile config,
+    volatile uint32_t timeout, volatile uint16_t limit)
+{
+    mac_adapter_result_t result = bounds(timeout, limit);
+    mac_radio_result_t radio;
+    if (result != MAC_ADAPTER_OK) return result;
+    if (!config) return MAC_ADAPTER_INVALID;
+    result = storage(MMIO_XADDRESS(config), sizeof(*config));
+    if (result != MAC_ADAPTER_OK) return result;
+    result = idle_off(timeout, limit);
+    if (result != MAC_ADAPTER_OK) return result;
+    if (config->channel < 11 || config->channel > 26 || config->power != RADIO_AUTOACK_POWER_05)
+        return MAC_ADAPTER_INVALID;
+    radio = mac_attempt_configure(config, timeout, limit);
+    if (radio == MAC_RADIO_INVALID_ARGUMENT) return MAC_ADAPTER_INVALID;
+    status.radio_result = radio;
+    if (radio != MAC_RADIO_READY) return fail(MAC_ADAPTER_RADIO_ERROR);
+    return clock(timeout, limit);
+}
+
+mac_adapter_result_t mac_adapter_open(volatile uint32_t timeout, volatile uint16_t limit,
+    mac_epoch_stamp_t MCU_XDATA * volatile opened)
+{
+    mac_adapter_result_t result = bounds(timeout, limit);
+    if (result != MAC_ADAPTER_OK) return result;
+    if (!opened) return MAC_ADAPTER_INVALID;
+    result = storage(MMIO_XADDRESS(opened), sizeof(*opened));
+    if (result != MAC_ADAPTER_OK) return result;
+    result = idle_off(timeout, limit);
+    if (result != MAC_ADAPTER_OK) return result;
+    status.radio_result = mac_attempt_resume(timeout, limit);
+    if (status.radio_result != MAC_RADIO_READY) return fail(MAC_ADAPTER_RADIO_ERROR);
+    status.phase = MAC_ADAPTER_RX; status.normal_rx = 1;
+    status.stop_started = status.wait_through = 0; settled = 0;
+    result = clock(timeout, limit);
+    if (result == MAC_ADAPTER_OK) *opened = status.live;
+    return result;
+}
+#endif
 MCU_XDATA uint8_t mac_adapter_reserved_end;

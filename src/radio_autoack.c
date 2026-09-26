@@ -881,4 +881,66 @@ failed:
     return result;
 }
 #endif
+#if defined(CC2530_MAC_RECONFIG)
+/* SWRU191F pp.214,256: frame-filter address RAM and FREQCTRL, written only
+ * while idle. owned changes with each byte so every full-profile observation
+ * compares the exact intended register set, including the unchanged rest.
+ */
+static uint8_t reconfigure_value(const radio_autoack_config_t MCU_XDATA *configuration)
+{
+    if (work.index == 8) return (uint8_t)configuration->pan;
+    if (work.index == 9) return (uint8_t)(configuration->pan >> 8);
+    if (work.index == 10) return (uint8_t)configuration->short_address;
+    if (work.index == 11) return (uint8_t)(configuration->short_address >> 8);
+    return (uint8_t)(11u + 5u * (configuration->channel - 11u));
+}
+
+radio_autoack_result_t radio_autoack_configure(
+    const radio_autoack_config_t MCU_XDATA *configuration, uint32_t timeout, uint16_t limit)
+{
+    radio_autoack_result_t result;
+    uint8_t i, value;
+    if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
+    if (!configuration || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
+        return RADIO_AUTOACK_INVALID_ARGUMENT;
+    if (radio_autoack_state != RADIO_AUTOACK_OFF && radio_autoack_state != RADIO_AUTOACK_OFF_NOACK)
+        return RADIO_AUTOACK_STATE;
+    result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
+    if (result != RADIO_AUTOACK_READY) return result;
+    if (configuration->channel < 11 || configuration->channel > 26 ||
+        configuration->power != owned.power)
+        return RADIO_AUTOACK_INVALID_ARGUMENT;
+    for (i = 0; i < 8; i++)
+        if (configuration->ieee[i] != owned.ieee[i]) return RADIO_AUTOACK_INVALID_ARGUMENT;
+    memset(&status, 0, sizeof(status)); work.limit = limit;
+    work.start = timebase_read_awake_ticks24(); work.previous = work.start;
+    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
+    status.phase = 24;
+    CHECK(poll()); CHECK(stopped());
+    REQUIRE(status.flags1 & 4u, RADIO_AUTOACK_STATE_CHANGED);
+    REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
+    for (work.index = 8; work.index != 23; work.index = work.index == 11 ? 22 : work.index + 1u) {
+        value = reconfigure_value(configuration);
+        if (value == setting_value(work.index)) continue;
+        ROOM();
+        if (work.index == 8) owned.pan = (owned.pan & 0xff00u) | value;
+        else if (work.index == 9) owned.pan = (owned.pan & 0x00ffu) | ((uint16_t)value << 8);
+        else if (work.index == 10) owned.short_address = (owned.short_address & 0xff00u) | value;
+        else if (work.index == 11)
+            owned.short_address = (owned.short_address & 0x00ffu) | ((uint16_t)value << 8);
+        else owned.channel = configuration->channel;
+        MMIO_XWRITE(setting_address(work.index), value); status.writes++;
+        CHECK(poll()); CHECK(stopped());
+        REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
+        status.verified = status.writes;
+    }
+    status.phase = 25; status.result = RADIO_AUTOACK_READY;
+    return RADIO_AUTOACK_READY;
+failed:
+    radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
+    status.result = result;
+    return result;
+}
+#endif
 MCU_XDATA uint8_t radio_autoack_reserved_end;

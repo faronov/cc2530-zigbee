@@ -92,5 +92,24 @@ const mac_adapter_diagnostics_t MCU_XDATA *mac_adapter_diagnostic(void) JOIN_FAR
  * publication. held/bound_valid distinguish original bytes from valid timing.
  */
 const mac_attempt_record_t MCU_XDATA *mac_adapter_record(void) JOIN_FAR;
+#if defined(CC2530_MAC_RECONFIG)
+/* OFF only: after a completed closure/retirement or unprepare, with no held
+ * frame, pending delivery or closure goal. Updates PAN, short address and
+ * channel through the real same-owner radio service; IEEE and power must be
+ * the initialization values (INVALID, no MMIO). The radio stays OFF.
+ * This is not network membership, PIB validation or recovery.
+ */
+mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDATA * volatile config,
+    volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
+/* OFF only, same preconditions. Starts a NEW normal filtered RX/AUTOACK
+ * episode through the real resume service. opened is a live sample taken
+ * after the receiver was confirmed ready: a conservative coverage start, not
+ * a captured edge. Frames sent while OFF were not received; the gap is
+ * explicit and never continuous coverage. RX_EVENT tx.lower is not a frame
+ * lower bound outside a transmission; order frames by rx_serial.
+ */
+mac_adapter_result_t mac_adapter_open(volatile uint32_t timeout, volatile uint16_t limit,
+    mac_epoch_stamp_t MCU_XDATA * volatile opened) JOIN_FAR;
+#endif
 #endif
 #endif

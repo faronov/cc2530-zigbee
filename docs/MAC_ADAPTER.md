@@ -15,9 +15,10 @@ accepted [complete banked join](ED_JOIN.md#complete-banked-mcu-execution)
 still has synthetic PHY events. Its interval-aware scan/POLL/association
 binding and actual combined RAM/call-lifetime placement remain separate.
 This owner has fixed initialization-time channel/PAN/address configuration.
-Independent RX reopening, safe channel retuning and parent/short-address
-installation APIs are not implemented here; they must use real services
-without resetting the device-wide MAC/epoch or bypassing ownership.
+The separately gated [OFF-only reconfiguration and reopen](#off-only-reconfiguration-and-reopen)
+profile adds real retuning/address installation and new RX episodes without
+resetting the device-wide MAC/epoch or bypassing ownership; it is not yet
+linked into an MCU composition.
 
 ## One owner, real actions
 
@@ -123,6 +124,52 @@ to the real interval classifier, including timing uncertainty; it does not
 silently authorize a stop/resume gap or restore first-ACK eligibility.
 There is no per-frame receiver-ACK attestation, complete POLL procedure,
 unicast-only policy for arbitrary input or full MLME conformance.
+
+## OFF-only reconfiguration and reopen
+
+`CC2530_MAC_RECONFIG` (requires the complete adapter profile) adds
+`mac_adapter_configure` and `mac_adapter_open`, layered through
+`mac_attempt_configure`, `mac_radio_configure` and `radio_autoack_configure`.
+Both calls are accepted only in adapter `OFF` after a consumed closure,
+retirement or unprepare: no held frame, pending delivery or closure goal.
+The radio must be this owner's `OFF`/`OFF_NOACK` state, `STOPPED`, with an
+empty FIFO and RFIDLE set.
+
+Configure rewrites only the differing PAN (`0x6172/73`), short-address
+(`0x6174/75`) and FREQCTRL (`0x618F`, `11+5*(channel-11)`) bytes, in that
+order, while the receiver mask is clear ([SWRU191F](PROVENANCE.md) pp.214,
+256). Each write is followed by a whole-profile readback of all25 acquired
+settings, the frame-filter and AUTOACK/CCA state, stopped/idle and FIFO checks.
+IEEE address and power are immutable and must equal the initialization values;
+an invalid channel, power, IEEE mismatch, storage or state returns
+`INVALID`/`STORAGE`/`RANGE`/`STATE` with no MMIO and no diagnostic change.
+A readback or controller failure is a retained terminal `RADIO_ERROR` like
+every other operation. Configure never restarts RX.
+
+Open starts a **new** normal filtered RX/AUTOACK episode through the existing
+resume service. After a raw lease it restores the normal filter/AUTOACK
+profile first. Its `opened` output is a live sample taken after the receiver
+is confirmed ready: a conservative coverage start, not a captured edge.
+Frames sent while `OFF` were not received; the gap is explicit and never
+continuous coverage. `RX_EVENT` `tx.lower` is the last transmission's
+bound, not a frame lower bound; consumers order frames by `rx_serial` and the
+open stamp. A transmission may also be prepared directly from `OFF` on the
+new channel. None of this is network membership, PIB validation, a
+coordinator realignment or recovery.
+
+Six native sequences over the handoff radio model exercise reopen,
+five-byte PAN/short/channel install, identical and partial reconfiguration,
+a four-channel raw Beacon-request sweep with per-channel TX/RX FREQCTRL checks,
+AUTOACK decisions against the installed address, boundary values
+(`0000`, `FFFE`, `FFFF`, channels11/26), a corrupted readback fault and every
+invalid/state/storage guard. The same binaries rerun all18 adapter sequences
+with the gated profile compiled in. The model does not implement frame
+rejection; only its AUTOACK decision reads the installed registers.
+Normal and nonrecovering-sanitizer builds pass. The four gated production
+objects compile under the banked SDCC flags with `--Werror`, and every existing
+profile's objects, relocations and debug records are byte-identical to the
+previous code. This increment is **host-tested and compile-checked** only:
+there is no linked RECONFIG image, MCU replay or hardware result yet.
 
 ## Linked composition and evidence
 

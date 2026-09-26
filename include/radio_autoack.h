@@ -199,4 +199,19 @@ uint8_t radio_autoack_handoff_eligible(void);
 radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile uint16_t limit,
                                             radio_autoack_handoff_clock_t MCU_XDATA * volatile clock);
 #endif
+#if defined(CC2530_MAC_RECONFIG)
+#if !defined(CC2530_MAC_HANDOFF)
+#error MAC reconfiguration requires the complete same-owner handoff profile
+#endif
+/* Co-owner hook. OFF/OFF_NOACK only, after this owner's STOPPED and complete
+ * drain. Rewrites only differing PAN, short-address and FREQCTRL bytes while
+ * the receiver mask is clear, verifying the whole owned profile after each
+ * write. IEEE, power and the filter/AUTOACK/CCA profile are immutable here.
+ * The state stays OFF/OFF_NOACK: a separate resume starts a new RX episode.
+ * Frames transmitted during the gap are not received. Invalid input changes
+ * nothing; an operational fault is terminal like every other operation.
+ */
+radio_autoack_result_t radio_autoack_configure(
+    const radio_autoack_config_t MCU_XDATA *configuration, uint32_t timeout, uint16_t limit);
+#endif
 #endif

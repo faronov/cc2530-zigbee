@@ -22,6 +22,7 @@ COMPONENTS = {
     "mac-tx-interval": ("Offline interval MAC transmitter ({board})", ("test-mac-tx-interval",)),
     "mac-handoff": ("Offline guarded RX handoff ({board})", ("test-mac-handoff",)),
     "mac-adapter": ("Offline banked MAC radio adapter ({board})", ("test-mac-adapter",)),
+    "mac-reconfig": ("Offline MAC radio reconfiguration ({board})", ("test-mac-reconfig",)),
     "security": ("Offline Zigbee security ({board})",
                  ("test-zigbee-security", "test-zigbee-mmo", "test-zigbee-key-hash")),
     "counters": ("Offline durable counters ({board})", ("test-security-counter",)),

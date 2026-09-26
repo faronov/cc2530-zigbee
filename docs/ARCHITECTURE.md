@@ -104,8 +104,10 @@ drain/closure. Faults retain the original frame and physical owner rather
 than fabricating timestamps or successful cleanup. Its isolated55442-CODE/
 2848-XDATA composition passed full106-job offline acceptance at `3cc26b0`.
 It is not the complete join/radio placement, an interval scan/POLL/association
-implementation or a hardware result; fixed configuration and reopening/
-retuning/address-installation boundaries remain explicit.
+implementation or a hardware result. The separate `CC2530_MAC_RECONFIG`
+profile adds [OFF-only PAN/short/channel installation and new RX episodes](MAC_ADAPTER.md#off-only-reconfiguration-and-reopen)
+through the same owner; every RX gap stays explicit. It is host-tested and
+compile-checked, not yet linked or MCU-executed.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

@@ -465,7 +465,10 @@ static void adapter_case(unsigned selected)
         assert(selected == 16); invalid_inputs();
     }
 }
-int main(int argc, char **argv)
+#ifndef MAC_ADAPTER_MAIN
+#define MAC_ADAPTER_MAIN main
+#endif
+int MAC_ADAPTER_MAIN(int argc, char **argv)
 {
     unsigned selected;
 #if defined(MAC_ADAPTER_TRACE)

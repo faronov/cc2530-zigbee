@@ -665,7 +665,10 @@ with55442 CODE,2848 ordinary XDATA andSP78/7C. Code `3cc26b0` passed
 [full CI,106/106 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36187341754).
 It is not integrated into the complete authenticated-join image or the
 interval scan/POLL/association controllers. No hardware/RF result is claimed;
-never flash `mac-adapter/mac_adapter.ihx`.
+never flash `mac-adapter/mac_adapter.ihx`. A separately gated
+[OFF-only reconfiguration](docs/MAC_ADAPTER.md#off-only-reconfiguration-and-reopen)
+installs PAN/short/channel and opens new RX episodes with explicit gaps; it is
+host-tested and compile-checked only, not linked into an MCU image.
 
 ## Offline MAC transmission state
 

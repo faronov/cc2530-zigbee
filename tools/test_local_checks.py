@@ -117,6 +117,32 @@ class LocalChecksTests(unittest.TestCase):
             for args in recipe(board, "bringup"):
                 self.assertFalse(any("mac-adapter" in arg or "-DCC2530_BANKED_MAC" == arg for arg in args))
 
+    def test_reconfiguration_gates_only_its_own_objects_and_native_builds(self):
+        gated = ("radio_autoack", "mac_radio", "mac_attempt", "mac_adapter")
+        for board in BOARDS:
+            commands = recipe(board, "mac-reconfig")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
+            reconfig = [args for args in compiles if "-DCC2530_MAC_RECONFIG" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in reconfig), gated)
+            for args in reconfig:
+                self.assertEqual(Path(args[-1]).parent.name, "mac-reconfig")
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_MAC_ADAPTER",
+                                 "-DCC2530_BANKED_MAC", "-DBANKED_STACK_FIRST=0x56"} <= set(args))
+            self.assertTrue(all(Path(args[-1]).parent.name == "mac-adapter"
+                                for args in compiles if args not in reconfig))
+            native = [args for args in commands if args[0] == "cc"]
+            self.assertEqual(len(native), 2)
+            self.assertTrue(all("tests/test_mac_reconfig.c" in args and "-DCC2530_MAC_RECONFIG" in args and
+                                "-DMAC_ADAPTER_TRACE" not in args and "-DCC2530_BANKED_MAC" not in args
+                                for args in native))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 1)
+            runs = [Path(args[0]).name for args in commands if args[0] not in ("cc", "sdcc", "mkdir", "cp")
+                    and not any("verify_mac_adapter.py" in arg for arg in args)]
+            self.assertEqual(runs, ["host-mac-reconfig-tests", "host-mac-reconfig-tests-sanitize"])
+            self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
+            for unit in ("mac-adapter", "bringup"):
+                self.assertFalse(any("-DCC2530_MAC_RECONFIG" in args for args in recipe(board, unit)))
+
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:
             for image in IMAGES:

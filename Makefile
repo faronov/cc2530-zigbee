@@ -99,6 +99,7 @@ endif
 .PHONY: test-mac-tx-interval
 .PHONY: test-mac-handoff
 .PHONY: test-mac-adapter
+.PHONY: test-mac-reconfig
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -1474,6 +1475,27 @@ test-mac-adapter: $(BUILD)/host-mac-observed-tests $(BUILD)/host-mac-observed-te
 	$(BUILD)/host-mac-adapter-tests-sanitize
 	$(PYTHON) -B tests/boot_mac_adapter.py --output $(BUILD) --simulator "$(S51)"
 
+# OFF-only PAN/short/channel reconfiguration and reopen. Native model proof plus
+# SDCC compile checks of the gated production objects; no RECONFIG MCU image yet.
+MAC_RECONFIG_DEFINES := $(MAC_ADAPTER_DEFINES) -DCC2530_MAC_RECONFIG
+MAC_RECONFIG_DIR := $(BUILD)/mac-reconfig
+MAC_RECONFIG_OBJECTS := $(addprefix $(MAC_RECONFIG_DIR)/,radio_autoack.rel mac_radio.rel mac_attempt.rel mac_adapter.rel)
+MAC_RECONFIG_TEST_INPUTS := tests/test_mac_reconfig.c $(MAC_ADAPTER_TEST_INPUTS)
+$(MAC_RECONFIG_DIR):
+	mkdir -p $@
+$(MAC_RECONFIG_OBJECTS): $(MAC_RECONFIG_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(MAC_RECONFIG_DIR)
+	$(SDCC) $(MAC_ADAPTER_BANK_FLAGS) -DCC2530_MAC_RECONFIG -c $< -o $@
+# The shared adapter harness textually reaches the generated layout used only by
+# its trace build; the dependency keeps CI include selection exact.
+$(BUILD)/host-mac-reconfig-tests: $(MAC_RECONFIG_TEST_INPUTS) tests/mac_adapter_trace.h $(MAC_ADAPTER_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) $(MAC_ADAPTER_BANK_DIR)/mac_adapter_layout.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_RECONFIG_DEFINES) -I$(MAC_ADAPTER_BANK_DIR) tests/test_mac_reconfig.c $(MAC_ADAPTER_SRC) tests/host_mmio.c -o $@
+$(BUILD)/host-mac-reconfig-tests-sanitize: $(MAC_RECONFIG_TEST_INPUTS) tests/mac_adapter_trace.h $(MAC_ADAPTER_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) $(MAC_ADAPTER_BANK_DIR)/mac_adapter_layout.h Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_RECONFIG_DEFINES) -I$(MAC_ADAPTER_BANK_DIR) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_reconfig.c $(MAC_ADAPTER_SRC) tests/host_mmio.c -o $@
+
+test-mac-reconfig: $(BUILD)/host-mac-reconfig-tests $(BUILD)/host-mac-reconfig-tests-sanitize $(MAC_RECONFIG_OBJECTS)
+	$(BUILD)/host-mac-reconfig-tests
+	$(BUILD)/host-mac-reconfig-tests-sanitize
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1686,7 +1708,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

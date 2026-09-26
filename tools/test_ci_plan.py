@@ -21,14 +21,15 @@ class SelectionTests(unittest.TestCase):
     def names(self, selected):
         return {(row["board"], row["directory"]) for row in selected["matrix"]["include"]}
 
-    def test_full_preserves_102_workers_and_adds_two_adapter_workers(self):
+    def test_full_preserves_104_workers_and_adds_two_reconfiguration_workers(self):
         selected = plan.full_plan("test")
         rows = selected["matrix"]["include"]
-        self.assertEqual(len(rows), 104)
-        self.assertEqual(len({r["name"] for r in rows}), 104)
+        self.assertEqual(len(rows), 106)
+        self.assertEqual(len({r["name"] for r in rows}), 106)
         self.assertEqual(sum(row["directory"] == "mac-tx-interval" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-handoff" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-adapter" for row in rows), 2)
+        self.assertEqual(sum(row["directory"] == "mac-reconfig" for row in rows), 2)
         self.assertEqual(sum(row["directory"].startswith("banked-join-") for row in rows), 44)
         self.assertEqual({(r["board"], r["image"]) for r in rows if r["image"]},
                          {(b, i) for b in plan.BOARDS for i in plan.IMAGES})
@@ -58,7 +59,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 selected = self.select("README.md", path)
                 self.assertEqual(selected["tier"], "full")
-                self.assertEqual(len(selected["matrix"]["include"]), 104)
+                self.assertEqual(len(selected["matrix"]["include"]), 106)
                 self.assertEqual(selected["campaign"], "full")
 
     def test_failed_dependency_derivation_is_explicit_full_not_an_empty_pass(self):
@@ -76,11 +77,12 @@ class SelectionTests(unittest.TestCase):
             "tests/banked_join_edges.c": {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "src/zcl_temperature.c": {"compositions"},
             "tests/test_mac_tx_interval.c": {"mac-tx-interval", "mac-adapter"},
-            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter"},
-            "src/mac_adapter.c": {"mac-adapter"},
+            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-reconfig"},
+            "src/mac_adapter.c": {"mac-adapter", "mac-reconfig"},
             "tests/test_mac_observed.c": {"mac-adapter"},
-            "tests/test_mac_adapter.c": {"mac-adapter"},
-            "tests/mac_adapter_fixture.c": {"mac-adapter"},
+            "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig"},
+            "tests/test_mac_reconfig.c": {"mac-reconfig"},
+            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},
         }
         for path, units in cases.items():
@@ -92,7 +94,8 @@ class SelectionTests(unittest.TestCase):
 
     def test_included_c_helpers_reach_all_compositions_and_fixtures(self):
         for board in plan.BOARDS:
-            for unit in ("core", "mac-attempt", "mac-tx-interval", "mac-handoff", "mac-adapter", "compositions", "radio_link_fixture"):
+            for unit in ("core", "mac-attempt", "mac-tx-interval", "mac-handoff", "mac-adapter", "mac-reconfig",
+                         "compositions", "radio_link_fixture"):
                 self.assertIn("tests/test_radio_autoack.c", self.index[board, unit])
             for unit in ("core", "counters", "resident-counter", "flash_fixture"):
                 self.assertIn("tests/test_flash_write.c", self.index[board, unit])
