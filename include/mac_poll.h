@@ -195,13 +195,28 @@ mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile poll,
 mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile poll,
     MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx);
 
-/* Fresh memory init is never radio recovery. All API errors are atomic.
- * PREPARE establishes a continuous independent poll RX/ACK lease through the
+/* Fresh memory init is never radio recovery. All API errors are atomic. */
+#if defined(CC2530_MAC_LINK)
+/* LINK PREPARED confirms installed PAN/channel/local address with the adapter
+ * OFF and drained, not prior RX coverage. The caller prepares the real DRAW
+ * slot before its first granted step. Raw response RX must already be armed
+ * by Data Request TX end. KEEP_AUTOACK must complete the guarded first-ACK
+ * handoff before normal DATA/command processing; failure is a terminal local
+ * adapter error, never NO_DATA. No OFF/raw-AUTOACK gap is called continuous
+ * normal RX. Acceptance remains after A through A+F; absent-data closure still
+ * requires a loss-free watermark through B+F and all ACK/IFS duties.
+ * TX_RESULT (NO_ACK/CHANNEL_ACCESS) instead relies on MAC window/CCA evidence:
+ * CLOSED need not cover its later report stamp. Frame/PENDING_ZERO decisions,
+ * timeout_pending coverage and through <= CLOSED delivery time are unchanged.
+ */
+#else
+/* PREPARE establishes a continuous independent poll RX/ACK lease through the
  * real TX operation's eventual confirmed quiescence; it does not weaken that
  * operation's QUIESCED contract or its 1024-symbol/16-step bound.
  * No radio/PAN/channel changes, CRC, timestamp capture or immediate ACK engine
  * are implemented. Current reset-exclusive platform services cannot compose it.
  */
+#endif
 #if defined(CC2530_MAC_LINK)
 /* step grants one observed step; never operate the embedded exact engine.
  * Accept addressed frames only through A+F; later upper bounds are uncertain,

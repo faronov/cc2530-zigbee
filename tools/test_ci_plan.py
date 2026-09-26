@@ -71,21 +71,24 @@ class SelectionTests(unittest.TestCase):
 
     def test_actual_shared_c_consumers_not_filename_matching(self):
         cases = {
-            "src/bdb_join.c": {"ed-bdb-join"} | {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
+            "src/bdb_join.c": {"ed-bdb-join", "mac-link"} | {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "tests/bdb_join_layout.c": {"ed-bdb-join"},
-            "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security"} |
+            "src/security_keys.c": {"ed-security-keys", "ed-bdb-join", "banked-security", "mac-link"} |
                                   {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "tests/banked_join_edges.c": {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "src/zcl_temperature.c": {"compositions"},
             "tests/test_mac_tx_interval.c": {"mac-tx-interval", "mac-adapter"},
-            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-reconfig"},
-            "src/mac_adapter.c": {"mac-adapter", "mac-reconfig"},
+            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-reconfig", "mac-link"},
+            "src/mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link"},
             "tests/test_mac_observed.c": {"mac-adapter"},
-            "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig"},
+            "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link"},
             "tests/test_mac_reconfig.c": {"mac-reconfig"},
             "tests/test_mac_link_scan.c": {"mac-link"},
             "tests/test_mac_link_join.c": {"mac-link"},
-            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig"},
+            "tests/test_mac_link_e2e.c": {"mac-link"},
+            "tests/mac_link_peer.c": {"mac-link"},
+            "src/mac_link_driver.c": {"mac-link"},
+            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig", "mac-link"},
             "examples/radio_tx_fixture.c": {"radio_tx_fixture"},
         }
         for path, units in cases.items():

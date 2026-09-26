@@ -6,6 +6,19 @@
 
 #include "ed_wire.h"
 #include "mac_tx.h"
+#if defined(CC2530_MAC_LINK)
+#include "mac_link.h"
+#define NWK_APS_TX_T mac_tx_interval_t
+#define NWK_APS_EVENT_T mac_tx_interval_event_t
+#define NWK_APS_ACTION_T mac_tx_interval_action_t
+/* A transport control action, NOT a mac_adapter_accept action. */
+#define NWK_APS_ACTION_ARM 5u
+#define NWK_APS_ACTION_DISARM 6u
+#else
+#define NWK_APS_TX_T mac_tx_t
+#define NWK_APS_EVENT_T mac_tx_event_t
+#define NWK_APS_ACTION_T mac_tx_action_t
+#endif
 
 #define NWK_APS_VERSION 2u
 #define NWK_APS_DUPLICATES 8u
@@ -39,7 +52,7 @@ typedef struct {
     ed_packet_t outgoing, incoming, acknowledgment;
     nwk_aps_duplicate_t duplicate[NWK_APS_DUPLICATES];
     nwk_aps_duplicate_t broadcast[NWK_APS_DUPLICATES];
-    mac_tx_t *owner;
+    NWK_APS_TX_T *owner;
     ccm_star_limits_t limits;
     uint8_t mac[MAC_FRAME_MAX_BODY];
     uint32_t last, deadline, counter_until, ack_wait, duplicate_time, transaction_until, broadcast_time;
@@ -50,6 +63,9 @@ typedef struct {
     uint8_t completed, result, error, announced, permit_sent, ready, wrap_wait, version;
     uint8_t cancel, cancel_sent, cancel_result, parent_information, quiet;
     uint8_t stopping, reply_result;
+#if defined(CC2530_MAC_LINK)
+    uint8_t armed, arm_issued, arm_retry, arm_nb, disarmed;
+#endif
 } nwk_aps_t;
 
 /* A single foreground owner with one application/control TX, one priority ACK,
@@ -70,7 +86,7 @@ typedef struct {
  * init copies a complete, disjoint configuration; it retains no pointer to
  * that input. The grouped input avoids an eleven-argument SDCC caller frame.
  */
-nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner,
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, NWK_APS_TX_T * volatile owner,
     const nwk_aps_config_t * volatile config, volatile uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * volatile packet,
                                volatile uint8_t aps_secure, volatile uint32_t now) JOIN_FAR;
@@ -81,7 +97,7 @@ nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * vol
  */
 nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
-    const mac_tx_event_t * volatile event, mac_tx_action_t * volatile action) JOIN_FAR;
+    const NWK_APS_EVENT_T * volatile event, NWK_APS_ACTION_T * volatile action) JOIN_FAR;
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
     volatile uint16_t length, volatile uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event) JOIN_FAR;
@@ -94,7 +110,30 @@ nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now)
  * in reply_result; it is not an uncertain radio fault or membership loss.
  */
 nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now) JOIN_FAR;
+#if defined(CC2530_MAC_LINK)
+/* Confirm exactly the outstanding ARM after real adapter prepare in DRAW.
+ * Generation/retry/NB identify this nonwrapping slot/attempt. Wrong/duplicate
+ * confirmations are atomic STATE errors; matched ARM still confirms after
+ * cancel/stop, so the next step can cancel and DISARM. No RX coverage is granted.
+ * Retries rearm unless stop or ordinary-TX cancellation is pending; cancelling
+ * ordinary TX does not cancel its priority ACK. Unattempted slots need unprepare.
+ */
+nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
+    uint8_t retry, uint8_t nb) JOIN_FAR;
+/* DISARM uses the same generation/retry/NB identity after MAC DONE. Retire
+ * any unattempted prepared slot with adapter_unprepare before confirming.
+ * An independent RX lease may remain; this is not a coverage assertion.
+ */
+nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
+    uint8_t retry, uint8_t nb) JOIN_FAR;
+#endif
 
+/* CC2530_MAC_LINK: the owner is the observed interval MAC. After submit, step
+ * emits ARM without drawing backoff; only armed() enables observed stepping.
+ * DONE emits DISARM and retains the slot until disarmed(), including a slot
+ * cancelled before its first ATTEMPT. Any outcome other than ACKED or
+ * UNACKNOWLEDGED, including TIMING_UNCERTAIN, is RADIO/ACK_FAILED, never delivery.
+ */
 /* Nonreentrant, disjoint complete ordinary caller objects only. Applications
  * remain blocked until a genuine network announcement, verified TC key and
  * actual final permit-join transmission. Broadcast completion means local

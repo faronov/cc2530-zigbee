@@ -63,7 +63,7 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t ack
         ctx->mac_length != MAC_PREFIX)
         return NWK_APS_WIRE;
     ctx->mac_length += ctx->length;
-    if (mac_tx_submit(ctx->owner, ctx->mac, ctx->mac_length, now,
+    if (NWK_APS_SUBMIT(ctx->owner, ctx->mac, ctx->mac_length, now,
                       NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
         return NWK_APS_RADIO;
     ctx->active = 1; ctx->active_ack = acknowledgment;

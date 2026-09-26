@@ -23,7 +23,7 @@ static nwk_aps_result_t advance(nwk_aps_t * volatile ctx, volatile uint32_t now)
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owner,
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, NWK_APS_TX_T * volatile owner,
     const nwk_aps_config_t * volatile config, volatile uint32_t now)
 {
     if (!ctx || !owner || !config || !config->endpoint || config->endpoint == 255 || !config->profile ||
@@ -31,7 +31,7 @@ nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, mac_tx_t * volatile owne
         config->ack_wait < 93750UL || config->ack_wait >= MAC_TX_HALF/8u ||
         !config->broadcast_time || config->broadcast_time >= MAC_TX_HALF)
         return NWK_APS_ARGUMENT;
-    if (owner->phase != MAC_TX_IDLE) return NWK_APS_STATE;
+    if (NWK_APS_ENGINE(owner)->phase != MAC_TX_IDLE) return NWK_APS_STATE;
     memset(ctx, 0, sizeof(*ctx));
     ctx->owner = owner; ctx->endpoint = config->endpoint; ctx->profile = config->profile;
     ctx->limits = config->limits; ctx->nv_polls = config->nv_polls; ctx->last = now;
@@ -140,8 +140,52 @@ void nwk_aps_broadcast_put(nwk_aps_t * volatile ctx, volatile uint8_t slot, vola
     entry->until = now+ctx->broadcast_time;
 }
 
+#if defined(CC2530_MAC_LINK)
+static void arm(nwk_aps_t *ctx, NWK_APS_ACTION_T *action)
+{
+    ctx->armed = 0;
+    ctx->disarmed = 0;
+    ctx->arm_issued = 1;
+    ctx->arm_retry = ctx->owner->engine.retries;
+    ctx->arm_nb = ctx->owner->engine.nb;
+    action->control.kind = NWK_APS_ACTION_ARM;
+    action->control.generation = ctx->owner->engine.generation;
+    action->control.retry = ctx->arm_retry;
+    action->control.nb = ctx->arm_nb;
+    action->control.until = ctx->owner->engine.deadline;
+}
+
+nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
+    uint8_t retry, uint8_t nb)
+{
+    if (!ctx || ctx->version != NWK_APS_VERSION) return NWK_APS_ARGUMENT;
+    if (!ctx->active || ctx->arm_issued != 1 || ctx->armed ||
+        ctx->owner->engine.phase != MAC_TX_DRAW ||
+        generation != ctx->owner->engine.generation ||
+        retry != ctx->arm_retry || nb != ctx->arm_nb)
+        return NWK_APS_STATE;
+    ctx->armed = 1;
+    ctx->arm_issued = 0;
+    return NWK_APS_OK;
+}
+
+nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
+    uint8_t retry, uint8_t nb)
+{
+    if (!ctx || ctx->version != NWK_APS_VERSION) return NWK_APS_ARGUMENT;
+    if (!ctx->active || ctx->arm_issued != 2 || ctx->disarmed ||
+        ctx->owner->engine.phase != MAC_TX_DONE ||
+        generation != ctx->owner->engine.generation ||
+        retry != ctx->owner->engine.retries || nb != ctx->owner->engine.nb)
+        return NWK_APS_STATE;
+    ctx->disarmed = 1;
+    ctx->arm_issued = 0;
+    return NWK_APS_OK;
+}
+#endif
+
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
-    const mac_tx_event_t * volatile event, mac_tx_action_t * volatile action)
+    const NWK_APS_EVENT_T * volatile event, NWK_APS_ACTION_T * volatile action)
 {
     nwk_aps_result_t result;
     uint8_t outcome;
@@ -153,23 +197,49 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
         ctx->cancel = 1; ctx->cancel_result = NWK_APS_TIMEOUT;
     }
     if (ctx->active) {
+#if defined(CC2530_MAC_LINK)
+        if (!ctx->armed && ctx->owner->engine.phase == MAC_TX_DRAW &&
+            !ctx->stopping && !(ctx->cancel && !ctx->active_ack) &&
+            !reached(now, ctx->owner->engine.deadline)) {
+            if (!ctx->arm_issued) arm(ctx, action);
+            return event ? NWK_APS_IGNORED : NWK_APS_OK;
+        }
+#endif
         if ((ctx->stopping || (ctx->cancel && !ctx->active_ack)) && !ctx->cancel_sent && !event) {
             memset(&nwk_aps_work.cancellation, 0, sizeof(nwk_aps_work.cancellation));
-            nwk_aps_work.cancellation.kind = MAC_TX_EVENT_CANCEL;
-            nwk_aps_work.cancellation.generation = ctx->owner->generation;
-            nwk_aps_work.cancellation.retry = ctx->owner->retries; nwk_aps_work.cancellation.nb = ctx->owner->nb;
-            nwk_aps_work.cancellation.stamp = now; event = &nwk_aps_work.cancellation; ctx->cancel_sent = 1;
+            NWK_APS_CANCEL_SOURCE.kind = MAC_TX_EVENT_CANCEL;
+            NWK_APS_CANCEL_SOURCE.generation = NWK_APS_ENGINE(ctx->owner)->generation;
+            NWK_APS_CANCEL_SOURCE.retry = NWK_APS_ENGINE(ctx->owner)->retries; NWK_APS_CANCEL_SOURCE.nb = NWK_APS_ENGINE(ctx->owner)->nb;
+            NWK_APS_CANCEL_SOURCE.stamp = now; event = &nwk_aps_work.cancellation; ctx->cancel_sent = 1;
         }
-        if (mac_tx_step(ctx->owner, now, event, action) != MAC_TX_OK) return NWK_APS_RADIO;
-        if (!ctx->active_ack && ctx->owner->transmissions) ctx->sent = 1;
-        if (ctx->owner->phase == MAC_TX_FAULT) {
-            ctx->ready = 0; ctx->error = ctx->owner->outcome;
+        if (NWK_APS_STEP(ctx->owner, now, event, action) != MAC_TX_OK) return NWK_APS_RADIO;
+#if defined(CC2530_MAC_LINK)
+        if (ctx->owner->engine.phase == MAC_TX_DRAW && !ctx->stopping && !(ctx->cancel && !ctx->active_ack)) arm(ctx, action);
+#endif
+        if (!ctx->active_ack && NWK_APS_ENGINE(ctx->owner)->transmissions) ctx->sent = 1;
+        if (NWK_APS_ENGINE(ctx->owner)->phase == MAC_TX_FAULT) {
+            ctx->ready = 0; ctx->error = NWK_APS_ENGINE(ctx->owner)->outcome;
             return NWK_APS_RADIO;
         }
-        if (ctx->owner->phase != MAC_TX_DONE) return NWK_APS_OK;
-        outcome = ctx->owner->outcome;
-        if (mac_tx_release(ctx->owner) != MAC_TX_OK) return NWK_APS_RADIO;
+        if (NWK_APS_ENGINE(ctx->owner)->phase != MAC_TX_DONE) return NWK_APS_OK;
+#if defined(CC2530_MAC_LINK)
+        if (!ctx->disarmed) {
+            if (ctx->arm_issued != 2) {
+                action->control.kind = NWK_APS_ACTION_DISARM;
+                action->control.generation = ctx->owner->engine.generation;
+                action->control.retry = ctx->owner->engine.retries;
+                action->control.nb = ctx->owner->engine.nb;
+                ctx->arm_issued = 2;
+            }
+            return NWK_APS_OK;
+        }
+#endif
+        outcome = NWK_APS_ENGINE(ctx->owner)->outcome;
+        if (NWK_APS_RELEASE(ctx->owner) != MAC_TX_OK) return NWK_APS_RADIO;
         ctx->active = 0;
+#if defined(CC2530_MAC_LINK)
+        ctx->armed = ctx->arm_issued = 0;
+#endif
         if (ctx->active_ack) {
             ctx->reply = ctx->cancel_sent = 0; ctx->reply_result = outcome;
             if (outcome != MAC_TX_ACKED && !ctx->stopping) return NWK_APS_ACK_FAILED;
@@ -183,7 +253,7 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
         return NWK_APS_OK;
     }
     if (event) return NWK_APS_IGNORED;
-    if (ctx->owner->phase != MAC_TX_IDLE) return NWK_APS_STATE;
+    if (NWK_APS_ENGINE(ctx->owner)->phase != MAC_TX_IDLE) return NWK_APS_STATE;
     if (ctx->stopping) {
         if (ctx->reply) { ctx->reply = 0; ctx->reply_result = MAC_TX_CANCELLED; }
         if (ctx->queued) nwk_aps_complete(ctx, NWK_APS_CANCELLED);
@@ -204,7 +274,12 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
             return result;
         }
         if (!ctx->active) return NWK_APS_OK;
-        return mac_tx_step(ctx->owner, now, NULL, action) == MAC_TX_OK ? NWK_APS_OK : NWK_APS_RADIO;
+#if defined(CC2530_MAC_LINK)
+        arm(ctx, action);
+        return NWK_APS_OK;
+#else
+        return NWK_APS_STEP(ctx->owner, now, NULL, action) == MAC_TX_OK ? NWK_APS_OK : NWK_APS_RADIO;
+#endif
     }
     return NWK_APS_OK;
 }

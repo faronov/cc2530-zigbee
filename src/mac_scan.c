@@ -170,7 +170,13 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
     kind = 0;
     if (event != NULL && event->generation == scan->generation
             && event->token == scan->token
-            && (uint32_t)(event->stamp - scan->last) < MAC_TX_HALF
+            && (
+#if defined(CC2530_MAC_LINK)
+                /* CLOSED is the saved pre-stop coverage watermark, not the
+                 * delivery clock. Draining after stop can advance last. */
+                event->kind == MAC_SCAN_EVENT_CLOSED ||
+#endif
+                (uint32_t)(event->stamp - scan->last) < MAC_TX_HALF)
             && (uint32_t)(now - event->stamp) < MAC_TX_HALF)
         kind = event->kind;
     scan->last = now;

@@ -112,7 +112,11 @@ compile-checked, not yet linked or MCU-executed. The separate
 [POLL/Association](MAC_POLL.md#interval-consumer-profile-cc2530_mac_link) and
 [join](MAC_JOIN.md#interval-consumer-profile-cc2530_mac_link) to the observed
 interval owner. Ambiguous interval timing becomes an explicit local reason, never
-a protocol decision. It is also host-tested and compile-checked only.
+a protocol decision. It is also host-tested and compile-checked only. The
+[link driver](MAC_LINK_DRIVER.md) is a single foreground owner above those
+consumers; it contains no board GPIO code. It maps their actions onto the adapter,
+feeds observations back unchanged and never generates randomness. It is not
+linked into an MCU image.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register

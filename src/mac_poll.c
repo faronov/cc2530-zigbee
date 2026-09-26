@@ -125,7 +125,13 @@ static uint8_t accept_ack(mac_tx_interval_t MAC_POLL_RAM * volatile tx)
         && input.source.source.length == 3 && (input.source.source.bytes[0] & 7u) == MAC_FRAME_ACK
         && input.source.source.bytes[2] == tx->engine.frame[2]
         && ((input.source.source.bytes[0] & MAC_FLAG_PENDING) != 0u) == tx->engine.pending
-        && reached(MAC_LINK_FLOOR(input.source.lower), control.tx_mark)
+        /* Physical bounds can precede the last foreground report. The
+         * adapter's causal ACK lower bound is the retained TX lower bound,
+         * not an invented captured ACK end. Order reports separately. */
+        && reached(input.source.source.stamp, control.tx_mark)
+        && reached(input.source.lower.symbols, tx->tx_lower.symbols)
+        && (input.source.lower.symbols != tx->tx_lower.symbols ||
+            input.source.lower.fine >= tx->tx_lower.fine)
         && reached(input.stamp, MAC_LINK_CEIL(input.source.upper))))
         return 0;
     control.ack_seen = 1;
@@ -429,7 +435,14 @@ static mac_poll_result_t step(void)
     if (kind == MAC_POLL_CLOSED && control.close_issued && input.token == control.close_token) {
         if (!reached(input.stamp, input.through)
                 || (control.timeout_pending && !reached(input.through, control.receive_end))
-                || (control.ready && receipt->protocol && !reached(input.through, receipt->stamp)))
+                || (control.ready && receipt->protocol &&
+#if defined(CC2530_MAC_LINK)
+                    /* TX_RESULT is backed by MAC CCA/closed-ACK-window
+                     * evidence, not RX through its later delivery stamp.
+                     * OFF/drain is still required; no post-stop coverage. */
+                    receipt->cause != MAC_POLL_TX_RESULT &&
+#endif
+                    !reached(input.through, receipt->stamp)))
             drain(MAC_POLL_ADAPTER_ERROR);
         else
             control.closed = 1;

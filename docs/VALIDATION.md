@@ -308,7 +308,7 @@ their limits remain accepted.
 
 The gated [interval consumer profile](MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
 adds `make BOARD=<board> test-mac-link`: the scan corpus and the
-POLL/Association/join corpus (136 cases), natively and under nonrecovering
+POLL/Association/join corpus (136 cases at `4b9b747`), natively and under nonrecovering
 sanitizers, plus SDCC `--Werror` banked compilation of the five link-profile
 objects. Eight scan and seven POLL/join mutations fail it. Without the flag, all
 25 affected exact images (`mac_scan_test`, `mac_poll_test`, 22
@@ -321,6 +321,25 @@ same calculation reproduces every previous pin from the previous revision. The e
 replay. Code `4b9b747` passed [full Actions 36226384354](https://github.com/faronov/cc2530-zigbee/actions/runs/36226384354), **110/110 jobs**:
 both new consumer workers (47 s generic, 37 s LG), all 106 previous workers
 with the refreshed pins, the plan job and the acceptance gate.
+
+The same `test-mac-link` target now also runs the
+[link driver](MAC_LINK_DRIVER.md#evidence) end-to-end corpus, natively and
+under nonrecovering sanitizers: 15 cases, 48262 checks plus 943 peer checks. It
+also compiles the eleven-object driver composition with SDCC `--Werror` under
+the full link+adapter+reconfiguration defines. The worker additionally builds
+the unchanged adapter image, because the shared harness textually reaches its
+generated layout. POLL/join grows to 146 cases and 8185 checks. Twelve
+driver-path mutations fail it. An independent review found that an
+unacknowledged or CCA-busy Data Request and a cancel/stop after transport ARM
+ended in permanent faults. Both are fixed under the flag, and seven E2E cases
+cover them and the related races.
+
+Without the flag, all 25 exact images, memory reports, non-line map symbols
+and listing bytes are again byte-identical. The refreshed pins cover only
+source-line records; split exact-profile conditions in `mac_join.c` and
+`mac_poll.c` add line records without changing instructions (486 relocated
+listings compared). The evidence is **host-tested and
+compile-checked**.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

@@ -7,9 +7,23 @@
 #include "nwk_aps.h"
 #include "security_keys.h"
 
+#if defined(CC2530_MAC_LINK)
+#define NWK_APS_ENGINE(tx) (&(tx)->engine)
+#define NWK_APS_CANCEL_SOURCE (nwk_aps_work.cancellation.source)
+#define NWK_APS_STEP mac_tx_observed_step
+#define NWK_APS_SUBMIT mac_tx_interval_submit
+#define NWK_APS_RELEASE mac_tx_interval_release
+#else
+#define NWK_APS_ENGINE(tx) (tx)
+#define NWK_APS_CANCEL_SOURCE (nwk_aps_work.cancellation)
+#define NWK_APS_STEP mac_tx_step
+#define NWK_APS_SUBMIT mac_tx_submit
+#define NWK_APS_RELEASE mac_tx_release
+#endif
+
 typedef union {
     mac_header_t mac_header;
-    mac_tx_event_t cancellation;
+    NWK_APS_EVENT_T cancellation;
     nwk_frame_info_t hint;
 } nwk_aps_work_t;
 

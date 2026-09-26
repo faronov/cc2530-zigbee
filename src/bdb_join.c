@@ -328,8 +328,8 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
         runtime(ctx); handled = 1;
     }
     transported = nwk_aps_step(&ctx->work.runtime.transport, now, event ? &event->data.tx : NULL, &action->data.tx);
-    if (action->data.tx.kind) action->kind = BDB_JOIN_ACTION_TX;
-    if (ctx->owner->phase == MAC_TX_FAULT) {
+    if (BDB_JOIN_TX_KIND(action->data.tx)) action->kind = BDB_JOIN_ACTION_TX;
+    if (BDB_JOIN_ENGINE(ctx->owner)->phase == MAC_TX_FAULT) {
         ctx->phase = BDB_JOIN_FAULT; ctx->result = BDB_JOIN_TRANSMIT_FAILED;
         ctx->work.runtime.transport.ready = ctx->member = 0;
         return BDB_JOIN_OK;
@@ -425,3 +425,23 @@ bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8
     *result = ctx->application_result; ctx->application_done = 0;
     return BDB_JOIN_OK;
 }
+#if defined(CC2530_MAC_LINK)
+bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    uint32_t generation, uint8_t retry, uint8_t nb)
+{
+    if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
+    if (ctx->workspace != BDB_JOIN_WORK_RUNTIME || ctx->phase < BDB_JOIN_WAIT_KEY ||
+        ctx->phase >= BDB_JOIN_FAILED) return BDB_JOIN_STATE;
+    return nwk_aps_armed(&ctx->work.runtime.transport, generation, retry, nb) == NWK_APS_OK ?
+        BDB_JOIN_OK : BDB_JOIN_STATE;
+}
+bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    uint32_t generation, uint8_t retry, uint8_t nb)
+{
+    if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
+    if (ctx->workspace != BDB_JOIN_WORK_RUNTIME || ctx->phase < BDB_JOIN_WAIT_KEY ||
+        ctx->phase >= BDB_JOIN_FAILED) return BDB_JOIN_STATE;
+    return nwk_aps_disarmed(&ctx->work.runtime.transport, generation, retry, nb) == NWK_APS_OK ?
+        BDB_JOIN_OK : BDB_JOIN_STATE;
+}
+#endif

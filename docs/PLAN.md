@@ -86,9 +86,12 @@ is the first of those steps: real PAN/short/channel installation and explicit
 new RX episodes, host-tested and compile-checked only. The gated
 [interval consumer profile](MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
 is the second: scan, POLL, Association and join over the observed interval
-owner, also host-tested and SDCC compile-checked only. Remaining #13/#14 order:
-a link driver with host end-to-end join, one combined banked MCU image within
-7680 XDATA, then documented closure.
+owner, also host-tested and SDCC compile-checked only. The
+[link driver](MAC_LINK_DRIVER.md) is the third. It adds correlated ARM/DISARM
+preparation handshakes and a host end-to-end authenticated join through the
+real adapter, also host-tested and compile-checked only. Remaining #13/#14
+order: one combined banked MCU image within 7680 XDATA (a measured RAM
+reduction first), then documented closure.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

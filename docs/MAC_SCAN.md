@@ -492,14 +492,19 @@ across the 32-bit symbol wrap, natively and under ASan/UBSan. Eight targeted
 link-profile mutations were killed: exact-equality closure, closure one symbol later,
 unconditional closure, restored dwell filter, any-channel beacons, dropped
 engine uncertainty, dropped report identity and a skipped release.
-With the banked-join flags, SDCC 4.2.0 compiles the link profile to 8504
-`BJ_BANK3` bytes, compared with 8602 for the exact profile. It also uses the same
+With the banked-join flags, SDCC 4.2.0 compiles the link profile to 8528
+`BJ_BANK3` bytes plus 8 CONST, compared with 8602 for the exact profile. It also uses the same
 4-byte data segment.
 
-This is **host-tested and SDCC compile-checked** only. It is not an adapter
-driver, a linked MCU image or a hardware observation. The link driver that
-maps these actions to `mac_adapter` configure/open/close calls is still
-separate #13/#14 work. Code `4b9b747` passed
+A CLOSED stamp is the adapter's saved pre-stop coverage watermark. It may be
+earlier than later drain-report clocks, so under the link profile it is
+exempt from the ordering-against-last check. It is still never in the future
+and never moved forward while RX is off.
+
+This is **host-tested and SDCC compile-checked** only. It is not a linked MCU
+image or a hardware observation. The [link driver](MAC_LINK_DRIVER.md) maps
+these actions to `mac_adapter` configure/open/close/prepare calls and runs a
+host end-to-end join. Code `4b9b747` passed
 [full Actions 36226384354](https://github.com/faronov/cc2530-zigbee/actions/runs/36226384354),
 110/110 jobs. No hardware was accessed.
 

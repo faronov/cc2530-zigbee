@@ -103,6 +103,13 @@ static void prepare(void)
 {
     input(MAC_JOIN_PREPARED, MAC_POLL_PREPARED);
     tick(&event);
+    if (joining && action.kind == MAC_JOIN_ACTION_ARM) {
+        CHECK(tx.engine.phase == MAC_TX_DRAW);
+        input(MAC_JOIN_ARMED, 0);
+        tick(&event);
+        CHECK(action.kind == MAC_JOIN_ACTION_RADIO &&
+              action.radio.control.kind == MAC_TX_ACTION_RANDOM);
+    }
 }
 
 static void check_wire(uint8_t association)
@@ -124,6 +131,12 @@ static void pump(uint8_t pending, uint8_t style)
     uint8_t internal = joining && join.phase == MAC_JOIN_REQUEST;
     uint8_t phase = tx.engine.phase;
     uint32_t end;
+    if (internal && join.issued == MAC_JOIN_ACTION_ARM) {
+        CHECK(phase == MAC_TX_DRAW);
+        input(MAC_JOIN_ARMED, 0);
+        tick(&event);
+        return;
+    }
     input(internal ? MAC_JOIN_SOURCE : MAC_JOIN_TX, MAC_POLL_TX);
     event.source.source.generation = tx.engine.generation;
     event.source.source.retry = tx.engine.retries;
@@ -180,6 +193,11 @@ static void pump(uint8_t pending, uint8_t style)
         CHECK(event.tx_result == MAC_TX_OK);
     }
     tick(internal && !event.source.source.kind ? NULL : &event);
+    if (internal && action.kind == MAC_JOIN_ACTION_DISARM) {
+        CHECK(tx.engine.phase == MAC_TX_DONE);
+        input(MAC_JOIN_DISARMED, 0);
+        tick(&event);
+    }
 }
 
 static void to_ack(void)
@@ -591,6 +609,7 @@ static void ack_witness(uint8_t damage)
     event.source.lower.symbols += 12u;
     event.source.upper = tx.tx_lower;
     event.source.upper.symbols += 40u;
+    if (damage == 11) event.source.lower = tx.tx_lower;
     a = event.source.lower.symbols;
     b = event.source.upper.symbols + 1u;
     now = b + 1u; /* An original report may precede the step's now. */
@@ -609,13 +628,13 @@ static void ack_witness(uint8_t damage)
     if (damage == 6) ack[0] = 0x13;
     if (damage == 7) ack[2]++;
     if (damage == 8) ack[0] = 2;
-    if (damage == 9) event.source.lower.symbols = poll.control.tx_mark - 1u;
+    if (damage == 9) event.source.lower.symbols = tx.tx_lower.symbols - 1u;
     if (damage == 10) event.source.source.kind = 0;
     tick(&event);
-    CHECK(poll.control.reason == (damage ? MAC_POLL_TX_ERROR : 0));
-    CHECK(poll.control.ack_seen == !damage);
+    CHECK(poll.control.reason == (damage && damage != 11 ? MAC_POLL_TX_ERROR : 0));
+    CHECK(poll.control.ack_seen == (!damage || damage == 11));
     pump(1, 0);
-    if (damage) {
+    if (damage && damage != 11) {
         close_poll(now);
         CHECK(poll.control.phase == MAC_POLL_FAULT && !poll.record.protocol);
     } else {
@@ -705,10 +724,110 @@ static void data_delivery(uint8_t empty)
     cases++;
 }
 
+static void arm_handshake(uint8_t ending)
+{
+    mac_tx_interval_t saved;
+    uint16_t token;
+    case_name = "ARM-correlation-cancel-lifetime-failure";
+    begin(1, 100, 511, 256, 100000);
+    input(MAC_JOIN_PREPARED, 0);
+    tick(&event);
+    CHECK(action.kind == MAC_JOIN_ACTION_ARM && tx.engine.phase == MAC_TX_DRAW);
+    token = action.token;
+    saved = tx;
+    input(MAC_JOIN_ARMED, 0); event.token++;
+    tick(&event);
+    CHECK(!memcmp(&tx, &saved, sizeof(tx)) && !join.armed);
+    input(MAC_JOIN_ARMED, 0); event.token = token; event.generation++;
+    tick(&event);
+    CHECK(!memcmp(&tx, &saved, sizeof(tx)) && !join.armed);
+    input(MAC_JOIN_ARMED, 0); event.token = token; event.epoch++;
+    tick(&event);
+    CHECK(!memcmp(&tx, &saved, sizeof(tx)) && !join.armed);
+    if (!ending) {
+        input(MAC_JOIN_ARMED, 0); event.token = token;
+        tick(&event);
+        CHECK(join.armed && tx.engine.phase == MAC_TX_DRAW_WAIT &&
+              action.radio.control.kind == MAC_TX_ACTION_RANDOM);
+        input(MAC_JOIN_CANCEL, 0);
+    } else if (ending == 1) input(MAC_JOIN_CANCEL, 0);
+    else if (ending == 2) {
+        now = join.deadline;
+        input(MAC_JOIN_ARMED, 0); event.token = token;
+    } else input(MAC_JOIN_FAILURE, 0);
+    tick(&event);
+    CHECK(tx.engine.phase == MAC_TX_DONE && !tx.engine.transmissions &&
+          action.kind == MAC_JOIN_ACTION_DISARM);
+    CHECK(mac_join_release(&join, &tx) == MAC_JOIN_STATE);
+    token = action.token;
+    input(MAC_JOIN_DISARMED, 0); event.token++;
+    tick(&event);
+    CHECK(tx.engine.phase == MAC_TX_DONE);
+    input(MAC_JOIN_DISARMED, 0); event.token = token;
+    tick(&event);
+    CHECK(join.phase == MAC_JOIN_RESTORE);
+    finish();
+    CHECK(record.reason == (ending == 2 ? MAC_JOIN_LIFETIME :
+          ending == 3 ? MAC_JOIN_ADAPTER_ERROR : MAC_JOIN_CANCELLED));
+    cases++;
+}
+
+static void tx_result_closed(uint8_t nested, uint8_t future)
+{
+    uint32_t through = 0;
+    unsigned guard = 0;
+    case_name = "NO_ACK-pre-stop-watermark-not-later-report";
+    begin(nested, UINT32_C(0xffffffc0), 511, 256, 100000);
+    if (nested) request_success();
+    else prepare();
+    while (tx.engine.phase != MAC_TX_DONE) {
+        CHECK(++guard < 40);
+        if (tx.engine.phase == MAC_TX_STOPPING) now += 7u;
+        pump(1, 2);
+        if (event.source.source.kind == MAC_TX_EVENT_RX_CLOSED)
+            through = MAC_LINK_FLOOR(event.source.upper);
+    }
+    CHECK(consumer()->record.protocol == MAC_POLL_NO_ACK &&
+          consumer()->record.cause == MAC_POLL_TX_RESULT &&
+          consumer()->record.stamp == now && through != now);
+    close_poll(future ? now+1u : through);
+    if (future) {
+        CHECK(!consumer()->control.closed && consumer()->control.reason == MAC_POLL_ADAPTER_ERROR);
+        close_poll(now);
+        CHECK(poll.control.phase == MAC_POLL_FAULT && mac_poll_release(&poll, &tx) == MAC_POLL_STATE);
+    } else {
+        CHECK(consumer()->control.closed && !consumer()->control.reason && !consumer()->control.cleanup_error);
+        finish();
+    }
+    cases++;
+}
+
+static void decision_requires_coverage(uint8_t pending)
+{
+    case_name = "FRAME-or-PENDING_ZERO-still-needs-coverage";
+    if (pending) {
+        begin(0, 100, 1, 256, 100000);
+        prepare(); poll_ack(0);
+    } else {
+        opened(0, 100, 1);
+        frame_event(a+300u, 1, 1, sizeof(response));
+        tick(&event);
+    }
+    CHECK(poll.record.protocol && poll.record.cause != MAC_POLL_TX_RESULT);
+    close_poll(poll.record.stamp-1u);
+    CHECK(!poll.control.closed && poll.control.reason == MAC_POLL_ADAPTER_ERROR);
+    close_poll(now);
+    CHECK(poll.control.phase == MAC_POLL_FAULT && mac_poll_release(&poll, &tx) == MAC_POLL_STATE);
+    cases++;
+}
+
 int main(void)
 {
     static const uint16_t phases[] = {0, 1, 511};
     unsigned f, wrap, nested, k;
+    tx_result_closed(0, 0); tx_result_closed(1, 0); tx_result_closed(0, 1);
+    decision_requires_coverage(0); decision_requires_coverage(1);
+    for (k = 0; k < 4; k++) arm_handshake((uint8_t)k);
     for (wrap = 0; wrap < 2; wrap++)
         for (f = 0; f < sizeof(phases) / sizeof(phases[0]); f++) {
             uint32_t start = wrap ? UINT32_C(0xffffffc0) : 100;
@@ -730,7 +849,7 @@ int main(void)
         classification(2, (uint8_t)k);
     }
     stale_duplicate(); order_error();
-    for (k = 0; k < 11; k++) ack_witness((uint8_t)k);
+    for (k = 0; k < 12; k++) ack_witness((uint8_t)k);
     response_spans(); fine_tick_frame();
     data_delivery(0); data_delivery(1);
     for (nested = 0; nested < 2; nested++) {

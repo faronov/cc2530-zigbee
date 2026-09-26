@@ -157,6 +157,11 @@ static uint16_t receive(void)
     else
         now = scan.window_end;
     local(MAC_SCAN_EVENT_CLOSED);
+    if (scenario == ORDINARY && scan.channel == 11) {
+        /* Drain reports advanced last to end+5; the actual pre-stop watermark
+         * remains end. Delivery latency cannot move coverage forward. */
+        event.stamp = scan.window_end;
+    }
     event.state.rx_on = 0;
     return 0;
 }

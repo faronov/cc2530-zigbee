@@ -54,7 +54,7 @@ typedef struct {
 typedef union {
     mac_scan_event_t scan;
     mac_join_event_t association;
-    mac_tx_event_t tx;
+    NWK_APS_EVENT_T tx;
     security_keys_config_t installed;
 } bdb_join_event_data_t;
 
@@ -68,7 +68,7 @@ typedef struct {
 typedef union {
     mac_scan_action_t scan;
     mac_join_action_t association;
-    mac_tx_action_t tx;
+    NWK_APS_ACTION_T tx;
     security_keys_config_t install;
 } bdb_join_action_data_t;
 
@@ -119,7 +119,7 @@ typedef struct {
     bdb_join_scan_result_t scan_result;
     mac_join_record_t record;
     nwk_parent_choice_t parent;
-    mac_tx_t BDB_JOIN_RAM *owner;
+    NWK_APS_TX_T BDB_JOIN_RAM *owner;
     uint32_t last, until, keepalive, epoch, commission_until, work_at;
     uint16_t token, steps;
     uint8_t version, phase, result, cleanup_error, attempts, issued, member;
@@ -151,7 +151,7 @@ typedef struct {
  * commissioning abandonment/address conflict still requests genuine Leave.
  */
 bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now) JOIN_FAR;
-bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_t BDB_JOIN_RAM * volatile owner,
+bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, NWK_APS_TX_T BDB_JOIN_RAM * volatile owner,
     const bdb_join_config_t * volatile config, volatile uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now,
     const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action) JOIN_FAR;
@@ -163,7 +163,22 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
 bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result) JOIN_FAR;
+#if defined(CC2530_MAC_LINK)
+/* ACTION_TX/NWK_APS_ACTION_ARM is a one-shot adapter preparation request.
+ * Confirm the unchanged slot identity after physical prepare, before RANDOM.
+ * No RX coverage is implied; OFF gaps around ordinary TX remain explicit.
+ */
+bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    uint32_t generation, uint8_t retry, uint8_t nb) JOIN_FAR;
+bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+    uint32_t generation, uint8_t retry, uint8_t nb) JOIN_FAR;
+#endif
 
+/* CC2530_MAC_LINK selects the observed interval owner for scan, association
+ * and transport; TX events/actions are interval types. The retained Response
+ * stamp is then a conservative upper bound, so security waits measured from it
+ * are never shorter than configured.
+ */
 /* Public context fields are read-only diagnostics. Inspect workspace before
  * reading work.scan, work.association or work.runtime; inactive union members
  * are not diagnostics. A successful release precedes every reuse. Association

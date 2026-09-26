@@ -274,6 +274,17 @@ unbounded delayed packets after an eight-bit counter has been reused.
 NWK commands do not consume an APS counter, so parent keepalive and Leave
 remain available during APS wrap quarantine.
 
+Under `CC2530_MAC_LINK` the transport and BDB owner is the interval MAC owner.
+The transport does not step its submitted frame in the same call. It issues
+`NWK_APS_ACTION_ARM` (5) and waits for a correlated `bdb_join_armed` after real
+adapter preparation. Before releasing a DONE slot it issues
+`NWK_APS_ACTION_DISARM` (6) and waits for `bdb_join_disarmed`. A matched
+ARMED is accepted even when a cancel or stop arrived after ARM; the transport
+then cancels through DONE and DISARM. It does not re-ARM a stopping or
+cancelled ordinary transmission after a retry. See the
+[link driver](MAC_LINK_DRIVER.md#preparation-handshakes); it is host-tested
+end to end and compile-checked, not linked into an MCU image.
+
 ## Endpoint zero
 
 `zdo_runtime` takes only packets admitted by the real transport. It supplies

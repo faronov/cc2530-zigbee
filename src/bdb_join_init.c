@@ -19,7 +19,7 @@ bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile
  * Both initializations finish before any runtime API can be admitted.
  */
 bdb_join_result_t bdb_join_runtime_init(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    mac_tx_t BDB_JOIN_RAM * volatile owner, const bdb_join_config_t * volatile config,
+    NWK_APS_TX_T BDB_JOIN_RAM * volatile owner, const bdb_join_config_t * volatile config,
     volatile uint32_t now)
 {
     ctx->workspace = BDB_JOIN_WORK_NONE;
@@ -30,7 +30,7 @@ bdb_join_result_t bdb_join_runtime_init(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     return BDB_JOIN_OK;
 }
 
-bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_t BDB_JOIN_RAM * volatile owner,
+bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, NWK_APS_TX_T BDB_JOIN_RAM * volatile owner,
     const bdb_join_config_t * volatile config, volatile uint32_t now)
 {
     bdb_join_result_t result = bdb_join_advance(ctx, now);
@@ -42,7 +42,7 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, mac_tx_
         config->scan.saved.channel != config->association.saved.channel ||
         config->scan.saved.filter != config->association.saved.filter ||
         config->scan.saved.rx_on != config->association.saved.rx_on) return BDB_JOIN_ARGUMENT;
-    if (ctx->phase != BDB_JOIN_IDLE || owner->phase != MAC_TX_IDLE) return BDB_JOIN_STATE;
+    if (ctx->phase != BDB_JOIN_IDLE || BDB_JOIN_ENGINE(owner)->phase != MAC_TX_IDLE) return BDB_JOIN_STATE;
     if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
     if (bdb_join_keys.phase != SECURITY_KEYS_PROVISIONED) return BDB_JOIN_RECOVERY_REQUIRED;
     if (config->scan.channels != (1UL << bdb_join_keys.config.channel) ||

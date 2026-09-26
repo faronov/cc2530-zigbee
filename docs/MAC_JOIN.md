@@ -388,14 +388,29 @@ macResponseWaitTime has elapsed. A Request `TIMING_UNCERTAIN` or POLL
 `MAC_JOIN_TIMING_UNCERTAIN` (10). It is never a fabricated protocol
 outcome. Retries, refusal and Response semantics are unchanged.
 
+The Request is not stepped in the same call as its submit, because adapter
+preparation needs the owner in DRAW:
+- After submit, and after each retry that returns to DRAW, join issues
+  `MAC_JOIN_ACTION_ARM` (7). Only a correlated `MAC_JOIN_ARMED` (9) allows the
+  first observed step.
+- Before releasing a DONE slot it issues `MAC_JOIN_ACTION_DISARM` (8) and needs
+  `MAC_JOIN_DISARMED` (10). This includes cancellation before ARMED.
+- Cancellation or lifetime expiry while waiting never draws randomness or
+  transmits.
+- PREPARE/RECEIVE confirm an installed configuration with the adapter OFF and
+  drained. They do not confirm receive coverage.
+
+See the [link driver](MAC_LINK_DRIVER.md#preparation-handshakes).
+
 The shared corpus is `tests/test_mac_link_join.c`. With banked-join flags,
-the SDCC 4.2.0 link profile is 7579 `BJ_BANK2` CODE bytes (exact 7189),
-XSEG 270 (240) and DATA 7 (5). The external workspace grows from 645 to 653
+the SDCC 4.2.0 link profile is 7784 `BJ_BANK2` CODE bytes (exact 7189),
+XSEG 270 (240) and DATA 7 (5). The external workspace grows from 645 to 655
 bytes. The exact profile's compiled instructions are unchanged for both boards
 and banked flags. All 22 `mac_join_<n>_test.ihx`, parsed maps and memory
 reports are byte-identical. The 22 manifest pins and compile-only
 `WORKSPACE_PINS` (rel/asm/lst) were refreshed only because source-line records
-moved. Evidence level: **host-tested and SDCC compile-checked**.
+moved, and again for the ARM handshake (including one split exact-profile
+condition). Evidence level: **host-tested and SDCC compile-checked**.
 
 ## Reproducible evidence and historical resources
 

@@ -213,8 +213,8 @@ It does not relax the captured-event contract, use a ceil-rounded future
 clock as now, or equate ordinary-TX retirement with physical RF-off.
 Remaining #13/#14 work after the opt-in
 [interval consumer profile](MAC_SCAN.md#interval-consumer-profile-cc2530_mac_link)
-is a link driver that binds scan/POLL/association to the adapter and actual
-integration into the complete banked join. The raw
+is actual integration of the [link driver](MAC_LINK_DRIVER.md), which binds
+scan/POLL/association to the adapter, into the complete banked join. The raw
 attempt's AUTOACK-off phase alone still cannot be called a complete POLL lease.
 The physical, entropy/NV and #45 full-MLME conformance gates remain separate.
 Never flash or publish `mac_tx_interval_test.ihx` as board firmware.

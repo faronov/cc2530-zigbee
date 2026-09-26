@@ -674,6 +674,12 @@ The gated [interval consumer profile](docs/MAC_SCAN.md#interval-consumer-profile
 runs scan, POLL, Association and join over the observed interval MAC owner;
 it is host-tested and SDCC compile-checked only, without an adapter driver or
 linked image. Code `4b9b747` passed [full CI, 110/110 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36226384354).
+The [link driver](docs/MAC_LINK_DRIVER.md) binds the complete BDB join to the
+real adapter. Explicit ARM/DISARM handshakes keep preparation correlated. A
+host end-to-end test covers an authenticated READY join, protected data and
+keepalive through the real adapter/radio services over the host MMIO model,
+plus fourteen failure, retry and cancellation cases. It is host-tested and SDCC compile-checked only, not
+an MCU image or hardware result.
 
 ## Offline MAC transmission state
 

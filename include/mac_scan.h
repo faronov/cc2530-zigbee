@@ -152,6 +152,8 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
  * CC2530_MAC_LINK instead grants one mac_tx_observed_step with interval input.
  * OPENED is then a post-open observation, BEACON is ordered delivery before
  * CLOSED, and CLOSED carries a loss-free watermark at or after window_end.
+ * That saved pre-stop watermark may precede the foreground delivery clock
+ * and earlier drain-report clocks; it is never moved forward while RX is off.
  */
 mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
                                 mac_scan_tx_t MAC_SCAN_RAM * volatile tx,

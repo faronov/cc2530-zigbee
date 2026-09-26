@@ -1497,10 +1497,12 @@ test-mac-reconfig: $(BUILD)/host-mac-reconfig-tests $(BUILD)/host-mac-reconfig-t
 	$(BUILD)/host-mac-reconfig-tests-sanitize
 
 # Interval-aware scan/POLL/association consumers over the observed MAC owner.
-# Native corpora plus banked SDCC compile checks; no linked link-profile image yet.
+# Native corpora plus banked SDCC compile checks of the scan/POLL/join and
+# transport/BDB link-profile objects; no linked link-profile image yet.
 MAC_LINK_DEFINES := -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_LINK
 MAC_LINK_DIR := $(BUILD)/mac-link
-MAC_LINK_OBJECTS := $(addprefix $(MAC_LINK_DIR)/,mac_tx.rel mac_scan.rel mac_poll.rel mac_association.rel mac_join.rel)
+MAC_LINK_OBJECTS := $(addprefix $(MAC_LINK_DIR)/,mac_tx.rel mac_scan.rel mac_poll.rel mac_association.rel mac_join.rel \
+	nwk_aps.rel nwk_aps_transmit.rel zdo_runtime.rel bdb_join.rel bdb_join_init.rel)
 MAC_LINK_SCAN_SRC := src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/mac_scan.c
 MAC_LINK_JOIN_SRC := src/mac_frame.c src/mac_tx.c src/mac_poll.c src/mac_association.c src/mac_join.c
 $(MAC_LINK_DIR):
@@ -1517,12 +1519,40 @@ $(BUILD)/host-mac-link-join-tests: tests/test_mac_link_join.c $(MAC_LINK_JOIN_SR
 $(BUILD)/host-mac-link-join-tests-sanitize: tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DEFINES) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_join.c $(MAC_LINK_JOIN_SRC) -o $@
 
+# Link driver: BDB join -> interval consumers -> real adapter/radio over host MMIO
+# with a synthetic coordinator/TC. Host end-to-end plus banked SDCC compile checks
+# of the driver composition; no linked driver image yet.
+MAC_LINK_DRIVER_DEFINES := $(MAC_RECONFIG_DEFINES) -DCC2530_MAC_LINK
+MAC_LINK_DRIVER_DIR := $(BUILD)/mac-link-driver
+MAC_LINK_DRIVER_MODULES := mac_tx mac_scan mac_poll mac_association mac_join nwk_aps nwk_aps_transmit \
+	zdo_runtime bdb_join bdb_join_init mac_link_driver
+MAC_LINK_DRIVER_OBJECTS := $(addprefix $(MAC_LINK_DRIVER_DIR)/,$(addsuffix .rel,$(MAC_LINK_DRIVER_MODULES)))
+MAC_LINK_E2E_SRC := $(ED_JOIN_SRC) $(filter-out src/timebase.c,$(MAC_ATTEMPT_SRC)) src/mac_adapter.c src/mac_link_driver.c
+MAC_LINK_E2E_INPUTS := tests/test_mac_link_e2e.c tests/mac_link_peer.c tests/mac_link_peer.h $(MAC_ADAPTER_TEST_INPUTS) \
+	tests/mac_adapter_trace.h $(ED_MODEL_SRC) $(MAC_LINK_E2E_SRC) $(HEADERS) tests/security_joint_model.h \
+	tests/security_aes_model.h $(MAC_ADAPTER_BANK_DIR)/mac_adapter_layout.h Makefile
+$(MAC_LINK_DRIVER_DIR):
+	mkdir -p $@
+$(MAC_LINK_DRIVER_OBJECTS): $(MAC_LINK_DRIVER_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(MAC_LINK_DRIVER_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_DRIVER_DEFINES) --dataseg BJ_$* \
+		$(foreach b,1 2 3 4,$(if $(filter $*,$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) \
+		$(if $(filter mac_link_driver,$*),--codeseg BJ_BANK4) -c $< -o $@
+$(BUILD)/host-mac-link-e2e-tests: $(MAC_LINK_E2E_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DRIVER_DEFINES) -I$(MAC_ADAPTER_BANK_DIR) tests/test_mac_link_e2e.c tests/mac_link_peer.c \
+		$(ED_MODEL_SRC) $(MAC_LINK_E2E_SRC) -o $@
+$(BUILD)/host-mac-link-e2e-tests-sanitize: $(MAC_LINK_E2E_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DRIVER_DEFINES) -I$(MAC_ADAPTER_BANK_DIR) -fsanitize=address,undefined -fno-sanitize-recover=all \
+		-fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_link_e2e.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_E2E_SRC) -o $@
+
 test-mac-link: $(BUILD)/host-mac-link-scan-tests $(BUILD)/host-mac-link-scan-tests-sanitize \
-		$(BUILD)/host-mac-link-join-tests $(BUILD)/host-mac-link-join-tests-sanitize $(MAC_LINK_OBJECTS)
+		$(BUILD)/host-mac-link-join-tests $(BUILD)/host-mac-link-join-tests-sanitize $(MAC_LINK_OBJECTS) \
+		$(BUILD)/host-mac-link-e2e-tests $(BUILD)/host-mac-link-e2e-tests-sanitize $(MAC_LINK_DRIVER_OBJECTS)
 	$(BUILD)/host-mac-link-scan-tests
 	$(BUILD)/host-mac-link-scan-tests-sanitize
 	$(BUILD)/host-mac-link-join-tests
 	$(BUILD)/host-mac-link-join-tests-sanitize
+	$(BUILD)/host-mac-link-e2e-tests
+	$(BUILD)/host-mac-link-e2e-tests-sanitize
 
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@

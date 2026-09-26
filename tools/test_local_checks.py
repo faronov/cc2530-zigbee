@@ -144,30 +144,48 @@ class LocalChecksTests(unittest.TestCase):
                 self.assertFalse(any("-DCC2530_MAC_RECONFIG" in args for args in recipe(board, unit)))
 
     def test_interval_consumers_gate_only_their_own_objects_and_native_builds(self):
-        gated = ("mac_tx", "mac_scan", "mac_poll", "mac_association", "mac_join")
-        banks = {"mac_scan": "BJ_BANK3"}
+        gated = ("mac_tx", "mac_scan", "mac_poll", "mac_association", "mac_join",
+                 "nwk_aps", "nwk_aps_transmit", "zdo_runtime", "bdb_join", "bdb_join_init")
+        driver = gated + ("mac_link_driver",)
+        banks = {"mac_scan": "BJ_BANK3", "bdb_join": "BJ_BANK3", "bdb_join_init": "BJ_BANK3",
+                 "nwk_aps": "BJ_BANK4", "nwk_aps_transmit": "BJ_BANK4", "zdo_runtime": "BJ_BANK4",
+                 "mac_link_driver": "BJ_BANK4"}
+        full = {"-DCC2530_MAC_RADIO", "-DCC2530_MAC_ATTEMPT", "-DCC2530_MAC_HANDOFF",
+                "-DCC2530_MAC_ADAPTER", "-DCC2530_MAC_RECONFIG"}
         for board in BOARDS:
             commands = recipe(board, "mac-link")
-            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
-            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles), gated)
-            for args in compiles:
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args
+                        and "-DCC2530_MAC_LINK" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles), gated + driver)
+            for index, args in enumerate(compiles):
                 stem = Path(args[-1]).stem
-                self.assertEqual(Path(args[-1]).parent.name, "mac-link")
+                self.assertEqual(Path(args[-1]).parent.name, "mac-link" if index < len(gated) else "mac-link-driver")
                 self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_JOIN",
                                  "-DCC2530_MAC_INTERVAL", "-DCC2530_MAC_OBSERVED",
                                  "-DCC2530_MAC_LINK"} <= set(args))
+                self.assertEqual(full <= set(args), index >= len(gated))
+                self.assertNotIn("-DCC2530_BANKED_MAC", args)
                 self.assertEqual(args[args.index("--codeseg") + 1], banks.get(stem, "BJ_BANK2"))
                 self.assertEqual(args[args.index("--dataseg") + 1], "BJ_" + stem)
+            self.assertTrue(all(Path(args[-1]).parent.name == "mac-adapter" for args in commands
+                                if args[0] == "sdcc" and "-c" in args and args not in compiles))
             native = [args for args in commands if args[0] == "cc"]
-            self.assertEqual(len(native), 4)
+            self.assertEqual(len(native), 6)
             self.assertTrue(all({"-DCC2530_MAC_INTERVAL", "-DCC2530_MAC_OBSERVED", "-DCC2530_MAC_LINK"}
                                 <= set(args) for args in native))
-            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 2)
-            runs = [Path(args[0]).name for args in commands if args[0] not in ("cc", "sdcc", "mkdir")]
+            e2e = [args for args in native if "tests/test_mac_link_e2e.c" in args]
+            self.assertEqual(len(e2e), 2)
+            self.assertTrue(all(full <= set(args) and "src/mac_link_driver.c" in args
+                                and "-DMAC_ADAPTER_TRACE" not in args and "-DCC2530_BANKED_MAC" not in args
+                                for args in e2e))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 3)
+            runs = [Path(args[0]).name for args in commands if args[0] not in ("cc", "sdcc", "mkdir", "cp")
+                    and not any("verify_mac_adapter.py" in arg for arg in args)]
             self.assertEqual(runs, ["host-mac-link-scan-tests", "host-mac-link-scan-tests-sanitize",
-                                    "host-mac-link-join-tests", "host-mac-link-join-tests-sanitize"])
+                                    "host-mac-link-join-tests", "host-mac-link-join-tests-sanitize",
+                                    "host-mac-link-e2e-tests", "host-mac-link-e2e-tests-sanitize"])
             self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
-            for unit in ("compositions", "bringup", "banked-join-success", "mac-adapter"):
+            for unit in ("compositions", "bringup", "banked-join-success", "mac-adapter", "mac-reconfig"):
                 self.assertFalse(any("-DCC2530_MAC_LINK" in args for args in recipe(board, unit)))
 
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):

@@ -453,6 +453,22 @@ context stores `ack_end = A`, `ack_upper = B`, `accept_end = A+F` and
 | NO_DATA timeout | CLOSED through `>= ACK end+F` | loss-free CLOSED through `>= B+F` |
 | Delivery stamp | captured PPDU end | conservative upward-rounded observation bound |
 
+Under the profile, PREPARED confirms installed PAN/channel/local address
+with the adapter OFF and drained. It does not assert prior RX coverage:
+- The caller prepares the DRAW slot with `KEEP_AUTOACK` before the first
+  granted step.
+- Raw response RX is armed by the Data Request's TX end.
+- The guarded first-ACK handoff must complete before normal frame processing.
+  A failure is a terminal local adapter error, never NO_DATA.
+
+ACK acceptance checks report order (source stamp after the last foreground
+report) separately from the physical bounds. The ACK lower bound must not
+precede the retained TX lower bound. A NO_ACK or CHANNEL_ACCESS decision
+(cause `MAC_POLL_TX_RESULT`) rests on the MAC's closed-ACK-window or CCA
+evidence, with the adapter already OFF and drained. Its CLOSED watermark need
+not reach the later report stamp; every other closure check is unchanged. See the
+[link driver](MAC_LINK_DRIVER.md#composition-policy).
+
 CRC, channel, codec and address classification happen before the timing
 check, so an unrelated or corrupt frame is still ignored instead of becoming
 uncertain. `MAC_ASSOCIATION` is unchanged in code. Under the profile, its forwarded FRAME
@@ -460,7 +476,8 @@ and RESPONSE stamps are the same conservative upper bounds, and the
 contextual window still intersects POLL's proven acceptance window.
 
 `tests/test_mac_link_join.c` drives the real observed interval engine,
-codecs, POLL, Association and join controllers: 136 cases and 7248 checks,
+codecs, POLL, Association and join controllers: 146 cases and 8185 checks
+(136/7248 before the ARM handshake, 141/7685 before the TX-result closure fix),
 natively and under nonrecovering ASan/UBSan. It covers the successful
 Association sequence, Pending 0, closure and boundaries, fine phases, wrap,
 retries, stale/duplicate reports, classification, cancellation, budgets,
@@ -470,12 +487,12 @@ exclusive acceptance, ambiguity reported as NO_DATA, a missing closure-coverage
 check, and Request ACK lower or floor used as the upper bound.
 
 With the banked-join flags and SDCC 4.2.0, the link profile's `BJ_BANK2`
-CODE is 7864 bytes versus 7626, with XSEG 319 versus 299 and DATA 11 versus 5.
+CODE is 8057 bytes versus 7626, with XSEG 319 versus 299 and DATA 11 versus 5.
 The context is 274 bytes and the control structure is 131 bytes. The
 additional DATA must be proved in the combined image. Without the flag the
 compiled SDCC instructions are unchanged for both boards and banked flags;
 `mac_poll_test.ihx` is byte-identical, and only the source-line part of the
-complete F/S/L/T metadata digest was refreshed (22456 records).
+complete F/S/L/T metadata digest was refreshed (22457 records).
 Evidence level: **host-tested and SDCC compile-checked**, with no linked
 link-profile image, adapter driver or hardware observation.
 

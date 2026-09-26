@@ -298,7 +298,13 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
         return MAC_JOIN_INVALID;
     if (event != NULL) {
         input = *event;
-        if (input.kind < MAC_JOIN_PREPARED || input.kind > MAC_JOIN_SOURCE || input.crc_valid > 1
+        if (input.kind < MAC_JOIN_PREPARED ||
+#if defined(CC2530_MAC_LINK)
+                input.kind > MAC_JOIN_DISARMED ||
+#else
+                input.kind > MAC_JOIN_SOURCE ||
+#endif
+                input.crc_valid > 1
                 || (input.kind == MAC_JOIN_FRAME && (input.body == NULL || !input.serial
                     || input.channel < 11 || input.channel > 26))
                 || ((input.kind == MAC_JOIN_TX || input.kind == MAC_JOIN_SOURCE)
@@ -390,6 +396,11 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
             } else {
                 j->tx_generation = ENGINE(owner)->generation;
                 j->phase = MAC_JOIN_REQUEST;
+#if defined(CC2530_MAC_LINK)
+                j->armed = j->disarmed = 0;
+                issue(MAC_JOIN_ACTION_ARM);
+                goto publish;
+#endif
             }
         } else if (!j->issued) {
             issue(MAC_JOIN_ACTION_PREPARE);
@@ -399,6 +410,17 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
         }
     }
     if (j->phase == MAC_JOIN_REQUEST) {
+#if defined(CC2530_MAC_LINK)
+        if (!j->armed && !j->stopping && ENGINE(owner)->phase != MAC_TX_DONE) {
+            if (kind == MAC_JOIN_ARMED && matched && j->issued == MAC_JOIN_ACTION_ARM) {
+                j->armed = 1;
+                j->issued = 0;
+            } else {
+                if (j->issued != MAC_JOIN_ACTION_ARM) issue(MAC_JOIN_ACTION_ARM);
+                goto publish;
+            }
+        }
+#endif
         source = NULL;
 #if defined(CC2530_MAC_LINK)
         if (kind == MAC_JOIN_SOURCE && (SOURCE(input).kind != MAC_TX_EVENT_ACK_INTERVAL || input.crc_valid))
@@ -425,6 +447,12 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
             }
             if (RADIO.kind)
                 output.kind = MAC_JOIN_ACTION_RADIO;
+#if defined(CC2530_MAC_LINK)
+            if (ENGINE(owner)->phase == MAC_TX_DRAW) {
+                j->armed = 0;
+                issue(MAC_JOIN_ACTION_ARM);
+            }
+#endif
             if (before == MAC_TX_ACK_WAIT && ENGINE(owner)->phase == MAC_TX_STOPPING && ENGINE(owner)->outcome == MAC_TX_ACKED) {
 #if defined(CC2530_MAC_LINK)
                 j->record.request_ack = MAC_LINK_CEIL(input.source.upper);
@@ -444,6 +472,17 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
             goto publish;
         }
         if (ENGINE(owner)->phase == MAC_TX_DONE) {
+#if defined(CC2530_MAC_LINK)
+            if (!j->disarmed) {
+                if (kind == MAC_JOIN_DISARMED && matched && j->issued == MAC_JOIN_ACTION_DISARM) {
+                    j->disarmed = 1;
+                    j->issued = 0;
+                } else {
+                    if (j->issued != MAC_JOIN_ACTION_DISARM) issue(MAC_JOIN_ACTION_DISARM);
+                    goto publish;
+                }
+            }
+#endif
             j->record.tx_outcome = ENGINE(owner)->outcome;
             j->record.tx_rc = release(owner);
             if (j->record.tx_rc != MAC_TX_OK) {

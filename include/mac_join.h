@@ -25,6 +25,12 @@
 #define MAC_JOIN_ACTION_CLOSE 4u
 #define MAC_JOIN_ACTION_RESTORE 5u
 #define MAC_JOIN_ACTION_RADIO 6u
+#if defined(CC2530_MAC_LINK)
+#define MAC_JOIN_ACTION_ARM 7u
+#define MAC_JOIN_ACTION_DISARM 8u
+#define MAC_JOIN_ARMED 9u
+#define MAC_JOIN_DISARMED 10u
+#endif
 #define MAC_JOIN_PREPARED 1u
 #define MAC_JOIN_TX 2u
 #define MAC_JOIN_FRAME 3u
@@ -123,6 +129,9 @@ typedef struct {
     uint16_t steps, token, issued_token, child_token;
     uint8_t version, phase, issued;
     uint8_t stopping, stop_steps, taken, window, restored, uncertain;
+#if defined(CC2530_MAC_LINK)
+    uint8_t armed, disarmed;
+#endif
 } mac_join_t;
 
 /* Fresh memory/adapter epoch only; never recovery or radio restoration.
@@ -142,7 +151,18 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx,
 /* RADIO is an observed Request action; TX grants one POLL observed step.
  * Only interval submit/copy/release and observed stepping may use this owner.
  * tx_cancel asks for a current-identity CANCEL; SOURCE is never retimestamped.
- * RECEIVE/CLOSE retain the continuous RX/ACK/loss-free drain obligations.
+ * PREPARED confirms the installed logical configuration, OFF and drained,
+ * not receive coverage. ARM is issued after submit and after each retry,
+ * with the owner still DRAW. ARMED echoes epoch/generation/token only after
+ * actual adapter preparation; no ordinary step precedes it. Cancellation
+ * while waiting only cancels the slot, never draws random or starts TX.
+ * A prepared but unattempted slot must be unprepared before RESTORED.
+ * DISARM/DISARMED retires preparation rights before releasing the DONE slot,
+ * including cancellation before ARMED. It never substitutes for TX retirement.
+ * RECEIVE has the same OFF logical preparation meaning for POLL. Its raw
+ * response RX starts by Data Request TX end; KEEP_AUTOACK must establish
+ * the guarded first-ACK handoff or fail locally. No OFF gap is coverage.
+ * CLOSE retains ordered loss-free drainage and ACK/IFS obligations.
  */
 #else
 /* RADIO contains one actual Request mac_tx_step action; SOURCE returns its real
