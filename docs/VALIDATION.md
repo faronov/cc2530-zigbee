@@ -345,6 +345,14 @@ compile-checked**. Code `6f648f5` passed
 generic, 87 s LG), all other workers with the refreshed pins, the plan job and
 the acceptance gate.
 
+The subsequent [SDCC resource comparison](MAC_LINK_DRIVER.md#sdcc-resource-comparison)
+uses the same committed sources on both boards with 4.2.0 and 4.6.0.
+Successful subsets reduce CODE but save no XDATA; compilation failures
+prevent a complete 4.6 total or accepted image. The 4.2 baseline retains its
+strict image/ABI gates and a fresh selected `network-key-late` simulation
+reaches SP7B/7C. Neither this object experiment nor that exact-profile
+simulation is combined LINK-image acceptance or new full-CI evidence.
+
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
 

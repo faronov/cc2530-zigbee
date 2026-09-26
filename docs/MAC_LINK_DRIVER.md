@@ -194,11 +194,96 @@ result. No hardware was accessed. Code `6f648f5` passed
 [full Actions 36237016492](https://github.com/faronov/cc2530-zigbee/actions/runs/36237016492),
 **110/110 jobs**.
 
+## SDCC resource comparison
+
+The 2026-09-26 offline experiment compares the unchanged sources at
+`0ca84cdf8f074b8c8f699d509580b612f98241b1` using SDCC 4.2.0 #13081 and
+the official stable **4.6.0 #16555** (released 2026-06-22). The latter runs
+from an isolated directory, not a replacement system installation.
+The [upstream Linux amd64 archive](https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.6.0/sdcc-4.6.0-amd64-unknown-linux2.5.tar.bz2/download)
+has SHA-256
+`f6b929c62ed3082a26087885e0f1f9bf41878602ef1f57e40b11b4a01bf4f366`;
+the published SHA-1 and MD5 were also checked. No proprietary toolchain was
+available or evaluated. Compiler/runtime licenses remain upstream's.
+
+The experiment compiles all **38 unique production modules** in
+`MAC_LINK_E2E_SRC`, not just the eleven changed-module targets. It uses
+`-mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror`, the
+existing banked-join/link/adapter/reconfiguration defines and per-module
+DATA/CODE area names. These separate-profile area names are not a proposed
+combined placement map. Host fixtures, banker and compiler runtime are
+excluded from production object sums. Both board definitions agree.
+
+Complete SDCC 4.2.0 object measurements, in bytes except BSEG:
+
+| Profile | Modules | CODE | CONST | XSEG | DATA sum | OSEG sum | BSEG bits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Exact join production | 30 | 141048 | 16 | 5320 | 327 | 52 | 47 |
+| LINK production | 38 | 204166 | 55 | 7264 | 497 | 77 | 66 |
+| LINK with `--nogcse` | 38 | 210318 | 55 | 7575 | 327 | 63 | 66 |
+
+XISEG is zero. DATA/OSEG sums are **not concurrent IRAM usage or stack
+measurements**. Disabling global common-subexpression elimination trades
+170 summed DATA bytes for **311 more XDATA bytes**, not a solution to the
+XDATA deficit. The shipped SDCC User Guide section 3.3.4 describes this
+spill tradeoff and excludes mcs51 from `--max-allocs-per-node` effects.
+
+There is **no complete 4.6.0 total or accepted new-compiler image**:
+
+- The unchanged banked build stops at the reviewed-version gate in
+  `include/banked.h`. This expected rejection is not itself a compiler bug.
+- Compiling identical, unedited 4.2-preprocessed input with both compilers
+  provides an object-only diagnostic, not a supported 4.6 banked build.
+  It exposes banked declaration/definition conflicts and an internal
+  compiler error in `ed_wire`. The 4.2 direct/preprocessed control matches.
+- A separate direct, nonbanked LINK reference still hits compiler internal
+  errors in `ed_wire`, `bdb_join`, `bdb_join_init` and `mac_link_driver`.
+  No production source, version macro or acceptance guard was changed.
+
+Only like-for-like successful subsets can be compared:
+
+| Diagnostic | Paired modules | 4.6 minus 4.2 CODE | XDATA |
+| --- | ---: | ---: | ---: |
+| Identical preprocessed banked LINK input | 27 | -1378 | **0** |
+| Direct nonbanked LINK reference | 34 | -2962 | **0** |
+
+Actual SDCC layouts are unchanged across releases and boards: LINK
+`bdb_join_t` is 1696 bytes (exact 1676), `mac_tx_interval_t` 180 and
+`mac_link_driver_t` 304. Embedded event/action/configuration fields are not
+counted again. The current unmodified composition therefore needs at least
+**7264 + 1696 + 180 + 304 = 9444 ordinary XDATA bytes**, exceeding 7680 by
+**1764 bytes before banker/libc/additional caller storage**. This supersedes
+the earlier rough 1.3–1.5 KB shortfall estimate.
+
+A small original control uses two disjoint leaf calls with 64-byte volatile
+automatic arrays. Both compilers allocate 131 XSEG bytes, just as with two
+persistent arrays; `--nooverlay` does not change that. CODE decreases
+128 to 122 bytes without freeing RAM. The small-model control does overlay
+the automatic arrays into 64 OSEG bytes, versus 128 DATA for persistent arrays
+or `--nooverlay`. That is evidence about a different memory space, not a
+proposed production-model switch or an exhaustive scalar-spill test.
+Upstream's [planned non-stack spill allocation work](https://sourceforge.net/p/sdcc/wiki/NGI0-Commons-SDCC/#a1-efficient-allocation-of-spilt-local-variables-into-non-stack-memory)
+is relevant, but these measurements do not establish that it shipped.
+
+The unchanged **4.2 baseline** passes both-board strict image/ABI checks:
+143242 populated CODE and7512 ordinary XDATA. A fresh, selected
+`network-key-late` simulation executes 58 calls/228 peripheral events per
+board and reaches SP7B under 7C. That is not a new full-suite peak.
+**4.6 stack use is unmeasured**, and no combined LINK image was linked or
+simulated. No hardware was accessed.
+
+Commands, hashes, per-module CSV/JSON, diagnostics and the original control
+are retained in the local `sdcc-resource-comparison` experiment artifacts
+(`reproduce.txt` is the entry point), outside Git and CI uploads.
+The measured recommendation is to retain 4.2.0 for the RAM-lifetime work:
+neither the tested upgrade nor `--nogcse` closes the deficit. Improving SDCC
+itself remains a separate compiler-development task, not an observed saving.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,
 driver and link consumers, within 7680 ordinary XDATA. It needs DATA/stack/ABI
-and alias proofs. A rough object estimate exceeds the budget by about
-1.3–1.5 KB, so a measured RAM reduction is required first. After that come the
-#45 decision, documentation and closure at the documented offline evidence
-level.
+and alias proofs. The measured current allocation floor exceeds the budget
+by 1764 bytes before banker/libc/additional caller storage, so a RAM reduction
+is required first. After that come the #45 decision, documentation and closure
+at the documented offline evidence level.

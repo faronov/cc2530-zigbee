@@ -92,6 +92,11 @@ preparation handshakes and a host end-to-end authenticated join through the
 real adapter, also host-tested and compile-checked only. Remaining #13/#14
 order: one combined banked MCU image within 7680 XDATA (a measured RAM
 reduction first), then documented closure.
+The [compiler comparison](MAC_LINK_DRIVER.md#sdcc-resource-comparison)
+finds no XDATA saving in the successfully compiled SDCC 4.6 subsets and no
+accepted 4.6 image. The current unmodified LINK allocation floor is 9444 bytes,
+before banker/libc/additional caller storage; upgrading alone is not the RAM
+reduction step.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute
