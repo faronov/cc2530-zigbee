@@ -318,7 +318,9 @@ records moved, so the POLL F/S/L/T digest, 22 join manifests, join
 `WORKSPACE_PINS` and banked raw-CDB/listing/object pins were refreshed. The
 same calculation reproduces every previous pin from the previous revision. The evidence is
 **host-tested and compile-checked**; there is no link-profile image or MCU
-replay.
+replay. Code `4b9b747` passed [full Actions 36226384354](https://github.com/faronov/cc2530-zigbee/actions/runs/36226384354), **110/110 jobs**:
+both new consumer workers (47 s generic, 37 s LG), all 106 previous workers
+with the refreshed pins, the plan job and the acceptance gate.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
