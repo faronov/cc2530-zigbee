@@ -573,7 +573,7 @@ def main():
     path, image, symbols, debug_raw, memory, listings, objects = load(args.output)
     _, sites, code = verify(image, symbols, debug_raw, memory, listings, objects)
     bad = negatives(image, symbols, debug_raw, memory, listings, objects)
-    require(bad == 61724, "Security artifact-negative coverage changed")
+    require(bad == 61730, f"Security artifact-negative coverage changed: {bad}")
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, False))
     for text in ("", "Max value of stack pointer= 0x7d", "Max value of stack pointer= 0x78"):

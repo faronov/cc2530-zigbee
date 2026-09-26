@@ -133,7 +133,7 @@ case, diagnostic, negative control and15-second simulator deadline remains.
 Each image consumes sixteen listings captured immediately after its own
 link, before a subsequent link can overwrite relocated listings. All source
 storage extents, complete libc boundaries and artifact identities are pinned.
-Artifact-negative counts are99497/93157/92802/89775 respectively. The
+Artifact-negative counts are99515/93175/92820/89793 respectively. The
 existing snapshot/continuation negatives remain; exact shifted peak checks
 are added for every crypto case. Every call also checks inactive services'
 XDATA, with1199/1950/1873/1309 individual inactive-byte mutations.

@@ -449,7 +449,7 @@ def main():
     path, *artifacts = load(args.output)
     allocated = verify(*artifacts)
     bad = negatives(*artifacts)
-    require(bad == 32257, "Counter artifact-negative coverage changed")
+    require(bad == 32269, f"Counter artifact-negative coverage changed: {bad}")
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, False))
     calls = commands = peak = total = runtime = segments = 0

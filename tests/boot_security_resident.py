@@ -82,7 +82,7 @@ PEAKS = {name: tuple(p+0x51-module.STACK for p in module.PEAKS)
          for name, module in (("security", aes), ("mmo", mmo), ("key_hash", keyed))}
 # Exhaustively executed inventories for the new complete compiler artifacts;
 # no old mutation class is omitted. INACTIVE still covers every inactive byte.
-NEGATIVES = {"security": 99497, "mmo": 93157, "key_hash": 92802, "counter": 89775}
+NEGATIVES = {"security": 99515, "mmo": 93175, "key_hash": 92820, "counter": 89793}
 INACTIVE = {
     "security": ((0, 995), (2080, 2284)),
     "mmo": ((0, 995), (1202, 2080), (2207, 2284)),
@@ -416,7 +416,7 @@ def main():
                 changed = values[field] | {m: values[field][m]+b"\n"}
                 rejected(lambda: verifier(**(values | {field: changed})))
                 bad += 1
-        require(bad == NEGATIVES[kind], "Resident complete artifact-negative coverage changed")
+        require(bad == NEGATIVES[kind], f"Resident complete artifact-negative coverage changed: {bad}")
         rejected(lambda: active_frames(edges | {("aes", "security_counter")}, frames))
         rejected(lambda: active_frames(edges | {("timebase", "aes")}, frames))
         rejected(lambda: active_frames(edges, frames | {"timebase": (34, 1)}))

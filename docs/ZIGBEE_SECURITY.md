@@ -154,7 +154,7 @@ The strict proof pins complete CODE, raw CDB before decoding, map, memory,
 all objects, ordered listings and instruction metrics. It checks struct
 fields, public ABI/parameter storage, actual call chains, module/private/libc
 ownership, final AES/fault/register state, complete caller bytes, private
-wipes, unchanged SFRs and exact per-case stack peaks. The61724 artifact negatives
+wipes, unchanged SFRs and exact per-case stack peaks. The61730 artifact negatives
 mutate every CODE byte, map symbol and F/S/L/T metadata record, listings,
 objects and raw line endings, plus54 snapshot faults,3 peak faults and a
 missing physical alias. No existing image, case, deadline or budget is relaxed.

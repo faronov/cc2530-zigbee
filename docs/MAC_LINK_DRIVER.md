@@ -575,6 +575,11 @@ scanned; no tool-side pin needed changing. The21 applicable existing static
 image/fixture guards per board remain intact. Each new CI worker explicitly
 runs all18 ABI-verifier regressions, including wrong counts/PC, stack/canary,
 malformed raw metadata and missing/swapped artifacts.
+The new source-line records add2 security,4 counter and6 resident CDB records,
+with no non-source-line changes. Their exhaustive three-mutations-per-record
+coverage therefore increases by6,12 and18 respectively; the exact count
+guards are refreshed, not relaxed. MMO/key-hash standalone counts, runtime
+cases, stack limits and all existing mutation generators remain unchanged.
 
 ## Remaining #13/#14 work
 

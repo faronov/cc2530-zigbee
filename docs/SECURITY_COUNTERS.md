@@ -173,7 +173,7 @@ memory, objects, listing order/metrics, fields, parameter storage, fences and
 real call chains are pinned; every CODE byte and every F/S/L/T record has
 negative controls. Caller publication, upper IRAM, status tails, unallocated
 XDATA, NV neighbors and unowned peripherals remain guarded.
-There are32257 artifact negatives,204 snapshot/continuation negatives and
+There are32269 artifact negatives,204 snapshot/continuation negatives and
 one missing-IRAM-alias negative; exact sequence/call/segment/peak totals
 are required, not merely printed.
 The complete-join stack reduction uses volatile domain/end/poll/page copies
