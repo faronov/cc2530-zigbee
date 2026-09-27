@@ -125,6 +125,11 @@ OFF/empty retirement and public slot release precede END. Faults retain the
 owner, and initial RX/AUTOACK remains possible. Its58149-byte LG image,
 2539 ordinary XDATA bytes and simulated SP78/7C are a separate composition,
 not combined real-radio join fit or hardware acceptance.
+The subsequent separately authorized LG experiment at `833d6f5` observed
+one actual MAC transmission and an exact independent `MAC1` reception,
+followed by OFF/STOPPED retirement and public slot release. That narrow
+hardware result does not establish calibrated timing, ACK/retry behavior,
+loss-free RX or a real-radio Zigbee join.
 The further opt-in [compact profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
 uses typed join/POLL caller views after admission, with separate nested work
 and public-return wiping. It removes the association shadow from the phase

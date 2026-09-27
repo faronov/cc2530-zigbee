@@ -701,10 +701,16 @@ ABI image is not a combined radio-backed MCU join. Code `e286b72` passed
 The separate [boot-disarmed MAC laboratory image](docs/MAC_SMOKE.md) prepares
 one public no-ACK broadcast through the real banked scheduler/adapter, with
 explicit ARM/RUN admission and physical stop/drain/release. It is host-tested,
-image-checked and simulated; physical MAC acceptance is still pending in #88.
+image-checked and simulated; code `833d6f5` passed
+[full CI,118/118 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36308161366).
+One separately authorized LG run in #88 is now **hardware-observed**:
+one actual MAC transmission, an exact independent Nordic `MAC1` reception
+on channel26, and terminal radio retirement/slot release. An operator-only
+M0 heartbeat error was reconciled from saved evidence without another RF run.
 Only its checked sparse physical HEX is a candidate for separately authorized
 programming, never the virtual IHX or earlier simulator-only adapter image.
-Initial RX/AUTOACK is possible; this is not a join or ACK/retry test.
+Initial RX/AUTOACK is possible; this is not a join, ACK/retry, calibrated
+timing or complete MAC conformance test.
 
 ## Offline MAC transmission state
 

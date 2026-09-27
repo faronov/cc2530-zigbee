@@ -187,7 +187,7 @@ def inspect(debugger, image, pc, capture, admission=None):
             registers.dps == 0 and not registers.psw & 0x18 and registers.bank == 1 and
             banker == bytes(2), "MAC checkpoint CPU/banker invariant differs")
     decode_bootstrap(boot, image.board)
-    require(mailbox == bytes(8) and boot[8] == record["completed"], "MAC mailbox/heartbeat differs")
+    require(mailbox == bytes(8) and boot[8] == 0, "MAC mailbox/immutable M0 heartbeat differs")
     if pc == image.fault or record["phase"] == 6:
         raise ValueError(f"MAC FAULT reason={record['reason']} stage={record['stage']}; "
                          "RF may remain active; no retry/reset/resume/flush attempted")
@@ -260,7 +260,7 @@ def exercise(debugger, image, sha256, capture, rf_permission=False, erased_gaps=
         debugger.resume()
         pc = wait_checkpoint(debugger, (image.end, image.fault, image.banker))
         record, boot, registers = inspect(debugger, image, pc, capture)
-        require(boot[:8] + boot[9:] == original[:8] + original[9:], "MAC run changed immutable M0")
+        require(boot == original, "MAC run changed immutable M0")
         outcome = check_end(record)
     return dict(evidence="hardware-observed", scope="one-ordinary-MAC-broadcast",
                 board=image.board, physical_hex_sha256=sha256, outcome=outcome,

@@ -418,9 +418,16 @@ deadline. The linked startup begins with dirty IRAM/XDATA and must actually
 reach `main`; peripheral reset/GPIO history is still not modeled completely.
 The manual operator has synthetic transaction/failure coverage, including
 full physical bank/gap verification before any resume, private-state admission,
-four terminal breakpoints and no recovery on fault. This remains host-tested,
-image-checked and simulated, not a physical MAC or join result. #88 tracks
-the separately authorized hardware trial.
+four terminal breakpoints and no recovery on fault. Code `833d6f5` passed
+[full Actions36308161366](https://github.com/faronov/cc2530-zigbee/actions/runs/36308161366),
+118/118 jobs. The separately authorized #88 LG trial then observed one
+ordinary real-MAC transmission, one complete independently matching Nordic
+`MAC1` record and terminal radio retirement/slot release. This narrow
+hardware observation does not validate calibrated timing, ACK/retry or join.
+The operator initially rejected immutable M0 heartbeat0 against the separate
+fixture completed1; the model/validator correction adds an explicit
+immutable-heartbeat regression. Reconciliation uses original saved evidence
+and read-only halted-END inspection, not another RF run.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:

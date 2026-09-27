@@ -49,11 +49,12 @@ def wire(phase=1, remaining=256, busy=0, outcome=1):
 
 class Synthetic:
     def __init__(self, *, outcome=1, busy=0, fail_at=None, bad_code=None,
-                 bad_admission=False, bad_end=False, fault=False, banker=False):
+                 bad_admission=False, bad_end=False, fault=False, banker=False, bad_heartbeat=False):
         self.calls = []
         self.fail_at, self.bad_code = fail_at, bad_code
         self.bad_admission, self.bad_end = bad_admission, bad_end
         self.banker = banker
+        self.bad_heartbeat = bad_heartbeat
         self.records = [wire(), wire(remaining=255), wire(2), wire(3, 0),
                         wire(4 if banker else 6 if fault else 5, 0, busy, outcome)]
         self.cursor = -1
@@ -137,7 +138,7 @@ class Synthetic:
         raw = self.records[self.cursor]
         if self.bad_end and self.cursor == 4:
             raw = raw[:45] + b"\0" + raw[46:]
-        boot = b"M0CC\x01\x20\x02\0" + bytes((raw[10],)) + bytes(15) + b"\xc9\xc9" + bytes(6)
+        boot = b"M0CC\x01\x20\x02\0" + bytes((int(self.bad_heartbeat and self.cursor == 4),)) + bytes(15) + b"\xc9\xc9" + bytes(6)
         values = {IMAGE.status: raw, IMAGE.mailbox: self.mailbox, 0x1E00: boot,
                   0x1F1E: b"\x02\x04" if self.banker and self.cursor == 4 else bytes(2)}
         if address in values:
@@ -219,6 +220,21 @@ class OperatorTests(unittest.TestCase):
             with self.subTest(index=index), self.assertRaises(OSError):
                 self.run_fake(fake)
             self.assertEqual(len(fake.calls), index)
+
+    def test_completed_fixture_does_not_tick_m0_and_changed_heartbeat_is_rejected(self):
+        with tempfile.TemporaryFile(mode="w+") as capture:
+            result = self.run_fake(Synthetic(), capture)
+            self.assertEqual(result["outcome"], "LOCAL_SENT")
+            capture.seek(0)
+            records = [json.loads(line) for line in capture]
+            checkpoints = [row for row in records if row.get("event") == "checkpoint"]
+            self.assertEqual(bytes.fromhex(checkpoints[-1]["status_hex"])[10], 1)
+            self.assertTrue(all(row["boot_hex"] == checkpoints[0]["boot_hex"] for row in checkpoints))
+            self.assertEqual(bytes.fromhex(checkpoints[-1]["boot_hex"])[8], 0)
+        fake = Synthetic(bad_heartbeat=True)
+        with self.assertRaisesRegex(ValueError, "immutable M0 heartbeat"):
+            self.run_fake(fake)
+        self.assertEqual(fake.calls.count("resume"), 5)
 
     def test_physical_common_banks_and_gaps_all_precede_first_resume(self):
         for address in (0, 0x79F8, 0x8000, 0xCEB4, 0x10000, len(PROGRAM) - 1):

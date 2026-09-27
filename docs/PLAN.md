@@ -131,7 +131,11 @@ establish a combined fit. Code `e286b72` passed
 The separate [boot-disarmed MAC laboratory fixture](MAC_SMOKE.md), tracked
 in #88, is a bounded hardware-readiness step: one public no-ACK broadcast on
 channel26 through real CSMA/CA and explicit physical retirement. It is
-host-tested, image-checked and simulated, not yet a hardware MAC result.
+host-tested, image-checked and simulated, with full118-job acceptance at
+`833d6f5`. Its first separately authorized LG trial is now hardware-observed:
+one local ordinary transmission, one exact independent Nordic `MAC1` reception
+and actual terminal retirement/slot release. A false operator heartbeat
+assertion was reconciled without repeating RF; it did not change firmware.
 Its manual operator verifies actual physical banks before admission and
 retains faults without retry/reset/flush. This does not close #13/#14 or
 authorize changing a coordinator/network or enabling permit-join.

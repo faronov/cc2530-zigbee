@@ -3759,3 +3759,46 @@ private and outside Git/CI. **Final state: the same-owner image is halted at
 END212A with physical stop/empty confirmed; the Nordic is sleep-commanded
 on26 with its port released.** Checkpoint SP is not a hardware stack
 high-water measurement.
+
+### 2026-09-27 LG real-MAC one-broadcast observation
+
+The separately authorized [#88 MAC fixture](MAC_SMOKE.md#first-lg-real-mac-hardware-observation-2026-09-27)
+uses actual banked MAC scheduling and the real adapter/clock/radio owner,
+not the earlier primitive-only same-owner fixture. Code `833d6f5` passed
+full Actions36308161366,118/118 jobs, before the hardware procedure.
+Its58149 populated CODE bytes occupy a72273-byte physical extent.
+
+The one programming attempt reported a USB I/O failure during read-verification.
+The subsequent separately approved status probe also failed with USB overflow.
+Neither triggered an automatic retry, normal-run reset or RF continuation.
+After the user's debugger reconnect, a new authorized debug-halt/readback scope
+independently matched all72273 CODE/gap bytes and preserved CPU/full FMAP;
+a complete262144-byte main-flash read and2048-byte information-page read
+then confirmed the expected image/FF gaps/suffix and original factory data.
+No second erase/write was performed. The failed programmer report remains
+failed, not rewritten as successful programming verification.
+
+A fresh RF operator reset/full physical preflight and four admission checks
+preceded one uninterrupted ordinary MAC transmission on channel26/raw05.
+The Nordic receiver, with unchanged firmware, captured one complete PCAP/TAP
+record matching public body `41 88 5A 34 12 FF FF 78 56 4D 41 43 31`.
+The actual owner reported1 draw,1 ATTEMPT,1 QUIESCE,1 transmission/SENT/
+RETIRED and zero busy observations. Adapter OFF2, radio OFF_NOACK7/STOPPED5,
+zero errors/held/ready/pending/goal/normal_rx and successful slot release
+preceded END787E.
+
+The operator then incorrectly expected M0 heartbeat1 because the fixture's
+separate completed byte was1. This fixture never ticks M0: its entire M0
+record correctly remained unchanged. The Python validator and synthetic
+model were corrected; original raw records and the complete one-record PCAP
+were reconciled offline. A separate read-only inspection confirmed the same
+halted END without reset/resume or another RF trial. Receiver termination
+occurred before the requested90 seconds; no full-duration capture is claimed.
+
+**Final state:** LG MAC image halted at END787E, status2B/config26,
+checkpoint SP57/DPS0/FMAP1, banker depth/fault0. Nordic sleep-commanded
+on26, channel read back and port released. No hardware SP high-water,
+independent FCS, calibrated CCA/backoff/PHY timing, ACK/retry/busy case,
+controlled RX or Zigbee join is established. Initial AUTOACK remained
+possible; the one-TX bound is only for ordinary DATA. All private recovery
+material, captures, USB details and reports remain outside Git/CI.

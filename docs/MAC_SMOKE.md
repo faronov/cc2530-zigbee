@@ -293,6 +293,8 @@ TX/action/random/clock contexts. Read-only IRAM-alias inspection checks banker
 depth/fault. No status or private state is written. The only operator writes
 are the two complete mailbox packets. After ADMITTED, the RF path runs
 uninterrupted to a terminal breakpoint.
+The M0 record remains byte-for-byte unchanged even at END: this fixture
+never calls `bringup_tick`. Its own `completed=1` is not an M0 heartbeat.
 
 Normal END requires the published retirement/release invariants and bounded
 SENT or five-busy accounting. SENT may follow earlier busy CCAs; live time,
@@ -330,5 +332,70 @@ at `df1f0c7`. A separately authorized320-byte hardware preflight preserved
 CPU/FMAP and matched the full predecessor backup while selecting banks0..7.
 All upper banks were erased, so that is control/restoration evidence, not
 distinct populated-bank discrimination. The actual MAC/RF trial remains
-pending in #88; neither these prerequisites nor local SENT prove reception,
-ACK/retry interoperability, join or Zigbee conformance.
+separate from those prerequisites; the first #88 observation follows below.
+Local SENT alone proves neither independent reception nor ACK/retry
+interoperability, join or Zigbee conformance.
+
+## First LG real-MAC hardware observation, 2026-09-27
+
+**One actual MAC no-ACK broadcast and independent reception were observed.**
+Only LG Rev0.3 was exercised, using the unchanged fixture code at
+`833d6f5e18e76ca735a69467bf827ced99a3d37b`, after
+[full Actions36308161366](https://github.com/faronov/cc2530-zigbee/actions/runs/36308161366)
+passed118/118 jobs. The physical HEX identity is the LG hash above.
+This is the real scheduler/adapter/clock/radio composition, not the earlier
+primitive-only `TXF1`/`LNK1` demonstrations.
+
+Fresh262144-byte predecessor and2048-byte information-page comparisons
+preceded programming. The one guarded erase/write attempt reached100% write,
+then its external read-verification failed at99% with USB I/O error. A
+separately approved status-only recovery probe also failed with USB overflow;
+both scopes stopped without automatic retry or application resume. After
+the user's physical debugger reconnect, a fresh authorized read-only scope
+performed reset-to-debug and independently compared all72273 physical CODE/
+gap bytes with CPU/full-FMAP preservation. A subsequent complete262144-byte
+main read matched the image and all-FF gaps/suffix, including the unchanged
+NV/lock-page values; the2048-byte information page matched the retained
+original. No second erase or programming attempt occurred. This verifies
+content, not that the whole-chip erase spared the erased NV/lock cells.
+
+The RF operator then performed its own reset and full physical CODE/gap
+preflight, checked initial/default/ARM/RUN admission and actual zero private
+state, and started the unchanged Nordic receiver only at halted ADMITTED.
+One uninterrupted RF continuation reached common END. No live time,
+peripheral-success flag or private owner state was injected.
+
+| Hardware observation | Result |
+| --- | --- |
+| Profile | Channel26, raw TXPOWER05, fixed public laboratory addresses/draws |
+| Real MAC actions |1 RANDOM using public draw7,1 ATTEMPT,1 QUIESCE; zero busy observations |
+| Ordinary TX/accounting |1 transmission,1 SENT event,1 RETIRED event; no ordinary retry |
+| Independent capture |1 complete PCAP/TAP record, exactly matching the13-byte public `MAC1` body |
+| Local terminal | END787E, stage6/reason0, consumed1/completed1, fixture SENT1/MAC UNACKNOWLEDGED2 |
+| Ownership | Adapter OFF2, radio OFF_NOACK7/STOPPED5, public slot released; held/ready/pending/goal/normal_rx all0 |
+| Radio errors / received heads |0 /0 |
+| Foreground observations |10 progress steps,1255 raw elapsed ticks, last live symbol2264; not calibrated duration |
+| Final debugger state | Halted END787E, status2B/config26, checkpoint SP57/DPS0/FMAP1; banker depth/fault0 |
+| Final receiver | Sleep commanded, channel26 read back, serial port released |
+
+The first operator invocation falsely rejected the successful END because
+it incorrectly equated M0 heartbeat with the separate fixture completion
+byte. Real firmware kept M0 unchanged, correctly. The resulting operator
+exception stopped the receiver early rather than completing its requested
+90-second window. The preserved81-byte PCAP nevertheless has a complete
+header and one complete matching record; no truncated tail was accepted.
+The heartbeat check and synthetic operator model were corrected, including
+a regression rejecting a changed M0 heartbeat. Offline reconciliation of
+the original records plus a separate read-only inspection of the same halted
+END confirmed the result. **No reset, resume or second RF trial was used
+to correct this operator error.** Original failed-scope logs were preserved,
+not rewritten as successful execution logs.
+
+This is FCS-free body equality, not independent FCS validation. Initial
+AUTOACK was possible and not included in the ordinary-TX budget. There is
+no hardware stack-high-water measurement, calibrated backoff/CCA/PHY timing,
+positive ACK/retry/busy-channel experiment, loss-free RX claim, generic-board
+RF result, full MAC conformance, Zigbee association or authenticated join.
+The coordinator/Home Assistant network was unchanged. #13/#14 remain open.
+Raw frames, backups, USB details and private recovery reports stay outside
+Git and generated CI artifacts.
