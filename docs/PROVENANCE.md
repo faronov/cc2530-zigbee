@@ -76,6 +76,14 @@ continuous handoff or justify narrowing ignored ACK FCF fields. Public PDF
 SHA256 remains `a8fe8e92db33ad79c7f371075b0a464602a6db747614625d9f8d3e6be990b877`;
 no document or external implementation is vendored.
 
+The debugger's separate physical CODE reader is original BSD-3-Clause work
+using the same SWRU191F pp27,33-34 FMAP/MEMCTR mapping facts and previously
+reviewed standalone DEBUG_INSTR packet forms. It preserves the complete
+FMAP byte, refuses XMAP and excludes the NV/lock/information partitions.
+Its synthetic host model uses distinct public byte patterns in all eight
+banks, not a device dump or imported programmer implementation. This adds
+neither a flash writer nor hardware-observed bank discrimination.
+
 The subsequent [guarded live handoff](MAC_ATTEMPT.md#guarded-live-rx-handoff)
 is original BSD-3-Clause work, not an imported driver. Additional direct
 SWRU191F reading covers section2.2.3/p28 (default/prefetch flash timing is

@@ -45,9 +45,12 @@ and address-sensitive hashes. No automatic flashing or artifact upload
 is added by this profile.
 
 A logical PC alone cannot identify upper-window code. These offline
-identities do not expand the existing hardware debugger's unbanked CODE
-read/breakpoint contract. Physical bank discrimination, recovery and
-flash programming need separately authorized hardware evidence.
+identities do not expand the existing debugger's unbanked `read_code()` or
+breakpoint contract. The separate [physical CODE reader](DEBUGGING.md#live-register-and-memory-access)
+adds a host-tested, context-preserving Python API for explicit F256 bank
+reads; it rejects XMAP and reserved flash pages. Physical bank discrimination,
+recovery and flash programming still need separately authorized hardware
+evidence.
 
 ## Simulator mapping
 

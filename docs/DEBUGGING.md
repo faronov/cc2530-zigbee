@@ -212,6 +212,22 @@ full context; DPTR1 and the other untouched registers must also match.
 restoration or retry.** Register/RAM changes may already have happened:
 `FAULTED` is not a claim that the pre-operation context survived.
 
+The separate Python `read_flash_code(physical_address, length)` API reads
+CC2530F256 physical CODE below `0x3E800`, excluding the NV, lock/config and
+information pages. It requires the same explicit memory-access permission,
+1..256 bytes and a range contained within one physical32-KiB bank.
+Common bytes retain the original lower-window reader. Upper banks use
+SWRU191F pp27,33-34's FMAP-selected CODE window: save the complete FMAP
+byte, reject an active MEMCTR.XMAP SRAM overlay, select/read back the bank,
+read with MOVC, check unchanged MEMCTR, restore/read back FMAP, then verify
+the full CPU context. It neither writes MEMCTR nor executes application CODE.
+Any failure retains the fault without attempting restoration or resuming;
+FMAP and other scratch registers may then differ. This API is host-tested
+with distinct synthetic bank contents and failure at every USB exchange,
+not yet hardware-observed bank discrimination. The original `read_code()`,
+CLI `read-code` and all breakpoint bounds remain `0000..7FFF`; there is no
+new generic flash programmer or upper-window breakpoint command.
+
 Exact command-specific CLI operands:
 
 | Command | Required additional permission(s) | Operands |

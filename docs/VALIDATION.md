@@ -1693,6 +1693,16 @@ bytes, pre-load permission/operand rejection and no success on cleanup failure.
 These are host tests of original instruction semantics, not linked-image or
 silicon evidence.
 
+`tools/test_m1_flash.py` separately exercises the physical F256 CODE reader:
+distinct contents in all eight banks, every bank's admitted boundaries,
+all four register banks and both DPTR selections, exact full-byte FMAP/CPU
+preservation, XMAP rejection and pre-I/O exclusion of cross-bank ranges and
+NV/lock pages. Selection, restoration, MEMCTR/context corruption, invalid
+status/family and every failing, short, long or late USB exchange must stop
+without recovery or retry. Legacy logical CODE/breakpoint bounds remain
+unchanged. This is host-tested mapping/transport behavior, not observed
+physical bank discrimination or permission to program a banked fixture.
+
 `tools/test_erase_boundary_fault.py` compiles the original macOS observer with
 a synthetic USB library and driver in a temporary directory, using strict
 compiler flags. It covers opt-in/pass-through, exact erase/status association,

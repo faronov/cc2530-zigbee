@@ -438,26 +438,57 @@ class Debugger:
         if address + length > limit:
             raise ValueError("Memory range crosses the supported address-space boundary")
 
+    def _read_memory_bytes(self, address: int, length: int, code: bool, deadline: _Deadline) -> bytes:
+        self._instruction(b"\x75\x92\x00", deadline)
+        self._instruction(bytes((0x90, address >> 8, address & 255)), deadline)
+        result = bytearray()
+        for index in range(length):
+            if code:
+                self._instruction(b"\xe4", deadline)
+            result.append(self._instruction(b"\x93" if code else b"\xe0", deadline))
+            if index + 1 < length:
+                self._instruction(b"\xa3", deadline)
+        return bytes(result)
+
     def _read_memory(self, address: int, length: int, *, code: bool) -> bytes:
         self._memory_range(address, length, 0x8000 if code else 0x2000)
         with self._stopped_operation(memory_access=True) as deadline:
             with self._preserve_registers(deadline):
-                self._instruction(b"\x75\x92\x00", deadline)
-                self._instruction(bytes((0x90, address >> 8, address & 255)), deadline)
-                result = bytearray()
-                for index in range(length):
-                    if code:
-                        self._instruction(b"\xe4", deadline)
-                    result.append(self._instruction(b"\x93" if code else b"\xe0", deadline))
-                    if index + 1 < length:
-                        self._instruction(b"\xa3", deadline)
-        return bytes(result)
+                result = self._read_memory_bytes(address, length, code, deadline)
+        return result
 
     def read_xdata(self, address: int, length: int) -> bytes:
         return self._read_memory(address, length, code=False)
 
     def read_code(self, address: int, length: int) -> bytes:
         return self._read_memory(address, length, code=True)
+
+    def read_flash_code(self, address: int, length: int) -> bytes:
+        """Read CC2530F256 physical CODE, excluding NV/lock pages; never resume."""
+        self._memory_range(address, length, 0x3E800)
+        if address // 0x8000 != (address + length - 1) // 0x8000:
+            raise ValueError("Physical CODE read crosses a flash bank boundary")
+        if address < 0x8000:
+            return self.read_code(address, length)
+        with self._stopped_operation(memory_access=True) as deadline:
+            with self._preserve_registers(deadline):
+                memctr = self._instruction(b"\xe5\xc7", deadline)
+                if memctr & 0x08:
+                    raise TransportError("XMAP overlays banked CODE; refusing physical flash read")
+                fmap = self._instruction(b"\xe5\x9f", deadline)
+                selected = (fmap & 0xF8) | (address // 0x8000)
+                self._instruction(bytes((0x75, 0x9F, selected)), deadline)
+                if self._instruction(b"\xe5\x9f", deadline) != selected:
+                    raise TransportError("Physical CODE bank selection failed; do not resume")
+                result = self._read_memory_bytes(0x8000 | (address & 0x7FFF), length, True, deadline)
+                if self._instruction(b"\xe5\x9f", deadline) != selected:
+                    raise TransportError("Physical CODE bank changed during read; do not resume")
+                if self._instruction(b"\xe5\xc7", deadline) != memctr:
+                    raise TransportError("MEMCTR changed during physical CODE read; do not resume")
+                self._instruction(bytes((0x75, 0x9F, fmap)), deadline)
+                if self._instruction(b"\xe5\x9f", deadline) != fmap:
+                    raise TransportError("Physical CODE bank restoration failed; do not resume")
+        return result
 
     def write_xdata(self, address: int, data: bytes) -> None:
         if not isinstance(data, bytes):
