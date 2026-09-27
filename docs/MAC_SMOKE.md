@@ -391,6 +391,13 @@ END confirmed the result. **No reset, resume or second RF trial was used
 to correct this operator error.** Original failed-scope logs were preserved,
 not rewritten as successful execution logs.
 
+The operator/model correction at
+`f2f38813e053aded1362af47b9d5625808286b41` passed
+[full Actions36314030255](https://github.com/faronov/cc2530-zigbee/actions/runs/36314030255):
+all118 jobs succeeded, including Required offline acceptance and every prior
+worker. Firmware and the observed physical image remain unchanged from
+`833d6f5`; this acceptance required no additional hardware operation.
+
 This is FCS-free body equality, not independent FCS validation. Initial
 AUTOACK was possible and not included in the ordinary-TX budget. There is
 no hardware stack-high-water measurement, calibrated backoff/CCA/PHY timing,

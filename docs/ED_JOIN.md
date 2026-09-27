@@ -163,6 +163,47 @@ A MAC-poll-only parent is an explicit unsupported/failing configuration.
 Persisted restart returns `BDB_JOIN_RECOVERY_REQUIRED`, not READY. Complete
 secure-rejoin/recovery orchestration belongs to #27.
 
+## First physical join gate
+
+The [observed MAC broadcast](MAC_SMOKE.md) is not a join. A physical
+commissioning trial still needs a combined, boot-disarmed image containing
+the real radio adapter and link driver, with complete bank/DATA/stack/alias
+proof. Neither the synthetic-PHY `banked_join` image nor the7644-byte
+CHILD object-plus-context floor establishes that image's readiness.
+
+Before admitting a trial, bind the actual coordinator/TC IEEE, current
+channel/PAN/Extended PAN/update ID, unique device IEEE and explicit initial
+counter floors. Provision a unique16+2-byte install code through the real
+key/counter/NV owner; do not inject the coordinator's network key or import a
+READY/key-owner snapshot. Supply separately qualified MAC backoff bytes.
+The public deterministic smoke draws and an unqualified hardware LFSR are
+not substitutes for that input contract.
+
+For a ZHA coordinator, inspect the deployed HA release's admission contract.
+For example, HA2026.9.3's
+[permit schema and service](https://github.com/home-assistant/core/blob/2026.9.3/homeassistant/components/zha/websocket_api.py)
+pair `source_ieee` (the **joining device**, not the coordinator) with
+`install_code`; ordinary `ieee`-targeted permit is a different branch.
+An interface exposing only `ieee` and duration does not provision the
+install-code link key. Do not assume that supplying both IEEE fields limits
+the install-code branch to a particular admission router.
+Also, that release's
+[integration diagnostics](https://github.com/home-assistant/core/blob/2026.9.3/homeassistant/components/zha/diagnostics.py)
+actively performs an all-channel energy scan. Fetching those diagnostics is
+not a passive metadata-only operation. Cached device/descriptor information
+does not establish a newly observed radio response.
+
+The physical scope must explicitly include real provisioning/NV writes,
+initial RX/AUTOACK, bounded retries and the final network-wide180-second
+Permit Joining request described below. Stopping at a READY checkpoint does
+not itself stop RX; retain the owner until verified physical closure.
+Use independent observations of association, authenticated key exchange and
+the remaining BDB stages, not just a new HA device-list entry.
+The current bounded endpoint-zero server does not implement Active Endpoints
+or Simple Descriptor responses, so complete ZHA interview and useful
+application attribute exchange remain separate work rather than implied
+consequences of BDB READY.
+
 ## Ownership and successful sequence
 
 `ed_wire` extends, rather than weakens, the original codecs. It provides

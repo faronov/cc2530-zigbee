@@ -428,6 +428,10 @@ The operator initially rejected immutable M0 heartbeat0 against the separate
 fixture completed1; the model/validator correction adds an explicit
 immutable-heartbeat regression. Reconciliation uses original saved evidence
 and read-only halted-END inspection, not another RF run.
+The correction at `f2f38813e053aded1362af47b9d5625808286b41` passed
+[full Actions36314030255](https://github.com/faronov/cc2530-zigbee/actions/runs/36314030255),
+118/118 jobs with no failed or skipped job. It changes no fixture firmware
+or physical image and required no additional hardware operation.
 
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
