@@ -117,6 +117,14 @@ a protocol decision. It is also host-tested and compile-checked only. The
 consumers; it contains no board GPIO code. It maps their actions onto the adapter,
 feeds observations back unchanged and never generates randomness. It is not
 linked into an MCU image.
+The separate [MAC laboratory board caller](MAC_SMOKE.md) uses the existing
+banked adapter and real scheduler, with boot-disarmed mailbox admission and
+no networking/security/NV services. A fixed public no-ACK DATA frame and
+explicit laboratory backoff draws exercise the ordinary TX path; a genuine
+OFF/empty retirement and public slot release precede END. Faults retain the
+owner, and initial RX/AUTOACK remains possible. Its58149-byte LG image,
+2539 ordinary XDATA bytes and simulated SP78/7C are a separate composition,
+not combined real-radio join fit or hardware acceptance.
 The further opt-in [compact profile](MAC_LINK_DRIVER.md#experimental-returning-work-profile)
 uses typed join/POLL caller views after admission, with separate nested work
 and public-return wiping. It removes the association shadow from the phase

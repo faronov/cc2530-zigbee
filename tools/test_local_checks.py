@@ -33,6 +33,46 @@ class LocalChecksTests(unittest.TestCase):
                     if line.startswith(("python3 ", directory + "/")) or
                     include_build and line.startswith(("cc ", "sdcc ", "cp "))]
 
+    def test_mac_smoke_has_separate_real_board_image_and_complete_offline_gate(self):
+        for board in BOARDS:
+            commands = recipe(board, "mac-smoke")
+            links = [args for args in commands if args[0] == "sdcc" and "-c" not in args and
+                     Path(args[args.index("-o")+1]).name == "mac_smoke.ihx"]
+            self.assertEqual(len(links), 1)
+            link = links[0]
+            output = Path(link[link.index("-o")+1]).parent
+            modules = [Path(arg).stem for arg in link if arg.endswith(".rel")]
+            self.assertEqual(modules[:3], ["mac_smoke_iram_low", "banked", "mac_smoke_iram_high"])
+            self.assertEqual(modules[-5:], ["startup", "status", board, "mac_smoke", "mac_smoke_main"])
+            self.assertTrue({"mac_frame", "mac_tx", "mac_adapter", "mac_radio", "mac_attempt",
+                             "radio_autoack", "mac_time", "mac_epoch", "clock", "timebase"} <= set(modules))
+            self.assertFalse(any(name.startswith("test_") or name == "mac_adapter_fixture" for name in modules))
+            expected = ["set", "-e;"]
+            for module in modules:
+                expected += ["cp", str(output / (module + ".rst")),
+                             str(output / ("mac_smoke." + module + ".rst")) + ";"]
+            self.assertEqual(commands[commands.index(link)+1], tuple(expected))
+            pack = [args for args in commands if "tests/verify_mac_smoke.py" in args]
+            self.assertEqual(len(pack), 1)
+            self.assertEqual(pack[0][pack[0].index("--pack")+1], str(output / "mac_smoke.physical.hex"))
+            for script in ("tools/test_mac_smoke.py", "tests/boot_mac_smoke.py"):
+                calls = [args for args in commands if script in args]
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0][calls[0].index("--output")+1], str(output))
+            hosts = [args for args in commands if args[0] == "cc" and "tests/test_mac_smoke.c" in args]
+            self.assertEqual(len(hosts), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in hosts), 1)
+            self.assertTrue(all("src/startup.c" in args and f"boards/{board}.c" in args for args in hosts))
+            loop = next(args for args in commands if args[:5] == ("set", "-e;", "for", "n", "in"))
+            self.assertEqual(loop[5:15], tuple(map(str, range(9))) + ("9;",))
+            self.assertIn(str(output / "host-smoke"), loop)
+            self.assertIn(str(output / "host-smoke-sanitize"), loop)
+            self.assertEqual(loop.count("$n;"), 2)
+            self.assertTrue(any("tests/verify_mac_adapter.py" in args and "--emit-header" in args
+                                for args in commands))
+            self.assertFalse(any("tools/check_mac_smoke_hardware.py" in args or "cc-tool" in args
+                                 for args in commands))
+
     def test_interval_profile_keeps_native_sanitizer_radio_and_target_proofs(self):
         for board in BOARDS:
             commands = self.dry_run("test-mac-tx-interval", BOARD=board, include_build=True)
@@ -352,7 +392,7 @@ class LocalChecksTests(unittest.TestCase):
                     split = self.dry_run("test-common", "test-tools", "test-board", BOARD=board, IMAGE=image)
                     def normalize(commands):
                         return Counter(tuple("OUTPUT" if i and args[i-1] == "--output" else
-                                             Path(arg).name if i and args[i-1] == "--emit-header" else arg
+                                             Path(arg).name if i and args[i-1] in ("--emit-header", "--pack") else arg
                                              if i or arg == "python3" else Path(arg).name
                                              for i, arg in enumerate(args)) for args in commands)
                     self.assertEqual(normalize(full), normalize(split))
@@ -381,7 +421,7 @@ class LocalChecksTests(unittest.TestCase):
             "zcl_identify", "zcl_temperature", "zdo_node", "zdo_srv", "zigbee_security", "zigbee_mmo",
             "zigbee_key_hash", "security_counter", "security_resident_security", "security_resident_mmo",
             "security_resident_key_hash", "security_resident_counter",
-            "banked", "banked_security", "mac_link_child_abi",
+            "banked", "banked_security", "mac_link_child_abi", "mac_smoke",
             "banked_join_joined-data-update-loss-restart", "banked_join_missing-network-key",
             "banked_join_retained-radio-fault", "banked_join_retained-flash-fault",
             "banked_join_rx-queues", "banked_join_wrap-quarantine", "banked_join_ack-correlation",
@@ -406,6 +446,9 @@ class LocalChecksTests(unittest.TestCase):
             elif args[2] == "tests/boot_mac_link_child_abi.py":
                 self.assertEqual(output.parts[-3:], ("components", "mac-link-child-workspace", "abi"))
                 components[output.parents[2].name, "mac_link_child_abi"] += 1
+            elif args[2] == "tests/boot_mac_smoke.py":
+                self.assertEqual(output.parts[-2:], ("components", "mac-smoke"))
+                components[output.parents[1].name, "mac_smoke"] += 1
             else:
                 self.assertEqual(output.name, "components")
                 component = Path(args[2]).stem.removeprefix("boot_")
@@ -423,7 +466,7 @@ class LocalChecksTests(unittest.TestCase):
             def normalized(targets):
                 commands = self.dry_run(*targets, BOARD=board)
                 return Counter(tuple("OUTPUT" if i and args[i-1] == "--output" else
-                                     Path(arg).name if i and args[i-1] == "--emit-header" else arg
+                                     Path(arg).name if i and args[i-1] in ("--emit-header", "--pack") else arg
                                      if i or arg == "python3" else Path(arg).name
                                      for i, arg in enumerate(args)) for args in commands)
             self.assertEqual(normalized(("test-common",)),

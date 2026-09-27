@@ -698,6 +698,14 @@ The full profile is host/object-checked. A separate simulated pointer/parameter
 ABI image is not a combined radio-backed MCU join. Code `e286b72` passed
 [full CI, 116/116 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852).
 
+The separate [boot-disarmed MAC laboratory image](docs/MAC_SMOKE.md) prepares
+one public no-ACK broadcast through the real banked scheduler/adapter, with
+explicit ARM/RUN admission and physical stop/drain/release. It is host-tested,
+image-checked and simulated; physical MAC acceptance is still pending in #88.
+Only its checked sparse physical HEX is a candidate for separately authorized
+programming, never the virtual IHX or earlier simulator-only adapter image.
+Initial RX/AUTOACK is possible; this is not a join or ACK/retry test.
+
 ## Offline MAC transmission state
 
 The [bounded MAC scheduler](docs/MAC_TX.md) adds unslotted CSMA-CA, legacy

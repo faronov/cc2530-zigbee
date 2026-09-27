@@ -1942,6 +1942,7 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
 test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-mac-smoke
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise
@@ -2022,3 +2023,5 @@ ifeq ($(IMAGE),irq_fixture)
 	$(BUILD)/host-irq-fixture-tests_$(BOARD)
 endif
 	$(PYTHON) -B tests/boot_image.py --board $(BOARD) --image $(IMAGE) --output $(BUILD) --simulator "$(S51)"
+
+include mac-smoke.mk

@@ -83,6 +83,12 @@ FMAP byte, refuses XMAP and excludes the NV/lock/information partitions.
 Its synthetic host model uses distinct public byte patterns in all eight
 banks, not a device dump or imported programmer implementation. This adds
 neither a flash writer nor hardware-observed bank discrimination.
+The [boot-disarmed real-MAC fixture and operator](MAC_SMOKE.md) likewise use
+original public `MAC1` bytes, fixed laboratory backoff inputs, unchanged
+production services and existing compiler/ABI proofs. No vendor implementation
+or private device material is imported. Its per-image TI references and
+simulation/reset limits are recorded with the fixture. Hardware backups,
+ambient frames and independent receiver captures remain outside Git and CI.
 
 The subsequent [guarded live handoff](MAC_ATTEMPT.md#guarded-live-rx-handoff)
 is original BSD-3-Clause work, not an imported driver. Additional direct

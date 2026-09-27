@@ -21,14 +21,15 @@ class SelectionTests(unittest.TestCase):
     def names(self, selected):
         return {(row["board"], row["directory"]) for row in selected["matrix"]["include"]}
 
-    def test_full_preserves_112_workers_and_adds_two_child_workers(self):
+    def test_full_preserves_114_workers_and_adds_two_mac_smoke_workers(self):
         selected = plan.full_plan("test")
         rows = selected["matrix"]["include"]
-        self.assertEqual(len(rows), 114)
-        self.assertEqual(len({r["name"] for r in rows}), 114)
+        self.assertEqual(len(rows), 116)
+        self.assertEqual(len({r["name"] for r in rows}), 116)
         self.assertEqual(sum(row["directory"] == "mac-tx-interval" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-handoff" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-adapter" for row in rows), 2)
+        self.assertEqual(sum(row["directory"] == "mac-smoke" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-reconfig" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-link" for row in rows), 2)
         self.assertEqual(sum(row["directory"] == "mac-link-ram" for row in rows), 2)
@@ -63,7 +64,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 selected = self.select("README.md", path)
                 self.assertEqual(selected["tier"], "full")
-                self.assertEqual(len(selected["matrix"]["include"]), 114)
+                self.assertEqual(len(selected["matrix"]["include"]), 116)
                 self.assertEqual(selected["campaign"], "full")
 
     def test_failed_dependency_derivation_is_explicit_full_not_an_empty_pass(self):
@@ -81,17 +82,20 @@ class SelectionTests(unittest.TestCase):
             "tests/banked_join_edges.c": {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "src/zcl_temperature.c": {"compositions"},
             "tests/test_mac_tx_interval.c": {"mac-tx-interval", "mac-adapter"},
-            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
-            "src/mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/test_mac_handoff.c": {"mac-handoff", "mac-adapter", "mac-smoke", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "src/mac_adapter.c": {"mac-adapter", "mac-smoke", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/test_mac_observed.c": {"mac-adapter"},
-            "tests/test_mac_adapter.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/test_mac_adapter.c": {"mac-adapter", "mac-smoke", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/test_mac_smoke.c": {"mac-smoke"},
+            "src/mac_smoke.c": {"mac-smoke"},
+            "examples/mac_smoke_main.c": {"mac-smoke"},
             "tests/test_mac_reconfig.c": {"mac-reconfig"},
             "tests/test_mac_link_scan.c": {"mac-link"},
             "tests/test_mac_link_join.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/test_mac_link_e2e.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/mac_link_peer.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "src/mac_link_driver.c": {"mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
-            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
+            "tests/mac_adapter_fixture.c": {"mac-adapter", "mac-smoke", "mac-reconfig", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/test_mac_link_ram.c": {"mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "tests/mac_link_ram_layout.c": {"mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"},
             "src/mac_link_workspace.c": {"mac-link-workspace", "mac-link-child-workspace"},
@@ -114,7 +118,7 @@ class SelectionTests(unittest.TestCase):
 
     def test_included_c_helpers_reach_all_compositions_and_fixtures(self):
         for board in plan.BOARDS:
-            for unit in ("core", "mac-attempt", "mac-tx-interval", "mac-handoff", "mac-adapter", "mac-reconfig",
+            for unit in ("core", "mac-attempt", "mac-tx-interval", "mac-handoff", "mac-adapter", "mac-smoke", "mac-reconfig",
                          "compositions", "radio_link_fixture"):
                 self.assertIn("tests/test_radio_autoack.c", self.index[board, unit])
             for unit in ("core", "counters", "resident-counter", "flash_fixture"):

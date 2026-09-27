@@ -128,6 +128,13 @@ overhead. Host/object and narrow pointer-ABI simulator evidence do not
 establish a combined fit. Code `e286b72` passed
 [full Actions36277911852](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852),
 116/116 jobs, preserving every prior worker and adding both CHILD workers.
+The separate [boot-disarmed MAC laboratory fixture](MAC_SMOKE.md), tracked
+in #88, is a bounded hardware-readiness step: one public no-ACK broadcast on
+channel26 through real CSMA/CA and explicit physical retirement. It is
+host-tested, image-checked and simulated, not yet a hardware MAC result.
+Its manual operator verifies actual physical banks before admission and
+retains faults without retry/reset/flush. This does not close #13/#14 or
+authorize changing a coordinator/network or enabling permit-join.
 The [runtime corrections and host regressions](ED_JOIN.md#operational-failure-and-foreground-work)
 preserve durable keys on operational loss, explicit physical retirement,
 real commissioning Leave, and the existing NV quotas. They do not constitute

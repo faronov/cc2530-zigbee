@@ -407,6 +407,21 @@ exposed stale exact mutation totals after source-line record additions;
 both-board targeted executions confirmed the increased totals before this
 complete acceptance. No generator, runtime case or deadline was removed.
 
+The separate [boot-disarmed MAC board fixture](MAC_SMOKE.md) adds two workers
+without replacing an existing image or uploading a banked programming artifact.
+The actual LG image uses58149 populated CODE bytes and2539 ordinary XDATA;
+generic uses58109 CODE. Both have64 reserved M0 bytes and simulated SP78/7C.
+Ten fresh-process native/sanitizer scenarios, ten strict artifact/startup
+regressions and nine real linked replays cover the limited one-broadcast
+behavior and retained failures. Every simulator process keeps its15-second
+deadline. The linked startup begins with dirty IRAM/XDATA and must actually
+reach `main`; peripheral reset/GPIO history is still not modeled completely.
+The manual operator has synthetic transaction/failure coverage, including
+full physical bank/gap verification before any resume, private-state admission,
+four terminal breakpoints and no recovery on fault. This remains host-tested,
+image-checked and simulated, not a physical MAC or join result. #88 tracks
+the separately authorized hardware trial.
+
 The 2026-09-18 measurements on the same Xeon E5-2697 v2 host compared the
 `3c3e133` baseline with the optimized checkers:
 

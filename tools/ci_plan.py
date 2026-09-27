@@ -22,6 +22,7 @@ COMPONENTS = {
     "mac-tx-interval": ("Offline interval MAC transmitter ({board})", ("test-mac-tx-interval",)),
     "mac-handoff": ("Offline guarded RX handoff ({board})", ("test-mac-handoff",)),
     "mac-adapter": ("Offline banked MAC radio adapter ({board})", ("test-mac-adapter",)),
+    "mac-smoke": ("Offline boot-disarmed real MAC fixture ({board})", ("test-mac-smoke",)),
     "mac-reconfig": ("Offline MAC radio reconfiguration ({board})", ("test-mac-reconfig",)),
     "mac-link": ("Offline interval MAC consumers ({board})", ("test-mac-link",)),
     "mac-link-ram": ("Experimental compact MAC link ({board})", ("test-mac-link-ram",)),
