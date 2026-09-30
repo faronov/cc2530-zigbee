@@ -5,6 +5,7 @@
 #define ZDO_RUNTIME_H
 #include "nwk_aps.h"
 #include "zdo_srv.h"
+#include "board.h"
 
 #define ZDO_RUNTIME_VERSION 2u
 #define ZDO_RUNTIME_WAIT 312500UL
@@ -53,6 +54,9 @@ typedef struct {
  * application_ready alone publishes it; other consumed input is cleared.
  * A pending application blocks taking another transport packet, but does not
  * block client timeout/TX retirement or discard a separate server response.
+ * The runtime owns the Basic cluster of the transport endpoint: unicast
+ * frames to it use the server response slot (BOARD_MANUFACTURER/BOARD_MODEL,
+ * see zdo_runtime.c); other Basic frames are ignored, never published.
  */
 zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     const zdo_node_descriptor_t * volatile local, volatile uint32_t now) JOIN_FAR;
@@ -71,6 +75,11 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t 
 zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
     uint8_t * volatile which, uint8_t * volatile result) JOIN_FAR;
 zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile ctx, ed_packet_t * volatile packet) JOIN_FAR;
+/* An application without endpoint clusters of its own releases a published
+ * frame unread; it is cleared exactly as a take would clear it. */
+zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * volatile ctx) JOIN_FAR;
+/* The Basic ModelIdentifier bytes, shared so reports need no second copy. */
+extern const MCU_CODE char zdo_runtime_model[BOARD_MODEL_LENGTH+1u];
 
 /* BDB commissioning messages, not a successful-join input: construct either
  * the local Device_annce or final 180-second permit broadcast in an EMPTY

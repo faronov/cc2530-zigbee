@@ -6,6 +6,8 @@
 #include "security_joint_model.h"
 #include "zigbee_key_hash.h"
 #include "nv_record.h"
+#include "security_counter.h"
+#include "board.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +38,7 @@ static uint8_t mac_length, npdu_length, aps_counter, nwk_sequence, pending;
 static uint8_t announced, described, requested, verified, parent_set, permit;
 static uint8_t scan_beacon, associated_request, extracted, initial_key;
 static uint8_t app_sends, app_counter, dropped_ack, test_case;
+static uint32_t settle;
 static uint8_t leave_sent;
 static uint8_t wrap_mode, drop_all_acks;
 static uint8_t phy_busy, phy_lose, mute_timeout;
@@ -44,6 +47,7 @@ static const uint8_t *aux_source;
 static uint16_t expected_reply_cluster;
 static uint16_t peer_pan;
 static uint8_t expected_reply_status, expected_reply_length, reply_seen;
+static uint8_t expected_zcl[ED_PAYLOAD_MAX], expected_zcl_length;
 static uint32_t now, peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device_aps;
 static uint32_t initial_now = 100;
 static unsigned checks, iterations, transmissions;
@@ -234,6 +238,12 @@ static void observe_transmission(void)
         CHECK(verified && parent_set && peer_in.nwk.destination == 0xfffcu && peer_in.length == 3);
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1);
         CHECK(!runtime.transport.ready); permit = 1;
+    } else if (expected_zcl_length) {
+        CHECK(!reply_seen && peer_in.aps.profile_id == 0x0104 && !peer_in.aps.cluster_id);
+        CHECK(peer_in.aps.source_endpoint == 1 && peer_in.aps.destination_endpoint == 9);
+        CHECK(!peer_in.nwk.destination && !peer_in.aps.delivery_mode && !peer_in.aps.flags);
+        CHECK(peer_in.length == expected_zcl_length && !memcmp(peer_in.payload, expected_zcl, expected_zcl_length));
+        reply_seen = 1;
     } else if (expected_reply_cluster) {
         CHECK(peer_in.aps.cluster_id == expected_reply_cluster && !peer_in.aps.profile_id);
         CHECK(peer_in.length == expected_reply_length && peer_in.payload[1] == expected_reply_status);
@@ -242,6 +252,12 @@ static void observe_transmission(void)
             CHECK(peer_in.payload[10] == 0x78 && peer_in.payload[11] == 0x56);
         }
         if (expected_reply_length == 13) CHECK(!peer_in.payload[12]);
+        if (expected_reply_cluster == 0x8005u) CHECK(peer_in.payload[4] == 1 && peer_in.payload[5] == 1);
+        if (expected_reply_cluster == 0x8004u)
+            CHECK(peer_in.payload[5] == 1 && peer_in.payload[6] == 0x04 && peer_in.payload[7] == 0x01 &&
+                  peer_in.payload[11] == 1 && !peer_in.payload[12] && !peer_in.payload[13] && !peer_in.payload[14]);
+        if (expected_reply_cluster == 0x8004u || expected_reply_cluster == 0x8005u)
+            CHECK(peer_in.payload[2] == 0x78 && peer_in.payload[3] == 0x56);
         reply_seen = 1;
     } else {
         CHECK(permit && device.phase == BDB_JOIN_READY && peer_in.aps.profile_id == 0x0104);
@@ -413,6 +429,8 @@ static void deliver(void)
     memcpy(mac_body, saved, mac_length);
     rc = bdb_join_receive(&device, mac_body, mac_length, 1, now);
     CHECK(rc == BDB_JOIN_OK);
+    /* Local durable processing may outlast the deadline the frame met. */
+    now += settle; settle = 0;
     if (peer_out.aps.cluster_id == 0x8002u) described = 1;
     if (peer_out.nwk.type && peer_out.payload[0] == 0x0c) parent_set = 1;
     pending = 0;
@@ -497,6 +515,13 @@ static void commission(void)
                      peer_out.payload[1] == 4) ||
                     (test_case == 8 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 16))
                     now = device.until;
+                if ((test_case == 9 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 5 &&
+                     peer_out.payload[1] == 1) ||
+                    (test_case == 10 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 5 &&
+                     peer_out.payload[1] == 4) ||
+                    (test_case == 11 && peer_out.aps.type == ED_APS_COMMAND && peer_out.payload[0] == 16)) {
+                    now = device.until-1; settle = BDB_JOIN_EXCHANGE_WAIT;
+                }
                 deliver();
             }
         }
@@ -776,7 +801,16 @@ static void work_and_deadlines(void)
         CHECK(device.result == BDB_JOIN_WORK_LIMIT && !leave_sent && !runtime.transport.ready);
         CHECK(device.phase == (which == 2 ? BDB_JOIN_FAULT : BDB_JOIN_FAILED));
         CHECK(security_joint_flash_commands() == before);
-        retained(SECURITY_KEYS_ASSOCIATED);
+        if (which == 2) {
+            /* INSTALL precedes persistence: the identity was never saved. */
+            CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_PROVISIONED);
+            CHECK(status.config.address == 0xffffu);
+        } else {
+            /* Association stays staged until the first key save: nothing is durable. */
+            CHECK(security_counter_status()->generation == 0);
+            security_joint_reset(0);
+            CHECK(security_keys_open() == SECURITY_KEYS_EMPTY && !security_joint_flash_commands());
+        }
     }
 }
 
@@ -814,11 +848,14 @@ static void stopped_transport(void)
     }
 }
 
-static void storage_quota(void)
+static void keepalive_storage(void)
 {
-    unsigned cycle, cleanup_start;
+    unsigned cycle, commands;
+    /* ED Timeout request/response keepalives are volatile: a READY device
+     * can refresh its parent indefinitely without consuming NV erase budget. */
     ready();
-    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 17);
+    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 9);
+    commands = security_joint_flash_commands();
     for (cycle = 0; cycle < 17 && device.phase == BDB_JOIN_READY; cycle++) {
         uint32_t previous = device.keepalive;
         now = previous;
@@ -826,18 +863,14 @@ static void storage_quota(void)
             device.keepalive == previous; iterations++) {
             drive();
             if (pending && !runtime.transport.active && device.phase == BDB_JOIN_READY) {
-                bdb_join_result_t result;
-                pending = 0; result = bdb_join_receive(&device, mac_body, mac_length, 1, now);
-                CHECK(result == BDB_JOIN_OK || result == BDB_JOIN_SECURITY);
+                pending = 0;
+                CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
             }
         }
         CHECK(iterations < 128);
     }
-    CHECK(cycle == 17 && device.phase != BDB_JOIN_READY);
-    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 2u*NV_RECORD_ERASE_LIMIT);
-    cleanup_start = security_joint_flash_commands(); drain();
-    CHECK(device.phase == BDB_JOIN_FAILED && !leave_sent && !runtime.transport.ready);
-    CHECK(security_joint_flash_commands() == cleanup_start);
+    CHECK(cycle == 17 && device.phase == BDB_JOIN_READY && runtime.transport.ready);
+    CHECK(security_joint_flash_commands() == commands);
     retained(SECURITY_KEYS_VERIFIED);
 }
 
@@ -954,9 +987,15 @@ static void phase_storage(void)
     CHECK(runtime.transport.owner == &transmitter && runtime.transport.last == now && runtime.zdo.last == now);
     CHECK(!runtime.transport.active && !runtime.transport.queued && !runtime.transport.ready &&
         !runtime.transport.next_aps && !runtime.transport.next_nwk && !runtime.zdo.next_tsn && !device.member);
-    CHECK(security_joint_flash_commands() > before);
+    CHECK(security_joint_flash_commands() == before);
+    CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_PROVISIONED);
+    drive();
+    CHECK(device.phase == BDB_JOIN_INSTALLING && action.kind == BDB_JOIN_ACTION_INSTALL);
+    CHECK(action.data.install.address == 0x5678 && security_joint_flash_commands() == before);
+    drive();
+    CHECK(security_joint_flash_commands() == before); /* staged until the first key save */
     CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_ASSOCIATED);
-    drive(); drive();
+    CHECK(!memcmp(&status.config, &event.data.installed, sizeof(status.config)));
     CHECK(device.phase == BDB_JOIN_WAIT_KEY && device.until == record.association.stamp+BDB_JOIN_SECURITY_WAIT);
     CHECK(device.until != now+BDB_JOIN_SECURITY_WAIT);
     commission();
@@ -971,6 +1010,16 @@ static void phase_storage(void)
     CHECK(device.workspace == BDB_JOIN_WORK_SCAN && device.work.scan.phase == MAC_SCAN_IDLE);
     CHECK(device.scan_result.reason == MAC_SCAN_FINISHED && !device.scan_result.candidates);
     CHECK(transmitter.phase == MAC_TX_IDLE && security_joint_flash_commands() == before);
+    CHECK(device.attempts == BDB_JOIN_ATTEMPTS);
+    before_runtime();
+    /* A beacon lost in one completed scan is rescanned, not a failed join. */
+    setup(); scan_beacon = 1;
+    for (iterations = 0; iterations < 128 && !device.attempts; iterations++) drive();
+    CHECK(iterations < 128 && device.phase == BDB_JOIN_SCANNING && device.attempts == 1);
+    CHECK(device.scan_result.reason == MAC_SCAN_FINISHED && !device.scan_result.candidates);
+    scan_beacon = 0;
+    for (iterations = 0; iterations < 128 && device.phase == BDB_JOIN_SCANNING; iterations++) drive();
+    CHECK(iterations < 128 && device.phase == BDB_JOIN_ASSOCIATING && device.attempts == 1);
     before_runtime();
 
     /* Missing physical restoration cannot be retired by a union handoff.
@@ -1025,18 +1074,26 @@ static void phase_storage(void)
     CHECK(device.phase == BDB_JOIN_READY && device.workspace == BDB_JOIN_WORK_RUNTIME && runtime.transport.ready);
     CHECK(device.record.generation == 2 && device.record.association.generation == 2 && !device.record.association.status);
 
-    /* Association is physically retired but durable short-address admission
-     * fails in the real flash reader: no INSTALL, key receipt or membership. */
+    /* Association is physically retired and the RX identity installed without
+     * NV work. The staged admission first reaches the real flash reader when
+     * the network key is saved; that failure grants no membership and leaves
+     * nothing durable. */
     setup(); restore_action(1); record = device.work.association.context.record; tx = transmitter;
     before = security_joint_flash_commands(); security_joint_fail_read(1); drive();
-    CHECK(device.workspace == BDB_JOIN_WORK_RUNTIME && device.result == BDB_JOIN_SECURITY);
-    CHECK(device.phase == BDB_JOIN_ABORTING && !runtime.transport.ready && !device.member);
+    CHECK(device.phase == BDB_JOIN_INSTALLING && security_joint_flash_commands() == before);
+    drive();
+    CHECK(action.kind == BDB_JOIN_ACTION_INSTALL && action.data.install.address == 0x5678);
+    drive();
+    CHECK(device.phase == BDB_JOIN_WAIT_KEY && security_joint_flash_commands() == before);
+    CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_ASSOCIATED);
     CHECK(!memcmp(&record, &device.record, sizeof(record)) && !memcmp(&tx, &transmitter, sizeof(tx)));
+    initial_transport();
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_SECURITY);
+    CHECK(security_joint_flash_commands() == before && !runtime.transport.ready && !device.member);
     drain();
     CHECK(device.phase == BDB_JOIN_FAILED && !leave_sent && security_joint_flash_commands() == before);
     security_joint_reset(0);
-    CHECK(security_keys_open() == SECURITY_KEYS_OK);
-    CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_PROVISIONED);
+    CHECK(security_keys_open() == SECURITY_KEYS_EMPTY);
 }
 
 static void rejected_start_storage(void)
@@ -1313,6 +1370,153 @@ static void slot_lifetimes(void)
     retained(SECURITY_KEYS_VERIFIED);
 }
 
+static void basic_frame(const uint8_t *zcl, uint8_t length, uint8_t endpoint)
+{
+    base_peer(0, 0, 0);
+    peer_out.aps.source_endpoint = 9; peer_out.aps.destination_endpoint = endpoint;
+    peer_out.aps.profile_id = 0x0104; peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
+    memcpy(peer_out.payload, zcl, length); peer_out.length = length;
+    seal_peer(0, 0, NULL, 1);
+}
+
+static void basic_reply(const uint8_t *zcl, uint8_t length, const uint8_t *reply, uint8_t reply_length)
+{
+    basic_frame(zcl, length, 1);
+    memcpy(expected_zcl, reply, reply_length); expected_zcl_length = reply_length; reply_seen = 0;
+    deliver();
+    for (iterations = 0; iterations < 128 &&
+        (!reply_seen || runtime.transport.active || runtime.transport.queued || runtime.zdo.response_tx); iterations++)
+        drive();
+    CHECK(iterations < 128 && reply_seen && device.phase == BDB_JOIN_READY);
+    CHECK(!runtime.zdo.application_ready && !runtime.zdo.response_pending);
+    expected_zcl_length = 0;
+}
+
+static void basic_silent(const uint8_t *zcl, uint8_t length, uint8_t endpoint, uint8_t result)
+{
+    basic_frame(zcl, length, endpoint);
+    if (endpoint == 255) {
+        peer_out.nwk.destination = 0xfffdu; peer_out.aps.delivery_mode = APS_DELIVERY_BROADCAST;
+        peer_out.aps.flags = 0; seal_peer(0, 0, NULL, 1);
+    }
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    pending = 0;
+    CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+    CHECK(device.receive_result == result && !runtime.zdo.application_ready && !runtime.zdo.response_pending);
+    empty_packet(&runtime.zdo.application);
+    drain(); CHECK(device.phase == BDB_JOIN_READY);
+}
+
+static void basic_cluster(void)
+{
+    static const uint8_t read[] = {0x00, 0x31, 0x00, 0x04, 0x00, 0x05, 0x00, 0x07, 0x00, 0x04, 0x01};
+    static const uint8_t odd[] = {0x10, 0x32, 0x00, 0x05, 0x00, 0x04};
+    static const uint8_t vendor[] = {0x04, 0x34, 0x12, 0x33, 0x00, 0x04, 0x00};
+    static const uint8_t vendor_reply[] = {0x1c, 0x34, 0x12, 0x33, 0x0b, 0x00, 0x81};
+    static const uint8_t specific[] = {0x01, 0x35, 0x00};
+    static const uint8_t specific_reply[] = {0x18, 0x35, 0x0b, 0x00, 0x81};
+    static const uint8_t write[] = {0x00, 0x36, 0x02, 0x10, 0x00, 0x42, 0x00};
+    static const uint8_t write_reply[] = {0x18, 0x36, 0x0b, 0x02, 0x81};
+    static const uint8_t quiet_write[] = {0x10, 0x37, 0x02, 0x10, 0x00, 0x42, 0x00};
+    static const uint8_t from_server[] = {0x18, 0x38, 0x01, 0x04, 0x00, 0x86};
+    static const uint8_t to_client[] = {0x08, 0x3d, 0x00, 0x04, 0x00};
+    static const uint8_t default_response[] = {0x00, 0x39, 0x0b, 0x00, 0x00};
+    static const uint8_t reserved[] = {0x02, 0x3a, 0x00, 0x04, 0x00};
+    static const uint8_t short_vendor[] = {0x04, 0x34, 0x12, 0x3b};
+    const uint8_t manufacturer[] = BOARD_MANUFACTURER, model[] = BOARD_MODEL;
+    uint8_t reply[ED_PAYLOAD_MAX], request[ED_PAYLOAD_MAX], at = 3, i;
+    ready();
+    for (i = 0; i < 2; i++) {
+        base_peer(0, 0, i ? 4 : 5);
+        peer_out.payload[0] = (uint8_t)(0x90+i); peer_out.payload[1] = 0x78; peer_out.payload[2] = 0x56;
+        peer_out.payload[3] = 1; peer_out.length = i ? 4 : 3;
+        expected_reply_cluster = peer_out.aps.cluster_id | 0x8000u;
+        expected_reply_status = 0; expected_reply_length = i ? 15 : 6; reply_seen = 0;
+        seal_peer(0, 0, NULL, 1);
+        deliver();
+        for (iterations = 0; iterations < 128 &&
+            (!reply_seen || runtime.transport.active || runtime.transport.queued || runtime.zdo.response_tx); iterations++)
+            drive();
+        CHECK(iterations < 128 && reply_seen && device.phase == BDB_JOIN_READY);
+        expected_reply_cluster = 0;
+    }
+    reply[0] = 0x18; reply[1] = 0x31; reply[2] = 0x01;
+    reply[at++] = 4; reply[at++] = 0; reply[at++] = 0; reply[at++] = 0x42;
+    reply[at++] = sizeof(manufacturer)-1; memcpy(reply+at, manufacturer, sizeof(manufacturer)-1);
+    at += sizeof(manufacturer)-1;
+    reply[at++] = 5; reply[at++] = 0; reply[at++] = 0; reply[at++] = 0x42;
+    reply[at++] = sizeof(model)-1; memcpy(reply+at, model, sizeof(model)-1); at += sizeof(model)-1;
+    reply[at++] = 7; reply[at++] = 0; reply[at++] = 0x86;
+    reply[at++] = 4; reply[at++] = 1; reply[at++] = 0x86;
+    basic_reply(read, sizeof(read), reply, at);
+    reply[0] = 0x18; reply[1] = 0x32; reply[2] = 0x01;
+    reply[3] = 5; reply[4] = 0; reply[5] = 0; reply[6] = 0x42; reply[7] = sizeof(model)-1;
+    memcpy(reply+8, model, sizeof(model)-1);
+    basic_reply(odd, sizeof(odd), reply, (uint8_t)(8+sizeof(model)-1));
+    basic_reply(vendor, sizeof(vendor), vendor_reply, sizeof(vendor_reply));
+    basic_reply(specific, sizeof(specific), specific_reply, sizeof(specific_reply));
+    basic_reply(write, sizeof(write), write_reply, sizeof(write_reply));
+    /* Records that would overflow one APS payload are omitted, not split. */
+    request[0] = 0; request[1] = 0x3c; request[2] = 0;
+    for (i = 3; i+1u < ED_PAYLOAD_MAX-8u; i += 2) { request[i] = 4; request[i+1] = 0; }
+    reply[0] = 0x18; reply[1] = 0x3c; reply[2] = 0x01; at = 3;
+    while (at+5+sizeof(manufacturer)-1 <= ED_PAYLOAD_MAX) {
+        reply[at++] = 4; reply[at++] = 0; reply[at++] = 0; reply[at++] = 0x42;
+        reply[at++] = sizeof(manufacturer)-1; memcpy(reply+at, manufacturer, sizeof(manufacturer)-1);
+        at += sizeof(manufacturer)-1;
+    }
+    basic_reply(request, ED_PAYLOAD_MAX-8, reply, at);
+    /* The last three-byte status record that fits is kept. */
+    request[1] = 0x3e;
+    for (i = 3; i+1u < ED_PAYLOAD_MAX; i += 2) { request[i] = 7; request[i+1] = 0; }
+    reply[1] = 0x3e; at = 3;
+    while (at+3u <= ED_PAYLOAD_MAX) { reply[at++] = 7; reply[at++] = 0; reply[at++] = 0x86; }
+    CHECK(at == ED_PAYLOAD_MAX-1);
+    basic_reply(request, ED_PAYLOAD_MAX-1, reply, at);
+    /* A string record exactly one byte too long ends the response (reachable
+     * only when the board strings break the three-byte record granularity). */
+    {
+        uint8_t a, b, c = 255, m = sizeof(manufacturer)-1, n = sizeof(model)-1, length = 3;
+        for (a = 0; a < 4 && c == 255; a++)
+            for (b = 0; b < 6 && c == 255; b++) {
+                int left = (int)ED_PAYLOAD_MAX-4-m-3-a*(5+m)-b*(5+n);
+                if (left >= 0 && !(left%3)) c = (uint8_t)(left/3);
+            }
+        if (c != 255) { a--; b--; } else a = b = c = 0;
+        request[1] = 0x3f; reply[1] = 0x3f; at = 3;
+        for (i = 0; i < a+b+c; i++) {
+            uint8_t id = i < a ? 4 : i < a+b ? 5 : 7;
+            request[length++] = id; request[length++] = 0;
+            reply[at++] = id; reply[at++] = 0;
+            if (id == 7) reply[at++] = 0x86;
+            else {
+                reply[at++] = 0; reply[at++] = 0x42; reply[at++] = id == 4 ? m : n;
+                memcpy(reply+at, id == 4 ? manufacturer : model, reply[at-1]); at += reply[at-1];
+            }
+        }
+        if (at+5u+m == ED_PAYLOAD_MAX+1u) {
+            request[length++] = 4; request[length++] = 0; request[length++] = 7; request[length++] = 0;
+            basic_reply(request, length, reply, at);
+        } else CHECK(!a && !b && !c && !((5u+m) % 3u) && !((5u+n) % 3u));
+    }
+    basic_silent(quiet_write, sizeof(quiet_write), 1, ZDO_RUNTIME_IGNORED);
+    basic_silent(from_server, sizeof(from_server), 1, ZDO_RUNTIME_IGNORED);
+    basic_silent(to_client, sizeof(to_client), 1, ZDO_RUNTIME_IGNORED);
+    basic_silent(default_response, sizeof(default_response), 1, ZDO_RUNTIME_IGNORED);
+    basic_silent(reserved, sizeof(reserved), 1, ZDO_RUNTIME_IGNORED);
+    basic_silent(read, sizeof(read), 255, ZDO_RUNTIME_IGNORED);
+    basic_silent(read, 2, 1, ZDO_RUNTIME_FORMAT);
+    basic_silent(short_vendor, sizeof(short_vendor), 1, ZDO_RUNTIME_FORMAT);
+    basic_frame(read, sizeof(read), 255);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    CHECK(runtime.transport.reply && runtime.transport.acknowledgment.aps.source_endpoint == 1 &&
+          runtime.transport.acknowledgment.aps.destination_endpoint == 9);
+    pending = 0;
+    CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+    CHECK(device.receive_result == ZDO_RUNTIME_IGNORED && !runtime.zdo.response_pending);
+    drain(); CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.application_ready);
+}
+
 static void transmit_extent(void)
 {
     ed_packet_t application = {0};
@@ -1358,6 +1562,7 @@ static void transmit_extent(void)
 
 int main(void)
 {
+    nwk_aps_duplicate_t duplicates[NWK_APS_DUPLICATES];
     uint8_t result, i;
     uint32_t previous, joined_at;
     ed_packet_t application = {0};
@@ -1416,7 +1621,7 @@ int main(void)
     }
     pending = 0;
     for (i = 0; i < 6; i++) {
-        base_peer(0, 0, i == 5 ? 5 : i == 4 ? 1 : 0);
+        base_peer(0, 0, i == 5 ? 6 : i == 4 ? 1 : 0);
         peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
         peer_out.payload[0] = (uint8_t)(0x80+i);
         peer_out.length = i == 5 ? 1 : i == 4 ? 5 : 11;
@@ -1458,7 +1663,24 @@ int main(void)
     CHECK(zdo_runtime_take_application(&runtime.zdo, &peer_in) == ZDO_RUNTIME_OK);
     peer_out.aps.counter = aps_counter++; peer_out.nwk.sequence = nwk_sequence++;
     seal_peer(0, 0, NULL, 1);
-    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_FULL);
+    /* A full duplicate table evicts its soonest-expiring retry record instead of losing new traffic. */
+    for (i = 0; i < NWK_APS_DUPLICATES; i++) {
+        CHECK(runtime.transport.duplicate[i].used);
+        runtime.transport.duplicate[i].until = now+1000u+(i == 5 ? 0u : 100u*i+50u);
+        duplicates[i] = runtime.transport.duplicate[i];
+    }
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    for (i = 0; i < NWK_APS_DUPLICATES; i++)
+        CHECK(i == 5 ? runtime.transport.duplicate[i].until == now+runtime.transport.duplicate_time :
+              !memcmp(&duplicates[i], &runtime.transport.duplicate[i], sizeof(duplicates[i])));
+    pending = 0;
+    CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+    CHECK(runtime.zdo.application_ready && runtime.zdo.application.length == 1);
+    CHECK(zdo_runtime_discard_application(NULL) == ZDO_RUNTIME_ARGUMENT);
+    CHECK(zdo_runtime_discard_application(&runtime.zdo) == ZDO_RUNTIME_OK);
+    for (i = 0; i < sizeof(runtime.zdo.application); i++) CHECK(!((uint8_t *)&runtime.zdo.application)[i]);
+    CHECK(zdo_runtime_discard_application(&runtime.zdo) == ZDO_RUNTIME_STATE);
+    CHECK(zdo_runtime_take_application(&runtime.zdo, &peer_in) == ZDO_RUNTIME_STATE);
     CHECK(!runtime.transport.receive_ready && !runtime.zdo.application_ready && runtime.transport.ready);
     empty_packet(&runtime.transport.incoming);
     pending = 0;
@@ -1523,6 +1745,14 @@ int main(void)
     CHECK(bdb_join_init(&device, now) == BDB_JOIN_OK);
     CHECK(bdb_join_start(&device, &transmitter, &config, now) == BDB_JOIN_RECOVERY_REQUIRED);
     CHECK(device.workspace == BDB_JOIN_WORK_NONE && !device.member && device.phase == BDB_JOIN_IDLE);
+    for (test_case = 9; test_case <= 11; test_case++) {
+        uint32_t late_at;
+        setup(); commission();
+        late_at = device.last;
+        CHECK(device.phase == BDB_JOIN_READY && runtime.transport.ready && device.member);
+        CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_VERIFIED);
+        CHECK(!settle && late_at == now);
+    }
     for (test_case = 1; test_case <= 8; test_case++) {
         setup(); commission();
         CHECK(!runtime.transport.ready && !device.member);
@@ -1539,9 +1769,9 @@ int main(void)
         }
     }
     operational_failures(); update_pending_query(); response_backpressure();
-    work_and_deadlines(); stopped_transport(); storage_quota(); terminal_control();
+    work_and_deadlines(); stopped_transport(); keepalive_storage(); terminal_control();
     phase_storage(); rejected_start_storage(); transport_configuration();
-    slot_lifetimes(); transmit_extent(); transport_endpoints();
+    slot_lifetimes(); basic_cluster(); transmit_extent(); transport_endpoints();
     printf("BDB join: %u checks PASS; real commissioning, operational loss, bounded work, backpressure, phase/slot ownership and durable recovery boundary.\n", checks);
     return 0;
 }

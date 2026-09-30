@@ -17,6 +17,16 @@
 #error Unsupported CC2530 board
 #endif
 
+/* ZCL Basic identity strings; metadata only, no hardware access. */
+#define BOARD_MANUFACTURER "cc2530-zigbee"
+#if CC2530_BOARD == BOARD_LG_ESL29_REV03
+#define BOARD_MODEL "LG-ESL29"
+#define BOARD_MODEL_LENGTH 8u
+#else
+#define BOARD_MODEL "generic"
+#define BOARD_MODEL_LENGTH 7u
+#endif
+
 typedef struct {
     uint8_t identifier;
     uint8_t policy;

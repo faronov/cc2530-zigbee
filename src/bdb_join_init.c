@@ -44,6 +44,11 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, NWK_APS
         config->scan.saved.rx_on != config->association.saved.rx_on) return BDB_JOIN_ARGUMENT;
     if (ctx->phase != BDB_JOIN_IDLE || BDB_JOIN_ENGINE(owner)->phase != MAC_TX_IDLE) return BDB_JOIN_STATE;
     if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
+#if defined(CC2530_DEFAULT_TC_KEY)
+    if (bdb_join_keys.phase != SECURITY_KEYS_UNPROVISIONED) return BDB_JOIN_RECOVERY_REQUIRED;
+    if (config->association.extraction.local_mode != MAC_ADDRESS_EXTENDED)
+        return BDB_JOIN_ARGUMENT;
+#else
     if (bdb_join_keys.phase != SECURITY_KEYS_PROVISIONED) return BDB_JOIN_RECOVERY_REQUIRED;
     if (config->scan.channels != (1UL << bdb_join_keys.config.channel) ||
         config->association.extraction.pan != bdb_join_keys.config.pan ||
@@ -53,6 +58,7 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, NWK_APS
         memcmp(config->association.extraction.local, bdb_join_keys.config.own_ieee, 8) ||
         memcmp(config->association.extraction.coordinator, bdb_join_keys.config.tc_ieee, 8))
         return BDB_JOIN_ARGUMENT;
+#endif
     if (bdb_join_runtime_init(ctx, owner, config, now) != BDB_JOIN_OK)
         return BDB_JOIN_ARGUMENT;
     ctx->config = *config; ctx->owner = owner; ctx->epoch = config->association.extraction.epoch;
@@ -66,3 +72,26 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, NWK_APS
     ctx->phase = BDB_JOIN_SCANNING;
     return BDB_JOIN_OK;
 }
+
+#if defined(CC2530_DEFAULT_TC_KEY)
+/* RAM only: the identity the association discovered, before any NV write. */
+void bdb_join_discovered_config(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+{
+    memcpy(bdb_join_keys.config.own_ieee, ctx->config.association.extraction.local, 8);
+    memcpy(bdb_join_keys.config.tc_ieee, ctx->record.association.source_ieee, 8);
+    memcpy(bdb_join_keys.config.extended_pan, ctx->parent.candidate.network.extended_pan_id, 8);
+    bdb_join_keys.config.pan = ctx->parent.candidate.pan_id;
+    bdb_join_keys.config.channel = ctx->parent.candidate.channel;
+    bdb_join_keys.config.update_id = ctx->parent.candidate.network.update_id;
+    bdb_join_keys.config.address = 0xffffu;
+}
+
+bdb_join_result_t bdb_join_provision_discovered(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+{
+    bdb_join_discovered_config(ctx);
+    if (security_keys_provision_default(&bdb_join_keys.config, 1, 1,
+        &ctx->config.transport.limits, ctx->config.transport.nv_polls) != SECURITY_KEYS_OK)
+        return BDB_JOIN_SECURITY;
+    return BDB_JOIN_OK;
+}
+#endif
