@@ -10,9 +10,9 @@
 #endif
 #include "timebase.h"
 #include <stddef.h>
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+/* Every profile: the J3 shallow-read forms are identities outside DIRECT. */
 #include "mac_link_workspace_guard_internal.h"
-#endif
+/* DIRECT keeps sample's d/now and the block bit in homes across calls (J3). */
 
 /* SWRU191F 2.2.2-2.2.3 pp.27-29; 8.3 pp.97-98; 15.9-15.10 pp.150-151. */
 volatile MCU_XDATA uint8_t aes_dma0[8], aes_dma1[32];
@@ -104,7 +104,7 @@ static void arm_output(void) __naked
 static void arm_input(void) { MMIO_WRITE(SOC_DMAARM, 1); host_mmio_system_cycles(9); }
 static void arm_output(void) { MMIO_WRITE(SOC_DMAARM, 2); host_mmio_system_cycles(9); }
 #endif
-
+#define timebase_expired(now, ...) timebase_expired(LW_SHALLOW_READ(uint32_t, now), __VA_ARGS__)
 static aes_result_t observe(aes_diagnostics_t MCU_XDATA *d)
 {
     uint8_t ien0, ien1, ien2, sleep, command, status;
@@ -134,7 +134,7 @@ static aes_result_t observe(aes_diagnostics_t MCU_XDATA *d)
     d->sample_valid = 1;
     return AES_OK;
 }
-
+#define observe(d) observe(LW_SHALLOW_READ(aes_diagnostics_t MCU_XDATA *, d))
 static aes_result_t sample(aes_diagnostics_t MCU_XDATA *d, uint8_t final)
 {
     aes_result_t result;
@@ -175,31 +175,31 @@ static aes_result_t sample(aes_diagnostics_t MCU_XDATA *d, uint8_t final)
     w.previous = now;
     return AES_OK;
 }
-
+#undef observe
 static void input_descriptor(uint16_t source)
 {
     aes_dma0[0] = (uint8_t)(source >> 8); aes_dma0[1] = (uint8_t)source;
     aes_dma0[2] = 0x70; aes_dma0[3] = 0xb1;
     aes_dma0[4] = 0; aes_dma0[5] = 16; aes_dma0[6] = 29; aes_dma0[7] = 0x41;
 }
-
+#undef timebase_expired
 aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,
                                   uint16_t limit, aes_diagnostics_t MCU_XDATA *d)
 {
     uint32_t key_location, input_location;
     uint16_t out, diag, address;
-    uint8_t i, bit, command;
+    uint8_t i; LW_SHALLOW_HOME uint8_t bit; uint8_t command;
     aes_result_t result;
     if (aes_fault)
         return (aes_result_t)aes_fault;
     if (key == NULL || input == NULL || output == NULL || d == NULL || !timeout ||
         timeout >= TIMEBASE_HALF_RANGE || !limit)
         return AES_INVALID_ARGUMENT;
-#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
-    if (!child_work_leaf(CW_AES) || !LW_IO(CW_AES_KEY,key,16,0) ||
-        !LW_IO(CW_AES_INPUT,input,16,0) || !LW_IO(CW_AES_OUTPUT,output,16,1) ||
-        !LW_IO(CW_AES_INFO,d,sizeof(*d),1)) return AES_BUFFER_OWNERSHIP;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
+    if (!child_work_leaf(CW_AES) || !LW_IO(CW_AES_KEY,*(const uint8_t * volatile *)&key,16,0) ||
+        !LW_IO(CW_AES_INPUT,*(const uint8_t * volatile *)&input,16,0) || !LW_IO(CW_AES_OUTPUT,*(uint8_t MCU_XDATA * volatile *)&output,16,1) ||
+        !LW_IO(CW_AES_INFO,*(aes_diagnostics_t MCU_XDATA * volatile *)&d,sizeof(*d),1)) return AES_BUFFER_OWNERSHIP;
 #else
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!link_work_external(key, 16) || !link_work_external(input, 16) ||

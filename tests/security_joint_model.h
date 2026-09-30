@@ -22,6 +22,8 @@ void security_joint_trace(uint8_t enabled);
  */
 void security_joint_cut(jmp_buf *env, unsigned command, uint8_t kind, unsigned bits);
 void security_joint_stall_flash(unsigned command);
+/* Nonzero completes erase/program only after SWRU191-derived FCTL poll counts. */
+void security_joint_physical_flash(uint8_t enabled);
 void security_joint_stall_aes(unsigned block);
 void security_joint_fail_read(unsigned relative_read);
 #endif

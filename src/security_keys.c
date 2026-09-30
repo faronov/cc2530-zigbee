@@ -80,8 +80,19 @@ static MCU_XDATA struct {
 } w;
 #endif
 typedef char phase_fits_packed_byte[(SECURITY_KEYS_REJOINING <= PHASE_MASK) ? 1 : -1];
+typedef char phase_ranges[(SECURITY_KEYS_REQUESTED == SECURITY_KEYS_RECEIVED+1 &&
+    SECURITY_KEYS_WAIT_CONFIRM == SECURITY_KEYS_PROVISIONAL+1) ? 1 : -1];
 typedef char payload_stays_112[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
 static MCU_XDATA uint8_t security_keys_phase, security_keys_result;
+/* Lazy volatile state: NF floors and the PHASE byte's keepalive bits
+ * (TIMEOUT_PENDING, parent information). Accepted DATA/MANAGEMENT frames
+ * without APS security or key-slot changes, and End Device Timeout requests,
+ * update only these caches; everything else saves the whole record.
+ * open/save/lazy paths keep them equal to the live state (floors never below
+ * NV). Reset loses them: replay protection reverts to saved floors and the
+ * keepalive bits to their last saved value. */
+static MCU_XDATA uint8_t floor_cache[8];
+static MCU_XDATA uint8_t phase_cache;
 
 static uint16_t u16(const uint8_t *p)
 {
@@ -92,10 +103,8 @@ static uint32_t u32(const uint8_t *p)
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
         ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
-static void put16(uint8_t *p, uint16_t n)
-{
-    p[0] = (uint8_t)n; p[1] = (uint8_t)(n >> 8);
-}
+/* Macro: its arguments are side-effect free and it saves static XDATA. */
+#define put16(p,n) ((p)[0] = (uint8_t)(n), (p)[1] = (uint8_t)((n) >> 8))
 static void put32(uint8_t *p, uint32_t n)
 {
     uint8_t i;
@@ -153,6 +162,8 @@ static security_keys_result_t finish(security_keys_result_t result)
 void security_keys_host_power_cycle(void)
 {
     security_keys_phase = SECURITY_KEYS_COLD;
+    memset(floor_cache, 0, sizeof(floor_cache));
+    phase_cache = 0;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     security_keys_result = SECURITY_KEYS_OK;
     link_work_host_reset();
@@ -237,13 +248,23 @@ static security_keys_result_t load(void)
         return fault(SECURITY_KEYS_STORAGE);
     if (!valid_record() || phase() != security_keys_phase)
         return fault(SECURITY_KEYS_FORMAT);
+    memcpy(w.record+NF, floor_cache, 8);
+    /* Zero until the first open/save: staged provision/association records
+     * are read back unchanged. */
+    if (phase_cache) w.record[PHASE] = phase_cache;
     return SECURITY_KEYS_OK;
+}
+static void keep_volatile(void)
+{
+    memcpy(floor_cache, w.record+NF, sizeof(floor_cache));
+    phase_cache = w.record[PHASE];
 }
 static security_keys_result_t save(void)
 {
     if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
         return fault(SECURITY_KEYS_STORAGE);
     security_keys_phase = phase();
+    keep_volatile();
     return SECURITY_KEYS_OK;
 }
 static uint8_t limits_ok(const ccm_star_limits_t *limits, uint16_t polls)
@@ -305,22 +326,34 @@ security_keys_result_t security_keys_open(void) SECURITY_FAR
     if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
         result = fault(SECURITY_KEYS_STORAGE);
     else if (!valid_record()) result = fault(SECURITY_KEYS_FORMAT);
-    else security_keys_phase = phase();
+    else { security_keys_phase = phase(); keep_volatile(); }
     return finish(result);
 }
 
+#if defined(CC2530_DEFAULT_TC_KEY)
+security_keys_result_t security_keys_provision_default(
+    const security_keys_config_t * volatile config,
+#else
 security_keys_result_t security_keys_provision(
     const security_keys_config_t * volatile config, const uint8_t * volatile install_code18,
+#endif
     volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     KEY_ENTER();
-    if (!KEY_EXTERNAL(config, sizeof(*config)) || !KEY_EXTERNAL(install_code18, 18) ||
+    if (!KEY_EXTERNAL(config, sizeof(*config)) ||
+#if !defined(CC2530_DEFAULT_TC_KEY)
+        !KEY_EXTERNAL(install_code18, 18) ||
+#endif
         !KEY_EXTERNAL(limits, sizeof(*limits))) return finish(SECURITY_KEYS_ARGUMENT);
 #endif
     if (security_keys_phase != SECURITY_KEYS_UNPROVISIONED) return finish(SECURITY_KEYS_STATE);
-    if (!config || !install_code18 || !limits_ok(limits, nv_polls) ||
+    if (!config ||
+#if !defined(CC2530_DEFAULT_TC_KEY)
+        !install_code18 ||
+#endif
+        !limits_ok(limits, nv_polls) ||
         nwk_floor == 0xffffffffUL || aps_floor == 0xffffffffUL)
         return finish(SECURITY_KEYS_ARGUMENT);
     memcpy(w.record+OWN, config->own_ieee, 8);
@@ -329,10 +362,14 @@ security_keys_result_t security_keys_provision(
     put16(w.record+PAN, config->pan); put16(w.record+ADDR, config->address);
     w.record[CHANNEL] = config->channel; w.record[UPDATE] = config->update_id;
     if (!valid_config()) return finish(SECURITY_KEYS_ARGUMENT);
+#if defined(CC2530_DEFAULT_TC_KEY)
+    memcpy(w.record+LK, "ZigBeeAlliance09", 16);
+#else
     memcpy(w.a, install_code18, 18);
     if (KEY_CALL(LW_INSTALL_CODE, install_code_derive(w.a, 18, w.record+LK,
         w.limits.block_timeout, w.limits.block_polls, &w.hash_info)) != ZIGBEE_MMO_OK)
         return finish(SECURITY_KEYS_CRYPTO);
+#endif
     w.record[MAGIC] = 'K'; w.record[MAGIC+1] = 2;
     set_phase(SECURITY_KEYS_PROVISIONED);
     if (KEY_CALL(LW_COUNTER_CREATE, security_counter_create(nwk_floor, aps_floor, w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
@@ -355,6 +392,12 @@ security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t 
         return finish(SECURITY_KEYS_IDENTITY);
     put16(w.record+ADDR, short_address); set_phase(SECURITY_KEYS_ASSOCIATED);
     w.polls = nv_polls;
+    /* Still staged: the first key save commits association and key atomically.
+     * Any restage refusal leaves the committed/failed path to save(). */
+    if (KEY_CALL(LW_COUNTER_CREATE, security_counter_restage(w.record, 112)) == SECURITY_COUNTER_OK) {
+        security_keys_phase = SECURITY_KEYS_ASSOCIATED;
+        return finish(SECURITY_KEYS_OK);
+    }
     return finish(save());
 }
 
@@ -632,7 +675,8 @@ security_keys_result_t security_keys_receive(
             raw_npdu, length, w.a, 116, &w.info));
         if (r != SECURITY_KEYS_OK) return finish(r);
         put32(w.record+NF+4u*i, w.meta.counter+1); w.size = w.info.length;
-        if ((w.record[FLAGS] & NEWER) && i != active_slot()) adopt(i);
+        /* secured == 2: this frame switched the active key (durable). */
+        if ((w.record[FLAGS] & NEWER) && i != active_slot()) { adopt(i); w.secured = 2; }
     } else {
         if (network() || length > 116) return finish(SECURITY_KEYS_CONTEXT);
         memcpy(w.a, raw_npdu, length); w.size = (uint8_t)length;
@@ -665,7 +709,10 @@ security_keys_result_t security_keys_receive(
     if (w.packet.nwk.type != ED_NWK_COMMAND && w.packet.aps.type == ED_APS_COMMAND) {
         memset(w.packet.payload, 0, sizeof(w.packet.payload)); w.packet.length = 0;
     }
-    r = save();
+    /* Every APS command and durable NWK command reports an event above
+     * MANAGEMENT; Network Status and ED Timeout responses stay lazy. */
+    if (w.event > SECURITY_KEYS_EVENT_MANAGEMENT || w.aps_secured || w.secured == 2) r = save();
+    else keep_volatile();
     if (r == SECURITY_KEYS_OK) {
         *output = w.packet;
         *event = w.event | (w.aps_secured ? SECURITY_KEYS_EVENT_APS_SECURED : 0);
@@ -734,7 +781,7 @@ security_keys_result_t security_keys_request(
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!out || !written || !limits_ok(limits, nv_polls)) return finish(SECURITY_KEYS_ARGUMENT);
-    if (phase() != SECURITY_KEYS_RECEIVED && phase() != SECURITY_KEYS_REQUESTED &&
+    if ((uint8_t)(phase()-SECURITY_KEYS_RECEIVED) > 1u &&
         phase() != SECURITY_KEYS_VERIFIED) return finish(SECURITY_KEYS_CONTEXT);
     if (capacity < 47) return finish(SECURITY_KEYS_SPACE);
     command_packet(nwk_seq, aps_counter);
@@ -758,8 +805,7 @@ security_keys_result_t security_keys_verify(
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!out || !written || !limits_ok(limits, nv_polls)) return finish(SECURITY_KEYS_ARGUMENT);
-    if (phase() != SECURITY_KEYS_PROVISIONAL && phase() != SECURITY_KEYS_WAIT_CONFIRM)
-        return finish(SECURITY_KEYS_CONTEXT);
+    if ((uint8_t)(phase()-SECURITY_KEYS_PROVISIONAL) > 1u) return finish(SECURITY_KEYS_CONTEXT);
     if (capacity < 54) return finish(SECURITY_KEYS_SPACE);
     command_packet(nwk_seq, aps_counter);
     w.packet.length = 26; w.packet.payload[0] = 15; w.packet.payload[1] = 4;
@@ -876,7 +922,7 @@ security_keys_result_t security_keys_send(
     }
     if (r == SECURITY_KEYS_OK && w.packet.nwk.type == ED_NWK_COMMAND && w.packet.payload[0] == 11) {
         w.record[PHASE] |= TIMEOUT_PENDING;
-        r = save();
+        keep_volatile();
     }
     if (r == SECURITY_KEYS_OK) r = publish(out, capacity, written);
     return finish(r);

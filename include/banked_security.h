@@ -11,7 +11,7 @@
 #define SECURITY_FAR
 #endif
 
-#if defined(CC2530_BANKED_JOIN)
+#if defined(CC2530_BANKED_JOIN) && !defined(CC2530_BANKED_LINK)
 #define WIRE_FAR
 #else
 #define WIRE_FAR SECURITY_FAR

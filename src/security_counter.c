@@ -10,9 +10,9 @@
 #define CW_READ_HOME(type,home) (home)
 #endif
 #include <stddef.h>
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+/* Every profile: the J3 shallow-read forms are identities outside DIRECT. */
 #include "mac_link_workspace_guard_internal.h"
-#endif
+/* DIRECT reloads saved parameters from their homes across calls (J3). */
 
 MCU_XDATA security_counter_status_t security_counter_diagnostic;
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
@@ -73,22 +73,25 @@ static security_counter_result_t ready(void)
         D.state == SECURITY_COUNTER_READY ? SECURITY_COUNTER_OK : SECURITY_COUNTER_STATE;
 }
 
-static security_counter_result_t load(uint8_t MCU_XDATA *p)
+static void floors(void)
 {
-    D.nv_result = (uint8_t)nv_record_load(p, NV_RECORD_MAX);
-    if (D.nv_result == NV_RECORD_RECOVERED)
-        return fail(SECURITY_COUNTER_RECOVERY);
-    if (D.nv_result != NV_RECORD_OK)
-        return fail(SECURITY_COUNTER_NV);
-    return SECURITY_COUNTER_OK;
+    uint8_t i;
+    for (i = 0; i < 2; i++)
+        D.next[i] = D.until[i] = decode(security_counter_blob+8u+4u*i);
 }
 
 static security_counter_result_t current(void)
 {
     uint8_t i;
-    security_counter_result_t result = load(security_counter_check);
-    if (result != SECURITY_COUNTER_OK)
-        return result;
+    D.nv_result = (uint8_t)nv_record_load(security_counter_check, NV_RECORD_MAX);
+    /* Staged creation: the first commit still requires an empty journal. */
+    if (!D.generation)
+        return D.nv_result == NV_RECORD_EMPTY ? SECURITY_COUNTER_OK :
+            fail(SECURITY_COUNTER_ROLLBACK);
+    if (D.nv_result == NV_RECORD_RECOVERED)
+        return fail(SECURITY_COUNTER_RECOVERY);
+    if (D.nv_result != NV_RECORD_OK)
+        return fail(SECURITY_COUNTER_NV);
     if (nv_record_status()->generation != D.generation ||
         nv_record_status()->length != 16u+D.payload_length)
         return fail(SECURITY_COUNTER_ROLLBACK);
@@ -126,7 +129,6 @@ static void payload(const uint8_t MCU_XDATA * volatile data, uint8_t length)
 
 security_counter_result_t security_counter_open(void)
 {
-    uint8_t i;
     if (D.state == SECURITY_COUNTER_FAILED)
         return (security_counter_result_t)D.result;
     if (D.state != SECURITY_COUNTER_COLD)
@@ -153,12 +155,32 @@ D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
         nv_record_status()->length != 16u+security_counter_blob[5] ||
         security_counter_blob[6] || security_counter_blob[7])
         return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
-    for (i = 0; i < 2; i++)
-        D.next[i] = D.until[i] = decode(security_counter_blob+8u+4u*i);
+    floors();
     D.generation = nv_record_status()->generation;
     D.payload_length = security_counter_blob[5];
     D.state = SECURITY_COUNTER_READY;
     return CW_RETURN(CW_COUNTER_OPEN,finish(SECURITY_COUNTER_OK));
+}
+
+/* Validates and stages a payload; the floors are the caller's. */
+static security_counter_result_t stage(const uint8_t MCU_XDATA * volatile data,
+    uint8_t length, uint16_t poll_limit)
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!link_work_counter_request(LW_COUNTER_CREATE, data, length, NULL))
+        return SECURITY_COUNTER_OWNERSHIP;
+#endif
+    if (length > SECURITY_COUNTER_PAYLOAD_MAX || (!data && length) || !poll_limit)
+        return SECURITY_COUNTER_ARGUMENT;
+    if (length && !caller(data, length))
+        return SECURITY_COUNTER_OWNERSHIP;
+#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+    if (!child_work_enter(CW_COUNTER_CREATE)) return SECURITY_COUNTER_OWNERSHIP;
+#endif
+    payload(data, length);
+    D.payload_length = length;
+    D.state = SECURITY_COUNTER_READY;
+    return CW_RETURN(CW_COUNTER_CREATE,finish(SECURITY_COUNTER_OK));
 }
 
 security_counter_result_t security_counter_create(
@@ -168,35 +190,27 @@ security_counter_result_t security_counter_create(
     security_counter_result_t result;
     if (D.state == SECURITY_COUNTER_FAILED)
         return (security_counter_result_t)D.result;
-    if (D.state != SECURITY_COUNTER_UNPROVISIONED)
+    if (D.state != SECURITY_COUNTER_UNPROVISIONED &&
+        (D.state != SECURITY_COUNTER_READY || D.generation))
         return SECURITY_COUNTER_STATE;
-#if defined(CC2530_MAC_LINK_WORKSPACE)
-    if (!link_work_counter_request(LW_COUNTER_CREATE, data, length, NULL))
-        return SECURITY_COUNTER_OWNERSHIP;
-#endif
-    if (length > SECURITY_COUNTER_PAYLOAD_MAX || (!data && length) || !poll_limit)
-        return SECURITY_COUNTER_ARGUMENT;
-    if (length && !caller(data, length))
-        return SECURITY_COUNTER_OWNERSHIP;
-
-#if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
-    if (!child_work_enter(CW_COUNTER_CREATE)) return SECURITY_COUNTER_OWNERSHIP;
-#endif
-D.nv_result = (uint8_t)nv_record_load(security_counter_check, NV_RECORD_MAX);
-    if (D.nv_result != NV_RECORD_EMPTY)
-        return CW_RETURN(CW_COUNTER_CREATE,fail(SECURITY_COUNTER_ROLLBACK));
+    result = stage(data, length, poll_limit);
+    if (result != SECURITY_COUNTER_OK)
+        return result;
     security_counter_blob[0] = 'C'; security_counter_blob[1] = 'T';
     security_counter_blob[2] = 'R'; security_counter_blob[3] = '1';
     security_counter_blob[4] = 1; security_counter_blob[6] = security_counter_blob[7] = 0;
     encode(security_counter_blob+8, nwk_floor);
     encode(security_counter_blob+12, aps_floor);
-    payload(data, length);
-    result = commit(poll_limit);
-    if (result == SECURITY_COUNTER_OK) {
-        D.next[0] = D.until[0] = nwk_floor;
-        D.next[1] = D.until[1] = aps_floor;
-    }
-    return CW_RETURN(CW_COUNTER_CREATE,result);
+    floors();
+    return result;
+}
+
+security_counter_result_t security_counter_restage(
+    const uint8_t MCU_XDATA * volatile data, uint8_t length)
+{
+    if (D.state != SECURITY_COUNTER_READY || D.generation)
+        return SECURITY_COUNTER_STATE;
+    return stage(data, length, 1);
 }
 
 security_counter_result_t security_counter_take(
@@ -238,7 +252,7 @@ if (D.next[domain] == D.until[domain]) {
     *value = taken;
     return CW_RETURN(CW_COUNTER_TAKE,finish(SECURITY_COUNTER_OK));
 }
-
+#define commit(limit) commit(LW_SHALLOW_READ(uint16_t, limit))
 security_counter_result_t security_counter_save(
     const uint8_t MCU_XDATA * volatile data, uint8_t length, uint16_t poll_limit)
 {
@@ -253,7 +267,7 @@ security_counter_result_t security_counter_save(
         return SECURITY_COUNTER_ARGUMENT;
     if (length && !caller(data, length))
         return SECURITY_COUNTER_OWNERSHIP;
-
+#define payload(d, n) payload(d, LW_SHALLOW_READ(uint8_t, n))
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (!child_work_enter(CW_COUNTER_SAVE)) return SECURITY_COUNTER_OWNERSHIP;
 #endif

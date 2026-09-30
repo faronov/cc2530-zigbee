@@ -126,15 +126,16 @@ static void accept(uint8_t expected)
           (sealed_aps_secured ? SECURITY_KEYS_EVENT_APS_SECURED : 0));
     CHECK(!(output.aps.flags & APS_FLAG_SECURITY));
 }
-static void reject(security_keys_result_t expected)
+static void reject_at(security_keys_result_t expected,int line)
 {
     security_keys_result_t r;
     memset(&output,0xa5,sizeof(output)); saved_output = output; event = 0xa5;
     r = security_keys_receive(raw,wire_length,&output,&event,&limits,3);
-    if (r != expected) fprintf(stderr,"result %u expected %u\n",(unsigned)r,(unsigned)expected);
+    if (r != expected) fprintf(stderr,"result %u expected %u line %d\n",(unsigned)r,(unsigned)expected,line);
     CHECK(r == expected);
     CHECK(!memcmp(&output,&saved_output,sizeof(output)) && event == 0xa5);
 }
+#define reject(e) reject_at(e,__LINE__)
 static void confirm(const uint8_t *link, uint32_t ac, uint32_t nc)
 {
     base(ED_APS_COMMAND); packet.length = 11;
@@ -175,15 +176,31 @@ static void setup(void)
     CHECK(security_keys_associate(0x1234,3) == SECURITY_KEYS_STATE);
     CHECK(install_code_derive(install,18,bootstrap,1000,128,&hash_info) == ZIGBEE_MMO_OK);
     CHECK(security_keys_provision(&config,install,10,20,&limits,3) == SECURITY_KEYS_OK);
-    CHECK(security_joint_aes_blocks() == 4 && security_joint_flash_commands() == 38);
+    /* Provisioning and association are staged; the first key save commits them. */
+    CHECK(security_joint_aes_blocks() == 4 && !security_joint_flash_commands());
     state(SECURITY_KEYS_PROVISIONED);
     CHECK(!status.parent_information && !status.timeout_pending);
-    memcpy(provisioned,security_joint_nv(),4096);
+    {
+        uint8_t record[112], length;
+        CHECK(security_counter_read(record,112,&length) == SECURITY_COUNTER_OK && length == 112);
+        CHECK(security_counter_save(record,112,3) == SECURITY_COUNTER_OK);
+        CHECK(security_joint_flash_commands() == 38);
+    }
+    memcpy(provisioned,security_joint_nv(),4096); /* committed legacy PROVISIONED image */
+    security_joint_reset(1);
+    CHECK(security_keys_open() == SECURITY_KEYS_EMPTY);
+    CHECK(security_keys_provision(&config,install,10,20,&limits,3) == SECURITY_KEYS_OK);
     CHECK(security_keys_associate(0,3) == SECURITY_KEYS_ARGUMENT);
     CHECK(security_keys_associate(0xfff8,3) == SECURITY_KEYS_ARGUMENT);
     CHECK(security_keys_associate(0x1234,3) == SECURITY_KEYS_OK);
+    CHECK(!security_joint_flash_commands() && !security_counter_status()->generation);
     state(SECURITY_KEYS_ASSOCIATED);
-    CHECK(!status.parent_information && !status.timeout_pending);
+    CHECK(!status.parent_information && !status.timeout_pending && status.config.address == 0x1234);
+    security_joint_reset(0);
+    CHECK(security_keys_open() == SECURITY_KEYS_EMPTY && !security_joint_flash_commands());
+    CHECK(security_keys_provision(&config,install,10,20,&limits,3) == SECURITY_KEYS_OK);
+    CHECK(security_keys_associate(0x1234,3) == SECURITY_KEYS_OK);
+    state(SECURITY_KEYS_ASSOCIATED);
     transport(1,nwk_key,255); seal_packet(bootstrap,2,0,NULL,0,0);
     CHECK(wire_length == 62 && raw[8] == 0x21 && raw[10] == 0x30);
     golden(raw,wire_length,
@@ -191,6 +208,7 @@ static void setup(void)
         "b7ca687916ae81c9a398c57b91d1190824b2d01897375fabba4977");
     raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH); raw[wire_length-1] ^= 1;
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
+    CHECK(security_counter_status()->generation == 1 && security_joint_flash_commands() == 38);
     CHECK(output.length == 0);
     for (unsigned i = 0; i < sizeof(output.payload); i++) CHECK(output.payload[i] == 0);
     state(SECURITY_KEYS_RECEIVED);
@@ -601,7 +619,9 @@ static void timeout_management(void)
                 CHECK(security_keys_send(&packet,0,raw,45,&written,&limits,3) == SECURITY_KEYS_OK);
                 timeout_packet(1); packet.payload[1] = status_code; packet.payload[2] = parent_info[i];
                 seal_packet(NULL,0,0,nwk_key,255,floor++);
+                commands = security_joint_flash_commands();
                 accept(SECURITY_KEYS_EVENT_MANAGEMENT);
+                CHECK(security_joint_flash_commands() == commands); /* lazy keepalive */
                 CHECK(event == SECURITY_KEYS_EVENT_MANAGEMENT); /* no APS security/key event */
                 CHECK(output.nwk.type == ED_NWK_COMMAND && output.length == 3 &&
                       output.payload[0] == 12 && output.payload[1] == status_code &&
@@ -614,7 +634,11 @@ static void timeout_management(void)
                 CHECK(!status.timeout_pending && status.parent_information == retained_info);
             }
         reject(SECURITY_KEYS_REPLAY);
-        reboot(NULL,phase); reject(SECURITY_KEYS_REPLAY);
+        /* Keepalive state is volatile: reset restores the saved (idle) bits,
+         * so the replayed response now lacks a pending request. */
+        reboot(NULL,phase);
+        CHECK(!status.timeout_pending && !status.parent_information);
+        reject(SECURITY_KEYS_CONTEXT);
     }
     /* All required addressing fields are checked on TX and RX, not merely
      * copied. TX config/reserved values are separate from RX parent-info. */
@@ -656,7 +680,11 @@ static void timeout_management(void)
     timeout_packet(1); seal_packet(NULL,0,0,NULL,0,0); reject(SECURITY_KEYS_CONTEXT);
     seal_packet(NULL,0,0,nwk_key,255,3);
     raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH);
-    raw[wire_length-1] ^= 1; security_joint_fail_read(1); reject(SECURITY_KEYS_STORAGE);
+    /* The lazy response neither writes nor reads NV back. */
+    raw[wire_length-1] ^= 1; security_joint_fail_read(1);
+    commands = security_joint_flash_commands();
+    accept(SECURITY_KEYS_EVENT_MANAGEMENT);
+    CHECK(security_joint_flash_commands() == commands);
 }
 static void post_key_passthrough(void)
 {
@@ -727,6 +755,7 @@ static void secured_rejoin(void)
 static void selectors_and_floors(void)
 {
     uint8_t good[116], n;
+    unsigned commands;
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
     base(APS_FRAME_DATA); packet.length = 1;
     seal_packet(new_tc,0,0,nwk_key,255,3); reject(SECURITY_KEYS_REPLAY);
@@ -743,8 +772,26 @@ static void selectors_and_floors(void)
     seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_SWITCH);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0 && !status.newer_pending);
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    commands = security_joint_flash_commands();
     data(0xfffffffeUL,nwk_key,255); accept(SECURITY_KEYS_EVENT_DATA);
+    CHECK(security_joint_flash_commands() == commands); /* lazy: RAM floor only */
     memcpy(good,raw,wire_length); n = wire_length;
+    reject(SECURITY_KEYS_REPLAY);
+    /* Reset reverts to the last saved floor: the documented replay window. */
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    memcpy(raw,good,n); wire_length = n; accept(SECURITY_KEYS_EVENT_DATA);
+    memcpy(raw,good,n); wire_length = n; reject(SECURITY_KEYS_REPLAY);
+    /* A durable save carries the RAM floor into NV. */
+    update_packet(config.update_id,config.pan); seal_packet(NULL,0,0,nwk_key,255,0xfffffffeUL);
+    reject(SECURITY_KEYS_REPLAY);
+    reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    data(0x100,nwk_key,255); accept(SECURITY_KEYS_EVENT_DATA);
+    update_packet(config.update_id,config.pan); seal_packet(NULL,0,0,nwk_key,255,0x100);
+    reject(SECURITY_KEYS_REPLAY);
+    update_packet(config.update_id,config.pan); seal_packet(NULL,0,0,nwk_key,255,0x101);
+    commands = security_joint_flash_commands(); accept(SECURITY_KEYS_EVENT_UPDATE);
+    CHECK(security_joint_flash_commands() != commands);
+    data(0x100,nwk_key,255); memcpy(good,raw,wire_length); n = wire_length;
     reboot(NULL,SECURITY_KEYS_VERIFIED);
     memcpy(raw,good,n); wire_length = n; reject(SECURITY_KEYS_REPLAY);
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
@@ -931,15 +978,16 @@ static void parent_information_edi(void)
         timeout_packet(0); packet.nwk.flags |= NWK_FLAG_END_DEVICE_INITIATOR;
         CHECK(security_keys_send(&packet,0,raw,45,&written,&limits,3) == SECURITY_KEYS_OK);
         sent_edi(0);
-        reboot(NULL,SECURITY_KEYS_VERIFIED);
+        state(SECURITY_KEYS_VERIFIED);
         CHECK(status.timeout_pending && !status.parent_information);
         timeout_packet(1); packet.payload[2] = information[i];
         seal_packet(NULL,0,0,nwk_key,255,3); accept(SECURITY_KEYS_EVENT_MANAGEMENT);
         expected = information[i] & 7u;
-        reboot(NULL,SECURITY_KEYS_VERIFIED);
+        state(SECURITY_KEYS_VERIFIED);
         CHECK(!status.timeout_pending && status.parent_information == expected);
+        /* Keepalive bits stay volatile until the next durable save. */
         CHECK(security_counter_read(record,112,&length) == SECURITY_COUNTER_OK && length == 112);
-        CHECK(record[109] == (uint8_t)(SECURITY_KEYS_VERIFIED | (expected << 4)) && record[111] == 2);
+        CHECK(record[109] == SECURITY_KEYS_VERIFIED && record[111] == 2);
         reject(SECURITY_KEYS_REPLAY);
         timeout_packet(1); packet.payload[2] = expected ^ 7u;
         seal_packet(NULL,0,0,nwk_key,255,4); reject(SECURITY_KEYS_CONTEXT);
@@ -1056,55 +1104,33 @@ static void outbound_router_broadcast(void)
     packet.nwk.destination = 0xffff;
     seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_DATA);
 }
-static void parent_information_cuts(void)
+static void parent_information_volatile(void)
 {
-    static const uint8_t boundaries[] = {1,38,39,76};
-    static uint8_t stage, boundary, kind, pending_image[4096], encoded[116], size;
-    unsigned n;
+    static uint8_t encoded[116], size;
+    unsigned commands;
+    /* ED Timeout request/response only update RAM: no NV command can be cut.
+     * Reset reverts both bits to the saved record, so a replayed response
+     * lacks the pending request instead of restoring parent information. */
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    commands = security_joint_flash_commands();
     request_timeout(1);
-    memcpy(pending_image,security_joint_nv(),4096);
-    for (stage = 0; stage < 2; stage++)
-        for (boundary = 0; boundary < (stage ? 4 : 2); boundary++)
-            for (kind = 1; kind <= 3; kind++) {
-                reboot(stage ? snapshot : pending_image,SECURITY_KEYS_VERIFIED);
-                if (stage) timeout_packet(0);
-                else {
-                    timeout_packet(1);
-                    seal_packet(NULL,0,0,nwk_key,255,3);
-                    memcpy(encoded,raw,wire_length); size = wire_length;
-                }
-                memset(raw,0xa5,sizeof(raw)); written = 0xa5;
-                memset(&output,0xa5,sizeof(output)); saved_output = output; event = 0xa5;
-                security_joint_cut(&power_cut,boundaries[boundary],kind,13);
-                if (!setjmp(power_cut)) {
-                    if (stage) (void)security_keys_send(&packet,0,raw,45,&written,&limits,3);
-                    else (void)security_keys_receive(encoded,size,&output,&event,&limits,3);
-                    CHECK(0);
-                }
-                CHECK(written == 0xa5 && event == 0xa5 &&
-                      !memcmp(&output,&saved_output,sizeof(output)));
-                for (n = 0; n < sizeof(raw); n++) CHECK(raw[n] == 0xa5);
-                security_joint_reset(0);
-                {
-                    security_keys_result_t r = security_keys_open();
-                    if (r == SECURITY_KEYS_OK) {
-                        state(SECURITY_KEYS_VERIFIED);
-                        if (stage) CHECK(status.parent_information == 0);
-                        else {
-                            CHECK((status.timeout_pending && !status.parent_information) ||
-                                  (!status.timeout_pending && status.parent_information == 2));
-                            if (!status.timeout_pending) {
-                                memcpy(raw,encoded,size); wire_length = size;
-                                reject(SECURITY_KEYS_REPLAY);
-                            }
-                        }
-                    } else {
-                        CHECK(r == SECURITY_KEYS_STORAGE && !security_joint_flash_commands());
-                        CHECK(security_keys_provision(&config,install,10,20,&limits,3) == SECURITY_KEYS_STATE);
-                    }
-                }
-            }
+    CHECK(security_joint_flash_commands() <= commands+38); /* counter reservation only */
+    timeout_packet(1); seal_packet(NULL,0,0,nwk_key,255,3);
+    memcpy(encoded,raw,wire_length); size = wire_length;
+    commands = security_joint_flash_commands();
+    accept(SECURITY_KEYS_EVENT_MANAGEMENT);
+    CHECK(security_joint_flash_commands() == commands);
+    state(SECURITY_KEYS_VERIFIED);
+    CHECK(!status.timeout_pending && status.parent_information == 2);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(!status.timeout_pending && !status.parent_information);
+    memcpy(raw,encoded,size); wire_length = size;
+    reject(SECURITY_KEYS_CONTEXT);
+    request_timeout(2);
+    memcpy(raw,encoded,size); wire_length = size;
+    accept(SECURITY_KEYS_EVENT_MANAGEMENT); /* saved floor predates the lazy one */
+    state(SECURITY_KEYS_VERIFIED);
+    CHECK(!status.timeout_pending && status.parent_information == 2);
 }
 static void interrupted(void)
 {
@@ -1139,11 +1165,16 @@ static void interrupted(void)
         }
     }
 }
+/* Plain data floors are lazy; a duplicate NWK Update always saves. */
+static void durable(uint32_t nc)
+{
+    update_packet(config.update_id,config.pan); seal_packet(NULL,0,0,nwk_key,255,nc);
+}
 static void failures(void)
 {
     unsigned before, n;
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
-    data(3,nwk_key,255); security_joint_fail_read(1);
+    durable(3); security_joint_fail_read(1);
     reject(SECURITY_KEYS_STORAGE);
     before = security_joint_flash_commands();
     reject(SECURITY_KEYS_STORAGE); CHECK(before == security_joint_flash_commands());
@@ -1157,12 +1188,12 @@ static void failures(void)
     state(SECURITY_KEYS_FAILED);
     /* Inherited 32 erase attempts/page/power epoch is NOT weakened. */
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
-    for (n = 3; n < 67; n++) { data(n,nwk_key,255); accept(SECURITY_KEYS_EVENT_DATA); }
+    for (n = 3; n < 67; n++) { durable(n); accept(SECURITY_KEYS_EVENT_UPDATE); }
     CHECK(security_joint_flash_erases(0) == 32 && security_joint_flash_erases(1) == 32);
-    data(67,nwk_key,255); before = security_joint_flash_commands();
+    durable(67); before = security_joint_flash_commands();
     reject(SECURITY_KEYS_STORAGE); CHECK(before == security_joint_flash_commands());
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
-    data(3,nwk_key,255);
+    durable(3);
     memset(&output,0xa5,sizeof(output)); saved_output = output; event = 0xa5;
     security_joint_cut(&power_cut,0,1,0);
     security_joint_stall_flash(1);
@@ -1185,7 +1216,7 @@ int main(void)
     secured_rejoin(); selectors_and_floors();
     schema_and_arguments(); local_leave(); interrupted_leave();
     parent_information_edi(); outbound_router_broadcast();
-    parent_information_cuts(); interrupted(); failures();
+    parent_information_volatile(); interrupted(); failures();
     printf("security keys: %u checks PASS; real AES/CCM/HMAC/counter/journal/flash host composition only\n",checks);
     return 0;
 }

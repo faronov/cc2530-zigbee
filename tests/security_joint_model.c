@@ -43,6 +43,8 @@ extern uint8_t aes_reserved_end, _gptrput_PARM_2;
 static uint8_t nv[4096], saved[2048], addresses[2], staged[4], controller, active, accepting;
 static unsigned commands, data_writes, polls, reads_nv, fail_read, erases[2], words[1024];
 static unsigned cut_command, cut_bits, stop_command;
+/* Physical timing survives modeled resets; default is the legacy 2-poll model. */
+static unsigned erase_polls = 2, program_polls = 2;
 static uint8_t cut_kind;
 static uint8_t trace_enabled;
 static jmp_buf *cut_env;
@@ -151,7 +153,8 @@ static uint8_t xload(uint16_t a)
     logs();
     if (a == 0x6270) {
         if (accepting) accepting = 0;
-        else if (active && ++polls == 2 && commands != stop_command) complete();
+        else if (active && ++polls == ((controller & 3) == FLASH_EXEC_ERASE ? erase_polls : program_polls) &&
+                 commands != stop_command) complete();
         return controller;
     }
     if (a == 0x624a) return 0xa5;
@@ -249,5 +252,11 @@ void security_joint_cut(jmp_buf *env, unsigned command, uint8_t kind, unsigned b
     cut_env = env; cut_command = command; cut_kind = kind; cut_bits = bits;
 }
 void security_joint_stall_flash(unsigned command) { stop_command = command; }
+void security_joint_physical_flash(uint8_t enabled)
+{
+    /* SWRU191: 20 ms erase, 20 us word write, >= 21 cycles per poll at 32 MHz. */
+    erase_polls = enabled ? 30477u : 2u;
+    program_polls = enabled ? 31u : 2u;
+}
 void security_joint_stall_aes(unsigned block) { security_aes_stall(block); }
 void security_joint_fail_read(unsigned relative_read) { fail_read = reads_nv+relative_read; }

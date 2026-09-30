@@ -49,6 +49,12 @@ typedef struct {
  * use save to preserve both ceilings, even when clearing the opaque payload.
  * This module has no erase/reset/rewind/recovery-bypass API.
  *
+ * Create only stages floors and payload in RAM (READY, generation 0); it does
+ * no flash work. Restage replaces a staged payload, keeping its floors, and
+ * returns STATE once committed. The first save or take commits generation 1
+ * and requires an EMPTY journal, else ROLLBACK. A reset before that commit
+ * leaves the journal EMPTY; recovery is a fresh explicit provisioning.
+ *
  * Degraded journal selection, unknown versions, unexpected runtime generation/
  * snapshot, and all storage failures retain a failure and forbid allocation.
  * A cold, coherent rollback of BOTH pages or complete erase cannot be detected
@@ -65,6 +71,8 @@ security_counter_result_t security_counter_open(void);
 security_counter_result_t security_counter_create(
     uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * volatile data,
     uint8_t length, uint16_t poll_limit);
+security_counter_result_t security_counter_restage(
+    const uint8_t MCU_XDATA * volatile data, uint8_t length);
 security_counter_result_t security_counter_take(
     volatile uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit);
 security_counter_result_t security_counter_save(

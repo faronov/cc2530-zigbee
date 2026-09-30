@@ -9,6 +9,10 @@
 #define FLASH_EXEC_RAM_SIZE 123u
 #define FLASH_EXEC_ERASE 1u
 #define FLASH_EXEC_PROGRAM 2u
+/* Largest poll_limit. Each executor poll is at least 21 CPU cycles (SWRU191
+ * instruction table), so this lasts >= 43 ms at 32 MHz, above the 20 ms page
+ * erase (SWRU191 6.3). A hardware erase with 2000 polls reached RAM_STOP. */
+#define FLASH_EXEC_POLL_MAX 65535u
 
 typedef enum {
     FLASH_EXEC_IDLE = 0, FLASH_EXEC_INVALID_ARGUMENT, FLASH_EXEC_UNSUPPORTED_STATE,
