@@ -116,6 +116,33 @@ success-shaped fallback. Diagnostics preserve phase and last observed control/
 selector/flags, poll/discard counts, raw elapsed ticks and timebase status.
 Argument/state misuse does not replace the last operational diagnostic.
 
+### Original first-failure register value
+
+The diagnostic appends two bytes, `guard` and `guard_value`, without moving
+the original fields. On UNSUPPORTED_STATE they identify the failing read and
+its original unmasked byte; no later peripheral reread is substituted.
+`MAC_TIME_GUARD_*` IDs1-18 cover IEN0/1/2, SLEEPCMD, DMAARM/REQ,
+CLKCONCMD/STA, CHIPID, CSPSTAT, RXENABLE, FSMSTAT0/1, RFERRF,
+RFIRQM0/1, RFERRM and T2IRQM in that order. Other results leave both zero.
+The existing fault latch preserves the first diagnostic on every later call.
+
+Each original guard still rejects exactly the same condition and reads the
+same registers in the same order. One volatile byte stages each read so SDCC
+cannot substitute another peripheral read when recording a failure.
+No recovery, flag clear, extra peripheral probe or captured-time claim is
+introduced. In particular, FSMSTAT0.7 remains guarded pending physical
+evidence; SWRU191F p262 says Reserved R, not guaranteed-zero R0.
+Guard14/value04 distinguishes a read RFERRF.RXOVERF from a counter error;
+guard12 preserves the raw FSMSTAT0 byte. These are diagnostic distinctions,
+not permission to accept an overflow or relax a radio predicate.
+
+The separately authorized complete LG caller
+[recorded guard14/value04 on hardware](ED_JOIN.md#2026-09-28-lg-physical-discovery-trials)
+during channel15 scan, at phase1/polls0. That first read proves RXOVERF for
+that run; the zero control/select/IRQ fields were not read before failure.
+This is neither standalone-image hardware acceptance nor evidence that a
+Timer2 counter failed. No overflow recovery or rejection change follows.
+
 ### Independent bounds and discontinuities
 
 Each operation requires `0 < timeout < 0x800000` raw Sleep Timer ticks and a
@@ -242,20 +269,20 @@ IRAM100, ordinary XDATA below1E00, unbanked CODE below8000. Link
 **timebase -> mac_time -> test caller**. Snapshot all three relocated `.rst`
 listings immediately after this link, before another link can overwrite them.
 
-Both board definitions have identical linked CODE:
+The current LG diagnostic composition has linked CODE:
 
 ```text
-2,999 bytes, 0000..0BB6
-SHA256 3caf16cb1d4010f02b32c9d448aab19eb816137f4e4d5c9be5088d37bc78b336
+3,249 bytes, 0000..0CB0
+SHA256 a08783b08a70df2d84257c96c2dc606d1d9522929f472ae57d66e1e58472e96b
 ```
 
-- **124 ordinary XDATA +64 status reservation =188/512 bytes**, within this
+- **126 ordinary XDATA +64 status reservation =190/512 bytes**, within this
   standalone composition's budget. No earlier budget is changed.
-- Whole timebase/service/compiler prefix `0000..0060` (97 bytes);
-  private diagnostic `001C..0029` (14 bytes), staging `002A..002F` (6),
-  wait state `0030..0040` (17). Public output is a **two-byte XDATA pointer**.
-- Caller guard/output `0061..006E`, actual six-byte stamp `0065..006A`;
-  generic-store helper scratch `007B` is explicitly excluded.
+- Whole timebase/service/compiler prefix `0000..0062` (99 bytes);
+  private diagnostic `001C..002B` (16 bytes), staging `002C..0031` (6),
+  wait state `0032..0042` (17). Public output is a **two-byte XDATA pointer**.
+- Caller guard/output `0063..0070`, actual six-byte stamp `0067..006C`;
+  generic-store helper scratch `007D` is explicitly excluded.
 - IRAM: bank0 eight bytes, DATA3, overlay3, one bit-storage byte (one bit).
   The 18-byte `0E..1F` gap is unused, not an implicit pool.
   Stack `21..FF` reserves223 bytes, initial SP20; observed MMIO peak **SP2E**.
@@ -264,15 +291,19 @@ SHA256 3caf16cb1d4010f02b32c9d448aab19eb816137f4e4d5c9be5088d37bc78b336
   the IRAM alias, never extra RAM.
 
 [Native tests](../tests/test_mac_time.c) execute the real driver/timebase with
-an original stateful counter/selector/latch model. Each board passes **8,384
+an original stateful counter/selector/latch model. The current LG run passes **8,600
 calls**, including every fine count against coarse byte/wrap boundaries,
 low-FF erratum, live carries during latched reads, malformed state/arguments,
 configuration/readback failures, RUN without STATE, deadline/work exhaustion,
 full16-bit cap, nonpublication and retained re-entry.
-The same native corpus also passes ASan/UBSan for both board definitions.
+The same native corpus passes nonrecovering ASan/UBSan, with identical exported
+vectors. All48 original traces preserve their complete MMIO and original
+diagnostic fields. The54 added cases cover every unsupported guard at initial
+observe, the first preflight poll and post-latch validation, including original
+unmasked values, short-circuit reads and retained-fault nonpublication.
 
-[Linked checks](../tests/boot_mac_time.py) run **48 sequences /158 calls /
-10,550 MMIO events** per board using genuine SDCC instructions, not patched
+[Linked checks](../tests/boot_mac_time.py) run **102 sequences /374 calls /
+26,165 MMIO events** on the LG composition using genuine SDCC instructions, not patched
 returns. They pin whole CODE, public/private/caller ABI, every MMIO site and
 actual operand, all allocations, accessor, listing snapshots and guards.
 The five adjacent period writes are individually stepped: uCsim `run` must not
@@ -293,7 +324,8 @@ These levels are **host-tested, image-checked and simulated**, not independent
 silicon models or hardware observations. No calibration, physical latch/timing,
 PM/debugger continuity, capture, RF or generic/LG hardware acceptance is claimed.
 
-Directly coupled `test-timebase test-radio-tx` passes for each board in separate
+For the original reader revision, directly coupled `test-timebase test-radio-tx`
+passed for each board in separate
 `build/mac-time-dev/coupled-<board>` directories: unchanged timebase corpus,
 and TX's 7,078 native calls plus51 linked sequences/173 calls/45,538 events.
 Normal image verification also passes for both `bringup` and `timebase_fixture`.

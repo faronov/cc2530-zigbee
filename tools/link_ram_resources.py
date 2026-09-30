@@ -30,6 +30,15 @@ CHILD_LIMITS = {"code": 236892, "const": 1507, "xdata": 5727,
                 "data_sum": 562, "overlay_sum": 74, "bits": 86}
 CHILD_LAYOUT_BYTES = WORKSPACE_LAYOUT_BYTES + 543 + 31
 CONTEXT_BYTES = 1433 + 180 + 304
+# CHILD with nwk_aps_t's private MAC build buffer removed: the NPDU is staged
+# in the IDLE owner's own frame. Added mac_tx loan/homes count in XSEG below;
+# BDB and ZDO reuse NWK/APS's refresh-before-use key status snapshot (-2x37).
+DIRECT_MODULES = (CHILD_MODULES - {"nwk_aps_transmit"}) | {"nwk_aps_direct"}
+DIRECT_PROBE = "mac_link_direct_layout"
+# J3 round 3: flash_write/aes DIRECT reload homes add 8 XSEG (5674 -> 5682 actual).
+DIRECT_LIMITS = {"code": 238278, "const": 1507, "xdata": 5682,
+                 "data_sum": 562, "overlay_sum": 74, "bits": 87}
+DIRECT_CONTEXT_BYTES = CONTEXT_BYTES - 125
 
 
 def object_areas(text, module):
@@ -60,9 +69,13 @@ def object_areas(text, module):
             "overlay_sum": areas.get("OSEG", 0), "bits": areas["BSEG"]}
 
 
-def report(objects, *, workspace=False, child_workspace=False):
-    require(not (workspace and child_workspace), "Conflicting workspace profiles")
-    if child_workspace:
+def report(objects, *, workspace=False, child_workspace=False, direct=False):
+    require(workspace + child_workspace + direct <= 1, "Conflicting workspace profiles")
+    context = DIRECT_CONTEXT_BYTES if direct else CONTEXT_BYTES
+    if direct:
+        modules, limits, probe = DIRECT_MODULES, DIRECT_LIMITS, DIRECT_PROBE
+        probe_bytes = context + CHILD_LAYOUT_BYTES
+    elif child_workspace:
         modules, limits, probe = CHILD_MODULES, CHILD_LIMITS, CHILD_PROBE
         probe_bytes = CONTEXT_BYTES + CHILD_LAYOUT_BYTES
     else:
@@ -76,8 +89,8 @@ def report(objects, *, workspace=False, child_workspace=False):
     totals = {key: sum(rows[m][key] for m in modules) for key in limits}
     for key, limit in limits.items():
         require(totals[key] <= limit, f"Compact {key} regression ceiling exceeded")
-    return totals | {"context_bytes": CONTEXT_BYTES,
-                     "object_floor": totals["xdata"] + CONTEXT_BYTES}
+    return totals | {"context_bytes": context,
+                     "object_floor": totals["xdata"] + context}
 
 
 def main():
@@ -88,13 +101,18 @@ def main():
                           help="Check the shared-UPPER profile, not the ordinary compact profile")
     profiles.add_argument("--child-workspace", action="store_true",
                           help="Check the combined UPPER/CHILD profile, not UPPER alone")
+    profiles.add_argument("--direct", action="store_true",
+                          help="Check UPPER/CHILD with direct NWK MAC staging")
     args = parser.parse_args()
     result = report({p.stem: p.read_text() for p in args.output.glob("*.rel")},
-                    workspace=args.workspace, child_workspace=args.child_workspace)
-    label = "Shared UPPER/CHILD LINK" if args.child_workspace else (
-        "Shared UPPER LINK" if args.workspace else "Compact LINK")
-    modules = CHILD_MODULES if args.child_workspace else (
-        WORKSPACE_MODULES if args.workspace else MODULES)
+                    workspace=args.workspace, child_workspace=args.child_workspace,
+                    direct=args.direct)
+    label = "Direct UPPER/CHILD LINK" if args.direct else (
+        "Shared UPPER/CHILD LINK" if args.child_workspace else (
+            "Shared UPPER LINK" if args.workspace else "Compact LINK"))
+    modules = DIRECT_MODULES if args.direct else (
+        CHILD_MODULES if args.child_workspace else (
+            WORKSPACE_MODULES if args.workspace else MODULES))
     print(f"{label}: {len(modules)} production objects, {result['code']} CODE + "
           f"{result['const']} CONST, {result['xdata']} XDATA; "
           f"caller-inclusive floor {result['object_floor']}/7680. "

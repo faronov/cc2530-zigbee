@@ -58,7 +58,7 @@ is imported.
 
 TI **SWRS081B, April 2009, revised February 2011**, Table 2 p.24
 ([CC2530 datasheet](https://www.ti.com/lit/pdf/swrs081)), characterizes raw
-TXPOWER `05` with the normal TXCTRL profile as typical -22 dBm on its CC2530 EM
+TXPOWER `05` and `D5` with the normal TXCTRL profile as typical -22 and +1 dBm on its CC2530 EM
 at 25 C, 3 V and 2440 MHz. This is not measured generic/LG output power, EIRP,
 calibration or regulatory permission.
 
@@ -94,7 +94,14 @@ handoff to one of those owners.
 configuration; it retains no caller pointer. IEEE bytes are supplied least
 significant first; PAN/short values are encoded little-endian. All address bit
 patterns are raw caller filter configuration, not validated identities.
-Channels 11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` are supported.
+Channels11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` or
+`RADIO_AUTOACK_POWER_D5` are supported. Power is copied at cold acquisition,
+fully read back and retained through stop/resume, ordinary TX, AUTOACK and
+channel reconfiguration. It cannot be changed within that ownership epoch.
+Other bytes, including `F5`, remain unsupported; there is no clamp or fallback.
+The complete join caller explicitly selects `D5`; existing isolated board
+fixtures still request `05`. Increasing TX power does not improve RX sensitivity
+or establish board-specific RF output or reachability.
 
 | Setting | Written value |
 | --- | --- |
@@ -104,7 +111,7 @@ Channels 11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` are supported.
 | FRMCTRL0 / FRMCTRL1 | `60 / 00`: AUTOCRC/AUTOACK, RSSI plus CRC/correlation, normal RX/TX, Pending0, underflow detection, no automatic TX mask bit |
 | FIFOPCTRL / FSMCTRL | `7F / 00`: threshold 127, unslotted ACK, RX-to-RX timeout disabled |
 | AGCCTRL1 / TXFILTCFG / FSCAL1 | `15 / 09 / 00`; only FSCAL1 readback is masked to bits 1:0 |
-| FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / 05 / 69` |
+| FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / caller 05 or D5 / 69` |
 
 Require unchanged MDMCTRL0/1 `85/14`, MDMTEST0/1 `75/08`, FREQTUNE `0F`,
 standard modem control and an idle CSP. Acquisition changes no CCA setting
@@ -134,7 +141,7 @@ publish a partial body. No heap or software packet queue is introduced.
 | Invalid argument/range/storage/state | No MMIO, output or diagnostic mutation. |
 | Operational error | Enter terminal FAULT and retain the first error and ownership. All later operations return it with no MMIO, output or diagnostic mutation, even with invalid arguments. |
 
-Receive masks only the PHR's documented high bit, bounds length 5..127, and
+Receive masks the PHR's documented high bit, bounds length 5..127, and
 returns `length=PHR-2` with 3..125 body bytes. `rssi_raw` is the uninterpreted
 RSSI byte; `crc_correlation` has CRC_OK in bit 7 and raw correlation in bits
 6:0, not calibrated LQI. Successful short frames preserve the inactive output
@@ -169,6 +176,11 @@ automatic retry or recovery operation.
 The ring identity follows the exact SWRU191F p.265 register definitions:
 `RXFIRST_PTR[6:0]` (`619D`) is the RAM offset of the first FIFO byte;
 `RXLAST_PTR[6:0]` (`619E`) is the offset of the **last byte +1 byte**.
+Their bit7 is reserved **R**, not guaranteed R0. The owner masks it in
+snapshots, destructive-read head checks and attempt admission, without
+masking count errors or documented RXP1 fields. The native and actual-MCU
+wrap cases also assert these reserved bits; changed low pointer bits remain
+errors. A real LG run exposed raw RXLAST=9A with first7D/count29.
 The latter is a one-past-last producer boundary, not the last occupied byte
 or permission to write when full. Page 264 defines RXFIFOCNT as the number of
 bytes in the FIFO. Section 23.9.7, Figure 23-15 p.230 shows the leading length

@@ -61,6 +61,29 @@ mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t n
     const mac_tx_interval_event_t * volatile event, mac_tx_interval_action_t * volatile action) JOIN_FAR;
 mac_tx_result_t mac_tx_interval_release(mac_tx_interval_t *tx) JOIN_FAR;
 
+#if defined(CC2530_MAC_LINK_DIRECT)
+/* DIRECT in-place admission; the ordinary copying API is unchanged.
+ * stage returns engine.frame only while the engine is IDLE (NULL otherwise)
+ * and records ONE loan bound to this owner and its current generation; a new
+ * stage replaces it. Between stage and submit_staged the caller alone writes
+ * frame[0..length). submit_staged admits only a DATA frame, with the ordinary
+ * DATA/Pending/PAN/FFFE/DSN/lifetime/work/clock/generation rules, without a
+ * second frame or memcpy; length is 1..125. Argument errors return INVALID
+ * and not IDLE returns FULL, both before the loan is examined. No loan,
+ * another owner or a changed generation (any intervening admission) returns
+ * STATE. A matching loan is consumed by that call whatever its later result.
+ * Every rejection leaves control, timestamps and generation unchanged; the
+ * rejected staged bytes are unspecified IDLE scratch, never retained evidence.
+ * The loan is foreground-local: pair stage and submit_staged inside one
+ * foreground operation. Admissions are detected through generation; an
+ * intervening re-initialization of the owner is not, and is a caller error.
+ * Commands and other callers still use the ordinary copying submit.
+ */
+uint8_t *mac_tx_interval_stage(mac_tx_interval_t *tx) JOIN_FAR;
+mac_tx_result_t mac_tx_interval_submit_staged(mac_tx_interval_t *tx, uint16_t length,
+    uint32_t now, uint32_t lifetime, uint16_t work) JOIN_FAR;
+#endif
+
 /* now/report are symbol-boundary observations no earlier than upper (ceil).
  * A definitely timely matching ACK can establish ACKED. A matching or wrong-DSN
  * ACK whose timing straddles the window produces local TIMING_UNCERTAIN, not

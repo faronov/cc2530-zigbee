@@ -743,3 +743,80 @@ mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * volatile tx, uint32_t n
     return LW_RETURN(LW_TX_OBSERVED, MAC_TX_OK);
 }
 #endif
+
+#if defined(CC2530_MAC_LINK_DIRECT)
+#if !defined(CC2530_MAC_INTERVAL) || !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#error DIRECT staging requires the interval owner and the UPPER/CHILD composition
+#endif
+/* One single-use loan of an IDLE owner's own frame. Any successful admission
+ * increments generation, so an ordinary submit in between cannot be mistaken
+ * for fresh DIRECT staging. No second frame and no copy onto itself exist. */
+static TX_RAM struct {
+    const mac_tx_interval_t *owner;
+    uint32_t generation;
+} lent;
+
+uint8_t *mac_tx_interval_stage(mac_tx_interval_t *tx)
+{
+    if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1) || tx == NULL || tx->engine.phase != MAC_TX_IDLE)
+        return NULL;
+    lent.owner = tx;
+    lent.generation = tx->engine.generation;
+    return tx->engine.frame;
+}
+
+mac_tx_result_t mac_tx_interval_submit_staged(mac_tx_interval_t *tx, uint16_t length,
+    uint32_t now, uint32_t lifetime, uint16_t work)
+{
+    LW_ENTER(LW_TX_SUBMIT, MAC_TX_INVALID);
+    if (!LW_IO(LW_TX_SUBMIT, tx, sizeof(*tx), 1)) return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
+    input.now = now;
+    input.lifetime = lifetime;
+    input.length = length;
+    input.limit = work;
+    if (tx == NULL || input.lifetime == 0u || input.lifetime >= MAC_TX_HALF || input.limit == 0u
+            || input.length == 0u || input.length > MAC_FRAME_MAX_BODY)
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
+    load_control(&tx->engine);
+    if (control.phase != MAC_TX_IDLE)
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_FULL);
+    if (lent.owner != tx || lent.generation != control.generation)
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_STATE);
+    lent.owner = NULL;
+    if ((uint32_t)(input.now - control.last) >= MAC_TX_HALF)
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
+    if (control.generation == UINT32_MAX)
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_GENERATION_EXHAUSTED);
+    /* The same real codec and DATA admission as mac_tx_submit, in place. */
+    if (mac_frame_decode(tx->engine.frame, input.length, &decoded) != MAC_CODEC_OK
+            || (decoded.header.flags & MAC_FLAG_PENDING)
+            || decoded.header.type != MAC_FRAME_DATA
+            || decoded.header.source_pan == 0xffffu
+            || decoded.header.destination_pan == 0xffffu
+            || (!(decoded.header.flags & MAC_FLAG_PAN_COMPRESSION)
+                && decoded.header.source_pan == decoded.header.destination_pan)
+            || (decoded.header.source_mode == MAC_ADDRESS_SHORT
+                && decoded.header.source[0] == 0xfeu && decoded.header.source[1] == 0xffu)
+            || (decoded.header.destination_mode == MAC_ADDRESS_SHORT
+                && decoded.header.destination[0] == 0xfeu && decoded.header.destination[1] == 0xffu))
+        return LW_RETURN(LW_TX_SUBMIT, MAC_TX_UNSUPPORTED);
+    tx->engine.frame[2] = control.next_dsn++;
+    control.length = (uint8_t)input.length;
+    control.ack_requested = (decoded.header.flags & MAC_FLAG_ACK_REQUEST) != 0u;
+    control.generation++;
+    if (reached(control.last, control.ready_at) || reached(input.now, control.ready_at))
+        control.ready_at = input.now;
+    control.last = input.now;
+    control.deadline = input.now + input.lifetime;
+    control.steps = input.limit;
+    control.phase = MAC_TX_DRAW;
+    control.nb = 0;
+    control.be = MAC_TX_MIN_BE;
+    memset((unsigned char *)&control + offsetof(control_t, retries), 0,
+           offsetof(control_t, stop_steps) - offsetof(control_t, retries));
+    save_control(&tx->engine);
+    memset(&tx->tx_lower, 0, sizeof(tx->tx_lower));
+    memset(&tx->tx_upper, 0, sizeof(tx->tx_upper));
+    return LW_RETURN(LW_TX_SUBMIT, MAC_TX_OK);
+}
+#endif

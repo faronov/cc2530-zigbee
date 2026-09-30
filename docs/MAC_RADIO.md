@@ -88,8 +88,8 @@ alone is not evidence: the proof binds all allocation records, actual marker
 addresses and the complete runtime suffix. Upper layers contain no peripheral
 instructions.
 
-Current linked image: **15040/16384 CODE**, **758 ordinary XDATA +64 reserved
-=822/1024**. Stack begins3C, initial3B; sampled/full-run peaks are53/55,
+Current linked image: **15316/16384 CODE**, **760 ordinary XDATA +64 reserved
+=824/1024**. Stack begins3C, initial3B; sampled/full-run peaks are53/55,
 below the unchanged7C cap. These are separate composition resources, not
 whole-stack/ZCL/interrupt-nesting headroom.
 
@@ -102,8 +102,8 @@ listings are snapshotted immediately after link. No board image, hardware
 operator, dependency or automatic RF step is added.
 
 Prepared evidence is **host-tested, image-checked and simulated**:
-62,516 native calls (also with nonrecovering ASan/UBSan),266 genuine target
-calls/79,308 MMIO events,48,143 artifact negatives and one missing-alias
+62,532 native calls (also with nonrecovering ASan/UBSan),282 genuine target
+calls/82,709 MMIO events,48,887 artifact negatives and one missing-alias
 negative. The CI matrix preserves its28 board/image jobs and adds two
 dedicated composition jobs (also running delayed stamps and synthetic
 temperature reporting and staged association); the existing debug-fixture jobs run
@@ -115,7 +115,7 @@ profile exposes lower prepare/attempt hooks solely to the
 [bounded interval owner](MAC_ATTEMPT.md); ordinary clients must not mix the
 two ownership interfaces.
 
-The52 native/exported scenarios exercise initialization ordering, live time
+The54 native/exported scenarios exercise initialization ordering, live time
 with active RF and through stop/drain/send/rearm, CRC-good/bad/empty receive,
 CCA busy, ordinary TX, clock/timer/radio faults, low-FF discards, work/time
 exhaustion, counter/range errors, exact half-range/ambiguous epoch progress,
@@ -123,6 +123,11 @@ invalid storage and retained first faults. The synthetic radio model is reused
 from the original owner corpus; the combined Timer2 model uses independent
 64-bit counter arithmetic and real selector/latch/period behavior. Production
 services are linked, never replaced by success mocks.
+The current LG revision adds original `mac_time` guard/value diagnostics and
+two actual-MCU cases: RFERRF04 or FSMSTAT081 appears only at the second
+preflight observation while this owner's radio is active. Both preserve
+the exact failed byte, phase1/polls1, unchanged caller output and retained
+faults. No RF flag is cleared and no timer/radio guard is relaxed.
 
 Four large accepted advances in the exported wrap scenario cross actual raw
 wraps. The longer520-advance software-coordinate wrap and exhaustive native

@@ -20,7 +20,11 @@ def object_text(module, xdata=1, code=1):
 
 
 class LinkRamResourcesTests(unittest.TestCase):
-    def objects(self, workspace=False, child_workspace=False):
+    def objects(self, workspace=False, child_workspace=False, direct=False):
+        if direct:
+            return {m: object_text(m) for m in ram.DIRECT_MODULES} | {
+                ram.DIRECT_PROBE: object_text(ram.DIRECT_PROBE,
+                                              ram.DIRECT_CONTEXT_BYTES + ram.CHILD_LAYOUT_BYTES, 0)}
         modules = ram.CHILD_MODULES if child_workspace else (
             ram.WORKSPACE_MODULES if workspace else ram.MODULES)
         probe_name = ram.CHILD_PROBE if child_workspace else ram.PROBE
@@ -57,8 +61,39 @@ class LinkRamResourcesTests(unittest.TestCase):
         self.assertEqual(result["xdata"], 40)
         self.assertEqual(result["object_floor"], 40 + 1917)
 
+    def test_direct_replaces_only_the_transmit_module_and_counts_new_context(self):
+        result = ram.report(self.objects(direct=True), direct=True)
+        self.assertEqual(len(ram.DIRECT_MODULES), 40)
+        self.assertEqual(ram.DIRECT_MODULES ^ ram.CHILD_MODULES,
+                         {"nwk_aps_transmit", "nwk_aps_direct"})
+        self.assertEqual(ram.DIRECT_CONTEXT_BYTES, 1308 + 180 + 304)
+        self.assertEqual(result["context_bytes"], 1792)
+        self.assertEqual(result["object_floor"], 40 + 1792)
+        # mac_tx loan (+28 XSEG), two removed key-status snapshot copies and
+        # the J3 round-3 flash_write/aes DIRECT reload homes (+8 actual, +1 ceiling).
+        self.assertEqual(ram.DIRECT_LIMITS, {"code": 238278, "const": 1507,
+                                             "xdata": 5727 + 28 - 2 * 37 + 1, "data_sum": 562,
+                                             "overlay_sum": 74, "bits": 87})
+        # The accepted CHILD ceilings and context are unchanged by DIRECT.
+        self.assertEqual(ram.CHILD_LIMITS, {"code": 236892, "const": 1507, "xdata": 5727,
+                                            "data_sum": 562, "overlay_sum": 74, "bits": 86})
+        self.assertEqual(ram.CONTEXT_BYTES, 1917)
+
+    def test_direct_probe_must_record_the_removed_buffer_exactly(self):
+        objects = self.objects(direct=True)
+        for bytes_ in (ram.CONTEXT_BYTES + ram.CHILD_LAYOUT_BYTES,
+                       ram.DIRECT_CONTEXT_BYTES + ram.CHILD_LAYOUT_BYTES - 1,
+                       ram.DIRECT_CONTEXT_BYTES + ram.CHILD_LAYOUT_BYTES + 1):
+            bad = objects | {ram.DIRECT_PROBE: object_text(ram.DIRECT_PROBE, bytes_, 0)}
+            with self.subTest(bytes=bytes_), self.assertRaisesRegex(ValueError, "probe"):
+                ram.report(bad, direct=True)
+        for bad in ({m: t for m, t in objects.items() if m != "nwk_aps_direct"},
+                    objects | {"nwk_aps_transmit": object_text("nwk_aps_transmit")}):
+            with self.assertRaisesRegex(ValueError, "object set"):
+                ram.report(bad, direct=True)
+
     def test_child_profile_cannot_be_mixed_with_previous_profiles(self):
-        profiles = ({}, {"workspace": True}, {"child_workspace": True})
+        profiles = ({}, {"workspace": True}, {"child_workspace": True}, {"direct": True})
         for actual in profiles:
             for selected in profiles:
                 if actual == selected:
@@ -68,6 +103,8 @@ class LinkRamResourcesTests(unittest.TestCase):
                         ram.report(self.objects(**actual), **selected)
         with self.assertRaisesRegex(ValueError, "Conflicting"):
             ram.report(self.objects(child_workspace=True), workspace=True, child_workspace=True)
+        with self.assertRaisesRegex(ValueError, "Conflicting"):
+            ram.report(self.objects(direct=True), child_workspace=True, direct=True)
 
     def test_child_probe_requires_payload_and_ownership_for_both_arenas(self):
         objects = self.objects(child_workspace=True)
@@ -103,6 +140,7 @@ class LinkRamResourcesTests(unittest.TestCase):
         for options, limits, manager in (
             ({"workspace": True}, ram.WORKSPACE_LIMITS, "mac_link_workspace"),
             ({"child_workspace": True}, ram.CHILD_LIMITS, "mac_link_child_workspace"),
+            ({"direct": True}, ram.DIRECT_LIMITS, "nwk_aps_direct"),
         ):
             objects = self.objects(**options)
             for metric, area in areas.items():

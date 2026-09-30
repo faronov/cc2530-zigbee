@@ -30,7 +30,25 @@ static MCU_XDATA struct {
 #if defined(CC2530_MAC_ATTEMPT)
     uint8_t search_disabled, prepared_length;
 #endif
+#if defined(CC2530_MAC_ADAPTER)
+    uint8_t overflow;
+#endif
 } work;
+#if defined(CC2530_MAC_ADAPTER)
+/* Raw-RX FIFO overflow: 1 latched until ISFLUSHRX, 2 flushed and restarting. */
+#define OVERFLOWED (work.overflow != 0u)
+#if defined(CC2530_MAC_LINK)
+/* LINK normal RX too: completed (AUTOACKed) frames are salvaged first. Overflow
+ * halts reception (SWRU191F 23.10.2): the partial frame never passes its FCS. */
+#define LOSS_RX(s) ((s) == RADIO_AUTOACK_RX_NOACK || (s) == RADIO_AUTOACK_RX)
+#define LOSS_DRAIN(s) ((s) == RADIO_AUTOACK_DRAIN_NOACK || (s) == RADIO_AUTOACK_DRAINING)
+#else
+#define LOSS_RX(s) ((s) == RADIO_AUTOACK_RX_NOACK)
+#define LOSS_DRAIN(s) ((s) == RADIO_AUTOACK_DRAIN_NOACK)
+#endif
+#else
+#define OVERFLOWED 0
+#endif
 /* SWRU191F pp.214,256-264; SWRS081B Table2 p.24. Address RAM first,
  * then the complete profile, all while idle. Only FSCAL1 has R/W0 high bits.
  */
@@ -54,12 +72,19 @@ static uint8_t setting_value(uint8_t index)
     if (index == 9) return (uint8_t)(owned.pan >> 8);
     if (index == 10) return (uint8_t)owned.short_address;
     if (index == 11) return (uint8_t)(owned.short_address >> 8);
+#if defined(CC2530_MAC_LINK)
+    /* Scan listen (profile bits 4/8): FRMFILT1 beacons only, then filter on. */
+    if (index == 13 && (work.profile & 4u)) return 0x08;
+    if (index == 12 && (work.profile & 2u)) return work.profile & 8u ? 0x0d : 0x0c;
+#else
     if (index == 12 && (work.profile & 2u)) return 0x0c;
+#endif
 #if defined(CC2530_MAC_ATTEMPT)
     if (index == 15 && work.search_disabled) return 0x4c;
 #endif
     if (index == 15 && (work.profile & 1u)) return 0x40;
     if (index == 22) return (uint8_t)(11u + 5u * (owned.channel - 11u));
+    if (index == 23) return owned.power;
     return values[index - 12u];
 }
 
@@ -103,8 +128,9 @@ static radio_autoack_result_t observe(void)
     status.calibration = MMIO_XREAD(0x6192);
     status.signals = MMIO_XREAD(0x6193);
     status.count = MMIO_XREAD(0x619b);
-    status.first = MMIO_XREAD(0x619d);
-    status.last = MMIO_XREAD(0x619e);
+    /* SWRU191F p265: bit7 is reserved R, not guaranteed R0. */
+    status.first = MMIO_XREAD(0x619d) & 127u;
+    status.last = MMIO_XREAD(0x619e) & 127u;
     status.packet = MMIO_XREAD(0x619f);
     status.rssi_valid = MMIO_XREAD(0x6199);
     if (work.cca) {
@@ -126,9 +152,30 @@ static radio_autoack_result_t observe(void)
     status.flags1 = MMIO_READ(SOC_RFIRQF1);
     status.sample_valid = 1;
     if (status.mask != work.expected_mask || (status.calibration & 0x80u) ||
-        (status.rssi_valid & 0xfeu) || (status.flags0 & 1u) || (status.flags1 & 0xf8u) ||
-        ((status.first | status.last) & 0x80u))
+        (status.rssi_valid & 0xfeu) || (status.flags0 & 1u) || (status.flags1 & 0xf8u))
         return RADIO_AUTOACK_STATE_CHANGED;
+#if defined(CC2530_MAC_ADAPTER)
+    /* SWRU191F p233: RXOVERF halts reception; stored frames stay readable
+     * until ISFLUSHRX. Accept only LOSS_RX/LOSS_DRAIN receive/stop, never
+     * TX/attempt.
+     */
+    if (work.overflow < 2u && status.errors == 4u &&
+        (status.phase == 4 || status.phase == 5)) {
+        if (LOSS_RX(radio_autoack_state)) {
+            if (work.overflow || (status.signals & 0xc0u) == 0x40u)
+                goto latched;
+        } else if (work.overflow && LOSS_DRAIN(radio_autoack_state)) {
+            goto latched;
+        }
+    }
+    if (0) {
+latched:
+        work.overflow = 1;
+        if (status.count > 128) return RADIO_AUTOACK_FIFO_ERROR;
+        return RADIO_AUTOACK_READY;
+    }
+    if (work.overflow == 1u) return RADIO_AUTOACK_CONTROLLER_ERROR;
+#endif
     if (status.errors || (status.signals & 0xc0u) == 0x40u)
         return RADIO_AUTOACK_CONTROLLER_ERROR;
     if (status.count > 128 || (work.cca &&
@@ -136,7 +183,7 @@ static radio_autoack_result_t observe(void)
         return RADIO_AUTOACK_FIFO_ERROR;
     if ((radio_autoack_state == RADIO_AUTOACK_RX ||
          radio_autoack_state == RADIO_AUTOACK_RX_NOACK) && work.expected_mask &&
-        !(status.signals & 3u))
+        !(status.signals & 3u) && !OVERFLOWED)
         return RADIO_AUTOACK_STATE_CHANGED;
     return RADIO_AUTOACK_READY;
 }
@@ -195,9 +242,19 @@ static radio_autoack_result_t consume(void)
     uint8_t count;
     if (result != RADIO_AUTOACK_READY) return result;
     if (status.polls == work.limit) return RADIO_AUTOACK_WORK_LIMIT;
-    if (MMIO_READ(SOC_RFERRF)) return RADIO_AUTOACK_CONTROLLER_ERROR;
+#if defined(CC2530_MAC_ADAPTER)
+    count = MMIO_READ(SOC_RFERRF);
+    /* Same first-detection rule as observe(): the head stays readable (p233). */
+    if (count == 4u && !work.overflow && LOSS_RX(radio_autoack_state) &&
+        (MMIO_XREAD(0x6193) & 0xc0u) == 0x40u)
+        work.overflow = 1;
+    if (count != (work.overflow == 1u ? 4u : 0u))
+#else
+    if (MMIO_READ(SOC_RFERRF))
+#endif
+        return RADIO_AUTOACK_CONTROLLER_ERROR;
     count = MMIO_XREAD(0x619b);
-    if (count < work.remaining || count > 128 || MMIO_XREAD(0x619d) != work.head)
+    if (count < work.remaining || count > 128 || (MMIO_XREAD(0x619d) & 127u) != work.head)
         return RADIO_AUTOACK_FIFO_ERROR;
     work.byte = read_fifo();
     status.bytes_read++;
@@ -225,8 +282,8 @@ static radio_autoack_result_t receive_head(void)
     CHECK(consume()); staged.crc_correlation = work.byte;
     CHECK(poll());
     REQUIRE(status.first == work.head, RADIO_AUTOACK_FIFO_ERROR);
-    if (radio_autoack_state == RADIO_AUTOACK_DRAINING ||
-        radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK)
+    if ((radio_autoack_state == RADIO_AUTOACK_DRAINING ||
+         radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK) && !OVERFLOWED)
         CHECK(stopped());
     return RADIO_AUTOACK_READY;
 failed:
@@ -259,7 +316,8 @@ static radio_autoack_result_t operate(uint8_t operation,
         result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
         if (result != RADIO_AUTOACK_READY) return result;
         if (configuration->channel < 11 || configuration->channel > 26 ||
-            configuration->power != RADIO_AUTOACK_POWER_05)
+            (configuration->power != RADIO_AUTOACK_POWER_05 &&
+             configuration->power != RADIO_AUTOACK_POWER_D5))
             return RADIO_AUTOACK_INVALID_ARGUMENT;
     } else if (operation == 1) {
         result = storage(MMIO_XADDRESS(output), sizeof(*output));
@@ -278,6 +336,9 @@ static radio_autoack_result_t operate(uint8_t operation,
             work.profile = work.cca = 0;
 #if defined(CC2530_MAC_ATTEMPT)
             work.search_disabled = work.prepared_length = 0;
+#endif
+#if defined(CC2530_MAC_ADAPTER)
+            work.overflow = 0;
 #endif
             status.phase = 1;
             CHECK(poll());
@@ -331,6 +392,27 @@ static radio_autoack_result_t operate(uint8_t operation,
     } else if (operation == 1) {
         status.phase = 4;
         CHECK(poll());
+#if defined(CC2530_MAC_ADAPTER)
+        if (work.overflow) {
+            status.phr = MMIO_XREAD(0x619a) & 127u;
+            if (status.phr >= 5 && status.count >= status.phr + 1u) goto head;
+            /* Incomplete overflow tail: flush and report the loss (p232). */
+            ROOM();
+            MMIO_WRITE(SOC_RFST, 0xed); status.writes++;
+            ROOM();
+            MMIO_WRITE(SOC_RFERRF, 0xfb); work.overflow = 2; status.writes++;
+            if (LOSS_RX(radio_autoack_state)) {
+                do { CHECK(poll()); } while (!(status.signals & 1u));
+            } else {
+                do { CHECK(poll()); } while (!idle() || !(status.flags1 & 4u));
+                CHECK(stopped());
+                REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
+            }
+            work.overflow = 0;
+            result = RADIO_AUTOACK_RX_LOST;
+            goto finished;
+        }
+#endif
         if (radio_autoack_state == RADIO_AUTOACK_DRAINING ||
             radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK)
             CHECK(stopped());
@@ -344,6 +426,9 @@ static radio_autoack_result_t operate(uint8_t operation,
         }
         status.phr = MMIO_XREAD(0x619a) & 127u;
         REQUIRE(status.phr >= 5 && status.count >= status.phr + 1u, RADIO_AUTOACK_FIFO_ERROR);
+#if defined(CC2530_MAC_ADAPTER)
+head:
+#endif
 #if defined(CC2530_MAC_ATTEMPT)
         CHECK(receive_head());
 #else
@@ -358,8 +443,8 @@ static radio_autoack_result_t operate(uint8_t operation,
         CHECK(consume()); staged.crc_correlation = work.byte;
         CHECK(poll());
         REQUIRE(status.first == work.head, RADIO_AUTOACK_FIFO_ERROR);
-        if (radio_autoack_state == RADIO_AUTOACK_DRAINING ||
-            radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK)
+        if ((radio_autoack_state == RADIO_AUTOACK_DRAINING ||
+             radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK) && !OVERFLOWED)
             CHECK(stopped());
 #endif
         for (i = 0; i < staged.length; i++) output->body[i] = staged.body[i];
@@ -370,19 +455,27 @@ static radio_autoack_result_t operate(uint8_t operation,
     } else {
         status.phase = 5;
         CHECK(poll());
-        if (radio_autoack_state == RADIO_AUTOACK_RX ||
-            radio_autoack_state == RADIO_AUTOACK_RX_NOACK) {
+        if ((radio_autoack_state == RADIO_AUTOACK_RX ||
+             radio_autoack_state == RADIO_AUTOACK_RX_NOACK) && !OVERFLOWED) {
             ROOM();
             /* R/W0: clear only the old RFIDLE flag, preserve TX/ACK flags. */
             MMIO_WRITE(SOC_RFIRQF1, 0x3b); status.writes++;
             CHECK(poll());
+#if defined(CC2530_MAC_ADAPTER)
+            if (work.overflow) goto overflowed;
+#endif
             REQUIRE(!(status.flags1 & 4u), RADIO_AUTOACK_STATE_CHANGED);
             ROOM();
             MMIO_XWRITE(0x618d, 1); status.writes++;
             work.expected_mask = 0;
-            do { CHECK(poll()); } while (!idle() || !(status.flags1 & 4u));
+            do { CHECK(poll()); } while (!OVERFLOWED && (!idle() || !(status.flags1 & 4u)));
             radio_autoack_state = work.profile ? RADIO_AUTOACK_DRAIN_NOACK : RADIO_AUTOACK_DRAINING;
         }
+#if defined(CC2530_MAC_ADAPTER)
+overflowed:
+        /* The next receive salvages complete heads, then flushes (RX_LOST). */
+        if (work.overflow) { status.phase = 6; result = RADIO_AUTOACK_DRAIN; goto finished; }
+#endif
         CHECK(stopped());
         status.phase = 6;
         if (status.count) {
@@ -390,6 +483,15 @@ static radio_autoack_result_t operate(uint8_t operation,
             result = RADIO_AUTOACK_DRAIN;
         } else {
             REQUIRE(!(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
+#if defined(CC2530_MAC_LINK)
+            if (work.profile & 4u) {
+                /* Stopped and empty: return to the raw TX profile. */
+                ROOM();
+                MMIO_XWRITE(0x6180, 0x0c);
+                MMIO_XWRITE(0x6181, 0x70); work.profile = 3; status.writes += 2;
+                CHECK(poll()); CHECK(stopped());
+            }
+#endif
             radio_autoack_state = work.profile ? RADIO_AUTOACK_OFF_NOACK : RADIO_AUTOACK_OFF;
             status.phase = 7;
             result = RADIO_AUTOACK_STOPPED;
@@ -557,12 +659,20 @@ static radio_autoack_result_t attempt_elapsed(
     return RADIO_AUTOACK_READY;
 }
 
+#if defined(CC2530_MAC_HANDOFF)
+static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volatile output);
+/* Reuse the one-latch reader inside this owner's bounded begin/end scope.
+ * Per-sample deadline setup/polling needlessly widens the ACK upper bound.
+ */
+#define attempt_sample(timeout, limit, output) handoff_sample(output)
+#else
 static radio_autoack_result_t attempt_sample(uint32_t timeout, uint16_t limit,
                                              mac_time_stamp_t MCU_XDATA *output)
 {
     return mac_time_attempt_read(timeout, limit, output) == MAC_TIME_OK ?
         RADIO_AUTOACK_READY : RADIO_AUTOACK_ATTEMPT_TIMER_ERROR;
 }
+#endif
 
 radio_autoack_result_t radio_autoack_prepare(
     const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit)
@@ -653,7 +763,10 @@ radio_autoack_result_t radio_autoack_attempt(
             RADIO_AUTOACK_ATTEMPT_TIMER_ERROR);
     attempt_output->transmitted = attempt_output->received = attempt_output->sampled_cca =
         attempt_output->within_window = 0;
-    attempt.duration = (16UL + 2UL*work.prepared_length)*512UL;
+#if defined(CC2530_MAC_LINK)
+    attempt_output->autoack = 0;
+#endif
+    attempt.duration = (RADIO_AUTOACK_TX_TURNAROUND + 16UL + 2UL*work.prepared_length)*512UL;
     attempt.until = attempt.duration + (uint32_t)window*512UL;
     ROOM(); status.phase = 18;
     MMIO_XWRITE(0x618c, 1); work.expected_mask = 1; status.writes++;
@@ -688,12 +801,58 @@ radio_autoack_result_t radio_autoack_attempt(
             signals = MMIO_XREAD(0x6193);
         }
         REQUIRE(!(signals & 1u), RADIO_AUTOACK_STATE_CHANGED);
+#if defined(CC2530_MAC_LINK)
+        if (MMIO_XREAD(0x6081) & 0x20u) {
+            /* Own TX is active, so no received frame can straddle this switch. */
+            ROOM();
+            MMIO_XWRITE(0x6180, RADIO_AUTOACK_NORMAL_FILTER); work.profile = 1; status.writes++;
+            ROOM();
+            MMIO_XWRITE(0x6189, 0x60); work.search_disabled = 0; work.profile = 0; status.writes++;
+            REQUIRE(MMIO_XREAD(0x6180) == RADIO_AUTOACK_NORMAL_FILTER &&
+                    MMIO_XREAD(0x6189) == 0x60, RADIO_AUTOACK_STATE_CHANGED);
+            REQUIRE(MMIO_XREAD(0x6193) & 2u, RADIO_AUTOACK_HANDOFF_RACE);
+            attempt_output->autoack = 1;
+        } else if (MMIO_XREAD(0x6081) == 3u) {
+            /* Beacon Request: listen for beacons only (SWRU191F pp224-225).
+             * PAN_ID 0xFFFF accepts every source PAN; busy-channel data,
+             * ACKs and commands are rejected at the header, not queued. */
+            ROOM();
+            MMIO_XWRITE(0x6181, 0x08);
+            MMIO_XWRITE(0x6180, 0x0d); work.profile = 15; status.writes += 2;
+        }
+#endif
     } else {
         REQUIRE(!(signals & 2u) && !(MMIO_READ(SOC_RFIRQF1) & 2u),
                 RADIO_AUTOACK_STATE_CHANGED);
+        /* Busy CCA leaves RSSI-only RX (SWRU191F pp223,226,259).
+         * No TX, SFD or FIFO can be aborted while symbol search stays off. */
+        ROOM();
+        MMIO_WRITE(SOC_RFIRQF1, 0x3b); status.writes++;
+        CHECK(poll());
+        REQUIRE(!(status.flags1 & 6u) && !status.count && !(status.signals & 0xeau),
+                RADIO_AUTOACK_STATE_CHANGED);
+        ROOM();
+        MMIO_WRITE(SOC_RFST, 0xef); work.expected_mask = 0; status.writes++;
+        do { CHECK(poll()); } while (!idle() || !(status.flags1 & 4u));
+        CHECK(tx_idle());
     }
+    ROOM();
+#if defined(CC2530_MAC_LINK)
+    if (work.profile) {
+#endif
     MMIO_XWRITE(0x6189, 0x40); work.search_disabled = 0; status.writes++;
     REQUIRE(MMIO_XREAD(0x6189) == 0x40, RADIO_AUTOACK_STATE_CHANGED);
+#if defined(CC2530_MAC_LINK)
+    }
+#endif
+    if (!attempt_output->sampled_cca) {
+        CHECK(poll()); CHECK(tx_idle());
+        ROOM();
+        MMIO_XWRITE(0x618c, 1); work.expected_mask = 1; status.writes++;
+        do { CHECK(poll()); }
+        while ((status.calibration & 0x40u) || (status.signals & 7u) != 5u ||
+               !status.rssi_valid);
+    }
     CHECK(attempt_sample(timeout, limit, &attempt_output->armed));
     if (!attempt_output->sampled_cca) { received = RADIO_AUTOACK_CCA_BUSY; goto complete; }
     CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->armed));
@@ -715,10 +874,13 @@ radio_autoack_result_t radio_autoack_attempt(
         REQUIRE((signals & 0xc0u) != 0x40u, RADIO_AUTOACK_CONTROLLER_ERROR);
         if (signals & 0x40u) {
             REQUIRE(attempt_output->transmitted, RADIO_AUTOACK_STATE_CHANGED);
-            attempt.head = MMIO_XREAD(0x619d);
+            attempt.head = MMIO_XREAD(0x619d) & 127u;
             attempt.phr = MMIO_XREAD(0x619a) & 127u;
             work.byte = MMIO_XREAD(0x619b);
-            REQUIRE(!(attempt.head & 128u) && MMIO_XREAD(0x619f) == attempt.head &&
+            /* LG hardware returned RXP1_PTR CB with RXFIRST_PTR[6:0] 4B:
+             * bit7 is not a 128-byte RXFIFO offset, so compare [6:0] only.
+             */
+            REQUIRE((MMIO_XREAD(0x619f) & 127u) == attempt.head &&
                     attempt.phr >= 5 && work.byte <= 128 && work.byte >= attempt.phr+1u &&
                     !MMIO_READ(SOC_RFERRF), RADIO_AUTOACK_FIFO_ERROR);
             CHECK(attempt_sample(timeout, limit, &attempt_output->rx));
@@ -728,7 +890,11 @@ radio_autoack_result_t radio_autoack_attempt(
             REQUIRE(status.first == attempt.head &&
                     (MMIO_XREAD(0x619a) & 127u) == attempt.phr, RADIO_AUTOACK_FIFO_ERROR);
             ROOM();
+#if defined(CC2530_MAC_LINK)
+            radio_autoack_state = work.profile ? RADIO_AUTOACK_RX_NOACK : RADIO_AUTOACK_RX;
+#else
             radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
+#endif
             status.phr = attempt.phr;
             CHECK(receive_head());
             attempt_output->frame = staged;
@@ -749,7 +915,11 @@ complete:
     REQUIRE(mac_time_attempt_end(timeout, limit, &attempt_output->last) == MAC_TIME_OK,
             RADIO_AUTOACK_ATTEMPT_TIMER_ERROR);
     CHECK(poll());
+#if defined(CC2530_MAC_LINK)
+    radio_autoack_state = work.profile ? RADIO_AUTOACK_RX_NOACK : RADIO_AUTOACK_RX;
+#else
     radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
+#endif
     status.phase = 21; status.result = received;
     return received;
 failed:

@@ -74,7 +74,7 @@ mac_radio_result_t mac_attempt_prepare(const uint8_t MCU_XDATA *body, uint8_t si
     if (result != MAC_RADIO_READY) return result;
     result = mac_radio_prepare(body, size, timeout, limit);
     if (result == MAC_RADIO_READY) {
-        mac_attempt_slot++; length = size; duration = 16u + 2u*size;
+        mac_attempt_slot++; length = size; duration = RADIO_AUTOACK_TX_TURNAROUND + 16u + 2u*size;
     }
     return result;
 }
@@ -124,6 +124,9 @@ mac_radio_result_t mac_attempt_run(uint16_t window, uint32_t timeout, uint16_t l
     staged.transmitted = mac_attempt_raw.transmitted;
     staged.received = mac_attempt_raw.received;
     staged.within_window = mac_attempt_raw.within_window;
+#if defined(CC2530_MAC_LINK) && !defined(CC2530_MAC_LINK_RAM)
+    staged.autoack = mac_attempt_raw.autoack;
+#endif
 #if defined(CC2530_MAC_LINK_RAM)
     /* The last projection can still fail. Publish only after all of them. */
     memset(receipt_output, 0, sizeof(*receipt_output));
@@ -137,6 +140,7 @@ mac_radio_result_t mac_attempt_run(uint16_t window, uint32_t timeout, uint16_t l
     receipt_output->transmitted = staged.transmitted;
     receipt_output->received = staged.received;
     receipt_output->within_window = staged.within_window;
+    receipt_output->autoack = mac_attempt_raw.autoack;
     if (staged.received) {
         receipt_output->frame.length = mac_attempt_raw.frame.length;
         receipt_output->frame.rssi_raw = mac_attempt_raw.frame.rssi_raw;

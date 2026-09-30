@@ -38,24 +38,24 @@ class Case:
 
 
 CASES = (
-    Case("handoff-data", "5ff57778dbdcbec67bbd5cc5dd6eb36fd62f72cbb58d980d314e47e1445ed2e5", 114, 10399),
-    Case("busy-cca", "5a51874fc2e1417aff40667c535884b0feee537487a40be38575d63c05b380fd", 380, 26178),
-    Case("absent-ack", "8179b2c3b020645bd474ddc4539965645399a6430528bdf7a01824627f2978de", 346, 28305),
-    Case("raw-lease", "d1bdbcf403c42efdc943e87422cd210651509d5221dc9d9bf6beee828471ce14", 94, 8523),
-    Case("queued-close", "7cfa7c8b43c27b5a1dc4d2c53ef4bed18f4cbfd2c8ea1affd8d50b5b76a3c963", 24, 4646, 0x72, 0x74),
-    Case("held-clock-fault", "8a0ce24e154dc924f4c56dcc831b4286cf2ab51c0b323bf3e889e63549af2071", 10, 2161, 0x72, 0x74),
-    Case("held-overflow", "fca6f2c38e1749b44ab9cb87248a3a12c00a5d0957d5db7bbeac9b862a814b2b", 14, 3059, 0x72, 0x74),
-    Case("sfd-race", "bc62ec98126430b5ee4d95c362edee032973c86e9c31d1f005e44107bdad712b", 93, 8743),
-    Case("filter-readback", "7bb58b589e7ff0802c13007833447798127da5b57d3ef47db561cea68f48847a", 93, 9003),
-    Case("wide-handoff", "9e5e1e33a5133fafdac38e4b819caafa578b7305431f66287957e6bde25ea3a5", 93, 8906),
-    Case("wrong-dsn", "d74aff38dc71a7d65f5903f48efffdf9c55d4a28cfaf57018b10490514b7b9a6", 338, 28289),
-    Case("bad-crc", "fe1e4e6f27c09a4584b2849252a425968ff82c8152cc3ae606744bba08fe91a5", 358, 28881),
-    Case("cancel-resubmit", "b607d37ef80216d85690dce4c0bd6e52a6bcbb97ebad0b54c8c144c0fcbff12d", 101, 9883),
-    Case("expired-action", "92e505375b692de3c4468762b4a3a85ea6d3522a2a45e56c740ba64ea008f8fe", 27, 4323, 0x74, 0x76),
-    Case("coarse-wrap", "36f20b69ffc7532c8994ffd18dbf4ff41cfebe1efca1b2fecb9ba609de46c73e", 103, 10247),
-    Case("work-exhaustion", "e86afbc414bcf7d2ab600329fb0493e484036590a128796ae64635c6f213185e", 15, 3953, 0x74, 0x76),
-    Case("invalid-storage", "042b12e95b13864e6209291bff426b0def19ff6a3c92842a044fab5c6eba6419", 48, 2283, 0x72, 0x74),
-    Case("later-ack-uncertainty", "059519224180f41d1637a15d0391dbb9e289244e391c012690ca88e26e2d747d", 159, 13206),
+    Case("handoff-data", "35574846ae1c4d39219b00960da05b412789e97017f7e4e8d243250f54ef78f4", 114, 10361),
+    Case("busy-cca", "3a7a3d87ccef297457d1820cb7665c38d0489b190d0029438634cf7a9ac2ef31", 380, 27283),
+    Case("absent-ack", "11af10c178c56e37cd283ecc949e97f0b48f3d37a4d560d0f5c7e70f38db66d3", 346, 28229),
+    Case("raw-lease", "e37843ac823c330986b0213b447578214492ea5a9ae241a56e54e9c599e5d878", 94, 8490),
+    Case("queued-close", "df119f703c763459ef734aaefef12caa415c87c95669cb8133b8b55ea527cba4", 24, 4646, 0x72, 0x74),
+    Case("held-clock-fault", "ff183c4f23a4cabfab46936971b0b55a31d628303c6b98a356d2f782e5bad2c1", 10, 2161, 0x72, 0x74),
+    Case("held-overflow", "695e11ec5edf7ce983360fc1fea2f9c863d9bb3346f8d6b26f013579e7376776", 14, 3059, 0x72, 0x74),
+    Case("sfd-race", "be55f249e82d4d7cbc18e3ac36b272818ead5eb82d330ff71fd51b20c61aae34", 93, 8705),
+    Case("filter-readback", "6893f11baf4f3149f7ad4311082ad3eead6dbced4bd518bd9f89ef8906bae0ce", 93, 8965),
+    Case("wide-handoff", "5e5d808987b3ef2799e2a40a1c5fc236b4012a20e0fae0974ab34e51c5a73603", 93, 8868),
+    Case("wrong-dsn", "eb2457b60307321c9dbe3ab8df22d59ff9c65f0d0abfe65ba7b0ad656695bd3f", 338, 28137),
+    Case("bad-crc", "0c24ce73d08cca130ff9f6b24d3afcd420b96af19f548b528378397c65a3c6cd", 354, 28581),
+    Case("cancel-resubmit", "4804821096509eff9ac0651172ef0eaa8dc1869c9a671d5b71448bc46982b4ba", 101, 9850),
+    Case("expired-action", "229b21525ae3cf32eb7f640e68eda93562b1757b3f154c0ad90e0395d84686ef", 27, 4323, 0x74, 0x76),
+    Case("coarse-wrap", "d4da2cfa392a66530a37158f0ac5b0aba5fad0c6b0030030a983fd2c16fae7aa", 102, 10135),
+    Case("work-exhaustion", "92c3eb85234fdd06f6d108041bdf7affb28f9d840be357e6f3dd6f3a34f05fba", 15, 3953, 0x74, 0x76),
+    Case("invalid-storage", "f68dc83c1933d1f26fef589cd44fe29979dfad99b9fc5115f95b2676727e23c6", 48, 2283, 0x72, 0x74),
+    Case("later-ack-uncertainty", "683029dbcc998a8df7e1141dd39e3a29d5cd55b76bae8b6c28d50f695109d852", 159, 13168),
 )
 
 
@@ -212,7 +212,7 @@ def main():
     layout.verify(*artifacts)
     if args.case is None:
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        require(count == 277229, "Adapter complete artifact rejection inventory")
+        require(count == 280044, "Adapter complete artifact rejection inventory")
     check_alias(args.simulator); rejected(lambda: check_alias(args.simulator, False))
     banking.check_mapping(args.simulator)
     rejected(lambda: banking.check_mapping(args.simulator, code=False))
@@ -225,8 +225,8 @@ def main():
         require((a, b, c, d) == (spec.calls, spec.events, spec.sampled, spec.peak), "Adapter replay/stack inventory")
         calls += a; events += b; peak = max(peak, d)
         print(f"MAC adapter {spec.name}: {a} genuine calls/{b} MMIO; SP{d:02X}/7C PASS.", flush=True)
-    campaign = "277229 artifact +3 mapping/alias negatives; " if args.case is None else "selected case; "
-    print(f"MAC adapter: {calls} calls/{events} MMIO; 55442 CODE,2848+64 XDATA; SP{peak:02X}/7C; "
+    campaign = "280044 artifact +3 mapping/alias negatives; " if args.case is None else "selected case; "
+    print(f"MAC adapter: {calls} calls/{events} MMIO; 56005 CODE,2842+64 XDATA; SP{peak:02X}/7C; "
           +campaign+"synthetic peripherals, no hardware or full-join claim.")
 
 

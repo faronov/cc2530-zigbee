@@ -35,6 +35,8 @@ typedef struct {
     uint16_t limit, saved_short;
     uint8_t version, fault, adapter_result, consumer_result;
     uint8_t stage, random_wait, random_ready, random_byte;
+    /* Saturating count of MAC-accepted DATA frames dropped on consumer FULL. */
+    uint8_t dropped;
 } mac_link_driver_t;
 
 /* Bind an already initialized real adapter, OFF after consumed close/drain,
@@ -76,8 +78,9 @@ mac_link_driver_result_t mac_link_driver_random(mac_link_driver_t MCU_XDATA * vo
  * for owner IFS. INSTALL echoes the original epoch/token only after real open.
  * CRC is actual radio metadata, not syntax/authentication. Received DATA
  * reaches bdb_join_receive and its real crypto/NV owner. There is no secondary
- * RX packet queue: FULL is a retained local CONSUMER fault, with the original
- * adapter head and unexecuted grant intact, never an implicit packet drop.
+ * RX packet queue: FULL drops that frame, counted in dropped, and consumes
+ * the adapter head without pumping BDB, so an unexecuted grant stays intact.
+ * The frame was already MAC-ACKed; only APS-AR senders recover it.
  * Application send/confirm may be called between driver calls at ctx->now,
  * exclusively by this same foreground owner. No other BDB stepping is allowed.
  */

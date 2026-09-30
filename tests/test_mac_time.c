@@ -75,6 +75,7 @@ static unsigned st_byte, start_delay, pending, stuck, force_ff;
 static unsigned ignore_address, ignore_occurrence, write_occurrence;
 static unsigned change_after_low, malformed_fine, malformed_overflow;
 static unsigned fail_poll, poll_count, fail_address, fail_value;
+static unsigned guard_check, guard_reads;
 static unsigned have_read, events, tracing, first_step, calls, live_reads, snapshot_order;
 static uint16_t last_address;
 static uint8_t last_value;
@@ -98,6 +99,10 @@ static void event(char kind, uint16_t address, uint8_t value)
 {
     if (tracing) printf("%s[\"%c\",%u,%u]", events ? "," : "", kind, address, value);
     events++;
+    if (guard_check && poll_count == fail_poll && kind == 'r') {
+        if (guard_reads) assert(address >= 0x95 && address <= 0x97);
+        else if (address == fail_address) guard_reads++;
+    }
 }
 static void advance(uint32_t clocks)
 {
@@ -158,10 +163,16 @@ static uint8_t load(uint8_t a, uint8_t value)
     consume(); advance(mac_step);
     if (a == 0xa8 && fail_poll && ++poll_count == fail_poll) {
         if (fail_address == 0xc6) SOC_CLKCONCMD = SOC_CLKCONSTA = (uint8_t)fail_value;
-        else if (fail_address == 0x94) SOC_T2CTRL = (uint8_t)fail_value;
-        else if (fail_address == 0xa7) SOC_T2IRQM = (uint8_t)fail_value;
-        else if (fail_address == 0x9c) SOC_T2EVTCFG = (uint8_t)fail_value;
+        else if (fail_address < 256) {
+            switch (fail_address) {
+#define SET_REGISTER(name, address) case address: name = (uint8_t)fail_value; break;
+            CC2530_REGISTER_LIST(SET_REGISTER)
+#undef SET_REGISTER
+            default: assert(0);
+            }
+        }
         else XR(fail_address) = (uint8_t)fail_value;
+        if (a == fail_address) value = (uint8_t)fail_value;
     }
     if (a == 0x94) {
         if (pending && !stuck && !--pending) SOC_T2CTRL |= 4;
@@ -238,6 +249,7 @@ static void reset(void)
     ignore_address = ignore_occurrence = write_occurrence = 0;
     change_after_low = malformed_fine = malformed_overflow = 0;
     fail_poll = poll_count = fail_address = fail_value = 0;
+    guard_check = guard_reads = 0;
     have_read = events = live_reads = snapshot_order = 0; first_step = 1;
     SOC_CLKCONCMD = SOC_CLKCONSTA = 0x88; SOC_SLEEPCMD = 4; SOC_T2CTRL = 2;
     mac_time_test_timeout = 10000; mac_time_test_limit = 1000; mac_time_test_target = 0x500;
@@ -296,10 +308,11 @@ static void step(unsigned action, unsigned expected)
     } else if (expected >= 8) assert(mac_time_fault == expected && d->result == expected);
     if (tracing)
         printf("],\"result\":%u,\"fault\":%u,\"ready\":%u,\"stamp\":[%u,%lu],"
-               "\"diagnostics\":[%lu,%u,%u,%u,%u,%u,%u,%u,%u]}",
+               "\"diagnostics\":[%lu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u]}",
             expected, mac_time_fault, mac_time_ready, mac_time_test_output.value.fine,
             (unsigned long)mac_time_test_output.value.periods, (unsigned long)d->elapsed_ticks,
-            d->polls, d->discarded, d->result, d->phase, d->control, d->select, d->irq_flags, d->timebase_status);
+            d->polls, d->discarded, d->result, d->phase, d->control, d->select, d->irq_flags,
+            d->timebase_status, d->guard, d->guard_value);
 }
 static void retained(void)
 {
@@ -398,6 +411,32 @@ static void scenarios(void)
     mac_time_test_target = 0x300; step(1, 5);
     mac_time_test_target = 0x700; step(1, 5);
     mac_time_test_target = 1; step(1, 5); finish();
+    for (i = 1; i <= MAC_TIME_GUARD_T2IRQM; i++) {
+        static const uint16_t addresses[] = {
+            0xa8, 0xb8, 0x9a, 0xbe, 0xd6, 0xd7, 0xc6, 0x9e,
+            0x624a, 0x61e1, 0x618b, 0x6192, 0x6193, 0xbf,
+            0x61a3, 0x61a4, 0x61a5, 0xa7
+        };
+        static const uint8_t values[] = {
+            1, 4, 1, 5, 1, 1, 0xc8, 0xc9,
+            0xa4, 0x20, 1, 0x81, 0x22, 4,
+            1, 1, 4, 1
+        };
+        unsigned observation;
+        for (observation = 1; observation <= 3; observation++) {
+            const mac_time_diagnostics_t *d;
+            reset(); begin("original first-failure register byte");
+            step(0, MAC_TIME_OK);
+            mac_step = 0; fine = 0;
+            fail_poll = observation; fail_address = addresses[i-1]; fail_value = values[i-1];
+            guard_check = 1;
+            step(1, MAC_TIME_UNSUPPORTED_STATE);
+            d = mac_time_diagnostic();
+            assert(d->guard == i && d->guard_value == fail_value && guard_reads == 1 &&
+                   d->polls == observation-1 && d->phase == (observation == 3 ? 7 : 1));
+            retained(); finish();
+        }
+    }
 }
 int main(int argc, char **argv)
 {

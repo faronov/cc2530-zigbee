@@ -16,9 +16,9 @@ static MCU_XDATA link_work_ownership_t ownership;
 #define ANCESTOR ownership.ancestors
 MCU_XDATA link_work_arena_t link_work_arena;
 #if defined(__SDCC)
-typedef uint16_t work_address_t;
+LW_SHALLOW_DECLARE(typedef uint16_t plain_address_t;) typedef LW_SHALLOW_HOME uint16_t work_address_t;
 #else
-typedef uintptr_t work_address_t;
+LW_SHALLOW_DECLARE(typedef uintptr_t plain_address_t;) typedef LW_SHALLOW_HOME uintptr_t work_address_t;
 #endif
 #define A link_work_arena
 #define J protocol.parent.join
@@ -61,10 +61,10 @@ static const MCU_CODE uint32_t callers[LW_FRAMES] = {
  * retains the word expression, without assuming its host byte order. */
 #if defined(__SDCC)
 #define CALLER_ALLOWED(f,p) \
-    (((const uint8_t MCU_CODE *)callers)[4u*(f)+((p)>>3)] & \
+    (((const uint8_t MCU_CODE *)callers)[4u*(LW_SHALLOW_READ(uint8_t, f))+((p)>>3)] & \
     (uint8_t)(1u<<((p)&7u)))
 #else
-#define CALLER_ALLOWED(f,p) (callers[(f)] & B(p))
+#define CALLER_ALLOWED(f,p) (callers[(LW_SHALLOW_READ(uint8_t, f))] & B(p))
 #endif
 
 static uint8_t tx_frame(uint8_t f) { return f >= LW_TX_SUBMIT && f <= LW_TX_OBSERVED; }
@@ -148,8 +148,8 @@ static uint8_t location(const void *p, uint16_t size, work_address_t MCU_XDATA *
     *address = a; return 1;
 #endif
 }
-#define OWNER_OVERLAP(a,n) ((a) <= (work_address_t)&ownership ? \
-    (work_address_t)&ownership-(a) < (n) : (a)-(work_address_t)&ownership < sizeof(ownership))
+#define OWNER_OVERLAP(a,n) ((a) <= (work_address_t)&ownership ? (work_address_t)&ownership-(a) < (n) : (a)-(work_address_t)&ownership < sizeof(ownership))
+#define work_address_t LW_SHALLOW_NAME(work_address_t, plain_address_t)
 static uint8_t outside_prefix(work_address_t address)
 {
 #if defined(__SDCC)
@@ -178,9 +178,9 @@ uint8_t link_work_external(const void * volatile p, uint16_t volatile size)
 #endif
     return (a <= b ? b-a >= size : a-b >= sizeof(A)) && outside_prefix(a);
 }
-
-/* Real typed caller subobjects, not whole-owner whitelist regions. Only
- * byte-array inputs admit bounded slices; all output loans are exact slots. */
+#undef work_address_t
+/* Real typed caller subobjects, not whole-owner regions. Only byte-array inputs admit bounded slices; outputs are exact slots. */
+#define child_work_address(op, a, n, wr) child_work_address(LW_SHALLOW_READ(uint8_t, op), a, n, LW_SHALLOW_READ(uint8_t, wr))
 typedef struct {
     uint8_t operation, owner, permission, writing, array;
     uint16_t first, size;
@@ -269,7 +269,7 @@ static const MCU_CODE loan_t loans[] = {
 uint8_t link_work_io(uint8_t operation, const void * volatile p, uint16_t volatile size, uint8_t writing)
 {
     work_address_t a, base = (work_address_t)&A;
-    uint16_t offset;
+    LW_SHALLOW_HOME uint16_t offset;
     const MCU_CODE loan_t *l;
     uint8_t space;
     if (!size) return 1;

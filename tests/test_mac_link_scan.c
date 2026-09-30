@@ -14,8 +14,8 @@
 #define CH26 (UINT32_C(1) << 26)
 
 enum {
-    ORDINARY, EARLY_CLOSE, BUSY, CLOSE_MISSING, CANCEL_RX, TX_MISMATCH,
-    LIFETIME, SCENARIOS
+    ORDINARY, EARLY_CLOSE, BUSY, BUSY_ONCE, CLOSE_MISSING, CANCEL_RX, TX_MISMATCH,
+    LIFETIME, LOSSY_ONCE, LOSSY_ALWAYS, LOSSY_INVALID, SCENARIOS
 };
 
 static const uint8_t beacon[] = {
@@ -35,7 +35,7 @@ static mac_tx_interval_event_t tx_event;
 static mac_tx_interval_action_t tx_action;
 static nwk_candidate_t entry;
 static uint8_t body[sizeof(beacon)], copy[16], length;
-static uint8_t scenario, received, busy, dsn, injected, observed, visited;
+static uint8_t scenario, received, busy, dsn, injected, observed, visited, updated;
 static uint16_t fine;
 static uint32_t now, at, epoch;
 
@@ -74,7 +74,7 @@ static uint16_t grant(void)
         CHECK(mac_tx_interval_copy(&tx, copy, sizeof(copy), &length) == MAC_TX_OK);
         CHECK(length == 8 && copy[0] == 3 && copy[1] == 8 && copy[2] == dsn && copy[7] == 7);
         CHECK(!tx_action.control.ack_requested);
-        if (scenario == BUSY && scan.channel == 11) {
+        if ((scenario == BUSY || (scenario == BUSY_ONCE && busy < 5)) && scan.channel == 11) {
             now = at + 20u;
             tx_source(MAC_TX_EVENT_BUSY_INTERVAL);
             tx_event.lower.symbols = at + 8u;
@@ -140,6 +140,13 @@ static uint16_t receive(void)
         received++;
         return 0;
     }
+    if (scenario >= LOSSY_ONCE && scan.channel == 11 && received < visited) {
+        /* One beacon per ch11 window; retries re-report the same parent. */
+        now += 50u;
+        beacon_event(0x10, 11);
+        received++;
+        return 0;
+    }
     if (scenario == CANCEL_RX) {
         now += 5u;
         local(MAC_SCAN_EVENT_CANCEL);
@@ -157,6 +164,9 @@ static uint16_t receive(void)
     else
         now = scan.window_end;
     local(MAC_SCAN_EVENT_CLOSED);
+    if (scan.channel == 11 && (scenario == LOSSY_ALWAYS || scenario == LOSSY_INVALID ||
+                               (scenario == LOSSY_ONCE && visited == 1)))
+        event.lossy = scenario == LOSSY_INVALID ? 2u : 1u;
     if (scenario == ORDINARY && scan.channel == 11) {
         /* Drain reports advanced last to end+5; the actual pre-stop watermark
          * remains end. Delivery latency cannot move coverage forward. */
@@ -171,7 +181,7 @@ static uint16_t run(void)
     uint16_t guard;
     memset(&action, 0, sizeof(action));
     memset(&tx_action, 0, sizeof(tx_action));
-    received = busy = injected = observed = visited = 0;
+    received = busy = injected = observed = visited = updated = 0;
     for (guard = 0; guard < 400; guard++) {
         const mac_scan_event_t *input = &event;
         if (scan.phase == MAC_SCAN_DONE || scan.phase == MAC_SCAN_FAULT)
@@ -203,7 +213,10 @@ static uint16_t run(void)
             CHECK(tx.engine.phase == MAC_TX_IDLE);
         if (action.observed) {
             observed++;
-            CHECK(action.candidate_result == NWK_CANDIDATES_ADDED);
+            if (action.candidate_result == NWK_CANDIDATES_UPDATED && scenario >= LOSSY_ONCE)
+                updated++;
+            else
+                CHECK(action.candidate_result == NWK_CANDIDATES_ADDED);
         }
     }
     CHECK(guard < 400);
@@ -250,8 +263,15 @@ static uint16_t scenario_case(void)
         CHECK(scan.unscanned == (CH11 | CH26) && scan.sent == CH11 && visited == 1);
         break;
     case BUSY:
-        CHECK(busy == 5 && scan.reason == MAC_SCAN_FINISHED && !scan.uncertain);
-        CHECK(scan.sent == CH26 && scan.unscanned == CH11 && visited == 1);
+        /* Each busy request is a complete CSMA-CA; retries never mark ch11 scanned. */
+        CHECK(busy == 5u * (1u + MAC_SCAN_BUSY_RETRIES) && scan.reason == MAC_SCAN_FINISHED);
+        CHECK(!scan.uncertain && scan.sent == CH26 && scan.unscanned == CH11 && visited == 1);
+        CHECK(tx.engine.next_dsn == (uint8_t)(0x40u + 2u + MAC_SCAN_BUSY_RETRIES));
+        break;
+    case BUSY_ONCE:
+        CHECK(busy == 5 && scan.reason == MAC_SCAN_FINISHED && !scan.uncertain && !scan.busy);
+        CHECK(scan.sent == (CH11 | CH26) && !scan.unscanned && visited == 2 && observed == 0);
+        CHECK(tx.engine.next_dsn == (uint8_t)(0x40u + 3u));
         break;
     case CLOSE_MISSING:
         CHECK(scan.reason == MAC_SCAN_CLOSE_MISSING && scan.uncertain);
@@ -262,6 +282,23 @@ static uint16_t scenario_case(void)
         break;
     case LIFETIME:
         CHECK(scan.reason == MAC_SCAN_LIFETIME && scan.uncertain && !scan.sent && !visited);
+        break;
+    case LOSSY_ONCE:
+        /* A loss-free rescan replaces the lossy window's coverage. */
+        CHECK(scan.reason == MAC_SCAN_FINISHED && !scan.uncertain && !scan.unscanned);
+        CHECK(!scan.lossy && visited == 3 && observed == 2 && updated == 1);
+        CHECK(scan.candidates.count == 1 && scan.sent == (CH11 | CH26));
+        break;
+    case LOSSY_ALWAYS:
+        CHECK(scan.reason == MAC_SCAN_FINISHED && !scan.uncertain && !scan.unscanned);
+        CHECK(scan.lossy == CH11 && visited == 2u + MAC_SCAN_LOSSY_RETRIES);
+        CHECK(observed == 1u + MAC_SCAN_LOSSY_RETRIES && updated == MAC_SCAN_LOSSY_RETRIES);
+        CHECK(scan.candidates.count == 1 && !scan.retries);
+        CHECK(tx.engine.next_dsn == (uint8_t)(0x40u + 2u + MAC_SCAN_LOSSY_RETRIES));
+        break;
+    case LOSSY_INVALID:
+        CHECK(scan.reason == MAC_SCAN_ADAPTER_ERROR && scan.uncertain && !scan.lossy);
+        CHECK(scan.unscanned == (CH11 | CH26) && visited == 1);
         break;
     }
     CHECK(mac_scan_release(&scan, &tx) == MAC_SCAN_OK);
@@ -354,7 +391,7 @@ int main(void)
                 line, scenario, fine, (unsigned long)epoch, scan.phase, scan.reason);
         return 1;
     }
-    puts("mac_scan link: interval TX, ordered beacons, loss-free closure, busy/cancel/lifetime/"
-         "early-close/missing-close/TX-identity cases over all fine phases and wrap PASS");
+    puts("mac_scan link: interval TX, ordered beacons, loss-free and lossy/rescanned closure, "
+         "busy/retried-busy/cancel/lifetime/early-close/missing-close/TX-identity cases over all fine phases and wrap PASS");
     return 0;
 }

@@ -6,6 +6,7 @@
 #include "mac_link_driver.h"
 #include "mac_link_peer.h"
 #include "security_joint_model.h"
+#include "security_aes_model.h"
 /* The original independent fixtures each define their libc ownership marker.
  * Keep the radio fixture marker separate; production uses the joint marker.
  */
@@ -29,18 +30,19 @@ static host_mmio_xwrite_hook_t crypto_xwrite;
 static host_mmio_xaddress_hook_t crypto_address;
 static host_mmio_cycles_hook_t crypto_cycles;
 static uint8_t sent_body[125], sent_length, sent_wait, command_wait;
-static uint8_t transport_sent, corrupt_sent, response_sent, app_sent, repeated_sent;
+static uint8_t transport_sent, corrupt_sent, response_sent, app_sent, repeated_sent, drop_checked;
 static unsigned scenario, e2e_checks, e2e_steps, random_inputs, received_frames;
 static unsigned totals, total_peer_checks, total_steps, total_random;
 static uint32_t test_prng;
 static uint32_t bad_serial;
 static uint8_t bad_checked;
 enum {
-    POLL_NO_ACK = 8, POLL_BUSY, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
-    RETRY_CANCEL, QUERY_TIMEOUT_ARM, E2E_CASES
+    POLL_NO_ACK = 8, POLL_BUSY, IMMEDIATE_RESPONSE, BROADCAST_DRAIN, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
+    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, E2E_CASES
 };
 static unsigned poll_attempts, closed_checked, race_started, race_disarmed, race_completed;
-static unsigned race_random, race_tx, retire_wait, timeout_started;
+static unsigned race_random, race_tx, retire_wait, timeout_started, early_acks;
+static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked;
 static uint32_t scan_watermark, race_generation;
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
@@ -142,6 +144,8 @@ static void joint_cycles(uint8_t n)
     else cycles(n);
 }
 
+static void early_key(void);
+
 static void cold_start(void)
 {
     memset(&driver, 0, sizeof(driver)); /* Fresh modeled device reset only. */
@@ -182,11 +186,12 @@ static void cold_start(void)
         CHECK(mac_link_driver_init(&driver, &device, &config.value, bound, cap) == MAC_LINK_DRIVER_STATE);
         CHECK(!memcmp(&before, &driver, sizeof(driver)));
     }
-    sent_wait = command_wait = transport_sent = corrupt_sent = response_sent = app_sent = repeated_sent = 0;
+    sent_wait = command_wait = transport_sent = corrupt_sent = response_sent = app_sent = repeated_sent = drop_checked = 0;
     random_inputs = received_frames = 0; test_prng = 0x13579bdu;
     bad_serial = 0; bad_checked = 0;
     poll_attempts = closed_checked = race_started = race_disarmed = race_completed = 0;
-    race_random = race_tx = retire_wait = timeout_started = 0;
+    race_random = race_tx = retire_wait = timeout_started = early_acks = 0;
+    broadcast_sent = drain_delayed = foreign_sent = early_key_acked = 0;
     scan_watermark = race_generation = 0;
 }
 
@@ -195,18 +200,36 @@ static void cold_start(void)
  * and AUTOACK is decided from actual installed registers and the real header.
  * No FCS verification is claimed: crc is synthetic peripheral truth.
  */
+static mac_frame_info_t early_mh;
+static const mac_frame_info_t *air_decoded;
+/* SWRU191F pp224-225 frame-type rules, and the beacon source-PAN rule. Other
+ * address rules are not modeled; unfiltered raw RX accepts everything. */
+static unsigned rejected_frames;
+static uint8_t filter_accepts(const uint8_t *body, uint8_t length)
+{
+    uint8_t type = body[0] & 7u;
+    uint16_t pan = (uint16_t)XR(0x6172) | ((uint16_t)XR(0x6173) << 8);
+    if (!(XR(0x6180) & 1u)) return 1;
+    if (type > 3u || !(XR(0x6181) & (8u << type))) return 0;
+    return type || (length >= 9u && pan == 0xffffu) ||
+        (length >= 9u && body[3] == (uint8_t)pan && body[4] == (uint8_t)(pan >> 8));
+}
 static void air_frame(const uint8_t *body, uint8_t length, uint8_t crc)
 {
     unsigned first = tail, i;
     mac_frame_info_t mh;
-    uint8_t addressed = 0;
+    uint8_t addressed = 0, decoded;
     CHECK(XR(0x618b) && mode == 2 && !ack_active && !packets);
     XR(0x6193) |= 0x20; SOC_RFIRQF0 |= 2;
     advance_clocks((12u+2u*(length+2u))*512u);
     XR(0x6193) &= (uint8_t)~0x20;
+    if (!filter_accepts(body, length)) { rejected_frames++; return; }
     enqueue((uint8_t)(length+2), crc ? 0xe9 : 0x69, 0);
     for (i = 0; i < length; i++) fifo[(first+1+i)&127] = body[i];
-    if (mac_frame_decode(body, length, &mh) == MAC_CODEC_OK &&
+    /* Inside device NV work the WORKSPACE codec is not the oracle's to call. */
+    if (air_decoded) { mh = *air_decoded; decoded = 1; }
+    else decoded = mac_frame_decode(body, length, &mh) == MAC_CODEC_OK;
+    if (decoded &&
         mh.header.destination_pan == ((uint16_t)XR(0x6172) | ((uint16_t)XR(0x6173)<<8))) {
         if (mh.header.destination_mode == MAC_ADDRESS_SHORT)
             addressed = mh.header.destination[0] == XR(0x6174) &&
@@ -224,7 +247,7 @@ static void air_frame(const uint8_t *body, uint8_t length, uint8_t crc)
     received_frames++;
 }
 
-static void peer_progress(void)
+static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
 {
     mac_frame_info_t mh;
     uint32_t saved_clocks;
@@ -233,23 +256,107 @@ static void peer_progress(void)
         /* Coordinator computations are an external oracle, not device CPU
          * execution time. All DUT calls keep the real timer running. */
         saved_clocks = mmio_clocks; mmio_clocks = 0;
+        security_aes_peer_enter();
         link_peer_transmitted(sent_body, sent_length);
+        security_aes_peer_leave();
         mmio_clocks = saved_clocks;
         CHECK(mac_frame_decode(sent_body, sent_length, &mh) == MAC_CODEC_OK);
         if (mh.header.type == MAC_FRAME_COMMAND)
             command_wait = sent_body[mh.payload_offset];
         sent_wait = 0;
     }
+    if (scenario == BROADCAST_DRAIN && broadcast_sent && !drain_delayed &&
+        mac_adapter_diagnostic()->phase == MAC_ADAPTER_DRAINING) {
+        /* LG hardware: draining one queued 59-byte broadcast after the
+         * Association Request's STOP_RX retirement exceeded 1024 symbols. */
+        advance_clocks(1500u*512u); drain_delayed = 1;
+    }
+    if (scenario == EARLY_KEY && !transport_sent && dev->phase == BDB_JOIN_INSTALLING) {
+        /* The frame is prepared by the peer oracle while the device is still
+         * INSTALLING; early_key() puts it on air before WAIT_KEY. */
+        saved_clocks = mmio_clocks; mmio_clocks = 0;
+        security_aes_peer_enter();
+        link_peer_transport(0);
+        security_aes_peer_leave();
+        mmio_clocks = saved_clocks; transport_sent = 1;
+        /* A real parent requests the MAC ACK for this unicast (outside the NWK MIC). */
+        link_peer_body[0] |= 0x20;
+        CHECK(mac_frame_decode(link_peer_body, link_peer_length, &early_mh) == MAC_CODEC_OK);
+    }
+    early_key();
     if (!XR(0x618b) || mode != 2 || ack_active || packets || mac_adapter_diagnostic()->held)
         return;
+    if (scenario == POLL_BUSY && !foreign_sent && dev->phase == BDB_JOIN_ASSOCIATING &&
+        command_wait == MAC_COMMAND_ASSOCIATION_REQUEST && poll_attempts == 1 &&
+        mac_adapter_diagnostic()->phase == MAC_ADAPTER_CLOSING &&
+        !mac_adapter_diagnostic()->normal_rx) {
+        /* LG hardware: a network data frame accepted by raw RX after the
+         * busy-CCA Data Request. It was never acknowledged and must be
+         * dropped, not delivered or treated as a coverage fault. */
+        uint8_t foreign[71];
+        unsigned i;
+        foreign[0] = 0x61; foreign[1] = 0x88; foreign[2] = 0x5a;
+        foreign[3] = (uint8_t)link_identity.pan; foreign[4] = (uint8_t)(link_identity.pan >> 8);
+        foreign[5] = 0x34; foreign[6] = 0x12; foreign[7] = 0x00; foreign[8] = 0x00;
+        for (i = 9; i < sizeof(foreign); i++) foreign[i] = (uint8_t)(i * 5u);
+        air_frame(foreign, sizeof(foreign), 1);
+        CHECK(!ack_active);
+        foreign_sent = 1;
+        return;
+    }
+    if (scenario == BROADCAST_DRAIN && !broadcast_sent &&
+        command_wait == MAC_COMMAND_ASSOCIATION_REQUEST && dev->phase == BDB_JOIN_ASSOCIATING &&
+        mac_adapter_diagnostic()->normal_rx && mac_adapter_diagnostic()->transmitted &&
+        mac_adapter_diagnostic()->phase == MAC_ADAPTER_COLLECT && tx->engine.phase != MAC_TX_DONE) {
+        /* An unacknowledged network broadcast accepted by the armed normal
+         * filter, queued before the retirement stops RX. */
+        uint8_t broadcast[57];
+        unsigned i;
+        broadcast[0] = 0x41; broadcast[1] = 0x88; broadcast[2] = 0x4c;
+        broadcast[3] = (uint8_t)link_identity.pan; broadcast[4] = (uint8_t)(link_identity.pan >> 8);
+        broadcast[5] = broadcast[6] = 0xff; broadcast[7] = 0x22; broadcast[8] = 0x2f;
+        for (i = 9; i < sizeof(broadcast); i++) broadcast[i] = (uint8_t)(i * 7u);
+        air_frame(broadcast, sizeof(broadcast), 1);
+        CHECK(!ack_active);
+        broadcast_sent = 1;
+        return;
+    }
     if (command_wait == MAC_COMMAND_BEACON_REQUEST &&
-        device.phase == BDB_JOIN_SCANNING && device.work.scan.phase == MAC_SCAN_RX) {
+        dev->phase == BDB_JOIN_SCANNING && dev->work.scan.phase == MAC_SCAN_RX) {
         command_wait = 0;
-        if (scenario != 1) air_frame(link_beacon, link_beacon_length, 1);
+        if (scenario != 1 && dev->work.scan.channel == link_identity.channel) {
+            /* LG channel 15: busy-network data around the beacon replies. */
+            uint8_t busy[45];
+            unsigned before = rejected_frames, i;
+            busy[0] = 0x41; busy[1] = 0x88; busy[2] = 0x33;
+            busy[3] = (uint8_t)link_identity.pan; busy[4] = (uint8_t)(link_identity.pan >> 8);
+            busy[5] = 0xff; busy[6] = 0xff; busy[7] = 0x34; busy[8] = 0x12;
+            for (i = 9; i < sizeof(busy); i++) busy[i] = (uint8_t)(i * 3u);
+            CHECK(XR(0x6180) == 0x0d && XR(0x6181) == 0x08);
+            air_frame(busy, sizeof(busy), 1);
+            CHECK(rejected_frames == before+1u && !packets);
+            air_frame(link_beacon, link_beacon_length, 1);
+            CHECK(rejected_frames == before+1u && packets);
+        }
+    } else if (scenario == IMMEDIATE_RESPONSE && command_wait == MAC_COMMAND_DATA_REQUEST &&
+        dev->phase == BDB_JOIN_ASSOCIATING && tx->engine.phase != MAC_TX_DONE &&
+        mac_adapter_diagnostic()->transmitted &&
+        (mac_adapter_diagnostic()->phase == MAC_ADAPTER_WAIT_MAC ||
+         mac_adapter_diagnostic()->phase == MAC_ADAPTER_COLLECT ||
+         mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING)) {
+        /* Observed EmberZNet parent: the indirect Association Response
+         * follows the Data Request ACK by about 1 ms, before the MAC has
+         * classified that ACK. Only armed hardware AUTOACK can answer it. */
+        unsigned before = automatic_acks;
+        air_frame(link_response, link_response_length, 1);
+        CHECK(ack_active); early_acks++;
+        while (ack_active) { advance_clocks(512u); handoff_tick(); }
+        CHECK(automatic_acks == before+1u);
+        command_wait = 0; response_sent++;
     } else if (command_wait == MAC_COMMAND_DATA_REQUEST &&
-        mac_adapter_diagnostic()->normal_rx && device.phase == BDB_JOIN_ASSOCIATING &&
-        device.work.association.context.poll.control.phase == MAC_POLL_RECEIVE &&
-        adapter_tx.engine.phase == MAC_TX_DONE) {
+        mac_adapter_diagnostic()->normal_rx && dev->phase == BDB_JOIN_ASSOCIATING &&
+        dev->work.association.context.poll.control.phase == MAC_POLL_RECEIVE &&
+        tx->engine.phase == MAC_TX_DONE) {
         if (scenario == 4) advance_clocks(320u*512u);
         if (scenario == 2) {
             link_response[link_response_length-3] = 255;
@@ -258,11 +365,13 @@ static void peer_progress(void)
         }
         air_frame(link_response, link_response_length, 1);
         command_wait = 0; response_sent++;
-    } else if (mac_adapter_diagnostic()->normal_rx && device.phase >= BDB_JOIN_WAIT_KEY &&
-               device.phase < BDB_JOIN_UPDATING && adapter_tx.engine.phase == MAC_TX_IDLE) {
-        if (device.phase == BDB_JOIN_WAIT_KEY && !transport_sent && scenario != 3) {
+    } else if (mac_adapter_diagnostic()->normal_rx && dev->phase >= BDB_JOIN_WAIT_KEY &&
+               dev->phase < BDB_JOIN_UPDATING && tx->engine.phase == MAC_TX_IDLE) {
+        if (dev->phase == BDB_JOIN_WAIT_KEY && !transport_sent && scenario != 3) {
             saved_clocks = mmio_clocks; mmio_clocks = 0;
+            security_aes_peer_enter();
             link_peer_transport(scenario == 7 || scenario == ACK_CANCEL_ARM);
+            security_aes_peer_leave();
             mmio_clocks = saved_clocks; transport_sent = 1;
         }
         if (link_peer_pending) {
@@ -272,14 +381,37 @@ static void peer_progress(void)
             } else {
                 air_frame(link_peer_body, link_peer_length, 1); link_peer_pending = 0;
             }
-        } else if (scenario == 7 && !repeated_sent && device.work.runtime.transport.receive_ready) {
+        } else if (scenario == 7 && !repeated_sent && dev->work.runtime.transport.receive_ready) {
             /* A second real RX arrives while the first frame's genuine
              * priority APS ACK blocks admission. No packet slot or successful
-             * admission is injected: retain this actual FIFO head. */
+             * admission is injected: the driver drops this MAC-ACKed head. */
             air_frame(link_peer_body, link_peer_length, 1);
             repeated_sent = 1;
         }
     }
+}
+
+/* LG/EmberZNet: Transport Key can follow the Association Response within
+ * milliseconds. INSTALL precedes the staged, NV-free admission, so the frame
+ * is aired at the first tick after the short address is installed; hardware
+ * AUTOACKs it and it waits in the RX FIFO until WAIT_KEY consumes it. */
+static void early_key(void)
+{
+    if (scenario != EARLY_KEY || !transport_sent || !link_peer_pending ||
+        (device.phase != BDB_JOIN_INSTALLING && device.phase != BDB_JOIN_WAIT_KEY) ||
+        XR(0x6174) != early_mh.header.destination[0] || XR(0x6175) != early_mh.header.destination[1] ||
+        !mac_adapter_diagnostic()->normal_rx || !XR(0x618b) || mode != 2 || ack_active || packets)
+        return;
+    corrupt_sent = 1; air_decoded = &early_mh;
+    air_frame(link_peer_body, link_peer_length, 1); link_peer_pending = 0; air_decoded = NULL;
+    CHECK(ack_active);
+    while (ack_active) { advance_clocks(512u); handoff_tick(); }
+    early_key_acked = 1;
+}
+
+static void peer_progress(void)
+{
+    peer_progress_for(&device, &adapter_tx);
 }
 
 /* Direct cancel/stop cases mimic zdo_runtime's real callers, without writing
@@ -399,6 +531,15 @@ static void tick_driver(void)
     if (handoff_started) handoff_configured = 0;
     if (scenario == 7) blocked_action = driver.action;
     result = mac_link_driver_step(&driver);
+    if (scenario == 7 && driver.dropped && !drop_checked) {
+        const mac_adapter_observation_t *o = mac_adapter_observation();
+        CHECK(repeated_sent && driver.dropped == 1 && driver.consumer_result == BDB_JOIN_FULL);
+        CHECK(device.work.runtime.transport.reply && !driver.fault && device.owner == &adapter_tx);
+        CHECK(o->kind == MAC_ADAPTER_RX_EVENT && o->rx_serial == driver.rx_serial &&
+              o->frame->length == link_peer_length && !memcmp(o->frame->body, link_peer_body, link_peer_length));
+        CHECK(!memcmp(&blocked_action, &driver.action, sizeof(blocked_action)));
+        drop_checked = 1;
+    }
     handoff_started = 0;
     if (scenario >= CANCEL_ARM) race_after(old_action, old_radio, old_phase);
     if (poll_close && driver.event.kind == BDB_JOIN_EVENT_ASSOCIATION &&
@@ -445,7 +586,7 @@ static void tick_driver(void)
             adapter_tx.engine.retries, adapter_tx.engine.nb, 0) == MAC_LINK_DRIVER_STATE);
         random_inputs++;
     } else CHECK(result == MAC_LINK_DRIVER_WAIT || result == MAC_LINK_DRIVER_FINISHED ||
-                 ((scenario == 5 || scenario == 7) && driver.fault));
+                 (scenario == 5 && driver.fault));
     if (!driver.fault) peer_progress();
 }
 
@@ -462,7 +603,8 @@ static void run(unsigned selected)
         tick_driver();
     }
     if (scenario == 0 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
-        scenario == QUERY_TIMEOUT_ARM) {
+        scenario == IMMEDIATE_RESPONSE || scenario == BROADCAST_DRAIN ||
+        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == 7) {
         if (device.phase != BDB_JOIN_READY)
             fprintf(stderr, "scan reason=%u unscanned=%lu candidates=%u peerTX=%u cmd=%u rx=%u through=%lu\n",
                 device.scan_result.reason,(unsigned long)device.scan_result.unscanned,
@@ -496,7 +638,7 @@ static void run(unsigned selected)
         CHECK(bdb_join_confirm(&device, &app_sent) == BDB_JOIN_OK && app_sent == NWK_APS_OK);
         CHECK(response_sent == 1 && automatic_acks >= 1 &&
               random_inputs == link_peer_tx+(scenario == POLL_BUSY ? 5u : 0u) &&
-              driver.gaps && bad_checked);
+              driver.gaps && (bad_checked || scenario == EARLY_KEY));
         /* A real periodic parent keepalive, not a fabricated parent response. */
         advance_clocks((device.keepalive-driver.now)*512u);
         while (link_peer_parent < 2 || device.work.runtime.zdo.query || link_peer_pending ||
@@ -508,6 +650,11 @@ static void run(unsigned selected)
             CHECK(closed_checked == 1 && poll_attempts == (scenario == POLL_NO_ACK ? 4u : 5u));
         if (scenario == QUERY_TIMEOUT_ARM)
             CHECK(race_started && race_disarmed && race_completed);
+        CHECK(early_acks == (scenario == IMMEDIATE_RESPONSE));
+        CHECK(drain_delayed == (scenario == BROADCAST_DRAIN) && broadcast_sent == drain_delayed);
+        CHECK(foreign_sent == (scenario == POLL_BUSY));
+        CHECK(early_key_acked == (scenario == EARLY_KEY));
+        CHECK(driver.dropped == (scenario == 7) && drop_checked == (scenario == 7));
     } else if (scenario == 1) {
         CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_NO_PARENT);
         CHECK(!device.scan_result.candidates && !device.scan_result.unscanned);
@@ -534,17 +681,6 @@ static void run(unsigned selected)
         CHECK(!random_inputs && !tx_started && !link_peer_tx &&
               mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF &&
               adapter_tx.engine.phase == MAC_TX_IDLE);
-    } else if (scenario == 7) {
-        mac_link_driver_t before = driver;
-        const mac_adapter_observation_t *o = mac_adapter_observation();
-        CHECK(scenario == 7 && repeated_sent && driver.fault == MAC_LINK_DRIVER_CONSUMER);
-        CHECK(driver.consumer_result == BDB_JOIN_FULL && device.work.runtime.transport.reply);
-        CHECK(mac_adapter_diagnostic()->ready && o->kind == MAC_ADAPTER_RX_EVENT &&
-              o->rx_serial == driver.rx_serial+1u && o->frame->length == link_peer_length &&
-              !memcmp(o->frame->body, link_peer_body, link_peer_length));
-        CHECK(!memcmp(&blocked_action, &driver.action, sizeof(blocked_action)));
-        CHECK(mac_link_driver_step(&driver) == MAC_LINK_DRIVER_CONSUMER &&
-              !memcmp(&driver, &before, sizeof(driver)) && device.owner == &adapter_tx);
     } else {
         CHECK(race_started && race_disarmed && race_completed && !driver.fault);
         CHECK(device.phase == BDB_JOIN_FAILED &&

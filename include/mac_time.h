@@ -16,6 +16,17 @@ typedef enum {
     MAC_TIME_COUNT_ERROR
 } mac_time_result_t;
 
+typedef enum {
+    MAC_TIME_GUARD_NONE = 0,
+    MAC_TIME_GUARD_IEN0, MAC_TIME_GUARD_IEN1, MAC_TIME_GUARD_IEN2,
+    MAC_TIME_GUARD_SLEEPCMD, MAC_TIME_GUARD_DMAARM, MAC_TIME_GUARD_DMAREQ,
+    MAC_TIME_GUARD_CLKCONCMD, MAC_TIME_GUARD_CLKCONSTA,
+    MAC_TIME_GUARD_CHIPID, MAC_TIME_GUARD_CSPSTAT, MAC_TIME_GUARD_RXENABLE,
+    MAC_TIME_GUARD_FSMSTAT0, MAC_TIME_GUARD_FSMSTAT1, MAC_TIME_GUARD_RFERRF,
+    MAC_TIME_GUARD_RFIRQM0, MAC_TIME_GUARD_RFIRQM1, MAC_TIME_GUARD_RFERRM,
+    MAC_TIME_GUARD_T2IRQM
+} mac_time_guard_t;
+
 /* A raw two-counter tuple, NOT mac_tx's uint32 symbol time or an event capture.
  * fine=0..511 system-clock increments within a period; periods=0..FFFFFE,
  * each worth 512 increments. Hardware replaces the would-be period values
@@ -31,6 +42,7 @@ typedef struct {
     uint32_t elapsed_ticks;
     uint16_t polls, discarded;
     uint8_t result, phase, control, select, irq_flags, timebase_status;
+    uint8_t guard, guard_value;
 } mac_time_diagnostics_t;
 
 /* Foreground, non-reentrant, SDCC large-model register-bank0/DPS0.
@@ -96,6 +108,9 @@ mac_time_result_t mac_time_read_radio(uint32_t timeout, uint16_t poll_limit,
 #endif
 /* Read-only private diagnostics. COLD at startup, PENDING in flight; partial
  * observations on fault. This memory accessor performs no hardware read.
+ * UNSUPPORTED_STATE retains a mac_time_guard_t ID and the original unmasked
+ * byte from that failed read, never a later reread. Other results leave both
+ * fields zero. Retained faults preserve the complete first-failure diagnostic.
  */
 const mac_time_diagnostics_t MCU_XDATA *mac_time_diagnostic(void);
 #if defined(CC2530_MAC_ATTEMPT)

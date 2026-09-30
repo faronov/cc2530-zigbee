@@ -190,24 +190,24 @@ receipts are compared after each genuine call.
 
 | Resource | Actual composition |
 | --- | ---: |
-| Common CODE, including constants | 28557 bytes |
+| Common CODE, including constants | 29096 bytes |
 | Bank1: MAC codec and scheduler | 20148 bytes |
-| Bank2: action adapter | 6737 bytes |
-| Populated CODE total | 55442 bytes |
-| Ordinary XDATA, including caller and libc | 2848 bytes |
+| Bank2: action adapter | 6761 bytes |
+| Populated CODE total | 56005 bytes |
+| Ordinary XDATA, including caller and libc | 2842 bytes |
 | Status reservation | 64 bytes, eight used |
-| Initial SP / full-run maximum / cap | 55 / 78 / 7C |
+| Initial SP / unchanged replay cap | 55 / 7C |
 
 The virtual bank encoding is not additional physical flash. Physical DATA
 reservations cover08..1D and23..4B; banking owns1E/1F, bits20..22,
-OSEG4C..55 and stack56..7C. Actual relocated byte-liveness covers146
-functions and634 live-caller-byte/callee-write comparisons, including libc
+OSEG4C..55 and stack56..7C. Actual relocated byte-liveness covers145
+functions and560 live-caller-byte/callee-write comparisons, including libc
 clobbers and cross-bank lifetimes.
 No named `--dataseg` is treated as a physical allocation by itself.
 XDATA1F00..1FFF remains the real IRAM alias. None of the original standalone
 or complete-join resource budgets is relaxed.
 
-Eighteen fresh-reset sequences execute2410 genuine calls and210988 MMIO
+Eighteen fresh-reset sequences require2405 genuine calls and211197 MMIO
 events. They cover ACK/AUTOACK and raw leases, five busy CCAs, all four
 no-ACK attempts, wrong DSN/bad CRC, queued pre-stop and in-flight heads,
 preserved closure watermark, a maximum frame across FIFO wrap, held clock/
@@ -219,7 +219,7 @@ hardware fault or a run through billions of delivery-counter values.
 Every native transcript is raw-byte pinned and must equal its sanitizer
 counterpart. The image, raw CDB, map, memory account, all14 immediate listing
 snapshots and relocatable objects are fully pinned. Acceptance includes
-277229 complete CODE/address/metadata mutations, missing IRAM alias and live
+280044 complete CODE/address/metadata mutations, missing IRAM alias and live
 FMAP/XBANK mapping controls, exact timebase/clock/MMIO instructions, unowned
 RAM/SFR/XREG/flash guards and actual full-run stack peaks.
 
@@ -232,7 +232,20 @@ separate whole-transcript scan per dump; missing or duplicated dump boundaries
 still fail. CI has two dedicated15-minute workers and uploads no adapter
 image or reference.
 
-This increment is **host-tested, image-checked and simulated**. Code commit
+The revised resource/corpus figures above include the bounded RSSI-only
+stop/restart, FIFO reserved-bit corrections, explicit D5 power support and
+reuse of the one-latch owner sampler during attempts and two original
+first-failure `mac_time` diagnostic bytes. All18 current raw native/
+sanitizer references agree and the current exact linked/DATA/MMIO proof passes.
+The279939 artifact rejections were executed on the preceding D5 revision;
+the current280044 inventory is retained, not claimed rerun. Current banked
+ACK/handoff case0 passes114 calls/10361 MMIO at SP78/7C. This is not a new
+full MCU-corpus, CI or hardware acceptance claim. The MMIO reader also retains
+five-digit SDCC source-line columns, including two handoff writes previously
+omitted by the old reader. Before D5, the LG busy-CCA MCU case passed380 calls,
+27433 MMIO events and peakSP78/7C with all mapping/alias controls.
+
+The original increment was **host-tested, image-checked and simulated**. Code commit
 `3cc26b0` passed
 [full Actions36187341754](https://github.com/faronov/cc2530-zigbee/actions/runs/36187341754),
 **106/106 jobs**, including both complete adapter workers and all102 previous

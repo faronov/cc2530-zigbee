@@ -16,24 +16,25 @@ from prng_fixture import PRNG_LENGTHS
 from radio_fifo_fixture import FIFO_LENGTHS, instructions
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
-SIZE = 2999
-DIGEST = "3caf16cb1d4010f02b32c9d448aab19eb816137f4e4d5c9be5088d37bc78b336"
-PRIVATE_DIGEST = "7b2dc17c795498472384142f39d7b707dcafeccfd7ea815c006644d2af96455b"
+SIZE = 3249
+DIGEST = "a08783b08a70df2d84257c96c2dc606d1d9522929f472ae57d66e1e58472e96b"
+PRIVATE_DIGEST = "f8107afcbb6b19a81e3021e2549ed3489834e8a69203efb93a3e07c21e5a3ac4"
 LENGTHS = PRNG_LENGTHS | FIFO_LENGTHS | {0: 1, 0x49: 1, 0x52: 2, 0xa4: 1}
-SIZES = (4, 2, 2, 1, 1, 1, 1, 1, 1)
-FIELDS = ("elapsed_ticks", "polls", "discarded", "result", "phase", "control", "select", "irq_flags", "timebase_status")
+SIZES = (4, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1)
+FIELDS = ("elapsed_ticks", "polls", "discarded", "result", "phase", "control", "select",
+          "irq_flags", "timebase_status", "guard", "guard_value")
 OBJECTS = {
-    "output": (97, 14), "action": (111, 1), "return": (112, 1), "target": (113, 2),
-    "limit": (115, 2), "timeout": (117, 4), "diagnostic": (121, 2),
+    "output": (99, 14), "action": (113, 1), "return": (114, 1), "target": (115, 2),
+    "limit": (117, 2), "timeout": (119, 4), "diagnostic": (123, 2),
 }
 INPUTS = ("action", "target", "limit", "timeout")
 PUBLIC_APIS = {
     "timebase_read_awake_ticks24": (0x62, "SL:U"),
     "timebase_deadline_after": (0xba, "SC:U"),
     "timebase_expired": (0x14e, "SC:U"),
-    "mac_time_init": (0xa1e, "SC:U"),
-    "mac_time_read_live": (0xa6d, "SC:U"),
-    "mac_time_diagnostic": (0xac5, "DX,ST__00000001:S"),
+    "mac_time_init": (0xb18, "SC:U"),
+    "mac_time_read_live": (0xb67, "SC:U"),
+    "mac_time_diagnostic": (0xbbf, "DX,ST__00000001:S"),
 }
 SFRS = {
     0xa8: "IEN0", 0xb8: "IEN1", 0x9a: "IEN2", 0xbe: "SLEEPCMD",
@@ -74,16 +75,16 @@ def verify(image, symbols, debug, memory, listings):
         records = re.findall(rf"^F:G\${name}\$[^\n]*$", debug, re.M)
         require(set(records) == {f"F:G${name}$0_0$0({{2}}DF,{abi}),Z,0,0,0,0,0"},
                 "MAC time public declaration ABI changed: "+name)
-    modules = {"timebase": (0x62, 0x1f6), "mac_time": (0x1f6, 0xac9), "test_mac_time": (0xac9, 0xb98)}
+    modules = {"timebase": (0x62, 0x1f6), "mac_time": (0x1f6, 0xbc3), "test_mac_time": (0xbc3, 0xc92)}
     require(cdb_address(debug, "L:Fmac_time$observe$0$0") == 0x1f6 and
-            cdb_address(debug, "L:XG$mac_time_diagnostic$0$0")+1 == 0xac9 and
-            cdb_address(debug, "L:XG$main$0$0")+1 == 0xb98, "MAC time code extent changed")
+            cdb_address(debug, "L:XG$mac_time_diagnostic$0$0")+1 == 0xbc3 and
+            cdb_address(debug, "L:XG$main$0$0")+1 == 0xc92, "MAC time code extent changed")
     codes, covered = {}, set()
     for name, (start, end) in modules.items():
         code = instructions(image, start, end, LENGTHS); codes[name] = code
         listed = [(int(m[1], 16), bytes.fromhex(m[2])) for m in re.finditer(
             r"^\s+([0-9A-F]{6}) ((?:[0-9A-F]{2} ){1,3})\s+\[\s*\d+\]", listings[name], re.M)]
-        startup = [(0, b"\x02\0\x06"), (0x5f, b"\x02\0\x03"), (3, b"\x02\x0b\x50")]
+        startup = [(0, b"\x02\0\x06"), (0x5f, b"\x02\0\x03"), (3, b"\x02\x0c\x4a")]
         require((startup if name == "test_mac_time" else []) + list(code.items()) == listed,
                 "MAC time listing snapshot differs from genuine instructions: "+name)
         if name == "test_mac_time":
@@ -94,14 +95,14 @@ def verify(image, symbols, debug, memory, listings):
             region = set(range(int(address, 16), int(address, 16)+int(size)))
             require(region and not region & covered, "MAC time private allocations overlap")
             covered |= region
-    require(covered == set(range(97)), "MAC time complete private prefix escaped its fence")
+    require(covered == set(range(99)), "MAC time complete private prefix escaped its fence")
     code = codes["mac_time"]
     accesses = peripheral_accesses(code)
-    require([code.get(pc) for pc in (0x76b, 0x76e, 0x771, 0x774, 0x777)] ==
+    require([code.get(pc) for pc in (0x865, 0x868, 0x86b, 0x86e, 0x871)] ==
             [b"\x75\xa2\0", b"\x75\xa3\x02", b"\x75\xa4\xff", b"\x75\xa5\xff", b"\x75\xa6\xff"],
             "MAC time consecutive low-first period writes changed")
     require([raw.hex() for _, raw, _ in accesses] == [
-        "e5a8", "e5b8", "e59a", "aebe", "e5d6", "e5d7", "e5c6", "b59e02", "e5bf",
+        "e5a8", "e5b8", "e59a", "e5be", "e5d6", "e5d7", "e5c6", "e59e", "e5bf",
         "e5a7", "e594", "e5c3", "e5a1", "b59c02", "e5c6",
         "e5a2", "e5a3", "e5a4", "e5a5", "e5a6",
         "f59c", "f594", "f5c3", "75a200", "75a302", "75a4ff", "75a5ff", "75a6ff",
@@ -130,12 +131,12 @@ def verify(image, symbols, debug, memory, listings):
         sites[reader+offset] = ("r", 0x95+i, 0xe0)
     # Exactly one live destructive-read site, and no other Timer2 read between
     # it and the saved-byte FF decision. Whole CODE pins the branches/retry path.
-    require([(pc, raw) for pc, raw, reg in accesses if pc >= 0x8a3 and reg in range(0xa2, 0xa7)] ==
-            [(0x8a3, b"\xe5\xa2"), (0x8e8, b"\xe5\xa3"), (0x8ee, b"\xe5\xa4"),
-             (0x8f4, b"\xe5\xa5"), (0x8fa, b"\xe5\xa6")], "MAC time live latch read sites changed")
+    require([(pc, raw) for pc, raw, reg in accesses if pc >= 0x99d and reg in range(0xa2, 0xa7)] ==
+            [(0x99d, b"\xe5\xa2"), (0x9e2, b"\xe5\xa3"), (0x9e8, b"\xe5\xa4"),
+             (0x9ee, b"\xe5\xa5"), (0x9f4, b"\xe5\xa6")], "MAC time live latch read sites changed")
     require(re.search(r"S:Lmac_time.mac_time_read_live\$output\$[^(]+\(\{2\}DX,ST", debug),
             "MAC time output lost XDATA-qualified ABI")
-    require(bytes(image[i] for i in range(0xac5, 0xac9)) == b"\x90\0\x1c\x22",
+    require(bytes(image[i] for i in range(0xbbf, 0xbc3)) == b"\x90\0\x1c\x22",
             "MAC time diagnostic accessor changed")
     for module in ("mac_time", "test_mac_time"):
         fields(debug, module, "__00000000", ("fine", "periods"), (2, 4))
@@ -143,7 +144,7 @@ def verify(image, symbols, debug, memory, listings):
     fields(debug, "test_mac_time", "__00000002", ("before", "value", "after"), (4, 6, 4))
     fields(debug, "mac_time", "__00000002",
            ("start", "previous", "deadline", "limit", "control", "select", "event"), (4, 4, 4, 2, 1, 1, 1))
-    for name, a in {"saved_clock": 27, "status": 28, "staged": 42, "work": 48}.items():
+    for name, a in {"saved_clock": 27, "status": 28, "staged": 44, "work": 50}.items():
         require(cdb_address(debug, f"L:Fmac_time${name}$0_0$0") == a, "MAC time private object changed")
     for name, (address, size) in OBJECTS.items():
         symbol = "_mac_time_test_"+name
@@ -151,15 +152,15 @@ def verify(image, symbols, debug, memory, listings):
         require(symbols.get(symbol) == address and records and all(int(x) == size for x in records)
                 and set(range(address, address+size)) <= allocated, "MAC time caller allocation/ABI changed")
     for name, expected in {
-        "_mac_time_fault": 25, "_mac_time_ready": 26, "_mac_time_reserved_end": 96,
-        "__gptrput_PARM_2": 123, "_mac_time_test_cycle": 0xac9, "_mac_time_test_before": 0xac9,
-        "_mac_time_test_done": 0xb4e, "_main": 0xb50, "l_XSEG": 124,
+        "_mac_time_fault": 25, "_mac_time_ready": 26, "_mac_time_reserved_end": 98,
+        "__gptrput_PARM_2": 125, "_mac_time_test_cycle": 0xbc3, "_mac_time_test_before": 0xbc3,
+        "_mac_time_test_done": 0xc48, "_main": 0xc4a, "l_XSEG": 126,
         "s_DSEG": 0, "l_DSEG": 110, "s_OSEG": 11, "l_OSEG": 3, "l_ISEG": 0,
         "s_BSEG_BYTES": 32, "l_BSEG_BYTES": 1, "l_BSEG": 1, "s_SSEG": 33,
         "s_REG_BANK_0": 0, "l_REG_BANK_0": 8, "l_REG_BANK_1": 0, "l_REG_BANK_2": 0, "l_REG_BANK_3": 0,
     }.items():
         require(symbols.get(name) == expected, "MAC time boundary changed: "+name)
-    require(image[0xac9] == image[0xb4e] == 0, "MAC time checkpoint is not NOP")
+    require(image[0xbc3] == image[0xc48] == 0, "MAC time checkpoint is not NOP")
     return allocated, sites
 
 
@@ -254,7 +255,7 @@ def execute(simulator, path, symbols, allocated, sites, vector):
         for name in INPUTS:
             address, size = OBJECTS[name]; value = step[name]
             if name == "target":
-                value = {65535: 101, 65534: 123, 65533: 96}.get(value, value)
+                value = {65535: 103, 65534: 125, 65533: 98}.get(value, value)
             inputs[name] = value.to_bytes(size, "little")
             commands.append(f"set memory xram {address:#x} "+" ".join(hex(b) for b in inputs[name]))
         commands.append("step 1"); first = number
@@ -303,15 +304,15 @@ def execute(simulator, path, symbols, allocated, sites, vector):
         ram = memory_dump(blocks[final], 0, 0x1f00)
         iram = memory_dump(blocks[final+1], 0, 256); sfr = memory_dump(blocks[final+2], 0x80, 128)
         require(ram[0x1e00:0x1e08] == b"MTI1\x01\x08\0\0", "MAC time status ABI changed")
-        require(ram[25] == step["fault"] and ram[26] == step["ready"] and ram[112] == step["result"],
+        require(ram[25] == step["fault"] and ram[26] == step["ready"] and ram[114] == step["result"],
                 "MAC time public/retained state mismatch")
-        require(ram[121:123] == b"\x1c\0", "MAC time accessor is not the real private diagnostic")
+        require(ram[123:125] == b"\x1c\0", "MAC time accessor is not the real private diagnostic")
         expected = b"".join(v.to_bytes(n, "little") for v, n in zip(step["stamp"], (2, 4)))
-        require(ram[101:107] == expected, vector["name"]+": coherent stamp/nonpublication mismatch")
-        require(ram[97:101] == ram[107:111] == b"\xa5"*4, "MAC time caller guard overwritten")
+        require(ram[103:109] == expected, vector["name"]+": coherent stamp/nonpublication mismatch")
+        require(ram[99:103] == ram[109:113] == b"\xa5"*4, "MAC time caller guard overwritten")
         require(len(step["diagnostics"]) == len(SIZES), "MAC time diagnostic serialization changed")
         expected = b"".join(v.to_bytes(n, "little") for v, n in zip(step["diagnostics"], SIZES))
-        require(ram[28:42] == expected, vector["name"]+": diagnostic ABI mismatch")
+        require(ram[28:44] == expected, vector["name"]+": diagnostic ABI mismatch")
         for name, value in inputs.items():
             address = OBJECTS[name][0]
             require(ram[address:address+len(value)] == value, "MAC time changed caller inputs")
@@ -346,7 +347,7 @@ def main():
     result = subprocess.run([str(args.output / "host-mac-time-tests"), "--vectors"],
                             capture_output=True, text=True, timeout=15, check=True)
     vectors = [json.loads(line) for line in result.stdout.splitlines()]
-    require(len(vectors) == 48, "MAC time trace inventory changed")
+    require(len(vectors) == 102, "MAC time trace inventory changed")
     peak = max(execute(args.simulator, path, symbols, allocated, sites, v) for v in vectors)
     # Real negative control: emulate an INCORRECT MOVF0 re-latch, but retain the
     # known T2M0-instant oracle. Range-valid torn time must not pass this proof.

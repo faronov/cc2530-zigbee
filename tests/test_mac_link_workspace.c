@@ -51,6 +51,8 @@ static void ws_counter_boundary(void)
     security_joint_reset(1);
     WS_CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY);
     WS_CHECK(security_counter_create(256, 256, payload, 112, 64) == SECURITY_COUNTER_OK);
+    WS_CHECK(!security_joint_flash_commands()); /* staged until the first commit */
+    WS_CHECK(security_counter_save(payload, 112, 64) == SECURITY_COUNTER_OK);
     WS_CHECK(security_joint_flash_commands() == 38);
     ws_address = host_mmio_xaddress_hook;
     host_mmio_xaddress_hook = ws_map;
@@ -115,6 +117,9 @@ static void ws_counter_boundary(void)
     WS_CHECK(link_work_enter(LW_KEYS));
     memcpy(WA.keys.record,payload,112);
     WS_CHECK(LW_CALL(LW_COUNTER_CREATE,security_counter_create(256,256,WA.keys.record,112,64)) == SECURITY_COUNTER_OK);
+    WS_CHECK(LW_CALL(LW_COUNTER_CREATE,security_counter_create(256,256,WA.keys.record,112,64)) == SECURITY_COUNTER_OK);
+    WS_CHECK(!security_joint_flash_commands());
+    WS_CHECK(LW_CALL(LW_COUNTER_SAVE,security_counter_save(WA.keys.record,112,64)) == SECURITY_COUNTER_OK);
     WS_CHECK(security_joint_flash_commands() == 38);
     WS_CHECK(link_work_leave(LW_KEYS) && link_work_clean());
 }
@@ -234,6 +239,19 @@ static void ws_key_slots_and_faults(void)
     WS_CHECK(security_keys_provision(&config,code,256,256,&limits,64) == SECURITY_KEYS_OK);
     WS_CHECK(link_work_clean());
     WS_CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_PROVISIONED);
+    security_joint_fail_read(1);
+    /* Staged association reads no NV; nothing is durable before the first key save. */
+    WS_CHECK(security_keys_associate(0x3344,64) == SECURITY_KEYS_OK && !security_joint_flash_commands());
+    WS_CHECK(link_work_clean());
+    security_joint_reset(0);
+    WS_CHECK(security_keys_open() == SECURITY_KEYS_EMPTY);
+    WS_CHECK(security_keys_provision(&config,code,256,256,&limits,64) == SECURITY_KEYS_OK);
+    {
+        uint8_t record[112], length;
+        WS_CHECK(security_counter_read(record,112,&length) == SECURITY_COUNTER_OK && length == 112);
+        WS_CHECK(security_counter_save(record,112,64) == SECURITY_COUNTER_OK); /* committed PROVISIONED */
+    }
+    WS_CHECK(link_work_clean());
     security_joint_fail_read(1);
     WS_CHECK(security_keys_associate(0x3344,64) == SECURITY_KEYS_STORAGE);
     WS_CHECK(link_work_clean());

@@ -21,15 +21,15 @@ from verify_firmware import (
 )
 
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio", "test_mac_radio")
-SIZE, XDATA, CASES = 15040, 758, 52
-CODE_SHA = "8d402707573bf0c436a03b2d6aaf7a48c82c38b28127e64c78cb0ec9f9b06e90"
-CDB_SHA = "d5860121f20c868796a603358e5de1bb9206e49888b581fd4278c2e9a6ef1a9a"
-MAP_SHA = "030b66f1d4a9aecebb8f6ff0d2da7448703ea5dd5379fdccc33d60a817939520"
-LIST_SHA = "46e0004f4f68b0d9ba076e05595322fc6c50d8f82621b7a1dd274432184b2a9c"
-OBJECT_SHA = "fc0017c6729e27de97f0b8ed6066bb9a9f6e4a9ffef53af8440139046a8f3670"
-CALLER = {"config": (585, 14), "frame": (599, 128), "stamp": (727, 6),
-          "operation": (733, 1), "return": (734, 1), "length": (735, 1),
-          "input": (736, 2), "output": (738, 2), "limit": (740, 2), "timeout": (742, 4)}
+SIZE, XDATA, CASES = 15316, 760, 54
+CODE_SHA = "94777c5d01556cf4339764d8112bde1aafe6aad97c9b8a8dc026523fb29b1cd7"
+CDB_SHA = "7a1eaefbe642aef34b0b07420b20c3ada38513c6306b703e13c077943768e7c0"
+MAP_SHA = "7dfd7d79e48a1b4594076d755cd2a814fc470d176e9167c7904fc8be8a56278e"
+LIST_SHA = "f87980582d911ce261c5b232d6976f22a5a1b56308e645be230390e77454df16"
+OBJECT_SHA = "08f0d1bc1d67fa737c68f61f4bef52fbcd263c4de42e2df0c4265909c373d3e9"
+CALLER = {"config": (587, 14), "frame": (601, 128), "stamp": (729, 6),
+          "operation": (735, 1), "return": (736, 1), "length": (737, 1),
+          "input": (738, 2), "output": (740, 2), "limit": (742, 2), "timeout": (744, 4)}
 
 
 def sha(data):
@@ -85,13 +85,13 @@ def verify(image, symbols, debug, memory, listings, objects):
             span = set(range(int(address, 16), int(address, 16)+int(length)))
             require(span and not span & set().union(*spans.values()), "MAC radio overlapping allocation")
             spans[module].update(span)
-    require(set().union(*(spans[m] for m in MODULES[:5])) == set(range(438)) and
-            spans["mac_radio"] == set(range(438, 585)) and
-            spans["test_mac_radio"] == set(range(585, 746)), "MAC radio complete private/caller prefix changed")
-    require(symbols["_mac_radio_shared_end"] == 438 and symbols["_mac_radio_reserved_end"] == 584 and
-            symbols["_mac_radio_raw"] == 439 and symbols["_mac_radio_config"] == 462 and
+    require(set().union(*(spans[m] for m in MODULES[:5])) == set(range(440)) and
+            spans["mac_radio"] == set(range(440, 587)) and
+            spans["test_mac_radio"] == set(range(587, 748)), "MAC radio complete private/caller prefix changed")
+    require(symbols["_mac_radio_shared_end"] == 440 and symbols["_mac_radio_reserved_end"] == 586 and
+            symbols["_mac_radio_raw"] == 441 and symbols["_mac_radio_config"] == 464 and
             [symbols[n] for n in ("___memcpy_PARM_2", "___memcpy_PARM_3", "_memset_PARM_2",
-                                 "_memset_PARM_3", "__gptrput_PARM_2")] == [746, 749, 754, 755, 757],
+                                 "_memset_PARM_3", "__gptrput_PARM_2")] == [748, 751, 756, 757, 759],
             "MAC radio staging/shared/end/complete runtime scratch changed")
     for name, (address, _) in CALLER.items():
         require(symbols["_mac_radio_test_" + name] == address, "MAC radio caller ABI changed")
@@ -132,9 +132,9 @@ def verify(image, symbols, debug, memory, listings, objects):
     radio = codes["radio_autoack"]
     labels = {name: int(address, 16) for address, name in LABEL.findall(listings["radio_autoack"])}
     base, rfd, settle = (labels[n] for n in ("_setting_address", "_read_fifo", "_cca_settle"))
-    require(radio.get(base+0x215) == b"\xe0" and radio.get(base+0x8e6) == b"\xf0",
+    require(radio.get(base+0x222) == b"\xe0" and radio.get(base+0x8fe) == b"\xf0",
             "MAC radio indexed configuration access changed")
-    sites[base+0x215] = ("r", None, 0xe0); sites[base+0x8e6] = ("w", None, None)
+    sites[base+0x222] = ("r", None, 0xe0); sites[base+0x8fe] = ("w", None, None)
     require(bytes(image[a] for a in range(rfd, rfd+4)) == b"\x85\xd9\x82\x22" and
             sum(raw == b"\x12" + rfd.to_bytes(2, "big") for raw in radio.values()) == 1 and
             bytes(image[a] for a in range(settle, settle+5)) == b"\0\0\0\0\x22" and
@@ -265,7 +265,7 @@ def run_vector(simulator, path, symbols, debug, allocated, sites, vector):
                 if name in ("config", "frame", "stamp") else step[name].to_bytes(size, "little")
             require(ram[address:address+size] == raw, "MAC radio caller publication/preservation changed: " + name)
         for module, key, sizes in (("radio_autoack", "radio", (4, 2, 2)+(1,)*18),
-                                   ("mac_time", "timer", (4, 2, 2)+(1,)*6)):
+                                   ("mac_time", "timer", (4, 2, 2)+(1,)*8)):
             address = cdb_address(debug, f"L:F{module}$status$0_0$0")
             require(len(step[key]) == len(sizes), "MAC radio diagnostic serializer changed")
             raw = b"".join(v.to_bytes(s, "little") for v, s in zip(step[key], sizes))
@@ -294,7 +294,7 @@ def main():
                for m in MODULES}
     allocated, sites = verify(image, symbols, debug, memory, listings, objects)
     count = negatives(image, symbols, debug, memory, listings, objects)
-    require(count == 48143, "MAC radio artifact rejection inventory changed")
+    require(count == 48887, "MAC radio artifact rejection inventory changed")
     check_alias(args.simulator); rejected(lambda: check_alias(args.simulator, False))
     sampled = peak = calls = events = 0
     addresses = [symbols["_mac_radio_" + n] for n in (
@@ -307,7 +307,7 @@ def main():
         a, b = run_vector(args.simulator, path, symbols, debug, allocated, sites, vector)
         sampled = max(sampled, a); peak = max(peak, b)
         calls += len(vector["steps"]); events += sum(len(s["events"]) for s in vector["steps"])
-    require((calls, events, sampled, peak) == (266, 79308, 0x53, 0x55),
+    require((calls, events, sampled, peak) == (282, 82709, 0x53, 0x55),
             "MAC radio genuine call/event/stack inventory changed")
     print(f"MAC radio: {CASES} sequences/{calls} genuine calls/{events} MMIO events; "
           f"{SIZE}/16384 CODE, {XDATA}+64/1024 XDATA; sampled/full SP={sampled:02X}/{peak:02X}; "
