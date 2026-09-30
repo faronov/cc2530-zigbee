@@ -91,6 +91,16 @@ The relevant packaged sources are
 [uc.cc](https://sources.debian.org/src/sdcc/4.2.0%2Bdfsg-1/sim/ucsim/sim.src/uc.cc/)
 and [uc51.cc](https://sources.debian.org/src/sdcc/4.2.0%2Bdfsg-1/sim/ucsim/s51.src/uc51.cc/).
 
+The newer [complete radio-backed replay](LINK_JOIN_PLAN.md) reaches an
+additional direct-IRAM lookup crash after removing all names. It instead
+uses a separately built, hash-bound uCsim4.2 source with two debugger-only
+null guards, described in [provenance](PROVENANCE.md). All eight live CODE/
+XBANK mappings and the true IRAM alias remain; no temporary fixed-bank
+decoder or fixed register-bank model is used. Execution probes stop on
+direct-register ANL and banked CJNE, then execute an actual FMAP write and
+verify the next instruction comes from the newly selected bank. This does
+not alter the older worker or constitute a hardware observation.
+
 ## Bounded acceptance
 
 | Resource | Linked fixture |

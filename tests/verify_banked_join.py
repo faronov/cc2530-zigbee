@@ -61,7 +61,7 @@ def transfers(image, symbols, listings, debug, *, modules=MODULES,
               areas=("CSEG", "BJ_BANK1", "BJ_BANK2", "BJ_BANK3", "BJ_BANK4"),
               library=("___memcpy", "_memset", "__gptrput", "__gptrget",
                        "__mulint", "__mullong", "_memcmp"),
-              indirect_sites=((0xe5, b"\x73"),)):
+              indirect_sites=((0xe5, b"\x73"),), runtime_spans=None):
     decoded, owners, covered = {}, {}, set()
     for module, listing in listings.items():
         for pc, raw in records(listing.decode("ascii")):
@@ -71,15 +71,22 @@ def transfers(image, symbols, listings, debug, *, modules=MODULES,
                     "Actual join instruction overlaps or differs from linked CODE")
             decoded[pc], owners[pc] = raw, module
             covered |= span
-    pc = min(symbols[n] for n in library)
-    end = symbols["s_CSEG"]+symbols["l_CSEG"]
-    while pc < end:
-        size = LENGTHS[image[pc]]
-        span = set(range(pc, pc+size))
-        require(pc+size <= end and not span & covered, "Runtime instruction escapes CODE ownership")
-        decoded[pc], owners[pc] = bytes(image[a] for a in range(pc, pc+size)), "libc"
-        covered |= span
-        pc += size
+    if runtime_spans is None:
+        runtime_spans = ((min(symbols[n] for n in library),
+                          symbols["s_CSEG"]+symbols["l_CSEG"]),)
+    for start, end in runtime_spans:
+        require(0 <= start < end <= 0x8000, "Runtime span escapes common CODE")
+        pc = start
+        while pc < end:
+            require(pc in image and image[pc] != 0xa5, "Missing/reserved runtime instruction")
+            size = LENGTHS[image[pc]]
+            span = set(range(pc, pc+size))
+            require(pc+size <= end and not span & covered, "Runtime instruction escapes CODE ownership")
+            decoded[pc], owners[pc] = bytes(image[a] for a in range(pc, pc+size)), "libc"
+            covered |= span
+            pc += size
+    require(all(owners.get(symbols[n]) == "libc" for n in library),
+            "Runtime entry lacks a decoded library owner")
     for area in areas:
         require(set(range(symbols["s_"+area], symbols["s_"+area]+symbols["l_"+area])) <= covered,
                 "Incomplete actual join CODE decode")
@@ -127,7 +134,8 @@ def transfers(image, symbols, listings, debug, *, modules=MODULES,
         if owners[target] == "libc" and source != "libc":
             require(target in {symbols[n] for n in library}, "Unreviewed runtime entry")
         if raw[0] == 0x12 or raw[0] & 31 == 17:
-            require(target in entries or owners[target] == "libc", "Call enters the middle of a function")
+            require(target in entries or owners[target] == "libc",
+                    f"Call enters the middle of a function: {pc:x}->{target:x}")
             calls[pc] = target
             if not far and target in entries:
                 require(not entries[target][2], "Ordinary call enters a banked function")
@@ -190,6 +198,15 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
                 span = set(range(int(address, 16), int(address, 16)+int(size)))
                 require(module in frames and span and span <= overlay, "Compiler overlay escapes physical ownership")
                 frames[module] |= span
+    frame_ids = {entry: module for entry, (module, name, _) in entries.items()
+                 if module in frames and (module != "banked" or name == "banked_code_read")}
+    return data_liveness(symbols, decoded, owners, functions, entries, targets, calls,
+                         frames, frame_ids, reservations, overlay)
+
+
+def data_liveness(symbols, decoded, owners, functions, entries, targets, calls,
+                  frames, frame_ids, reservations, overlay, *, constraints=None):
+    """Check declared byte owners, or collect placement constraints without acceptance."""
     for pc, raw in decoded.items():
         if raw[0] in (0x10, 0x20, 0x30, 0x72, 0x82, 0x92, 0xa0, 0xa2, 0xb0, 0xb2, 0xc2, 0xd2):
             require(raw[1] >= 0x80 or raw[1] < symbols["l_BSEG"], "Bit access escapes physical bit ownership")
@@ -222,8 +239,7 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
 
     bodies = {}
     for pc, entry in functions.items():
-        module, name, _ = entries[entry]
-        if module in frames and (module != "banked" or name == "banked_code_read"):
+        if entry in frame_ids:
             bodies.setdefault(entry, []).append(pc)
     visited, active, conflicts = {}, set(), 0
 
@@ -233,16 +249,16 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
             return visited[entry]
         require(entry not in active, "Recursive compiler DATA lifetime")
         active.add(entry)
-        module = entries[entry][0]
+        owner = frame_ids[entry]
         body = sorted(bodies[entry])
         uses, defines, successors, modified, callees = {}, {}, {}, set(), {}
         for pc in body:
             raw = decoded[pc]
             read, write = direct_accesses(raw)
             relevant = (read | write) & tracked
-            require(relevant <= frames[module], "Linked direct access escapes its module frame")
-            uses[pc] = {(module, a) for a in read & tracked}
-            defines[pc] = {(module, a) for a in write & tracked}
+            require(relevant <= frames[owner], "Linked direct access escapes its declared frame")
+            uses[pc] = {(owner, a) for a in read & tracked}
+            defines[pc] = {(owner, a) for a in write & tracked}
             modified |= defines[pc]
             following = pc+len(raw)
             successors[pc] = {following} if following in functions and functions[following] == entry else set()
@@ -277,8 +293,11 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
         require(not live[entry], f"Uninitialized/retained shared DATA in {entries[entry][:2]}")
         for pc, writes in callees.items():
             after = set().union(*(live[p] for p in successors[pc]))
-            require(not {a for _, a in after} & {a for _, a in writes},
-                    f"Live DATA overwritten across actual call {pc:x}")
+            if constraints is None:
+                require(not {a for _, a in after} & {a for _, a in writes},
+                        f"Live DATA overwritten across actual call {pc:x}")
+            elif after and writes:
+                constraints.append((pc, after, writes))
             conflicts += len(after)*len(writes)
         active.remove(entry)
         visited[entry] = (live[entry], modified)

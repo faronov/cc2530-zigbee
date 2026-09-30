@@ -99,7 +99,7 @@ endif
 .PHONY: test-mac-tx-interval
 .PHONY: test-mac-handoff
 .PHONY: test-mac-adapter
-.PHONY: test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace
+.PHONY: test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace test-mac-link-direct
 .PHONY: test-mac-join
 .PHONY: test-mac-stamp
 .PHONY: test-radio-rx test-radio-autoack test-radio-queue test-radio-tx test-flash test-flash-exec test-flash-write
@@ -877,9 +877,19 @@ $(BUILD)/host-radio-autoack-tests: tests/test_radio_autoack.c src/timebase.c src
 $(BUILD)/host-radio-autoack-tests-sanitize: tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c -o $@
 
-test-radio-autoack: $(BUILD)/host-radio-autoack-tests $(BUILD)/host-radio-autoack-tests-sanitize $(BUILD)/radio_autoack_test.ihx
+# The adapter's loss-reporting raw-RX overflow path, on the same synthetic model.
+$(BUILD)/host-radio-autoack-loss-tests: tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_ADAPTER -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c -o $@
+
+# LINK: normal AUTOACK RX also salvages complete heads and reports the loss.
+$(BUILD)/host-radio-autoack-link-loss-tests: tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_ADAPTER -DCC2530_MAC_LINK -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c -o $@
+
+test-radio-autoack: $(BUILD)/host-radio-autoack-tests $(BUILD)/host-radio-autoack-tests-sanitize $(BUILD)/host-radio-autoack-loss-tests $(BUILD)/host-radio-autoack-link-loss-tests $(BUILD)/radio_autoack_test.ihx
 	$(BUILD)/host-radio-autoack-tests
 	$(BUILD)/host-radio-autoack-tests-sanitize
+	$(BUILD)/host-radio-autoack-loss-tests
+	$(BUILD)/host-radio-autoack-link-loss-tests
 	$(PYTHON) -B tests/boot_radio_autoack.py --output $(BUILD) --simulator "$(S51)"
 
 $(BUILD)/prng_test.rel: tests/test_prng.c $(HEADERS) Makefile | $(BUILD)
@@ -1729,6 +1739,195 @@ test-mac-link-child-workspace: $(BUILD)/host-mac-link-child-crypto-tests $(BUILD
 	$(PYTHON) -B tools/test_mac_link_child_abi.py --output $(MAC_LINK_CHILD_ABI_DIR)
 	$(PYTHON) -B tests/boot_mac_link_child_abi.py --output $(MAC_LINK_CHILD_ABI_DIR) --simulator "$(S51)"
 
+# CHILD plus direct NWK MAC staging in the IDLE owner frame; no MCU image.
+MAC_LINK_DIRECT_DEFINES := $(MAC_LINK_CHILD_DEFINES) -DCC2530_MAC_LINK_DIRECT
+MAC_LINK_DIRECT_DIR := $(BUILD)/mac-link-direct
+MAC_LINK_DIRECT_SRC := $(patsubst src/nwk_aps_transmit.c,src/nwk_aps_direct.c,$(MAC_LINK_CHILD_SRC))
+MAC_LINK_DIRECT_MODULES := $(sort $(filter-out nwk_aps_transmit,$(MAC_LINK_CHILD_MODULES)) nwk_aps_direct)
+MAC_LINK_DIRECT_OBJECTS := $(addprefix $(MAC_LINK_DIRECT_DIR)/,$(addsuffix .rel,$(MAC_LINK_DIRECT_MODULES)))
+MAC_LINK_DIRECT_INPUTS := $(filter-out src/nwk_aps_transmit.c,$(MAC_LINK_CHILD_INPUTS)) src/nwk_aps_direct.c
+$(MAC_LINK_DIRECT_DIR):
+	mkdir -p $@
+$(MAC_LINK_DIRECT_OBJECTS): $(MAC_LINK_DIRECT_DIR)/%.rel: src/%.c $(HEADERS) Makefile | $(MAC_LINK_DIRECT_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_DIRECT_DEFINES) \
+		$(if $(filter-out mac_link_workspace mac_link_child_workspace,$*),--dataseg $(if $(filter $*,$(BANKED_JOIN_MODULES) mac_link_driver nwk_aps_direct),BJ,MA)_$*) \
+		$(foreach b,1 2 3 4,$(if $(filter $*,$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) \
+		$(if $(filter mac_link_driver nwk_aps_direct,$*),--codeseg BJ_BANK4) \
+		$(if $(filter mac_adapter,$*),--codeseg MA_BANK2) -c $< -o $@
+$(MAC_LINK_DIRECT_DIR)/mac_link_direct_layout.rel: tests/mac_link_direct_layout.c $(HEADERS) Makefile | $(MAC_LINK_DIRECT_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -Isrc -c $< -o $@
+$(BUILD)/host-mac-link-direct-tests: tests/test_mac_link_direct.c $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		tests/test_mac_link_direct.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+$(BUILD)/host-mac-link-direct-tests-sanitize: tests/test_mac_link_direct.c $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_direct.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+$(BUILD)/host-mac-link-direct-nv-tests: tests/test_mac_link_child_nv.c $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		tests/test_mac_link_child_nv.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+$(BUILD)/host-mac-link-direct-nv-tests-sanitize: tests/test_mac_link_child_nv.c $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_child_nv.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+$(BUILD)/host-mac-link-direct-upper-tests: $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		tests/test_mac_link_workspace.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+$(BUILD)/host-mac-link-direct-upper-tests-sanitize: $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_workspace.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+MAC_LINK_DIRECT_REFRESHERS := security_keys_status bdb_join_start bdb_join_step bdb_join_receive \
+	mac_link_driver_step nwk_aps_step nwk_aps_transmit nwk_aps_complete \
+	zdo_runtime_step zdo_runtime_request zdo_runtime_broadcast
+$(BUILD)/host-mac-link-direct-poison-tests: tests/mac_link_direct_poison.c $(MAC_LINK_DIRECT_INPUTS) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		$(foreach f,$(MAC_LINK_DIRECT_REFRESHERS),-Wl,--wrap=$(f)) tests/mac_link_direct_poison.c \
+		tests/test_mac_link_workspace.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC) -o $@
+$(BUILD)/host-mac-link-direct-join-tests: tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -Isrc tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) -o $@
+$(BUILD)/host-mac-link-direct-join-tests-sanitize: tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(MAC_LINK_DIRECT_DEFINES) -Isrc \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie \
+		tests/test_mac_link_join.c $(MAC_LINK_CHILD_JOIN_SRC) -o $@
+
+test-mac-link-direct: $(BUILD)/host-mac-link-direct-tests $(BUILD)/host-mac-link-direct-tests-sanitize \
+		$(BUILD)/host-mac-link-direct-nv-tests $(BUILD)/host-mac-link-direct-nv-tests-sanitize \
+		$(BUILD)/host-mac-link-direct-upper-tests $(BUILD)/host-mac-link-direct-upper-tests-sanitize \
+		$(BUILD)/host-mac-link-direct-join-tests $(BUILD)/host-mac-link-direct-join-tests-sanitize \
+		$(BUILD)/host-mac-link-direct-poison-tests \
+		$(MAC_LINK_DIRECT_OBJECTS) $(MAC_LINK_DIRECT_DIR)/mac_link_direct_layout.rel
+	$(BUILD)/host-mac-link-direct-tests
+	$(BUILD)/host-mac-link-direct-tests-sanitize
+	$(BUILD)/host-mac-link-direct-nv-tests
+	$(BUILD)/host-mac-link-direct-nv-tests-sanitize
+	$(BUILD)/host-mac-link-direct-upper-tests
+	$(BUILD)/host-mac-link-direct-upper-tests-sanitize
+	$(BUILD)/host-mac-link-direct-join-tests
+	$(BUILD)/host-mac-link-direct-join-tests-sanitize
+	$(BUILD)/host-mac-link-direct-poison-tests
+	$(PYTHON) -B tools/link_ram_resources.py --output $(MAC_LINK_DIRECT_DIR) --direct
+
+MAC_LINK_SHALLOW_SRC := tests/test_mac_link_shallow.c src/mac_frame.c src/mac_link_workspace.c src/mac_link_child_workspace.c
+MAC_LINK_SHALLOW_CASES := shallow deep shallow-sanitize deep-sanitize
+MAC_LINK_SHALLOW_SANITIZERS := -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie
+define MAC_LINK_SHALLOW_HOST
+$(BUILD)/host-mac-link-$(1): $(MAC_LINK_SHALLOW_SRC) $(HEADERS) Makefile | $(BUILD)
+	$$(HOST_CC) $$(HOST_FLAGS) $$(MAC_LINK_DIRECT_DEFINES) -Isrc \
+		$(if $(filter deep deep-sanitize,$(1)),-DCC2530_MAC_LINK_DEEP_REFERENCE) \
+		$(if $(filter %-sanitize,$(1)),$(MAC_LINK_SHALLOW_SANITIZERS)) \
+		$$(MAC_LINK_SHALLOW_SRC) -o $$@
+endef
+$(foreach c,$(MAC_LINK_SHALLOW_CASES),$(eval $(call MAC_LINK_SHALLOW_HOST,$(c))))
+.PHONY: test-mac-link-shallow
+test-mac-link-shallow: $(addprefix $(BUILD)/host-mac-link-,$(MAC_LINK_SHALLOW_CASES))
+	set -e; for c in $(MAC_LINK_SHALLOW_CASES); do $(BUILD)/host-mac-link-$$c > $(BUILD)/mac-link-$$c.txt; done
+	cmp $(BUILD)/mac-link-shallow.txt $(BUILD)/mac-link-deep.txt
+	cmp $(BUILD)/mac-link-shallow-sanitize.txt $(BUILD)/mac-link-deep-sanitize.txt
+	tail -n 1 $(BUILD)/mac-link-shallow.txt $(BUILD)/mac-link-shallow-sanitize.txt
+
+# Complete real caller: host acceptance and a separate, unverified resource link.
+JOIN_SMOKE_DIR := $(BUILD)/join-smoke-objects
+JOIN_SMOKE_LAYOUT_DIR := $(BUILD)/join-smoke-layout
+JOIN_SMOKE_KEY_MODE ?= install-code
+ifneq ($(filter $(JOIN_SMOKE_KEY_MODE),install-code default-tc),$(JOIN_SMOKE_KEY_MODE))
+$(error JOIN_SMOKE_KEY_MODE must be install-code or default-tc)
+endif
+JOIN_SMOKE_DEFINES := $(MAC_LINK_DIRECT_DEFINES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)
+JOIN_SMOKE_FLAGS := $(BANKED_JOIN_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_BANKED_LINK
+JOIN_SMOKE_PROFILE := $(BUILD)/join-smoke-profile
+.PHONY: force-join-smoke-profile
+$(JOIN_SMOKE_PROFILE): force-join-smoke-profile | $(BUILD)
+	printf '%s\n' '$(BOARD) $(JOIN_SMOKE_KEY_MODE)' > $@.tmp
+	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
+JOIN_SMOKE_COMMON := banked mac_link_workspace mac_link_child_workspace timebase clock flash_exec flash flash_write nv_record security_counter ccm_star zigbee_mmo zigbee_key_hash mac_epoch startup join_smoke
+JOIN_SMOKE_RADIO := mac_time radio_autoack mac_radio mac_attempt
+JOIN_SMOKE_WIRE := nwk_frame aps_frame ed_wire
+JOIN_SMOKE_NWK := nwk_aps nwk_aps_direct
+JOIN_SMOKE_BDB := bdb_join bdb_join_init mac_scan nwk_candidates nwk_beacon nwk_parent
+JOIN_SMOKE_ASSOCIATION := mac_join mac_poll mac_association
+JOIN_SMOKE_MODULES := banked mac_link_workspace mac_link_child_workspace flash_exec timebase clock flash flash_write nv_record security_counter aes ccm_star zigbee_mmo zigbee_key_hash mac_time radio_autoack mac_epoch mac_radio mac_attempt mac_frame mac_tx mac_adapter nwk_frame aps_frame ed_wire security_keys mac_association mac_poll mac_join zdo_node zdo_srv nwk_beacon nwk_candidates nwk_parent mac_scan nwk_aps nwk_aps_direct zdo_runtime bdb_join bdb_join_init mac_link_driver
+JOIN_SMOKE_AREA = $(if $(filter $(1),$(JOIN_SMOKE_COMMON)),CSEG,$(if $(filter $(1),$(JOIN_SMOKE_RADIO)),JS_RADIO,$(if $(filter $(1),$(JOIN_SMOKE_WIRE)),JS_WIRE,$(if $(filter $(1),$(JOIN_SMOKE_NWK)),JS_NWK,$(if $(filter $(1),$(JOIN_SMOKE_BDB)),JS_BDB,$(if $(filter $(1),$(JOIN_SMOKE_ASSOCIATION)),JS_ASSOCIATION,JS_$(1)))))))
+JOIN_SMOKE_OBJECTS := $(addprefix $(JOIN_SMOKE_DIR)/,$(addsuffix .rel,$(JOIN_SMOKE_MODULES) startup $(BOARD) join_smoke join_smoke_main))
+JOIN_SMOKE_LINK_MODULES := join_smoke_iram_low banked join_smoke_iram_high $(filter-out banked,$(JOIN_SMOKE_MODULES)) startup $(BOARD) join_smoke join_smoke_main
+$(JOIN_SMOKE_DIR) $(JOIN_SMOKE_LAYOUT_DIR):
+	mkdir -p $@
+define JOIN_SMOKE_MODULE
+$(JOIN_SMOKE_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile $$(JOIN_SMOKE_PROFILE) | $(JOIN_SMOKE_DIR)
+	$$(SDCC) $$(JOIN_SMOKE_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,JD_$(1)) --codeseg $(call JOIN_SMOKE_AREA,$(1)) -c $$< -o $$@
+endef
+$(foreach m,$(JOIN_SMOKE_MODULES) startup join_smoke,$(eval $(call JOIN_SMOKE_MODULE,$(m))))
+$(JOIN_SMOKE_DIR)/$(BOARD).rel: boards/$(BOARD).c $(HEADERS) Makefile $(JOIN_SMOKE_PROFILE) | $(JOIN_SMOKE_DIR)
+	$(SDCC) $(JOIN_SMOKE_FLAGS) --dataseg JD_board -c $< -o $@
+$(JOIN_SMOKE_DIR)/join_smoke_main.rel: examples/join_smoke_main.c $(HEADERS) Makefile $(JOIN_SMOKE_PROFILE) | $(JOIN_SMOKE_DIR)
+	$(SDCC) $(JOIN_SMOKE_FLAGS) --dataseg JD_main -c $< -o $@
+$(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_iram_%.rel: src/join_smoke_iram_%.c Makefile $(JOIN_SMOKE_PROFILE) | $(JOIN_SMOKE_LAYOUT_DIR)
+	$(SDCC) $(JOIN_SMOKE_FLAGS) -c $< -o $@
+.PHONY: prepare-join-smoke-layout prepare-join-smoke-data prepare-join-smoke-stack test-join-smoke-host
+prepare-join-smoke-layout: $(JOIN_SMOKE_OBJECTS) \
+		$(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_iram_low.rel $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_iram_high.rel
+	$(PYTHON) -B tools/split_link_spills.py --input $(JOIN_SMOKE_DIR) --output $(JOIN_SMOKE_LAYOUT_DIR)
+	$(PYTHON) -B tools/join_smoke_layout.py --output $(JOIN_SMOKE_LAYOUT_DIR) --sdcc "$(SDCC)" --modules $(JOIN_SMOKE_LINK_MODULES)
+
+prepare-join-smoke-data: prepare-join-smoke-layout
+	$(PYTHON) -B tools/join_smoke_analysis.py --output $(JOIN_SMOKE_LAYOUT_DIR) --solve-data $(JOIN_SMOKE_LAYOUT_DIR)/data-placement.json
+	$(PYTHON) -B tools/join_smoke_layout.py --output $(JOIN_SMOKE_LAYOUT_DIR) --sdcc "$(SDCC)" --data-placement $(JOIN_SMOKE_LAYOUT_DIR)/data-placement.json --modules $(JOIN_SMOKE_LINK_MODULES)
+	$(PYTHON) -B tools/join_smoke_analysis.py --output $(JOIN_SMOKE_LAYOUT_DIR) --check-data
+
+prepare-join-smoke-stack: prepare-join-smoke-data
+	$(PYTHON) -B tools/join_smoke_analysis.py --output $(JOIN_SMOKE_LAYOUT_DIR) --check-data --check-stack
+
+JOIN_SMOKE_IMAGE_INPUTS := $(wildcard tools/join_smoke*.py tools/join_smoke_pins.json) \
+	tools/split_link_spills.py tools/banked_image.py tools/verify_firmware.py \
+	tests/verify_banked_join.py tests/verify_mac_smoke.py tests/boot_mac_link_child_abi.py
+$(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h: $(JOIN_SMOKE_OBJECTS) $(JOIN_SMOKE_IMAGE_INPUTS) \
+		$(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_iram_low.rel $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_iram_high.rel
+	+$(MAKE) --no-print-directory prepare-join-smoke-stack
+	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --header $@
+
+JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10
+JOIN_SMOKE_HOST_CASES := $(JOIN_SMOKE_CASES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15)
+.PHONY: prepare-join-smoke-image test-join-smoke-mcu
+prepare-join-smoke-image: $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h
+	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE)
+
+define JOIN_SMOKE_MCU_CASE
+.PHONY: test-join-smoke-mcu-$(1)
+test-join-smoke-mcu-$(1): $(BUILD)/host-join-smoke-vectors $(BUILD)/host-join-smoke-vectors-sanitize
+	$$(PYTHON) -B tests/boot_join_smoke.py --output $$(BUILD) --board $$(BOARD) --key-mode $$(JOIN_SMOKE_KEY_MODE) --simulator "$$(S51)" --case $(1)
+endef
+$(foreach c,$(JOIN_SMOKE_CASES),$(eval $(call JOIN_SMOKE_MCU_CASE,$(c))))
+test-join-smoke-mcu: $(addprefix test-join-smoke-mcu-,$(JOIN_SMOKE_CASES))
+
+JOIN_SMOKE_HOST_SRC := tests/test_join_smoke.c src/join_smoke.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC)
+$(BUILD)/host-join-smoke-vectors: $(JOIN_SMOKE_HOST_SRC) tests/join_smoke_trace.h $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h $(JOIN_SMOKE_PROFILE) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DJOIN_SMOKE_TRACE \
+		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) -I$(JOIN_SMOKE_LAYOUT_DIR) $(JOIN_SMOKE_HOST_SRC) -o $@
+$(BUILD)/host-join-smoke-vectors-sanitize: $(JOIN_SMOKE_HOST_SRC) tests/join_smoke_trace.h $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h $(JOIN_SMOKE_PROFILE) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DJOIN_SMOKE_TRACE \
+		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) -I$(JOIN_SMOKE_LAYOUT_DIR) $(MAC_LINK_SHALLOW_SANITIZERS) $(JOIN_SMOKE_HOST_SRC) -o $@
+$(BUILD)/host-join-smoke: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_PROFILE) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) $(JOIN_SMOKE_HOST_SRC) -o $@
+$(BUILD)/host-join-smoke-sanitize: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_PROFILE) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) \
+		-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(JOIN_SMOKE_HOST_SRC) -o $@
+$(BUILD)/host-join-smoke-deep: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_PROFILE) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_MAC_LINK_DEEP_REFERENCE \
+		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) $(JOIN_SMOKE_HOST_SRC) -o $@
+$(BUILD)/host-join-smoke-deep-sanitize: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_PROFILE) | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_MAC_LINK_DEEP_REFERENCE \
+		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) $(MAC_LINK_SHALLOW_SANITIZERS) $(JOIN_SMOKE_HOST_SRC) -o $@
+test-join-smoke-host: $(BUILD)/host-join-smoke $(BUILD)/host-join-smoke-sanitize \
+		$(BUILD)/host-join-smoke-deep $(BUILD)/host-join-smoke-deep-sanitize
+	set -e; for n in $(JOIN_SMOKE_HOST_CASES); do \
+		$(BUILD)/host-join-smoke $$n > $(BUILD)/join-smoke-$$n.txt; \
+		$(BUILD)/host-join-smoke-sanitize $$n > $(BUILD)/join-smoke-$$n-sanitize.txt; \
+		$(BUILD)/host-join-smoke-deep $$n > $(BUILD)/join-smoke-$$n-deep.txt; \
+		$(BUILD)/host-join-smoke-deep-sanitize $$n > $(BUILD)/join-smoke-$$n-deep-sanitize.txt; \
+		cmp $(BUILD)/join-smoke-$$n.txt $(BUILD)/join-smoke-$$n-deep.txt; \
+		cmp $(BUILD)/join-smoke-$$n-sanitize.txt $(BUILD)/join-smoke-$$n-deep-sanitize.txt; \
+		cat $(BUILD)/join-smoke-$$n.txt $(BUILD)/join-smoke-$$n-sanitize.txt; done
+
 $(BUILD)/host-mac-interval-radio-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_INTERVAL tests/test_mac_attempt.c src/mac_tx.c src/mac_frame.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
 
@@ -1941,8 +2140,10 @@ test-radio-rx-fixture: all $(BUILD)/host-radio-rx-fixture-tests_$(BOARD)
 
 # Component inputs vary with BOARD, not IMAGE. Keep both compiler definitions,
 # but do not repeat the same corpus for every board fixture in test-local.
-test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
+test-common: test-common-core test-mac-radio test-mac-stamp test-zcl-temperature test-mac-attempt test-mac-tx-interval test-mac-handoff test-mac-adapter test-mac-reconfig test-mac-link test-mac-link-ram test-mac-link-workspace test-mac-link-child-workspace test-mac-link-direct test-mac-join test-zdo-node test-zdo-srv test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident test-ed-integration test-banked test-banked-security test-banked-join
 test-common: test-mac-smoke
+test-common: test-join-smoke-host
+test-common: test-mac-link-shallow
 test-common-core: test-protocol-frame test-protocol-budget test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify test-radio-rx test-radio-autoack test-radio-queue test-radio-tx
 test-common-core: test-mac-tx test-nwk-candidates test-nwk-parent test-mac-time test-mac-epoch test-mac-scan test-mac-association test-mac-poll
 test-common-core: test-noise-health test-radio-noise

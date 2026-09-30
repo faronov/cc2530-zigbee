@@ -59,7 +59,7 @@ linked-image/ABI/alias guard and simulator deadline.
 | --- | --- | --- |
 | Fast development | `make test-fast`, or `python3 -B tools/ci_plan.py --base origin/main --tier fast` | Actual affected direct native/sanitizer recipes, both board definitions; no linked-image or simulator acceptance |
 | Affected integration | Accepted-baseline push/PR; inspect locally with `python3 -B tools/ci_plan.py --base origin/main` | Complete selected compositions, actual image/ABI/alias/MMIO/stack guards and execution; only the banked-key exhaustive artifact campaign is deferred |
-| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All116 workers/corpora, including separate compact-link, shared-UPPER, CHILD and boot-disarmed MAC experiments; exhaustive current artifact mutations |
+| Full | Nightly at03:23 UTC, manual dispatch, published release, shared/build/header/verifier/runtime or unknown changes | All118 workers/corpora, including separate compact-link, shared-UPPER, CHILD, DIRECT staging and boot-disarmed MAC experiments; exhaustive current artifact mutations |
 
 Selection uses actual forced Make dry-run compiler inputs and recursively
 follows project includes, including C test helpers included by other C tests.
@@ -73,6 +73,50 @@ Make-generated inputs derived from the actual target CDB; they are not guessed f
 padding or accepted from a stale build cache.
 `test-fast` compares HEAD with staged/unstaged/untracked source by default.
 It is a development aid, never a substitute for the affected integration gate.
+
+For the active [complete radio-backed join plan](docs/LINK_JOIN_PLAN.md),
+`make BOARD=<board> test-join-smoke-host` runs the ten fresh-process caller
+scenarios with native and nonrecovering-sanitizer builds, comparing
+shallow/deep caller paths within each mode, including NV/wire/AES.
+`JOIN_SMOKE_KEY_MODE=default-tc` selects the explicit ordinary discovery
+profile and adds five host scenarios (all channels, ambiguity, closed
+admission, overflow and inconsistent learned TC identity). It requires no
+install code or target-network metadata; see its
+[current evidence and limits](docs/ED_JOIN.md#ordinary-default-key-discovery).
+Use a separate `BUILD` for independent profiles; the board/mode dependency
+also invalidates stale caller artifacts if the mode changes in one directory.
+Separately,
+`make BOARD=<board> BUILD=build/join-integration/<board> prepare-join-smoke-layout`
+compiles and resource-links the complete caller. Its unverified IHX, map,
+CDB, complete NoICE symbols, snapshotted listings and `layout.json` are
+development artifacts, not an accepted executable or physical HEX.
+The resource preparation is opt-in and has no boot, upload or hardware step.
+`make BOARD=<board> BUILD=build/join-integration/<board> prepare-join-smoke-data`
+also derives object-bound function-spill placements, relinks and independently
+checks actual near/far destinations and DATA/OSEG/libc byte lifetimes.
+`analysis.json` binds that result to the linked artifact report; it does not
+accept the stack or authorize execution.
+`make BOARD=<board> BUILD=build/join-integration/<board> prepare-join-smoke-stack`
+retains the DATA gate and adds actual linked static stack bounds with exact
+CRT, bank-trampoline and flash-template checks. Only `static_stack_verified`
+is added; observed-stack, image and execution acceptance remain separate.
+`make BOARD=<board> BUILD=build/join-integration/<board> prepare-join-smoke-image`
+then requires immutable complete-image identities and XDATA/private-prefix
+proof, and generates the exact native admission header. The opt-in
+`test-join-smoke-mcu` target uses that header for both native/sanitizer
+references and runs only an admitted image. It currently requires the isolated
+debugger repair and explicit `S51` path documented in
+[the execution plan](docs/LINK_JOIN_PLAN.md); neither source downloads nor a
+simulator installation happen automatically. The full new replay is still
+under development, not an accepted CI worker or a physical programming path.
+`test-join-smoke-mcu` selects cases0-6 and8-10; the corresponding
+`test-join-smoke-mcu-<case>` target reproduces one case with the same immutable
+admission. Case7 remains the separate legacy host E2E entry, not a caller
+replay. Cases8/9 withhold the network key or assert a synthetic radio error;
+case10 exhausts an actually busy flash command and must never return.
+The DIRECT workers additionally run
+`test-mac-link-shallow`, comparing shallow/deep guard and codec behavior
+separately for native and nonrecovering-sanitizer builds.
 
 CI only narrows a push/PR when its exact previous/base commit already has a
 successful main CI result. A failed/cancelled/in-progress predecessor,
@@ -160,10 +204,13 @@ Two CHILD workers add the40-module resource/ownership experiment and its
 separate ABI image. Two [boot-disarmed MAC fixture](docs/MAC_SMOKE.md) workers
 run the actual board image only on synthetic peripherals, never equipment,
 without uploading the physical programming image.
-The exact component union is still `test-common`;116 worker jobs retain
+Two DIRECT workers add in-place MAC staging/shared key-status regressions
+and ten fresh-process native/sanitizer cases for the actual `join_smoke`
+caller. These are host results, not a combined MCU execution claim.
+The exact component union is still `test-common`;118 worker jobs retain
 all twenty-eight board/image checks and the unchanged simulator deadlines.
 Selection and the stable acceptance gate add two control jobs. A full run has
-118 jobs, not fewer cases; an affected run contains only its selected workers.
+120 jobs, not fewer cases; an affected run contains only its selected workers.
 The generic BDB host worker also reports fresh host coverage.
 The tool suite itself includes both-board image profiles;
 no component, board-image, simulator or artifact check is omitted.

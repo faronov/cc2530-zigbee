@@ -15,6 +15,7 @@ from ci_plan import COMPONENTS, recipe
 from link_ram_resources import MODULES as LINK_RAM_MODULES
 from link_ram_resources import WORKSPACE_MODULES as LINK_WORKSPACE_MODULES
 from link_ram_resources import CHILD_MODULES as LINK_CHILD_MODULES
+from link_ram_resources import DIRECT_MODULES as LINK_DIRECT_MODULES
 
 
 @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
@@ -29,7 +30,7 @@ class LocalChecksTests(unittest.TestCase):
                 cwd=ROOT, env=environment, capture_output=True, text=True, check=True, timeout=30,
             )
             self.assertEqual(list(Path(directory).iterdir()), [])
-            return [shlex.split(line) for line in result.stdout.splitlines()
+            return [shlex.split(line) for line in result.stdout.replace("\\\n", " ").splitlines()
                     if line.startswith(("python3 ", directory + "/")) or
                     include_build and line.startswith(("cc ", "sdcc ", "cp "))]
 
@@ -383,6 +384,195 @@ class LocalChecksTests(unittest.TestCase):
                          "mac-adapter", "bringup"):
                 self.assertFalse(any("-DCC2530_MAC_LINK_CHILD_WORKSPACE" in args
                                      for args in recipe(board, unit)))
+
+    def test_direct_replaces_transmit_and_adds_only_host_join_caller(self):
+        for board in BOARDS:
+            commands = recipe(board, "mac-link-direct")
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args
+                        and "-DCC2530_MAC_LINK_DIRECT" in args]
+            self.assertEqual(tuple(Path(args[-1]).stem for args in compiles),
+                             tuple(sorted(LINK_DIRECT_MODULES)) + ("mac_link_direct_layout",))
+            self.assertEqual(LINK_DIRECT_MODULES ^ LINK_CHILD_MODULES,
+                             {"nwk_aps_transmit", "nwk_aps_direct"})
+            for args in compiles:
+                stem = Path(args[-1]).stem
+                self.assertEqual(Path(args[-1]).parent.name, "mac-link-direct")
+                self.assertTrue({"--model-large", "--debug", "--Werror", "-DCC2530_BANKED_JOIN",
+                                 "-DCC2530_JOIN_WORKSPACE", "-DCC2530_MAC_LINK_RAM",
+                                 "-DCC2530_MAC_LINK_WORKSPACE", "-DCC2530_MAC_LINK_CHILD_WORKSPACE",
+                                 "-DCC2530_MAC_RECONFIG", "-DCC2530_MAC_ADAPTER"} <= set(args))
+                self.assertFalse({"--stack-auto", "--xstack", "-DCC2530_HOST_TEST"} & set(args))
+                self.assertNotIn("src/nwk_aps_transmit.c", args)
+                if stem in ("mac_link_workspace", "mac_link_child_workspace"):
+                    self.assertNotIn("--dataseg", args)
+                    self.assertNotIn("--codeseg", args)
+                if stem == "nwk_aps_direct":
+                    self.assertEqual(args[args.index("--dataseg")+1], "BJ_nwk_aps_direct")
+                    self.assertEqual(args[args.index("--codeseg")+1], "BJ_BANK4")
+                if stem == "mac_tx":
+                    self.assertEqual(args[args.index("--codeseg")+1], "BJ_BANK2")
+            native = [args for args in commands if args[0] == "cc"]
+            shallow = [args for args in native if "tests/test_mac_link_shallow.c" in args]
+            self.assertEqual(len(shallow), 4)
+            self.assertEqual(sum("-DCC2530_MAC_LINK_DEEP_REFERENCE" in args for args in shallow), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in shallow), 2)
+            for args in shallow:
+                sanitized = Path(args[-1]).name.endswith("-sanitize")
+                self.assertEqual("-fsanitize=address,undefined" in args, sanitized)
+                self.assertEqual("-fno-sanitize-recover=all" in args, sanitized)
+                self.assertNotIn("undefined", args)
+            self.assertEqual({Path(args[-1]).name for args in shallow},
+                             {"host-mac-link-" + c for c in
+                              ("shallow", "deep", "shallow-sanitize", "deep-sanitize")})
+            native = [args for args in native if args not in shallow]
+            self.assertEqual(len(native), 13)
+            caller = [args for args in native if "tests/test_join_smoke.c" in args]
+            self.assertEqual(len(caller), 4)
+            self.assertEqual(sum("-DCC2530_MAC_LINK_DEEP_REFERENCE" in args for args in caller), 2)
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in caller), 2)
+            poison = [args for args in native if "tests/mac_link_direct_poison.c" in args]
+            self.assertEqual(len(poison), 1)
+            self.assertEqual({arg for arg in poison[0] if arg.startswith("-Wl,")},
+                             {f"-Wl,--wrap={name}" for name in (
+                                 "security_keys_status", "bdb_join_start", "bdb_join_step",
+                                 "bdb_join_receive", "mac_link_driver_step", "nwk_aps_step",
+                                 "nwk_aps_transmit", "nwk_aps_complete", "zdo_runtime_step",
+                                 "zdo_runtime_request", "zdo_runtime_broadcast")})
+            self.assertIn("tests/test_mac_link_workspace.c", poison[0])
+            self.assertTrue(all("-DCC2530_MAC_LINK_DIRECT" in args and "-Isrc" in args
+                                and "-DCC2530_BANKED_JOIN" not in args for args in native))
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 6)
+            for args in native:
+                self.assertNotIn("src/nwk_aps_transmit.c", args)
+                self.assertIn("src/mac_link_child_workspace.c", args)
+                if "tests/test_mac_link_join.c" not in args:
+                    expected = LINK_DIRECT_MODULES | (
+                        {"join_smoke"} if "tests/test_join_smoke.c" in args else set())
+                    self.assertEqual({Path(arg).stem for arg in args if arg.startswith("src/")},
+                                     expected)
+                    self.assertIn("tests/security_joint_model.c", args)
+            links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
+            self.assertEqual(len(links), 1)
+            self.assertTrue(links[0][-1].endswith("/mac-adapter/mac_adapter_fixture.rel"))
+            self.assertNotIn("-DCC2530_MAC_LINK_DIRECT", links[0])
+            runs = [Path(args[0]).name for args in commands
+                    if args[0] not in ("cc", "sdcc", "mkdir", "cp", "python3", "set", "cmp", "tail",
+                                       "printf", "if")]
+            self.assertEqual(runs, [f"host-mac-link-direct-{case}tests{suffix}"
+                                    for case in ("", "nv-", "upper-", "join-")
+                                    for suffix in ("", "-sanitize")]
+                             + ["host-mac-link-direct-poison-tests"])
+            loops = [args for args in commands if args[0] == "set"]
+            self.assertEqual(len(loops), 2)
+            self.assertTrue(" ".join(loops[0]).startswith("set -e; for n in 0 1 2 3 4 5 6 8 9 10 ; do "))
+            self.assertEqual(loops[0].count("$n"), 4)
+            self.assertEqual(loops[0].count("cmp"), 2)
+            self.assertIn("shallow-sanitize", loops[1])
+            self.assertIn("deep-sanitize;", loops[1])
+            self.assertEqual(sum(args[0] == "cmp" for args in commands), 2)
+            self.assertEqual(sum("tools/link_ram_resources.py" in args and "--direct" in args
+                                 for args in commands), 1)
+            self.assertFalse(any("tests/boot_" in arg for args in commands for arg in args))
+            for unit in ("mac-link-child-workspace", "mac-link-workspace", "mac-link-ram", "mac-link",
+                         "banked-join-success", "mac-adapter", "bringup"):
+                self.assertFalse(any("-DCC2530_MAC_LINK_DIRECT" in args
+                                     for args in recipe(board, unit)))
+
+    def test_join_layout_is_opt_in_and_contains_the_real_complete_caller(self):
+        for board in BOARDS:
+            commands = self.dry_run("prepare-join-smoke-layout", BOARD=board, include_build=True)
+            compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
+            self.assertEqual({Path(args[-1]).stem for args in compiles},
+                             LINK_DIRECT_MODULES | {"banked", "startup", board, "join_smoke",
+                                                    "join_smoke_main", "join_smoke_iram_low",
+                                                    "join_smoke_iram_high"})
+            for args in compiles:
+                self.assertIn("-DCC2530_BANKED_LINK", args)
+                self.assertIn("-DCC2530_MAC_LINK_DIRECT", args)
+                self.assertFalse({"--stack-auto", "--xstack", "-DCC2530_HOST_TEST"} & set(args))
+                if Path(args[-1]).stem in ("mac_time", "radio_autoack", "mac_radio", "mac_attempt"):
+                    self.assertEqual(args[args.index("--codeseg") + 1], "JS_RADIO")
+                if Path(args[-1]).stem in ("nwk_aps", "nwk_aps_direct"):
+                    self.assertEqual(args[args.index("--codeseg") + 1], "JS_NWK")
+                if Path(args[-1]).stem in ("mac_join", "mac_poll", "mac_association"):
+                    self.assertEqual(args[args.index("--codeseg") + 1], "JS_ASSOCIATION")
+                if Path(args[-1]).stem in ("bdb_join", "bdb_join_init", "mac_scan",
+                                          "nwk_candidates", "nwk_beacon", "nwk_parent"):
+                    self.assertEqual(args[args.index("--codeseg") + 1], "JS_BDB")
+            links = [args for args in commands if "tools/join_smoke_layout.py" in args]
+            self.assertEqual(len(links), 1)
+            self.assertEqual(set(links[0][links[0].index("--modules") + 1:]),
+                             {Path(args[-1]).stem for args in compiles})
+            modules = links[0][links[0].index("--modules") + 1:]
+            self.assertLess(modules.index("flash_exec"), modules.index("timebase"))
+            self.assertLess(modules.index("flash_exec"), modules.index("clock"))
+            self.assertFalse(any(arg in ("--pack", "--flash", "--simulator")
+                                 for args in commands for arg in args))
+
+    def test_join_data_preparation_relinks_before_strict_liveness_check(self):
+        commands = self.dry_run("prepare-join-smoke-data", BOARD="generic", include_build=True)
+        steps = [args for args in commands if any(name in args for name in
+                 ("tools/join_smoke_analysis.py", "tools/join_smoke_layout.py"))]
+        self.assertEqual(len(steps), 4)
+        self.assertIn("tools/join_smoke_layout.py", steps[0])
+        self.assertNotIn("--data-placement", steps[0])
+        self.assertIn("--solve-data", steps[1])
+        self.assertIn("--data-placement", steps[2])
+        self.assertIn("--check-data", steps[3])
+        self.assertEqual(steps[1][steps[1].index("--solve-data") + 1],
+                         steps[2][steps[2].index("--data-placement") + 1])
+        self.assertFalse(any(arg in ("--pack", "--flash", "--simulator")
+                             for args in commands for arg in args))
+
+    def test_join_stack_preparation_keeps_the_data_gate_and_never_executes(self):
+        commands = self.dry_run("prepare-join-smoke-stack", BOARD="generic", include_build=True)
+        checks = [args for args in commands if "tools/join_smoke_analysis.py" in args]
+        self.assertEqual(len(checks), 3)
+        self.assertIn("--solve-data", checks[0])
+        self.assertIn("--check-data", checks[1])
+        self.assertNotIn("--check-stack", checks[1])
+        self.assertEqual(checks[2][-2:], ["--check-data", "--check-stack"])
+        self.assertFalse(any(arg in ("--pack", "--flash", "--simulator")
+                             for args in commands for arg in args))
+
+    def test_join_vectors_require_a_fresh_admitted_target_header(self):
+        commands = self.dry_run("test-join-smoke-mcu", BOARD="generic", include_build=True)
+        admission = next(i for i, args in enumerate(commands) if "tools/join_smoke_image.py" in args)
+        header = commands[admission]
+        self.assertIn("--header", header)
+        checks = [i for i, args in enumerate(commands)
+                  if "tools/join_smoke_analysis.py" in args and "--check-stack" in args]
+        self.assertTrue(checks and max(checks) < admission)
+        compiles = [(i, args) for i, args in enumerate(commands)
+                    if args[0] == "cc" and "-DJOIN_SMOKE_TRACE" in args]
+        self.assertEqual(len(compiles), 2)
+        self.assertTrue(all(i > admission for i, _ in compiles))
+        self.assertEqual(sum("-fno-sanitize-recover=all" in args for _, args in compiles), 1)
+        replays = [(i, args) for i, args in enumerate(commands) if "tests/boot_join_smoke.py" in args]
+        self.assertEqual([int(args[args.index("--case")+1]) for _, args in replays],
+                         [0, 1, 2, 3, 4, 5, 6, 8, 9, 10])
+        self.assertTrue(all(i > max(n for n, _ in compiles) for i, _ in replays))
+        self.assertFalse(any(arg in ("--pack", "--flash") for args in commands for arg in args))
+
+    def test_join_individual_failure_target_keeps_immutable_admission(self):
+        commands = self.dry_run("test-join-smoke-mcu-10", BOARD="lg_esl29_rev03", include_build=True)
+        self.assertTrue(any("tools/join_smoke_image.py" in args and "--header" in args for args in commands))
+        replays = [args for args in commands if "tests/boot_join_smoke.py" in args]
+        self.assertEqual(len(replays), 1)
+        self.assertEqual(replays[0][-2:], ["--case", "10"])
+
+    def test_ordinary_join_profile_reaches_all_callers_and_admission(self):
+        commands = self.dry_run("test-join-smoke-mcu-0", BOARD="lg_esl29_rev03",
+                                JOIN_SMOKE_KEY_MODE="default-tc", include_build=True)
+        compiles = [args for args in commands if args[0] in ("cc", "sdcc") and
+                    ("-DJOIN_SMOKE_TRACE" in args or "-c" in args and
+                     any(part.startswith("join-smoke-") for part in Path(args[-1]).parts))]
+        self.assertTrue(compiles)
+        self.assertTrue(all("-DCC2530_DEFAULT_TC_KEY" in args for args in compiles))
+        tools = [args for args in commands if any(name in args for name in
+                 ("tools/join_smoke_image.py", "tests/boot_join_smoke.py"))]
+        self.assertEqual(len(tools), 2)
+        self.assertTrue(all(args[args.index("--key-mode")+1] == "default-tc" for args in tools))
 
     def test_full_target_is_union_of_split_suites_for_every_board_image(self):
         for board in BOARDS:

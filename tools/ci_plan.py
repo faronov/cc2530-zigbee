@@ -29,6 +29,8 @@ COMPONENTS = {
     "mac-link-workspace": ("Experimental shared MAC workspace ({board})", ("test-mac-link-workspace",)),
     "mac-link-child-workspace": ("Experimental shared MAC CHILD workspace ({board})",
                                ("test-mac-link-child-workspace",)),
+    "mac-link-direct": ("Experimental direct MAC staging CHILD ({board})",
+                        ("test-mac-link-direct", "test-join-smoke-host", "test-mac-link-shallow")),
     "security": ("Offline Zigbee security ({board})",
                  ("test-zigbee-security", "test-zigbee-mmo", "test-zigbee-key-hash")),
     "counters": ("Offline durable counters ({board})", ("test-security-counter",)),
@@ -77,6 +79,21 @@ def recipe(board, unit, build="build/ci-plan"):
     return tuple(tuple(shlex.split(line)) for line in text.replace("\\\n", " ").splitlines() if line.strip())
 
 
+@lru_cache(maxsize=None)
+def trace_headers(board, build="build/ci-plan"):
+    # tests/join_smoke_trace.h is included only for local traced MCU replays;
+    # accept its layout header only where the actual Make rule emits it.
+    text = command(["make", "--no-print-directory", "-n", "-B", "-j1",
+                    "HOST_CC=cc", "SDCC=sdcc", "PYTHON=python3", f"BOARD={board}",
+                    "IMAGE=bringup", f"BUILD={build}", f"{build}/join-smoke-layout/join_smoke_layout.h"])
+    commands = [shlex.split(line) for line in text.replace("\\\n", " ").splitlines() if line.strip()]
+    headers = {(ROOT/args[args.index("--header")+1]).resolve() for args in commands
+               if "tools/join_smoke_image.py" in args and "--header" in args}
+    if not headers:
+        raise ValueError(f"No generated join-smoke layout header for {board}")
+    return frozenset(headers)
+
+
 def source_index():
     index = {}
     for board in BOARDS:
@@ -95,6 +112,9 @@ def source_index():
                          for args in commands
                          if {"tests/verify_banked_join.py", "tests/verify_mac_adapter.py"} & set(args)
                          and "--emit-header" in args}
+            for header in trace_headers(board):
+                directories.add(header.parent)
+                generated.add(header)
             index[board, unit] = include_closure(inputs, directories, generated)
     return index
 
