@@ -1,0 +1,59 @@
+{
+  "baseline": "build/xdata-study/baseline/join-smoke-layout",
+  "baseline_identities": {
+    "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+    "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+    "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+    "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+    "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+    "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+    "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+    "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+    "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+  },
+  "plan": {
+    "module": "nwk_aps",
+    "width": 6,
+    "offsets": {
+      "Lnwk_aps.acknowledgment$ctx$1_0$204": 0,
+      "Lnwk_aps.acknowledgment$a$1_0$205": 3,
+      "Lnwk_aps.acknowledgment_matches$ctx$1_0$202": 0,
+      "Lnwk_aps.acknowledgment_matches$sent$1_0$203": 3,
+      "Lnwk_aps.nwk_aps_broadcast_put$ctx$1_0$173": 0,
+      "Lnwk_aps.nwk_aps_broadcast_put$entry$1_0$174": 3,
+      "Lnwk_aps.nwk_aps_broadcast_slot$ctx$1_0$169": 0,
+      "Lnwk_aps.nwk_aps_broadcast_slot$entry$3_0$172": 3,
+      "Lnwk_aps.nwk_aps_complete$ctx$1_0$166": 0,
+      "Lnwk_aps.nwk_aps_complete$p$1_0$167": 3,
+      "Lnwk_aps.advance$ctx$1_0$146": 0,
+      "Lnwk_aps.allocated$ctx$1_0$154": 0,
+      "Lnwk_aps.arm$ctx$1_0$175": 0,
+      "Lnwk_aps.nwk_aps_armed$ctx$1_0$177": 0,
+      "Lnwk_aps.nwk_aps_confirm$ctx$1_0$232": 0
+    },
+    "saving": 39,
+    "owners": [
+      "nwk_aps.acknowledgment",
+      "nwk_aps.acknowledgment_matches",
+      "nwk_aps.nwk_aps_broadcast_put",
+      "nwk_aps.nwk_aps_broadcast_slot",
+      "nwk_aps.nwk_aps_complete",
+      "nwk_aps.advance",
+      "nwk_aps.allocated",
+      "nwk_aps.arm",
+      "nwk_aps.nwk_aps_armed",
+      "nwk_aps.nwk_aps_confirm"
+    ]
+  },
+  "candidate_identities": {
+    "ihx": "bcd60dea20970a7aa439ed444de773acaf189d8b626bdbfe773e9bd36e327712",
+    "cdb": "d447b1d156f2308ed0ccbcbcef037a78918983547d76d13cadcde2a6eb5db10b",
+    "memory": "419553dc09115d1d1f8e3aba30d726deba8030098304c6a533d110025d829f4b",
+    "map_prefix": "90e28dab685ccb0f19ff24c7a058be139460d7ec51c8a0d4dc238c6664f8c298",
+    "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+    "noice": "b03b5f2d0d3a883ed3b5369534c9fbf32535f2ab6e53c08eec9ceda80edd7f81",
+    "objects": "c530fd8afffcf7944c756d4a3b31e1d000b13ab58cecb4837879ab97c7940444",
+    "listings": "93250bab043b834fe4029e4382f7cf3125d5c6ba81f2b84bdcfc9af946c325f0",
+    "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+  }
+}

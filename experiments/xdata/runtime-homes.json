@@ -1,0 +1,44 @@
+{
+  "__memcpy": {
+    "object_sha256": "fc6a1354e66b63b9e1887d32eab401c7ce21b31a9abda52d0076ab9ef671c5dc",
+    "allocations": [
+      {
+        "symbol": "___memcpy_PARM_2",
+        "offset": 0,
+        "size": 3
+      },
+      {
+        "symbol": "___memcpy_PARM_3",
+        "offset": 3,
+        "size": 2
+      },
+      {
+        "symbol": "___memcpy_dst_65536_26",
+        "offset": 5,
+        "size": 3
+      }
+    ],
+    "evidence": "sdcc -mmcs51 --model-large -c /usr/share/sdcc/lib/src/__memcpy.c; emitted .rel byte-identical to actually linked archive member"
+  },
+  "_memcmp": {
+    "object_sha256": "74597dee97a17bb82bdde0de62e23ae7259b4d0ce1244dc599f6188580a7626d",
+    "allocations": [
+      {
+        "symbol": "_memcmp_PARM_2",
+        "offset": 0,
+        "size": 3
+      },
+      {
+        "symbol": "_memcmp_PARM_3",
+        "offset": 3,
+        "size": 2
+      },
+      {
+        "symbol": "_memcmp_buf1_65536_26",
+        "offset": 5,
+        "size": 3
+      }
+    ],
+    "evidence": "sdcc -mmcs51 --model-large -c /usr/share/sdcc/lib/src/_memcmp.c; emitted .rel byte-identical to actually linked archive member"
+  }
+}

@@ -513,11 +513,16 @@ def main():
     parser.add_argument("--case", type=int, choices=CASES, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--chunk", type=int, default=256)
+    parser.add_argument("--xdata-study", action="store_true")
     args = parser.parse_args()
     require(0 < args.chunk <= 256 and (args.limit is None or args.limit > 0), "Invalid replay bound")
     report = args.output / f"join-replay-{args.case}.json"
     report.unlink(missing_ok=True)
-    artifacts, _ = verify(args.output / "join-smoke-layout", args.board, args.key_mode)
+    if args.xdata_study:
+        from xdata_overlay import verify_study
+        artifacts, _ = verify_study(args.output / "join-smoke-layout", args.board, args.key_mode)
+    else:
+        artifacts, _ = verify(args.output / "join-smoke-layout", args.board, args.key_mode)
     check_alias(args.simulator)
     banking.check_mapping(args.simulator)
     check_debugger(args.simulator)

@@ -20,6 +20,14 @@ original BSD-3-Clause work. Source-built compiler experiments and upstream
 patches remain in isolated ignored build output with their upstream licenses.
 All measurements use public source and synthetic inputs, not equipment data.
 
+The separate [physical XDATA lifetime study](XDATA_LIFETIME_STUDY.md) uses
+original Python analyzers, an original simulator caller and generated public
+compiler-allocation facts. Its ASxxxx relocation decoder was written against
+the observed object format and linker behavior; no upstream implementation
+is copied. Recompiled runtime objects remain ignored build evidence under
+their existing upstream licenses. No SDK, private capture or equipment
+identity enters the committed inventory or measurements.
+
 The opt-in complete-radio replay uses an isolated build of the public
 [SDCC4.2.0+dfsg source archive](https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz),
 SHA256 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`.

@@ -1,0 +1,389 @@
+{
+  "roots": [
+    "banked:stop",
+    "banked:_sdcc_banked_call",
+    "banked:_sdcc_banked_ret",
+    "banked:banked_code_read",
+    "flash_exec:flash_exec_template",
+    "flash_exec:enter_ram",
+    "flash_exec:idle",
+    "flash_exec:flash_exec_command",
+    "startup:_sdcc_external_startup",
+    "join_smoke_main:main"
+  ],
+  "address_taken": {
+    "flash_exec:enter_ram": [
+      7787,
+      7789
+    ],
+    "flash_exec:flash_exec_template": [
+      7791,
+      7793,
+      7860,
+      7862,
+      7908,
+      7910
+    ],
+    "startup:_sdcc_external_startup": [
+      56
+    ]
+  },
+  "relocation_audit": {
+    "relocations": 26213,
+    "emitted_code": 253445,
+    "object_count": 60
+  },
+  "functions": [
+    {
+      "owner": "mac_link_workspace.link_work_clean",
+      "entry": 4440,
+      "code": 101,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "mac_link_child_workspace.child_work_poisoned",
+      "entry": 4934,
+      "code": 7,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "flash_write.flash_write_diagnostic",
+      "entry": 12808,
+      "code": 4,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "security_counter.security_counter_status",
+      "entry": 20512,
+      "code": 4,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "zigbee_mmo.install_code_derive",
+      "entry": 24674,
+      "code": 734,
+      "xdata": 19,
+      "data_frame": 12,
+      "bseg_bits": 0,
+      "homes": [
+        "Lzigbee_mmo.install_code_derive$length$1_0$92",
+        "Lzigbee_mmo.install_code_derive$output$1_0$92",
+        "Lzigbee_mmo.install_code_derive$timeout$1_0$92",
+        "Lzigbee_mmo.install_code_derive$poll_limit$1_0$92",
+        "Lzigbee_mmo.install_code_derive$info$1_0$92",
+        "Lzigbee_mmo.install_code_derive$code$1_0$92",
+        "Lzigbee_mmo.install_code_derive$crc$1_1$94"
+      ]
+    },
+    {
+      "owner": "mac_time.mac_time_read_live",
+      "entry": 231910,
+      "code": 88,
+      "xdata": 8,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_time.mac_time_read_live$poll_limit$1_0$121",
+        "Lmac_time.mac_time_read_live$output$1_0$121",
+        "Lmac_time.mac_time_read_live$timeout$1_0$121"
+      ]
+    },
+    {
+      "owner": "mac_time.mac_time_diagnostic",
+      "entry": 232086,
+      "code": 4,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "mac_time.attempt_clock",
+      "entry": 232090,
+      "code": 186,
+      "xdata": 6,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_time.attempt_clock$limit$1_0$127",
+        "Lmac_time.attempt_clock$timeout$1_0$127"
+      ]
+    },
+    {
+      "owner": "mac_time.mac_time_attempt_read",
+      "entry": 232390,
+      "code": 683,
+      "xdata": 14,
+      "data_frame": 6,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_time.mac_time_attempt_read$limit$1_0$131",
+        "Lmac_time.mac_time_attempt_read$output$1_0$131",
+        "Lmac_time.mac_time_attempt_read$timeout$1_0$131",
+        "Lmac_time.mac_time_attempt_read$result$1_0$132",
+        "Lmac_time.mac_time_attempt_read$low$1_0$132",
+        "Lmac_time.mac_time_attempt_read$high$1_0$132",
+        "Lmac_time.mac_time_attempt_read$a$1_0$132",
+        "Lmac_time.mac_time_attempt_read$b$1_0$132",
+        "Lmac_time.mac_time_attempt_read$c$1_0$132"
+      ]
+    },
+    {
+      "owner": "mac_radio.mac_radio_now",
+      "entry": 249584,
+      "code": 306,
+      "xdata": 8,
+      "data_frame": 1,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_radio.mac_radio_now$limit$1_0$51",
+        "Lmac_radio.mac_radio_now$output$1_0$51",
+        "Lmac_radio.mac_radio_now$timeout$1_0$51"
+      ]
+    },
+    {
+      "owner": "mac_radio.mac_radio_send",
+      "entry": 250708,
+      "code": 97,
+      "xdata": 9,
+      "data_frame": 1,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_radio.mac_radio_send$length$1_0$64",
+        "Lmac_radio.mac_radio_send$timeout$1_0$64",
+        "Lmac_radio.mac_radio_send$limit$1_0$64",
+        "Lmac_radio.mac_radio_send$body$1_0$64"
+      ]
+    },
+    {
+      "owner": "mac_attempt.mac_attempt_diagnostic",
+      "entry": 255893,
+      "code": 21,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "mac_frame.read_le16",
+      "entry": 376998,
+      "code": 65,
+      "xdata": 3,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_frame.read_le16$bytes$1_0$143"
+      ]
+    },
+    {
+      "owner": "mac_frame.write_le16",
+      "entry": 377063,
+      "code": 65,
+      "xdata": 5,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_frame.write_le16$value$1_0$145",
+        "Lmac_frame.write_le16$bytes$1_0$145"
+      ]
+    },
+    {
+      "owner": "mac_frame.mac_command_encode",
+      "entry": 377918,
+      "code": 711,
+      "xdata": 14,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_frame.mac_command_encode$payload$1_0$159",
+        "Lmac_frame.mac_command_encode$capacity$1_0$159",
+        "Lmac_frame.mac_command_encode$length$1_0$159",
+        "Lmac_frame.mac_command_encode$command$1_0$159",
+        "Lmac_frame.mac_command_encode$bytes$4_1$164"
+      ]
+    },
+    {
+      "owner": "mac_adapter.mac_adapter_record",
+      "entry": 392230,
+      "code": 6,
+      "xdata": 0,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": []
+    },
+    {
+      "owner": "nwk_frame.read_le16",
+      "entry": 441945,
+      "code": 65,
+      "xdata": 3,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lnwk_frame.read_le16$bytes$1_0$74"
+      ]
+    },
+    {
+      "owner": "nwk_frame.write_le16",
+      "entry": 442010,
+      "code": 65,
+      "xdata": 5,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lnwk_frame.write_le16$value$1_0$76",
+        "Lnwk_frame.write_le16$bytes$1_0$76"
+      ]
+    },
+    {
+      "owner": "aps_frame.read_le16",
+      "entry": 444851,
+      "code": 65,
+      "xdata": 3,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Laps_frame.read_le16$bytes$1_0$74"
+      ]
+    },
+    {
+      "owner": "aps_frame.write_le16",
+      "entry": 444916,
+      "code": 65,
+      "xdata": 5,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Laps_frame.write_le16$value$1_0$76",
+        "Laps_frame.write_le16$bytes$1_0$76"
+      ]
+    },
+    {
+      "owner": "ed_wire.ed_wire_aps",
+      "entry": 448576,
+      "code": 217,
+      "xdata": 8,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Led_wire.ed_wire_aps$length$1_0$86",
+        "Led_wire.ed_wire_aps$info$1_0$86",
+        "Led_wire.ed_wire_aps$frame$1_0$86"
+      ]
+    },
+    {
+      "owner": "security_keys.take",
+      "entry": 298069,
+      "code": 118,
+      "xdata": 1,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lsecurity_keys.take$domain$1_0$226"
+      ]
+    },
+    {
+      "owner": "security_keys.seal",
+      "entry": 305439,
+      "code": 918,
+      "xdata": 7,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lsecurity_keys.seal$aps_secure$1_0$291",
+        "Lsecurity_keys.seal$__1310720109$2_0$292",
+        "Lsecurity_keys.seal$offset$1_0$292",
+        "Lsecurity_keys.seal$slot$1_0$292",
+        "Lsecurity_keys.seal$__1966080106$3_0$293",
+        "Lsecurity_keys.seal$domain$4_0$295",
+        "Lsecurity_keys.seal$domain$3_0$298"
+      ]
+    },
+    {
+      "owner": "mac_association.mac_association_step",
+      "entry": 166818,
+      "code": 96,
+      "xdata": 10,
+      "data_frame": 2,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_association.mac_association_step$now$1_0$157",
+        "Lmac_association.mac_association_step$event$1_0$157",
+        "Lmac_association.mac_association_step$observation$1_0$157",
+        "Lmac_association.mac_association_step$ctx$1_0$157"
+      ]
+    },
+    {
+      "owner": "mac_poll.mac_poll_step",
+      "entry": 177779,
+      "code": 337,
+      "xdata": 12,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_poll.mac_poll_step$tx$1_0$199",
+        "Lmac_poll.mac_poll_step$now$1_0$199",
+        "Lmac_poll.mac_poll_step$event$1_0$199",
+        "Lmac_poll.mac_poll_step$action$1_0$199",
+        "Lmac_poll.mac_poll_step$p$1_0$199"
+      ]
+    },
+    {
+      "owner": "zdo_node.zdo_node_req_encode",
+      "entry": 194735,
+      "code": 369,
+      "xdata": 11,
+      "data_frame": 8,
+      "bseg_bits": 0,
+      "homes": [
+        "Lzdo_node.zdo_node_req_encode$body$1_0$156",
+        "Lzdo_node.zdo_node_req_encode$capacity$1_0$156",
+        "Lzdo_node.zdo_node_req_encode$size$1_0$156",
+        "Lzdo_node.zdo_node_req_encode$request$1_0$156"
+      ]
+    },
+    {
+      "owner": "mac_scan.mac_scan_get",
+      "entry": 112283,
+      "code": 149,
+      "xdata": 5,
+      "data_frame": 0,
+      "bseg_bits": 0,
+      "homes": [
+        "Lmac_scan.mac_scan_get$index$1_0$121",
+        "Lmac_scan.mac_scan_get$result$1_0$121",
+        "Lmac_scan.mac_scan_get$scan$1_0$121"
+      ]
+    },
+    {
+      "owner": "zdo_runtime.zdo_runtime_take_application",
+      "entry": 324828,
+      "code": 332,
+      "xdata": 6,
+      "data_frame": 3,
+      "bseg_bits": 0,
+      "homes": [
+        "Lzdo_runtime.zdo_runtime_take_application$packet$1_0$203",
+        "Lzdo_runtime.zdo_runtime_take_application$context$1_0$203"
+      ]
+    }
+  ],
+  "code": 5878,
+  "xdata": 162,
+  "data_frame_sum": 33,
+  "bseg_bits": 0,
+  "physical_data_saving": 0,
+  "removal_prototype": false,
+  "scope": "Reachability of this closed foreground firmware, not arbitrary calls to exported C APIs. DATA frames already overlap real reservations, so their sum is not physical savings. Removing functions requires separate compiler-metadata/area/fence proofs; this tool does not strip."
+}

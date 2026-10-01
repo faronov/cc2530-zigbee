@@ -161,7 +161,11 @@ class CallerSchema(Schema):
 
 def structure(root):
     image, symbols, debug, listings, objects = load(root)
-    ownership = xdata(symbols, debug, listings, objects)
+    if (root / "xdata-overlay.json").exists():
+        from xdata_overlay import verify as verify_overlay
+        ownership = verify_overlay(root)
+    else:
+        ownership = xdata(symbols, debug, listings, objects)
     graph = call_graph(image, symbols, debug, listings, objects)
     data, _, _ = analyze_data(symbols, debug, listings, graph)
     stack = analyze_stack(image, symbols, graph, RUNTIME)
@@ -189,12 +193,18 @@ def main():
     parser.add_argument("--board", choices=("generic", "lg_esl29_rev03"), required=True)
     parser.add_argument("--key-mode", choices=("install-code", "default-tc"), default="install-code")
     parser.add_argument("--header", type=Path)
+    parser.add_argument("--xdata-study", action="store_true",
+                        help="Use the separate immutable experimental XDATA catalog; not production admission")
     args = parser.parse_args()
     report = args.output / "admission.json"
     report.unlink(missing_ok=True)
     if args.header:
         args.header.unlink(missing_ok=True)
-    artifacts, result = verify(args.output, args.board, args.key_mode)
+    if args.xdata_study:
+        from xdata_overlay import verify_study
+        artifacts, result = verify_study(args.output, args.board, args.key_mode)
+    else:
+        artifacts, result = verify(args.output, args.board, args.key_mode)
     if args.header:
         args.header.write_text(CallerSchema(artifacts[2]).header(artifacts[1]), encoding="ascii")
     result.update(simulation_admitted=True, simulated=False, hardware_observed=False,
