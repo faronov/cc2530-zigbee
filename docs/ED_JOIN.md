@@ -219,9 +219,9 @@ durable counter, journal and flash-RAM services together. The synthetic PHY
 and coordinator supply external events and public packets only; they never
 write expected controller state or supply authentication-success flags.
 
-The measured image has145985 populated CODE bytes on generic and145986
+The measured image has145994 populated CODE bytes on generic and145995
 on LG:28760/28761 common bytes and four bank windows containing28126,
-28883,29755 and30461 bytes. Ordinary XDATA is7545/7680, leaving135 bytes
+28906,29755 and30447 bytes. Ordinary XDATA is7546/7680, leaving134 bytes
 before the status block. `zdo_runtime` embeds the board's Basic model
 string, so each board pins its own six complete artifact identities.
 The actual physical DATA reservations are08..1D and26..45, banking state
@@ -246,8 +246,8 @@ entries/returns and analyzes285 functions with1882 live-byte/callee-write
 pairs, including OSEG and transitive libc scratch. Raw CDB, complete
 NoICE-checked symbols, memory report, ordered relocated listings,
 relocatable objects and all CODE addresses/bytes are pinned per board before
-execution. The complete image corruption campaign passes729944 (generic)
-and729949 (LG) mutations.
+execution. The complete image corruption campaign passes729989 (generic)
+and729994 (LG) mutations.
 
 The native and nonrecovering-sanitizer transcript contains415 public calls
 and2791 real modeled AES/flash events. The generic MCU run executes all415:

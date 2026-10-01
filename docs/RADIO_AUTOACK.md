@@ -336,10 +336,10 @@ and unbanked linker flags produce byte-identical generic/LG images:
 | Object | CODE, including constants/startup | Ordinary XDATA | Permanent DATA | OSEG |
 | --- | ---: | ---: | ---: | ---: |
 | timebase | 404 | 25 | 0 | 3 |
-| radio_autoack | 5888 | 256 | 4 | 2 |
+| radio_autoack | 5937 | 256 | 4 | 2 |
 | test caller | 411 | 157 | 2 | 0 |
 
-Whole image: **7031/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
+Whole image: **7056/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
 status reservation = 514/1536 bytes**. Runtime/startup adds 304 CODE and 12
 XDATA beyond those object totals. The separate 24 KiB/1536-byte budget covers
 the real timebase, one staged frame, copied configuration, diagnostics,
@@ -364,10 +364,10 @@ RAM are guarded.
 Whole emitted CODE SHA-256:
 
 ```text
-f6df84b6a5796bf768126533995dcdf2847f9f55f0e4b20d7fed7c8c62cd20b5
+5c67a615443cf2e05b47168b38b63b335f39b828f9c82659d8435bf411f40ee6
 ```
 
-**Host-test corpus:** 158362 API calls per board, both strict native and ASan/UBSan.
+**Host-test corpus:** 158409 API calls per board, both strict native and ASan/UBSan.
 Coverage includes all bounded lengths/CRC bytes, address/profile bits,
 every value of each caller address byte, copied-configuration independence,
 configuration/output ownership including every libc-scratch overlap, native
@@ -378,8 +378,8 @@ implement over-air filtering, FCS calculation or ACK generation. Lengths
 6..8 deliberately overapproximate the configured filter's possible frames
 to exercise byte bounds, not claim those are eligible over-air packets.
 
-**Image/simulator corpus:** 194 persistent sequences, 1732 genuine API calls,
-1157 exactly-once RFD reads, and 9041 artifact negatives plus one genuine
+**Image/simulator corpus:** 194 persistent sequences, 1730 genuine API calls,
+1163 exactly-once RFD reads, and 9080 artifact negatives plus one genuine
 missing-alias negative per board. Coverage includes delayed readiness/
 calibration, active receive/ACK soft stop, 21 queued frames, max-length circular
 FIFO, concurrent arrival, CRC classification, stale flags, partial/count/
@@ -424,17 +424,18 @@ status tail, upper IRAM, GPIO/IRQ/clock guards, stack unwind and simulator
 whole-run high-water remain enforced. Each simulator process retains its
 **15-second** limit.
 
-The original125 scenarios are also pinned independently to their pre-rearm
-native results, frame/diagnostic/input snapshots and complete ordered MMIO.
-Their canonical JSON digest is
-`d15ba16889fcb03932468342741390d9807a7ff652aa342aa6b2accdd87d0a32`.
-The verifier runs the same fixed synthetic-address corpus and requires exact
-identity, not only the same final return values. All157 pre-TX scenarios,
-including the32 rearm cases, also retain their complete native identity:
-`c19e89572bc7398c799d9a9240f703e1ac5ae92b93f9d397aeefcbf3859e411a`.
+The original125 scenarios are also pinned independently to their native
+results, frame/diagnostic/input snapshots and complete ordered MMIO
+(`LEGACY_DIGEST`), and all157 pre-TX scenarios including the32 rearm cases
+likewise (`REARM_DIGEST` in `tests/boot_radio_autoack.py`). The verifier runs
+the same fixed synthetic-address corpus and requires exact identity, not only
+the same final return values. The stopped-head fix intentionally changed three
+of them: case80 now returns the complete frame and STOPPED instead of
+`FIFO_ERROR`, and cases76/104 make one extra PHR read before the same
+`FIFO_ERROR`; every other scenario is identical to the previous pins.
 New cases never replace old ones. Historical pre-TX simulator-call envelopes
 were3.464s (generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
-Those measured the4692-byte rearm image, not this7031-byte extension; they
+Those measured the4692-byte rearm image, not this7056-byte extension; they
 are local observations, not portable timing guarantees.
 
 ### Historical overlap-partition acceptance before rearm

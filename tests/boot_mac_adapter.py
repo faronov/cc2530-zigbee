@@ -37,6 +37,9 @@ class Case:
     peak: int = 0x78
 
 
+# held-overflow: the adapter-only radio_autoack RXOVERF resample repeats one
+# 9-read observation sample (RFERRF=04, FSMSTAT1 without FIFO=0/FIFOP=1);
+# outputs, calls and every later event are unchanged (3252 -> 3261 MMIO).
 CASES = (
     Case("handoff-data", "ed0e216077f75e25b4c40026a484611710ca4ee710d4a8f616c1e165e8058e46", 114, 10361),
     Case("busy-cca", "daf76ebf14a6c2308c27885ee659b1697c7c66b02b4ab9152f926d242c95be8d", 380, 27283),
@@ -44,7 +47,7 @@ CASES = (
     Case("raw-lease", "a1068bab4877c9e7342a39e1bb02b624d6dc65c661a8a8ae0069a6fa5ad86beb", 94, 8490),
     Case("queued-close", "7d4d9f88a2efd8a564043624e3e7f403921b9e55192f9001f21e56387b7e1822", 24, 4646, 0x72, 0x74),
     Case("held-clock-fault", "fc1e96d8cf966be5b9e6f474220c6ce8e4f4b007b45cd5c815a44859b9a357c9", 10, 2161, 0x72, 0x74),
-    Case("held-overflow", "e19acdaffccddb7890582812b8327ee042e948383a14569094218a29d3e09207", 14, 3252, 0x72, 0x74),
+    Case("held-overflow", "d5be3c5e5dd4e5c4d352ddba7cef7b32cf91562714cc4dc06223cb610d51ff09", 14, 3261, 0x72, 0x74),
     Case("sfd-race", "c33b2436a7118d50e35e0a0e47b319d9bad33e531b8f17706319e0940c7ab765", 93, 8705),
     Case("filter-readback", "f035209e359d1fa1c78b9f3bab4e1d7fe86c361694ef0133236d347d0e67e77d", 93, 8965),
     Case("wide-handoff", "35267a0ae19451786ddf685388c4f1779b0d6ad8d0014ff574cacc6e3ecee8b1", 93, 8868),
@@ -212,7 +215,8 @@ def main():
     layout.verify(*artifacts)
     if args.case is None:
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        require(count == 283179, "Adapter complete artifact rejection inventory")
+        # Five per CODE byte: +195 for the radio_autoack stopped-head/RXOVERF +39 CODE.
+        require(count == 283374, "Adapter complete artifact rejection inventory")
     check_alias(args.simulator); rejected(lambda: check_alias(args.simulator, False))
     banking.check_mapping(args.simulator)
     rejected(lambda: banking.check_mapping(args.simulator, code=False))
@@ -225,8 +229,8 @@ def main():
         require((a, b, c, d) == (spec.calls, spec.events, spec.sampled, spec.peak), "Adapter replay/stack inventory")
         calls += a; events += b; peak = max(peak, d)
         print(f"MAC adapter {spec.name}: {a} genuine calls/{b} MMIO; SP{d:02X}/7C PASS.", flush=True)
-    campaign = "283179 artifact +3 mapping/alias negatives; " if args.case is None else "selected case; "
-    print(f"MAC adapter: {calls} calls/{events} MMIO; 56632 CODE,2848+64 XDATA; SP{peak:02X}/7C; "
+    campaign = "283374 artifact +3 mapping/alias negatives; " if args.case is None else "selected case; "
+    print(f"MAC adapter: {calls} calls/{events} MMIO; 56671 CODE,2848+64 XDATA; SP{peak:02X}/7C; "
           +campaign+"synthetic peripherals, no hardware or full-join claim.")
 
 

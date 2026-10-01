@@ -22,14 +22,14 @@ OBJECTS = {"state": (335, 36), "mailbox": (371, 8), "clock": (379, 19),
 SETTINGS = (0x6180, 0x6181, 0x6182, 0x6189, 0x618a, 0x6194, 0x6195,
             0x61b2, 0x61fa, 0x61ae, 0x618f, 0x6190, 0x6191)
 HASHES = {
-    "generic": (10782, "7ea9df1b002133b6ee15f0b1c44137b0d7efbee0c0495835e9743a5e474fe273",
-                "2b5d47431dfd0c733671db4152b26c1230e8f8f98e3a352f5bbcf9e1b07956ba",
-                "d9b6d589c6cdfd69bc8eb54780cb54ebef5073c669bd149ade35c3c0d6f5d808",
-                "4a9dcf9ecaecd5af5260799eb86aed98f8d082508a04f30682051d3385263e9e"),
-    "lg_esl29_rev03": (10822, "9d8f9c005e6f4717a2dbfa16f8a4857048b1602203dc96a5b8646c89b0388332",
-                      "5827e7e930a9dad89364c817bca8b59635eeb68a8f67c8c55a228b19ce42facb",
-                      "f7906367b3b0e3d9e2fa04facb049b1bf4233a426beb5e3b104e506ac16df876",
-                      "482918cb284c2c20a7c1cc36b3ccb34777e5c2e204c249d7de9f705e0d967e13"),
+    "generic": (10807, "312bcacdfa7b020ebe141a8ada31e56d20b9adb157fc165d79488f43321a22ea",
+                "345f6c513654155a5d69dba742bd5d463288f44c96dff4d4ca4443c385457de2",
+                "49e1d3e657d23f84fdc606597536b2021734f5939b4bb933479e64f11bd1a40c",
+                "4665541d18adbafb0bb759f0fd860a792574a838f3e7d7a288f5f5a3a99e7373"),
+    "lg_esl29_rev03": (10847, "9eb3267a5c16c9a524332af2832c02ef224d1dc845de5bd56bf14b487373fcef",
+                      "f1d6b516dc78179c6de6de27c6811307541a2fbcf5973430bdbc119cf27aa6ab",
+                      "077fe6f9653276816eb399a7d97c71a646620ad308f53ef93879c8b14b425310",
+                      "e5294983546b70cc6eb527fda95fdce546f35b78fe97271f0ec2e6f62e1625d8"),
 }
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-F]{6})\s+((?:[0-9A-F]{2}\s+)+)\[\s*\d+\]\s+\d+\s+\S.*$", re.M)
@@ -137,7 +137,7 @@ def verify_fixture(image, symbols, debug, board):
     require(sha(json.dumps(symbols, sort_keys=True, separators=(",", ":")).encode("ascii")) == map_sha,
             "Link complete map changed")
     checkpoints = [symbols[n] for n in CHECKPOINTS]
-    require(checkpoints == [8472 + BOARDS[board]*40, 8474 + BOARDS[board]*40, 8477 + BOARDS[board]*40] and
+    require(checkpoints == [8497 + BOARDS[board]*40, 8499 + BOARDS[board]*40, 8502 + BOARDS[board]*40] and
             bytes(image[a] for a in range(checkpoints[0], checkpoints[0]+8)) == b"\0\x22\0\x80\xfd\0\x80\xfd",
             "Link admission/terminal checkpoints changed")
     require(symbols["l_XSEG"] == 750 and symbols["s_SSEG"] == 0x21 and
@@ -232,11 +232,11 @@ def verify_listings(listings, image, symbols, board):
                 sites[pc+5] = ("w", address, address)
     labels = {name: int(address, 16) for address, name in LABEL.findall(listings["radio_autoack"])}
     base, settle, rfd = (labels[name] for name in ("_setting_address", "_cca_settle", "_read_fifo"))
-    require(radio.get(base+0x222) == b"\xe0" and radio.get(base+0x8fe) == b"\xf0" and
+    require(radio.get(base+0x222) == b"\xe0" and radio.get(base+0x925) == b"\xf0" and
             bytes(image[a] for a in range(rfd, rfd+4)) == b"\x85\xd9\x82\x22" and
             sum(raw == b"\x12" + rfd.to_bytes(2, "big") for raw in radio.values()) == 1,
             "Link indexed configuration or exactly-once RFD leaf changed")
-    sites[base+0x222] = ("r", None, 0xe0); sites[base+0x8fe] = ("w", None, None)
+    sites[base+0x222] = ("r", None, 0xe0); sites[base+0x925] = ("w", None, None)
     require(bytes(image[a] for a in range(settle, settle+5)) == b"\0\0\0\0\x22" and
             sum(raw == b"\x12" + settle.to_bytes(2, "big") for raw in radio.values()) == 1,
             "Link genuine four-NOP CCA settling changed")

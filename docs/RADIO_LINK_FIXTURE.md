@@ -97,14 +97,15 @@ The decoder rejects live RUNNING inspection and inconsistent completion.
 
 | Resource | Generic | LG Rev0.3 |
 | --- | --- | --- |
-| Complete populated CODE |10782|10822|
+| Complete populated CODE |10807|10847|
 | Ordinary XDATA |750|750|
 | Including status reservation |814/1024|814/1024|
 | Stack start / initial SP |21 /20|21 /20|
 | Corpus sampled / whole-run SP high-water |31 /37|31 /37|
 
 The beacon-only scan filter in `radio_autoack` added24 CODE bytes after the
-physical result below; XDATA/stack allocation is unchanged. CODE limit is16384 and the exercised stack cap is7C; all values in the stack
+physical result below; XDATA/stack allocation is unchanged. The stopped-head PHR helper
+added25 more (the RXOVERF resample is adapter-only). CODE limit is16384 and the exercised stack cap is7C; all values in the stack
 rows are hexadecimal. Existing image budgets and15-second simulator limits
 are unchanged. This is an isolated diagnostic image, not complete-stack fit
 or interrupt-nesting acceptance.

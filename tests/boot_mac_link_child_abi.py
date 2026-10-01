@@ -24,7 +24,9 @@ MAIN, DONE, FAILED, FLASH = 0x1bcd, 0x1b83, 0x1b80, 0x1830
 # SDCC4.2.0#13081, canonical src/... / tests/... inputs, BOTH board definitions.
 # These bind whole bytes, not source-line-masked or instruction-only identities.
 # CODE, the memory account and the map suffix are identical on both boards.
-CODE_SHA = "96b4ae33504720ccbd58f5868c6309e4dc082f4f1bfe8b502312efcb1712d0dc"
+# Sensor demo: zdo_srv staged reply 17 -> 19 bytes moves three
+# mac_link_workspace offset constants (45/83/17 -> 47/85/19); nothing else.
+CODE_SHA = "b169fed88666a3d0e02b1c41eaab2a496ba4f0004fdb1c84937d16a5da64f007"
 MEM_SHA = "f0433cd0f02beb7eda5cb8a7ddb432cbd0400200e029c534776d8e929040927b"
 MAP_SUFFIX_SHA = "da6eb110b124ece27e2f55dc4b5f1775a1c494cccbf3731cf862b0a9c297de93"
 
@@ -49,15 +51,15 @@ _LISTINGS = ("4b9e94585f97d6cd9be29f347ebca7c6b2846c3cd76d001cfbdec57c1c21a89d",
              "13bd83b4dcb03161cd3ee561c843d7f724b8c3cf01baef7fd2b21792f9711147")
 BOARD_PINS = {
     "generic": BoardPins(
-        "712bb9730cab7c633317a95fe2ba47258e97d048c7f35c98f456b7af719f781a",
+        "d96ed6dce20a6af468791bfb18d1e77907a9585a900ebaff8039ca60b4ec285b",
         "fa25f30814e3b87f5206807b3511acb42c5e15165ff133cd6440fb4511da1d2a",
-        (_OBJECTS[0], "74739b39b67f1c76a44cd2da863a743c40b437fd4d10d5dbebf950d2d12b96e5", *_OBJECTS[1:]),
-        (_LISTINGS[0], "4606e907486cd50b860f48396c67ffe8e2da99f52a102702fc87cc3a012b6fd0", *_LISTINGS[1:])),
+        (_OBJECTS[0], "a569b5803f3521435804a538fc37d9efa0bc9214f8fe6101b08c3bafa58dd929", *_OBJECTS[1:]),
+        (_LISTINGS[0], "88224d42721c9e999af1fd8bc70e51ea4c089760d17c9386b8d1d0b22698dcfc", *_LISTINGS[1:])),
     "lg_esl29_rev03": BoardPins(
-        "88cee00df8017f8ff1dbff42eab141de261e27ab27fc532cc5a9db1c1d3d11aa",
+        "a8663fd0a662b93184ffe9af754ba6929b01776cad155f86052ee3bef86e1345",
         "6590e556952ae57b6a7aae41575403bd129d12b7f53089b9d8bac8eb17aaabad",
-        (_OBJECTS[0], "b07a91afc902b792ba997f687929755a507afd263f7586698fea6583c26ff4bc", *_OBJECTS[1:]),
-        (_LISTINGS[0], "019570f6754d8345c4bf90b8a9ce764d6787d835f36b746783293b17f8e90c5d", *_LISTINGS[1:])),
+        (_OBJECTS[0], "14ace12e1f9128686d3cf04da5a957557872da4f7f7897b625191a89cbeaf10d", *_OBJECTS[1:]),
+        (_LISTINGS[0], "04a2bdfc678128e60ee24581c718d524396462cea6bb04189674483af63fa59b", *_LISTINGS[1:])),
 }
 RUNTIME = ("___memcpy_PARM_2", "___memcpy_PARM_3", "__gptrput_PARM_2", "__mullong_PARM_2")
 

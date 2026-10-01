@@ -1214,7 +1214,7 @@ Receive/stop retain existing bounded publication/drain semantics; resume
 restores filtering then AUTOACK only while stopped and empty. There is no
 concurrent live-AUTOACK admission claim or hidden RX gap.
 
-Both-board host/image/alias-aware CI binds7031 CODE,450+64 reserved
+Both-board host/image/alias-aware CI binds7056 CODE,450+64 reserved
 XDATA and whole-run SP34 within separate24576/1536/SP7C limits. No board image
 links this synthetic test composition. Broadcast-AR behavior, global ACK-FCF
 compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration

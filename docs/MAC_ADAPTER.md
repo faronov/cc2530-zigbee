@@ -190,24 +190,24 @@ receipts are compared after each genuine call.
 
 | Resource | Actual composition |
 | --- | ---: |
-| Common CODE, including constants | 29654 bytes |
+| Common CODE, including constants | 29693 bytes |
 | Bank1: MAC codec and scheduler | 20148 bytes |
 | Bank2: action adapter | 6830 bytes |
-| Populated CODE total | 56632 bytes |
+| Populated CODE total | 56671 bytes |
 | Ordinary XDATA, including caller and libc | 2848 bytes |
 | Status reservation | 64 bytes, eight used |
 | Initial SP / unchanged replay cap | 55 / 7C |
 
 The virtual bank encoding is not additional physical flash. Physical DATA
 reservations cover08..1D and23..4B; banking owns1E/1F, bits20..22,
-OSEG4C..55 and stack56..7C. Actual relocated byte-liveness covers145
+OSEG4C..55 and stack56..7C. Actual relocated byte-liveness covers146
 functions and560 live-caller-byte/callee-write comparisons, including libc
 clobbers and cross-bank lifetimes.
 No named `--dataseg` is treated as a physical allocation by itself.
 XDATA1F00..1FFF remains the real IRAM alias. None of the original standalone
 or complete-join resource budgets is relaxed.
 
-Eighteen fresh-reset sequences require2405 genuine calls and212138 MMIO
+Eighteen fresh-reset sequences require2405 genuine calls and212147 MMIO
 events. They cover ACK/AUTOACK and raw leases, five busy CCAs, all four
 no-ACK attempts, wrong DSN/bad CRC, queued pre-stop and in-flight heads,
 preserved closure watermark, a maximum frame across FIFO wrap, held clock/
@@ -219,7 +219,7 @@ hardware fault or a run through billions of delivery-counter values.
 Every native transcript is raw-byte pinned and must equal its sanitizer
 counterpart. The image, raw CDB, map, memory account, all14 immediate listing
 snapshots and relocatable objects are fully pinned. Acceptance includes
-283179 complete CODE/address/metadata mutations, missing IRAM alias and live
+283374 complete CODE/address/metadata mutations, missing IRAM alias and live
 FMAP/XBANK mapping controls, exact timebase/clock/MMIO instructions, unowned
 RAM/SFR/XREG/flash guards and actual full-run stack peaks.
 
@@ -232,7 +232,21 @@ separate whole-transcript scan per dump; missing or duplicated dump boundaries
 still fail. CI has two dedicated15-minute workers and uploads no adapter
 image or reference.
 
-The current resource/corpus figures above additionally include the
+The current figures additionally include the `radio_autoack` stopped-head
+fix (a static `complete_head()` helper that requires PHR >= 5 and more FIFO
+bytes than PHR, used by the stopped-drain receive path, stop phase 6 and the
+overflow salvage, which now share one PHR read site: 171 exact MMIO sites)
+and the adapter-only RXOVERF resample in `observe()`. Relative to the
+preceding 56632-byte image only `radio_autoack` grew, by 39 common CODE
+bytes; the byte-liveness proof gains the helper (146 functions/560
+comparisons). Only held-overflow changed: one observation sample with
+RXOVERF-only RFERRF and no FIFO=0/FIFOP=1 is resampled once, adding nine
+identical MMIO reads (3252 to 3261); its outputs, call count, later events
+and stack peak are unchanged. The 283374 artifact mutations (195 more, five
+per added CODE byte) and all 18 MCU cases were rerun offline; this is
+simulated evidence only.
+
+The preceding resource/corpus figures included the
 `radio_autoack` scan filter and RX-loss salvage (four more exact MMIO sites,
 172 in total), the `mac_time` and `mac_adapter` changes of the same series and
 the resulting `__gptrput` relocation in the staged clock bytes. Relative to

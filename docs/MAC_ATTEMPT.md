@@ -393,6 +393,10 @@ native/sanitizer references agree, and current MCU cases14/23/33 retain SP7B.
 The committed RX-overflow, TX-turnaround and FIFO-pointer-mask guards make the
 current images25401/1477 and27973/1537, with181474/438789 MMIO events and
 79861/87801 required mutations; cases, calls and peak SP are unchanged.
+The stopped-drain complete-head helper (PHR0x619A plus count, accepted
+without FIFOP) adds25 CODE to each: the images are now25426/1477 and
+27998/1537 with79948/87888 required mutations; MMIO events, cases, calls,
+XDATA and peak SP are unchanged.
 It exercises SFD/clear/configuration races, retained faults,
 511/512/513-tick boundaries, whole-FF retry/exhaustion, invalid scoped fine/
 coarse tuples, buffer exclusions,

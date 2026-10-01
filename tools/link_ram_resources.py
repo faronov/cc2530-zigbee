@@ -22,16 +22,18 @@ CODE_AREAS = {"CSEG", "HOME", "GSINIT", "GSFINAL", "MA_BANK2",
 # changes, NV byte-wise CRC table and served ZDO/ZCL interview requests.
 # CONST is the larger board: zdo_runtime's Basic model string is 8 bytes plus
 # NUL on lg_esl29_rev03 ("LG-ESL29"), one more than generic ("generic").
-LIMITS = {"code": 217135, "const": 206, "xdata": 7050,
-          "data_sum": 605, "overlay_sum": 81, "bits": 70}
+# Synthetic sensor demo: zdo_srv +2 XDATA (3-cluster list), zdo_runtime +2 DATA
+# and -1 XDATA; radio_autoack stopped-head/RXOVERF fixes +39 CODE.
+LIMITS = {"code": 217183, "const": 206, "xdata": 7051,
+          "data_sum": 607, "overlay_sum": 81, "bits": 70}
 WORKSPACE_MODULES = MODULES | {"mac_link_workspace"}
-WORKSPACE_LIMITS = {"code": 236004, "const": 1113, "xdata": 6323,
-                    "data_sum": 644, "overlay_sum": 74, "bits": 80}
+WORKSPACE_LIMITS = {"code": 236052, "const": 1113, "xdata": 6322,
+                    "data_sum": 646, "overlay_sum": 74, "bits": 80}
 WORKSPACE_LAYOUT_BYTES = 617 + 31
 CHILD_MODULES = WORKSPACE_MODULES | {"mac_link_child_workspace"}
 CHILD_PROBE = "mac_link_child_layout"
-CHILD_LIMITS = {"code": 241660, "const": 1658, "xdata": 5747,
-                "data_sum": 642, "overlay_sum": 74, "bits": 86}
+CHILD_LIMITS = {"code": 241708, "const": 1658, "xdata": 5746,
+                "data_sum": 644, "overlay_sum": 74, "bits": 86}
 CHILD_LAYOUT_BYTES = WORKSPACE_LAYOUT_BYTES + 543 + 31
 # bdb_join_t gained scan lossy (4) and timely (1); the driver its drop count (1).
 CONTEXT_BYTES = 1438 + 180 + 305
@@ -42,8 +44,8 @@ DIRECT_MODULES = (CHILD_MODULES - {"nwk_aps_transmit"}) | {"nwk_aps_direct"}
 DIRECT_PROBE = "mac_link_direct_layout"
 # J3 round 3: flash_write/aes DIRECT reload homes added 8 XSEG (5674 -> 5682).
 # Refreshed with CHILD: exact current 5713 = CHILD 5747 - 2x37 + 40 DIRECT.
-DIRECT_LIMITS = {"code": 242949, "const": 1658, "xdata": 5713,
-                 "data_sum": 603, "overlay_sum": 74, "bits": 87}
+DIRECT_LIMITS = {"code": 242997, "const": 1658, "xdata": 5712,
+                 "data_sum": 605, "overlay_sum": 74, "bits": 87}
 DIRECT_CONTEXT_BYTES = CONTEXT_BYTES - 125
 
 

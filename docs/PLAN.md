@@ -636,7 +636,7 @@ replacement or fault recovery. The #73 extension adds one same-owner
 hardware-gated CCA/TX attempt and post-TX reception from stopped/drained idle.
 Its explicit response phase disables filtering/AUTOACK; stop/drain and resume
 restore them. TX_DONE is PHY completion, not ACK/delivery or timed MAC acceptance.
-Both-board host/image/alias-aware CI binds7031 CODE,450+64 XDATA and SP34.
+Both-board host/image/alias-aware CI binds7056 CODE,450+64 XDATA and SP34.
 This is an RF-transmitting hardware-service foundation, not itself a board image
 or silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
 captured timing (#40), continuous ordinary-TX/RX arbitration, IFS and loss-aware

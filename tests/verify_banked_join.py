@@ -35,26 +35,28 @@ RUNTIME_XDATA = {
 BOARDS = ("generic", "lg_esl29_rev03")
 # zdo_runtime embeds BOARD_MODEL, so every identity is keyed by board.
 # Per-function spill split link: CODE, NoICE-complete symbols, raw CDB,
-# memory, relocated listings and normalized split objects.
+# memory, relocated listings and normalized split objects. Repinned for the
+# synthetic sensor demo (zdo_runtime Temperature/Humidity reads, three-cluster
+# zdo_srv Simple_Desc); radio_autoack is not linked here.
 PINS = {
     "generic": (
-        "dd08093badf865b805444d9fe12f5d1f0f4be5b99fc737b537b7e81efdd3cd48",
-        "872d1bf4bd7d3dc015a152a0424c9c1d541edc29dd755bc0856bc81310fea6fe",
-        "7395224a55776d470b3a14e1008d8b7754a90410f411bb6cb1a4d0e0bc116573",
-        "176ea291f3b2726c1a907750f0f1e88f4f29c90a0074d826e8d2193a86fbe6ac",
-        "3bc18c12caebad3dae87b54189cbef559eb92df36ed83bf0046fbf1a9d66bfe0",
-        "58a3023dbdfa78cd2ba1e9a9dad99846e599ef88d9ad328be3850011a64b1fd4",
+        "278cc6299b9bf5d3ee67ee4990f1251e696691e4e9671e206335b844c463d80e",
+        "97b79be55415848fcb4b2146ca3cec74d31e1c55dc6f3e6586d8e6f4e3bbe2df",
+        "6da68d97fe04d65392746feb62baa9646ef61301106ebf628587b11cc5d5ce66",
+        "1594a16ad0538c1014669ecc2b69aa4cd83194e83765f3e34f46cf2b0fccd0bb",
+        "ba1bd1115c10cd271759ce7d2a82208bdea21f6ed4c97bffc8718623ff6560ce",
+        "57a8fe029a49acef286699e8387819eb6fe68299f2b60f7318f5a628a498a34c",
     ),
     "lg_esl29_rev03": (
-        "88d12aff84e9a649109d9d5615f1ca26c1d156e5b9f3f86b81ae6bd77ee42d53",
-        "6b30b816f556c84a69959178a20fcd0fa189467a79b09a8d0317a259173fdbc7",
-        "6e48dd6f15f283ed45d2dc8ed8ce8f3fea23824ff31912f92d1d19536c403ff8",
-        "7f58684ff071c9215507d5e36774dea1ae6fcd3ad5c5661c6088b4f9b2b49f69",
-        "fba8a7cb4f7fdcda379c4a192bfaba4962b649c14353e923fcbc4ace22a2d335",
-        "e8982f5b4934978d5c60d088b8ca3d29a500790f9586fa4661762762f04c5e65",
+        "1f333cf68982cafb2c30331c2c4e5c4c9b88fd2fc3bffff9155c3628f6e3a93f",
+        "b6c4d120ea8a01eacf1ab082106757f7b8fa99db49f29086c857e62e80040cbd",
+        "21d4b417b1239a61352a24e0919de2c629e48b69437c3e6cf6af64a658f084aa",
+        "40624353acad6ec8858fcc2a35222edb34f22a782d02049743dca1b433967496",
+        "aca2a89a4afb7aedf3531a334aa6df264605ea5ab40006650a345ca2507f9186",
+        "4be6d92d3e731ca11d901b1acb933ad7bb1f7b7220aa306d1ec6cda14ef88543",
     ),
 }
-NEGATIVES = {"generic": 729944, "lg_esl29_rev03": 729949}
+NEGATIVES = {"generic": 729989, "lg_esl29_rev03": 729994}
 # Functions with frames/overlay analysed, live-byte x clobber pairs checked.
 LIFETIME = (285, 1882)
 # Physical DATA owned by banked_join_iram_low/high; compiler frames may reuse

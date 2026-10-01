@@ -139,16 +139,16 @@ response bytes.
 
 | Linked object | CODE including constants/startup | XDATA | DSEG | OSEG | BSEG bits |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| New `zdo_srv` production | 2416 | 69 | 0 | 0 | 0 |
+| New `zdo_srv` production | 2439 | 71 | 0 | 0 | 0 |
 | Unchanged `zdo_node` | 3133 | 86 | 32 | 0 | 1 |
 | Unchanged `aps_frame` | 1626 | 69 | 8 | 7 | 0 |
 | Unchanged `nwk_frame` | 2294 | 96 | 12 | 10 | 0 |
-| Test caller | 8582 | 503 | 4 | 0 | 1 |
-| Full image including runtime | 18578/24576 | 843+64/1024 | - | - | - |
+| Test caller | 8586 | 505 | 4 | 0 | 1 |
+| Full image including runtime | 18605/24576 | 847+64/1024 | - | - | - |
 
 Target local/rx/info objects occupy19/11/8 bytes. Production private XDATA is
-`[0,320)`, caller objects `[320,806)`, caller locals `[806,823)` and complete
-linked libc scratch `[823,843)`. Stack starts at4B, unwinds to4A, and has
+`[0,322)`, caller objects `[322,810)`, caller locals `[810,827)` and complete
+linked libc scratch `[827,847)`. Stack starts at4B, unwinds to4A, and has
 full-run peak65 under the unchanged7C cap. This is not whole-stack fit or
 ISR/concurrency headroom.
 
@@ -163,7 +163,7 @@ map and memory accounting, all relocatable objects except their build-path
 first lines, and five immediate relocated-listing snapshots. It checks
 explicit fields/generic-pointer/entry/return ABI, genuine service and
 NWK/APS calls, storage boundaries and the absence of peripheral instructions.
-The proof rejects54,409 artifact mutations,21 state-guard mutations,3
+The proof rejects54,487 artifact mutations,21 state-guard mutations,3
 peak-metadata mutations and one disabled-alias control.
 The actual linked image executes under the existing alias-aware `s51` harness,
 with the unchanged15-second deadline, exact completed-check count, untouched

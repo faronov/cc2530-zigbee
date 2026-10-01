@@ -30,13 +30,15 @@ SCALARS = {**dict.fromkeys(("op", "return", "policy", "selector", "random_byte",
 # Busy CCA verifies empty RSSI-only RX before hard-off and normal-RX restart.
 # Refreshed for the radio_autoack scan filter/RX-loss salvage and mac_time/
 # mac_adapter changes: +1190 CODE only in those modules, four new MMIO sites.
+# Refreshed again for the radio_autoack stopped-head PHR helper and RXOVERF
+# resample: +39 CODE in radio_autoack, the PHR reads share one MMIO site.
 PINS = (
-    "383f751c1231c17ef6cc9cde5d8b4441f0379d9b7bde17f361572f70103165b3",
-    "14cdb6c1c19ba4ec626fe21daa8c51a7cd6486d7da53b2d00deaa5855a4d40c3",
-    "0de0ffaeca16c6f3a48f0e964dec219b3b110bb62f2eccdbb8fde1d14bef621a",
-    "de01500219d1bfb88f4b0ac6cd89bb0f1ac975e3ab4181d1c17a4a655eb97bb7",
-    "91fec7cde6b4539ab6325294d13399cd1ea97098ba3ded27250605ee3e605bf0",
-    "721a216afd8215347d266981c833e3c99e9a5228c625f4dcd4d249604e3488b1",
+    "fddde18cd4a97a1f2ba8a9744c09f257fdcdfaa7db68031bd565776db578813a",
+    "686880e0abaf1e9c06a7af5d21f8f066a06076e023fa1f59389919e159fdd636",
+    "b95f557498ee3a0561262a6de718fed229cb35c306eafea8eb16d251a78c54af",
+    "eb7cf669ffdc3d0fae8ef2bad453cc1b41ade91fcbb7ac29fa39e7e25bd4469a",
+    "5318afee3fe0e51efd335fa48727bfe93a4b20e987c27a31028c57519ece2daf",
+    "2e62f2cf418b87ea4bae10d53a1a29065ce05acf29fb66d9cfdfff3cc84c5fa1",
 )
 
 
@@ -66,7 +68,7 @@ def artifact_bytes(*artifacts):
 def verify(*artifacts):
     banking.pin_artifacts(artifact_bytes(*artifacts), PINS)
     image, symbols, raw, memory, listings, _ = artifacts
-    require(len(image) == len(banking.pack(image)) == 56632, "Adapter physical CODE accounting")
+    require(len(image) == len(banking.pack(image)) == 56671, "Adapter physical CODE accounting")
     areas = ("HOME", "GSINIT0", "GSINIT1", "GSINIT2", "GSINIT3", "GSINIT4", "GSINIT5",
              "GSINIT", "GSFINAL", "CSEG", "CONST", "MA_BANK1", "MA_BANK2")
     covered = set()
@@ -139,9 +141,9 @@ def verify(*artifacts):
             "Upper adapter/protocol layer bypasses the genuine hardware services")
     verify_timebase_reader(image, symbols, debug, 0x1e00, 8)
     verify_clock_code(image, symbols, debug)
-    require(len(mmio_sites(image, debug, {m: r.decode("ascii") for m, r in listings.items()}, handoff=True)) == 172,
+    require(len(mmio_sites(image, debug, {m: r.decode("ascii") for m, r in listings.items()}, handoff=True)) == 171,
             "Actual peripheral instruction inventory changed")
-    require(check_data(artifacts) == (145, 560), "Adapter DATA call-lifetime inventory changed")
+    require(check_data(artifacts) == (146, 560), "Adapter DATA call-lifetime inventory changed")
 
 
 class Layout:

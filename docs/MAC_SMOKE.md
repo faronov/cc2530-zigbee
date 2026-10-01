@@ -195,6 +195,12 @@ changes, the current images use59339 (LG)/59299 (generic) CODE bytes with
 bank2=6830, LG CONST7E2E..7E69 exclusive, highest physical byte11AAD,
 2537 ordinary XDATA bytes, a172-site lower MMIO inventory and liveness over
 156/155 functions with560 combinations.
+The stopped-drain complete-head helper and the adapter-only RXOVERF resample
+then raise this to59378 (LG)/59338 (generic) CODE bytes (bank1/bank2 and the
+highest physical byte11AAD unchanged; LG CONST7E55..7E90 exclusive), merge
+the two adapter PHR reads into a171-site lower MMIO inventory and extend
+liveness to157/156 functions with the same560 combinations. Native smoke
+scenario MMIO counts are unchanged by these fixes.
 
 Raw CDB bytes are pinned before decoding. Complete CODE/address bytes,
 source objects, immediately snapshotted relocated listings, memory report

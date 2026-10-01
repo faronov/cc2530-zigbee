@@ -21,12 +21,13 @@ from verify_firmware import (
 )
 
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio", "test_mac_radio")
-SIZE, XDATA, CASES = 15316, 760, 54
-CODE_SHA = "94777c5d01556cf4339764d8112bde1aafe6aad97c9b8a8dc026523fb29b1cd7"
-CDB_SHA = "6479129f4774f475043fdc1bf15c79ce724a930aafc986acb3ea8a78917b1f6a"
-MAP_SHA = "7dfd7d79e48a1b4594076d755cd2a814fc470d176e9167c7904fc8be8a56278e"
-LIST_SHA = "4b4b93ca2783f4147f7f6db7d8205a9eb7c8db8d8b321f1dec8cd8d0c7c31659"
-OBJECT_SHA = "d16843631fffaaa11217c39374f3c31b4dc4363331a5649982f08d446111cc4f"
+# Pins refreshed for the radio_autoack stopped-head (complete_head) fix.
+SIZE, XDATA, CASES = 15341, 760, 54
+CODE_SHA = "b704c71d231349a39aecb3de22551bdaae1cfdd91ce2a0adccb6fc630363b6fe"
+CDB_SHA = "42b3d1bb4747c5749d0c80ec96bfda16dd6b0871605486bf79b881eced2863a8"
+MAP_SHA = "fb5f92fc637de38789585e6cd91f0cc70d327e00885f7868867ce13b3df7ecaf"
+LIST_SHA = "f5a43cc80a4ccacadf8d0ef988704c17727900129964943f0d2dc4c65bfc2d49"
+OBJECT_SHA = "229bad5afe880f539e12d0ad45bc5a07b7a74ebcfc822c9f3519368f65c94042"
 CALLER = {"config": (587, 14), "frame": (601, 128), "stamp": (729, 6),
           "operation": (735, 1), "return": (736, 1), "length": (737, 1),
           "input": (738, 2), "output": (740, 2), "limit": (742, 2), "timeout": (744, 4)}
@@ -132,9 +133,9 @@ def verify(image, symbols, debug, memory, listings, objects):
     radio = codes["radio_autoack"]
     labels = {name: int(address, 16) for address, name in LABEL.findall(listings["radio_autoack"])}
     base, rfd, settle = (labels[n] for n in ("_setting_address", "_read_fifo", "_cca_settle"))
-    require(radio.get(base+0x222) == b"\xe0" and radio.get(base+0x8fe) == b"\xf0",
+    require(radio.get(base+0x222) == b"\xe0" and radio.get(base+0x925) == b"\xf0",
             "MAC radio indexed configuration access changed")
-    sites[base+0x222] = ("r", None, 0xe0); sites[base+0x8fe] = ("w", None, None)
+    sites[base+0x222] = ("r", None, 0xe0); sites[base+0x925] = ("w", None, None)
     require(bytes(image[a] for a in range(rfd, rfd+4)) == b"\x85\xd9\x82\x22" and
             sum(raw == b"\x12" + rfd.to_bytes(2, "big") for raw in radio.values()) == 1 and
             bytes(image[a] for a in range(settle, settle+5)) == b"\0\0\0\0\x22" and
@@ -294,7 +295,7 @@ def main():
                for m in MODULES}
     allocated, sites = verify(image, symbols, debug, memory, listings, objects)
     count = negatives(image, symbols, debug, memory, listings, objects)
-    require(count == 48890, "MAC radio artifact rejection inventory changed")
+    require(count == 48977, "MAC radio artifact rejection inventory changed")
     check_alias(args.simulator); rejected(lambda: check_alias(args.simulator, False))
     sampled = peak = calls = events = 0
     addresses = [symbols["_mac_radio_" + n] for n in (

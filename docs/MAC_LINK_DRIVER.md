@@ -758,13 +758,15 @@ security-counter/NV/crypto changes move the exact SDCC4.2 object ledgers
 
 | Profile | CODE | CONST | XSEG | Raw DATA | OSEG | Bits | Floor |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Compact | 217135 | 205/206 | 7050 | 605 | 81 | 70 | 8973 |
-| Shared UPPER | 236004 | 1112/1113 | 6323 | 644 | 74 | 80 | 8246 |
-| UPPER + CHILD | 241660 | 1657/1658 | 5747 | 642 | 74 | 86 | 7670 |
-| DIRECT | 242949 | 1657/1658 | 5713 | 603 | 74 | 87 | 7511 |
+| Compact | 217183 | 205/206 | 7051 | 607 | 81 | 70 | 8974 |
+| Shared UPPER | 236052 | 1112/1113 | 6322 | 646 | 74 | 80 | 8245 |
+| UPPER + CHILD | 241708 | 1657/1658 | 5746 | 644 | 74 | 86 | 7669 |
+| DIRECT | 242997 | 1657/1658 | 5712 | 605 | 74 | 87 | 7510 |
 
 CONST is generic/LG: the Basic model string is one byte longer on LG.
-The CHILD floor leaves10 bytes below7680 before runtime/additional caller
+The synthetic sensor demo (zdo_srv three-cluster list +2 XSEG, zdo_runtime
++2 DATA/-1 XSEG) and the radio_autoack stopped-head/RXOVERF fixes (+39 CODE)
+are included. The CHILD floor leaves11 bytes below7680 before runtime/additional caller
 storage; this remains object arithmetic, not a fit. The raw DATA growth is
 mainly compiler spill frames of the new ZDO serving functions, not
 simultaneous IRAM. The CHILD pointer-ABI image keeps11105 CODE,1551+64

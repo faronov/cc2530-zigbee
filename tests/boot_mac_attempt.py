@@ -22,15 +22,17 @@ from verify_firmware import (cdb_address, code_bytes, parse_ihex, parse_symbols,
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch",
            "mac_radio", "mac_attempt", "test_mac_attempt")
 CASES = 33
-SIZE, XDATA, STACK = 25401, 1477, 0x5a
-CODE_SHA = "43da365375024a89cd8ba1c33b7c4952b4f88ec7f8af9ce743b4a3c27b9f734e"
-CDB_SHA = "713793b7e56c0b11a964368d4d867ca0b1c66fd0fb227ab2c61fe8e41b0bdedc"
-MAP_SHA = "f5ca58746d4dbfc733d47b57530aac7a36ef1dfa75a7eb92623ada2c9eb8cd93"
-MEM_SHA = "fd25b3f7bc2ec26dae7252069dd6c1a55b93a9d816881925580188137bc51deb"
-LIST_SHA = "3465f90fce4d5567f4ae7077b1f0f6b04d25c6304826ce2fb3874e510b21da0a"
-OBJECT_SHA = "c13c680c19a8af511305ef5f91a46548580b4735ea5502f27ebd060d214e76c4"
+# radio_autoack complete_head() (stopped drain without FIFOP): +25 CODE,
+# relinked identities and +87 required mutations; MMIO trace unchanged.
+SIZE, XDATA, STACK = 25426, 1477, 0x5a
+CODE_SHA = "6c663f84924c921e3b10582d4e5056a942d9adc250d34be4c0ab1b13593db16c"
+CDB_SHA = "160df10256ea0fd94a9e1b25a6b507bcfe6d60af4cc7ce1c8d466816a1969dbe"
+MAP_SHA = "6011dff89ef58ee0cd5973ef71a22eae1e3222104f85f559248bc46065e3e9dc"
+MEM_SHA = "02f400f9fc928c50cb0a9d23b9b7ce3867939768934036b7e11a2966f3ffefe8"
+LIST_SHA = "e36388c868ddfa1c6be4ef504324b7b5806968f6a384a4a276f82ac5b0231d88"
+OBJECT_SHA = "1007f0103b2e3f72c3d34879ecc5f5b989b717c2517f60fb21afaee9a05744a2"
 INVENTORY = (391, 181474, 119, 121)
-NEGATIVES = 79861
+NEGATIVES = 79948
 CALLER_SIZES = {"config": 14, "frame": 128, "record": 164, "operation": 1,
                 "return": 1, "length": 1, "input": 2, "output": 2, "limit": 2,
                 "window": 2, "timeout": 4}

@@ -88,7 +88,7 @@ alone is not evidence: the proof binds all allocation records, actual marker
 addresses and the complete runtime suffix. Upper layers contain no peripheral
 instructions.
 
-Current linked image: **15316/16384 CODE**, **760 ordinary XDATA +64 reserved
+Current linked image: **15341/16384 CODE**, **760 ordinary XDATA +64 reserved
 =824/1024**. Stack begins3C, initial3B; sampled/full-run peaks are53/55,
 below the unchanged7C cap. These are separate composition resources, not
 whole-stack/ZCL/interrupt-nesting headroom.

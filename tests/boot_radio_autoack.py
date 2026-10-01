@@ -19,40 +19,45 @@ from boot_timebase import READ_OFFSETS, READER_BYTES
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 MODULES = ("timebase", "radio_autoack", "radio_autoack_test")
-SIZE, XDATA, PRIVATE_END, CASES = 7031, 450, 281, 194
+# Artifact pins refreshed for the radio_autoack stopped-head fix: the shared
+# complete_head() PHR helper adds 25 CODE bytes and moves later code/MMIO sites.
+SIZE, XDATA, PRIVATE_END, CASES = 7056, 450, 281, 194
 CODE_BUDGET, XDATA_BUDGET = 24576, 1536
-DIGEST = "f6df84b6a5796bf768126533995dcdf2847f9f55f0e4b20d7fed7c8c62cd20b5"
-MAP_DIGEST = "3360bf808ff809336764939a2244bdc3774b4c25e72e060d21d427b3cf9fd27a"
-RAW_CDB_DIGEST = "3efa7c5e0d2e6014fe3a571bab3d6749bf80bcc50dd30a2bf9759f4d4410affc"
+DIGEST = "5c67a615443cf2e05b47168b38b63b335f39b828f9c82659d8435bf411f40ee6"
+MAP_DIGEST = "a86dfa35489600e945d443f40d08582f3027bdaedfdb63870a4a4e1b9720ecc0"
+RAW_CDB_DIGEST = "fc6841643722c157cdba4d16922d1660b781a2249bbf15eaddd66a1651861a4f"
 # Case 1 now returns RXFIRST/RXLAST/RXP1 reads with reserved bit7 set (SWRU191F
 # p265); only those 155 read values and the raw RXP1 diagnostic differ from the
 # previous pins; every result, state, frame and access order is unchanged.
-LEGACY_DIGEST = "92c75b7f52455740d75acad65aeb786e9865fdc8d13db09474926f38d9eb4ca9"
-REARM_DIGEST = "9bee0485944202820c5784e235fec8b9e4e0d0848c1235299a8404f2c07d747a"
+# Stopped-head fix (complete_head): case80's stopped drain without FIFOP now
+# returns its complete frame then STOPPED instead of FIFO_ERROR; cases76/104
+# stop with count>0/FIFOP=0 add one PHR read (0) and still report FIFO_ERROR.
+LEGACY_DIGEST = "af0c8a0ecae45412c693e675a48d3cac41cdf9a8246dd0141ef4b484f0113c3b"
+REARM_DIGEST = "9619dc9d5e04c8901b353577e7f37e9783efddd7fb2f7de9c9c550bca1295c57"
 METADATA = {
     r"^[FSLT]:(?:X?F|L)(?:timebase|radio_autoack)[.$][^\n]+$":
-        "de25f4cb8627114f1d593d26a66caa7dd2df2da30b6695c99a09465e67eb20b3",
+        "a175c15054fe9cccb9ae520a4ac794ddd86d7257f3b3037ad99f45473f227e01",
     r"^[FSLT]:(?:X?F|L)test_radio_autoack[.$][^\n]+$":
         "d79bc1826fbbf21fe78846ebcc7d3032b50ec6dee497f2c8b6a3a7032423f128",
     r"^[FSL]:(?:X?G)\$[^\n]+$":
-        "d180674496e54e661985b03dd1b90feb7ba2efe1e5669f5dccb2a5ddfad67b08",
+        "707d22b93cbd74bbf682779c09303270a8b3e05f72d406a6ef1d9ba3b843ddd1",
 }
 LISTINGS = {
-    "timebase": (265, 404, "9fb026bbe7f646f13c41c2854a69f300a0db272f54b1d57d2c375f01419049c2"),
-    "radio_autoack": (3366, 5873, "b852a23753f331d90269fce59d4a8ad6647e725eb367789a1d3210d144010f09"),
-    "radio_autoack_test": (264, 411, "dd42e6d326f0887112f3c6c7061c30681b7d80d7423931092edcbcabc85944ad"),
+    "timebase": (265, 404, "82ca2deca689292a24c74ea3e570bb2dc5d57b3a0c82e77701124769a6693367"),
+    "radio_autoack": (3377, 5898, "907034a7445e68ecb05700c8b4b742106e4e0fd9b0e414485e66ad9becd9a912"),
+    "radio_autoack_test": (264, 411, "b87813c436fc98eb4404b5b646906e00b273c202db5514607f90496e3dfee201"),
 }
 STORAGE = {
     "timebase": ("7e29643ee1d1225c20d5a4ee1beaee3319490ae992627c43c22b53b006c23580",
                  "f812571971442e3efb76d6e35fc06f820d3ee3da014fbe453f6bd00509c13e80"),
     "radio_autoack": ("cdbf2d272f8183fc1f0e9c29094f553cf60010b4549933af651aefd48d04e96a",
-                      "9cbd0e7f86b3e42ea782edfd78cdd094dc58a92a8187ac33083aead1ef839bac"),
+                      "2bc5e885b5b76fcfbad4e788d27d6c3c6ebc8dd3ce751ea3ea6779446a206232"),
     "radio_autoack_test": ("d93f2639ffb319fb000e73407db3a9c052301e7e1c34340b064d16879a12e153",
-                           "0b968eff99ab4342a16819ff96e24f7b27098839071e1421886291230e7a1778"),
+                           "6ca8fc3b84973496be91b23053d3ca89e2d1065d78fd8181befabc8a8ab3cdd0"),
 }
 OBJECTS = {
     "timebase": ((404, 25, 0, 3), "11e376b9aa9e8c4c6d94dfb9685d15bed0b455019a023476540150eaabec6a08"),
-    "radio_autoack": ((5912, 256, 4, 2), "ec437978e1d246083caef503d15d6eb000dd34047a543daef2b49c92b4f8200d"),
+    "radio_autoack": ((5937, 256, 4, 2), "03a1ac9dfb670d716b2819313331c69e61078e534b98fd00b65ad0e9d0e3ddeb"),
     "radio_autoack_test": ((411, 157, 2, 0), "f739df4ed377ba272918e9173752237043d9d4ec7e5031f5688fd4d497ae0220"),
 }
 CALLER = {
@@ -66,15 +71,15 @@ VALUES = bytes((1, 0x70, 0, 0x60, 0, 0x7f, 0, 0x15, 9, 0, 0, 5, 0x69))
 XREADS = (
     0x624a, 0x61e1, 0x61a3, 0x61a4, 0x61a5, 0x61a8, 0x61a9, 0x61b8, 0x61b9, 0x618e,
     0x618b, 0x6192, 0x6193, 0x619b, 0x619d, 0x619e, 0x619f, 0x6199,
-    0x6196, 0x6197, 0x619c, 0x61a1, 0x61a2,
-    0x619b, 0x619d, 0x619c, 0x61a1, 0x61a2, 0x6189, 0x618a, 0x619a,
+    0x6196, 0x6197, 0x619c, 0x61a1, 0x61a2, 0x619a,
+    0x619b, 0x619d, 0x619c, 0x61a1, 0x61a2, 0x6189, 0x618a,
 )
 XWRITES = (
-    (0xbcc, 0x6180, 1), (0xc39, 0x6189, 0x60), (0xcbb, 0x618c, 1),
-    (0xfc5, 0x618d, 1), (0x1423, 0x6189, 0x40), (0x1482, 0x6180, 0x0c),
-    (0x14ea, 0x6196, 0xf8), (0x1549, 0x6197, 0x1a), (0x1769, 0x618c, 1),
+    (0xbf3, 0x6180, 1), (0xc60, 0x6189, 0x60), (0xce2, 0x618c, 1),
+    (0xfd7, 0x618d, 1), (0x143c, 0x6189, 0x40), (0x149b, 0x6180, 0x0c),
+    (0x1503, 0x6196, 0xf8), (0x1562, 0x6197, 0x1a), (0x1782, 0x618c, 1),
 )
-SETTLE = 0x11ec
+SETTLE = 0x1205
 STATUS_SIZES = (4, 2, 2) + (1,) * 18
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-F]{6})\s+((?:[0-9A-F]{2}\s+)+)\[\s*\d+\]\s+\d+\s+\S.*$", re.M,
@@ -204,8 +209,8 @@ def verify(image, symbols, debug, memory, listings, objects):
         "e5bf", "e5e9", "e591", "85d982", "e5bf", "e5c6", "75913b",
         "75e1ee", "8bd9", "75913d", "75e1ea",
     ], "Complete SFR inventory/exactly-once RFD leaf changed")
-    require(raw[0x730:0x734] == bytes.fromhex("85d98222") and
-            sum(b == b"\x12\x07\x30" for b in code.values()) == 1,
+    require(raw[0x757:0x75b] == bytes.fromhex("85d98222") and
+            sum(b == b"\x12\x07\x57" for b in code.values()) == 1,
             "Destructive RFD must have one read and one genuine call site")
     sites = {}
     for pc, data, reg in peripheral_accesses(code):
@@ -226,8 +231,8 @@ def verify(image, symbols, debug, memory, listings, objects):
             require(code.get(pc + 3) == b"\xe0", "Unexpected static MMIO operand")
             sites[pc + 3] = ("r", address, 0xe0); static.append(address)
     require(tuple(static) == XREADS and tuple(writes) == XWRITES, "Static MMIO/address whitelist changed")
-    require(code.get(0x418) == b"\xe0" and code.get(0xaf4) == b"\xf0", "Indexed MMIO changed")
-    sites[0x418] = ("r", None, 0xe0); sites[0xaf4] = ("w", None, None)
+    require(code.get(0x418) == b"\xe0" and code.get(0xb1b) == b"\xf0", "Indexed MMIO changed")
+    sites[0x418] = ("r", None, 0xe0); sites[0xb1b] = ("w", None, None)
     require(raw[SETTLE:SETTLE + 5] == b"\0\0\0\0\x22" and
             sum(data == b"\x12" + SETTLE.to_bytes(2, "big") for data in code.values()) == 1,
             "CCA must execute four real NOPs through one genuine call")
@@ -534,7 +539,7 @@ def main():
             [(1, a) for a in range(helper - 138, helper + 1)],
             "Every original libc overlap must execute exactly once across the fresh partitions")
     inventory = (calls, rfd, sampled, full, count, tx_bytes, attempts, flushes, settles)
-    require(inventory == (1732, 1157, 0x2e, 0x34, 9041, 419, 22, 29, 22),
+    require(inventory == (1730, 1163, 0x2e, 0x34, 9080, 419, 22, 29, 22),
             f"Complete corpus, negative inventory or measured stack high-water changed: {inventory}")
     print(f"AUTOACK: {CASES} sequences/{calls} genuine API calls/{rfd} exactly-once RFD reads; "
           f"{SIZE} CODE SHA256={DIGEST}; {XDATA}+64/{XDATA_BUDGET} XDATA; "
