@@ -306,7 +306,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
     parts = sections(simulate_binary_dumps(simulator, commands))
     check_pc(parts[59990], symbols["_main"])
     state = captured_sections(parts, 60000, wait)
-    require(state[0][0x1e00:0x1e08] == b"JSN1\x01\x30\x01\0"
+    require(state[0][0x1e00:0x1e08] == b"JSN1\x02\x30\x01\0"
             and state[0][symbols["_join_smoke_mailbox"]:symbols["_join_smoke_mailbox"]+8] == bytes(8),
             "Genuine reset did not produce DISARMED")
     pc, count, peak = wait, 0, 0x4f

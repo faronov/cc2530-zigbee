@@ -190,8 +190,8 @@ static void serve_ready(unsigned *calls)
      * voltage on its three steps (3/41). */
     assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
     assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
-    assert(counts[3]+2u>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
-    assert(counts[2]+2u>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+    assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
+    assert((int64_t)counts[2]+2>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
     /* The status snapshot follows the last report confirmation. */
