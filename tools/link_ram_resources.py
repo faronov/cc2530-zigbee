@@ -18,26 +18,32 @@ zigbee_key_hash zigbee_mmo
 PROBE = "mac_link_ram_layout"
 CODE_AREAS = {"CSEG", "HOME", "GSINIT", "GSFINAL", "MA_BANK2",
               *(f"GSINIT{i}" for i in range(6)), *(f"BJ_BANK{i}" for i in range(1, 5))}
-LIMITS = {"code": 211892, "const": 55, "xdata": 7035,
-          "data_sum": 519, "overlay_sum": 77, "bits": 70}
+# Refreshed for the real-air scan filter/RX-loss salvage, MAC time/adapter
+# changes, NV byte-wise CRC table and served ZDO/ZCL interview requests.
+# CONST is the larger board: zdo_runtime's Basic model string is 8 bytes plus
+# NUL on lg_esl29_rev03 ("LG-ESL29"), one more than generic ("generic").
+LIMITS = {"code": 217135, "const": 206, "xdata": 7050,
+          "data_sum": 605, "overlay_sum": 81, "bits": 70}
 WORKSPACE_MODULES = MODULES | {"mac_link_workspace"}
-WORKSPACE_LIMITS = {"code": 230576, "const": 962, "xdata": 6308,
-                    "data_sum": 556, "overlay_sum": 74, "bits": 80}
+WORKSPACE_LIMITS = {"code": 236004, "const": 1113, "xdata": 6323,
+                    "data_sum": 644, "overlay_sum": 74, "bits": 80}
 WORKSPACE_LAYOUT_BYTES = 617 + 31
 CHILD_MODULES = WORKSPACE_MODULES | {"mac_link_child_workspace"}
 CHILD_PROBE = "mac_link_child_layout"
-CHILD_LIMITS = {"code": 236892, "const": 1507, "xdata": 5727,
-                "data_sum": 562, "overlay_sum": 74, "bits": 86}
+CHILD_LIMITS = {"code": 241660, "const": 1658, "xdata": 5747,
+                "data_sum": 642, "overlay_sum": 74, "bits": 86}
 CHILD_LAYOUT_BYTES = WORKSPACE_LAYOUT_BYTES + 543 + 31
-CONTEXT_BYTES = 1433 + 180 + 304
+# bdb_join_t gained scan lossy (4) and timely (1); the driver its drop count (1).
+CONTEXT_BYTES = 1438 + 180 + 305
 # CHILD with nwk_aps_t's private MAC build buffer removed: the NPDU is staged
 # in the IDLE owner's own frame. Added mac_tx loan/homes count in XSEG below;
 # BDB and ZDO reuse NWK/APS's refresh-before-use key status snapshot (-2x37).
 DIRECT_MODULES = (CHILD_MODULES - {"nwk_aps_transmit"}) | {"nwk_aps_direct"}
 DIRECT_PROBE = "mac_link_direct_layout"
-# J3 round 3: flash_write/aes DIRECT reload homes add 8 XSEG (5674 -> 5682 actual).
-DIRECT_LIMITS = {"code": 238278, "const": 1507, "xdata": 5682,
-                 "data_sum": 562, "overlay_sum": 74, "bits": 87}
+# J3 round 3: flash_write/aes DIRECT reload homes added 8 XSEG (5674 -> 5682).
+# Refreshed with CHILD: exact current 5713 = CHILD 5747 - 2x37 + 40 DIRECT.
+DIRECT_LIMITS = {"code": 242949, "const": 1658, "xdata": 5713,
+                 "data_sum": 603, "overlay_sum": 74, "bits": 87}
 DIRECT_CONTEXT_BYTES = CONTEXT_BYTES - 125
 
 

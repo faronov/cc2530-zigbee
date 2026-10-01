@@ -325,7 +325,7 @@ and unbanked linker flags produce byte-identical generic/LG images:
 | radio_autoack | 5888 | 256 | 4 | 2 |
 | test caller | 411 | 157 | 2 | 0 |
 
-Whole image: **7007/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
+Whole image: **7031/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
 status reservation = 514/1536 bytes**. Runtime/startup adds 304 CODE and 12
 XDATA beyond those object totals. The separate 24 KiB/1536-byte budget covers
 the real timebase, one staged frame, copied configuration, diagnostics,
@@ -350,7 +350,7 @@ RAM are guarded.
 Whole emitted CODE SHA-256:
 
 ```text
-a06a14624e638adb49b87a23d7e2fe35711a32a23c53eaf53f74c6569a1bcde4
+f6df84b6a5796bf768126533995dcdf2847f9f55f0e4b20d7fed7c8c62cd20b5
 ```
 
 **Host-test corpus:** 158362 API calls per board, both strict native and ASan/UBSan.
@@ -365,7 +365,7 @@ implement over-air filtering, FCS calculation or ACK generation. Lengths
 to exercise byte bounds, not claim those are eligible over-air packets.
 
 **Image/simulator corpus:** 194 persistent sequences, 1732 genuine API calls,
-1157 exactly-once RFD reads, and 9017 artifact negatives plus one genuine
+1157 exactly-once RFD reads, and 9041 artifact negatives plus one genuine
 missing-alias negative per board. Coverage includes delayed readiness/
 calibration, active receive/ACK soft stop, 21 queued frames, max-length circular
 FIFO, concurrent arrival, CRC classification, stale flags, partial/count/
@@ -420,7 +420,7 @@ including the32 rearm cases, also retain their complete native identity:
 `c19e89572bc7398c799d9a9240f703e1ac5ae92b93f9d397aeefcbf3859e411a`.
 New cases never replace old ones. Historical pre-TX simulator-call envelopes
 were3.464s (generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
-Those measured the4692-byte rearm image, not this7007-byte extension; they
+Those measured the4692-byte rearm image, not this7031-byte extension; they
 are local observations, not portable timing guarantees.
 
 ### Historical overlap-partition acceptance before rearm

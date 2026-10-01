@@ -26,6 +26,8 @@ LENGTHS = CLOCK_INSTRUCTION_LENGTHS | PRNG_LENGTHS | FIFO_LENGTHS | {
 # Keys are CODE start, private XDATA start, generic-store runtime entry.
 # New consumers must supply their own genuine reviewed emission, not bypass it.
 PROFILES = {
+    (1027, 33, 29443): ("890d2618edc29fe3b4954cdb288c4ac68c3c570b0c700363eb6605949ff0ba54",
+                        "498bd06c481b81cfecca399352a6901734234c5a3a958c50d6fd2a62e4b944cb", 44),
     (502, 25, 10673): ("e5849315341f0a7176ebf6ada1a5cb05b79c03bc84cf265a4d4353de4e22cc75",
                       "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
     (502, 25, 10713): ("f1f610989cf80d5089d9eb30ef5fdcdbce698d38d25f153ea3d54d06110283e1",
@@ -33,6 +35,10 @@ PROFILES = {
     (502, 25, 25287): ("dbcc4e1353394efee5abc4467c819f00bff7671aa0505610c6c376dc9acf1945",
                       "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
     (502, 25, 27859): ("b9b08731c7b002efd89e9b9046a87f416df26334affe15508728f0709d7ae40a",
+                      "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
+    (502, 25, 25298): ("d1f2608afb89755dadcb76412d193cb5a44a07c28bc9acf85f08f0092d918882",
+                      "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
+    (502, 25, 27870): ("286d40f21b68dfc01cf91b7140752e6029d96d79b5a682a803798784b3698294",
                       "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),
     (502, 25, 15213): ("d643cd488807a3e4b61ab96c2da8a3fd76436915ef294f1d5d48d64f9261669c",
                       "05c07fcf61c66bb58b55df94b441e7ccad1bc3523145ec92fc6ef511cd5958cb", 8),

@@ -390,6 +390,9 @@ bytes: the ordinary attempt uses25390/1477 and the handoff uses27962/1537.
 Required mutation inventories are79832 and87772, with every previous case
 retained. The handoff's1164 calls/438415 MMIO count is unchanged; all76
 native/sanitizer references agree, and current MCU cases14/23/33 retain SP7B.
+The committed RX-overflow, TX-turnaround and FIFO-pointer-mask guards make the
+current images25401/1477 and27973/1537, with181474/438789 MMIO events and
+79861/87801 required mutations; cases, calls and peak SP are unchanged.
 It exercises SFD/clear/configuration races, retained faults,
 511/512/513-tick boundaries, whole-FF retry/exhaustion, invalid scoped fine/
 coarse tuples, buffer exclusions,

@@ -15,7 +15,7 @@ typedef char transport_config_size[sizeof(nwk_aps_config_t) == 19 ? 1 : -1];
 typedef char config_size[sizeof(bdb_join_config_t) == 93 ? 1 : -1];
 typedef char endpoint_zero_size[sizeof(zdo_runtime_t) == 339 ? 1 : -1];
 typedef char work_size[sizeof(bdb_join_work_t) == 1042 ? 1 : -1];
-typedef char context_size[sizeof(bdb_join_t) == 1428 ? 1 : -1];
+typedef char context_size[sizeof(bdb_join_t) == 1429 ? 1 : -1];
 typedef char scan_result_size[sizeof(bdb_join_scan_result_t) == 17 ? 1 : -1];
 typedef char event_size[sizeof(bdb_join_event_t) == 55 ? 1 : -1];
 typedef char action_size[sizeof(bdb_join_action_t) == 51 ? 1 : -1];

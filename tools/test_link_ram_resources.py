@@ -37,7 +37,7 @@ class LinkRamResourcesTests(unittest.TestCase):
         result = ram.report(self.objects())
         self.assertEqual(len(ram.MODULES), 38)
         self.assertEqual(result["xdata"], 38)
-        self.assertEqual(result["object_floor"], 38 + 1433 + 180 + 304)
+        self.assertEqual(result["object_floor"], 38 + 1438 + 180 + 305)
         self.assertEqual(result["code"], 38)
 
     def test_workspace_probe_does_not_double_count_the_production_arena(self):
@@ -45,8 +45,8 @@ class LinkRamResourcesTests(unittest.TestCase):
         self.assertEqual(len(ram.WORKSPACE_MODULES), 39)
         self.assertEqual(ram.WORKSPACE_LAYOUT_BYTES, 617 + 31)
         self.assertEqual(result["xdata"], 39)
-        self.assertEqual(result["context_bytes"], 1917)
-        self.assertEqual(result["object_floor"], 39 + 1917)
+        self.assertEqual(result["context_bytes"], 1923)
+        self.assertEqual(result["object_floor"], 39 + 1923)
 
     def test_workspace_and_compact_profiles_are_not_interchangeable(self):
         for objects, workspace in ((self.objects(True), False), (self.objects(), True)):
@@ -57,27 +57,27 @@ class LinkRamResourcesTests(unittest.TestCase):
         result = ram.report(self.objects(child_workspace=True), child_workspace=True)
         self.assertEqual(len(ram.CHILD_MODULES), 40)
         self.assertEqual(ram.CHILD_LAYOUT_BYTES, 617 + 31 + 543 + 31)
-        self.assertEqual(result["context_bytes"], 1917)
+        self.assertEqual(result["context_bytes"], 1923)
         self.assertEqual(result["xdata"], 40)
-        self.assertEqual(result["object_floor"], 40 + 1917)
+        self.assertEqual(result["object_floor"], 40 + 1923)
 
     def test_direct_replaces_only_the_transmit_module_and_counts_new_context(self):
         result = ram.report(self.objects(direct=True), direct=True)
         self.assertEqual(len(ram.DIRECT_MODULES), 40)
         self.assertEqual(ram.DIRECT_MODULES ^ ram.CHILD_MODULES,
                          {"nwk_aps_transmit", "nwk_aps_direct"})
-        self.assertEqual(ram.DIRECT_CONTEXT_BYTES, 1308 + 180 + 304)
-        self.assertEqual(result["context_bytes"], 1792)
-        self.assertEqual(result["object_floor"], 40 + 1792)
-        # mac_tx loan (+28 XSEG), two removed key-status snapshot copies and
-        # the J3 round-3 flash_write/aes DIRECT reload homes (+8 actual, +1 ceiling).
-        self.assertEqual(ram.DIRECT_LIMITS, {"code": 238278, "const": 1507,
-                                             "xdata": 5727 + 28 - 2 * 37 + 1, "data_sum": 562,
+        self.assertEqual(ram.DIRECT_CONTEXT_BYTES, 1313 + 180 + 305)
+        self.assertEqual(result["context_bytes"], 1798)
+        self.assertEqual(result["object_floor"], 40 + 1798)
+        # Two removed key-status snapshot copies; the mac_tx loan/homes, DIRECT
+        # reload homes and the direct staging module add a net 40 XSEG.
+        self.assertEqual(ram.DIRECT_LIMITS, {"code": 242949, "const": 1658,
+                                             "xdata": 5747 - 2 * 37 + 40, "data_sum": 603,
                                              "overlay_sum": 74, "bits": 87})
         # The accepted CHILD ceilings and context are unchanged by DIRECT.
-        self.assertEqual(ram.CHILD_LIMITS, {"code": 236892, "const": 1507, "xdata": 5727,
-                                            "data_sum": 562, "overlay_sum": 74, "bits": 86})
-        self.assertEqual(ram.CONTEXT_BYTES, 1917)
+        self.assertEqual(ram.CHILD_LIMITS, {"code": 241660, "const": 1658, "xdata": 5747,
+                                            "data_sum": 642, "overlay_sum": 74, "bits": 86})
+        self.assertEqual(ram.CONTEXT_BYTES, 1923)
 
     def test_direct_probe_must_record_the_removed_buffer_exactly(self):
         objects = self.objects(direct=True)

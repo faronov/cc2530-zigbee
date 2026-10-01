@@ -40,8 +40,9 @@ The next [occupancy-owned runtime-slot step](ED_JOIN.md#occupancy-owned-runtime-
 removes duplicate NWK/APS receive/encapsulation storage and ZDO receive/BDB
 broadcast packets; occupied slots and server responses remain independent.
 Real tagged event/action unions also shrink caller I/O. Current SDCC BDB
-size is1428, the services+BDB/MAC lower bound7891, and explicit caller
-configuration/I/O raises it to8090. Both-board81722-check native/sanitizer
+size is1429, including the later one-byte association `timely` flag. At the
+earlier1428-byte size the services+BDB/MAC lower bound was7891, and explicit
+caller configuration/I/O raised it to8090. Both-board81722-check native/sanitizer
 evidence and retained exact key-image identities do not establish complete
 target fit or execution.
 
@@ -1213,7 +1214,7 @@ Receive/stop retain existing bounded publication/drain semantics; resume
 restores filtering then AUTOACK only while stopped and empty. There is no
 concurrent live-AUTOACK admission claim or hidden RX gap.
 
-Both-board host/image/alias-aware CI binds7007 CODE,450+64 reserved
+Both-board host/image/alias-aware CI binds7031 CODE,450+64 reserved
 XDATA and whole-run SP34 within separate24576/1536/SP7C limits. No board image
 links this synthetic test composition. Broadcast-AR behavior, global ACK-FCF
 compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration

@@ -24,7 +24,9 @@ CODE_BUDGET, XDATA_BUDGET = 32768, 2048
 # start 41->3D and the complete 28-case replay measures peak 66->59.
 SIZE, XDATA, PRIVATE_END = (29524, 1501, 624)
 DIGEST = '378d9e05ddc9d342680851411e5de81d48e92c4044160d95a29d0a12a1f617b0'
-PRIVATE_DIGEST = 'b0f1a4001f9be61c0223b2aaae1c4211f348645f7e901d285664cc1c37131b58'
+# Identical linked image; profile-only mac_scan.c additions renumber the
+# get/release local scope IDs (98/100 -> 99/101) in the private records.
+PRIVATE_DIGEST = '61701e3ffc8be17b07d3cb6ccc135782a84b9fb26bfc02be94fb46cb34349e56'
 CALLER_DIGEST = '628695e1a67dad1e9d0320f28ed8c0af4b1e375ae141837e4276beee62ec004c'
 PUBLIC_DIGEST = '342bd01b8abd7ddc8162c5ef5a3e20070397a6c5fc1031e22fbc061983c3e67f'
 FIELD_DIGEST = '659464f7b5d96ba06e79f413f6a255d76b148b1fcf94f83ef341f6e56e0a6a88'

@@ -150,13 +150,13 @@ its only external calls are the real reader, erase and program APIs.
 
 | Item | Measured/checkable value |
 | --- | --- |
-| CODE | 6,937 bytes, unbanked |
+| CODE | 7,088 bytes, unbanked |
 | Ordinary XDATA + status reservation | 798 +64 =862, within a separate 1,024-byte budget |
 | Complete private/compiler prefix | `0000..0295` |
 | Diagnostic / staging / reader chunk / program word | `0195` / `01A4` / `0224` / `0244` |
 | Caller buffer | `0296..0315`, 128 bytes |
 | Stack | Starts `30`; observed peak `4C`; upper IRAM remains guarded |
-| CODE SHA-256 | `f99475c308cdca64589fc3a7e2772cb84549ccc5da5c3c8df752f32123aade12` |
+| CODE SHA-256 | `e4fe6f613045d395995c663e055a2333f7ea060d474181a9a27679d2593a0e07` |
 
 The complete-join stack work makes the replacement poll/page copies volatile,
 shortening SDCC register saves and reducing journal DATA from23 to15 bytes.
@@ -164,6 +164,12 @@ The actual module has3585 CSEG bytes plus8 CONST bytes,258 XDATA bytes and
 4 OSEG bytes. The refreshed ordinary replay passes all original cases and
 6968 artifact negatives; record format, commit ordering and wear limits
 are unchanged.
+
+The table-driven CRC replaces the bitwise loop with two16-entry
+nibble tables in CODE. The module becomes3608 CSEG plus136 CONST bytes
+(+23 code, +128 table); its XDATA, OSEG, private prefix, stack peak, record
+format, CRC value and flash history are unchanged, and every existing
+sequence, call and RAM-command count still matches exactly.
 
 The 69,623 counted native checks cover every payload length and every byte
 of both pages as corruption, independent full-record CRC/format comparison,

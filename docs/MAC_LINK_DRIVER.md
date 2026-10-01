@@ -742,6 +742,36 @@ and sanitizer modes. None of these static bounds is an observed MCU peak. The
 [execution plan](LINK_JOIN_PLAN.md#execution-record) records the complete
 linked caller and its separate compiler-scratch lifetime proof.
 
+### Current object ledger after the ZHA-join series
+
+The tables above are historical measurements. The later scan filter, RX-loss
+salvage/lossy scan reporting, ZDO Basic/Active_EP/Simple_Desc serving and the
+security-counter/NV/crypto changes move the exact SDCC4.2 object ledgers
+(both boards) and the measured contexts to `bdb_join_t` 1438 (was1433: a
+32-bit lossy scan count and a timeliness byte) and `mac_link_driver_t` 305
+(was304: one drop flag). Caller contexts are therefore1923 bytes (DIRECT
+1798):
+
+| Profile | CODE | CONST | XSEG | Raw DATA | OSEG | Bits | Floor |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Compact | 217135 | 205/206 | 7050 | 605 | 81 | 70 | 8973 |
+| Shared UPPER | 236004 | 1112/1113 | 6323 | 644 | 74 | 80 | 8246 |
+| UPPER + CHILD | 241660 | 1657/1658 | 5747 | 642 | 74 | 86 | 7670 |
+| DIRECT | 242949 | 1657/1658 | 5713 | 603 | 74 | 87 | 7511 |
+
+CONST is generic/LG: the Basic model string is one byte longer on LG.
+The CHILD floor leaves10 bytes below7680 before runtime/additional caller
+storage; this remains object arithmetic, not a fit. The raw DATA growth is
+mainly compiler spill frames of the new ZDO serving functions, not
+simultaneous IRAM. The CHILD pointer-ABI image keeps11105 CODE,1551+64
+XDATA,43098 checks and peakSP59/7C; only nine typed-loan size/offset
+constants in `mac_link_workspace` changed, following the three added
+`zdo_srv_local_t` bytes (profile, endpoint: 16 to19) and the resulting ZDO
+server/descriptor union (37 to38). Because `zdo_runtime.h` now includes
+`board.h`, that object's SDCC symbol keys and CDB/map debug records differ by
+board while its CODE does not; the proof therefore pins one complete raw set
+per board, selected by the exact CDB and never mixed.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,

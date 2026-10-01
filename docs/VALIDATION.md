@@ -83,7 +83,7 @@ release events are always full. Shared headers/build/verification/runtime
 changes and unknown dependency mappings also select full.
 
 The expensive banked-key artifact corruption campaign is explicit:
-`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all246199
+`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all247674
 current CODE/address and complete metadata mutations. A selected affected run
 may defer this campaign, **not** the immutable
 CODE/address/raw-CDB/map/listing/object identities, physical

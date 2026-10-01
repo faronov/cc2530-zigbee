@@ -23,23 +23,42 @@ STACK_FIRST, STACK_SIZE, SP_CAP, PEAK = 0x50, 45, 0x7c, 0x59
 MAIN, DONE, FAILED, FLASH = 0x1bcd, 0x1b83, 0x1b80, 0x1830
 # SDCC4.2.0#13081, canonical src/... / tests/... inputs, BOTH board definitions.
 # These bind whole bytes, not source-line-masked or instruction-only identities.
-CODE_SHA = "94ce5357761bed5812c2f5722112dde7ab97efe88ecb3bc711ef614a94994a69"
-CDB_SHA = "d001b9be94fab607449a3a647ec692704a7641b5af137877b156bbf877193b17"
+# CODE, the memory account and the map suffix are identical on both boards.
+CODE_SHA = "96b4ae33504720ccbd58f5868c6309e4dc082f4f1bfe8b502312efcb1712d0dc"
 MEM_SHA = "f0433cd0f02beb7eda5cb8a7ddb432cbd0400200e029c534776d8e929040927b"
-MAP_PREFIX_SHA = "8f851ccbb299c3fb0598da31c4f7ee04e13d25aeefffe0423badaf6c9ca3a1bc"
 MAP_SUFFIX_SHA = "da6eb110b124ece27e2f55dc4b5f1775a1c494cccbf3731cf862b0a9c297de93"
-OBJECT_PINS = (
-    "e055058223c4e704a9d97c8c6efd3f028920bcaaa9cfd70273e65cad5d33cb11",
-    "85cb14a68f06ec5c1499ffad9b240056f35ba3dc96ce6937077753108c34533d",
-    "c2c851f453375df8b7175fba398cb0d1da5dc171231e27fe21bd54bcf79117a3",
-    "f80e0539b57b42e16383e44ab0176827f5b6923663803953cf9af4b7df00fb19",
-)
-LIST_PINS = (
-    "4b9e94585f97d6cd9be29f347ebca7c6b2846c3cd76d001cfbdec57c1c21a89d",
-    "5bf12f2401d7e8a2d94a3d2b4e058570024aa93cf80cdd5e2de8c819f814c566",
-    "6c2b4b1d9f81450db84b3c804c5f5c25e4abe967fdc498c135627133d3091f4e",
-    "13bd83b4dcb03161cd3ee561c843d7f724b8c3cf01baef7fd2b21792f9711147",
-)
+
+
+@dataclass(frozen=True)
+class BoardPins:
+    cdb: str
+    map_prefix: str
+    objects: tuple
+    listings: tuple
+
+
+# zdo_runtime.h includes board.h (BOARD_MODEL; LG also declares
+# board_early_off), so mac_link_workspace's SDCC symbol keys, CDB/map debug
+# records and object symbol order are board-specific; its CODE is not. The
+# raw CDB selects exactly one complete board set; sets are never mixed.
+_OBJECTS = ("e055058223c4e704a9d97c8c6efd3f028920bcaaa9cfd70273e65cad5d33cb11",
+            "c2c851f453375df8b7175fba398cb0d1da5dc171231e27fe21bd54bcf79117a3",
+            "f80e0539b57b42e16383e44ab0176827f5b6923663803953cf9af4b7df00fb19")
+_LISTINGS = ("4b9e94585f97d6cd9be29f347ebca7c6b2846c3cd76d001cfbdec57c1c21a89d",
+             "6c2b4b1d9f81450db84b3c804c5f5c25e4abe967fdc498c135627133d3091f4e",
+             "13bd83b4dcb03161cd3ee561c843d7f724b8c3cf01baef7fd2b21792f9711147")
+BOARD_PINS = {
+    "generic": BoardPins(
+        "712bb9730cab7c633317a95fe2ba47258e97d048c7f35c98f456b7af719f781a",
+        "fa25f30814e3b87f5206807b3511acb42c5e15165ff133cd6440fb4511da1d2a",
+        (_OBJECTS[0], "74739b39b67f1c76a44cd2da863a743c40b437fd4d10d5dbebf950d2d12b96e5", *_OBJECTS[1:]),
+        (_LISTINGS[0], "4606e907486cd50b860f48396c67ffe8e2da99f52a102702fc87cc3a012b6fd0", *_LISTINGS[1:])),
+    "lg_esl29_rev03": BoardPins(
+        "88cee00df8017f8ff1dbff42eab141de261e27ab27fc532cc5a9db1c1d3d11aa",
+        "6590e556952ae57b6a7aae41575403bd129d12b7f53089b9d8bac8eb17aaabad",
+        (_OBJECTS[0], "b07a91afc902b792ba997f687929755a507afd263f7586698fea6583c26ff4bc", *_OBJECTS[1:]),
+        (_LISTINGS[0], "019570f6754d8345c4bf90b8a9ce764d6787d835f36b746783293b17f8e90c5d", *_LISTINGS[1:])),
+}
 RUNTIME = ("___memcpy_PARM_2", "___memcpy_PARM_3", "__gptrput_PARM_2", "__mullong_PARM_2")
 
 
@@ -65,6 +84,13 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def board_pins(debug):
+    """Select the one complete board pin set whose raw CDB matches exactly."""
+    matches = [pins for pins in BOARD_PINS.values() if type(debug) is bytes and sha(debug) == pins.cdb]
+    require(len(matches) == 1, "CHILD ABI complete raw CDB before decoding")
+    return matches[0]
+
+
 def ascii_text(raw, name):
     require(type(raw) is bytes and b"\r" not in raw and b"\0" not in raw,
             "CHILD ABI malformed raw " + name)
@@ -84,7 +110,7 @@ def object_body(raw, module):
     return body.encode("ascii")
 
 
-def map_metadata(raw):
+def map_metadata(raw, prefix_sha):
     """Bind ALL address/area rows, including ambiguous31-character map names.
 
     ASlink MAP is not a full-name symbol dictionary. The complete raw metadata
@@ -97,7 +123,7 @@ def map_metadata(raw):
             "CHILD ABI map inventory sections")
     prefix, rest = raw.split(b"Files Linked")
     files, suffix = rest.split(b"Libraries Linked")
-    require(sha(prefix) == MAP_PREFIX_SHA and sha(suffix) == MAP_SUFFIX_SHA,
+    require(sha(prefix) == prefix_sha and sha(suffix) == MAP_SUFFIX_SHA,
             "CHILD ABI complete map address/area/library/base metadata")
     header = b"                              [ module(s) ]\n\n"
     require(files.startswith(header) and files.endswith(b"\n\n\n"), "CHILD ABI map file framing")
@@ -112,18 +138,17 @@ def map_metadata(raw):
 
 def immutable(artifacts):
     # In particular, never read_text/decode/strip/replace the CDB before this pin.
-    require(type(artifacts.debug) is bytes and sha(artifacts.debug) == CDB_SHA,
-            "CHILD ABI complete raw CDB before decoding")
+    pins = board_pins(artifacts.debug)
     require(sha(code_bytes(artifacts.image, SIZE)) == CODE_SHA, "CHILD ABI complete CODE")
     require(set(artifacts.objects) == set(artifacts.listings) == set(MODULES),
             "CHILD ABI complete source-object/listing inventories")
     require(sha(artifacts.memory) == MEM_SHA, "CHILD ABI complete memory accounting")
-    for module, obj, listing in zip(MODULES, OBJECT_PINS, LIST_PINS):
+    for module, obj, listing in zip(MODULES, pins.objects, pins.listings):
         require(sha(object_body(artifacts.objects[module], module)) == obj,
                 "CHILD ABI complete source object: " + module)
         require(sha(artifacts.listings[module]) == listing,
                 "CHILD ABI complete relocated snapshot: " + module)
-    return map_metadata(artifacts.mapping)
+    return map_metadata(artifacts.mapping, pins.map_prefix)
 
 
 def full_locations(debug):
@@ -299,7 +324,7 @@ def load(output):
     """
     path = output / (STEM + ".ihx")
     debug = path.with_suffix(".cdb").read_bytes()
-    require(sha(debug) == CDB_SHA, "CHILD ABI complete raw CDB before decoding")
+    board_pins(debug)
     require({p.name for p in output.glob("*.rel")} == {m + ".rel" for m in MODULES} and
             {p.name for p in output.glob(STEM + ".*.rst")} == {STEM + "." + m + ".rst" for m in MODULES},
             "CHILD ABI exact on-disk object/snapshot inventories")

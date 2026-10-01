@@ -17,57 +17,57 @@ from boot_zdo_node import FIELDS as NODE_FIELDS, OBJECTS as NODE_OBJECTS, reject
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
 MODULES = ("zdo_srv", "zdo_node", "aps_frame", "nwk_frame", "zdo_srv_test")
-SIZE, XDATA, CHECKS, PEAK = 15802, 834, 1694, 0x65
-CODE_BUDGET, XDATA_BUDGET = 16384, 1024
-CODE_SHA = "2f0bf8dbddd7a755a1cbee35d99c87f51189dd3cb31202ddffab9f4fe7a8b9f0"
-CDB_SHA = "1539763f76bb53b34243679d8f8fc65a745064063cfd4a3c55710abd83193f0e"
-MAP_SHA = "bd006cf2f138aee6dfdbb22efeb3c6c3e525e828be88e579bc459d561bc5365e"
-MEM_SHA = "5154f2237e9fd2b5998f449c3113681c02f3c242440c4ced35b87b20131f3a09"
+SIZE, XDATA, CHECKS, PEAK = 18578, 843, 1818, 0x65
+CODE_BUDGET, XDATA_BUDGET = 24576, 1024
+CODE_SHA = "10b925d964fa4e5a8c1c9c88cab41efd26fc56e51c72885ac969e4fbaf13aa07"
+CDB_SHA = "3a1f364ae65dfe1ef3b29dd7e8f5f034ccfed987d058b13e4fd52a70591feb2f"
+MAP_SHA = "ea20c07db3f03ada7dfc9eeeb7939d3747765115fc5f2ae41a21d166a5130ac3"
+MEM_SHA = "2e77fdd6859e9cfd3bf097d7c49c5d97eaf5df5e41ed8c1a2e580aa0e296f9a5"
 LIST_SHA = dict(zip(MODULES, (
-    "b95b4ea964938cbfa35e6bdf36ff580f21210d62e4ae0384be16ac27f115550a",
-    "76dfc437b842e35e4f5b04ce27881ef39e53ec3d6c5e81fdd0bd0adb445a27af",
-    "1bf2f7dceb33652e1e181e72cb701e75f51b2f302021597a808678a56a577077",
-    "6c1d498597a76069788f5f39d0c965adc02f58b63ebcb73321848aa928b7e567",
-    "252e1fca66c01802f6cc4c219f5d60c3afee8d3200b734dc30760c8656cd6daf",
+    "efb5e0f5ffb41438a8d10adf5156906fef17744b86f5c08d1e045aa9dec0af22",
+    "f4158f572c21a9388ba0c36e781157dca4b6a264d9405a5949a69ef642633980",
+    "707fcdac0cd0c35a930757f272d22b4a7012fe76cc0c4832530c3e465b630d13",
+    "754c95cb483f34c28110747240105dd8b61964fb644f0a03f3f519e4be4766d4",
+    "78cf3d4ca4a37c18bfa8cc17424dc5823326500b11c50e14aabe414ad2e5d877",
 )))
 METRICS = dict(zip(MODULES, (
-    (977, 1534, "690f459ac874c999019388193682e3d5c90f7341feb9ff20ba7ab0f4ec35ee96"),
-    (1758, 3133, "9feff0ed6db8fac2582f0c1b194dc17e7442ffaca9f277371bc76f32355ccc51"),
-    (939, 1626, "26cc467cd1ee12e61f6592aed1a3994a4d34ee908f96776248ef24923b76eec1"),
-    (1344, 2294, "8e9c9a80efc1e7d3b515b6a53d19dec5f501c044e593aa4b0da0dc495c7aad98"),
-    (3869, 6587, "c5a5d9cbcdf4b3f81e881641d220840df4d419a5aa01467ec11a6b512dccd9f3"),
+    (1543, 2416, "70544f186ea647e16100b7fafa8bb47ac06c903d47d492526ce8a057228c1309"),
+    (1758, 3133, "c1b3b48e51f1813999995e82ae9d7e07498d572c2b2ccf4e205fcad17c05f355"),
+    (939, 1626, "91779b4cade774e2cd80fbaa0c8af6355ad12e88108d39a84a93aaf97ebfc3c0"),
+    (1344, 2294, "595f0fde6a76f16708e31afa1c47adf8b23eef38e490d00d9defcf4354a7e1b4"),
+    (4943, 8445, "2f8a197d014357ea28b4a8b8f29e72a98c1b18f772583770c85690667909a8f6"),
 )))
 # Total CODE including constants/startup contributions, XSEG, DSEG, OSEG, BSEG.
 OBJECTS = {
-    "zdo_srv": ((1534, 69, 0, 0, 0), "70efeb82d281ea28f30936dc85c2abbdf3282bb168d56f3f63a59d009edc9197"),
+    "zdo_srv": ((2416, 69, 0, 0, 0), "efd37f56e7bcc3debea5f436d28c3bf7c1169e624a858966cd92250ede609973"),
     "zdo_node": NODE_OBJECTS["zdo_node"],
     "aps_frame": NODE_OBJECTS["aps_frame"],
     "nwk_frame": ((2294, 96, 12, 10, 0), "f1d39e71ec25fe27d8f4e269a09810541fcfc830705ea37c640fcd4611d4341a"),
-    "zdo_srv_test": ((6688, 494, 4, 0, 1), "ad87dcb65d83a27a69fecd73c73718a5eaaee9e1ac41f2d21389ad3f59d7da5e"),
+    "zdo_srv_test": ((8582, 503, 4, 0, 1), "8ba089a411d04960f05990dee86791c993e58e7c3892849d52da20f2ef9fc333"),
 }
 PUBLIC = {
     "zdo_srv_handle": ("zdo_srv", 98),
-    "zdo_node_req_decode": ("zdo_node", 3263), "zdo_node_req_encode": ("zdo_node", 3499),
-    "zdo_node_rsp_decode": ("zdo_node", 3694), "zdo_node_rsp_encode": ("zdo_node", 4288),
-    "aps_frame_decode": ("aps_frame", 5057), "aps_frame_encode": ("aps_frame", 6090),
-    "nwk_frame_decode": ("nwk_frame", 6917), "nwk_frame_encode": ("nwk_frame", 8346),
+    "zdo_node_req_decode": ("zdo_node", 4145), "zdo_node_req_encode": ("zdo_node", 4381),
+    "zdo_node_rsp_decode": ("zdo_node", 4576), "zdo_node_rsp_encode": ("zdo_node", 5170),
+    "aps_frame_decode": ("aps_frame", 5939), "aps_frame_encode": ("aps_frame", 6972),
+    "nwk_frame_decode": ("nwk_frame", 7799), "nwk_frame_encode": ("nwk_frame", 9228),
 }
 CALLER = {
-    "local": (324, 16), "rx": (340, 11), "info": (351, 8), "decoded": (359, 20),
-    "input": (379, 101), "output": (480, 19), "nwk": (499, 27), "network": (526, 29),
-    "aps": (555, 10), "transport": (565, 12), "apdu": (577, 108), "npdu": (685, 116),
-    "aps_length": (801, 1), "nwk_length": (802, 1),
+    "local": (324, 19), "rx": (343, 11), "info": (354, 8), "decoded": (362, 20),
+    "input": (382, 101), "output": (483, 19), "nwk": (502, 27), "network": (529, 29),
+    "aps": (558, 10), "transport": (568, 12), "apdu": (580, 108), "npdu": (688, 116),
+    "aps_length": (804, 1), "nwk_length": (805, 1),
 }
 RUNTIME = {
-    "___memcpy_PARM_2": 814, "___memcpy_PARM_3": 817, "_memset_PARM_2": 822,
-    "_memset_PARM_3": 823, "__gptrput_PARM_2": 825, "_memcmp_PARM_2": 826, "_memcmp_PARM_3": 829,
+    "___memcpy_PARM_2": 823, "___memcpy_PARM_3": 826, "_memset_PARM_2": 831,
+    "_memset_PARM_3": 832, "__gptrput_PARM_2": 834, "_memcmp_PARM_2": 835, "_memcmp_PARM_3": 838,
 }
 FIELDS = {
     0: ((0, "type", 1), (1, "delivery_mode", 1), (2, "flags", 1), (3, "destination_endpoint", 1),
         (4, "cluster_id", 2), (6, "profile_id", 2), (8, "source_endpoint", 1), (9, "counter", 1)),
     1: ((0, "header", 10), (10, "payload_offset", 1), (11, "payload_length", 1)),
     2: NODE_FIELDS[0], 3: NODE_FIELDS[1], 4: NODE_FIELDS[2],
-    5: ((0, "descriptor", 14), (14, "address", 2)),
+    5: ((0, "descriptor", 14), (14, "address", 2), (16, "profile", 2), (18, "endpoint", 1)),
     6: ((0, "header", 10), (10, "broadcast", 1)),
     7: ((0, "cluster_id", 2), (2, "kind", 1), (3, "endpoint", 1), (4, "sequence", 1),
         (5, "status", 1), (6, "length", 1), (7, "consumed", 1)),
@@ -130,13 +130,13 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         ("body", "{3}DG,SC:U"), ("length", "{2}SI:U"),
         ("response", "{3}DG,SC:U"), ("capacity", "{2}SI:U"), ("info", "{3}DG,ST__00000007:S"),
         ("reply", "{20}ST__00000004:S"), ("request", "{4}ST__00000003:S"),
-        ("candidate", "{8}ST__00000007:S"), ("staged", "{17}DA17d,SC:U"),
+        ("candidate", "{8}ST__00000007:S"), ("staged", "{17}DA17d,SC:U"), ("simple", "{1}SC:U"),
     ):
         require(re.search(r"^S:Lzdo_srv.zdo_srv_handle\$" + name + r"\$[^(]+\(" + re.escape(spec)
                           + r"\),F,0,0$", debug, re.M), "ZDO dispatch argument/staging ABI changed")
     for module, lo, hi in (("zdo_srv", 0, 69), ("zdo_node", 69, 155),
                            ("aps_frame", 155, 224), ("nwk_frame", 224, 320),
-                           ("test_zdo_srv", 803, 814)):
+                           ("test_zdo_srv", 806, 823)):
         require(private_span(debug, module) == set(range(lo, hi)),
                 "ZDO dispatch private storage boundary changed")
     caller = set(range(320, 324))
@@ -149,7 +149,7 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         span = set(range(address, address + size))
         require(not caller & span and span <= allocated, "ZDO dispatch caller overlap")
         caller.update(span)
-    require(caller == set(range(320, 803)) and all(symbols.get(k) == v for k, v in RUNTIME.items())
+    require(caller == set(range(320, 806)) and all(symbols.get(k) == v for k, v in RUNTIME.items())
             and allocated == set(range(XDATA)) | set(range(0x1e00, 0x1e08)),
             "ZDO dispatch caller/runtime/status ownership changed")
     for name, (module, address) in PUBLIC.items():
@@ -167,9 +167,9 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         calls = {int.from_bytes(raw[1:], "big") for a, raw in instructions.items()
                  if lo <= a <= hi and len(raw) == 3 and raw[0] == 0x12}
         require(all(PUBLIC[t][1] in calls for t in targets), "ZDO dispatch bypasses genuine composition")
-    require(symbols["_main"] == 15208 and symbols["_zdo_srv_done"] == 15281
-            and instructions.get(15281) == b"\0"
-            and code_bytes(image, SIZE)[15281:15284] == b"\0\x80\xfe", "ZDO dispatch checkpoint changed")
+    require(symbols["_main"] == 17966 and symbols["_zdo_srv_done"] == 18039
+            and instructions.get(18039) == b"\0"
+            and code_bytes(image, SIZE)[18039:18042] == b"\0\x80\xfe", "ZDO dispatch checkpoint changed")
     return allocated
 
 
@@ -199,7 +199,7 @@ def negatives(image, symbols, debug_raw, memory, listings, objects):
                 debug_raw + b"\n", debug_raw + b"\xff"):
         reject(debug_raw=raw)
     reject(memory=memory.replace(b"181 bytes available", b"180 bytes available"))
-    reject(memory=memory.replace(b"834", b"835"))
+    reject(memory=memory.replace(b"843", b"844"))
     reject(listings={m: listings[m] for m in MODULES[:-1]})
     for module in MODULES:
         lines = listings[module].splitlines(keepends=True)
@@ -250,7 +250,7 @@ def main():
     objects = {m: (args.output / f"{m}.rel").read_bytes() for m in MODULES}
     allocated = verify(image, symbols, debug_raw, memory, listings, objects)
     count = negatives(image, symbols, debug_raw, memory, listings, objects)
-    require(count == 46446, "ZDO dispatch artifact rejection inventory changed")
+    require(count == 54409, "ZDO dispatch artifact rejection inventory changed")
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, False))
     commands = [ALIAS, "fill xram 0 0x1eff 0xa5", f"run 0 {symbols['_main']:#x}",

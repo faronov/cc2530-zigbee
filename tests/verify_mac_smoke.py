@@ -161,7 +161,7 @@ def structure(artifacts, board):
                          overlay=set(range(0x4c,0x56)),frame_areas=frame_areas,
                          physical=("mac_smoke_iram_low","mac_smoke_iram_high"))
     sites = mmio_sites(image,debug,{m:v.decode("ascii") for m,v in listings.items()},handoff=True)
-    require(len(sites)==165, "Smoke unchanged lower MMIO inventory")
+    require(len(sites)==172, "Smoke unchanged lower MMIO inventory")
     for name in ("wait","end","fault"):
         require(symbols["_mac_smoke_"+name] < 0x8000, "Smoke checkpoint outside common CODE")
     require("S:G$mac_smoke_status$0_0$0({64}" in debug and

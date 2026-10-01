@@ -22,15 +22,15 @@ from verify_firmware import (cdb_address, code_bytes, parse_ihex, parse_symbols,
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch",
            "mac_radio", "mac_attempt", "test_mac_attempt")
 CASES = 33
-SIZE, XDATA, STACK = 25390, 1477, 0x5a
-CODE_SHA = "72fda360280aacf985abb1171a5c32f487c18a8d244c09259ef7ee4383e7bca7"
-CDB_SHA = "10c48b3397801885a20071c79d1904b409995c694f3424199dcec2b5098c890e"
-MAP_SHA = "1faff6db5bef5cbce792490dea850db75273d6d68179cd6c4ee246d6c8919b90"
-MEM_SHA = "9fc91e02aef847acb4db15d8f57369c8cdd51d5457b2a5dec1484f739dcdb203"
-LIST_SHA = "46dfd9e4adc542e23fae54e51a07d95feb287e09f4f448aed0e8306fec053fd6"
-OBJECT_SHA = "20640443d0bcc0a43b2d468ca0a78697bd5336f3a52793ef9f71d0f8ae7fb9d8"
-INVENTORY = (391, 181287, 119, 121)
-NEGATIVES = 79832
+SIZE, XDATA, STACK = 25401, 1477, 0x5a
+CODE_SHA = "43da365375024a89cd8ba1c33b7c4952b4f88ec7f8af9ce743b4a3c27b9f734e"
+CDB_SHA = "713793b7e56c0b11a964368d4d867ca0b1c66fd0fb227ab2c61fe8e41b0bdedc"
+MAP_SHA = "f5ca58746d4dbfc733d47b57530aac7a36ef1dfa75a7eb92623ada2c9eb8cd93"
+MEM_SHA = "fd25b3f7bc2ec26dae7252069dd6c1a55b93a9d816881925580188137bc51deb"
+LIST_SHA = "3465f90fce4d5567f4ae7077b1f0f6b04d25c6304826ce2fb3874e510b21da0a"
+OBJECT_SHA = "c13c680c19a8af511305ef5f91a46548580b4735ea5502f27ebd060d214e76c4"
+INVENTORY = (391, 181474, 119, 121)
+NEGATIVES = 79861
 CALLER_SIZES = {"config": 14, "frame": 128, "record": 164, "operation": 1,
                 "return": 1, "length": 1, "input": 2, "output": 2, "limit": 2,
                 "window": 2, "timeout": 4}
@@ -91,6 +91,21 @@ def caller(symbols, profile=LEGACY):
     return {name: (symbols["_mac_attempt_test_"+name], size) for name, size in profile.caller_sizes}
 
 
+def switch_table(code, pc, raw):
+    """SDCC switch dispatch: MOV DPTR,#table; JMP @A+DPTR; table of LJMPs.
+
+    The immediate is the CODE address of the table that immediately follows
+    the JMP in the same module, so it cannot be an XDATA/XREG access.
+    """
+    table = pc+4
+    if int.from_bytes(raw[1:], "big") != table or code.get(pc+3) != b"\x73":
+        return False
+    count = 0
+    while len(code.get(table+3*count, b"")) == 3 and code[table+3*count][0] == 0x02:
+        count += 1
+    return count >= 2
+
+
 def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
     require(profile.size <= 32768 and sha(code_bytes(image, profile.size)) == profile.code_sha,
             "Attempt complete CODE")
@@ -139,8 +154,9 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
     require(used == spans[profile.modules[-1]], "Attempt unaccounted caller storage")
     for module in profile.modules[4:]:
         require(not peripheral_accesses(codes[module]) and not any(
-            raw[0] == 0x90 and 0x6000 <= int.from_bytes(raw[1:], "big") < 0x6400
-            for raw in codes[module].values()), "Attempt upper-layer MMIO bypass")
+            raw[0] == 0x90 and 0x6000 <= int.from_bytes(raw[1:], "big") < 0x6400 and
+            not switch_table(codes[module], pc, raw)
+            for pc, raw in codes[module].items()), "Attempt upper-layer MMIO bypass")
     for module, names in (
         ("mac_attempt", ("mac_radio_init", "mac_radio_prepare", "mac_radio_attempt",
                          "mac_radio_receive", "mac_radio_stop", "mac_radio_resume", "mac_epoch_step")),

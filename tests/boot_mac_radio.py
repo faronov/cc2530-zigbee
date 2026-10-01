@@ -23,10 +23,10 @@ from verify_firmware import (
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch", "mac_radio", "test_mac_radio")
 SIZE, XDATA, CASES = 15316, 760, 54
 CODE_SHA = "94777c5d01556cf4339764d8112bde1aafe6aad97c9b8a8dc026523fb29b1cd7"
-CDB_SHA = "7a1eaefbe642aef34b0b07420b20c3ada38513c6306b703e13c077943768e7c0"
+CDB_SHA = "6479129f4774f475043fdc1bf15c79ce724a930aafc986acb3ea8a78917b1f6a"
 MAP_SHA = "7dfd7d79e48a1b4594076d755cd2a814fc470d176e9167c7904fc8be8a56278e"
-LIST_SHA = "f87980582d911ce261c5b232d6976f22a5a1b56308e645be230390e77454df16"
-OBJECT_SHA = "08f0d1bc1d67fa737c68f61f4bef52fbcd263c4de42e2df0c4265909c373d3e9"
+LIST_SHA = "4b4b93ca2783f4147f7f6db7d8205a9eb7c8db8d8b321f1dec8cd8d0c7c31659"
+OBJECT_SHA = "d16843631fffaaa11217c39374f3c31b4dc4363331a5649982f08d446111cc4f"
 CALLER = {"config": (587, 14), "frame": (601, 128), "stamp": (729, 6),
           "operation": (735, 1), "return": (736, 1), "length": (737, 1),
           "input": (738, 2), "output": (740, 2), "limit": (742, 2), "timeout": (744, 4)}
@@ -294,7 +294,7 @@ def main():
                for m in MODULES}
     allocated, sites = verify(image, symbols, debug, memory, listings, objects)
     count = negatives(image, symbols, debug, memory, listings, objects)
-    require(count == 48887, "MAC radio artifact rejection inventory changed")
+    require(count == 48890, "MAC radio artifact rejection inventory changed")
     check_alias(args.simulator); rejected(lambda: check_alias(args.simulator, False))
     sampled = peak = calls = events = 0
     addresses = [symbols["_mac_radio_" + n] for n in (

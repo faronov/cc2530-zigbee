@@ -190,6 +190,11 @@ CONST ends7A20 exclusive. Complete DATA liveness checks157 functions on LG
 module sums. No lower production source, old budget or old verifier pin is
 changed. The native model's address mapping is synthetic; the independent
 linked verifier establishes genuine source/compiler/libc placement.
+After the later committed scan, RX-overflow and time-guard lower-service
+changes, the current images use59339 (LG)/59299 (generic) CODE bytes with
+bank2=6830, LG CONST7E2E..7E69 exclusive, highest physical byte11AAD,
+2537 ordinary XDATA bytes, a172-site lower MMIO inventory and liveness over
+156/155 functions with560 combinations.
 
 Raw CDB bytes are pinned before decoding. Complete CODE/address bytes,
 source objects, immediately snapshotted relocated listings, memory report

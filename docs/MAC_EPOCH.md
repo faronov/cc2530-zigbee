@@ -119,7 +119,7 @@ does not claim whole-stack memory or interrupt-nesting headroom.
 CODE SHA-256:
 `f3b736e20ab790097034cb4e0676dc37279033c18d2bda0a5444a0a1f58e58f5`.
 Raw CDB SHA-256:
-`3ccacc99c08c9a3780a249573ae829c2957b2ec592fb9c8ec15962c6249ab4ad`.
+`c6fd741405367815fd51fe312ca30f6abd037f3cf2baf484490b9c8a4e5d3973`.
 
 The proof binds every CODE/runtime/constant byte, raw CDB before decoding
 (including all public/private F/S/L/T records and multiplicities), every map

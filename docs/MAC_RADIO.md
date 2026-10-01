@@ -103,7 +103,7 @@ operator, dependency or automatic RF step is added.
 
 Prepared evidence is **host-tested, image-checked and simulated**:
 62,532 native calls (also with nonrecovering ASan/UBSan),282 genuine target
-calls/82,709 MMIO events,48,887 artifact negatives and one missing-alias
+calls/82,709 MMIO events,48,890 artifact negatives and one missing-alias
 negative. The CI matrix preserves its28 board/image jobs and adds two
 dedicated composition jobs (also running delayed stamps and synthetic
 temperature reporting and staged association); the existing debug-fixture jobs run

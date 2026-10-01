@@ -22,11 +22,11 @@ Full acceptance belongs to the completed Actions run, not merely compilation.
 
 | Region | Placement | Populated bytes |
 | --- | --- | ---: |
-| Common CODE | Startup, runtime, real crypto/NV, codecs, caller and libc | 24992 |
-| Bank1 | `security_keys`, virtual `18000..1C28E` | 17039 |
+| Common CODE | Startup, runtime, real crypto/NV, codecs, caller and libc | 25179 |
+| Bank1 | `security_keys`, virtual `18000..1C2FA` | 17147 |
 | Bank2 | `ed_wire`, virtual `28000..29C24` | 7205 |
-| Complete executable | Sparse canonical bank identities | 49236 |
-| Ordinary XDATA | All production/caller/compiler/libc storage | 3564 |
+| Complete executable | Sparse canonical bank identities | 49531 |
+| Ordinary XDATA | All production/caller/compiler/libc storage | 3574 |
 | Status | Separately reserved at `1E00` | 64 |
 
 The composition budgets remain 51200 populated CODE bytes and 4096 total
@@ -151,6 +151,18 @@ the larger complete-join caller's SP7B result. The corrected `08672c5`
 passed [full Actions36124292416](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416),
 64/64 jobs, including both unchanged-limit key-lifecycle workers.
 
+The later table-driven journal CRC and staged counter create/restage grow
+common CODE by187 bytes and bank1 `security_keys` by108, giving49531
+CODE /3574 ordinary XDATA; the source/libc boundary moves to3554 and
+`__gptrput_PARM_2` to3565, and the counter DATA frame shrinks from14 to8.
+Provisioning now stages the counter record and association restages it, so
+calls2 and3 of the native reference trace no longer touch flash; every call
+result and metadata byte is unchanged, later NV generations are two lower
+and the final committed record bodies are identical. The10 added XDATA
+bytes remove10 unowned-byte outcome mutations (10345->10335) and the larger
+CODE extent adds artifact negatives (246199->247674,49531*5+19); peak SP
+remains `77`.
+
 ## Executed contract
 
 The native and nonrecovering sanitizer references agree on the complete
@@ -190,12 +202,14 @@ must fail. A separate public provisioning attempt exhausts a busy flash
 command in the real RAM fail-stop and stays there after later synthetic idle,
 without successful publication or media replacement.
 
-The regular lifecycle executes128 actual AES calls and532 flash-RAM commands.
+The regular lifecycle executes128 actual AES calls and532 flash-RAM commands
+(measured before staged create removed the provisioning/association writes;
+the command total is not separately pinned or re-counted).
 Its maximum SP is `77` under the unchanged `7C` cap. Full acceptance requires
-246199 artifact and10345 outcome negatives, without sampling either count.
+247674 artifact and10335 outcome negatives, without sampling either count.
 The explicit affected tier may defer only the exhaustive artifact corruption
 campaign (`ARTIFACT_CAMPAIGN=deferred`); complete immutable artifact/layout
-checks, all real execution,10345 outcome negatives, aliases/stack and retained
+checks, all real execution,10335 outcome negatives, aliases/stack and retained
 busy failure still run. The Make default remains `full`, and CI runs the
 complete campaign on full/nightly/release/verification changes. See the
 [tier and coverage contract](VALIDATION.md#risk-based-selection-and-host-coverage).

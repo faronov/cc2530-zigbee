@@ -28,42 +28,42 @@ RESERVATION_SHA = (
     "86f19238fd20241b40f25d1e7c2bb341c0aa5d6f9d471f4ff1a56940230d1feb",
     "3cd06fb264f02be0947c0894be74fc9c6c7311ccc25d92e6f78c04511df50577")
 # CODE, raw CDB, complete map, memory report, ordered complete listing manifest.
-PINS = {'security': (31761,
-              3110,
+PINS = {'security': (31948,
+              3116,
               'security_test',
               'security',
-              ('12fd37133c82662edef2b6c845ff3256359a16a1513708557bdf1b516cb3c0f4',
-               '5daf4646f1333cedfdf188dca0ad63584c0ca535a0094f6da9e9ed47e1e89c01',
-               'cc92ec8c6571a2117a1ec8014291c7bb148d39e3e3188b8238e758d538e53828',
-               'cfd00596b070d8ee908120603b55d8bfed1e8ab5884849f9265f7a2517253819',
-               '5d9666e8618d2d7d31a23f6ff764b357dacdf76c5f74d20938260cc2ea4b1ee4')),
- 'mmo': (29396,
-         2376,
+              ('7e4f2ba9b958ad2de9426b0ba95cfd5f73f9dd2240037f3ca4aaf72cfc8c4c1a',
+               '50a691514b11af00771a10c3c05a19d944cf4464ee88e82ef26a58ccdad768bd',
+               '9a85100494240e80c426ce6ad80336808d5e3b6062afc1c3a634799676f66e82',
+               '7bee3f68f8e7531c56e775b81f48afd41c81142998c7f8c4ce68bc70a80805b8',
+               '78df08e507dbc6973fe50ae1d14869374e79a39f21fe4f174215308fbd0e9e1c')),
+ 'mmo': (29583,
+         2382,
          'mmo_test',
          'mmo',
-         ('f2beaa5c2dd480254aa750d6f5a123b108be6e1dd7379888afd77c0445cca7bd',
-          '7fc6f9bee99048b54cd294e4e64e6ccf0cd188e899cb7db04e2d330109a42ab7',
-          '5720ec334ba9e25693ce86553a8e978f58e36fcb0158d215b67ae54939e9371f',
-          '609378d870c4bef59d20e20979cf3ba237bca0fe57dcbe1ca5bfaf9c5d4499d8',
-          'd6f1eb5119e547902e10e4d799ec600826b40832cc8d1c90d7bc02c36baa01b9')),
- 'key_hash': (29750,
-              2379,
+         ('5851a713b3ffc6a447dea724bfbaf73a794446706f382b0eb0a9a8a19a3ea849',
+          'f5dae5404a8af2637f23f8a2d3c464c1ccd90979ff53bb4ca0efb41b0d94d689',
+          'd46da96f6e6de088b1da30f58b9f242306d57c0dedf3683d6240d1f6e461f8c6',
+          '65b939913973524aaa7d49fe0a1f3616627e4ddc92290a37073a4df165f94ca2',
+          'c9d738a1f700d3564f04174891b9fd32ea1dbbeb6ea30b49a90d89a0a1b12d0f')),
+ 'key_hash': (29937,
+              2385,
               'key_hash_test',
               'kh',
-              ('c36ccc9f35b26d4a63a322bb3c4906b44a9fba2436e65976c452d0f3b7ef957c',
-               'a961fb39130a632dbbb8d4964600acff98f7302dde85ab7a11d4aab963e0ebdf',
-               '0fce774fff15e0a06cd767a46e8043249411e7e5505e387db22ddc5c719ab4fc',
-               'f17df01914b79b4bdd004146bbc7d833f8df515aa4a16a4008faf33f020a27ee',
-               '274e880a44d65c22d263e2b6e2ec93967505dab9ca2680f813188482f2fc0447')),
- 'counter': (28206,
-             2434,
+              ('1e0b0b3be2e1504040b296a0e7314de55d6a14f649edd8dd6a792b03b0f73eaa',
+               '434b45aea53dd77cc86ed589d5c8f1d14e4286ace1c1e9bb3821779513098d54',
+               'd734ac0278588c316445985e8c28522d31c451411fd3792a10a443131c8de8ca',
+               '58f4a9ac14c2a47bbf5519da1a2b2dbbdf2cbd5bc9fc96188626493f1cf46f5f',
+               '1b604e5907589720702c0122fcfb9dfdbf0da1b5e246ab80d9135fa04eb8c338')),
+ 'counter': (28393,
+             2440,
              'security_counter_test',
              'counter_test',
-             ('4a12aa3ca9285dcc85a773ab97ae77badfbb583a97d3f045a400a4536246dc8b',
-              '198e9f12d2e8b86515eb3f1872451601b11760e6328e98dac14862b06460a1fe',
-              '8405a5405f3080647b52127984348d1c1f1fd51d96f61bb4360e2e780742ca89',
-              '8c7ce9c276b30bebb8a50b59c87fc9f4f17ea9faebaeb92ef1ed03ac1000791a',
-              '2db899b38ef95db09c9b59546179b00ddd2ab0336422f07a4fa19d1c050282aa'))}
+             ('b90c0913d306a97263670c2c0edad5a1c4d0381f72afe96b73a0359babb09983',
+              'f88e3d7328f5d0643658739b653cd07c74d48db4174c281491d57a49260faa12',
+              '7e83388d5f2a61b534901f7b793b32da8a5d62ae1b113112f3c126ffce78ed1e',
+              'fd34aaca80dd7d23720e7e33869206cdfa9b81e2289e82fb7b2adc4da64abd66',
+              '644265b668504d28516a0a5183b42a28bfdde0e0df1abaa75525170f78600f1e'))}
 LENGTHS = tuple(int(n) for row in (
     "1231121111111111", "3231121111111111", "3211221111111111", "3211221111111111",
     "2223221111111111", "2223221111111111", "2223221111111111", "2221232222222222",
@@ -82,12 +82,12 @@ PEAKS = {name: tuple(p+0x51-module.STACK for p in module.PEAKS)
          for name, module in (("security", aes), ("mmo", mmo), ("key_hash", keyed))}
 # Exhaustively executed inventories for the new complete compiler artifacts;
 # no old mutation class is omitted. INACTIVE still covers every inactive byte.
-NEGATIVES = {"security": 99515, "mmo": 93175, "key_hash": 92820, "counter": 89793}
+NEGATIVES = {"security": 99929, "mmo": 93589, "key_hash": 93234, "counter": 90210}
 INACTIVE = {
-    "security": ((0, 995), (2080, 2284)),
-    "mmo": ((0, 995), (1202, 2080), (2207, 2284)),
-    "key_hash": ((0, 995), (1202, 2080)),
-    "counter": ((995, 2284), (2414, 2434)),
+    "security": ((0, 1001), (2086, 2290)),
+    "mmo": ((0, 1001), (1208, 2086), (2213, 2290)),
+    "key_hash": ((0, 1001), (1208, 2086)),
+    "counter": ((1001, 2290), (2420, 2440)),
 }
 _pinned_cdb = {}
 
@@ -264,7 +264,7 @@ def verify(kind, image, symbols, debug_raw, memory, listings, objects):
             owned |= span; storage |= span
         require(owned == set(range(offset, offset+extents[1])), "Resident complete source XDATA span changed")
         offset += extents[1]
-    require(offset == 2284+OBJECTS[caller][1][1] and
+    require(offset == 2290+OBJECTS[caller][1][1] and
             min(symbols[n+"_PARM_2"] for n in LIBRARY if n+"_PARM_2" in symbols) == offset,
             "Resident complete caller/libc scratch boundary changed")
     for key, module, length in re.findall(r"^S:(L([^.$]+)\.[^(\n]+)\(\{(\d+)\}[^)\n]*\),E,0,0$", debug, re.M):
@@ -278,8 +278,8 @@ def verify(kind, image, symbols, debug_raw, memory, listings, objects):
     require(all(symbols[n] == value for n, value in counter.ABI.items()
                 if n.startswith("_security_counter_")), "Resident lower counter ABI/fence changed")
     require([(pc, int.from_bytes(raw[1:], "big")) for pc, raw in decoded.items()
-             if 0xc3f <= pc < 0x1a40 and raw[0] == 0x12 and int.from_bytes(raw[1:], "big") < 0xc3f] ==
-            [(counter.journal.READ_CALL, 0x5e0), (counter.journal.PROGRAM_CALL, 0xbf7), (0x174c, 0xbc6)],
+             if 0xc3f <= pc < 0x1a57 and raw[0] == 0x12 and int.from_bytes(raw[1:], "big") < 0xc3f] ==
+            [(counter.journal.READ_CALL, 0x5e0), (counter.journal.PROGRAM_CALL, 0xbf7), (0x1763, 0xbc6)],
             "Resident journal no longer reaches actual flash calls at the replay boundaries")
     edges = call_graph(image, symbols, decoded, owners, caller, frames)
     sites, code = aes.aes_sites(listings["aes"].decode("ascii"))
@@ -368,7 +368,7 @@ def run_counter(simulator, path, artifacts, allocated):
         client = CounterClient(artifacts[1])
         try:
             observed, count, physical = counter.journal.execute(
-                simulator, path, artifacts[0], allocated, 0x174c, media, operations, client)
+                simulator, path, artifacts[0], allocated, 0x1763, media, operations, client)
         except (ValueError, KeyError) as exc:
             raise ValueError(f"Resident counter sequence {number}: {exc}") from exc
         require(observed <= 0x7c, "Resident counter crossed original stack cap")
@@ -379,7 +379,7 @@ def run_counter(simulator, path, artifacts, allocated):
         peak = max(peak, observed); calls += count; commands += physical
         segments += len(client.continuations); total += 1
     # Independently replayed with resident DATA reservations and stack start 51.
-    require((total, calls, commands, segments, peak, bad) == (56, 36695, 919, 162, 0x75, 204),
+    require((total, calls, commands, segments, peak, bad) == (56, 36301, 909, 162, 0x71, 204),
             f"Resident original counter sequence/call/command/continuation/peak/negative coverage changed: "
             f"{(total, calls, commands, segments, peak, bad)}")
     return total, segments, calls, peak, bad+1309

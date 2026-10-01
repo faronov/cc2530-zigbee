@@ -67,7 +67,12 @@ this is not secure key erasure.
 
 `security_counter_open()` returning EMPTY is **not evidence of a virgin
 device**. `security_counter_create()` is an explicit provisioning operation,
-permitted only after EMPTY. The caller must independently establish unused
+permitted only after EMPTY. It only stages floors and payload in RAM
+(READY, generation 0) and does no flash work; `security_counter_restage()`
+replaces that staged payload while keeping its floors. The first take or
+save rechecks that the journal is still EMPTY (else ROLLBACK) and commits
+generation 1. A reset before that commit leaves the journal EMPTY and
+requires fresh explicit provisioning. The caller must independently establish unused
 identity/key history or trusted nondecreasing starting floors. Never call it
 automatically after missing state, a leave or factory reset. Those procedures
 must retain the counter record and use the counter-preserving save path.
@@ -155,25 +160,25 @@ instruction identities. The journal is the real production C, with its
 relocated constant addresses checked for this composition. Actual NV calls,
 RAM commands, FCTL/FADDR/FWDATA instructions and every programmed byte are
 checked by the shared journal replay, not substituted API results.
-The56 sequences execute36695 traced flash calls and919 actual RAM commands
+The56 sequences execute36301 traced flash calls and909 actual RAM commands
 across162 complete-state segments.
 
 | Resource | Measured / limit |
 | --- | --- |
-|Complete isolated CODE|9907 /12288 bytes|
-|Ordinary XDATA plus status reservation|1125+64 /1280 bytes|
-|Counter module CODE / XDATA|2821 /333 bytes|
-|Stack allocation / checkpoint SP|42 /43 hex|
-|Maximum full-run stack / cap|66 /7C hex|
+|Complete isolated CODE|10094 /12288 bytes|
+|Ordinary XDATA plus status reservation|1131+64 /1280 bytes|
+|Counter module CODE / XDATA|2857 /339 bytes|
+|Stack allocation / checkpoint SP|3C /3D hex|
+|Maximum full-run stack / cap|5C /7C hex|
 
 The journal/private prefix ends at0295; the counter/private compiler fence
-is03E2; caller storage is03E3..0464. There is no linked generic-pointer/libc
+is03E8; caller storage is03E9..046A. There is no linked generic-pointer/libc
 scratch in this composition. Complete CODE, raw CDB before decoding, map,
 memory, objects, listing order/metrics, fields, parameter storage, fences and
 real call chains are pinned; every CODE byte and every F/S/L/T record has
 negative controls. Caller publication, upper IRAM, status tails, unallocated
 XDATA, NV neighbors and unowned peripherals remain guarded.
-There are32269 artifact negatives,204 snapshot/continuation negatives and
+There are32686 artifact negatives,204 snapshot/continuation negatives and
 one missing-IRAM-alias negative; exact sequence/call/segment/peak totals
 are required, not merely printed.
 The complete-join stack reduction uses volatile domain/end/poll/page copies
@@ -183,6 +188,14 @@ standalone execution passes locally; its larger
 [resident composition](SECURITY_RESIDENT.md#execution-and-resource-contract)
 subsequently passed both hosted combined deadline checks without changing
 its corpus or15-minute limit.
+Staged create moves the first commit from create to the first take/save:
+sequence 0 now checks a flash-free create (unchanged diagnostic, NV
+generation still absent) followed by the EMPTY recheck and generation-1
+commit on its first take. The corpus loses one journal read (192 traced
+calls) and one record write (202 calls,10 RAM commands), so calls fall by
+394 and RAM commands by10; counter DSEG
+shrinks from14 to8 bytes and XSEG grows from333 to339, moving the stack
+base from42 to3C and the peak from66 to5C.
 
 Longer multi-operation sequences use complete-state continuations at genuine
 operation boundaries, following the existing offline proof pattern. Each

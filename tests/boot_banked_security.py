@@ -94,7 +94,7 @@ def reference(executable):
     text = subprocess.run([str(executable)], capture_output=True, text=True,
                           check=True, timeout=15).stdout
     require(banking.sha(text.encode("ascii")) ==
-            "b1ea8524cd0ee1443d089dafdc0fb99b5237b8093bbfdf9bc6744ac7c26f6e35",
+            "94d1d2b72dd2e1a9d42e8560ff9bab100e07cdde48fba8fa82f18e703811c278",
             "Complete synthetic AES/flash/key lifecycle reference changed")
     calls, reset, current = [], None, None
     for line in text.splitlines():
@@ -413,8 +413,8 @@ def artifact_campaign(artifacts, campaign):
     if campaign == "full":
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
         # All five address-sensitive mutations per populated byte, plus 19:
-        # 49236 * 5 + 19. This is executed, not a sampled/formula-only campaign.
-        require(count == 246199, "Banked key artifact-negative coverage changed")
+        # 49531 * 5 + 19. This is executed, not a sampled/formula-only campaign.
+        require(count == 247674, "Banked key artifact-negative coverage changed")
         return f"{count} artifact negatives"
     require(campaign == "deferred", "Unknown artifact campaign")
     return "artifact corruption explicitly deferred to full tier"
@@ -435,9 +435,10 @@ def main():
     campaign = artifact_campaign(artifacts, args.artifact_campaign)
     check_alias(args.simulator)
     peak, negatives = run(args.output, args.simulator, artifacts, calls)
-    # Measured complete 22-call replay. Nine added compiler XDATA bytes remove
-    # nine unowned-byte mutations; all named outputs/wipes/media remain checked.
-    require((peak, negatives) == (0x77, 10345),
+    # Measured complete 22-call replay. Ten added source/compiler XDATA bytes
+    # (l_XSEG 3564->3574) remove ten unowned-byte mutations; all named
+    # outputs/wipes/media remain checked.
+    require((peak, negatives) == (0x77, 10335),
             f"Banked key peak/negative coverage changed: SP{peak:02X}, {negatives} negatives")
     run(args.output, args.simulator, artifacts, calls, failure=True)
     print(f"Banked security: 22 real lifecycle operations, {campaign}, "

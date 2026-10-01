@@ -28,13 +28,15 @@ SCALARS = {**dict.fromkeys(("op", "return", "policy", "selector", "random_byte",
            **dict.fromkeys(("limit", "work", "config_ptr", "tx_ptr", "action_ptr", "clock_ptr", "through_ptr"), 2),
            **dict.fromkeys(("timeout", "lifetime", "token"), 4)}
 # Busy CCA verifies empty RSSI-only RX before hard-off and normal-RX restart.
+# Refreshed for the radio_autoack scan filter/RX-loss salvage and mac_time/
+# mac_adapter changes: +1190 CODE only in those modules, four new MMIO sites.
 PINS = (
-    "99124a2d3607a4e4886c0a36395df35e8ee0ddaf3a601cb87bdaadd97cf9e33b",
-    "8148f050d05005361ab28738d4e4a69f85b0097f72c7f2e209b5ec646b9d3267",
-    "2095d9f04e5843493f39ecce793a842a673563d70cbc744e7dadbd0842087d39",
-    "e175866b1d082885034c2225ef4411a5d004abeb1612996ab1ca568fce7b3c88",
-    "8aa59062d586572369d7e540f432e050c3c3bdb9e0123ba0f080e3a2e08d6e60",
-    "7a1d0bcac5faa975c2d78e63489ff1d4fcdf99cdfb79a66bd30dfc5138bd4762",
+    "383f751c1231c17ef6cc9cde5d8b4441f0379d9b7bde17f361572f70103165b3",
+    "14cdb6c1c19ba4ec626fe21daa8c51a7cd6486d7da53b2d00deaa5855a4d40c3",
+    "0de0ffaeca16c6f3a48f0e964dec219b3b110bb62f2eccdbb8fde1d14bef621a",
+    "de01500219d1bfb88f4b0ac6cd89bb0f1ac975e3ab4181d1c17a4a655eb97bb7",
+    "91fec7cde6b4539ab6325294d13399cd1ea97098ba3ded27250605ee3e605bf0",
+    "721a216afd8215347d266981c833e3c99e9a5228c625f4dcd4d249604e3488b1",
 )
 
 
@@ -64,7 +66,7 @@ def artifact_bytes(*artifacts):
 def verify(*artifacts):
     banking.pin_artifacts(artifact_bytes(*artifacts), PINS)
     image, symbols, raw, memory, listings, _ = artifacts
-    require(len(image) == len(banking.pack(image)) == 56005, "Adapter physical CODE accounting")
+    require(len(image) == len(banking.pack(image)) == 56632, "Adapter physical CODE accounting")
     areas = ("HOME", "GSINIT0", "GSINIT1", "GSINIT2", "GSINIT3", "GSINIT4", "GSINIT5",
              "GSINIT", "GSFINAL", "CSEG", "CONST", "MA_BANK1", "MA_BANK2")
     covered = set()
@@ -80,7 +82,7 @@ def verify(*artifacts):
     require((symbols["s_SSEG"], symbols["l_SSEG"], symbols["s_OSEG"], symbols["l_OSEG"],
              symbols["s_BSEG_BYTES"], symbols["l_BSEG_BYTES"], symbols["_banked_depth"],
              symbols["_banked_fault"], symbols["_fixture_status"], symbols["s_XSEG"], symbols["l_XSEG"]) ==
-            (0x56, 0x27, 0x4c, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00, 0, 2842),
+            (0x56, 0x27, 0x4c, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00, 0, 2848),
             "Adapter physical RAM/IRAM/status ABI")
     require(b"16 bit mode initial stack starts at: 0x56 (sp set to 0x55) with 39 bytes available." in memory,
             "Adapter CPU return-address/stack ABI")
@@ -137,7 +139,7 @@ def verify(*artifacts):
             "Upper adapter/protocol layer bypasses the genuine hardware services")
     verify_timebase_reader(image, symbols, debug, 0x1e00, 8)
     verify_clock_code(image, symbols, debug)
-    require(len(mmio_sites(image, debug, {m: r.decode("ascii") for m, r in listings.items()}, handoff=True)) == 168,
+    require(len(mmio_sites(image, debug, {m: r.decode("ascii") for m, r in listings.items()}, handoff=True)) == 172,
             "Actual peripheral instruction inventory changed")
     require(check_data(artifacts) == (145, 560), "Adapter DATA call-lifetime inventory changed")
 

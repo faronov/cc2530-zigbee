@@ -8,14 +8,14 @@ HANDOFF = Profile(
     stem="mac_handoff_test", prefix="mh", native="host-mac-handoff-tests",
     modules=MODULES[:-1]+("test_mac_handoff",),
     caller_sizes=tuple(CALLER_SIZES.items())+(("clock", 6),),
-    size=27962, xdata=1537, stack=0x5c,
-    code_sha="4d71f20c33d2e3fb7f3e47da54833d69c7e4e93ef548cf1fdf5e6ae86df7450c",
-    cdb_sha="8d99a07155281bb30610ab2a2b13e24e40a13af15be4f9612dc9cead9ff3ed06",
-    map_sha="602ccddc2736446b443f85042e82dba3eac1c7b308ac77e0a630e76494ae8d72",
-    mem_sha="2d84dc7ff945bb9b862d0f92f9083445928b789258803b4e7b37a568309630a0",
-    list_sha="087fc53299cb37b01faab8dcb62291a217012f0ec037bf3fb8be8acc3887e9b2",
-    object_sha="3719b463cf4dfab6734f7e65382c865e05f86e1c31b7d8661bf6dca1dc04ea55",
-    cases=76, inventory=(1164, 438415, 121, 123), negatives=87772, handoff=True,
+    size=27973, xdata=1537, stack=0x5c,
+    code_sha="9c391b9b21091663e809910eadfd6203b74be5c5e1364521793e74b750c5880d",
+    cdb_sha="4225b3c1ada3a30eaa25111ad998bf8cdb9c3bb11b74324f8fbf96b664045d19",
+    map_sha="8a2d5e78b01c8f71033b64c2ad4a9cbc534ebd21361bc5a00cd06c88efc0ad23",
+    mem_sha="3997d5dabe368f189112a30c9a65bccfc0820228722f4c83cbfb34efca797425",
+    list_sha="f6b123726aca309c62414f77a3a10937492f6a46709a64a1dc7650e2d19cec32",
+    object_sha="52531d611847cd7cf59b432edcb14810ea5d232ed860d2279318c0c2be7afb4e",
+    cases=76, inventory=(1164, 438789, 121, 123), negatives=87801, handoff=True,
 )
 
 

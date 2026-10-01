@@ -101,10 +101,10 @@ continuations. Only peripherals/media are explicitly synthetic.
 
 | Resident caller | Complete CODE | Ordinary XDATA | Maximum SP, hex | Original corpus |
 | --- | ---: | ---: | ---: | --- |
-| Security envelopes |31761|3110|73|23 cases,220 checks,345 AES calls|
-| MMO/install code |29396|2376|6C|39 cases,117 checks,58 AES calls|
-| Keyed hash |29750|2379|76|15 cases,45 checks,51 AES calls|
-| Outgoing counters |28206|2434|75|56 sequences,36695 flash calls,919 RAM commands,162 continuations|
+| Security envelopes |31948|3116|73|23 cases,220 checks,345 AES calls|
+| MMO/install code |29583|2382|6C|39 cases,117 checks,58 AES calls|
+| Keyed hash |29937|2385|76|15 cases,45 checks,51 AES calls|
+| Outgoing counters |28393|2440|71|56 sequences,36301 flash calls,909 RAM commands,162 continuations|
 
 These are refreshed compiler identities and measured execution after the
 complete-join CCM/counter/journal register-lifetime changes. Both boards'
@@ -123,17 +123,28 @@ failed on the separate protocol-budget identity refresh. The corrected
 [all64 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36124292416),
 including the eight resident workers and Required offline acceptance.
 
+The later table-driven journal CRC (+23 code, +128 CODE table bytes) and
+staged counter create/restage (+36 counter CODE, XSEG +6, DSEG14->8) add
+187 CODE and6 XDATA bytes to every profile and shift the inactive-range and
+journal/erase-site pins by the same amounts. The crypto corpora are
+unchanged. The counter corpus loses one journal read and one record write in
+its first sequence because create no longer commits (see
+[staged create](SECURITY_COUNTERS.md)): calls36695->36301, RAM commands
+919->909, peak SP75->71 with the stack base still51. Artifact negatives rise
+by414 (crypto) and417 (counter) with the larger CODE extent. Both boards'
+full make targets pass locally with these values.
+
 The new profile caps are32768 CODE and3200 total XDATA including64 reserved
 status bytes; executed SP remains at or below the original7C cap. These
 are new full-resident image budgets, **not relaxed original component caps**.
-The largest image leaves1007 CODE bytes below8000; this is not demonstrated
+The largest image leaves820 CODE bytes below8000; this is not demonstrated
 space for the remaining stack. Every existing standalone image identity,
 case, diagnostic, negative control and15-second simulator deadline remains.
 
 Each image consumes sixteen listings captured immediately after its own
 link, before a subsequent link can overwrite relocated listings. All source
 storage extents, complete libc boundaries and artifact identities are pinned.
-Artifact-negative counts are99515/93175/92820/89793 respectively. The
+Artifact-negative counts are99929/93589/93234/90210 respectively. The
 existing snapshot/continuation negatives remain; exact shifted peak checks
 are added for every crypto case. Every call also checks inactive services'
 XDATA, with1199/1950/1873/1309 individual inactive-byte mutations.
