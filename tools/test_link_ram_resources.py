@@ -71,12 +71,12 @@ class LinkRamResourcesTests(unittest.TestCase):
         self.assertEqual(result["object_floor"], 40 + 1798)
         # Two removed key-status snapshot copies; the mac_tx loan/homes, DIRECT
         # reload homes and the direct staging module add a net 40 XSEG.
-        self.assertEqual(ram.DIRECT_LIMITS, {"code": 242949, "const": 1658,
-                                             "xdata": 5747 - 2 * 37 + 40, "data_sum": 603,
+        self.assertEqual(ram.DIRECT_LIMITS, {"code": 242997, "const": 1658,
+                                             "xdata": 5746 - 2 * 37 + 40, "data_sum": 605,
                                              "overlay_sum": 74, "bits": 87})
         # The accepted CHILD ceilings and context are unchanged by DIRECT.
-        self.assertEqual(ram.CHILD_LIMITS, {"code": 241660, "const": 1658, "xdata": 5747,
-                                            "data_sum": 642, "overlay_sum": 74, "bits": 86})
+        self.assertEqual(ram.CHILD_LIMITS, {"code": 241708, "const": 1658, "xdata": 5746,
+                                            "data_sum": 644, "overlay_sum": 74, "bits": 86})
         self.assertEqual(ram.CONTEXT_BYTES, 1923)
 
     def test_direct_probe_must_record_the_removed_buffer_exactly(self):
