@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Restricted form of SDCC mcs51 peeph.def rules 251.a/251.b.
+// SDCC copyright holders retain their notices in the upstream source.
+// Deliberately no CALL/RET -> JMP rule: keep existing call-boundary proofs.
+replace {
+    ljmp %1
+} by {
+    ; local-return: replace jump to a plain RET in this function
+    ret
+} if labelIsReturnOnly(%1), labelRefCountChange(%1 -1)
+
+replace {
+    sjmp %1
+} by {
+    ; local-return: replace jump to a plain RET in this function
+    ret
+} if labelIsReturnOnly(%1), labelRefCountChange(%1 -1)

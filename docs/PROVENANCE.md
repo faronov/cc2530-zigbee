@@ -10,6 +10,16 @@ At M0, no third-party radio or Zigbee stack implementation is vendored.
 Standard compiler/runtime dependencies retain their own upstream licenses.
 BSD-3-Clause does not relicense SDCC, its runtime, uCsim, or external tools.
 
+The optional [SDCC code-generation study](SDCC_STUDY.md) includes
+`experiments/sdcc/local-returns.peep`, a restricted adaptation of SDCC 4.2
+mcs51 `peeph.def` rules 251.a/251.b, under GPL-2.0-or-later. It is a compiler
+input, not linked firmware or an imported protocol implementation.
+Its upstream GPL text is preserved verbatim in `experiments/sdcc/COPYING`.
+The accompanying Python/C regression fixtures and measurement tool are
+original BSD-3-Clause work. Source-built compiler experiments and upstream
+patches remain in isolated ignored build output with their upstream licenses.
+All measurements use public source and synthetic inputs, not equipment data.
+
 The opt-in complete-radio replay uses an isolated build of the public
 [SDCC4.2.0+dfsg source archive](https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz),
 SHA256 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`.
