@@ -1193,36 +1193,45 @@ BANKED_JOIN_BANK3 := nwk_beacon nwk_candidates nwk_parent mac_scan bdb_join bdb_
 BANKED_JOIN_BANK4 := nwk_aps nwk_aps_transmit zdo_runtime
 BANKED_JOIN_MODULES := $(BANKED_JOIN_COMMON) $(BANKED_JOIN_BANK1) $(BANKED_JOIN_BANK2) \
 	$(BANKED_JOIN_BANK3) $(BANKED_JOIN_BANK4)
-BANKED_JOIN_BASES := 0x0e 0x12 0x16 0x26 0x08 0x08 0x26 0x08 0x08 0x08 0x08 0 \
-	0x08 0x09 0x08 0x08 0x08 0x08 0x26 0x08 0x26 0x08 \
-	0x08 0x08 0x08 0x08 0x08 0x08 0x08 0x08 0x08
-BANKED_JOIN_OBJECTS := $(addprefix $(BANKED_JOIN_DIR)/,banked_join_iram_low.rel \
-	banked_join_iram_high.rel $(addsuffix .rel,$(BANKED_JOIN_MODULES)) banked_join_fixture.rel)
+BANKED_JOIN_OBJECT_DIR := $(BANKED_JOIN_DIR)/objects
+BANKED_JOIN_LINK_MODULES := banked_join_iram_low banked_join_iram_high $(BANKED_JOIN_MODULES) banked_join_fixture
+BANKED_JOIN_COMPILED := $(BANKED_JOIN_DIR)/banked_join_iram_low.rel $(BANKED_JOIN_DIR)/banked_join_iram_high.rel \
+	$(addprefix $(BANKED_JOIN_OBJECT_DIR)/,$(addsuffix .rel,$(BANKED_JOIN_MODULES)) banked_join_fixture.rel)
+BANKED_JOIN_OBJECTS := $(addprefix $(BANKED_JOIN_DIR)/,$(addsuffix .rel,$(BANKED_JOIN_LINK_MODULES)))
 BANKED_JOIN_FLAGS := $(SDCC_FLAGS) -DCC2530_BANKED_JOIN -DCC2530_JOIN_WORKSPACE -DBANKED_STACK_FIRST=0x50
 BANKED_JOIN_LINK := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 \
-	--code-size 0x80000 --stack-size 0x2d -Wl-r -Wl-bBJ_CALLER=0x08 \
+	--code-size 0x80000 --stack-size 0x2d -Wl-r -Wl-w -Wl-j \
 	-Wl-bBJ_BANK1=0x18000 -Wl-bBJ_BANK2=0x28000 -Wl-bBJ_BANK3=0x38000 -Wl-bBJ_BANK4=0x48000
+BANKED_JOIN_VERIFY := PYTHONPATH=tools:tests $(PYTHON) -B tests/verify_banked_join.py --output $(BUILD)
 
-$(BANKED_JOIN_DIR):
+$(BANKED_JOIN_DIR) $(BANKED_JOIN_OBJECT_DIR):
 	mkdir -p $@
 
+# Draft JD_<module> DATA is split into JF_<module>_<function> spill frames;
+# the banker keeps its real DSEG reservation.
 define BANKED_JOIN_MODULE
-$(BANKED_JOIN_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile | $(BANKED_JOIN_DIR)
-	$$(SDCC) $$(BANKED_JOIN_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,BJ_$(1)) \
+$(BANKED_JOIN_OBJECT_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile | $(BANKED_JOIN_OBJECT_DIR)
+	$$(SDCC) $$(BANKED_JOIN_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,JD_$(1)) \
 		$(foreach b,1 2 3 4,$(if $(filter $(1),$(BANKED_JOIN_BANK$(b))),--codeseg BJ_BANK$(b))) -c $$< -o $$@
-$(if $(filter-out banked,$(1)),BANKED_JOIN_LINK += -Wl-bBJ_$(1)=$(2))
 endef
-$(foreach n,1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31,$(eval $(call BANKED_JOIN_MODULE,$(word $(n),$(BANKED_JOIN_MODULES)),$(word $(n),$(BANKED_JOIN_BASES)))))
+$(foreach m,$(BANKED_JOIN_MODULES),$(eval $(call BANKED_JOIN_MODULE,$(m))))
 
 $(BANKED_JOIN_DIR)/banked_join_iram_%.rel: tests/banked_join_iram_%.c Makefile | $(BANKED_JOIN_DIR)
 	$(SDCC) $(BANKED_JOIN_FLAGS) -c $< -o $@
 
-$(BANKED_JOIN_DIR)/banked_join_fixture.rel: tests/banked_join_fixture.c $(HEADERS) Makefile | $(BANKED_JOIN_DIR)
-	$(SDCC) $(BANKED_JOIN_FLAGS) --dataseg BJ_CALLER -c $< -o $@
+$(BANKED_JOIN_OBJECT_DIR)/banked_join_fixture.rel: tests/banked_join_fixture.c $(HEADERS) Makefile | $(BANKED_JOIN_OBJECT_DIR)
+	$(SDCC) $(BANKED_JOIN_FLAGS) --dataseg JD_banked_join_fixture -c $< -o $@
 
-$(BANKED_JOIN_DIR)/banked_join.ihx: $(BANKED_JOIN_OBJECTS) force-link
-	$(SDCC) $(SDCC_FLAGS) $(BANKED_JOIN_LINK) -o $@ $(BANKED_JOIN_OBJECTS)
-	$(foreach m,banked_join_iram_low banked_join_iram_high $(BANKED_JOIN_MODULES) banked_join_fixture,cp $(BANKED_JOIN_DIR)/$(m).rst $(BANKED_JOIN_DIR)/banked_join.$(m).rst;)
+# Draft link -> liveness-derived function-frame placement -> final link; the
+# final image is accepted only by the strict per-call check in check_layout.
+$(BANKED_JOIN_DIR)/banked_join.ihx: $(BANKED_JOIN_COMPILED) tests/verify_banked_join.py tools/split_link_spills.py force-link
+	rm -f $(BANKED_JOIN_DIR)/banked_join_draft.* $(BANKED_JOIN_DIR)/banked_join.* $(BANKED_JOIN_DIR)/*.flags $(BANKED_JOIN_DIR)/data-placement.json
+	$(BANKED_JOIN_VERIFY) --split-draft
+	$(SDCC) $(SDCC_FLAGS) $(BANKED_JOIN_LINK) $$(cat $(BANKED_JOIN_DIR)/draft.flags) -o $(BANKED_JOIN_DIR)/banked_join_draft.ihx $(BANKED_JOIN_OBJECTS)
+	$(foreach m,$(BANKED_JOIN_LINK_MODULES),cp $(BANKED_JOIN_DIR)/$(m).rst $(BANKED_JOIN_DIR)/banked_join_draft.$(m).rst;)
+	$(BANKED_JOIN_VERIFY) --solve-data
+	$(SDCC) $(SDCC_FLAGS) $(BANKED_JOIN_LINK) $$(cat $(BANKED_JOIN_DIR)/final.flags) -o $@ $(BANKED_JOIN_OBJECTS)
+	$(foreach m,$(BANKED_JOIN_LINK_MODULES),cp $(BANKED_JOIN_DIR)/$(m).rst $(BANKED_JOIN_DIR)/banked_join.$(m).rst;)
 
 $(BANKED_JOIN_DIR)/banked_join_layout.h: $(BANKED_JOIN_DIR)/banked_join.ihx tests/verify_banked_join.py
 	PYTHONPATH=tools:tests $(PYTHON) -B tests/verify_banked_join.py --output $(BUILD) --emit-header $@
@@ -1239,7 +1248,7 @@ $(BUILD)/host-banked-join-vectors-sanitize: $(BANKED_JOIN_HOST_INPUTS) | $(BUILD
 define BANKED_JOIN_CASE
 .PHONY: test-banked-join-$(1)
 test-banked-join-$(1): $(BANKED_JOIN_DIR)/banked_join.ihx $(BUILD)/host-banked-join-vectors $(BUILD)/host-banked-join-vectors-sanitize
-	$(PYTHON) -B tests/boot_banked_join.py --output $(BUILD) --simulator "$(S51)" --case $(2)
+	$(PYTHON) -B tests/boot_banked_join.py --output $(BUILD) --board $(BOARD) --simulator "$(S51)" --case $(2)
 endef
 $(eval $(call BANKED_JOIN_CASE,success,joined-data-update-loss-restart))
 $(eval $(call BANKED_JOIN_CASE,missing-key,missing-network-key))

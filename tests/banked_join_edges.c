@@ -300,7 +300,8 @@ static void edge_broadcast_table(void)
     CHECK(blocks == security_joint_aes_blocks() && flash == security_joint_flash_commands());
     now = until-1; edge_receive(BDB_JOIN_FULL);
     now = until; edge_receive(BDB_JOIN_IGNORED);
-    CHECK(blocks < security_joint_aes_blocks() && flash < security_joint_flash_commands());
+    /* Unsecured-APS broadcast data advances only the volatile NWK floor. */
+    CHECK(blocks < security_joint_aes_blocks() && flash == security_joint_flash_commands());
     CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.response_tx);
     keepalive_success();
 }

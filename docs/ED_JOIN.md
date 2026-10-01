@@ -219,12 +219,15 @@ durable counter, journal and flash-RAM services together. The synthetic PHY
 and coordinator supply external events and public packets only; they never
 write expected controller state or supply authentication-success flags.
 
-The measured image has143242 populated CODE bytes:28551 common bytes and
-four bank windows containing28018,28001,29185 and29487 bytes. Ordinary
-XDATA is7512/7680, leaving168 bytes before the status block. Both board
-definitions produce the same six pinned complete artifact identities.
+The measured image has145985 populated CODE bytes on generic and145986
+on LG:28760/28761 common bytes and four bank windows containing28126,
+28883,29755 and30461 bytes. Ordinary XDATA is7545/7680, leaving135 bytes
+before the status block. `zdo_runtime` embeds the board's Basic model
+string, so each board pins its own six complete artifact identities.
 The actual physical DATA reservations are08..1D and26..45, banking state
 1E..1F, bit storage20..25, compiler overlay46..4F and stack50..7C.
+Compiler spills are split into62 per-function `JF_<module>_<function>`
+frames, then placed inside those reservations as described below.
 XDATA1F00..1FFF still aliases IRAM; no allocation boundary or SP7C limit
 was increased.
 
@@ -239,11 +242,12 @@ MAC decoding, CCM, counter reservation and journal replacement; they do not
 change wire rules, counter floors, NV schema or persistence frequency.
 
 The linked proof decodes every source/runtime instruction, checks far
-entries/returns and analyzes279 functions with1262 live-byte/callee-write
-pairs, including OSEG and transitive libc scratch. Raw CDB, complete map,
-memory report, ordered relocated listings, relocatable objects and all
-CODE addresses/bytes are pinned before execution. The complete image
-corruption campaign passes716229 mutations.
+entries/returns and analyzes285 functions with1882 live-byte/callee-write
+pairs, including OSEG and transitive libc scratch. Raw CDB, complete
+NoICE-checked symbols, memory report, ordered relocated listings,
+relocatable objects and all CODE addresses/bytes are pinned per board before
+execution. The complete image corruption campaign passes729944 (generic)
+and729949 (LG) mutations.
 
 The native and nonrecovering-sanitizer transcript contains415 public calls
 and2791 real modeled AES/flash events. The generic MCU run executes all415:
@@ -340,6 +344,32 @@ full716229-mutation campaign. The generic wrap worker takes14m02s and ZDO
 server10m35s, below the unchanged15-minute limit; no corpus or guard was
 removed to fit. This completes #26's linked-image/simulated transport and
 endpoint-zero scope, not #27 recovery or physical #13/#14/#15/#28 acceptance.
+
+The ordinary-join tree keeps NWK floors and keepalive bits volatile between
+NV saves and stages provisioning/association until the first key save. Its
+refreshed host references keep every public call and AES block but carry
+fewer journal writes/erases:415 calls/1651 events originally and3234 edge
+calls/11445 events (`update-full` gains the two public calls of its
+duplicate-eviction check; `broadcast-table` now requires unchanged flash
+after unsecured broadcast data). The fixed `bdb_join_t` grows to1677 bytes.
+
+Its compiler spills no longer fit the former hand-placed module frames
+(`bdb_join`, `nwk_aps` and `zdo_runtime` would need26,26 and116 bytes).
+The complete image therefore uses the join-smoke method instead of source
+changes: modules compile with draft `JD_<module>` DATA (the banker keeps its
+DSEG), unchanged `tools/split_link_spills.py` emits per-function frames of
+at most24 bytes, and a deliberately unverified draft link exposes the actual
+linked call graph. `verify_banked_join.py --solve-data` collects every
+live-byte/callee-write pair from that graph and deterministically places
+whole frames inside08..1D/26..45. The final relink is accepted only by the
+strict per-call backwards liveness check above; the draft link itself is
+rejected by that check. Retained DATA, OSEG, bit storage, stack50..7C,
+libc scratch, indirect spill users and the copied flash-RAM engine checks
+are unchanged, and direct DATA accesses must stay in owned bytes.
+Both boards derive the same placement. Offline, all22 targets per board
+pass with `ARTIFACT_CAMPAIGN=full`; every scenario matches the host
+transcript and peaks atSP7B. This is simulated evidence, not hardware
+acceptance.
 
 ## Selected configuration and boundaries
 

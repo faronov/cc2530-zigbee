@@ -1037,20 +1037,34 @@ class LocalChecksTests(unittest.TestCase):
                                  "-DCC2530_JOIN_WORKSPACE", "-DBANKED_STACK_FIRST=0x50"} <= set(args))
                 self.assertFalse({"--model-huge", "--stack-auto", "--xstack",
                                   "--parms-in-bank1", "-DCC2530_HOST_TEST"} & set(args))
-            link = next(args for args in commands if args[0] == "sdcc" and "-c" not in args)
-            self.assertEqual(tuple(Path(arg).stem for arg in link if arg.endswith(".rel")), modules)
-            for option, expected in (("--stack-size", "0x2d"), ("--xram-size", "0x1e00"),
-                                     ("--code-size", "0x80000")):
-                self.assertEqual(link[link.index(option)+1], expected)
-            for bank in range(1, 5):
-                self.assertIn(f"-Wl-bBJ_BANK{bank}=0x{bank}8000", link)
-            directory = Path(link[link.index("-o")+1]).parent
-            copies = commands[commands.index(link)+1]
-            self.assertEqual(copies, tuple(arg for module in modules for arg in
-                             ("cp", str(directory/f"{module}.rst"), str(directory/f"banked_join.{module}.rst")+";")))
+                module = Path(args[-1]).stem
+                dataseg = args[args.index("--dataseg")+1] if "--dataseg" in args else None
+                self.assertEqual(dataseg, None if module.startswith("banked_join_iram_") else
+                                 "DSEG" if module == "banked" else "JD_"+module)
+            links = [args for args in commands if args[0] == "sdcc" and "-c" not in args]
+            self.assertEqual(len(links), 2)
+            for link, name in zip(links, ("banked_join_draft", "banked_join")):
+                self.assertEqual(tuple(Path(arg).stem for arg in link if arg.endswith(".rel")), modules)
+                for option, expected in (("--stack-size", "0x2d"), ("--xram-size", "0x1e00"),
+                                         ("--code-size", "0x80000")):
+                    self.assertEqual(link[link.index(option)+1], expected)
+                for bank in range(1, 5):
+                    self.assertIn(f"-Wl-bBJ_BANK{bank}=0x{bank}8000", link)
+                self.assertTrue({"-Wl-w", "-Wl-j"} <= set(link))
+                self.assertFalse(any(arg.startswith("-Wl-bBJ_") and not arg.startswith("-Wl-bBJ_BANK")
+                                     for arg in link))
+                output = Path(link[link.index("-o")+1])
+                self.assertEqual(output.name, name+".ihx")
+                directory = output.parent
+                copies = commands[commands.index(link)+1]
+                self.assertEqual(copies, tuple(arg for module in modules for arg in
+                                 ("cp", str(directory/f"{module}.rst"), str(directory/f"{name}.{module}.rst")+";")))
             generated = [args for args in commands if "tests/verify_banked_join.py" in args]
-            self.assertEqual(len(generated), 1)
-            self.assertIn("--emit-header", generated[0])
+            self.assertEqual([args[args.index("--output")+2] for args in generated],
+                             ["--split-draft", "--solve-data", "--emit-header"])
+            self.assertLess(commands.index(generated[0]), commands.index(links[0]))
+            self.assertLess(commands.index(links[0]), commands.index(generated[1]))
+            self.assertLess(commands.index(generated[1]), commands.index(links[1]))
             native = [args for args in commands if args[0] == "cc"]
             self.assertEqual(len(native), 2)
             self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in native), 1)
