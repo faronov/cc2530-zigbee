@@ -95,7 +95,11 @@ Receive loss (`lossy`) is a `COVERAGE` fault during scan-less association
 work only. Once RUNTIME owns the workspace, a normal AUTOACK RX FIFO overflow
 is an accepted loss: completed frames ahead of the overflow are salvaged, the
 halted partial frame never passed its FCS and so was never acknowledged
-(SWRU191F §23.10.2). Upper-layer timeouts and retries handle the loss. In raw
+(SWRU191F §23.10.2). Upper-layer timeouts and retries handle the loss. The
+adapter observation samples FSMSTAT1 before RFERRF, so an overflow can latch
+between the two reads; an RXOVERF-only RFERRF without the FIFO=0/FIFOP=1
+overflow signature is resampled once, and a persistent mismatch stays a
+`CONTROLLER_ERROR` (LG READY observed FSMSTAT1=ED with RXOVERF, then 5C). In raw
 (non-AUTOACK) RX during association, a command or data frame after the
 Beacon/Association exchange, such as a neighbour's network frame following a
 busy-CCA Data Request, is never acknowledged. It is dropped, not delivered,

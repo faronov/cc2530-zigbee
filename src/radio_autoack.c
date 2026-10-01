@@ -124,6 +124,10 @@ static radio_autoack_result_t observe(void)
         if (i == 21) value &= 3;
         if (value != setting_value(i)) return RADIO_AUTOACK_STATE_CHANGED;
     }
+#if defined(CC2530_MAC_ADAPTER)
+    clock = 0;
+sample:
+#endif
     status.mask = MMIO_XREAD(0x618b);
     status.calibration = MMIO_XREAD(0x6192);
     status.signals = MMIO_XREAD(0x6193);
@@ -148,6 +152,15 @@ static radio_autoack_result_t observe(void)
         work.tx_last = MMIO_XREAD(0x61a2);
     }
     status.errors = MMIO_READ(SOC_RFERRF);
+#if defined(CC2530_MAC_ADAPTER)
+    /* RXOVERF can latch between the FSMSTAT1 and RFERRF reads (LG READY):
+     * resample once; a persistent mismatch below stays fatal.
+     */
+    if (status.errors == 4u && (status.signals & 0xc0u) != 0x40u && !clock) {
+        clock = 1;
+        goto sample;
+    }
+#endif
     status.flags0 = MMIO_READ(SOC_RFIRQF0);
     status.flags1 = MMIO_READ(SOC_RFIRQF1);
     status.sample_valid = 1;
@@ -199,6 +212,16 @@ static radio_autoack_result_t stopped(void)
     if (((status.first + status.count) & 127u) != status.last)
         return RADIO_AUTOACK_FIFO_ERROR;
     return RADIO_AUTOACK_READY;
+}
+
+/* RXFIRST plus count prove a complete head without FIFOP: after a head's first
+ * RFD read FIFOP stays low for later complete frames (SWRU191F 23.10.1 p232).
+ */
+static uint8_t complete_head(void)
+{
+    status.phr = MMIO_XREAD(0x619a) & 127u;
+    if (status.phr < 5 || status.count <= status.phr) return 0;
+    return 1;
 }
 
 static radio_autoack_result_t progress(void)
@@ -394,8 +417,7 @@ static radio_autoack_result_t operate(uint8_t operation,
         CHECK(poll());
 #if defined(CC2530_MAC_ADAPTER)
         if (work.overflow) {
-            status.phr = MMIO_XREAD(0x619a) & 127u;
-            if (status.phr >= 5 && status.count >= status.phr + 1u) goto head;
+            if (complete_head()) goto head;
             /* Incomplete overflow tail: flush and report the loss (p232). */
             ROOM();
             MMIO_WRITE(SOC_RFST, 0xed); status.writes++;
@@ -416,16 +438,18 @@ static radio_autoack_result_t operate(uint8_t operation,
         if (radio_autoack_state == RADIO_AUTOACK_DRAINING ||
             radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK)
             CHECK(stopped());
-        if (!(status.signals & 0x40u)) {
+        /* Stopped drain is physically idle, so a nonempty FIFO is read even
+         * without FIFOP; live RX waits for the next FIFOP.
+         */
+        if (!(status.signals & 0x40u) && (radio_autoack_state == RADIO_AUTOACK_RX ||
+            radio_autoack_state == RADIO_AUTOACK_RX_NOACK || !status.count)) {
             REQUIRE(radio_autoack_state == RADIO_AUTOACK_RX ||
                     radio_autoack_state == RADIO_AUTOACK_RX_NOACK ||
-                    (!status.count && !(status.signals & 0xc0u)),
-                    RADIO_AUTOACK_FIFO_ERROR);
+                    !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
             result = RADIO_AUTOACK_EMPTY;
             goto finished;
         }
-        status.phr = MMIO_XREAD(0x619a) & 127u;
-        REQUIRE(status.phr >= 5 && status.count >= status.phr + 1u, RADIO_AUTOACK_FIFO_ERROR);
+        REQUIRE(complete_head(), RADIO_AUTOACK_FIFO_ERROR);
 #if defined(CC2530_MAC_ADAPTER)
 head:
 #endif
@@ -479,7 +503,7 @@ overflowed:
         CHECK(stopped());
         status.phase = 6;
         if (status.count) {
-            REQUIRE(status.signals & 0x40u, RADIO_AUTOACK_FIFO_ERROR);
+            REQUIRE((status.signals & 0x40u) || complete_head(), RADIO_AUTOACK_FIFO_ERROR);
             result = RADIO_AUTOACK_DRAIN;
         } else {
             REQUIRE(!(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);

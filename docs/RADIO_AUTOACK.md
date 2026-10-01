@@ -49,7 +49,7 @@ is imported.
 | Section 23.9.2, p.223; FSMCTRL, p.263 | `RX2RX_TIME_OFF=0` disables the default 12-symbol post-reception SFD-detection timeout. This is not MAC SIFS/LIFS completion or a loss-free receive guarantee. |
 | Figure 23-20, p.235; Table 23-3, p.236; FSMSTAT0/1, pp.262-263 | A soft stop allows an in-flight reception and its eligible ACK to finish. TX_ACTIVE covers ACK calibration/delay/TX/shutdown; RX_ACTIVE includes RX calibration. Do not drive control flow from fast numeric FSM state values. |
 | RFIRQF0/1 and RFERRF, pp.210-211 | Flags update even while IRQs are masked. RXMASKZERO is not idle. TXACKDONE is sticky, not a per-frame count, correlation token or timestamp. A separately cleared/verified RFIDLE plus physical idle is the stop completion gate. |
-| Section 23.10, pp.232-233; FSMSTAT1/FIFOPCTRL, p.263; FIFO registers, pp.264-265 | The 128-byte FIFO can contain multiple frames. RFD advances its read pointer; direct RAM access does not. Use the complete-frame indication with threshold 127, bounded count and head progression. RFIRQF0.FIFOP also documents notification when reading a complete packet leaves another complete packet. No one-frame/one-edge assumption is used. |
+| Section 23.10, pp.232-233; FSMSTAT1/FIFOPCTRL, p.263; FIFO registers, pp.264-265 | The 128-byte FIFO can contain multiple frames. RFD advances its read pointer; direct RAM access does not. Use the complete-frame indication with threshold 127, bounded count and head progression; p.232 drops FSMSTAT1.FIFOP at the next RFD read, so a stopped drain checks PHR/count instead. RFIRQF0.FIFOP also documents notification when reading a complete packet leaves another complete packet. No one-frame/one-edge assumption is used. |
 | Section 23.10.2, p.233 | Overflow, underflow and abort are errors, not permission to flush and claim drainage. Filtering can overflow before rejecting a frame. |
 | Table 23-6, p.256; FSCAL1, p.267; TXPOWER/TXCTRL, p.262 | Apply the recommended AGC/TX filter/VCO settings. Read back only FSCAL1's known VCO_CURR bits; its upper bits are R/W0, not read-as-zero. All other configured bytes require full readback. |
 | Section 23.8, pp.218-222; immediate instructions, pp.253-254 | With AUTOACK disabled at idle, replace TXFIFO using only ISFLUSHTX=EE and RFD writes. AUTOCRC PHR includes two FCS bytes; software supplies only the body. Use ISTXONCCA=EA, never unconditional TX. Successful TX retains FIFO contents. |
@@ -169,6 +169,20 @@ reception/ACK completion, including AUTOACK when enabled. Require fresh RFIDLE, 
 unlocked, SFD low and RX_ACTIVE/TX_ACTIVE both low. Once stopped, also require
 `(RXFIRST_PTR+RXFIFOCNT) mod 128 == RXLAST_PTR`; a full 128-byte FIFO is distinct
 from empty despite identical pointers. Complete frames remain available.
+FIFOP is not a per-frame indication: SWRU191F section 23.10.1 p.232 lets it
+fall at the next RFD read after a frame's last byte, even when another complete
+frame is queued (RFIRQF0.FIFOP, p.210, separately reports that case). A stopped
+stop/DRAIN head is therefore accepted with FIFOP or with `PHR>=5` and
+`RXFIFOCNT>=PHR+1` from RXFIRST; physical idle means no reception can extend it.
+Live RX still requires FIFOP and reports `EMPTY` otherwise. The LG board
+observed this in READY: after the first of two queued 56-byte frames was read,
+FSMSTAT1.FIFOP stayed low with the complete, CRC-valid second frame (57 bytes)
+still in the stopped FIFO; the earlier FIFOP-only rule faulted with `FIFO_ERROR`.
+Adapter compositions only: the observation reads FSMSTAT1 before RFERRF, and the
+LG board in READY captured RXOVERF with FSMSTAT1=`ED` (FIFO still high), which
+a later halted read showed as the documented overflow signature `5C`. When the
+only RF error is RXOVERF and the sample lacks FIFO=0/FIFOP=1, the observation
+is taken once more; a persistent mismatch remains `CONTROLLER_ERROR`.
 An unexplained partial FIFO, pointer/count contradiction or RF error is a
 fault, never drained success. There is no abort, SRXON, RX flush, hidden discard,
 automatic retry or recovery operation.

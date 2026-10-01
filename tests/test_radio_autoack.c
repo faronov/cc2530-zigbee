@@ -75,6 +75,7 @@ static unsigned tx_count, tx_attempts, tx_started, tx_flushes, tx_delay, rx_dela
 static unsigned hold_tx, lost_tx, reply_after_tx, bad_reply, ignored_tx_clear, ignored_flush;
 static unsigned tx_write_fault, phase_write_fault, tx_error, late_cca_loss;
 static unsigned unexpected_rx;
+static unsigned fifop_edge, fifop_high, overflow_at_errors;
 static unsigned rx_overflow, overflow_on_stop, flush_settle, flush_rxabo, overflow_after_reads;
 static unsigned head, tail, count, packets, packet_head, packet_tail, remaining;
 static unsigned mode, phase, samples, rfd_reads, accesses, calls, cases;
@@ -114,7 +115,8 @@ static void signals(void)
     XR(0x619b) = (uint8_t)count;
     XR(0x619d) = (uint8_t)head; XR(0x619e) = (uint8_t)tail;
     XR(0x619f) = (uint8_t)head;
-    XR(0x6193) = (XR(0x6193) & 0x3f) | (count ? 0x80 : 0) | (packets ? 0x40 : 0);
+    XR(0x6193) = (XR(0x6193) & 0x3f) | (count ? 0x80 : 0) |
+        ((fifop_edge ? fifop_high : packets) ? 0x40 : 0);
     /* SWRU191F p233: overflow reports FIFO=0 and FIFOP=1 until ISFLUSHRX. */
     if (rx_overflow) XR(0x6193) = (XR(0x6193) & 0x3f) | 0x40;
     if (count) XR(0x619a) = fifo[head];
@@ -144,7 +146,7 @@ static void enqueue(unsigned length, unsigned crc, unsigned seed)
         }
         tail = (tail + 1) & 127; count++;
     }
-    signals(); SOC_RFIRQF0 |= 0x66;
+    fifop_high = 1; signals(); SOC_RFIRQF0 |= 0x66;
 }
 
 /* An incomplete frame fills the FIFO: reception halts in FSM state 17 with
@@ -244,9 +246,13 @@ static uint8_t load(uint8_t address, uint8_t value)
         value = (uint8_t)latched;
     } else if (address == SOC_ST1_ADDRESS) value = (uint8_t)(latched >> 8);
     else if (address == SOC_ST2_ADDRESS) value = (uint8_t)(latched >> 16);
+    else if (address == SOC_RFERRF_ADDRESS && overflow_at_errors) {
+        /* Overflow lands after observe's FSMSTAT1 read (LG READY sample). */
+        overflow_at_errors = 0; inject_overflow(127); value = SOC_RFERRF;
+    }
     else if (address == SOC_RFD_ADDRESS) {
         assert(count && packets && remaining);
-        value = fifo[head]; head = (head + 1) & 127; count--; rfd_reads++;
+        value = fifo[head]; head = (head + 1) & 127; count--; rfd_reads++; fifop_high = 0;
         if (!--remaining) {
             packets--; packet_head = (packet_head + 1) % 24;
             remaining = packets ? lengths[packet_head] : 0;
@@ -386,7 +392,7 @@ static void reset(void)
     tx_delay = 2; rx_delay = 1; cca_clear = 1;
     hold_tx = lost_tx = reply_after_tx = bad_reply = ignored_tx_clear = ignored_flush = 0;
     tx_write_fault = phase_write_fault = tx_error = late_cca_loss = 0;
-    unexpected_rx = 0;
+    unexpected_rx = fifop_edge = fifop_high = overflow_at_errors = 0;
     rx_overflow = overflow_on_stop = flush_settle = flush_rxabo = overflow_after_reads = 0;
     memset(&config, 0xa5, sizeof(config)); memset(&frame, 0x69, sizeof(frame));
     for (i = 0; i < 8; i++) config.value.ieee[i] = (uint8_t)(0x10 + i);
@@ -862,7 +868,8 @@ static void scenario(unsigned n)
             enqueue(5, 128, 0x18); call(1, 10000, 7, RADIO_AUTOACK_WORK_LIMIT);
         } else if (n == 80) {
             enqueue(5, 128, 0x18); CALL(2, RADIO_AUTOACK_DRAIN);
-            XR(0x6193) &= 0xbf; CALL(1, RADIO_AUTOACK_FIFO_ERROR);
+            XR(0x6193) &= 0xbf; CALL(1, RADIO_AUTOACK_FRAME);
+            CALL(2, RADIO_AUTOACK_STOPPED);
         } else if (n == 81) {
             SOC_RFIRQF0 = 0xfe; SOC_RFIRQF1 = 3;
             XR(0x619f) = 255; CALL(1, RADIO_AUTOACK_EMPTY);
@@ -913,6 +920,42 @@ end:
         if (n >= 157) call(4, 0, 0, fault);
     }
     if (printing) puts("]}");
+}
+
+/* SWRU191F 23.10.1 p232: FIFOP rises at a frame's last byte and falls at the
+ * next RFD read, even when another complete frame remains (LG READY fault).
+ */
+static void incomplete_tail(void)
+{
+    fifo[tail] = 56; tail = (tail + 3) & 127; count += 3; signals();
+}
+
+static void fifop_cases(void)
+{
+    unsigned i;
+    for (i = 0; i < 2; i++) {
+        reset(); fifop_edge = 1; CALL(0, RADIO_AUTOACK_READY);
+        enqueue(56, 128, 0x21); enqueue(56, 128, 0x22);
+        if (i) {
+            CALL(1, RADIO_AUTOACK_FRAME);
+            assert(count == 57 && !(XR(0x6193) & 0x40));
+            CALL(1, RADIO_AUTOACK_EMPTY);
+        }
+        CALL(2, RADIO_AUTOACK_DRAIN);
+        if (!i) CALL(1, RADIO_AUTOACK_FRAME);
+        assert(count == 57 && !(XR(0x6193) & 0x40));
+        CALL(1, RADIO_AUTOACK_FRAME);
+        CALL(2, RADIO_AUTOACK_STOPPED); CALL(3, RADIO_AUTOACK_READY);
+    }
+    /* An incomplete stopped head remains a FIFO error at drain or stop. */
+    reset(); fifop_edge = 1; CALL(0, RADIO_AUTOACK_READY);
+    enqueue(56, 128, 0x23); CALL(2, RADIO_AUTOACK_DRAIN);
+    incomplete_tail(); CALL(1, RADIO_AUTOACK_FRAME);
+    CALL(1, RADIO_AUTOACK_FIFO_ERROR);
+    reset(); fifop_edge = 1; CALL(0, RADIO_AUTOACK_READY);
+    enqueue(56, 128, 0x24); CALL(1, RADIO_AUTOACK_FRAME);
+    incomplete_tail(); CALL(1, RADIO_AUTOACK_EMPTY);
+    CALL(2, RADIO_AUTOACK_FIFO_ERROR);
 }
 
 #if defined(CC2530_MAC_ADAPTER) && !defined(CC2530_MAC_ATTEMPT)
@@ -976,6 +1019,11 @@ static void overflow_cases(void)
     CALL(2, RADIO_AUTOACK_STOPPED);
     assert(radio_autoack_state == RADIO_AUTOACK_OFF_NOACK);
     CALL(3, RADIO_AUTOACK_READY);
+    /* RXOVERF latched between the FSMSTAT1 and RFERRF reads: resample once. */
+    raw_rx(); enqueue(28, 128, 0x5a); overflow_at_errors = 1;
+    CALL(1, RADIO_AUTOACK_FRAME); assert(rx_overflow && SOC_RFERRF == 4);
+    CALL(1, RADIO_AUTOACK_RX_LOST); flushed(1); lost++;
+    CALL(2, RADIO_AUTOACK_STOPPED); CALL(3, RADIO_AUTOACK_READY);
     /* Overflow while reading a complete head: finish it, then flush (LG run). */
     raw_rx(); enqueue(28, 128, 0x5b); enqueue(28, 128, 0x5c); overflow_after_reads = 9;
     CALL(1, RADIO_AUTOACK_FRAME); assert(rx_overflow && SOC_RFERRF == 4);
@@ -994,6 +1042,9 @@ static void overflow_cases(void)
         CALL(2, RADIO_AUTOACK_STOPPED); CALL(3, RADIO_AUTOACK_READY);
     }
     reset(); CALL(0, RADIO_AUTOACK_READY); enqueue(28, 128, 0x67); overflow_after_reads = 9;
+    CALL(1, RADIO_AUTOACK_FRAME); assert(rx_overflow && SOC_RFERRF == 4);
+    CALL(1, RADIO_AUTOACK_RX_LOST); flushed_normal(1); lost++;
+    reset(); CALL(0, RADIO_AUTOACK_READY); enqueue(28, 128, 0x6a); overflow_at_errors = 1;
     CALL(1, RADIO_AUTOACK_FRAME); assert(rx_overflow && SOC_RFERRF == 4);
     CALL(1, RADIO_AUTOACK_RX_LOST); flushed_normal(1); lost++;
     CALL(2, RADIO_AUTOACK_STOPPED); CALL(3, RADIO_AUTOACK_READY);
@@ -1170,6 +1221,7 @@ int main(int argc, char **argv)
         body_length = 125; tx_write_fault = i;
         CALL(4, RADIO_AUTOACK_FIFO_ERROR);
     }
+    fifop_cases();
 #if defined(CC2530_MAC_ADAPTER) && !defined(CC2530_MAC_ATTEMPT)
     overflow_cases();
 #endif
