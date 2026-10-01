@@ -10,7 +10,6 @@
 #define JOIN_SMOKE_ADMISSION_POLLS 256u
 #define JOIN_SMOKE_STEPS 1000000UL
 #define JOIN_SMOKE_RAW_TICKS 2949120UL
-#define JOIN_SMOKE_SERVE_TICKS 7864320UL
 
 enum { JS_DISARMED=1, JS_ARMED, JS_ADMITTED, JS_RUNNING, JS_READY, JS_FAULT };
 enum { JS_NONE, JS_PACKET, JS_ADMISSION_EXPIRED, JS_INPUT, JS_SECURITY,
@@ -64,12 +63,18 @@ extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smo
  * input fields, and requires the same own IEEE in both public input views.
  * Existing NV is refused, never erased/reprovisioned.
  * READY is authenticated BDB readiness, NOT radio OFF or complete HA interview.
- * READY then serves (stage 5) for JOIN_SMOKE_SERVE_TICKS from a fresh step and
- * time budget: ZDO/Basic requests are answered by the runtime, other published
- * application frames are discarded and counted, and one APS-acknowledged Basic
- * ModelIdentifier report to the coordinator (announce: 255 unsent, else the
- * APS result or 0x80|BDB send failure) invites an interview. Stage 6 means the
- * serving budget ended without a fault; no further driver step is made.
+ * READY then serves (stage 5) WITHOUT a time or step budget until reset or a
+ * fault: ZDO and Basic/Temperature/Humidity requests are answered by the
+ * runtime, other published application frames are discarded and counted. One
+ * APS-acknowledged Basic ModelIdentifier report to the coordinator invites an
+ * interview, then APS-acknowledged SYNTHETIC (fake, not measured) Temperature
+ * and Humidity MeasuredValue reports alternate per 2^21 MAC symbols. announce
+ * is 255 before the first send, else the latest APS result or 0x80|BDB send
+ * failure. In READY, steps wraps modulo 2^32 and elapsed modulo 2^24 ticks.
+ * READY entry consumes one further nonzero qualified draw as the seed of a
+ * deterministic maximal 8-bit Galois LFSR (x^8+x^6+x^5+x^4+1) that supplies
+ * every READY CSMA backoff byte; it is NOT entropy and has no other consumer.
+ * Before READY each RANDOM request consumes one qualified draw as before.
  * READY/FAULT retain ownership; no independent lower-service cleanup is legal.
  * A separately authorized operator must handle physical shutdown/full reset.
  * This image owns the reserved status block as JSN1, not the bootstrap M0 ABI.
@@ -80,6 +85,5 @@ extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smo
 void join_smoke_initialize(void);
 void join_smoke_poll(void);
 void join_smoke_wait(void);
-void join_smoke_ready(void);
 void join_smoke_fault(void);
 #endif

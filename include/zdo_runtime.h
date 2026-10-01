@@ -18,6 +18,18 @@
 #define ZDO_RUNTIME_BROADCAST_ANNOUNCE 1u
 #define ZDO_RUNTIME_BROADCAST_PERMIT 2u
 
+/* SYNTHETIC demonstration values, NOT measurements: sawtooths over the
+ * 8-bit sample index, bits 22..29 of the runtime's MAC-symbol time
+ * (ctx->last), so one step per 2^22 symbols (~67 s). Temperature
+ * 21.00..24.90 C in 0.10 steps (40), humidity 45.00..55.00 %RH in 0.25 steps
+ * (41). The 256-sample index wrap (~4.8 h) restarts both sawtooths. 8-bit
+ * operands keep SDCC on inline DIV/MUL AB. */
+#define ZDO_RUNTIME_SAMPLE(now) ((uint8_t)((uint16_t)((uint32_t)(now) >> 16) >> 6))
+#define ZDO_RUNTIME_TEMPERATURE(sample) \
+    ((uint16_t)(2100u + (uint16_t)((uint8_t)((uint8_t)(sample) % (uint8_t)40) * (uint8_t)10)))
+#define ZDO_RUNTIME_HUMIDITY(sample) \
+    ((uint16_t)(4500u + (uint16_t)((uint8_t)((uint8_t)(sample) % (uint8_t)41) * (uint8_t)25)))
+
 typedef enum {
     ZDO_RUNTIME_OK = 0, ZDO_RUNTIME_ARGUMENT, ZDO_RUNTIME_STATE,
     ZDO_RUNTIME_FULL, ZDO_RUNTIME_FORMAT, ZDO_RUNTIME_IGNORED,
@@ -54,9 +66,11 @@ typedef struct {
  * application_ready alone publishes it; other consumed input is cleared.
  * A pending application blocks taking another transport packet, but does not
  * block client timeout/TX retirement or discard a separate server response.
- * The runtime owns the Basic cluster of the transport endpoint: unicast
- * frames to it use the server response slot (BOARD_MANUFACTURER/BOARD_MODEL,
- * see zdo_runtime.c); other Basic frames are ignored, never published.
+ * The runtime owns the Basic, Temperature Measurement and Relative Humidity
+ * Measurement clusters of the transport endpoint: unicast frames to them use
+ * the server response slot (BOARD_MANUFACTURER/BOARD_MODEL and the SYNTHETIC
+ * MeasuredValue below, see zdo_runtime.c); other frames for those clusters are
+ * ignored, never published. No sensor is read and no reporting is configured.
  */
 zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     const zdo_node_descriptor_t * volatile local, volatile uint32_t now) JOIN_FAR;

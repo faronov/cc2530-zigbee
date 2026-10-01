@@ -2,6 +2,7 @@
 #include "join_smoke.h"
 #include "flash_exec.h"
 #include "timebase.h"
+#include "zcl_sensor.h"
 #include <string.h>
 
 MCU_XDATA bdb_join_t join_smoke_device;
@@ -13,7 +14,19 @@ MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
 
-static MCU_XDATA uint8_t initialized, gate, i, packet[8], any, opcode, event_kind;
+static MCU_XDATA uint8_t initialized, gate, i;
+/* Admission scratch is dead once started; the start loop and RUNNING/READY
+ * reuse its storage. */
+static MCU_XDATA union {
+    struct { uint8_t packet[8], any, opcode; } admit;
+    struct { uint8_t backoff, draw, slot, current, result; } serve;
+} scratch;
+#define BACKOFF scratch.serve.backoff
+#define DRAW scratch.serve.draw
+#define SLOT scratch.serve.slot
+#define CURRENT scratch.serve.current
+#define RESULT scratch.serve.result
+#define EVENT scratch.serve.result /* start loop only, before RESULT is live */
 static MCU_XDATA uint16_t admission;
 static MCU_XDATA uint32_t started, previous, now, elapsed, steps;
 static const mac_adapter_diagnostics_t MCU_XDATA * MCU_XDATA diagnostic;
@@ -49,17 +62,18 @@ static void snapshot(void)
 
 static void fault(uint8_t reason)
 {
+    S.reason=reason;
     if(gate==JS_RUNNING || gate==JS_READY) snapshot();
-    S.reason=reason; gate=JS_FAULT; S.phase=gate;
+    gate=JS_FAULT; S.phase=gate;
 }
 
-/* Model-only Basic report: any frame from an uninterviewed device invites
- * the coordinator to interview it; the runtime answers the interview. */
+/* One Basic ModelIdentifier report first: any frame from an uninterviewed
+ * device invites the coordinator to interview it; the runtime answers the
+ * interview. Then one SYNTHETIC MeasuredValue report per 2^21-symbol slot,
+ * temperature in even and humidity in odd slots (each cluster ~every 67 s). */
 static void serve(void)
 {
     ed_packet_t MCU_XDATA *report=&DEVICE.work.runtime.zdo.application;
-    uint8_t MCU_XDATA *o;
-    uint8_t result;
     if(DEVICE.phase!=BDB_JOIN_READY) return;
     if(DEVICE.work.runtime.zdo.application_ready) {
         if(zdo_runtime_discard_application(&DEVICE.work.runtime.zdo)!=ZDO_RUNTIME_OK) {
@@ -68,23 +82,30 @@ static void serve(void)
         if(S.discarded!=255) S.discarded++;
     }
     if(DEVICE.application_done) {
-        if(bdb_join_confirm(&DEVICE,&result)!=BDB_JOIN_OK) { fault(JS_BDB); return; }
-        S.announce=result; return;
+        if(bdb_join_confirm(&DEVICE,&RESULT)!=BDB_JOIN_OK) { fault(JS_BDB); return; }
+        S.announce=RESULT; snapshot(); return;
     }
-    if(S.announce!=255 || DEVICE.application_pending) return;
+    if(DEVICE.application_pending) return;
+    /* Little-endian bits 21..23 detect a new slot; serve runs every poll. */
+    CURRENT=((const uint8_t MCU_XDATA *)&DEVICE.work.runtime.zdo.last)[2]&0xe0u;
+    if(S.announce!=255 && CURRENT==SLOT) return;
+    zcl_sensor_report(&DEVICE,S.announce==255);
+    RESULT=bdb_join_send(&DEVICE,report,0,DRIVER.now);
     memset(report,0,sizeof(*report));
-    report->nwk.version=2; report->nwk.radius=30;
-    report->aps.flags=APS_FLAG_ACK_REQUEST;
-    report->aps.profile_id=DEVICE.config.transport.profile;
-    report->aps.source_endpoint=DEVICE.config.transport.endpoint;
-    report->aps.destination_endpoint=1;
-    o=report->payload;
-    *o++=0x18; *o++=1; *o++=0x0a; *o++=5; *o++=0; *o++=0x42; *o++=sizeof(zdo_runtime_model)-1;
-    for(i=0;i<sizeof(zdo_runtime_model)-1;i++) *o++=(uint8_t)zdo_runtime_model[i];
-    report->length=(uint8_t)(6+sizeof(zdo_runtime_model));
-    result=bdb_join_send(&DEVICE,report,0,DRIVER.now);
-    memset(report,0,sizeof(*report));
-    if(result!=BDB_JOIN_OK && result!=BDB_JOIN_FULL) S.announce=(uint8_t)(0x80u|result);
+    /* FULL and the APS counter-wrap quarantine are retried in this slot. */
+    if(RESULT==BDB_JOIN_FULL || (RESULT==BDB_JOIN_TRANSMIT_FAILED &&
+       DEVICE.work.runtime.transport.wrap_wait)) return;
+    SLOT=CURRENT;
+    if(RESULT!=BDB_JOIN_OK) S.announce=(uint8_t)(0x80u|RESULT);
+}
+
+/* READY CSMA backoff only: maximal 8-bit Galois LFSR (x^8+x^6+x^5+x^4+1)
+ * seeded from one nonzero qualified draw. Deterministic, NOT entropy;
+ * nothing else consumes it. */
+static void backoff(void)
+{
+    BACKOFF=(uint8_t)((BACKOFF>>1)^(BACKOFF&1u?0xb8u:0u));
+    DRAW=BACKOFF;
 }
 
 static uint8_t progress(void)
@@ -92,13 +113,13 @@ static uint8_t progress(void)
     now=timebase_read_awake_ticks24();
     elapsed=(now-started)&TIMEBASE_TICKS_MASK;
     if(((now-previous)&TIMEBASE_TICKS_MASK)>=TIMEBASE_HALF_RANGE) { fault(JS_TIME); return 0; }
-    if(gate==JS_READY && elapsed>=JOIN_SMOKE_SERVE_TICKS) {
-        snapshot(); S.stage=6; return 0;
+    if(gate!=JS_READY) {
+        if(elapsed>=JOIN_SMOKE_RAW_TICKS) { fault(JS_TIME); return 0; }
+        if(steps==JOIN_SMOKE_STEPS) { fault(JS_WORK); return 0; }
     }
-    if(gate!=JS_READY && elapsed>=JOIN_SMOKE_RAW_TICKS) { fault(JS_TIME); return 0; }
     previous=now;
-    if(steps==JOIN_SMOKE_STEPS) { fault(JS_WORK); return 0; }
-    steps++; return 1;
+    steps++;
+    return 1;
 }
 
 static uint8_t input_ready(void)
@@ -132,7 +153,7 @@ void join_smoke_initialize(void)
 
 void join_smoke_poll(void)
 {
-    if(gate==JS_FAULT || (gate==JS_READY && S.stage==6)) return;
+    if(gate==JS_FAULT) return;
     if(!initialized || S.phase!=gate || S.saw_ready!=(gate==JS_READY) ||
        S.guards[0]!=0x69 || S.guards[1]!=0x96) { fault(JS_INPUT); return; }
     if(gate==JS_RUNNING || gate==JS_READY) {
@@ -141,11 +162,14 @@ void join_smoke_poll(void)
         if(!progress()) return;
         S.driver_result=mac_link_driver_step(&DRIVER);
         if(S.driver_result==MAC_LINK_DRIVER_RANDOM) {
-            if(S.draws==S.draw_limit) { fault(JS_RANDOM); return; }
+            if(gate==JS_READY) backoff();
+            else {
+                if(S.draws==S.draw_limit) { fault(JS_RANDOM); return; }
+                DRAW=join_smoke_draws[S.draws]; join_smoke_draws[S.draws++]=0;
+            }
             S.driver_result=mac_link_driver_random(&DRIVER,TX.engine.generation,
-                TX.engine.retries,TX.engine.nb,join_smoke_draws[S.draws]);
+                TX.engine.retries,TX.engine.nb,DRAW);
             if(S.driver_result!=MAC_LINK_DRIVER_OK) { fault(JS_DRIVER); return; }
-            join_smoke_draws[S.draws++]=0;
         } else if(S.driver_result==MAC_LINK_DRIVER_FINISHED) {
             fault(JS_BDB); return;
         } else if(S.driver_result!=MAC_LINK_DRIVER_OK && S.driver_result!=MAC_LINK_DRIVER_WAIT) {
@@ -158,6 +182,9 @@ void join_smoke_poll(void)
                !DEVICE.work.runtime.transport.ready || S.radio_errors) {
                 fault(JS_TERMINAL); return;
             }
+            if(S.draws==S.draw_limit) { fault(JS_RANDOM); return; }
+            BACKOFF=join_smoke_draws[S.draws]; join_smoke_draws[S.draws++]=0;
+            if(!BACKOFF) { fault(JS_RANDOM); return; }
             S.saw_ready=1; S.stage=5; gate=JS_READY; S.phase=gate;
             started=previous=now; steps=0;
         }
@@ -165,15 +192,20 @@ void join_smoke_poll(void)
     }
     if(S.consumed || S.stage || S.bound) { fault(JS_INPUT); return; }
     if(gate==JS_DISARMED || gate==JS_ARMED) {
-        any=0;
-        for(i=0;i<8;i++) { packet[i]=join_smoke_mailbox[i]; any|=packet[i]; join_smoke_mailbox[i]=0; }
+        scratch.admit.any=0;
+        for(i=0;i<8;i++) {
+            scratch.admit.packet[i]=join_smoke_mailbox[i];
+            scratch.admit.any|=scratch.admit.packet[i]; join_smoke_mailbox[i]=0;
+        }
         if(!admission) { fault(JS_ADMISSION_EXPIRED); return; }
-        if(!any) { if(!--admission) fault(JS_ADMISSION_EXPIRED); }
+        if(!scratch.admit.any) { if(!--admission) fault(JS_ADMISSION_EXPIRED); }
         else {
-            opcode=gate==JS_DISARMED?0xa9:0x56;
-            if(packet[0]!=0x4a || packet[1]!=0xb5 || packet[2]!=0x4e || packet[3]!=0xb1 ||
-               packet[4]!=opcode || packet[5]!=(uint8_t)~opcode ||
-               packet[6]!=1 || packet[7]!=0xfe) { fault(JS_PACKET); return; }
+            scratch.admit.opcode=gate==JS_DISARMED?0xa9:0x56;
+            if(scratch.admit.packet[0]!=0x4a || scratch.admit.packet[1]!=0xb5 ||
+               scratch.admit.packet[2]!=0x4e || scratch.admit.packet[3]!=0xb1 ||
+               scratch.admit.packet[4]!=scratch.admit.opcode ||
+               scratch.admit.packet[5]!=(uint8_t)~scratch.admit.opcode ||
+               scratch.admit.packet[6]!=1 || scratch.admit.packet[7]!=0xfe) { fault(JS_PACKET); return; }
             if(!input_ready()) { fault(JS_INPUT); return; }
             gate++; S.phase=gate; admission=gate==JS_ARMED?JOIN_SMOKE_ADMISSION_POLLS:0;
         }
@@ -208,12 +240,12 @@ void join_smoke_poll(void)
         S.adapter_result=mac_adapter_step(JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS);
         if(S.adapter_result==MAC_ADAPTER_WAIT) continue;
         if(S.adapter_result!=MAC_ADAPTER_EVENT) { fault(JS_ADAPTER); return; }
-        observation=mac_adapter_observation(); event_kind=observation->kind;
-        if(event_kind!=MAC_ADAPTER_CLOSED_EVENT && event_kind!=MAC_ADAPTER_RX_EVENT) {
+        observation=mac_adapter_observation(); EVENT=observation->kind;
+        if(EVENT!=MAC_ADAPTER_CLOSED_EVENT && EVENT!=MAC_ADAPTER_RX_EVENT) {
             fault(JS_ADAPTER); return;
         }
         ADAPTER(mac_adapter_consume(observation->token));
-        if(event_kind==MAC_ADAPTER_CLOSED_EVENT) break;
+        if(EVENT==MAC_ADAPTER_CLOSED_EVENT) break;
     }
     S.stage=3;
     ADAPTER(mac_adapter_now(JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS,&CLOCK));

@@ -15,7 +15,10 @@
 #define ZDO_SRV_INVALID_EP 0x82u
 #define ZDO_SRV_NOT_ACTIVE 0x83u
 #define ZDO_SRV_BASIC_CLUSTER 0x0000u
-/* No Home Automation device type is claimed: the endpoint serves only Basic. */
+#define ZDO_SRV_TEMPERATURE_CLUSTER 0x0402u
+#define ZDO_SRV_HUMIDITY_CLUSTER 0x0405u
+/* No Home Automation device type is claimed: Identify and the other mandatory
+ * clusters of an HA sensor device are not implemented. */
 #define ZDO_SRV_DEVICE 0xffffu
 #define ZDO_SRV_DEVICE_VERSION 0u
 
@@ -72,7 +75,8 @@ typedef struct {
  * queried address. Active_EP_req lists the single application endpoint, if
  * any. Simple_Desc_req returns INVALID_EP for 0/FF, INV_REQUESTTYPE for another
  * address, NOT_ACTIVE for other endpoints, else profile, ZDO_SRV_DEVICE and
- * one input cluster, Basic; the caller must actually serve that cluster.
+ * three input clusters: Basic, Temperature and Relative Humidity Measurement;
+ * the caller must actually serve those clusters.
  * Other unicast requests get TSN/status-only NOT_SUPPORTED.
  * Unknown mandatory services are still missing, not made conformant by fallback.
  *

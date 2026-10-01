@@ -185,30 +185,36 @@ static zdo_runtime_result_t announce(zdo_runtime_t * volatile context, nwk_aps_t
 #define ZCL_UNSUPPORTED_COMMAND 0x81u
 #define ZCL_UNSUPPORTED_ATTRIBUTE 0x86u
 #define ZCL_CHARACTER_STRING 0x42u
+#define ZCL_UINT16 0x21u
+#define ZCL_INT16 0x29u
 
 static const MCU_CODE char manufacturer[] = BOARD_MANUFACTURER;
 const MCU_CODE char zdo_runtime_model[BOARD_MODEL_LENGTH+1u] = BOARD_MODEL;
 
-/* Basic server on the transport endpoint: Read Attributes answers
- * ManufacturerName/ModelIdentifier, other attributes UNSUPPORTED_ATTRIBUTE.
- * Other client-to-server commands get Default Response UNSUP_COMMAND unless
- * disabled; server-to-client, reserved frame types and Default Responses
- * get nothing. */
-static zdo_runtime_result_t basic(zdo_runtime_t * volatile context, nwk_aps_t * volatile link,
-    const ed_packet_t * volatile packet)
+/* Basic/Temperature/Humidity servers on the transport endpoint: Read
+ * Attributes answers Basic ManufacturerName/ModelIdentifier or the synthetic
+ * MeasuredValue 0000 of the measurement clusters, other attributes
+ * UNSUPPORTED_ATTRIBUTE. Other client-to-server commands (including Configure
+ * Reporting) get Default Response UNSUP_COMMAND unless disabled;
+ * server-to-client, reserved frame types and Default Responses get nothing. */
+static zdo_runtime_result_t basic(zdo_runtime_t * volatile context, nwk_aps_t * volatile link)
 {
-    zdo_runtime_t *ctx = context;
-    const ed_packet_t *p = packet;
-    const uint8_t *in = p->payload;
-    uint8_t *out;
+    /* Runtime state and packets live in XDATA; qualified pointers avoid
+     * generic-pointer accesses. */
+    zdo_runtime_t MCU_XDATA *ctx = (zdo_runtime_t MCU_XDATA *)context;
+    const ed_packet_t MCU_XDATA *p = &ctx->application;
+    const nwk_aps_t MCU_XDATA *transport = (const nwk_aps_t MCU_XDATA *)link;
+    const uint8_t MCU_XDATA *in = p->payload;
+    uint8_t MCU_XDATA *out;
     const MCU_CODE char *text;
-    uint8_t control, header, command, read, at, i, size, length = p->length;
+    uint16_t value;
+    uint8_t control, header, command, read, at, i, size, sensor, length = p->length;
     if (!length) return ZDO_RUNTIME_FORMAT;
     control = in[0];
     if ((control & 8u) || (control & 3u) > 1u) return ZDO_RUNTIME_IGNORED;
-    header = control & 4u ? 5 : 3;
-    if (length < header) return ZDO_RUNTIME_FORMAT;
-    command = in[header-1];
+    header = control & 4u ? 4 : 2;
+    if (length <= header) return ZDO_RUNTIME_FORMAT;
+    command = in[header];
     read = 0;
     if (!(control & 7u) && command == ZCL_READ) read = 1;
     else if ((control & 0x10u) || (!(control & 3u) && command == ZCL_DEFAULT_RESPONSE))
@@ -217,29 +223,42 @@ static zdo_runtime_result_t basic(zdo_runtime_t * volatile context, nwk_aps_t * 
         ctx->response_result = NWK_APS_FULL;
         return ZDO_RUNTIME_DROPPED;
     }
-    base(&ctx->response, p->nwk.source, ZDO_SRV_BASIC_CLUSTER);
-    ctx->response.aps.profile_id = link->profile;
-    ctx->response.aps.source_endpoint = link->endpoint;
+    base(&ctx->response, p->nwk.source, p->aps.cluster_id);
+    ctx->response.aps.profile_id = transport->profile;
+    ctx->response.aps.source_endpoint = transport->endpoint;
     ctx->response.aps.destination_endpoint = p->aps.source_endpoint;
+    /* sensor is the measurement's ZCL type, 0 for Basic. */
+    if (p->aps.cluster_id == ZDO_SRV_TEMPERATURE_CLUSTER) {
+        sensor = ZCL_INT16; value = ZDO_RUNTIME_TEMPERATURE(ZDO_RUNTIME_SAMPLE(ctx->last));
+    } else {
+        sensor = p->aps.cluster_id == ZDO_SRV_HUMIDITY_CLUSTER ? ZCL_UINT16 : 0;
+        value = ZDO_RUNTIME_HUMIDITY(ZDO_RUNTIME_SAMPLE(ctx->last));
+    }
     out = ctx->response.payload;
     *out++ = (uint8_t)((control & 4u) | 0x18u);
-    for (i = 1; i < header-1u; i++) *out++ = in[i];
+    for (i = 1; i < header; i++) *out++ = in[i];
     if (!read) {
         *out++ = ZCL_DEFAULT_RESPONSE; *out++ = command; *out = ZCL_UNSUPPORTED_COMMAND;
-        at = header+2u;
+        at = header+3u;
     } else {
         *out++ = ZCL_READ_RESPONSE; at = 3;
+        /* size counts the record bytes after the status: type and value. */
         for (i = 3; (uint8_t)(i+1u) < length; i += 2) {
             size = 0; text = manufacturer;
             if (!in[i+1]) {
-                if (in[i] == 4) size = sizeof(manufacturer)-1;
-                else if (in[i] == 5) { size = sizeof(zdo_runtime_model)-1; text = zdo_runtime_model; }
+                if (sensor) { if (!in[i]) size = 3; }
+                else if (in[i] == 4) size = sizeof(manufacturer)+1u;
+                else if (in[i] == 5) { size = sizeof(zdo_runtime_model)+1u; text = zdo_runtime_model; }
             }
-            if ((uint8_t)(at+(size ? 5u+size : 3u)) > ED_PAYLOAD_MAX) break;
-            *out++ = in[i]; *out++ = in[i+1];
-            if (!size) { *out++ = ZCL_UNSUPPORTED_ATTRIBUTE; at += 3; continue; }
-            *out++ = 0; *out++ = ZCL_CHARACTER_STRING; *out++ = size;
-            at += 5+size;
+            if ((uint8_t)(at+3u+size) > ED_PAYLOAD_MAX) break;
+            *out++ = in[i]; *out++ = in[i+1]; at += 3u+size;
+            if (!size) { *out++ = ZCL_UNSUPPORTED_ATTRIBUTE; continue; }
+            *out++ = 0;
+            if (sensor) {
+                *out++ = sensor; *out++ = (uint8_t)value; *out++ = (uint8_t)(value >> 8);
+                continue;
+            }
+            *out++ = ZCL_CHARACTER_STRING; size -= 2; *out++ = size;
             while (size--) *out++ = (uint8_t)*text++;
         }
     }
@@ -313,10 +332,11 @@ static zdo_runtime_result_t received(zdo_runtime_t * volatile context, nwk_aps_t
     }
     if (p->nwk.type) return LW_RETURN(LW_ZDO_RX, parent_response(ctx, transport));
     if (p->aps.destination_endpoint || p->aps.profile_id) {
-        if (p->aps.cluster_id == ZDO_SRV_BASIC_CLUSTER) {
+        if (p->aps.cluster_id == ZDO_SRV_BASIC_CLUSTER || p->aps.cluster_id == ZDO_SRV_TEMPERATURE_CLUSTER ||
+            p->aps.cluster_id == ZDO_SRV_HUMIDITY_CLUSTER) {
             if (p->aps.type || p->aps.delivery_mode || p->nwk.destination != keys.config.address ||
                 p->aps.destination_endpoint != transport->endpoint) return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_IGNORED);
-            return LW_RETURN(LW_ZDO_RX, basic(ctx, transport, p));
+            return LW_RETURN(LW_ZDO_RX, basic(ctx, transport));
         }
         ctx->application_ready = 1;
         return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_OK);

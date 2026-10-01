@@ -113,6 +113,7 @@ class SelectionTests(unittest.TestCase):
             "tests/test_join_smoke.c": {"mac-link-direct"},
             "tests/test_mac_link_shallow.c": {"mac-link-direct"},
             "src/join_smoke.c": {"mac-link-direct"},
+            "src/zcl_sensor.c": {"mac-link-direct"},
             "src/nwk_aps_transmit.c": {"ed-bdb-join", "mac-link", "mac-link-ram", "mac-link-workspace", "mac-link-child-workspace"} | {name for name in plan.COMPONENTS if name.startswith("banked-join-")},
             "tests/test_mac_link_projection.c": {"mac-link-ram"},
             "tests/mac_attempt_projection.c": {"mac-link-ram"},

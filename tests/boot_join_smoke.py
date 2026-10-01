@@ -177,7 +177,7 @@ def stops_for(sites, symbols, ram_stop=None):
     result = [f'break {pc:#x} 1 if "' + "||".join(f"({c})" for c in clauses) + '"'
               for pc, clauses in conditions.items()]
     result += [f"break {symbols[n]:#x}" for n in
-               ("_join_smoke_wait", "_join_smoke_ready", "_join_smoke_fault", "_banked_stop")]
+               ("_join_smoke_wait", "_join_smoke_fault", "_banked_stop")]
     return result
 
 
@@ -286,7 +286,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
     ram_stop, template_bytes = flash_stop(image, symbols, debug)
     stops = stops_for(sites, symbols, ram_stop)
     base = ["set option analyzer false"] + model(image, directory) + [AES_ALIAS]
-    wait, ready, fault = (symbols["_join_smoke_" + n] for n in ("wait", "ready", "fault"))
+    wait, fault = (symbols["_join_smoke_" + n] for n in ("wait", "fault"))
     rows = instructions(listings["join_smoke_main"].decode("ascii"))
     after = [pc + len(raw) for pc, (raw, _) in rows.items()
              if raw == b"\x12" + symbols["_join_smoke_poll"].to_bytes(2, "big")]
@@ -473,7 +473,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
                 completed += 1
             print(f"join step{index} events {last}/{len(events)} SP{peak:02x}", flush=True)
     finished = completed == len(vector["steps"])
-    terminal_kind = "ready" if vector["case"] == 0 else (
+    terminal_kind = "serving" if vector["case"] == 0 else (
         "flash-ram-stop" if vector["case"] == FLASH_BUSY_CASE else "fault")
     if finished and vector["case"] == FLASH_BUSY_CASE:
         discovery = "_security_keys_provision_default" in symbols
@@ -487,9 +487,12 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
         parts = sections(simulate_binary_dumps(simulator, commands))
         check_flash_retention(state, captured_sections(parts, 60000, ram_stop))
         check_flash_retention(state, captured_sections(parts, 60010, ram_stop), idle=True)
+    elif finished and vector["case"] == 0:
+        # READY has no terminal loop: the last traced poll returned to main.
+        require(state[0][0x1e06] == 5 and pc == after, "READY did not keep serving")
     elif finished:
-        terminal = ready if vector["case"] == 0 else fault
-        require(state[0][0x1e06] == (5 if vector["case"] == 0 else 6), "Wrong terminal state")
+        terminal = fault
+        require(state[0][0x1e06] == 6, "Wrong terminal state")
         commands = base + resume(state, pc) + stops + ["step 1", "run"] + capture(60000)
         commands += ["step 16"] + capture(60010)
         parts = sections(simulate_binary_dumps(simulator, commands))

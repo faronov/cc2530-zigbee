@@ -447,7 +447,7 @@ class LocalChecksTests(unittest.TestCase):
                 self.assertIn("src/mac_link_child_workspace.c", args)
                 if "tests/test_mac_link_join.c" not in args:
                     expected = LINK_DIRECT_MODULES | (
-                        {"join_smoke"} if "tests/test_join_smoke.c" in args else set())
+                        {"join_smoke", "zcl_sensor"} if "tests/test_join_smoke.c" in args else set())
                     self.assertEqual({Path(arg).stem for arg in args if arg.startswith("src/")},
                                      expected)
                     self.assertIn("tests/security_joint_model.c", args)
@@ -483,7 +483,7 @@ class LocalChecksTests(unittest.TestCase):
             commands = self.dry_run("prepare-join-smoke-layout", BOARD=board, include_build=True)
             compiles = [args for args in commands if args[0] == "sdcc" and "-c" in args]
             self.assertEqual({Path(args[-1]).stem for args in compiles},
-                             LINK_DIRECT_MODULES | {"banked", "startup", board, "join_smoke",
+                             LINK_DIRECT_MODULES | {"banked", "startup", board, "join_smoke", "zcl_sensor",
                                                     "join_smoke_main", "join_smoke_iram_low",
                                                     "join_smoke_iram_high"})
             for args in compiles:

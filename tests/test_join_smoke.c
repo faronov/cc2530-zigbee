@@ -90,18 +90,54 @@ static uint16_t caller_address(const volatile void *p)
     return joint_address(p);
 }
 
-/* READY keeps serving until its own budget ends, without a fault. */
+#if defined(JOIN_SMOKE_TRACE)
+#define SERVE_SECONDS 110u  /* Basic plus three synthetic reports: short replay. */
+#else
+#define SERVE_SECONDS 10800u  /* Past one APS counter wrap of reports. */
+#endif
+
+/* One acknowledged report: Basic ModelIdentifier first, then alternating
+ * SYNTHETIC temperature/humidity MeasuredValue reports, one per slot. */
+static void serve_report(unsigned *reports, uint8_t *slot)
+{
+    uint16_t value=(uint16_t)(link_peer_report[6]|link_peer_report[7]<<8);
+    assert(link_peer_report[0]==0x18 && link_peer_report[2]==0x0a && !link_peer_report[4]);
+    if(!*reports) {
+        assert(!link_peer_report_cluster && link_peer_report[3]==5 && link_peer_report[5]==0x42);
+        assert(link_peer_report_length==6+sizeof(zdo_runtime_model) &&
+            !memcmp(link_peer_report+7,zdo_runtime_model,sizeof(zdo_runtime_model)-1));
+    } else {
+        assert(link_peer_report_length==8 && !link_peer_report[3]);
+        if(*reports>1) assert(link_peer_report[1]==(uint8_t)(*slot+1u));
+        if(link_peer_report[1]&1) {
+            assert(link_peer_report_cluster==ZDO_SRV_HUMIDITY_CLUSTER && link_peer_report[5]==0x21);
+            assert(value>=4500 && value<=5500 && !(value%25));
+        } else {
+            assert(link_peer_report_cluster==ZDO_SRV_TEMPERATURE_CLUSTER && link_peer_report[5]==0x29);
+            assert(value>=2100 && value<=2490 && !(value%10));
+        }
+    }
+    *slot=link_peer_report[1];
+    (*reports)++;
+}
+
+/* READY serves without a time bound, a fault or further qualified draws. */
 static void serve_ready(unsigned *calls)
 {
-    unsigned served=0;
+    unsigned served=0, reports=0, seen=link_peer_app, confirmed=0;
+    uint32_t steps;
+    uint8_t slot=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
-    while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && served++<100000u) {
+    while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
+          cycles<(uint64_t)SERVE_SECONDS*32000000u) {
         uint32_t step;
+        served++;
 #if defined(CC2530_DEFAULT_TC_KEY)
         discovery_peer();
 #else
         peer_progress_for(&join_smoke_device,&join_smoke_tx);
 #endif
+        if(link_peer_app!=seen) { assert(link_peer_app==seen+1u); seen++; serve_report(&reports,&slot); confirmed=served; }
         /* Coarse time only while no MAC transmission owns a stop window. */
         step=(join_smoke_status.announce==255 || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
             join_smoke_device.work.runtime.transport.active || join_smoke_device.work.runtime.transport.queued ?
@@ -123,16 +159,21 @@ static void serve_ready(unsigned *calls)
             !join_smoke_device.work.runtime.zdo.application.length && join_smoke_status.discarded==1);
         (*calls)++;
     }
-    if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=6)
+    if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=5)
         fprintf(stderr,"serve phase=%u reason=%u stage=%u BDB=%u/%u driver=%u announce=%u served=%u\n",
             join_smoke_status.phase,join_smoke_status.reason,join_smoke_status.stage,
             join_smoke_device.phase,join_smoke_device.result,join_smoke_status.driver_result,
             join_smoke_status.announce,served);
-    assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==6 && join_smoke_status.saw_ready);
-    assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce && link_peer_app==1);
-    assert(join_smoke_status.discarded==1 && !join_smoke_status.dropped);
-    assert(((uint32_t)join_smoke_status.steps[0]|(uint32_t)join_smoke_status.steps[1]<<8|
-        (uint32_t)join_smoke_status.steps[2]<<16|(uint32_t)join_smoke_status.steps[3]<<24)==served-1u);
+    assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && join_smoke_status.saw_ready);
+    assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce);
+    assert(join_smoke_status.discarded==1 && !join_smoke_status.dropped && served>200);
+    /* One report per 2^21-symbol slot, give or take the slot boundaries. */
+    assert(reports+2u>=SERVE_SECONDS*62500u/2097152u && reports<=SERVE_SECONDS*62500u/2097152u+2u);
+    assert(join_smoke_status.draws==draws);
+    /* The status snapshot follows the last report confirmation. */
+    steps=(uint32_t)join_smoke_status.steps[0]|(uint32_t)join_smoke_status.steps[1]<<8|
+        (uint32_t)join_smoke_status.steps[2]<<16|(uint32_t)join_smoke_status.steps[3]<<24;
+    assert(steps>=confirmed && steps<=served && confirmed);
 }
 
 static void prepare_caller(unsigned selected)
@@ -354,7 +395,8 @@ int main(int argc, char **argv)
         assert(mac_adapter_diagnostic()->phase==MAC_ADAPTER_COLD);
         assert(security_keys_open()==SECURITY_KEYS_EMPTY);
     }
-    if(!caller_stopped) {
+    /* READY never becomes terminal; only stopped phases are idempotent. */
+    if(!caller_stopped && join_smoke_status.phase!=JS_READY) {
         join_smoke_status_t before=join_smoke_status;
         unsigned old_accesses=accesses, old_flash=security_joint_flash_commands();
         join_smoke_phase_t before_phase=join_smoke_phase;

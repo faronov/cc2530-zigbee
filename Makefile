@@ -1855,7 +1855,7 @@ JOIN_SMOKE_WIRE := nwk_frame aps_frame ed_wire
 JOIN_SMOKE_NWK := nwk_aps nwk_aps_direct
 JOIN_SMOKE_BDB := bdb_join bdb_join_init mac_scan nwk_candidates nwk_beacon nwk_parent
 JOIN_SMOKE_ASSOCIATION := mac_join mac_poll mac_association
-JOIN_SMOKE_MODULES := banked mac_link_workspace mac_link_child_workspace flash_exec timebase clock flash flash_write nv_record security_counter aes ccm_star zigbee_mmo zigbee_key_hash mac_time radio_autoack mac_epoch mac_radio mac_attempt mac_frame mac_tx mac_adapter nwk_frame aps_frame ed_wire security_keys mac_association mac_poll mac_join zdo_node zdo_srv nwk_beacon nwk_candidates nwk_parent mac_scan nwk_aps nwk_aps_direct zdo_runtime bdb_join bdb_join_init mac_link_driver
+JOIN_SMOKE_MODULES := banked mac_link_workspace mac_link_child_workspace flash_exec timebase clock flash flash_write nv_record security_counter aes ccm_star zigbee_mmo zigbee_key_hash mac_time radio_autoack mac_epoch mac_radio mac_attempt mac_frame mac_tx mac_adapter nwk_frame aps_frame ed_wire security_keys mac_association mac_poll mac_join zdo_node zdo_srv nwk_beacon nwk_candidates nwk_parent mac_scan nwk_aps nwk_aps_direct zdo_runtime zcl_sensor bdb_join bdb_join_init mac_link_driver
 JOIN_SMOKE_AREA = $(if $(filter $(1),$(JOIN_SMOKE_COMMON)),CSEG,$(if $(filter $(1),$(JOIN_SMOKE_RADIO)),JS_RADIO,$(if $(filter $(1),$(JOIN_SMOKE_WIRE)),JS_WIRE,$(if $(filter $(1),$(JOIN_SMOKE_NWK)),JS_NWK,$(if $(filter $(1),$(JOIN_SMOKE_BDB)),JS_BDB,$(if $(filter $(1),$(JOIN_SMOKE_ASSOCIATION)),JS_ASSOCIATION,JS_$(1)))))))
 JOIN_SMOKE_OBJECTS := $(addprefix $(JOIN_SMOKE_DIR)/,$(addsuffix .rel,$(JOIN_SMOKE_MODULES) startup $(BOARD) join_smoke join_smoke_main))
 JOIN_SMOKE_LINK_MODULES := join_smoke_iram_low banked join_smoke_iram_high $(filter-out banked,$(JOIN_SMOKE_MODULES)) startup $(BOARD) join_smoke join_smoke_main
@@ -1908,7 +1908,7 @@ endef
 $(foreach c,$(JOIN_SMOKE_CASES),$(eval $(call JOIN_SMOKE_MCU_CASE,$(c))))
 test-join-smoke-mcu: $(addprefix test-join-smoke-mcu-,$(JOIN_SMOKE_CASES))
 
-JOIN_SMOKE_HOST_SRC := tests/test_join_smoke.c src/join_smoke.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC)
+JOIN_SMOKE_HOST_SRC := tests/test_join_smoke.c src/join_smoke.c src/zcl_sensor.c tests/mac_link_peer.c $(ED_MODEL_SRC) $(MAC_LINK_DIRECT_SRC)
 $(BUILD)/host-join-smoke-vectors: $(JOIN_SMOKE_HOST_SRC) tests/join_smoke_trace.h $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h $(JOIN_SMOKE_PROFILE) | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DJOIN_SMOKE_TRACE \
 		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) -I$(JOIN_SMOKE_LAYOUT_DIR) $(JOIN_SMOKE_HOST_SRC) -o $@

@@ -7,13 +7,6 @@ void join_smoke_wait(void) __naked
         ret
     __endasm;
 }
-void join_smoke_ready(void) __naked
-{
-    __asm
-        nop
-        sjmp _join_smoke_ready
-    __endasm;
-}
 void join_smoke_fault(void) __naked
 {
     __asm
@@ -27,7 +20,6 @@ void main(void)
     for(;;) {
         if(join_smoke_status.phase!=JS_RUNNING && join_smoke_status.phase!=JS_READY) join_smoke_wait();
         join_smoke_poll();
-        if(join_smoke_status.phase==JS_READY && join_smoke_status.stage==6) join_smoke_ready();
         if(join_smoke_status.phase==JS_FAULT) join_smoke_fault();
     }
 }

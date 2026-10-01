@@ -35,8 +35,12 @@ further corrections, the LG board was **hardware-observed** on 2026-09-30 to
 complete an ordinary ZHA join to BDB READY and pass the zigpy interview; ZHA
 lists it as `cc2530-zigbee` `LG-ESL29` (see
 [the run](docs/ED_JOIN.md#2026-09-30-lg-ordinary-join-and-zha-interview)).
-It exposes only the Basic cluster, runs for a bounded serving budget and is
-not a sleepy, rejoining or production device. Router-parent joining is not
+Its endpoint now serves Basic plus Temperature and Relative Humidity
+Measurement with **synthetic (fake) values** for demonstration, reported
+periodically after READY (see
+[the sensor demo](docs/ED_JOIN.md#synthetic-temperature-and-humidity-demo)).
+It serves until reset, but is not a real sensor, nor a sleepy, rejoining or
+production device. Router-parent joining is not
 implemented.
 
 [Русский обзор](README.ru.md)
