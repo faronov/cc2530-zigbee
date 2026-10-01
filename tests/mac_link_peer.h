@@ -9,7 +9,7 @@ extern uint8_t link_beacon_length, link_response_length, link_peer_length, link_
 extern unsigned link_peer_tx, link_peer_checks, link_peer_app, link_peer_parent;
 /* Last APS-acknowledged application frame. */
 extern uint16_t link_peer_report_cluster;
-extern uint8_t link_peer_report[], link_peer_report_length;
+extern uint8_t link_peer_report[], link_peer_report_length, link_peer_report_counter;
 void link_peer_setup(bdb_join_config_t *config);
 void link_peer_transmitted(const uint8_t *body, uint8_t length);
 void link_peer_transport(uint8_t request_ack);

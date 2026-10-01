@@ -886,11 +886,11 @@ unproved. Sticky TXACKDONE supplies neither a per-frame ACK count nor time.
 RX-to-RX timeout removal is not MAC IFS; physical stop/drain is not receiver-on
 POLL CLOSED. These limits are part of the contract, not hidden test restrictions.
 
-SWRS081B (revised February2011), Table2 p24 supplies the reference raw05/D5
-power profiles, typical -22/+1 dBm on the CC2530 EM at25C,3V,2440MHz, not
-calibrated board output. The D5 extension reread the original TI PDF,
+SWRS081B (revised February2011), Table2 p24 supplies the reference raw05/D5/F5
+power profiles, typical -22/+1/+4.5 dBm on the CC2530 EM at25C,3V,2440MHz, not
+calibrated board output. The D5 and later F5 extensions reread the original TI PDF,
 SHA-256 `78d47f4ae373c95a1c452954a843b561b35ffa96bfb3061ddbab095c337d11bd`;
-it preserves full-byte TXPOWER readback and rejects other power bytes.
+they preserve full-byte TXPOWER readback and reject other power bytes.
 SWRZ031 (April2009), sections1.1-1.2
 pp2-3 covers DMA/Timer2 issues; this owner uses neither. All implementation,
 synthetic controller/vector and linked proof code is original BSD-3-Clause.

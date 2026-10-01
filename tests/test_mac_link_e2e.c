@@ -12,11 +12,21 @@
  */
 #define _gptrput_PARM_2 link_radio_gptr
 #define MAC_ADAPTER_MAIN adapter_component_main
+#define ADAPTER_ADDRESS_HOOK loss_address
 #define scenario component_scenario
+static uint16_t loss_address(const volatile void *p);
 #include "test_mac_adapter.c"
 #undef scenario
 #undef _gptrput_PARM_2
 extern uint8_t _gptrput_PARM_2;
+
+/* The standalone adapter fixture inside this joint TU: production uses the
+ * joint libc scratch marker, not the renamed radio fixture one. */
+static uint16_t loss_address(const volatile void *p)
+{
+    if (p == &_gptrput_PARM_2) return helper;
+    return adapter_address(p);
+}
 
 static bdb_join_t device;
 static bdb_join_config_t join_config;
@@ -702,6 +712,8 @@ int MAC_LINK_E2E_MAIN(void)
 {
     unsigned i;
     for (i = 0; i < E2E_CASES; i++) run(i);
+    /* Adapter-level AUTOACK RX loss inside an ACK window, LINK composition. */
+    for (i = 4; i < 6; i++) loss_case(i);
     printf("MAC link E2E: %u cases, %u checks + %u peer checks, %u steps, %u test RANDOM inputs PASS.\n",
            E2E_CASES,totals,total_peer_checks,total_steps,total_random);
     return 0;

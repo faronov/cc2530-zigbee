@@ -69,7 +69,8 @@ mac_radio_result_t mac_radio_init(const radio_autoack_config_t MCU_XDATA *config
     if (result != MAC_RADIO_READY) return result;
     if (configuration->channel < 11 || configuration->channel > 26 ||
         (configuration->power != RADIO_AUTOACK_POWER_05 &&
-         configuration->power != RADIO_AUTOACK_POWER_D5)) return MAC_RADIO_INVALID_ARGUMENT;
+         configuration->power != RADIO_AUTOACK_POWER_D5 &&
+         configuration->power != RADIO_AUTOACK_POWER_F5)) return MAC_RADIO_INVALID_ARGUMENT;
     mac_radio_config = *configuration;
     status.phase = MAC_RADIO_STARTING;
     status.radio_result = 255;

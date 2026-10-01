@@ -19,12 +19,10 @@ static MCU_XDATA uint8_t initialized, gate, i;
  * reuse its storage. */
 static MCU_XDATA union {
     struct { uint8_t packet[8], any, opcode; } admit;
-    struct { uint8_t backoff, draw, slot, current, result; } serve;
+    struct { uint8_t backoff, draw, result; } serve;
 } scratch;
 #define BACKOFF scratch.serve.backoff
 #define DRAW scratch.serve.draw
-#define SLOT scratch.serve.slot
-#define CURRENT scratch.serve.current
 #define RESULT scratch.serve.result
 #define EVENT scratch.serve.result /* start loop only, before RESULT is live */
 static MCU_XDATA uint16_t admission;
@@ -67,35 +65,30 @@ static void fault(uint8_t reason)
     gate=JS_FAULT; S.phase=gate;
 }
 
-/* One Basic ModelIdentifier report first: any frame from an uninterviewed
- * device invites the coordinator to interview it; the runtime answers the
- * interview. Then one SYNTHETIC MeasuredValue report per 2^21-symbol slot,
- * temperature in even and humidity in odd slots (each cluster ~every 67 s). */
+/* READY: the application ZCL server (zcl_sensor.h) answers published frames,
+ * which are then cleared, and supplies at most one due report while no
+ * application TX is outstanding. FULL and the APS counter-wrap quarantine
+ * leave the report uncommitted, so a later poll rebuilds it. */
 static void serve(void)
 {
-    ed_packet_t MCU_XDATA *report=&DEVICE.work.runtime.zdo.application;
     if(DEVICE.phase!=BDB_JOIN_READY) return;
+    RESULT=zcl_sensor_serve();
     if(DEVICE.work.runtime.zdo.application_ready) {
         if(zdo_runtime_discard_application(&DEVICE.work.runtime.zdo)!=ZDO_RUNTIME_OK) {
             fault(JS_BDB); return;
         }
-        if(S.discarded!=255) S.discarded++;
+        if(RESULT==ZCL_SENSOR_DISCARDED && S.discarded!=255) S.discarded++;
     }
     if(DEVICE.application_done) {
         if(bdb_join_confirm(&DEVICE,&RESULT)!=BDB_JOIN_OK) { fault(JS_BDB); return; }
         S.announce=RESULT; snapshot(); return;
     }
-    if(DEVICE.application_pending) return;
-    /* Little-endian bits 21..23 detect a new slot; serve runs every poll. */
-    CURRENT=((const uint8_t MCU_XDATA *)&DEVICE.work.runtime.zdo.last)[2]&0xe0u;
-    if(S.announce!=255 && CURRENT==SLOT) return;
-    zcl_sensor_report(&DEVICE,S.announce==255);
-    RESULT=bdb_join_send(&DEVICE,report,0,DRIVER.now);
-    memset(report,0,sizeof(*report));
-    /* FULL and the APS counter-wrap quarantine are retried in this slot. */
+    if(RESULT!=ZCL_SENSOR_REPORT) return;
+    RESULT=bdb_join_send(&DEVICE,&DEVICE.work.runtime.zdo.application,0,DRIVER.now);
+    memset(&DEVICE.work.runtime.zdo.application,0,sizeof(ed_packet_t));
     if(RESULT==BDB_JOIN_FULL || (RESULT==BDB_JOIN_TRANSMIT_FAILED &&
        DEVICE.work.runtime.transport.wrap_wait)) return;
-    SLOT=CURRENT;
+    ZCL_SENSOR_STATE.sent=1;
     if(RESULT!=BDB_JOIN_OK) S.announce=(uint8_t)(0x80u|RESULT);
 }
 
@@ -187,6 +180,7 @@ void join_smoke_poll(void)
             if(!BACKOFF) { fault(JS_RANDOM); return; }
             S.saw_ready=1; S.stage=5; gate=JS_READY; S.phase=gate;
             started=previous=now; steps=0;
+            zcl_sensor_init();
         }
         return;
     }
@@ -231,7 +225,7 @@ void join_smoke_poll(void)
 #endif
     for(i=0;i<8;i++) INITIAL.ieee[i]=IN.identity.own_ieee[i];
     INITIAL.pan=INITIAL.short_address=0xffff;
-    INITIAL.channel=IN.identity.channel; INITIAL.power=RADIO_AUTOACK_POWER_D5;
+    INITIAL.channel=IN.identity.channel; INITIAL.power=RADIO_AUTOACK_POWER_F5;
     S.stage=2;
     ADAPTER(mac_adapter_init(&INITIAL,JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS));
     ADAPTER(mac_adapter_close(NULL));

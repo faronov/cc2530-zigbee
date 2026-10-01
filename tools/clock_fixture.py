@@ -26,6 +26,8 @@ LENGTHS = CLOCK_INSTRUCTION_LENGTHS | PRNG_LENGTHS | FIFO_LENGTHS | {
 # Keys are CODE start, private XDATA start, generic-store runtime entry.
 # New consumers must supply their own genuine reviewed emission, not bypass it.
 PROFILES = {
+    (1027, 33, 29495): ("a2277c4c668c01ffff1f376f1e153168571ea36bb09dba727f2f9134fe3ef8ef",
+                        "498bd06c481b81cfecca399352a6901734234c5a3a958c50d6fd2a62e4b944cb", 44),
     (1027, 33, 29482): ("a429b11d3a2ad28bb509d3e66564abad0a33c9fd43908e271fed8ec8a8a25b18",
                         "498bd06c481b81cfecca399352a6901734234c5a3a958c50d6fd2a62e4b944cb", 44),
     (502, 25, 10698): ("1244f142211c4955b955cccbaaf79d4bbf36dbd68bbddf66a344c6211c227eb2",

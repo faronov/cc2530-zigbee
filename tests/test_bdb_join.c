@@ -47,7 +47,6 @@ static const uint8_t *aux_source;
 static uint16_t expected_reply_cluster;
 static uint16_t peer_pan;
 static uint8_t expected_reply_status, expected_reply_length, reply_seen;
-static uint8_t expected_zcl[ED_PAYLOAD_MAX], expected_zcl_length;
 static uint16_t zcl_cluster;
 static uint32_t now, peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device_aps;
 static uint32_t initial_now = 100;
@@ -239,12 +238,6 @@ static void observe_transmission(void)
         CHECK(verified && parent_set && peer_in.nwk.destination == 0xfffcu && peer_in.length == 3);
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1);
         CHECK(!runtime.transport.ready); permit = 1;
-    } else if (expected_zcl_length) {
-        CHECK(!reply_seen && peer_in.aps.profile_id == 0x0104 && peer_in.aps.cluster_id == zcl_cluster);
-        CHECK(peer_in.aps.source_endpoint == 1 && peer_in.aps.destination_endpoint == 9);
-        CHECK(!peer_in.nwk.destination && !peer_in.aps.delivery_mode && !peer_in.aps.flags);
-        CHECK(peer_in.length == expected_zcl_length && !memcmp(peer_in.payload, expected_zcl, expected_zcl_length));
-        reply_seen = 1;
     } else if (expected_reply_cluster) {
         CHECK(peer_in.aps.cluster_id == expected_reply_cluster && !peer_in.aps.profile_id);
         CHECK(peer_in.length == expected_reply_length && peer_in.payload[1] == expected_reply_status);
@@ -255,10 +248,11 @@ static void observe_transmission(void)
         if (expected_reply_length == 13) CHECK(!peer_in.payload[12]);
         if (expected_reply_cluster == 0x8005u) CHECK(peer_in.payload[4] == 1 && peer_in.payload[5] == 1);
         if (expected_reply_cluster == 0x8004u)
-            CHECK(peer_in.payload[4] == 14 && peer_in.payload[5] == 1 && peer_in.payload[6] == 0x04 &&
-                  peer_in.payload[7] == 0x01 && peer_in.payload[11] == 3 && !peer_in.payload[12] &&
-                  !peer_in.payload[13] && peer_in.payload[14] == 0x02 && peer_in.payload[15] == 0x04 &&
-                  peer_in.payload[16] == 0x05 && peer_in.payload[17] == 0x04 && !peer_in.payload[18]);
+            CHECK(peer_in.payload[4] == 18 && peer_in.payload[5] == 1 && peer_in.payload[6] == 0x04 &&
+                  peer_in.payload[7] == 0x01 && peer_in.payload[8] == 0xff && peer_in.payload[9] == 0xff &&
+                  peer_in.payload[11] == 5 &&
+                  !memcmp(peer_in.payload+12, "\x00\x00\x01\x00\x03\x00\x02\x04\x05\x04", 10) &&
+                  !peer_in.payload[22]);
         if (expected_reply_cluster == 0x8004u || expected_reply_cluster == 0x8005u)
             CHECK(peer_in.payload[2] == 0x78 && peer_in.payload[3] == 0x56);
         reply_seen = 1;
@@ -639,11 +633,15 @@ static void operational_failures(void)
     ready(); mute_timeout = 1; keepalive_sent();
     CHECK(muted == 1 && device.attempts == 1);
     now = runtime.zdo.deadline; drive();
-    CHECK(device.phase == BDB_JOIN_READY && device.attempts == 2);
+    /* A lost keepalive is retried after a spacing delay, not in the same burst. */
+    CHECK(device.phase == BDB_JOIN_READY && device.attempts == 1 && !runtime.zdo.query);
+    CHECK(device.keepalive == device.last+BDB_JOIN_KEEPALIVE_RETRY);
+    now = device.keepalive-1; drive();
+    CHECK(device.attempts == 1 && !runtime.zdo.query);
     keepalive_success(); retained(SECURITY_KEYS_VERIFIED);
 
     ready(); mute_timeout = 1;
-    for (attempt = 1; attempt <= BDB_JOIN_ATTEMPTS; attempt++) {
+    for (attempt = 1; attempt <= BDB_JOIN_KEEPALIVE_ATTEMPTS; attempt++) {
         keepalive_sent();
         CHECK(device.attempts == attempt && muted == attempt);
         now = runtime.zdo.deadline; drive();
@@ -655,9 +653,13 @@ static void operational_failures(void)
 
     for (sustained = 0; sustained < 2; sustained++) {
         ready(); phy_busy = 1; now = device.keepalive;
-        for (iterations = 0; iterations < 256 && busy_events < 5u*(sustained ? BDB_JOIN_ATTEMPTS : 1u);
-             iterations++) drive();
-        CHECK(iterations < 256);
+        for (iterations = 0; iterations < 512 &&
+             busy_events < 5u*(sustained ? BDB_JOIN_KEEPALIVE_ATTEMPTS : 1u); iterations++) {
+            if (device.phase == BDB_JOIN_READY && !runtime.zdo.query &&
+                (int32_t)(device.keepalive-now) > 0) now = device.keepalive;
+            drive();
+        }
+        CHECK(iterations < 512);
         if (sustained) {
             drain();
             CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_PARENT_FAILED && !leave_sent);
@@ -1382,103 +1384,38 @@ static void basic_frame(const uint8_t *zcl, uint8_t length, uint8_t endpoint)
     seal_peer(0, 0, NULL, 1);
 }
 
-static void basic_reply(const uint8_t *zcl, uint8_t length, const uint8_t *reply, uint8_t reply_length)
+/* The runtime publishes the frame unanswered for the application server. */
+static void published(void)
 {
-    basic_frame(zcl, length, 1);
-    memcpy(expected_zcl, reply, reply_length); expected_zcl_length = reply_length; reply_seen = 0;
-    deliver();
-    for (iterations = 0; iterations < 128 &&
-        (!reply_seen || runtime.transport.active || runtime.transport.queued || runtime.zdo.response_tx); iterations++)
-        drive();
-    CHECK(iterations < 128 && reply_seen && device.phase == BDB_JOIN_READY);
-    CHECK(!runtime.zdo.application_ready && !runtime.zdo.response_pending);
-    expected_zcl_length = 0;
-}
-
-static void basic_silent(const uint8_t *zcl, uint8_t length, uint8_t endpoint, uint8_t result)
-{
-    basic_frame(zcl, length, endpoint);
-    if (endpoint == 255) {
-        peer_out.nwk.destination = 0xfffdu; peer_out.aps.delivery_mode = APS_DELIVERY_BROADCAST;
-        peer_out.aps.flags = 0; seal_peer(0, 0, NULL, 1);
-    }
+    ed_packet_t sent = peer_out;
     CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
     pending = 0;
     CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
-    CHECK(device.receive_result == result && !runtime.zdo.application_ready && !runtime.zdo.response_pending);
-    empty_packet(&runtime.zdo.application);
-    drain(); CHECK(device.phase == BDB_JOIN_READY);
+    CHECK(device.receive_result == ZDO_RUNTIME_OK && runtime.zdo.application_ready);
+    CHECK(!runtime.zdo.response_pending && runtime.zdo.application.aps.cluster_id == sent.aps.cluster_id);
+    CHECK(runtime.zdo.application.aps.profile_id == sent.aps.profile_id);
+    CHECK(runtime.zdo.application.length == sent.length &&
+          !memcmp(runtime.zdo.application.payload, sent.payload, sent.length));
+    CHECK(zdo_runtime_discard_application(&runtime.zdo) == ZDO_RUNTIME_OK);
+    CHECK(!runtime.zdo.application_ready);
+    drain(); CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.response_pending);
 }
 
-/* The synthetic sawtooths: 40 temperature and 41 humidity steps of 2^22 symbols. */
-static void sensor_values(void)
-{
-    CHECK(ZDO_RUNTIME_SAMPLE(0) == 0 && ZDO_RUNTIME_SAMPLE((1ul << 22)-1) == 0);
-    CHECK(ZDO_RUNTIME_SAMPLE(1ul << 22) == 1 && ZDO_RUNTIME_SAMPLE(0x3ffffffful) == 255);
-    CHECK(ZDO_RUNTIME_SAMPLE(0x40000000ul) == 0 && ZDO_RUNTIME_SAMPLE(0xfffffffful) == 255);
-    CHECK(ZDO_RUNTIME_TEMPERATURE(0) == 2100 && ZDO_RUNTIME_TEMPERATURE(1) == 2110);
-    CHECK(ZDO_RUNTIME_TEMPERATURE(39) == 2490 && ZDO_RUNTIME_TEMPERATURE(40) == 2100);
-    CHECK(ZDO_RUNTIME_TEMPERATURE(255) == 2100+10*(255%40));
-    CHECK(ZDO_RUNTIME_HUMIDITY(0) == 4500 && ZDO_RUNTIME_HUMIDITY(1) == 4525);
-    CHECK(ZDO_RUNTIME_HUMIDITY(40) == 5500 && ZDO_RUNTIME_HUMIDITY(41) == 4500);
-    CHECK(ZDO_RUNTIME_HUMIDITY(255) == 4500+25*(255%41));
-}
-
-/* Synthetic MeasuredValue reads; no reporting configuration is accepted. */
-static void sensor_clusters(void)
-{
-    static const uint8_t configure[] = {0x00, 0x42, 0x06, 0x00, 0x00, 0x00, 0x29, 0x0a, 0x00, 0x10, 0x0e, 0x0a, 0x00};
-    static const uint8_t configure_reply[] = {0x18, 0x42, 0x0b, 0x06, 0x81};
-    static const uint8_t read[] = {0x00, 0x43, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01};
-    uint8_t reply[16], c;
-    uint16_t value;
-    uint32_t before;
-    sensor_values();
-    for (c = 0; c < 2; c++) {
-        zcl_cluster = c ? ZDO_SRV_HUMIDITY_CLUSTER : ZDO_SRV_TEMPERATURE_CLUSTER;
-        before = now + (7ul << 22);
-        while ((uint32_t)(before - device.keepalive) < MAC_TX_HALF) keepalive_success();
-        CHECK((uint32_t)(before - now) < MAC_TX_HALF);
-        now = before; drain();
-        value = c ? ZDO_RUNTIME_HUMIDITY(ZDO_RUNTIME_SAMPLE(before)) :
-            ZDO_RUNTIME_TEMPERATURE(ZDO_RUNTIME_SAMPLE(before));
-        memcpy(reply, "\x18\x43\x01\x00\x00\x00", 6);
-        reply[6] = c ? 0x21 : 0x29; reply[7] = (uint8_t)value; reply[8] = (uint8_t)(value >> 8);
-        memcpy(reply+9, "\x01\x00\x86\x00\x01\x86", 6);
-        basic_reply(read, sizeof(read), reply, 15);
-        CHECK(ZDO_RUNTIME_SAMPLE(runtime.zdo.last) == ZDO_RUNTIME_SAMPLE(before));
-        basic_reply(configure, sizeof(configure), configure_reply, sizeof(configure_reply));
-        basic_silent(read, sizeof(read), 255, ZDO_RUNTIME_IGNORED);
-        basic_silent(read, 2, 1, ZDO_RUNTIME_FORMAT);
-    }
-    zcl_cluster = 0;
-}
-
+/* Descriptor queries list the five application input clusters; endpoint
+ * frames (unicast or broadcast, any cluster, even malformed) and Bind/Unbind
+ * requests are published for zcl_sensor (tests/test_zcl_sensor.c). */
 static void basic_cluster(void)
 {
-    static const uint8_t read[] = {0x00, 0x31, 0x00, 0x04, 0x00, 0x05, 0x00, 0x07, 0x00, 0x04, 0x01};
-    static const uint8_t odd[] = {0x10, 0x32, 0x00, 0x05, 0x00, 0x04};
-    static const uint8_t vendor[] = {0x04, 0x34, 0x12, 0x33, 0x00, 0x04, 0x00};
-    static const uint8_t vendor_reply[] = {0x1c, 0x34, 0x12, 0x33, 0x0b, 0x00, 0x81};
-    static const uint8_t specific[] = {0x01, 0x35, 0x00};
-    static const uint8_t specific_reply[] = {0x18, 0x35, 0x0b, 0x00, 0x81};
-    static const uint8_t write[] = {0x00, 0x36, 0x02, 0x10, 0x00, 0x42, 0x00};
-    static const uint8_t write_reply[] = {0x18, 0x36, 0x0b, 0x02, 0x81};
-    static const uint8_t quiet_write[] = {0x10, 0x37, 0x02, 0x10, 0x00, 0x42, 0x00};
-    static const uint8_t from_server[] = {0x18, 0x38, 0x01, 0x04, 0x00, 0x86};
-    static const uint8_t to_client[] = {0x08, 0x3d, 0x00, 0x04, 0x00};
-    static const uint8_t default_response[] = {0x00, 0x39, 0x0b, 0x00, 0x00};
-    static const uint8_t reserved[] = {0x02, 0x3a, 0x00, 0x04, 0x00};
-    static const uint8_t short_vendor[] = {0x04, 0x34, 0x12, 0x3b};
-    const uint8_t manufacturer[] = BOARD_MANUFACTURER, model[] = BOARD_MODEL;
-    uint8_t reply[ED_PAYLOAD_MAX], request[ED_PAYLOAD_MAX], at = 3, i;
+    static const uint8_t read[] = {0x00, 0x31, 0x00, 0x04, 0x00, 0x05, 0x00};
+    static const uint16_t clusters[] = {0x0000, 0x0001, 0x0003, 0x0402, 0x0405, 0x0006};
+    uint8_t i;
     ready();
     for (i = 0; i < 2; i++) {
         base_peer(0, 0, i ? 4 : 5);
         peer_out.payload[0] = (uint8_t)(0x90+i); peer_out.payload[1] = 0x78; peer_out.payload[2] = 0x56;
         peer_out.payload[3] = 1; peer_out.length = i ? 4 : 3;
         expected_reply_cluster = peer_out.aps.cluster_id | 0x8000u;
-        expected_reply_status = 0; expected_reply_length = i ? 19 : 6; reply_seen = 0;
+        expected_reply_status = 0; expected_reply_length = i ? 23 : 6; reply_seen = 0;
         seal_peer(0, 0, NULL, 1);
         deliver();
         for (iterations = 0; iterations < 128 &&
@@ -1487,82 +1424,24 @@ static void basic_cluster(void)
         CHECK(iterations < 128 && reply_seen && device.phase == BDB_JOIN_READY);
         expected_reply_cluster = 0;
     }
-    reply[0] = 0x18; reply[1] = 0x31; reply[2] = 0x01;
-    reply[at++] = 4; reply[at++] = 0; reply[at++] = 0; reply[at++] = 0x42;
-    reply[at++] = sizeof(manufacturer)-1; memcpy(reply+at, manufacturer, sizeof(manufacturer)-1);
-    at += sizeof(manufacturer)-1;
-    reply[at++] = 5; reply[at++] = 0; reply[at++] = 0; reply[at++] = 0x42;
-    reply[at++] = sizeof(model)-1; memcpy(reply+at, model, sizeof(model)-1); at += sizeof(model)-1;
-    reply[at++] = 7; reply[at++] = 0; reply[at++] = 0x86;
-    reply[at++] = 4; reply[at++] = 1; reply[at++] = 0x86;
-    basic_reply(read, sizeof(read), reply, at);
-    reply[0] = 0x18; reply[1] = 0x32; reply[2] = 0x01;
-    reply[3] = 5; reply[4] = 0; reply[5] = 0; reply[6] = 0x42; reply[7] = sizeof(model)-1;
-    memcpy(reply+8, model, sizeof(model)-1);
-    basic_reply(odd, sizeof(odd), reply, (uint8_t)(8+sizeof(model)-1));
-    basic_reply(vendor, sizeof(vendor), vendor_reply, sizeof(vendor_reply));
-    basic_reply(specific, sizeof(specific), specific_reply, sizeof(specific_reply));
-    basic_reply(write, sizeof(write), write_reply, sizeof(write_reply));
-    /* Records that would overflow one APS payload are omitted, not split. */
-    request[0] = 0; request[1] = 0x3c; request[2] = 0;
-    for (i = 3; i+1u < ED_PAYLOAD_MAX-8u; i += 2) { request[i] = 4; request[i+1] = 0; }
-    reply[0] = 0x18; reply[1] = 0x3c; reply[2] = 0x01; at = 3;
-    while (at+5+sizeof(manufacturer)-1 <= ED_PAYLOAD_MAX) {
-        reply[at++] = 4; reply[at++] = 0; reply[at++] = 0; reply[at++] = 0x42;
-        reply[at++] = sizeof(manufacturer)-1; memcpy(reply+at, manufacturer, sizeof(manufacturer)-1);
-        at += sizeof(manufacturer)-1;
+    for (i = 0; i < sizeof(clusters)/sizeof(clusters[0]); i++) {
+        zcl_cluster = clusters[i];
+        basic_frame(read, sizeof(read), 1); published();
+        basic_frame(read, 2, 1); published();
     }
-    basic_reply(request, ED_PAYLOAD_MAX-8, reply, at);
-    /* The last three-byte status record that fits is kept. */
-    request[1] = 0x3e;
-    for (i = 3; i+1u < ED_PAYLOAD_MAX; i += 2) { request[i] = 7; request[i+1] = 0; }
-    reply[1] = 0x3e; at = 3;
-    while (at+3u <= ED_PAYLOAD_MAX) { reply[at++] = 7; reply[at++] = 0; reply[at++] = 0x86; }
-    CHECK(at == ED_PAYLOAD_MAX-1);
-    basic_reply(request, ED_PAYLOAD_MAX-1, reply, at);
-    /* A string record exactly one byte too long ends the response (reachable
-     * only when the board strings break the three-byte record granularity). */
-    {
-        uint8_t a, b, c = 255, m = sizeof(manufacturer)-1, n = sizeof(model)-1, length = 3;
-        for (a = 0; a < 4 && c == 255; a++)
-            for (b = 0; b < 6 && c == 255; b++) {
-                int left = (int)ED_PAYLOAD_MAX-4-m-3-a*(5+m)-b*(5+n);
-                if (left >= 0 && !(left%3)) c = (uint8_t)(left/3);
-            }
-        if (c != 255) { a--; b--; } else a = b = c = 0;
-        request[1] = 0x3f; reply[1] = 0x3f; at = 3;
-        for (i = 0; i < a+b+c; i++) {
-            uint8_t id = i < a ? 4 : i < a+b ? 5 : 7;
-            request[length++] = id; request[length++] = 0;
-            reply[at++] = id; reply[at++] = 0;
-            if (id == 7) reply[at++] = 0x86;
-            else {
-                reply[at++] = 0; reply[at++] = 0x42; reply[at++] = id == 4 ? m : n;
-                memcpy(reply+at, id == 4 ? manufacturer : model, reply[at-1]); at += reply[at-1];
-            }
-        }
-        if (at+5u+m == ED_PAYLOAD_MAX+1u) {
-            request[length++] = 4; request[length++] = 0; request[length++] = 7; request[length++] = 0;
-            basic_reply(request, length, reply, at);
-        } else CHECK(!a && !b && !c && !((5u+m) % 3u) && !((5u+n) % 3u));
-    }
-    basic_silent(quiet_write, sizeof(quiet_write), 1, ZDO_RUNTIME_IGNORED);
-    basic_silent(from_server, sizeof(from_server), 1, ZDO_RUNTIME_IGNORED);
-    basic_silent(to_client, sizeof(to_client), 1, ZDO_RUNTIME_IGNORED);
-    basic_silent(default_response, sizeof(default_response), 1, ZDO_RUNTIME_IGNORED);
-    basic_silent(reserved, sizeof(reserved), 1, ZDO_RUNTIME_IGNORED);
-    basic_silent(read, sizeof(read), 255, ZDO_RUNTIME_IGNORED);
-    basic_silent(read, 2, 1, ZDO_RUNTIME_FORMAT);
-    basic_silent(short_vendor, sizeof(short_vendor), 1, ZDO_RUNTIME_FORMAT);
     basic_frame(read, sizeof(read), 255);
-    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
-    CHECK(runtime.transport.reply && runtime.transport.acknowledgment.aps.source_endpoint == 1 &&
-          runtime.transport.acknowledgment.aps.destination_endpoint == 9);
-    pending = 0;
-    CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
-    CHECK(device.receive_result == ZDO_RUNTIME_IGNORED && !runtime.zdo.response_pending);
-    drain(); CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.application_ready);
-    sensor_clusters();
+    peer_out.nwk.destination = 0xfffdu; peer_out.aps.delivery_mode = APS_DELIVERY_BROADCAST;
+    peer_out.aps.flags = 0; seal_peer(0, 0, NULL, 1);
+    published();
+    for (i = 0; i < 2; i++) {
+        base_peer(0, 0, i ? ZDO_SRV_UNBIND_REQUEST : ZDO_SRV_BIND_REQUEST);
+        peer_out.payload[0] = (uint8_t)(0x70+i); memcpy(peer_out.payload+1, identity.own_ieee, 8);
+        peer_out.payload[9] = 1; peer_out.payload[10] = 0x02; peer_out.payload[11] = 0x04;
+        peer_out.payload[12] = 3; memset(peer_out.payload+13, 0x5a, 8); peer_out.payload[21] = 1;
+        peer_out.length = 22; seal_peer(0, 0, NULL, 1);
+        published();
+    }
+    zcl_cluster = 0;
 }
 
 static void transmit_extent(void)

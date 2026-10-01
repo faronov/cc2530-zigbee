@@ -109,7 +109,8 @@ mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * v
     result = storage(MMIO_XADDRESS(config), sizeof(*config));
     if (result != MAC_ADAPTER_OK) return result;
     if (config->channel < 11 || config->channel > 26 ||
-        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5))
+        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5 &&
+         config->power != RADIO_AUTOACK_POWER_F5))
         return MAC_ADAPTER_INVALID;
     memset(&status, 0, sizeof(status)); memset(&observation, 0, sizeof(observation));
     memset(&mac_adapter_receipt, 0, sizeof(mac_adapter_receipt));
@@ -356,14 +357,19 @@ mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16
         return MAC_ADAPTER_WAIT;
     }
     if (status.radio_result == MAC_RADIO_RX_LOST) {
-        /* LINK normal RX too: the radio salvaged every AUTOACKed head first. */
+        /* LINK normal RX too: the radio salvaged every AUTOACKed head first.
+         * There a loss inside a TX window equals an over-air loss: an unseen
+         * ACK closes as NO_ACK and is retried, and the closure stays lossy. */
         if (
-#if !defined(CC2530_MAC_LINK)
-            status.normal_rx ||
+#if defined(CC2530_MAC_LINK)
+            (!status.normal_rx && status.goal != CLOSE_NONE && status.goal != CLOSE_USER) ||
+            (status.phase == MAC_ADAPTER_COLLECT && !status.normal_rx) ||
+            (status.phase != MAC_ADAPTER_RX && status.phase != MAC_ADAPTER_COLLECT &&
+#else
+            status.normal_rx || (status.goal != CLOSE_NONE && status.goal != CLOSE_USER) ||
+            (status.phase != MAC_ADAPTER_RX &&
 #endif
-            (status.goal != CLOSE_NONE && status.goal != CLOSE_USER) ||
-            (status.phase != MAC_ADAPTER_RX && status.phase != MAC_ADAPTER_CLOSING &&
-             status.phase != MAC_ADAPTER_DRAINING))
+             status.phase != MAC_ADAPTER_CLOSING && status.phase != MAC_ADAPTER_DRAINING))
             return fail(MAC_ADAPTER_RADIO_ERROR);
         status.lossy = 1;
     } else if (status.radio_result != MAC_RADIO_EMPTY) return fail(MAC_ADAPTER_RADIO_ERROR);
@@ -410,7 +416,8 @@ mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDAT
     result = idle_off(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
     if (config->channel < 11 || config->channel > 26 ||
-        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5))
+        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5 &&
+         config->power != RADIO_AUTOACK_POWER_F5))
         return MAC_ADAPTER_INVALID;
     radio = mac_attempt_configure(config, timeout, limit);
     if (radio == MAC_RADIO_INVALID_ARGUMENT) return MAC_ADAPTER_INVALID;

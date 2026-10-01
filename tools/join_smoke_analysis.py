@@ -63,10 +63,58 @@ def load(root):
     return image, symbols, debug, listings, objects
 
 
+# Banked read-only tables, placed by SDCC after the module's code in its own
+# area (common CODE has no room). Only these named objects may be non-code.
+CONSTANT_TABLES = {"zcl_sensor": ("attributes", "defaults", "manufacturer", "model")}
+DATA_RECORD = re.compile(r"^\s*([0-9A-Fa-f]{6})\s+((?:[0-9A-Fa-f]{2}\s+)+)\s*\d+\s+"
+                         r"\t(?:\.byte|\.db|\.ascii)\s")
+CONTINUATION = re.compile(r"^\s+((?:[0-9A-Fa-f]{2}\s+)*[0-9A-Fa-f]{2})\s*$")
+
+
+def constant_tables(image, symbols, listings):
+    """Return the exact linked bytes of each allowed module's trailing tables."""
+    result = {}
+    for module, names in CONSTANT_TABLES.items():
+        area = "JS_" + module
+        start, end = symbols["s_" + area], symbols["s_" + area] + symbols["l_" + area]
+        text = listings[module].decode("ascii")
+        first = re.search(rf"^\s*([0-9A-Fa-f]{{6}})\s+\d+\s+_{names[0]}:\s*$", text, re.M)
+        require(first is not None, "Missing banked constant table: " + names[0])
+        tail = text[first.start():text.rindex("\n", 0, text.index("\t.area XINIT", first.start()))]
+        data, pc, labels = {}, int(first[1], 16), []
+        for line in tail.splitlines():
+            label = re.fullmatch(r"\s*([0-9A-Fa-f]{6})\s+\d+\s+_(\w+):\s*", line)
+            record = DATA_RECORD.match(line)
+            more = CONTINUATION.fullmatch(line)
+            if label:
+                require(int(label[1], 16) == pc, "Banked constant table is not contiguous")
+                labels.append(label[2])
+            elif record:
+                require(int(record[1], 16) == pc, "Banked constant record is not contiguous")
+                raw = bytes.fromhex(record[2])
+            elif more:
+                raw = bytes.fromhex(more[1])
+            else:
+                require(re.fullmatch(r"\s*(?:[0-9A-Fa-f]{6}\s+)?\d+\s+\w+\$\w+\$\w+\$\w+ == \.\s*",
+                                     line) is not None, "Unexpected banked constant listing record")
+                continue
+            if not label:
+                for octet in raw:
+                    require(image.get(pc) == octet, "Banked constant differs from linked CODE")
+                    data[pc] = octet
+                    pc += 1
+        require(tuple(labels) == names,
+                "Banked constant inventory differs")
+        require(pc == end and min(data) >= start, "Banked constants do not end the area")
+        result[area] = (min(data), end)
+    return result
+
+
 def call_graph(image, symbols, debug, listings, objects):
     areas = ["CSEG"]
+    tables = constant_tables(image, symbols, listings)
     for name, value in symbols.items():
-        if name.startswith("l_JS_") and value:
+        if name.startswith("l_JS_") and value and name[2:] not in tables:
             areas.append(name[2:])
     indirect = [(pc, raw) for listing in listings.values()
                 for pc, raw in records(listing.decode("ascii")) if raw[0] in (0x73, 0x32)]
@@ -93,6 +141,14 @@ def call_graph(image, symbols, debug, listings, objects):
                       areas=tuple(areas), library=RUNTIME, indirect_sites=tuple(indirect),
                       runtime_spans=runtime_spans)
     symbolic_transfers(symbols, listings, graph[4])
+    for area, (first, end) in tables.items():
+        code = set()
+        module = area[3:]
+        for pc, raw in records(listings[module].decode("ascii")):
+            require(pc + len(raw) <= first, "Banked code overlaps its constants")
+            code |= set(range(pc, pc + len(raw)))
+        require(code | set(range(first, end)) == set(range(symbols["s_" + area], end)),
+                "Incomplete actual join CODE decode")
     return graph
 
 

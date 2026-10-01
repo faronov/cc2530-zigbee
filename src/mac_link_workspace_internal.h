@@ -122,7 +122,7 @@ typedef union {
             link_work_nwk_t nwk;
             struct {
                 link_work_zdo_t work;
-                struct { zdo_node_response_t reply; uint8_t staged[19]; zdo_srv_info_t candidate; } server;
+                struct { zdo_node_response_t reply; uint8_t staged[23]; zdo_srv_info_t candidate; } server;
                 zdo_node_response_t node;
             } zdo;
         } parent;

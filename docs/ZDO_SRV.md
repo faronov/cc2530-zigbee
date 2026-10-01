@@ -33,8 +33,9 @@ admission flag, replay check or security-success stub is added.
 | Unicast `Node_Desc_req`, queried address equals local address | `REPLY`: cluster8002, echoed TSN/address, SUCCESS and caller's descriptor |
 | Unicast `Node_Desc_req`, another queried address | `REPLY`: cluster8002, echoed TSN/address and INV_REQUESTTYPE, no descriptor |
 | Unicast `Active_EP_req`0005 | `REPLY`: cluster8005, echoed TSN/address, SUCCESS and the caller's single application endpoint (none if0), or INV_REQUESTTYPE for another address |
-| Unicast `Simple_Desc_req`0004 | `REPLY`: cluster8004; INVALID_EP for endpoint00/FF, INV_REQUESTTYPE for another address, NOT_ACTIVE for another endpoint, else the caller's profile, `ZDO_SRV_DEVICE` and three input clusters, Basic `0000`, Temperature Measurement `0402` and Relative Humidity Measurement `0405` (the caller must actually serve them) |
+| Unicast `Simple_Desc_req`0004 | `REPLY`: cluster8004; INVALID_EP for endpoint00/FF, INV_REQUESTTYPE for another address, NOT_ACTIVE for another endpoint, else the caller's profile, `ZDO_SRV_DEVICE` and five input clusters, Basic `0000`, Power Configuration `0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity Measurement `0405` (the caller must actually serve them) |
 | Other low-bit unicast request except the special cases below | `REPLY`: request cluster with bit15 set, echoed TSN and NOT_SUPPORTED only |
+| `Bind_req`0021/`Unbind_req`0022 in the READY runtime | Not passed to `zdo_srv`: `zdo_runtime` publishes them to the application, whose `zcl_sensor` server answers (see [ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo)); `zdo_srv_handle` alone still returns NOT_SUPPORTED |
 | Broadcast-addressed request | `DROP_BROADCAST`: no serialized reply |
 | `Parent_annce`001F, unicast or broadcast | `DROP_PARENT`: no further processing by this ED |
 | Any response cluster (bit15 set) | `NOT_REQUEST` error; do not feed a response back into server fallback |

@@ -118,6 +118,20 @@ from a valid timed delivery. No stale time is fed to the MAC as a fabricated
 FAILURE event. The fault is out of band and ownership is retained, without
 automatic reset/reinitialization/recovery.
 
+The `CC2530_MAC_LINK` exception is AUTOACK RX loss (`RX_LOST`). There the
+radio has already salvaged every complete, possibly acknowledged head, so the
+loss is accepted in normal RX and, with `normal_rx`, also in the TX windows
+(COLLECT, CLOSING or DRAINING for ACK-window, busy and retirement closures).
+A lost ACK is indistinguishable from an over-air ACK loss: RX_CLOSED still
+reports the pre-stop watermark but with `lossy` set, and `mac_tx` classifies
+it as NO_ACK and retries. The driver accepts `lossy` only in RUNTIME (see
+[MAC_LINK_DRIVER](MAC_LINK_DRIVER.md)). Raw (non-AUTOACK) TX windows and all
+non-LINK compositions keep the retained fault. LG hardware observed this
+fault after joining (ACK window, RXFIFO overflow at the closing stop, BDB NODE
+phase). The acceptance is host-tested (`loss_case` 4/5 in the LINK E2E and,
+as a retained fault, in the standalone adapter test). It has not yet been
+re-observed on hardware.
+
 The handoff only accepts the original first raw ACK and cannot be revived by
 an intervening radio operation. A later ACK is still preserved and subjected
 to the real interval classifier, including timing uncertainty; it does not

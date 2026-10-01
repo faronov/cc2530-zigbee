@@ -33,7 +33,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
     zdo_node_request_t request;
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     zdo_srv_info_t candidate;
-    uint8_t staged[19], size, simple;
+    uint8_t staged[23], size, simple;
 #else
     uint8_t size, simple;
 #endif
@@ -91,16 +91,19 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
             } else if (body[3] != local->endpoint) {
                 reply.status = ZDO_SRV_NOT_ACTIVE;
             } else {
-                staged[4] = 14; staged[5] = local->endpoint;
+                staged[4] = 18; staged[5] = local->endpoint;
                 staged[6] = (uint8_t)local->profile; staged[7] = (uint8_t)(local->profile >> 8);
                 staged[8] = (uint8_t)ZDO_SRV_DEVICE; staged[9] = (uint8_t)(ZDO_SRV_DEVICE >> 8);
-                staged[10] = ZDO_SRV_DEVICE_VERSION; staged[11] = 3;
+                staged[10] = ZDO_SRV_DEVICE_VERSION; staged[11] = ZDO_SRV_INPUT_CLUSTERS;
                 staged[12] = (uint8_t)ZDO_SRV_BASIC_CLUSTER; staged[13] = (uint8_t)(ZDO_SRV_BASIC_CLUSTER >> 8);
-                staged[14] = (uint8_t)ZDO_SRV_TEMPERATURE_CLUSTER;
-                staged[15] = (uint8_t)(ZDO_SRV_TEMPERATURE_CLUSTER >> 8);
-                staged[16] = (uint8_t)ZDO_SRV_HUMIDITY_CLUSTER;
-                staged[17] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
-                staged[18] = 0; size = 19;
+                staged[14] = (uint8_t)ZDO_SRV_POWER_CLUSTER; staged[15] = (uint8_t)(ZDO_SRV_POWER_CLUSTER >> 8);
+                staged[16] = (uint8_t)ZDO_SRV_IDENTIFY_CLUSTER;
+                staged[17] = (uint8_t)(ZDO_SRV_IDENTIFY_CLUSTER >> 8);
+                staged[18] = (uint8_t)ZDO_SRV_TEMPERATURE_CLUSTER;
+                staged[19] = (uint8_t)(ZDO_SRV_TEMPERATURE_CLUSTER >> 8);
+                staged[20] = (uint8_t)ZDO_SRV_HUMIDITY_CLUSTER;
+                staged[21] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
+                staged[22] = 0; size = 23;
             }
             staged[1] = reply.status;
         } else {

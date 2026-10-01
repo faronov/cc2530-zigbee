@@ -32,13 +32,16 @@ SCALARS = {**dict.fromkeys(("op", "return", "policy", "selector", "random_byte",
 # mac_adapter changes: +1190 CODE only in those modules, four new MMIO sites.
 # Refreshed again for the radio_autoack stopped-head PHR helper and RXOVERF
 # resample: +39 CODE in radio_autoack, the PHR reads share one MMIO site.
+# Refreshed for the third accepted power, +4.5 dBm TXPOWER 0xF5: +37 CODE
+# in the three power validations. LINK-only RX-loss acceptance in ACK windows
+# leaves this non-LINK CODE unchanged; only line records moved.
 PINS = (
-    "fddde18cd4a97a1f2ba8a9744c09f257fdcdfaa7db68031bd565776db578813a",
-    "686880e0abaf1e9c06a7af5d21f8f066a06076e023fa1f59389919e159fdd636",
-    "b95f557498ee3a0561262a6de718fed229cb35c306eafea8eb16d251a78c54af",
-    "eb7cf669ffdc3d0fae8ef2bad453cc1b41ade91fcbb7ac29fa39e7e25bd4469a",
-    "5318afee3fe0e51efd335fa48727bfe93a4b20e987c27a31028c57519ece2daf",
-    "2e62f2cf418b87ea4bae10d53a1a29065ce05acf29fb66d9cfdfff3cc84c5fa1",
+    "a9821102114da268fcabbe201a6637104ceb8e56ce901df07ef0332c1869be40",
+    "60375634109f64af1fdb6e7ba01e9925778278905608f6ad70e0d4ad731a1820",
+    "1686aa4ca633a7569533799e509dbe1d6b458b322f1731d24a84f2762734f719",
+    "72b5f751c008d8976e0446d7a3c31af083363d750157369b24ee1be393847d43",
+    "a415c6d3abb0e3e40da6905b83681e6e7431887b3930ae29872bd147e868c210",
+    "42a1522999b37aaab1e44a56e3a2b0406f6520986863b96116be6cdb164fabe7",
 )
 
 
@@ -68,7 +71,7 @@ def artifact_bytes(*artifacts):
 def verify(*artifacts):
     banking.pin_artifacts(artifact_bytes(*artifacts), PINS)
     image, symbols, raw, memory, listings, _ = artifacts
-    require(len(image) == len(banking.pack(image)) == 56671, "Adapter physical CODE accounting")
+    require(len(image) == len(banking.pack(image)) == 56708, "Adapter physical CODE accounting")
     areas = ("HOME", "GSINIT0", "GSINIT1", "GSINIT2", "GSINIT3", "GSINIT4", "GSINIT5",
              "GSINIT", "GSFINAL", "CSEG", "CONST", "MA_BANK1", "MA_BANK2")
     covered = set()

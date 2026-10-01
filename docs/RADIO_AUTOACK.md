@@ -58,7 +58,7 @@ is imported.
 
 TI **SWRS081B, April 2009, revised February 2011**, Table 2 p.24
 ([CC2530 datasheet](https://www.ti.com/lit/pdf/swrs081)), characterizes raw
-TXPOWER `05` and `D5` with the normal TXCTRL profile as typical -22 and +1 dBm on its CC2530 EM
+TXPOWER `05`, `D5` and `F5` with the normal TXCTRL profile as typical -22, +1 and +4.5 dBm on its CC2530 EM
 at 25 C, 3 V and 2440 MHz. This is not measured generic/LG output power, EIRP,
 calibration or regulatory permission.
 
@@ -94,12 +94,12 @@ handoff to one of those owners.
 configuration; it retains no caller pointer. IEEE bytes are supplied least
 significant first; PAN/short values are encoded little-endian. All address bit
 patterns are raw caller filter configuration, not validated identities.
-Channels11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` or
-`RADIO_AUTOACK_POWER_D5` are supported. Power is copied at cold acquisition,
+Channels11..26 and explicit raw power `RADIO_AUTOACK_POWER_05`,
+`RADIO_AUTOACK_POWER_D5` or `RADIO_AUTOACK_POWER_F5` are supported. Power is copied at cold acquisition,
 fully read back and retained through stop/resume, ordinary TX, AUTOACK and
 channel reconfiguration. It cannot be changed within that ownership epoch.
-Other bytes, including `F5`, remain unsupported; there is no clamp or fallback.
-The complete join caller explicitly selects `D5`; existing isolated board
+Other bytes remain unsupported; there is no clamp or fallback.
+The complete join caller explicitly selects `F5`; existing isolated board
 fixtures still request `05`. Increasing TX power does not improve RX sensitivity
 or establish board-specific RF output or reachability.
 
@@ -111,7 +111,7 @@ or establish board-specific RF output or reachability.
 | FRMCTRL0 / FRMCTRL1 | `60 / 00`: AUTOCRC/AUTOACK, RSSI plus CRC/correlation, normal RX/TX, Pending0, underflow detection, no automatic TX mask bit |
 | FIFOPCTRL / FSMCTRL | `7F / 00`: threshold 127, unslotted ACK, RX-to-RX timeout disabled |
 | AGCCTRL1 / TXFILTCFG / FSCAL1 | `15 / 09 / 00`; only FSCAL1 readback is masked to bits 1:0 |
-| FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / caller 05 or D5 / 69` |
+| FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / caller 05, D5 or F5 / 69` |
 
 Require unchanged MDMCTRL0/1 `85/14`, MDMTEST0/1 `75/08`, FREQTUNE `0F`,
 standard modem control and an idle CSP. Acquisition changes no CCA setting

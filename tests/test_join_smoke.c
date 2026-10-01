@@ -91,42 +91,58 @@ static uint16_t caller_address(const volatile void *p)
 }
 
 #if defined(JOIN_SMOKE_TRACE)
-#define SERVE_SECONDS 110u  /* Basic plus three synthetic reports: short replay. */
+#define SERVE_SECONDS 110u  /* Basic plus the first synthetic reports: short replay. */
 #else
 #define SERVE_SECONDS 10800u  /* Past one APS counter wrap of reports. */
 #endif
+/* Synthetic sample boundaries crossed while serving. */
+#define SERVE_SAMPLES ((unsigned)((uint64_t)SERVE_SECONDS*62500u >> 22))
 
-/* One acknowledged report: Basic ModelIdentifier first, then alternating
- * SYNTHETIC temperature/humidity MeasuredValue reports, one per slot. */
-static void serve_report(unsigned *reports, uint8_t *slot)
+/* One acknowledged report under the default (unconfigured) reporting:
+ * consecutive ZCL sequence numbers even across FULL/wrap rebuilds,
+ * Basic ModelIdentifier first, then SYNTHETIC temperature, humidity,
+ * BatteryVoltage and BatteryPercentageRemaining; counts per attribute. */
+static uint8_t last_counter, last_report[ED_PAYLOAD_MAX], last_length;
+static void serve_report(unsigned *reports, uint8_t *tsn, unsigned counts[4])
 {
+    static const char model[]=BOARD_MODEL;
     uint16_t value=(uint16_t)(link_peer_report[6]|link_peer_report[7]<<8);
     assert(link_peer_report[0]==0x18 && link_peer_report[2]==0x0a && !link_peer_report[4]);
+    /* An APS retransmission after a late ACK repeats the counter and frame;
+     * like a coordinator's duplicate rejection, it is not a new report. */
+    if(*reports && link_peer_report_counter==last_counter && link_peer_report[1]==*tsn) {
+        assert(link_peer_report_length==last_length && !memcmp(link_peer_report,last_report,last_length));
+        return;
+    }
+    last_counter=link_peer_report_counter; last_length=link_peer_report_length;
+    memcpy(last_report,link_peer_report,last_length);
+    if(*reports) assert(link_peer_report[1]==(uint8_t)(*tsn+1u));
     if(!*reports) {
         assert(!link_peer_report_cluster && link_peer_report[3]==5 && link_peer_report[5]==0x42);
-        assert(link_peer_report_length==6+sizeof(zdo_runtime_model) &&
-            !memcmp(link_peer_report+7,zdo_runtime_model,sizeof(zdo_runtime_model)-1));
+        assert(link_peer_report_length==7+sizeof(model)-1 && link_peer_report[6]==sizeof(model)-1 &&
+            !memcmp(link_peer_report+7,model,sizeof(model)-1));
+    } else if(link_peer_report_cluster==ZDO_SRV_TEMPERATURE_CLUSTER) {
+        assert(link_peer_report_length==8 && !link_peer_report[3] && link_peer_report[5]==0x29);
+        assert(value>=2100 && value<=2500 && !(value%10)); counts[0]++;
+    } else if(link_peer_report_cluster==ZDO_SRV_HUMIDITY_CLUSTER) {
+        assert(link_peer_report_length==8 && !link_peer_report[3] && link_peer_report[5]==0x21);
+        assert(value>=4500 && value<=5500 && !(value%25)); counts[1]++;
     } else {
-        assert(link_peer_report_length==8 && !link_peer_report[3]);
-        if(*reports>1) assert(link_peer_report[1]==(uint8_t)(*slot+1u));
-        if(link_peer_report[1]&1) {
-            assert(link_peer_report_cluster==ZDO_SRV_HUMIDITY_CLUSTER && link_peer_report[5]==0x21);
-            assert(value>=4500 && value<=5500 && !(value%25));
-        } else {
-            assert(link_peer_report_cluster==ZDO_SRV_TEMPERATURE_CLUSTER && link_peer_report[5]==0x29);
-            assert(value>=2100 && value<=2490 && !(value%10));
-        }
+        assert(link_peer_report_cluster==ZDO_SRV_POWER_CLUSTER && link_peer_report_length==7);
+        assert((link_peer_report[3]==0x20 || link_peer_report[3]==0x21) && link_peer_report[5]==0x20);
+        if(link_peer_report[3]==0x20) { assert(link_peer_report[6]>=28 && link_peer_report[6]<=30); counts[2]++; }
+        else { assert(link_peer_report[6]>=160 && link_peer_report[6]<=200); counts[3]++; }
     }
-    *slot=link_peer_report[1];
+    *tsn=link_peer_report[1];
     (*reports)++;
 }
 
 /* READY serves without a time bound, a fault or further qualified draws. */
 static void serve_ready(unsigned *calls)
 {
-    unsigned served=0, reports=0, seen=link_peer_app, confirmed=0;
+    unsigned served=0, reports=0, seen=link_peer_app, confirmed=0, counts[4]={0,0,0,0};
     uint32_t steps;
-    uint8_t slot=0, draws=join_smoke_status.draws;
+    uint8_t tsn=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
     while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
           cycles<(uint64_t)SERVE_SECONDS*32000000u) {
@@ -137,7 +153,7 @@ static void serve_ready(unsigned *calls)
 #else
         peer_progress_for(&join_smoke_device,&join_smoke_tx);
 #endif
-        if(link_peer_app!=seen) { assert(link_peer_app==seen+1u); seen++; serve_report(&reports,&slot); confirmed=served; }
+        if(link_peer_app!=seen) { assert(link_peer_app==seen+1u); seen++; serve_report(&reports,&tsn,counts); confirmed=served; }
         /* Coarse time only while no MAC transmission owns a stop window. */
         step=(join_smoke_status.announce==255 || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
             join_smoke_device.work.runtime.transport.active || join_smoke_device.work.runtime.transport.queued ?
@@ -167,8 +183,16 @@ static void serve_ready(unsigned *calls)
     assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && join_smoke_status.saw_ready);
     assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce);
     assert(join_smoke_status.discarded==1 && !join_smoke_status.dropped && served>200);
-    /* One report per 2^21-symbol slot, give or take the slot boundaries. */
-    assert(reports+2u>=SERVE_SECONDS*62500u/2097152u && reports<=SERVE_SECONDS*62500u/2097152u+2u);
+    /* Temperature and humidity change on every 2^22-symbol sample boundary
+     * (one past the 30 s minimum each). In each 41-sample phase cycle,
+     * BatteryPercentageRemaining (change 2, 0.5 % steps) reports on every
+     * second of its 40 single steps plus the +40 wrap (21/41), and the
+     * voltage on its three steps (3/41). */
+    assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
+    assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
+    assert(counts[3]+2u>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
+    assert(counts[2]+2u>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+    assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
     /* The status snapshot follows the last report confirmation. */
     steps=(uint32_t)join_smoke_status.steps[0]|(uint32_t)join_smoke_status.steps[1]<<8|
@@ -200,7 +224,7 @@ static void prepare_caller(unsigned selected)
     host_mmio_xaddress_hook=caller_address; host_mmio_cycles_hook=joint_cycles;
     memcpy(config.value.ieee,link_identity.own_ieee,8);
     config.value.pan=config.value.short_address=0xffff; config.value.channel=15;
-    config.value.power=RADIO_AUTOACK_POWER_D5;
+    config.value.power=RADIO_AUTOACK_POWER_F5;
     scenario=selected==6?1:selected==CALLER_MISSING_KEY?3:0;
     if(selected==CALLER_FLASH_BUSY) security_joint_stall_flash(1);
     join_smoke_initialize();
@@ -297,8 +321,8 @@ int main(int argc, char **argv)
                         join_smoke_status.security_result,join_smoke_status.adapter_result,join_smoke_status.mac_result,
                         join_smoke_status.bdb_result,join_smoke_status.driver_result);
                 assert(join_smoke_status.phase==JS_RUNNING);
-                assert(join_smoke_initial.power==RADIO_AUTOACK_POWER_D5 &&
-                    XR(0x6190)==RADIO_AUTOACK_POWER_D5);
+                assert(join_smoke_initial.power==RADIO_AUTOACK_POWER_F5 &&
+                    XR(0x6190)==RADIO_AUTOACK_POWER_F5);
                 epoch_origin=((uint64_t)mac_radio_epoch.periods-mac_radio_epoch.symbols)*512u;
                 while(join_smoke_status.phase==JS_RUNNING && !caller_stopped && calls++<JOIN_SMOKE_STEPS) {
                     uint8_t saved_aes_used=aes_used, saved_enccs=SOC_ENCCS;

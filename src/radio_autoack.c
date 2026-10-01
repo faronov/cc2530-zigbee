@@ -340,7 +340,8 @@ static radio_autoack_result_t operate(uint8_t operation,
         if (result != RADIO_AUTOACK_READY) return result;
         if (configuration->channel < 11 || configuration->channel > 26 ||
             (configuration->power != RADIO_AUTOACK_POWER_05 &&
-             configuration->power != RADIO_AUTOACK_POWER_D5))
+             configuration->power != RADIO_AUTOACK_POWER_D5 &&
+             configuration->power != RADIO_AUTOACK_POWER_F5))
             return RADIO_AUTOACK_INVALID_ARGUMENT;
     } else if (operation == 1) {
         result = storage(MMIO_XADDRESS(output), sizeof(*output));

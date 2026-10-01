@@ -206,9 +206,9 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * volatile ctx)
             if (which != ZDO_RUNTIME_PARENT ||
                 (!result && !(ctx->work.runtime.zdo.parent_information & 2u)) ||
                 (result && result != ZDO_RUNTIME_TIMEOUT && result != ZDO_RUNTIME_TRANSMIT) ||
-                (result && ctx->attempts == BDB_JOIN_ATTEMPTS))
+                (result && ctx->attempts == BDB_JOIN_KEEPALIVE_ATTEMPTS))
                 fail(ctx, BDB_JOIN_PARENT_FAILED);
-            else if (result) ctx->keepalive = ctx->last;
+            else if (result) ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE_RETRY;
             else { ctx->attempts = 0; ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE; }
         }
         if (ctx->phase == BDB_JOIN_READY && expired(ctx->last, ctx->keepalive) && !ctx->work.runtime.zdo.query) {

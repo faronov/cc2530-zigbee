@@ -35,10 +35,12 @@ further corrections, the LG board was **hardware-observed** on 2026-09-30 to
 complete an ordinary ZHA join to BDB READY and pass the zigpy interview; ZHA
 lists it as `cc2530-zigbee` `LG-ESL29` (see
 [the run](docs/ED_JOIN.md#2026-09-30-lg-ordinary-join-and-zha-interview)).
-Its endpoint now serves Basic plus Temperature and Relative Humidity
-Measurement with **synthetic (fake) values** for demonstration, reported
-periodically after READY (see
+Its endpoint now serves Basic, Power Configuration, Identify, Temperature
+and Relative Humidity Measurement with **synthetic (fake) values**,
+including a fake battery, for demonstration (see
 [the sensor demo](docs/ED_JOIN.md#synthetic-temperature-and-humidity-demo)).
+It supports Configure Reporting and coordinator-only ZDO Bind/Unbind,
+keeping both in RAM only; Read Reporting Configuration is unsupported.
 It serves until reset, but is not a real sensor, nor a sleepy, rejoining or
 production device. Router-parent joining is not
 implemented.

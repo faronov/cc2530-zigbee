@@ -123,6 +123,14 @@ The reporting application's binding, reporting and attribute requirements are
 added with its pinned profile/ZCL revision. Synthetic lab values must be
 clearly identified; they are not physical sensor evidence.
 
+The LG join-smoke demo's `zcl_sensor` server is a bounded interoperability
+demonstration with ZHA. It is not an implementation of these requirements. It
+advertises device ID `FFFF` (no HA/BDB device type), serves synthetic values,
+supports Configure Reporting and coordinator-only Bind/Unbind in RAM only, and
+rejects Read Reporting Configuration with UNSUP_GENERAL_COMMAND
+([ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo)). BDB-09 and
+the profile/device selection remain open.
+
 ## Preparatory ZCL foundation evidence
 
 These references use the printed chapter-page numbering of ZCL Revision 8,

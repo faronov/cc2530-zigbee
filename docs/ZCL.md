@@ -15,7 +15,11 @@ profile requirements, complete clusters, reporting and persistence
 are not implemented or advertised. A bounded generic read-only attribute
 model, Read/Discover Attributes handlers and one-cluster unicast command
 dispatcher are implemented below.
-No module is linked into board firmware.
+No module is linked into board firmware. The LG join-smoke image instead
+links a separate, bounded application server, `zcl_sensor`, which serves
+synthetic data; it is described in
+[ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo). It does not
+reuse these modules and makes no cluster-conformance claim.
 
 The separate [read-only Basic provider](ZCL_LAB.md) now constructs six
 primary-backed attributes in caller-owned storage and uses these same

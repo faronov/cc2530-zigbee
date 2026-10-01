@@ -19,6 +19,7 @@
 #define RADIO_AUTOACK_BODY_MAX 125u
 #define RADIO_AUTOACK_POWER_05 0x05u
 #define RADIO_AUTOACK_POWER_D5 0xd5u
+#define RADIO_AUTOACK_POWER_F5 0xf5u
 
 typedef enum {
     RADIO_AUTOACK_READY = 0, RADIO_AUTOACK_FRAME, RADIO_AUTOACK_BAD_CRC,
@@ -81,7 +82,7 @@ typedef struct {
  *
  * Cold acquisition copies the configuration; no pointer is retained. All PAN,
  * short and IEEE values are raw caller-owned filter configuration, not identity
- * validation or security. Channel11..26; only raw power05 or D5. The normal profile is
+ * validation or security. Channel11..26; only raw power05, D5 or F5. The normal profile is
  * version<=0, reserved-FCF mask0, non-coordinator, DATA/ACK/command accepted,
  * filtering/AUTOCRC/AUTOACK on, unslotted, RX-to-RX timeout off, Pending0 and
  * source matching/AUTOPEND off. Security-enabled bodies are NOT excluded.

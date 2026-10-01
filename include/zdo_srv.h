@@ -14,11 +14,17 @@
 #define ZDO_SRV_ACTIVE_EP_REQUEST 0x0005u
 #define ZDO_SRV_INVALID_EP 0x82u
 #define ZDO_SRV_NOT_ACTIVE 0x83u
+#define ZDO_SRV_BIND_REQUEST 0x0021u
+#define ZDO_SRV_UNBIND_REQUEST 0x0022u
 #define ZDO_SRV_BASIC_CLUSTER 0x0000u
+#define ZDO_SRV_POWER_CLUSTER 0x0001u
+#define ZDO_SRV_IDENTIFY_CLUSTER 0x0003u
 #define ZDO_SRV_TEMPERATURE_CLUSTER 0x0402u
 #define ZDO_SRV_HUMIDITY_CLUSTER 0x0405u
-/* No Home Automation device type is claimed: Identify and the other mandatory
- * clusters of an HA sensor device are not implemented. */
+#define ZDO_SRV_INPUT_CLUSTERS 5u
+/* No Home Automation device type is claimed: the endpoint's minimal
+ * application servers (zcl_sensor.h) have not been conformance-tested
+ * against any HA/BDB device definition. */
 #define ZDO_SRV_DEVICE 0xffffu
 #define ZDO_SRV_DEVICE_VERSION 0u
 

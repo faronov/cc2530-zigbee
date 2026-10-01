@@ -129,6 +129,12 @@ It is host/image-checked with selected lower MCU power paths; the two D5
 physical results are recorded above. D5 is a checked firmware configuration,
 not a calibrated measurement of output power.
 
+After the parent-keepalive loss described in *Sensor demo*, the operator
+authorized the highest Table2 reference profile. The caller now selects raw
+F5 (typical +4.5 dBm, 34 mA on the TI EM); 05/D5/F5 are the only accepted
+bytes, all with full-byte readback. This is not a measured LG output, EIRP or
+receiver-sensitivity change.
+
 The second D5 run retained pre-strobe, TX-observation and RX-observation live
 Timer2 tuples. Relative to the pre-strobe sample, TX was observed at45007
 fine ticks and RX at67457; the19-byte request gives a conservative TX lower
@@ -902,41 +908,70 @@ sleepy behaviour, rejoin after reset or production NV endurance is claimed.
 ### Synthetic temperature and humidity demo
 
 **The values are synthetic demonstration data, not measurements.** The LG
-board has no temperature or humidity sensor. The endpoint now advertises
-input clusters Basic `0000`, Temperature Measurement `0402` and Relative
-Humidity Measurement `0405` (device ID still `FFFF`). `zdo_runtime` answers
-Read Attributes for MeasuredValue `0000` of both clusters with a sawtooth
-derived from runtime time: 21.0-24.9 °C in 0.1 °C steps and 45.00-55.00 %RH
-in 0.25 % steps (`ZDO_RUNTIME_TEMPERATURE/HUMIDITY`, sample index from bits
-22..29 of the MAC-symbol time). Every other attribute returns
-UNSUPPORTED_ATTRIBUTE; MinMeasuredValue/MaxMeasuredValue, Tolerance and
-ClusterRevision are not implemented. Configure Reporting and Bind are not
-implemented either: the ZCL Default Response is UNSUP_GENERAL_COMMAND
-(`0x81`) and ZDO returns NOT_SUPPORTED. They are never acknowledged as
-successful.
+board has no temperature, humidity or battery sensor. Endpoint 1 (device ID
+still `FFFF`) advertises the input clusters Basic `0000`, Power Configuration
+`0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
+Measurement `0405`. `zdo_runtime` publishes endpoint frames and ZDO
+Bind/Unbind requests, and the banked application server `zcl_sensor` answers
+them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
 
-READY no longer has a serving budget, and the join-smoke caller serves until
-reset or a fault (stage 6 and `JOIN_SMOKE_SERVE_TICKS` are removed). It first
-sends the Basic ModelIdentifier report. After that, the banked `zcl_sensor`
-builds one unsolicited, APS-acknowledged Report Attributes frame to
-coordinator endpoint 1 in each 2^21-symbol slot (~33.6 s). Even slots carry
-temperature and odd slots humidity, so each cluster is reported about every
-67 s. The ZCL sequence number is the slot number. Report FULL and the APS
-counter-wrap quarantine are retried within the same slot; any other send
-failure is recorded in `announce` as `0x80|result`, and the next slot sends
-again. READY CSMA backoff bytes now come from a maximal 8-bit Galois LFSR
-seeded by one nonzero qualified draw at READY entry. It is deterministic and
-**not entropy**, and it has no other consumer. In READY, the status `steps`
-wraps modulo 2^32.
+- **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
+  MeasuredValue/Min/Max for both measurement clusters, BatteryVoltage,
+  BatteryPercentageRemaining, IdentifyTime and ClusterRevision. Other
+  attributes return UNSUPPORTED_ATTRIBUTE.
+- **Values:** one sawtooth phase 0..40, one step per 2^22 MAC symbols
+  (~67 s). Temperature runs 21.0-25.0 °C in 0.1 °C steps and humidity
+  45.00-55.00 %RH in 0.25 % steps. The synthetic battery runs 100-80 % in
+  0.5 % steps and 3.0-2.8 V.
+- **Write Attributes:** only IdentifyTime is writable.
+- **Identify:** Identify and Identify Query are supported, counting
+  IdentifyTime down once per second. No LED is driven.
+- **Configure Reporting:** supported for the four reportable attributes, with
+  minimum/maximum interval and reportable change. A maximum of `FFFF`
+  disables reporting. The defaults are temperature 30/300 s/0.10 °C,
+  humidity 30/300 s/0.25 %, voltage 60/3600 s/0.1 V and percentage
+  60/3600 s/1 %.
+- **Read Reporting Configuration:** remains UNSUP_GENERAL_COMMAND (`0x81`),
+  never a fabricated success.
+- **ZDO Bind/Unbind:** a 64-bit destination is accepted only if it is the
+  trust center (coordinator), and only for the three clusters. A bind table
+  for any other target returns NOT_SUPPORTED, and unbinding an absent entry
+  returns NO_ENTRY.
+- **Persistence:** bindings and reporting configuration are RAM-only. A reset
+  restores the defaults: all three clusters bound to coordinator endpoint 1.
 
-To fit the image, common CODE, XDATA (7680/7680), the DATA reservations and
-the 45-byte static stack bound are all unchanged in size. The serve
-temporaries reuse the dead admission scratch, and the report builder lives in
-its own bank. Host-tested: `test_zdo_srv.c`, `test_bdb_join.c` (reads of both
-clusters and an alternating-report peer), and `test_join_smoke.c` in both
-key modes (unbounded READY, consecutive slot reports, no further draws).
-Image-checked: `prepare-join-smoke-stack` and `join_smoke_image.py` with the
-repinned LG default-TC identity.
+READY has no serving budget: the join-smoke caller serves until reset or a
+fault. It first sends the Basic ModelIdentifier report. Then, whenever no
+application TX is outstanding, it queues at most one APS-acknowledged Report
+Attributes frame for the first due attribute, taken in the order temperature,
+humidity, voltage, percentage. An attribute is due when it is bound and
+enabled, its minimum interval has passed, and either its maximum interval or
+its reportable change is reached. The ZCL sequence number advances only when
+a report is committed. A FULL or APS counter-wrap quarantined report is
+rebuilt with the same number, so the peer sees consecutive numbers. An APS
+retransmission after a late ACK repeats the identical frame and APS counter.
+READY CSMA backoff bytes come from a maximal 8-bit Galois LFSR seeded by one
+nonzero qualified draw at READY entry. It is deterministic and **not
+entropy**, and it has no other consumer. In READY, the status `steps` wraps
+modulo 2^32.
+
+The application state overlays the association record, which is dead in
+READY. The tables live in the `zcl_sensor` bank; the linked-image analysis
+admits exactly those four constant tables as data after the bank's code, and
+everything else in the bank must decode as instructions. Common CODE, XDATA
+(7676/7680), the DATA/BSEG reservations and the 45-byte static stack bound
+remain within their limits. SDCC bit temporaries from compound ternaries are
+avoided because BSEG has no spare bit.
+
+Validation:
+
+- **Host-tested:** `test_zcl_sensor.c` covers every command, error status and
+  the report scheduling. `test_join_smoke.c` passes in both key modes: three
+  hours of unbounded READY with exact report counts (about one temperature
+  and humidity report per sample and 21/41 of samples for the percentage),
+  consecutive ZCL numbers and no further draws.
+- **Image-checked:** `prepare-join-smoke-stack` and `join_smoke_image.py`
+  with the repinned LG default-TC identity.
 
 Hardware-observed on the LG board (channel 15, ordinary join with
 coordinator-only `zha.permit`): ZHA interviewed the endpoint with all three
@@ -952,6 +987,39 @@ stayed READY for the whole 25-minute window. HA recorded continuous reports
 about every 67 s, 21.1-23.2 °C and 45.00-50.25 %RH, and the final status was
 `ready=1`, reason 0, no radio errors and no recorded send failure. This is one
 run on one board, not a long-term reliability claim.
+
+In a later run of the earlier image, reports stopped after a parent keepalive
+went unacknowledged. With no rejoin, that loss was terminal. This led to the
+keepalive retries (six attempts 5 s apart), the F5 power selection and the
+`zcl_sensor` server.
+
+Hardware-observed with this image, after a full-erase reflash:
+
+- **Earlier image, rerun without reflashing:** stopped immediately at
+  JS_SECURITY. This is intended: the caller requires empty key NV.
+- **First attempt:** ZHA logged the unsecured join, but the device ended
+  BDB FAILED/KEY_TIMEOUT without the network key. The cause is not
+  established.
+- **Second attempt:** the key was received. The device then faulted with
+  MAC_RADIO_RX_LOST. The retained adapter state showed an RXFIFO overflow at
+  the stop that closes the ACK window of an unacknowledged ACK-requested
+  frame. That is the LINK loss policy now described in
+  [MAC_ADAPTER](MAC_ADAPTER.md).
+- **Run with the fix:** joined, verified the TC link key and passed the ZHA
+  interview with all five input clusters.
+  - Entities: temperature, humidity, battery and an Identify button.
+  - ZHA sent Bind_req for `0001`, `0402` and `0405`; each returned SUCCESS.
+  - Configure Reporting succeeded for BatteryVoltage/Percentage,
+    temperature and humidity.
+  - Identify Trigger Effect correctly returned UNSUP_COMMAND, and the
+    optional battery size/quantity attributes returned
+    UNSUPPORTED_ATTRIBUTE.
+  - With ZHA's reportable changes of 0.5 °C and 1 %, HA recorded temperature
+    reports per 0.5 °C (~5.6 min) and humidity per 1 % (~4.5 min).
+  - After 22 minutes the retained status was `ready=1`, reason 0, no radio
+    errors and no recorded send failure.
+
+This is one board on one channel, not a long-term reliability claim.
 
 NV record CRC-32 is now computed a byte at a time from two
 16-entry nibble tables rather than bit by bit; its format and results are

@@ -1863,7 +1863,8 @@ $(JOIN_SMOKE_DIR) $(JOIN_SMOKE_LAYOUT_DIR):
 	mkdir -p $@
 define JOIN_SMOKE_MODULE
 $(JOIN_SMOKE_DIR)/$(1).rel: src/$(1).c $(HEADERS) Makefile $$(JOIN_SMOKE_PROFILE) | $(JOIN_SMOKE_DIR)
-	$$(SDCC) $$(JOIN_SMOKE_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,JD_$(1)) --codeseg $(call JOIN_SMOKE_AREA,$(1)) -c $$< -o $$@
+	$$(SDCC) $$(JOIN_SMOKE_FLAGS) --dataseg $(if $(filter banked,$(1)),DSEG,JD_$(1)) --codeseg $(call JOIN_SMOKE_AREA,$(1)) \
+		$(if $(filter zcl_sensor,$(1)),--constseg JS_zcl_sensor) -c $$< -o $$@
 endef
 $(foreach m,$(JOIN_SMOKE_MODULES) startup join_smoke,$(eval $(call JOIN_SMOKE_MODULE,$(m))))
 $(JOIN_SMOKE_DIR)/$(BOARD).rel: boards/$(BOARD).c $(HEADERS) Makefile $(JOIN_SMOKE_PROFILE) | $(JOIN_SMOKE_DIR)
@@ -1926,8 +1927,16 @@ $(BUILD)/host-join-smoke-deep: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) 
 $(BUILD)/host-join-smoke-deep-sanitize: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_PROFILE) | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_MAC_LINK_DEEP_REFERENCE \
 		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) $(MAC_LINK_SHALLOW_SANITIZERS) $(JOIN_SMOKE_HOST_SRC) -o $@
+ZCL_SENSOR_HOST_SRC := tests/test_zcl_sensor.c src/zcl_sensor.c
+$(BUILD)/host-zcl-sensor: $(ZCL_SENSOR_HOST_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -I. -Isrc $(ZCL_SENSOR_HOST_SRC) -o $@
+$(BUILD)/host-zcl-sensor-sanitize: $(ZCL_SENSOR_HOST_SRC) $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -I. -Isrc $(MAC_LINK_SHALLOW_SANITIZERS) $(ZCL_SENSOR_HOST_SRC) -o $@
 test-join-smoke-host: $(BUILD)/host-join-smoke $(BUILD)/host-join-smoke-sanitize \
-		$(BUILD)/host-join-smoke-deep $(BUILD)/host-join-smoke-deep-sanitize
+		$(BUILD)/host-join-smoke-deep $(BUILD)/host-join-smoke-deep-sanitize \
+		$(BUILD)/host-zcl-sensor $(BUILD)/host-zcl-sensor-sanitize
+	$(BUILD)/host-zcl-sensor
+	$(BUILD)/host-zcl-sensor-sanitize
 	set -e; for n in $(JOIN_SMOKE_HOST_CASES); do \
 		$(BUILD)/host-join-smoke $$n > $(BUILD)/join-smoke-$$n.txt; \
 		$(BUILD)/host-join-smoke-sanitize $$n > $(BUILD)/join-smoke-$$n-sanitize.txt; \

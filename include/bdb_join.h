@@ -14,6 +14,11 @@
 #define BDB_JOIN_SECURITY_WAIT 625000UL
 #define BDB_JOIN_EXCHANGE_WAIT 312500UL
 #define BDB_JOIN_KEEPALIVE 1875000UL
+/* READY keepalive loss: retries are 5 s apart and the sixth consecutive
+ * failure is final, so a short RF burst cannot consume every attempt while
+ * the last failure still precedes the requested 2-minute parent timeout. */
+#define BDB_JOIN_KEEPALIVE_RETRY 312500UL
+#define BDB_JOIN_KEEPALIVE_ATTEMPTS 6u
 #define BDB_JOIN_ATTEMPTS 3u
 #define BDB_JOIN_STALL_STEPS 4096u
 

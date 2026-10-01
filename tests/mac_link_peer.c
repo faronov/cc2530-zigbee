@@ -31,7 +31,7 @@ uint8_t link_beacon[48], link_response[27], link_peer_body[125];
 uint8_t link_beacon_length, link_response_length, link_peer_length, link_peer_pending;
 unsigned link_peer_tx, link_peer_checks, link_peer_app, link_peer_parent;
 uint16_t link_peer_report_cluster;
-uint8_t link_peer_report[ED_PAYLOAD_MAX], link_peer_report_length;
+uint8_t link_peer_report[ED_PAYLOAD_MAX], link_peer_report_length, link_peer_report_counter;
 #define CHECK(c) do { link_peer_checks++; assert(c); } while (0)
 
 static void base_peer(uint8_t nwk_command, uint8_t aps_type, uint16_t cluster)
@@ -197,7 +197,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1); permit = 1;
     } else {
         CHECK(permit && peer_in.aps.profile_id == 0x0104 && (peer_in.aps.flags & APS_FLAG_ACK_REQUEST));
-        link_peer_app++; link_peer_report_cluster = peer_in.aps.cluster_id;
+        link_peer_app++; link_peer_report_cluster = peer_in.aps.cluster_id; link_peer_report_counter = peer_in.aps.counter;
         link_peer_report_length = peer_in.length; memcpy(link_peer_report, peer_in.payload, peer_in.length);
         base_peer(0, ED_APS_ACK, peer_in.aps.cluster_id);
         peer_out.aps.counter = peer_in.aps.counter; peer_out.aps.profile_id = peer_in.aps.profile_id;

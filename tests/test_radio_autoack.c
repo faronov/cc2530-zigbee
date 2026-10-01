@@ -1147,7 +1147,8 @@ int main(int argc, char **argv)
         reset(); config.value.channel = (uint8_t)value;
         CALL(0, value >= 11 && value <= 26 ? RADIO_AUTOACK_READY : RADIO_AUTOACK_INVALID_ARGUMENT);
         reset(); config.value.power = (uint8_t)value;
-        CALL(0, value == RADIO_AUTOACK_POWER_05 || value == RADIO_AUTOACK_POWER_D5 ?
+        CALL(0, value == RADIO_AUTOACK_POWER_05 || value == RADIO_AUTOACK_POWER_D5 ||
+             value == RADIO_AUTOACK_POWER_F5 ?
              RADIO_AUTOACK_READY : RADIO_AUTOACK_INVALID_ARGUMENT);
     }
     for (value = 0; value < 8; value++) {
