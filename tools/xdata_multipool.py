@@ -18,8 +18,11 @@ from join_smoke_image import CallerSchema, identities, xdata
 from verify_firmware import require
 from xdata_lifetime import (activation_graph, analyze, assembly_allocations,
                             compiler_metadata_identities, nonescape, platform_contract)
-from xdata_pool_allocator import allocate
+from xdata_pool_allocator import ALLOCATOR_ALGORITHM_VERSION, allocate
 from xdata_relocations import audit, metadata
+
+
+XDATA_OVERLAY_FORMAT_VERSION = 4
 
 
 def sha(raw):
@@ -28,13 +31,20 @@ def sha(raw):
 
 def bind_inputs(root, directory, binding_file):
     binding = json.loads(binding_file.read_bytes())
-    require(binding["version"] == 1 and identities(root) == binding["baseline"],
-            "Preliminary image identity changed")
-    require(compiler_metadata_identities(directory) == binding["metadata"],
-            "Missing, stale or falsified compiler sidecar")
+    require(type(binding["version"]) is int and binding["version"] == 1,
+            "Unsupported preliminary binding schema")
+    check_identities(identities(root), binding["baseline"], "Preliminary image")
+    check_identities(compiler_metadata_identities(directory), binding["metadata"], "Compiler sidecar")
     require(sha(Path(__file__).with_name("xdata_platform_contract.json").read_bytes()) ==
             binding["contract_sha256"], "Platform contract identity changed")
     return binding
+
+
+def check_identities(actual, expected, label):
+    for name in sorted(actual.keys() | expected.keys()):
+        require(actual.get(name) == expected.get(name),
+                f"{label} {name}: expected {expected.get(name, 'absent')}, "
+                f"actual {actual.get(name, 'missing')}")
 
 
 def regions(artifacts, study):
@@ -232,7 +242,15 @@ def transform(raw, plans):
 def verify(root):
     started = time.perf_counter()
     manifest = json.loads((root / "xdata-overlay.json").read_bytes())
-    require(manifest["version"] == 3, "Wrong multi-pool schema")
+    version = manifest["version"]
+    require(type(version) is int and version in (3, XDATA_OVERLAY_FORMAT_VERSION),
+            "Wrong multi-pool schema")
+    if version == XDATA_OVERLAY_FORMAT_VERSION:
+        require(type(manifest.get("algorithm_version")) is int and
+                manifest["algorithm_version"] == ALLOCATOR_ALGORITHM_VERSION,
+                "Unsupported XDATA allocator algorithm version")
+        require(manifest.get("platform_version") == platform_contract()["version"],
+                "Unsupported XDATA platform contract version")
     baseline, directory, binding = map(Path, (manifest["baseline"], manifest["metadata"], manifest["bindings"]))
     require(baseline.resolve() != root.resolve() and not (baseline / "xdata-overlay.json").exists(),
             "Invalid preliminary image")
@@ -396,7 +414,10 @@ def verify_physical(ctx, plans, candidate, graph):
                 generated_header=CallerSchema(candidate[2]).header(symbols))
 
 
-def prepare(baseline, directory, binding, root, analysis_only=False):
+def prepare(baseline, directory, binding, root, analysis_only=False, *,
+            format_version=3, sdcc="sdcc"):
+    require(type(format_version) is int and format_version in (3, XDATA_OVERLAY_FORMAT_VERSION),
+            "Unsupported generated overlay format")
     ctx = context(baseline, directory, binding)
     plans, metrics = select(ctx)
     check_plans(ctx, plans)
@@ -425,13 +446,17 @@ def prepare(baseline, directory, binding, root, analysis_only=False):
     (root / "data-placement.json").write_text(json.dumps(placement, indent=2)+"\n")
     started = time.perf_counter()
     subprocess.run([sys.executable, "-B", str(Path(__file__).with_name("join_smoke_layout.py")),
-                    "--output", str(root), "--data-placement", str(root / "data-placement.json"),
+                    "--output", str(root), "--sdcc", sdcc,
+                    "--data-placement", str(root / "data-placement.json"),
                     "--modules", *original[4]], check=True)
     report["timings"]["relink_seconds"] = time.perf_counter()-started
     (root / "allocation.json").write_text(json.dumps(report, separators=(",", ":"))+"\n")
-    manifest = dict(version=3, baseline=str(baseline), metadata=str(directory), bindings=str(binding),
+    manifest = dict(version=format_version, baseline=str(baseline), metadata=str(directory), bindings=str(binding),
                     binding_sha256=sha(binding.read_bytes()), candidate_identities=identities(root),
                     plans=plans, regions=ctx["model"])
+    if format_version == XDATA_OVERLAY_FORMAT_VERSION:
+        manifest.update(algorithm_version=ALLOCATOR_ALGORITHM_VERSION,
+                        platform_version=platform_contract()["version"])
     (root / "xdata-overlay.json").write_text(json.dumps(manifest, separators=(",", ":"))+"\n")
     return verify(root)
 

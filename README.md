@@ -59,6 +59,7 @@ implemented.
 | [Conformance ledger](docs/CONFORMANCE.md) | Required behaviors, specification gates and implementation status |
 | [Sources and licensing](docs/PROVENANCE.md) | Permitted inputs and reference provenance |
 | [Contributing](CONTRIBUTING.md) | How to add a small, reviewable change |
+| [Opt-in XDATA overlay](docs/XDATA_OVERLAY.md) | Reproduce and verify the 553-byte physical RAM saving; default OFF |
 
 ## Build the bootstrap
 

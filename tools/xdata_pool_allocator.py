@@ -5,6 +5,9 @@ from collections import defaultdict
 import time
 
 
+ALLOCATOR_ALGORITHM_VERSION = 1
+
+
 def pool(groups, starts, method):
     return dict(region=groups[0]["region"], owners=sorted(g["owner"] for g in groups),
                 group_offsets={g["owner"]: starts[g["owner"]] for g in groups},

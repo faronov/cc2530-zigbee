@@ -252,12 +252,21 @@ class SelectionTests(unittest.TestCase):
         for text in ("workflow_dispatch:", "schedule:", "release:", "types: [published]",
                      "fetch-depth: 0", "actions: read", "contents: read",
                      "matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}",
-                     "if: always()", "needs: [plan, checks]", "--check-result",
+                     "if: always()", "needs: [plan, checks, overlay]", "--check-result",
                      'ARTIFACT_CAMPAIGN="$ARTIFACT_CAMPAIGN"', "timeout-minutes: 15"):
             self.assertIn(text, workflow)
         self.assertNotIn("pull_request_target", workflow)
         self.assertNotIn("continue-on-error", workflow)
         self.assertNotIn("contents: write", workflow)
+        ordinary = workflow.split("\n  checks:\n", 1)[1].split("\n  overlay:\n", 1)[0]
+        self.assertIn("timeout-minutes: 15", ordinary)
+        overlay = workflow.split("\n  overlay:\n", 1)[1].split("\n  acceptance:\n", 1)[0]
+        for text in ("needs: plan", "if: needs.plan.outputs.count != '0'",
+                     "prepare-join-smoke-stack test-join-smoke-host", "test-join-smoke-overlay",
+                     "prepare_xdata_compiler.py", "prepare_join_simulator.py",
+                     "Feature-off physical XDATA changed"):
+            self.assertIn(text, overlay)
+        self.assertIn('--check-result "$PLAN_RESULT" "$OVERLAY_RESULT" "$COUNT"', workflow)
 
 
 if __name__ == "__main__":

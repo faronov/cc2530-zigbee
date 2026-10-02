@@ -534,12 +534,20 @@ def main():
     parser.add_argument("--case", type=int, choices=CASES, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--chunk", type=int, default=256)
-    parser.add_argument("--xdata-study", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--xdata-study", action="store_true")
+    mode.add_argument("--xdata-overlay", action="store_true",
+                      help="Require the opt-in build receipt and independent overlay admission")
     args = parser.parse_args()
     require(0 < args.chunk <= 256 and (args.limit is None or args.limit > 0), "Invalid replay bound")
     report = args.output / f"join-replay-{args.case}.json"
     report.unlink(missing_ok=True)
-    if args.xdata_study:
+    layout = args.output / "join-smoke-layout"
+    if args.xdata_overlay:
+        from xdata_build import admit, canonical
+        layout = canonical(layout)
+        artifacts, _ = admit(layout, args.board, args.key_mode)
+    elif args.xdata_study:
         from xdata_overlay import verify_study
         artifacts, _ = verify_study(args.output / "join-smoke-layout", args.board, args.key_mode)
     else:
@@ -551,7 +559,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="join-smoke-") as directory:
         result = replay(args.simulator, artifacts, vector, Path(directory), limit=args.limit, chunk=args.chunk)
     if result["complete"]:
-        result.update(identities=identities(args.output / "join-smoke-layout"), board=args.board,
+        result.update(identities=identities(layout), board=args.board,
                       key_mode=args.key_mode, case=args.case, simulated=True, hardware_observed=False)
         report.write_text(json.dumps(result, indent=2) + "\n", encoding="ascii")
     print(f"{'Complete' if result['complete'] else 'Partial diagnostic'} case{args.case}: "

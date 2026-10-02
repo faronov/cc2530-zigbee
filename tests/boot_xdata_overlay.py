@@ -18,8 +18,12 @@ from verify_firmware import require
 from xdata_overlay import verify_study
 
 
-def execute(root, simulator):
-    artifacts, proof = verify_study(root, "lg_esl29_rev03", "default-tc")
+def execute(root, simulator, *, production=False):
+    if production:
+        from xdata_build import admit, canonical
+        artifacts, proof = admit(canonical(root), "lg_esl29_rev03", "default-tc")
+    else:
+        artifacts, proof = verify_study(root, "lg_esl29_rev03", "default-tc")
     image, symbols, debug, _, _ = artifacts
     graph = call_graph(*artifacts)
     body = debug.split("M:nwk_aps\n", 1)[1].split("\nM:", 1)[0]
@@ -98,10 +102,11 @@ def main():
     parser.add_argument("--layout", type=Path, required=True)
     parser.add_argument("--simulator", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--xdata-overlay", action="store_true")
     args = parser.parse_args()
     args.output.unlink(missing_ok=True)
     check_alias(args.simulator)
-    result = execute(args.layout, args.simulator)
+    result = execute(args.layout, args.simulator, production=args.xdata_overlay)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result))
 

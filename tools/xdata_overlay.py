@@ -25,7 +25,7 @@ def sha(raw):
 def verify_study(root, board, key_mode):
     require(board == "lg_esl29_rev03" and key_mode == "default-tc", "Unmeasured XDATA study profile")
     manifest = root / "xdata-overlay.json"
-    multipool = manifest.exists() and json.loads(manifest.read_bytes()).get("version") == 3
+    multipool = manifest.exists() and json.loads(manifest.read_bytes()).get("version") in (3, 4)
     catalog = json.loads((Path(__file__).resolve().parents[1] /
                           ("experiments/xdata/multipool/identities.json" if multipool else
                            "experiments/xdata/identities.json")).read_bytes())
@@ -85,8 +85,8 @@ def transform(raw, plan):
 def verify(root):
     manifest = json.loads((root / "xdata-overlay.json").read_bytes())
     version = manifest.get("version", 1)
-    require(type(version) is int and version in (1, 3), "Unknown XDATA overlay schema")
-    if version == 3:
+    require(type(version) is int and version in (1, 3, 4), "Unknown XDATA overlay schema")
+    if version in (3, 4):
         from xdata_multipool import verify as verify_multipool
         return verify_multipool(root)
     baseline = Path(manifest["baseline"])

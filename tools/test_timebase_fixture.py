@@ -167,20 +167,28 @@ class TimebaseCodeTests(unittest.TestCase):
         tool_step = workflow.split("- name: Check host tool regressions\n", 1)[1].split("- name:", 1)[0]
         self.assertIn("if: matrix.tools", tool_step)
         self.assertIn("python3 -m unittest discover -s tools -p 'test_*.py' -v", tool_step)
-        workers = workflow.split("  checks:\n", 1)[1].split("\n  acceptance:", 1)[0]
+        workers = workflow.split("  checks:\n", 1)[1].split("\n  overlay:", 1)[0]
         self.assertIn("timeout-minutes: 15", workers)
         self.assertIn('make -j1 BOARD="$BOARD" IMAGE="$IMAGE" BUILD="$BUILD"', workers)
         self.assertIn('"${targets[@]}"', workers)
         upload = workers.split("- name: Upload generated board artifacts", 1)[1]
         self.assertIn("if: matrix.image != ''", upload)
         self.assertIn("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", upload)
-        self.assertEqual(workflow.count("uses: actions/upload-artifact"), 1)
+        self.assertEqual(workers.count("uses: actions/upload-artifact"), 1)
         uploads = upload.split("          path: |\n", 1)[1].strip().splitlines()
         prefix = "build/${{ matrix.board }}/${{ matrix.image }}/"
         expected = {prefix + "${{ matrix.image }}." + suffix for suffix in ("hex", "bin", "ihx", "map", "mem", "cdb")}
         expected.add(prefix + "build-info.json")
         self.assertEqual(len(uploads), 7)
         self.assertEqual({line.strip() for line in uploads}, expected)
+        overlay = workflow.split("\n  overlay:\n", 1)[1].split("\n  acceptance:", 1)[0]
+        self.assertEqual(workflow.count("uses: actions/upload-artifact"), 2)
+        self.assertEqual(overlay.count("uses: actions/upload-artifact"), 1)
+        summary = overlay.split("- name: Retain public synthetic acceptance summary", 1)[1]
+        self.assertIn("if-no-files-found: error", summary)
+        self.assertIn("include-hidden-files: true", summary)
+        self.assertEqual(summary.split("          path: ", 1)[1].strip(),
+                         "build/overlay/xdata-overlay/.generations/image-*/acceptance-*/acceptance.json")
 
 
 if __name__ == "__main__":

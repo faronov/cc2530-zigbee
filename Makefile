@@ -1901,6 +1901,19 @@ JOIN_SMOKE_HOST_CASES := $(JOIN_SMOKE_CASES) $(if $(filter default-tc,$(JOIN_SMO
 prepare-join-smoke-image: $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h
 	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE)
 
+.PHONY: prepare-join-smoke-overlay verify-join-smoke-overlay test-join-smoke-overlay
+prepare-join-smoke-overlay:
+	$(PYTHON) -B tools/xdata_build.py --output $(BUILD)/xdata-overlay \
+		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --sdcc "$(SDCC)"
+
+verify-join-smoke-overlay:
+	$(PYTHON) -B tools/xdata_build.py --output $(BUILD)/xdata-overlay \
+		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --sdcc "$(SDCC)" --verify
+
+test-join-smoke-overlay:
+	$(PYTHON) -B tools/xdata_acceptance.py --output $(BUILD)/xdata-overlay \
+		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --sdcc "$(SDCC)" --simulator "$(S51)"
+
 define JOIN_SMOKE_MCU_CASE
 .PHONY: test-join-smoke-mcu-$(1)
 test-join-smoke-mcu-$(1): $(BUILD)/host-join-smoke-vectors $(BUILD)/host-join-smoke-vectors-sanitize

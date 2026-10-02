@@ -93,7 +93,7 @@ class XdataAdmissionTests(unittest.TestCase):
 
 class ImmutableAdmissionTests(unittest.TestCase):
     def test_overlay_schema_does_not_fall_back_to_legacy_admission(self):
-        for version in (2, 4, True, "3", None):
+        for version in (2, 5, True, "3", None):
             with self.subTest(version=version), patch.object(
                     Path, "read_bytes", return_value=json.dumps({"version": version}).encode()), \
                     self.assertRaisesRegex(ValueError, "Unknown XDATA overlay schema"):

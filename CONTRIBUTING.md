@@ -118,6 +118,14 @@ The DIRECT workers additionally run
 `test-mac-link-shallow`, comparing shallow/deep guard and codec behavior
 separately for native and nonrecovering-sanitizer builds.
 
+The separate [opt-in XDATA overlay](docs/XDATA_OVERLAY.md) has one verified
+build target, `prepare-join-smoke-overlay`, and an independent verification
+target, `verify-join-smoke-overlay`. Both require the explicit ownership-enabled
+compiler and the admitted LG/default-TC profile. `test-join-smoke-overlay`
+additionally requires complete successful case0 and repeated directed pool
+execution. Its separate CI job includes both disabled/enabled primary builds;
+it does not replace any existing worker or enable overlay by default.
+
 CI only narrows a push/PR when its exact previous/base commit already has a
 successful main CI result. A failed/cancelled/in-progress predecessor,
 missing baseline or unavailable approval selects full acceptance, even for
