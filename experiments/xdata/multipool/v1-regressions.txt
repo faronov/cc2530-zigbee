@@ -1,0 +1,1 @@
+XDATA inventory, real 39-byte reduction and 12 negative checks PASS

@@ -41,6 +41,14 @@ documented metadata architecture, not copied proprietary code or formats.
 No application source, production pins, SDK, equipment data or private
 capture is imported or altered by this compiler representation experiment.
 
+The [multi-pool XDATA study](XDATA_MULTIPOOL_STUDY.md) keeps that compiler
+frozen and adds original BSD-3-Clause allocation, binding and verification
+tools. Its committed evidence contains public compiler allocations,
+linked-image identities, synthetic simulator observations and reconstructed
+read/write sites. No third-party allocator, linker implementation, SDK or
+equipment data was imported. Production sources and production pin catalogs
+remain unchanged; the new identities are explicitly experimental.
+
 The opt-in complete-radio replay uses an isolated build of the public
 [SDCC4.2.0+dfsg source archive](https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz),
 SHA256 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`.

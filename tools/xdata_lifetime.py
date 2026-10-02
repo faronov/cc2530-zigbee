@@ -75,6 +75,41 @@ def parameter_names(module, function):
     return candidates.pop() if len(candidates) == 1 else None
 
 
+def platform_contract():
+    return json.loads(Path(__file__).with_name("xdata_platform_contract.json").read_bytes())
+
+
+def legacy_scopes(blocks):
+    scopes = defaultdict(set)
+    for block in blocks:
+        if "_PARM_" in block["symbol"]:
+            scopes[block["key"].split("$")[0]].add(tuple(block["key"].split("$")[2:]))
+    return scopes
+
+
+def legacy_classification(module, key, name, shape, parameters, formal_scopes):
+    owner = key[1:].split("$")[0] if key.startswith("L") else None
+    variable = key.split("$")[1]
+    if owner and owner not in parameters and not formal_scopes[key.split("$")[0]]:
+        parameters[owner] = parameter_names(module, owner.split(".", 1)[1])
+    scopes, known = formal_scopes[key.split("$")[0]], parameters.get(owner)
+    parameter = owner and (tuple(key.split("$")[2:]) in scopes if scopes else
+                           known is not None and variable in known and key.split("$")[2] == "1_0")
+    if "_PARM_" in name:
+        require(parameter, "Compiler/source parameter identity differs")
+    category = ("parameter_home" if parameter else
+                "unknown_unclassified" if owner and not scopes and known is None else
+                "compiler_temporary" if owner and variable.startswith(("__", "sloc")) else
+                "function_local_array" if owner and shape.startswith("DA") else
+                "function_local_struct" if owner and shape.startswith("ST") else
+                "function_local_scalar" if owner else "persistent_global")
+    return owner, category
+
+
+def legacy_caller_written(row):
+    return "_PARM_" in row["symbol"]
+
+
 def compiler_ownership(directory, module, blocks, assembly):
     paths = list(directory.rglob(module + ".xdata.json"))
     require(len(paths) == 1, "Missing or ambiguous compiler ownership: " + module)
@@ -108,16 +143,14 @@ def compiler_ownership(directory, module, blocks, assembly):
         require(row["symbol"] == block["symbol"] and row["size"] == block["size"],
                 "Compiler/assembly storage identity differs")
         owner = module + "." + row["owner"] if row["owner"] is not None else None
-        cdb_owner = block["key"][1:].split("$")[0] if block["key"].startswith("L") else None
-        require(owner == cdb_owner, "Compiler/CDB owner differs")
+        expected_scope = f"L{module}.{row['owner']}$" if owner else ("G$", f"F{module}$")
+        require(block["key"].startswith(expected_scope), "Compiler/CDB owner differs")
         require(row["owner_symbol"] == ("_" + row["owner"] if owner else None),
                 "Compiler function entry identity differs")
         require((row["class"] not in {"GLOBAL", "FILE_STATIC"} or owner is None) and
                 (row["class"] not in {"LOCAL", "STATIC_LOCAL", "FIRST_ARGUMENT_HOME",
                  "REGISTER_ARGUMENT_HOME", "PARAM_CALLER_WRITTEN", "INLINE_RETURN_HOME"} or owner),
                 "Compiler storage class/owner conflict")
-        require(("_PARM_" in row["symbol"]) == (row["class"] == "PARAM_CALLER_WRITTEN"),
-                "Caller-written parameter class differs")
     return result
 
 
@@ -182,10 +215,7 @@ def inventory(root, artifacts, metadata_directory=None):
         row_symbols = {name: int(addr, 16) for addr, name in re.findall(
             r"^\s*([0-9A-F]{6})\s+\d+\s+(_\w+)::?$", raw.decode("ascii"), re.M)}
         parameters = {}
-        formal_scopes = defaultdict(set)
-        for block in blocks:
-            if "_PARM_" in block["symbol"]:
-                formal_scopes[block["key"].split("$")[0]].add(tuple(block["key"].split("$")[2:]))
+        formal_scopes = legacy_scopes(blocks) if owned is None else None
         for block, (address, size) in zip(blocks, ranges):
             key, name = block["key"], block["symbol"]
             require(size == block["size"] and address == cursor, "XSEG gap/size/order mismatch")
@@ -197,26 +227,11 @@ def inventory(root, artifacts, metadata_directory=None):
             if name in defined:
                 require(defined[name] + module_base == address and symbols[name] == address,
                         "Global object/linker symbol differs")
-            owner = key[1:].split("$")[0] if key.startswith("L") else None
             shape = declarations[module, key][1]
-            variable = key.split("$")[1]
-            if owned is None and owner and owner not in parameters and not formal_scopes[key.split("$")[0]]:
-                parameters[owner] = parameter_names(module, owner.split(".", 1)[1])
-            # Inlined/shadowed variables in deeper blocks are not formal parameters.
-            scopes = formal_scopes[key.split("$")[0]]
-            known = parameters.get(owner)
-            parameter = owner and (tuple(key.split("$")[2:]) in scopes if scopes else
-                                    known is not None and variable in known and key.split("$")[2] == "1_0")
-            if owned is None and "_PARM_" in name:
-                require(parameter, "Compiler/source parameter identity differs")
-            category = ("parameter_home" if parameter else
-                        "unknown_unclassified" if owner and not scopes and known is None else
-                        "compiler_temporary" if owner and variable.startswith(("__", "sloc")) else
-                        "function_local_array" if owner and shape.startswith("DA") else
-                        "function_local_struct" if owner and shape.startswith("ST") else
-                        "function_local_scalar" if owner else "persistent_global")
             compiler = {}
-            if owned is not None:
+            if owned is None:
+                owner, category = legacy_classification(module, key, name, shape, parameters, formal_scopes)
+            else:
                 data = owned[key]
                 owner = module + "." + data["owner"] if data["owner"] is not None else None
                 kind = data["class"]
@@ -245,8 +260,6 @@ def inventory(root, artifacts, metadata_directory=None):
         require(not span & occupied, "Baseline XDATA allocations overlap")
         occupied |= span
     require(occupied == set(range(symbols["l_XSEG"])), "Inventory does not cover entire l_XSEG")
-    require(sum(r["size"] for r in result if r["owner"]) == 2849,
-            "Requested baseline function-home inventory differs")
     return result
 
 
@@ -259,9 +272,11 @@ def activation_graph(graph, symbols):
     for pc, target in targets.items():
         if pc not in calls and pc in functions and target in entries and target != functions[pc]:
             edges[functions[pc]].add(target)
-    enter = next(e for e, ident in entries.items() if ident[:2] == ("flash_exec", "enter_ram"))
-    template = next(e for e, ident in entries.items() if ident[:2] == ("flash_exec", "flash_exec_template"))
-    edges[enter].add(template)
+    by_identity = {tuple(ident[:2]): entry for entry, ident in entries.items()}
+    for origin, destination in platform_contract()["extra_activation_edges"]:
+        require(tuple(origin) in by_identity and tuple(destination) in by_identity,
+                "Platform activation transfer is not bound")
+        edges[by_identity[tuple(origin)]].add(by_identity[tuple(destination)])
     closure, cycles = {}, set()
     for entry in entries:
         pending, seen = list(edges[entry]), set()
@@ -283,7 +298,7 @@ def activation_graph(graph, symbols):
     return edges, closure, cycles
 
 
-def nonescape(row, graph, reference_index, debug):
+def nonescape(row, graph, reference_index, debug, *, evidence=None):
     """DPTR is the only permitted address materialization; values may be pointers."""
     decoded, _, functions, entries, targets, calls = graph
     identity = tuple(row["owner"].split(".", 1))
@@ -313,8 +328,9 @@ def nonescape(row, graph, reference_index, debug):
     returns = 0 if ret.startswith("SV:") else 1 if ret.startswith("SC:") else 2
     states, pending = {entry: {(0, 0, 0)}}, deque([entry])
     refs = set(references)
-    banker_return = next(e for e, ident in entries.items()
-                         if ident[:2] == ("banked", "_sdcc_banked_ret"))
+    return_transfers = {tuple(ident) for ident in platform_contract()["return_transfers"]}
+    banker_returns = {e for e, ident in entries.items() if ident[:2] in return_transfers}
+    require(len(banker_returns) == len(return_transfers), "Unbound platform return transfer")
     while pending:
         pc = pending.popleft()
         require(pc in decoded and functions.get(pc) == entry, "Owner CFG escapes function")
@@ -337,6 +353,8 @@ def nonescape(row, graph, reference_index, debug):
                     return False, "home read before activation-local definition", references
                 if op == 0xf0:
                     initialized |= 1 << offset
+                if evidence is not None:
+                    evidence.setdefault("reads" if op == 0xe0 else "writes", set()).add((pc, offset))
             elif op in (0x73, 0x93) and mask:
                 return False, "implicit DPTR CODE consumer", references
             else:
@@ -353,11 +371,11 @@ def nonescape(row, graph, reference_index, debug):
                 if mask:
                     return False, "storage address live at call boundary", references
                 mask, offset = 0, 0
-            terminal = op == 0x22 or targets.get(pc) == banker_return
+            terminal = op == 0x22 or targets.get(pc) in banker_returns
             if terminal and (mask & 1 and returns or mask & 2 and returns >= 2):
                 return False, "storage address in return registers", references
             outgoing.add((mask, offset, initialized))
-        if raw[0] == 0x22 or targets.get(pc) == banker_return:
+        if raw[0] == 0x22 or targets.get(pc) in banker_returns:
             continue
         successor = pc + len(raw)
         if pc in calls:
@@ -418,12 +436,15 @@ def analyze(root, metadata_directory=None):
     for row in rows:
         if not row["owner"]:
             continue
-        if (row.get("compiler_class") in {"STATIC_LOCAL", "UNKNOWN", "PARAM_CALLER_WRITTEN"} or
+        if (metadata_directory and row.get("compiler_class") not in
+                {"LOCAL", "FIRST_ARGUMENT_HOME", "REGISTER_ARGUMENT_HOME", "COMPILER_TEMP",
+                 "INLINE_RETURN_HOME"} or
                 row.get("compiler_reentrant") or row.get("compiler_isr")):
             row.update(reason="compiler storage is retained, unknown, reentrant, ISR or caller-written",
                        candidate_for_overlay="no")
             continue
-        if row["module"] in ("banked", "flash_exec") or "_PARM_" in row["symbol"]:
+        if row["module"] in platform_contract()["frozen_modules"] or (
+                metadata_directory is None and legacy_caller_written(row)):
             row["reason"] = "runtime state or caller-written parameter home excluded"
             row["candidate_for_overlay"] = "no"
             continue

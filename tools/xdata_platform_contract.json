@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "platform": "CC2530 closed foreground banked image",
+  "ordinary_start": 0,
+  "ordinary_limit": 7680,
+  "runtime_prefix_bytes": 26,
+  "fixed_objects": {"_join_smoke_status": [7680, 48]},
+  "forbidden_ranges": [[7936, 8192]],
+  "empty_areas": ["XABS", "XISEG", "XINIT", "PSEG"],
+  "frozen_modules": {
+    "banked": "Naked banker entry/return ABI and scratch are not ordinary C activation homes.",
+    "flash_exec": "Copied XMAP engine, MEMCTR transitions and retained fail-stop require dedicated storage."
+  },
+  "extra_activation_edges": [
+    [["flash_exec", "enter_ram"], ["flash_exec", "flash_exec_template"]]
+  ],
+  "return_transfers": [["banked", "_sdcc_banked_ret"]],
+  "root_symbols": ["_main", "__sdcc_external_startup", "__sdcc_banked_call", "__sdcc_banked_ret"],
+  "banked_call_entry": "__sdcc_banked_call",
+  "root_modules": ["banked", "flash_exec"],
+  "sources": [
+    "tools/join_smoke_image.py:xdata",
+    "tools/join_smoke_stack.py:analyze_stack",
+    "tests/verify_banked_join.py",
+    "include/flash_exec.h",
+    "docs/ARCHITECTURE.md"
+  ],
+  "policy": "All retained objects and module boundaries preserve order; no cross-module or cross-retained-object reuse. Addresses otherwise derive from current linked artifacts."
+}

@@ -141,6 +141,7 @@ static void serve_report(unsigned *reports, uint8_t *tsn, unsigned counts[4])
 static void serve_ready(unsigned *calls)
 {
     unsigned served=0, reports=0, seen=link_peer_app, confirmed=0, counts[4]={0,0,0,0};
+    unsigned application_sent=0;
     uint32_t steps;
     uint8_t tsn=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
@@ -164,15 +165,30 @@ static void serve_ready(unsigned *calls)
         ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
         credited=cycles*32768u/32000000u;
         handoff_tick();
-        if(served==200) {
-            /* A published non-Basic frame is released, not left to block RX. */
+        if(served>=200 && !application_sent && !link_peer_pending && !sent_wait &&
+           !packets && !ack_active && XR(0x618b) && mode==2 &&
+           !mac_adapter_diagnostic()->held && mac_adapter_diagnostic()->normal_rx &&
+           join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+           !join_smoke_device.work.runtime.transport.active &&
+           !join_smoke_device.work.runtime.transport.queued) {
+            uint32_t saved_clocks=mmio_clocks;
             assert(!join_smoke_device.work.runtime.zdo.application_ready);
-            link_peer_application(&join_smoke_device.work.runtime.zdo.application);
-            join_smoke_device.work.runtime.zdo.application_ready=1;
+            /* Peer input must enter through traced peripherals, not private DUT memory. */
+            mmio_clocks=0;
+            security_aes_peer_enter();
+            link_peer_receive_application();
+            security_aes_peer_leave();
+            mmio_clocks=saved_clocks;
+            air_frame(link_peer_body,link_peer_length,1);
+            link_peer_pending=0; application_sent=served;
         }
         caller_poll();
-        if(served==200) assert(!join_smoke_device.work.runtime.zdo.application_ready &&
-            !join_smoke_device.work.runtime.zdo.application.length && join_smoke_status.discarded==1);
+        assert(join_smoke_status.discarded<=1);
+        if(join_smoke_status.discarded) assert(application_sent &&
+            !join_smoke_device.work.runtime.zdo.application_ready &&
+            !join_smoke_device.work.runtime.zdo.application.length);
+        if(application_sent && served-application_sent>=128)
+            assert(join_smoke_status.discarded==1);
         (*calls)++;
     }
     if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=5)
@@ -182,7 +198,7 @@ static void serve_ready(unsigned *calls)
             join_smoke_status.announce,served);
     assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && join_smoke_status.saw_ready);
     assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce);
-    assert(join_smoke_status.discarded==1 && !join_smoke_status.dropped && served>200);
+    assert(application_sent && join_smoke_status.discarded==1 && !join_smoke_status.dropped && served>200);
     /* Temperature and humidity change on every 2^22-symbol sample boundary
      * (one past the 30 s minimum each). In each 41-sample phase cycle,
      * BatteryPercentageRemaining (change 2, 0.5 % steps) reports on every

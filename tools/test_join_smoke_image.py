@@ -7,9 +7,28 @@ from unittest.mock import patch
 
 from join_smoke_image import CallerSchema, main, verify, xdata
 from verify_banked_join import RUNTIME_XDATA
+from xdata_overlay import verify as verify_overlay
+from xdata_multipool import regions
 
 
 class XdataAdmissionTests(unittest.TestCase):
+    def test_ownerless_compiler_storage_is_a_retained_region_anchor(self):
+        rows = [dict(module="unit", key=key, symbol="_"+key, owner=owner,
+                     compiler_class=kind, address=26+i, size=1, shape="SC:U")
+                for i, (key, owner, kind) in enumerate((
+                    ("a", "unit.a", "LOCAL"), ("scratch", None, "COMPILER_TEMP"),
+                    ("b", "unit.b", "LOCAL")))]
+        with patch("xdata_multipool.xdata", return_value={"modules": {"unit": (26, 29)}}), \
+                patch("xdata_multipool.CallerSchema") as schema, \
+                patch("xdata_multipool.platform_contract",
+                      return_value={"frozen_modules": {}, "fixed_objects": {}}):
+            schema.return_value.header.return_value = ""
+            model = regions(({}, {}, "", {}, {"unit": b""}), {"objects": rows})
+        self.assertEqual([a["key"] for a in model["anchors"]], ["scratch"])
+        self.assertEqual([r["keys"] for r in model["runs"]], [["a"], ["b"]])
+        self.assertEqual(model["runs"][0]["fence_after"], "scratch")
+        self.assertEqual(model["runs"][1]["fence_before"], "scratch")
+
     def fixture(self, wrong_clock_order=False):
         modules = ["banked", "mac_link_workspace", "mac_link_child_workspace",
                    "flash_exec", "timebase", "clock", "flash", "flash_write", "nv_record",
@@ -73,6 +92,17 @@ class XdataAdmissionTests(unittest.TestCase):
 
 
 class ImmutableAdmissionTests(unittest.TestCase):
+    def test_overlay_schema_does_not_fall_back_to_legacy_admission(self):
+        for version in (2, 4, True, "3", None):
+            with self.subTest(version=version), patch.object(
+                    Path, "read_bytes", return_value=json.dumps({"version": version}).encode()), \
+                    self.assertRaisesRegex(ValueError, "Unknown XDATA overlay schema"):
+                verify_overlay(Path("unused"))
+        with patch.object(Path, "read_bytes", return_value=b'{"version":3}'), \
+                patch("xdata_multipool.verify", return_value={"routed": True}) as multi:
+            self.assertEqual(verify_overlay(Path("unused")), {"routed": True})
+            multi.assert_called_once_with(Path("unused"))
+
     def test_every_artifact_and_wrong_board_fail_before_structure(self):
         pins = json.loads(Path(__file__).with_name("join_smoke_pins.json").read_bytes())
         for name in pins["generic"]:

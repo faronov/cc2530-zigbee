@@ -7,13 +7,18 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 from boot_join_smoke import (
     CASES, PERIPHERAL_SFR, check_breakpoints, check_flash_retention, check_flash_stop,
-    events_for, stops_for, validate_reference,
+    active_phase, events_for, stops_for, validate_reference,
 )
 from boot_mac_attempt import mmio_sites
 from join_smoke_analysis import instructions
 
 
 class ReplayBoundaryTests(unittest.TestCase):
+    def test_running_and_ready_poll_without_a_debug_mailbox_wait(self):
+        for phase in range(1, 7):
+            with self.subTest(phase=phase):
+                self.assertEqual(active_phase(phase), phase in (4, 5))
+
     def fixture(self):
         initial = {str(a): 0 for a in PERIPHERAL_SFR | set(range(0x6100, 0x6400))}
         return {"case": 0, "admission": "00" * 150, "draws": "00" * 64,

@@ -42,6 +42,10 @@ CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10)
 FLASH_BUSY_CASE = 10
 
 
+def active_phase(phase):
+    return phase in (4, 5)
+
+
 def check_debugger(simulator):
     """Exercise real register/CODE banks, without temporary direct decoders."""
     image = {0: 2, 1: 0x80, 2: 0}
@@ -280,6 +284,22 @@ def resume(state, pc):
     return commands + [f"pc {pc:#x}"]
 
 
+def check_poll_loop(simulator, base, symbols, after):
+    boundaries = {name: symbols["_join_smoke_" + name] for name in ("wait", "poll", "fault")}
+    stops = [f"break {address:#x}" for address in boundaries.values()]
+    commands = base + stops + ["set memory sfr 0x9f 0", "set memory sfr 0xa8 0"]
+    expected = ("wait", "wait", "wait", "poll", "poll", "fault")
+    for phase, name in enumerate(expected, 1):
+        commands += [f"set memory xram {symbols['_join_smoke_status']+6:#x} {phase}",
+                     "set memory sfr 0x81 0x4f", f"run {after:#x}",
+                     marker(phase*2), "state", marker(phase*2+1)]
+    text = simulate(simulator, commands)
+    check_breakpoints(text, stops)
+    parts = sections(text)
+    for phase, name in enumerate(expected, 1):
+        check_pc(parts[phase*2], boundaries[name])
+
+
 def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
     image, symbols, debug, listings, _ = artifacts
     sites = sites_for(artifacts)
@@ -292,6 +312,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
              if raw == b"\x12" + symbols["_join_smoke_poll"].to_bytes(2, "big")]
     require(len(after) == 1, "Missing actual main poll continuation")
     after = after[0]
+    check_poll_loop(simulator, base, symbols, after)
     stops.append(f"break {after:#x}")
     initial = {int(a): v for a, v in vector["initial"].items()} | CONSTANT | {0x6270: 4}
     require(all(type(v) is int and 0 <= v <= 255 for v in initial.values()), "Invalid initial peripherals")
@@ -326,14 +347,14 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
             commands += banking.xmap() if state[2][0x47] & 8 else banking.code_banks()
             commands += capture(60000)
             if first == 0:
-                if pc == after and state[0][0x1e06] != 4:
+                if pc == after and not active_phase(state[0][0x1e06]):
                     commands += ["step 1", "run", marker(59980), "state", marker(59981)]
                 if index == 0:
                     commands += store("xram", symbols["_join_smoke_phase"], bytes.fromhex(vector["admission"]))
                     commands += store("xram", symbols["_join_smoke_draws"], bytes.fromhex(vector["draws"]))
                 require(pc in (wait, after), "Input outside public foreground boundary")
                 packet = bytes.fromhex(step["packet"])
-                require(len(packet) == 8 and (state[0][0x1e06] != 4 or packet == bytes(8)),
+                require(len(packet) == 8 and (not active_phase(state[0][0x1e06]) or packet == bytes(8)),
                         "Invalid mailbox handoff")
                 commands += store("xram", symbols["_join_smoke_mailbox"], packet)
                 commands.append("step 1")
@@ -418,7 +439,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
             check_breakpoints(text, stops)
             parts = sections(text)
             require(captured_sections(parts, 60000, pc) == state, "Continuation changed actual machine state")
-            if first == 0 and pc == after and state[0][0x1e06] != 4:
+            if first == 0 and pc == after and not active_phase(state[0][0x1e06]):
                 check_pc(parts[59980], wait)
             for n, kind, address, value, dma, flash in checks:
                 here = pc_in(parts[n])

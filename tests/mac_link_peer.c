@@ -230,6 +230,17 @@ void link_peer_application(ed_packet_t *packet)
     packet->length = 3; packet->payload[0] = 0x55;
 }
 
+void link_peer_receive_application(void)
+{
+    CHECK(verified && permit);
+    base_peer(0, 0, 6);
+    peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
+    peer_out.aps.source_endpoint = peer_out.aps.destination_endpoint = 1;
+    peer_out.aps.profile_id = 0x0104;
+    peer_out.length = 3; peer_out.payload[0] = 0x55;
+    seal_peer(0, 0, NULL, 1);
+}
+
 void link_peer_verify(void)
 {
     security_keys_status_t status;

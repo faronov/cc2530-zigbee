@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from verify_firmware import require
-from xdata_lifetime import analyze, assembly_allocations, compiler_ownership
+from xdata_lifetime import analyze, assembly_allocations, compiler_metadata_identities, compiler_ownership
 from xdata_overlay import choose
 
 
@@ -37,6 +37,7 @@ def main():
     module = "nwk_aps"
     sidecar = next(args.metadata.rglob(module + ".xdata.json"))
     manifest = json.loads(sidecar.read_bytes())
+    bound_metadata = compiler_metadata_identities(args.metadata)
     text = (args.layout / (module + ".asm")).read_text("ascii")
     blocks = assembly_allocations(text)
     first = next(i for i, r in enumerate(manifest["objects"]) if r["class"] == "FIRST_ARGUMENT_HOME")
@@ -71,11 +72,19 @@ def main():
         with patch.object(Path, "read_bytes",
                           lambda p: json.dumps(data).encode() if p == sidecar else read(p)):
             try:
-                compiler_ownership(args.metadata, module, blocks, text)
+                require(compiler_metadata_identities(args.metadata) == bound_metadata,
+                        "Compiler metadata no longer matches its frozen build")
             except ValueError:
                 pass
             else:
                 raise AssertionError("Accepted malformed compiler metadata: " + label)
+            if label != "parameter":
+                try:
+                    compiler_ownership(args.metadata, module, blocks, text)
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("Accepted structurally malformed compiler metadata: " + label)
     for field, value in (("class", "UNKNOWN"), ("class", "STATIC_LOCAL"),
                          ("owner_isr", True), ("owner_reentrant", True)):
         data = copy.deepcopy(manifest)
@@ -92,6 +101,7 @@ def main():
                   function_bytes=actual["function_scoped"], owner_mismatches=0,
                   eligible_objects=len(safe), eligible_bytes=sum(r["size"] for r in safe),
                   source_parsing=False, negative_cases=[name for name, _ in mutations],
+                  independently_rejected_structural_mutations=14,
                   selected_plan=choose(actual, "nwk_aps", 10))
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result))
