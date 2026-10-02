@@ -425,6 +425,13 @@ class LocalChecksTests(unittest.TestCase):
                              {"host-mac-link-" + c for c in
                               ("shallow", "deep", "shallow-sanitize", "deep-sanitize")})
             native = [args for args in native if args not in shallow]
+            sensors = [args for args in native if "tests/test_zcl_sensor.c" in args]
+            self.assertEqual({Path(args[-1]).name for args in sensors},
+                             {"host-zcl-sensor", "host-zcl-sensor-sanitize"})
+            self.assertEqual(sum("-fno-sanitize-recover=all" in args for args in sensors), 1)
+            for args in sensors:
+                self.assertEqual([arg for arg in args if arg.startswith("src/")], ["src/zcl_sensor.c"])
+            native = [args for args in native if args not in sensors]
             self.assertEqual(len(native), 13)
             caller = [args for args in native if "tests/test_join_smoke.c" in args]
             self.assertEqual(len(caller), 4)
@@ -461,7 +468,8 @@ class LocalChecksTests(unittest.TestCase):
             self.assertEqual(runs, [f"host-mac-link-direct-{case}tests{suffix}"
                                     for case in ("", "nv-", "upper-", "join-")
                                     for suffix in ("", "-sanitize")]
-                             + ["host-mac-link-direct-poison-tests"])
+                             + ["host-mac-link-direct-poison-tests", "host-zcl-sensor",
+                                "host-zcl-sensor-sanitize"])
             loops = [args for args in commands if args[0] == "set"]
             self.assertEqual(len(loops), 2)
             self.assertTrue(" ".join(loops[0]).startswith("set -e; for n in 0 1 2 3 4 5 6 8 9 10 ; do "))

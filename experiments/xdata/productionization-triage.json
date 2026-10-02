@@ -1,0 +1,80 @@
+{
+  "baseline": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+  "multipool": "a8897f4",
+  "before_repairs": true,
+  "commands": [
+    "python3 -B tools/check_repository.py",
+    "PYTHONPATH=tools:tests python3 -B -m unittest test_local_checks.LocalChecksTests.test_direct_replaces_transmit_and_adds_only_host_join_caller test_radio_link_fixture.LinkTests.test_fresh_both_board_artifacts_and_snapshot_rejection test_radio_tx_fixture.ClockMetadataTests.test_genuine_clock_metadata_for_every_coupled_profile"
+  ],
+  "results": [
+    {
+      "check": "check_repository.py: personal absolute path",
+      "baseline": "PASS: 606 files; report absent",
+      "multipool": "FAIL: docs/SDCC_FUNCTION_XDATA_STUDY.md",
+      "classification": "EXPERIMENTAL ARTIFACT HYGIENE ISSUE",
+      "origin": "98b7c4b compiler study; not present in the application baseline"
+    },
+    {
+      "check": "check_repository.py: file size",
+      "baseline": "PASS: inventory absent",
+      "multipool": "FAIL: experiments/xdata/inventory.json exceeds 256 KiB",
+      "classification": "EXPERIMENTAL ARTIFACT HYGIENE ISSUE",
+      "origin": "af762a7 lifetime study; not present in the application baseline"
+    },
+    {
+      "check": "test_local_checks.LocalChecksTests.test_direct_replaces_transmit_and_adds_only_host_join_caller",
+      "baseline": "FAIL: 15 != 13",
+      "multipool": "FAIL: 15 != 13",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "origin": "6ba0039 added host-zcl-sensor and host-zcl-sensor-sanitize to test-join-smoke-host without updating orchestration coverage",
+      "source_and_test_unchanged_between_compared_revisions": true
+    },
+    {
+      "check": "test_radio_link_fixture.LinkTests.test_fresh_both_board_artifacts_and_snapshot_rejection",
+      "baseline": "ERROR: generic/radio_link_fixture CODE extent changed",
+      "multipool": "ERROR: generic/radio_link_fixture CODE extent changed",
+      "classification": "EXISTING BASELINE FAILURE",
+      "origin": "6ba0039 added the RADIO_AUTOACK_POWER_F5 admission comparison; radio_link_fixture catalog still matches 9e8424f",
+      "source_and_checker_unchanged_between_compared_revisions": true
+    },
+    {
+      "check": "test_radio_tx_fixture.ClockMetadataTests.test_genuine_clock_metadata_for_every_coupled_profile",
+      "baseline": "ERROR: same generic/radio_link_fixture CODE extent failure",
+      "multipool": "ERROR: same generic/radio_link_fixture CODE extent failure",
+      "classification": "EXISTING BASELINE FAILURE",
+      "origin": "Dependent clock-metadata test cannot reach the stale radio-link fixture",
+      "source_and_checker_unchanged_between_compared_revisions": true
+    }
+  ],
+  "baseline_tests": {"run": 3, "failures": 1, "errors": 2, "seconds": 91.301},
+  "multipool_tests": {"run": 3, "failures": 1, "errors": 2, "seconds": 91.170},
+  "scope": "Independent fresh worktree reproduction of the exact failing tests, before any repairs; not full unittest discovery or full CI.",
+  "after_repairs": {
+    "classification": "FIXED BASELINE TEST INFRASTRUCTURE and experimental artifact hygiene; no allocator or production C changes",
+    "repository": "PASS after removing the personal path and admitting only the exact original inventory length/hash without bypassing content checks",
+    "targeted_tests": {
+      "command": "PYTHONPATH=tools:tests python3 -B -m unittest test_repository_evidence test_local_checks.LocalChecksTests.test_direct_replaces_transmit_and_adds_only_host_join_caller test_radio_link_fixture.LinkTests.test_fresh_both_board_artifacts_and_snapshot_rejection test_radio_tx_fixture.ClockMetadataTests.test_genuine_clock_metadata_for_every_coupled_profile",
+      "run": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 303.451
+    },
+    "clock_relocation": {
+      "unchanged_private_cdb": true,
+      "call_sites": 34,
+      "generic_gptrput": [10698, 10706],
+      "lg_gptrput": [10738, 10746],
+      "proof": "Restoring only the 34 decoded LCALL operands to the former runtime address reproduces each existing full 1875-byte clock CODE digest exactly; no masked digest or semantic expectation change"
+    },
+    "radio_fixture": [
+      {
+        "command": "make -s -j1 BOARD=generic IMAGE=radio_link_fixture BUILD=build/productionization-radio/generic test-board",
+        "result": "PASS: native/sanitized 1342 polls; 35 MCU sequences, 1096 polls, 54878 MMIO/settle events; 34266+1 artifact/alias negatives; sampled SP31/full SP37"
+      },
+      {
+        "command": "make -s -j1 BOARD=lg_esl29_rev03 IMAGE=radio_link_fixture BUILD=build/productionization-radio/lg_esl29_rev03 test-board",
+        "result": "PASS: native/sanitized 1342 polls; 35 MCU sequences, 1096 polls, 54878 MMIO/settle events; 34415+1 artifact/alias negatives; sampled SP31/full SP37"
+      }
+    ]
+  }
+}

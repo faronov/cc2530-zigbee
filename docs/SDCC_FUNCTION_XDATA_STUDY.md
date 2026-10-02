@@ -391,8 +391,11 @@ Area/CRT test, **PASS** (including the expected failure to clear custom areas):
 ```sh
 python3 -B experiments/sdcc-function/test_areas.py \
  --output build/sdcc-function/areas-verified \
- --simulator /home/alexx/cc2530-zigbee/build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51
+ --simulator "$S51"
 ```
+
+`S51` is an explicit path to the separately prepared alias-aware simulator;
+see `tools/prepare_join_simulator.py`. No machine-local path is required.
 
 Full artifact/resource/timing comparison, **PASS**:
 

@@ -49,6 +49,15 @@ read/write sites. No third-party allocator, linker implementation, SDK or
 equipment data was imported. Production sources and production pin catalogs
 remain unchanged; the new identities are explicitly experimental.
 
+The preserved `experiments/xdata/inventory.json` is the one reviewed large
+text artifact: 1,069,021 bytes, SHA256
+`4b675f4f0e3f5d6d98a672537d6a2a9ece9d296e07a13383246cd3b9e628b260`.
+Its complete public allocation/reference/lifetime ledger remains inspectable
+and reproducible using the lifetime-study command. The repository checker
+allows only that exact path, length and digest above its ordinary 256-KiB
+guard. All UTF-8, binary, credential and personal-path checks still apply;
+other experimental or JSON files receive no exemption.
+
 The opt-in complete-radio replay uses an isolated build of the public
 [SDCC4.2.0+dfsg source archive](https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz),
 SHA256 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`.
