@@ -73,15 +73,18 @@
     "scope": "Standalone real-image BTR fill/duplicate/full/expiry scenario; not complete join replay."
   },
   "complete_case0": {
-    "status": "RUNNING",
-    "shell_id": "mp-full-join",
+    "status": "PASS",
+    "report": "experiments/xdata/multipool/full-case0.json",
     "log": "build/multipool-evidence/full-case0.log",
-    "last_observed_step_events_sp": [
-      "465",
-      "15872",
-      "69715",
-      "7a"
-    ]
+    "complete": true,
+    "steps": 1142,
+    "peripheral_stops": 559709,
+    "peak_sp": 123,
+    "phase": 5,
+    "terminal": "serving",
+    "identities_match_catalog": true,
+    "simulated": true,
+    "hardware_observed": false
   },
   "full_application_ci": "PARTIAL",
   "full_workers_not_run": 118,

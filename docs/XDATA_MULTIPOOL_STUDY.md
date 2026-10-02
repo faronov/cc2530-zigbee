@@ -10,7 +10,7 @@
 10. Source/name ownership heuristics used: **NO**.
 11. CODE changed: **YES, relocation operands only; populated size and instruction sequences unchanged**.
 12. ABI changed: **NO**.
-13. Complete MCU successful join replay: **NOT RUN to completion; the final-image replay is running**.
+13. Complete MCU successful join replay: **PASS, simulated: 1142 steps / 559709 peripheral stops, READY/serving**.
 14. Full application CI: **PARTIAL**.
 
 # Compiler-owned, region-aware physical XDATA reuse
@@ -24,7 +24,8 @@ protocol limits, memory ceilings, production admission catalogs and the
 preserved v1 image were not changed.
 
 **The physical and independently admitted result exceeds the 150-byte
-stretch target. Runtime/CI completion is not inferred from that result.**
+stretch target. The complete synthetic join also passes; full CI remains
+partial.**
 Ordinary headroom is now **557 bytes**, versus 4 initially.
 Dead CODE/XDATA saving included = **0**.
 
@@ -502,7 +503,17 @@ Case2: **PASS**, one complete rejection step, zero peripheral stops,
 SP `0x53`. Bounded case0: **PASS as a prefix only**, three steps / 1974
 peripheral stops, SP `0x71`. BTR: **PASS**, eighteen actual linked calls
 covering fill, duplicate, full and expiry behavior at the new addresses.
-The complete case0 command is **running**, not a completed result.
+Complete case0: **PASS**, 1142 steps / 559709 peripheral stops, final phase
+5 (`READY`) and continuing `serving`, peak SP `0x7b` below the `0x7c`
+boundary. The actual replay result is preserved byte-for-byte in
+[`full-case0.json`](../experiments/xdata/multipool/full-case0.json).
+All nine result identities match both the immutable multi-pool catalog and
+the current linked artifacts. Every logged step completed its expected
+events; their total agrees with the report. The replay enforced status/NV,
+MMIO, stack/IRAM-alias and unowned-XDATA guards throughout. This is evidence
+for the 7123-byte multi-pool image, not a reuse of the earlier v2 result,
+and remains simulated rather than hardware-observed.
+
 Directed owner execution currently covers the two BTR entries; exhaustive
 per-owner execution of all 326 owners is **not claimed**.
 
@@ -681,7 +692,7 @@ XSEG accounting. No measured limitation here requires LTO.
 ## Recommended next step
 
 **A. Productionize the multi-pool allocator**, after completing this
-candidate's outstanding runtime/CI acceptance. The existing metadata and
+candidate's remaining directed-owner coverage and full-CI acceptance. The existing metadata and
 conservative model already realize 553 bytes, exceeding the requested
 stretch goal without compiler or protocol changes. Robust build
 integration, reproducible admission and validation coverage have higher
