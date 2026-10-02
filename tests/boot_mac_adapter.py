@@ -215,8 +215,8 @@ def main():
     layout.verify(*artifacts)
     if args.case is None:
         count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        # Five per CODE byte: +195 for the radio_autoack stopped-head/RXOVERF +39 CODE.
-        require(count == 283374, "Adapter complete artifact rejection inventory")
+        # Five per CODE byte: +195 for stopped-head/RXOVERF, +185 for F5 admission.
+        require(count == 283559, "Adapter complete artifact rejection inventory")
     check_alias(args.simulator); rejected(lambda: check_alias(args.simulator, False))
     banking.check_mapping(args.simulator)
     rejected(lambda: banking.check_mapping(args.simulator, code=False))
@@ -229,8 +229,8 @@ def main():
         require((a, b, c, d) == (spec.calls, spec.events, spec.sampled, spec.peak), "Adapter replay/stack inventory")
         calls += a; events += b; peak = max(peak, d)
         print(f"MAC adapter {spec.name}: {a} genuine calls/{b} MMIO; SP{d:02X}/7C PASS.", flush=True)
-    campaign = "283374 artifact +3 mapping/alias negatives; " if args.case is None else "selected case; "
-    print(f"MAC adapter: {calls} calls/{events} MMIO; 56671 CODE,2848+64 XDATA; SP{peak:02X}/7C; "
+    campaign = "283559 artifact +3 mapping/alias negatives; " if args.case is None else "selected case; "
+    print(f"MAC adapter: {calls} calls/{events} MMIO; 56708 CODE,2848+64 XDATA; SP{peak:02X}/7C; "
           +campaign+"synthetic peripherals, no hardware or full-join claim.")
 
 

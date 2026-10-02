@@ -21,7 +21,7 @@ from boot_image import check_alias, simulate_binary_dumps
 from boot_zdo_node import rejected
 from verify_firmware import require
 
-REFERENCE_SHA = "13111e56f3dcce064cd6dc9d99c1acc7cbcf5193b65f15e4a93be441f84ee162"
+REFERENCE_SHA = "f9ba89f873003f97b71e6763329e2ec5d4ca9c3ac02d4d1f46538c4693a881eb"
 CASES = ("joined-data-update-loss-restart", "missing-network-key", "retained-radio-fault")
 FLASH_FAILURE = "retained-flash-fault"
 EDGE_CASES = {
@@ -48,7 +48,7 @@ EDGE_CASES = {
 
 def reference(executable, selected=None):
     require(selected is None or selected in EDGE_CASES, "Unknown complete join reference")
-    digest, expected_calls, expected_events = ((REFERENCE_SHA, 415, 1651) if selected is None
+    digest, expected_calls, expected_events = ((REFERENCE_SHA, 465, 1672) if selected is None
                                               else EDGE_CASES[selected])
     raw = subprocess.run([str(executable)]+([] if selected is None else [selected]), capture_output=True,
                          check=True, timeout=15).stdout

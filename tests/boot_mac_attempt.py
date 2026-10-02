@@ -24,15 +24,15 @@ MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch",
 CASES = 33
 # radio_autoack complete_head() (stopped drain without FIFOP): +25 CODE,
 # relinked identities and +87 required mutations; MMIO trace unchanged.
-SIZE, XDATA, STACK = 25426, 1477, 0x5a
-CODE_SHA = "6c663f84924c921e3b10582d4e5056a942d9adc250d34be4c0ab1b13593db16c"
-CDB_SHA = "160df10256ea0fd94a9e1b25a6b507bcfe6d60af4cc7ce1c8d466816a1969dbe"
-MAP_SHA = "6011dff89ef58ee0cd5973ef71a22eae1e3222104f85f559248bc46065e3e9dc"
-MEM_SHA = "02f400f9fc928c50cb0a9d23b9b7ce3867939768934036b7e11a2966f3ffefe8"
-LIST_SHA = "e36388c868ddfa1c6be4ef504324b7b5806968f6a384a4a276f82ac5b0231d88"
-OBJECT_SHA = "1007f0103b2e3f72c3d34879ecc5f5b989b717c2517f60fb21afaee9a05744a2"
+SIZE, XDATA, STACK = 25439, 1477, 0x5a
+CODE_SHA = "0a0cf7413ba2b25931b8057a59fd48582b1311696f2c95256dec951767ca5612"
+CDB_SHA = "0858c530cd765b959caf134fd678c25fcce2dbc4ccbf6af3804a9d3615acb242"
+MAP_SHA = "5bc66444502e1844418a40c0ce77dcb34bc56cc1301e865eb8eaa65fd69f4230"
+MEM_SHA = "b136d38cbbc2724474f71f671aa08bfdae96769103caa35874ed0bb2d4a71438"
+LIST_SHA = "2a48198b367e960dd0e3366393167abf7af52a55907a16559d5c658238f1de91"
+OBJECT_SHA = "0a96dd21f240d10126c5972ed2420653ddc09c2b6d96af1b4d1952bf7a24ce66"
 INVENTORY = (391, 181474, 119, 121)
-NEGATIVES = 79948
+NEGATIVES = 79982
 CALLER_SIZES = {"config": 14, "frame": 128, "record": 164, "operation": 1,
                 "return": 1, "length": 1, "input": 2, "output": 2, "limit": 2,
                 "window": 2, "timeout": 4}

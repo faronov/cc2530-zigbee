@@ -88,7 +88,7 @@ alone is not evidence: the proof binds all allocation records, actual marker
 addresses and the complete runtime suffix. Upper layers contain no peripheral
 instructions.
 
-Current linked image: **15341/16384 CODE**, **760 ordinary XDATA +64 reserved
+Current linked image: **15354/16384 CODE**, **760 ordinary XDATA +64 reserved
 =824/1024**. Stack begins3C, initial3B; sampled/full-run peaks are53/55,
 below the unchanged7C cap. These are separate composition resources, not
 whole-stack/ZCL/interrupt-nesting headroom.
@@ -103,7 +103,7 @@ operator, dependency or automatic RF step is added.
 
 Prepared evidence is **host-tested, image-checked and simulated**:
 62,532 native calls (also with nonrecovering ASan/UBSan),282 genuine target
-calls/82,709 MMIO events,48,890 artifact negatives and one missing-alias
+calls/82,709 MMIO events,49,011 artifact negatives and one missing-alias
 negative. The CI matrix preserves its28 board/image jobs and adds two
 dedicated composition jobs (also running delayed stamps and synthetic
 temperature reporting and staged association); the existing debug-fixture jobs run

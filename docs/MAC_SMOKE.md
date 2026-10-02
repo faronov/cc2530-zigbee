@@ -201,6 +201,11 @@ highest physical byte11AAD unchanged; LG CONST7E55..7E90 exclusive), merge
 the two adapter PHR reads into a171-site lower MMIO inventory and extend
 liveness to157/156 functions with the same560 combinations. Native smoke
 scenario MMIO counts are unchanged by these fixes.
+The subsequent F5 power admission adds eight `radio_autoack`, five
+`mac_radio_init` and 24 `mac_adapter_init` CODE bytes: totals are 59415
+(LG) and 59375 (generic), with bank1 unchanged and bank2=6854. The highest
+physical byte is11AC5 and LG CONST is7E62..7E9D exclusive. XDATA and the
+171-site lower MMIO inventory are unchanged.
 
 Raw CDB bytes are pinned before decoding. Complete CODE/address bytes,
 source objects, immediately snapshotted relocated listings, memory report

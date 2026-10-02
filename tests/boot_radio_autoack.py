@@ -21,11 +21,12 @@ from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, 
 MODULES = ("timebase", "radio_autoack", "radio_autoack_test")
 # Artifact pins refreshed for the radio_autoack stopped-head fix: the shared
 # complete_head() PHR helper adds 25 CODE bytes and moves later code/MMIO sites.
-SIZE, XDATA, PRIVATE_END, CASES = 7056, 450, 281, 194
+# Accepting raw TX power F5 adds eight operate() bytes; later sites relocate.
+SIZE, XDATA, PRIVATE_END, CASES = 7064, 450, 281, 194
 CODE_BUDGET, XDATA_BUDGET = 24576, 1536
-DIGEST = "5c67a615443cf2e05b47168b38b63b335f39b828f9c82659d8435bf411f40ee6"
-MAP_DIGEST = "a86dfa35489600e945d443f40d08582f3027bdaedfdb63870a4a4e1b9720ecc0"
-RAW_CDB_DIGEST = "fc6841643722c157cdba4d16922d1660b781a2249bbf15eaddd66a1651861a4f"
+DIGEST = "2cdc0df173f2a5c9d5a3fa153240f81c478d543f2eabae7bfde6a2e666c3450a"
+MAP_DIGEST = "84d7a235bb1ac3f1c926e8a654f3cace942ef4c901969fdc54ac754cee623d35"
+RAW_CDB_DIGEST = "b0bb8f9fa40076d938d28026bf2b9430e8fd34457427ad63ada4ea81e0c3696a"
 # Case 1 now returns RXFIRST/RXLAST/RXP1 reads with reserved bit7 set (SWRU191F
 # p265); only those 155 read values and the raw RXP1 diagnostic differ from the
 # previous pins; every result, state, frame and access order is unchanged.
@@ -36,28 +37,28 @@ LEGACY_DIGEST = "af0c8a0ecae45412c693e675a48d3cac41cdf9a8246dd0141ef4b484f0113c3
 REARM_DIGEST = "9619dc9d5e04c8901b353577e7f37e9783efddd7fb2f7de9c9c550bca1295c57"
 METADATA = {
     r"^[FSLT]:(?:X?F|L)(?:timebase|radio_autoack)[.$][^\n]+$":
-        "a175c15054fe9cccb9ae520a4ac794ddd86d7257f3b3037ad99f45473f227e01",
+        "9617e196dbbaa0d1b27ea25bc56b44a746fb81633ec53dddf4b6bc54426d4f92",
     r"^[FSLT]:(?:X?F|L)test_radio_autoack[.$][^\n]+$":
         "d79bc1826fbbf21fe78846ebcc7d3032b50ec6dee497f2c8b6a3a7032423f128",
     r"^[FSL]:(?:X?G)\$[^\n]+$":
-        "707d22b93cbd74bbf682779c09303270a8b3e05f72d406a6ef1d9ba3b843ddd1",
+        "c90b72413c3c063c20d5191a04ab3185d838dbf7d24fd94715de3da902299318",
 }
 LISTINGS = {
-    "timebase": (265, 404, "82ca2deca689292a24c74ea3e570bb2dc5d57b3a0c82e77701124769a6693367"),
-    "radio_autoack": (3377, 5898, "907034a7445e68ecb05700c8b4b742106e4e0fd9b0e414485e66ad9becd9a912"),
-    "radio_autoack_test": (264, 411, "b87813c436fc98eb4404b5b646906e00b273c202db5514607f90496e3dfee201"),
+    "timebase": (265, 404, "7a4ab34e7f86ec46fb184709b8acacd03e1d28ef1997b0c96553b796fcf2ef19"),
+    "radio_autoack": (3380, 5906, "807794f9d1c8ddd2ed952a066d2d21b2ad3e0d4211279a09d18138de799e9c3a"),
+    "radio_autoack_test": (264, 411, "863f436d1f9a7e2721631db4ff044eb05f61502bc30afa9aab057e9b62d18319"),
 }
 STORAGE = {
     "timebase": ("7e29643ee1d1225c20d5a4ee1beaee3319490ae992627c43c22b53b006c23580",
                  "f812571971442e3efb76d6e35fc06f820d3ee3da014fbe453f6bd00509c13e80"),
     "radio_autoack": ("cdbf2d272f8183fc1f0e9c29094f553cf60010b4549933af651aefd48d04e96a",
-                      "2bc5e885b5b76fcfbad4e788d27d6c3c6ebc8dd3ce751ea3ea6779446a206232"),
+                      "1a1f6672f86fca961fc8805781c800f4e4a53aebf14148f6cf496c4a23371268"),
     "radio_autoack_test": ("d93f2639ffb319fb000e73407db3a9c052301e7e1c34340b064d16879a12e153",
-                           "6ca8fc3b84973496be91b23053d3ca89e2d1065d78fd8181befabc8a8ab3cdd0"),
+                           "07716428781dedecce7382cc08c66b7d2b9c0016fa8587d2a791fc8187d27887"),
 }
 OBJECTS = {
     "timebase": ((404, 25, 0, 3), "11e376b9aa9e8c4c6d94dfb9685d15bed0b455019a023476540150eaabec6a08"),
-    "radio_autoack": ((5937, 256, 4, 2), "03a1ac9dfb670d716b2819313331c69e61078e534b98fd00b65ad0e9d0e3ddeb"),
+    "radio_autoack": ((5945, 256, 4, 2), "00de8117cdfddfaf4a1c4d3c7bc6c9b74ee56fe743eef439ffbf6046d5e77203"),
     "radio_autoack_test": ((411, 157, 2, 0), "f739df4ed377ba272918e9173752237043d9d4ec7e5031f5688fd4d497ae0220"),
 }
 CALLER = {
@@ -75,11 +76,11 @@ XREADS = (
     0x619b, 0x619d, 0x619c, 0x61a1, 0x61a2, 0x6189, 0x618a,
 )
 XWRITES = (
-    (0xbf3, 0x6180, 1), (0xc60, 0x6189, 0x60), (0xce2, 0x618c, 1),
-    (0xfd7, 0x618d, 1), (0x143c, 0x6189, 0x40), (0x149b, 0x6180, 0x0c),
-    (0x1503, 0x6196, 0xf8), (0x1562, 0x6197, 0x1a), (0x1782, 0x618c, 1),
+    (0xbfb, 0x6180, 1), (0xc68, 0x6189, 0x60), (0xcea, 0x618c, 1),
+    (0xfdf, 0x618d, 1), (0x1444, 0x6189, 0x40), (0x14a3, 0x6180, 0x0c),
+    (0x150b, 0x6196, 0xf8), (0x156a, 0x6197, 0x1a), (0x178a, 0x618c, 1),
 )
-SETTLE = 0x1205
+SETTLE = 0x120d
 STATUS_SIZES = (4, 2, 2) + (1,) * 18
 INSTRUCTION = re.compile(
     r"^\s*([0-9A-F]{6})\s+((?:[0-9A-F]{2}\s+)+)\[\s*\d+\]\s+\d+\s+\S.*$", re.M,
@@ -231,8 +232,8 @@ def verify(image, symbols, debug, memory, listings, objects):
             require(code.get(pc + 3) == b"\xe0", "Unexpected static MMIO operand")
             sites[pc + 3] = ("r", address, 0xe0); static.append(address)
     require(tuple(static) == XREADS and tuple(writes) == XWRITES, "Static MMIO/address whitelist changed")
-    require(code.get(0x418) == b"\xe0" and code.get(0xb1b) == b"\xf0", "Indexed MMIO changed")
-    sites[0x418] = ("r", None, 0xe0); sites[0xb1b] = ("w", None, None)
+    require(code.get(0x418) == b"\xe0" and code.get(0xb23) == b"\xf0", "Indexed MMIO changed")
+    sites[0x418] = ("r", None, 0xe0); sites[0xb23] = ("w", None, None)
     require(raw[SETTLE:SETTLE + 5] == b"\0\0\0\0\x22" and
             sum(data == b"\x12" + SETTLE.to_bytes(2, "big") for data in code.values()) == 1,
             "CCA must execute four real NOPs through one genuine call")
@@ -539,7 +540,7 @@ def main():
             [(1, a) for a in range(helper - 138, helper + 1)],
             "Every original libc overlap must execute exactly once across the fresh partitions")
     inventory = (calls, rfd, sampled, full, count, tx_bytes, attempts, flushes, settles)
-    require(inventory == (1730, 1163, 0x2e, 0x34, 9080, 419, 22, 29, 22),
+    require(inventory == (1730, 1163, 0x2e, 0x34, 9088, 419, 22, 29, 22),
             f"Complete corpus, negative inventory or measured stack high-water changed: {inventory}")
     print(f"AUTOACK: {CASES} sequences/{calls} genuine API calls/{rfd} exactly-once RFD reads; "
           f"{SIZE} CODE SHA256={DIGEST}; {XDATA}+64/{XDATA_BUDGET} XDATA; "

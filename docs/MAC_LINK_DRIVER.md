@@ -775,10 +775,12 @@ simultaneous IRAM. The CHILD pointer-ABI image keeps11105 CODE,1551+64
 XDATA,43098 checks and peakSP59/7C; only nine typed-loan size/offset
 constants in `mac_link_workspace` changed, following the three added
 `zdo_srv_local_t` bytes (profile, endpoint: 16 to19) and the resulting ZDO
-server/descriptor union (37 to38). Because `zdo_runtime.h` now includes
-`board.h`, that object's SDCC symbol keys and CDB/map debug records differ by
-board while its CODE does not; the proof therefore pins one complete raw set
-per board, selected by the exact CDB and never mixed.
+server/descriptor union (37 to38). The later five-cluster descriptor grows
+the staged reply from19 to23 bytes, changing three offsets from47/85/19
+to51/89/23. Since the sensor server moved to `zcl_sensor`, `zdo_runtime.h`
+no longer includes `board.h`. Both boards again have identical complete
+CDB/map/object/listing identities; the proof selects this single complete
+set by its raw CDB before decoding, never by mixing per-file pins.
 
 ## Remaining #13/#14 work
 

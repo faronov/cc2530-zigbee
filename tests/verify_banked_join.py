@@ -33,32 +33,33 @@ RUNTIME_XDATA = {
     "_memcmp_PARM_2": 18, "_memcmp_PARM_3": 21,
 }
 BOARDS = ("generic", "lg_esl29_rev03")
-# zdo_runtime embeds BOARD_MODEL, so every identity is keyed by board.
+# CDB/listings/objects remain board-specific. CODE/symbols/memory now coincide:
+# the Basic model string moved to zcl_sensor, which is not linked here.
 # Per-function spill split link: CODE, NoICE-complete symbols, raw CDB,
 # memory, relocated listings and normalized split objects. Repinned for the
-# synthetic sensor demo (zdo_runtime Temperature/Humidity reads, three-cluster
-# zdo_srv Simple_Desc); radio_autoack is not linked here.
+# READY keepalive retry, five-cluster descriptor and Bind/Unbind publication;
+# radio_autoack is not linked here.
 PINS = {
     "generic": (
-        "278cc6299b9bf5d3ee67ee4990f1251e696691e4e9671e206335b844c463d80e",
-        "97b79be55415848fcb4b2146ca3cec74d31e1c55dc6f3e6586d8e6f4e3bbe2df",
-        "6da68d97fe04d65392746feb62baa9646ef61301106ebf628587b11cc5d5ce66",
-        "1594a16ad0538c1014669ecc2b69aa4cd83194e83765f3e34f46cf2b0fccd0bb",
-        "ba1bd1115c10cd271759ce7d2a82208bdea21f6ed4c97bffc8718623ff6560ce",
-        "57a8fe029a49acef286699e8387819eb6fe68299f2b60f7318f5a628a498a34c",
+        "1eba32f768ce5bef32b972a27ebd50de15924765d3698ecbfa752ce5b5601ee0",
+        "4b8955fe700e38eb1a44681151c175dd67be0cd388a3d58feec2c1c6d9362e9c",
+        "8f5d6abb0dd2c5c7a95a218f45746b21d1f68419ad6556077db4a55d9c26cd9e",
+        "80fb8bfc5816edbe9d6feca6af45c2705346aa255fcb45f65646489453e4c3fc",
+        "051572cdd6ab3ded92afee71cad885f1f83e0fe04bc8dd85ab71f64c6ea4dacc",
+        "857a306e86dfacce006cb3f2a3d564f631ca342e857e3e5def100823a6636816",
     ),
     "lg_esl29_rev03": (
-        "1f333cf68982cafb2c30331c2c4e5c4c9b88fd2fc3bffff9155c3628f6e3a93f",
-        "b6c4d120ea8a01eacf1ab082106757f7b8fa99db49f29086c857e62e80040cbd",
-        "21d4b417b1239a61352a24e0919de2c629e48b69437c3e6cf6af64a658f084aa",
-        "40624353acad6ec8858fcc2a35222edb34f22a782d02049743dca1b433967496",
-        "aca2a89a4afb7aedf3531a334aa6df264605ea5ab40006650a345ca2507f9186",
-        "4be6d92d3e731ca11d901b1acb933ad7bb1f7b7220aa306d1ec6cda14ef88543",
+        "1eba32f768ce5bef32b972a27ebd50de15924765d3698ecbfa752ce5b5601ee0",
+        "4b8955fe700e38eb1a44681151c175dd67be0cd388a3d58feec2c1c6d9362e9c",
+        "c08b0ff9e9c8196290b2a3ea1a544590c742f19133fbe1224cb86bc3d6fcfd6e",
+        "80fb8bfc5816edbe9d6feca6af45c2705346aa255fcb45f65646489453e4c3fc",
+        "cfa8cb0dae234325d37d70b717cefc6b6a118243dddb14f22f8a95751da59253",
+        "8476d7d8135af44f3ea18e60ae83b431608882d25b7ac039398e1ca7ec8b34f6",
     ),
 }
-NEGATIVES = {"generic": 729989, "lg_esl29_rev03": 729994}
+NEGATIVES = {"generic": 723054, "lg_esl29_rev03": 723054}
 # Functions with frames/overlay analysed, live-byte x clobber pairs checked.
-LIFETIME = (285, 1882)
+LIFETIME = (284, 1831)
 # Physical DATA owned by banked_join_iram_low/high; compiler frames may reuse
 # only these bytes, and only where backwards liveness proves them dead.
 RESERVATIONS = frozenset(range(8, 0x1e)) | frozenset(range(0x26, 0x46))

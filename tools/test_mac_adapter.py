@@ -91,7 +91,7 @@ class AdapterMetadataTests(unittest.TestCase):
         with patch.object(sys, "argv", ["proof", "--output", "unused"]), \
                 patch.object(layout, "load", return_value=("actual",)), patch.object(layout, "verify") as verify, \
                 patch.object(layout, "artifact_bytes", return_value="immutable"), \
-                patch.object(proof.banking, "artifact_negatives", return_value=283374) as negatives, \
+                patch.object(proof.banking, "artifact_negatives", return_value=283559) as negatives, \
                 patch.object(proof, "check_alias", side_effect=[None, ValueError("no alias")]) as alias, \
                 patch.object(proof.banking, "check_mapping",
                              side_effect=[None, ValueError("no banking"), ValueError("no alias")]) as mapping, \

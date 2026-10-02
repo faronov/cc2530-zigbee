@@ -24,9 +24,9 @@ MAIN, DONE, FAILED, FLASH = 0x1bcd, 0x1b83, 0x1b80, 0x1830
 # SDCC4.2.0#13081, canonical src/... / tests/... inputs, BOTH board definitions.
 # These bind whole bytes, not source-line-masked or instruction-only identities.
 # CODE, the memory account and the map suffix are identical on both boards.
-# Sensor demo: zdo_srv staged reply 17 -> 19 bytes moves three
-# mac_link_workspace offset constants (45/83/17 -> 47/85/19); nothing else.
-CODE_SHA = "b169fed88666a3d0e02b1c41eaab2a496ba4f0004fdb1c84937d16a5da64f007"
+# The five-cluster descriptor grew the staged reply from 19 to 23 bytes,
+# moving the three workspace offsets from 47/85/19 to 51/89/23.
+CODE_SHA = "0f1178923f8b8b1f6babc0dd9bfae86d01109a3ef6498a46986f50c86cc53685"
 MEM_SHA = "f0433cd0f02beb7eda5cb8a7ddb432cbd0400200e029c534776d8e929040927b"
 MAP_SUFFIX_SHA = "da6eb110b124ece27e2f55dc4b5f1775a1c494cccbf3731cf862b0a9c297de93"
 
@@ -39,27 +39,22 @@ class BoardPins:
     listings: tuple
 
 
-# zdo_runtime.h includes board.h (BOARD_MODEL; LG also declares
-# board_early_off), so mac_link_workspace's SDCC symbol keys, CDB/map debug
-# records and object symbol order are board-specific; its CODE is not. The
-# raw CDB selects exactly one complete board set; sets are never mixed.
+# The sensor server moved to zcl_sensor; zdo_runtime.h no longer includes
+# board.h. Both boards now produce one identical complete raw set.
+# The raw CDB still selects that set before any decoding.
 _OBJECTS = ("e055058223c4e704a9d97c8c6efd3f028920bcaaa9cfd70273e65cad5d33cb11",
+            "d87732a073d19d36108fac89180c997b87025517763f118cbc59be1a01ea6557",
             "c2c851f453375df8b7175fba398cb0d1da5dc171231e27fe21bd54bcf79117a3",
             "f80e0539b57b42e16383e44ab0176827f5b6923663803953cf9af4b7df00fb19")
 _LISTINGS = ("4b9e94585f97d6cd9be29f347ebca7c6b2846c3cd76d001cfbdec57c1c21a89d",
+             "8868ab7f272f48cd02daa6e0fc19d19806c9181c7f26b17bd97163a53ea5b204",
              "6c2b4b1d9f81450db84b3c804c5f5c25e4abe967fdc498c135627133d3091f4e",
              "13bd83b4dcb03161cd3ee561c843d7f724b8c3cf01baef7fd2b21792f9711147")
 BOARD_PINS = {
-    "generic": BoardPins(
-        "d96ed6dce20a6af468791bfb18d1e77907a9585a900ebaff8039ca60b4ec285b",
+    "generic+lg_esl29_rev03": BoardPins(
+        "6f5314613233dd8a599d900668b794f97e33a76f3fe1233e30f09694ca3c6d41",
         "fa25f30814e3b87f5206807b3511acb42c5e15165ff133cd6440fb4511da1d2a",
-        (_OBJECTS[0], "a569b5803f3521435804a538fc37d9efa0bc9214f8fe6101b08c3bafa58dd929", *_OBJECTS[1:]),
-        (_LISTINGS[0], "88224d42721c9e999af1fd8bc70e51ea4c089760d17c9386b8d1d0b22698dcfc", *_LISTINGS[1:])),
-    "lg_esl29_rev03": BoardPins(
-        "a8663fd0a662b93184ffe9af754ba6929b01776cad155f86052ee3bef86e1345",
-        "6590e556952ae57b6a7aae41575403bd129d12b7f53089b9d8bac8eb17aaabad",
-        (_OBJECTS[0], "14ace12e1f9128686d3cf04da5a957557872da4f7f7897b625191a89cbeaf10d", *_OBJECTS[1:]),
-        (_LISTINGS[0], "04a2bdfc678128e60ee24581c718d524396462cea6bb04189674483af63fa59b", *_LISTINGS[1:])),
+        _OBJECTS, _LISTINGS),
 }
 RUNTIME = ("___memcpy_PARM_2", "___memcpy_PARM_3", "__gptrput_PARM_2", "__mullong_PARM_2")
 

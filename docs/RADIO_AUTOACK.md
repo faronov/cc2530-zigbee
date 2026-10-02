@@ -336,10 +336,10 @@ and unbanked linker flags produce byte-identical generic/LG images:
 | Object | CODE, including constants/startup | Ordinary XDATA | Permanent DATA | OSEG |
 | --- | ---: | ---: | ---: | ---: |
 | timebase | 404 | 25 | 0 | 3 |
-| radio_autoack | 5937 | 256 | 4 | 2 |
+| radio_autoack | 5945 | 256 | 4 | 2 |
 | test caller | 411 | 157 | 2 | 0 |
 
-Whole image: **7056/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
+Whole image: **7064/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
 status reservation = 514/1536 bytes**. Runtime/startup adds 304 CODE and 12
 XDATA beyond those object totals. The separate 24 KiB/1536-byte budget covers
 the real timebase, one staged frame, copied configuration, diagnostics,
@@ -379,7 +379,7 @@ implement over-air filtering, FCS calculation or ACK generation. Lengths
 to exercise byte bounds, not claim those are eligible over-air packets.
 
 **Image/simulator corpus:** 194 persistent sequences, 1730 genuine API calls,
-1163 exactly-once RFD reads, and 9080 artifact negatives plus one genuine
+1163 exactly-once RFD reads, and 9088 artifact negatives plus one genuine
 missing-alias negative per board. Coverage includes delayed readiness/
 calibration, active receive/ACK soft stop, 21 queued frames, max-length circular
 FIFO, concurrent arrival, CRC classification, stale flags, partial/count/
@@ -435,7 +435,7 @@ of them: case80 now returns the complete frame and STOPPED instead of
 `FIFO_ERROR`; every other scenario is identical to the previous pins.
 New cases never replace old ones. Historical pre-TX simulator-call envelopes
 were3.464s (generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
-Those measured the4692-byte rearm image, not this7056-byte extension; they
+Those measured the4692-byte rearm image, not this7064-byte extension; they
 are local observations, not portable timing guarantees.
 
 ### Historical overlap-partition acceptance before rearm

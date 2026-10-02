@@ -204,10 +204,10 @@ receipts are compared after each genuine call.
 
 | Resource | Actual composition |
 | --- | ---: |
-| Common CODE, including constants | 29693 bytes |
+| Common CODE, including constants | 29706 bytes |
 | Bank1: MAC codec and scheduler | 20148 bytes |
-| Bank2: action adapter | 6830 bytes |
-| Populated CODE total | 56671 bytes |
+| Bank2: action adapter | 6854 bytes |
+| Populated CODE total | 56708 bytes |
 | Ordinary XDATA, including caller and libc | 2848 bytes |
 | Status reservation | 64 bytes, eight used |
 | Initial SP / unchanged replay cap | 55 / 7C |
@@ -233,7 +233,7 @@ hardware fault or a run through billions of delivery-counter values.
 Every native transcript is raw-byte pinned and must equal its sanitizer
 counterpart. The image, raw CDB, map, memory account, all14 immediate listing
 snapshots and relocatable objects are fully pinned. Acceptance includes
-283374 complete CODE/address/metadata mutations, missing IRAM alias and live
+283559 complete CODE/address/metadata mutations, missing IRAM alias and live
 FMAP/XBANK mapping controls, exact timebase/clock/MMIO instructions, unowned
 RAM/SFR/XREG/flash guards and actual full-run stack peaks.
 
@@ -246,7 +246,12 @@ separate whole-transcript scan per dump; missing or duplicated dump boundaries
 still fail. CI has two dedicated15-minute workers and uploads no adapter
 image or reference.
 
-The current figures additionally include the `radio_autoack` stopped-head
+The current figures include the previously implemented F5 power admission:
+24 additional bank2 bytes and 13 common bytes. The artifact mutation count
+therefore grows by 185 (five per added CODE byte). This fixture repair does
+not change any API-call, MMIO, stack or protocol expectation.
+
+The preceding figures additionally included the `radio_autoack` stopped-head
 fix (a static `complete_head()` helper that requires PHR >= 5 and more FIFO
 bytes than PHR, used by the stopped-drain receive path, stop phase 6 and the
 overflow salvage, which now share one PHR read site: 171 exact MMIO sites)
