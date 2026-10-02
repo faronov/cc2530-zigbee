@@ -75,7 +75,58 @@ def parameter_names(module, function):
     return candidates.pop() if len(candidates) == 1 else None
 
 
-def inventory(root, artifacts):
+def compiler_ownership(directory, module, blocks, assembly):
+    paths = list(directory.rglob(module + ".xdata.json"))
+    require(len(paths) == 1, "Missing or ambiguous compiler ownership: " + module)
+    manifest = json.loads(paths[0].read_bytes())
+    require(manifest["version"] == 1 and manifest["module"] == module,
+            "Wrong compiler ownership schema/module")
+    classes = {"GLOBAL", "FILE_STATIC", "STATIC_LOCAL", "LOCAL", "FIRST_ARGUMENT_HOME",
+               "REGISTER_ARGUMENT_HOME", "PARAM_CALLER_WRITTEN", "COMPILER_TEMP",
+               "INLINE_RETURN_HOME", "UNKNOWN"}
+    result, seen = {}, set()
+    for row in manifest["objects"]:
+        require(row["class"] in classes and type(row["size"]) is int and row["size"] > 0,
+                "Unknown compiler class/size")
+        require(all(type(row[f]) is bool for f in
+                    ("absolute", "owner_reentrant", "owner_isr", "address_taken")),
+                "Invalid compiler storage flags")
+        require(row["area"] == "XSEG", "Unmodeled compiler storage area")
+        key = row["cdb_key"]
+        require(key not in seen, "Duplicate compiler storage key")
+        seen.add(key)
+        if row["absolute"]:
+            require(re.search(r"^" + re.escape(key) + r"\s*==\s*0x" +
+                              f'{row["address"]:04x}' + r"\s*$", assembly, re.M),
+                    "Compiler absolute storage differs from assembly")
+            continue
+        require(row["address"] == 0, "Relocatable compiler object has an absolute address")
+        result[key] = row
+    require(set(result) == {b["key"] for b in blocks}, "Compiler/assembly allocation coverage differs")
+    for block in blocks:
+        row = result[block["key"]]
+        require(row["symbol"] == block["symbol"] and row["size"] == block["size"],
+                "Compiler/assembly storage identity differs")
+        owner = module + "." + row["owner"] if row["owner"] is not None else None
+        cdb_owner = block["key"][1:].split("$")[0] if block["key"].startswith("L") else None
+        require(owner == cdb_owner, "Compiler/CDB owner differs")
+        require(row["owner_symbol"] == ("_" + row["owner"] if owner else None),
+                "Compiler function entry identity differs")
+        require((row["class"] not in {"GLOBAL", "FILE_STATIC"} or owner is None) and
+                (row["class"] not in {"LOCAL", "STATIC_LOCAL", "FIRST_ARGUMENT_HOME",
+                 "REGISTER_ARGUMENT_HOME", "PARAM_CALLER_WRITTEN", "INLINE_RETURN_HOME"} or owner),
+                "Compiler storage class/owner conflict")
+        require(("_PARM_" in row["symbol"]) == (row["class"] == "PARAM_CALLER_WRITTEN"),
+                "Caller-written parameter class differs")
+    return result
+
+
+def compiler_metadata_identities(directory):
+    return {str(p.relative_to(directory)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(directory.rglob("*.xdata.json"))}
+
+
+def inventory(root, artifacts, metadata_directory=None):
     _, symbols, debug, listings, objects = artifacts
     locations = full_locations(debug)
     declarations = {}
@@ -122,6 +173,7 @@ def inventory(root, artifacts):
         module_base = cursor
         text = (root / (module + ".asm")).read_text("ascii")
         blocks = assembly_allocations(text)
+        owned = compiler_ownership(metadata_directory, module, blocks, text) if metadata_directory else None
         ranges = allocations(raw.decode("ascii")).get("XSEG", [])
         require(len(ranges) == len(blocks), "Compiler/listing allocation count differs")
         areas, syms = object_metadata(objects[module])
@@ -148,14 +200,14 @@ def inventory(root, artifacts):
             owner = key[1:].split("$")[0] if key.startswith("L") else None
             shape = declarations[module, key][1]
             variable = key.split("$")[1]
-            if owner and owner not in parameters and not formal_scopes[key.split("$")[0]]:
+            if owned is None and owner and owner not in parameters and not formal_scopes[key.split("$")[0]]:
                 parameters[owner] = parameter_names(module, owner.split(".", 1)[1])
             # Inlined/shadowed variables in deeper blocks are not formal parameters.
             scopes = formal_scopes[key.split("$")[0]]
             known = parameters.get(owner)
             parameter = owner and (tuple(key.split("$")[2:]) in scopes if scopes else
                                     known is not None and variable in known and key.split("$")[2] == "1_0")
-            if "_PARM_" in name:
+            if owned is None and "_PARM_" in name:
                 require(parameter, "Compiler/source parameter identity differs")
             category = ("parameter_home" if parameter else
                         "unknown_unclassified" if owner and not scopes and known is None else
@@ -163,6 +215,21 @@ def inventory(root, artifacts):
                         "function_local_array" if owner and shape.startswith("DA") else
                         "function_local_struct" if owner and shape.startswith("ST") else
                         "function_local_scalar" if owner else "persistent_global")
+            compiler = {}
+            if owned is not None:
+                data = owned[key]
+                owner = module + "." + data["owner"] if data["owner"] is not None else None
+                kind = data["class"]
+                category = ("persistent_global" if not owner else
+                            "static_local" if kind == "STATIC_LOCAL" else
+                            "unknown_unclassified" if kind == "UNKNOWN" else
+                            "parameter_home" if kind in {"FIRST_ARGUMENT_HOME", "REGISTER_ARGUMENT_HOME",
+                                                        "PARAM_CALLER_WRITTEN"} else
+                            "compiler_temporary" if kind in {"COMPILER_TEMP", "INLINE_RETURN_HOME"} else
+                            "function_local_array" if shape.startswith("DA") else
+                            "function_local_struct" if shape.startswith("ST") else "function_local_scalar")
+                compiler = dict(compiler_class=kind, compiler_address_taken=data["address_taken"],
+                                compiler_reentrant=data["owner_reentrant"], compiler_isr=data["owner_isr"])
             result.append(dict(module=module, symbol=name, address=address, size=size,
                                object_offset=address-module_base,
                                area="XSEG",
@@ -170,7 +237,7 @@ def inventory(root, artifacts):
                                ("file_static" if key.startswith("F") else "global"),
                                category=category, owner=owner, key=key,
                                shape=shape, address_taken="unknown", pointer_escapes="unknown",
-                               retained_across_calls="unknown", candidate_for_overlay="unknown"))
+                               retained_across_calls="unknown", candidate_for_overlay="unknown", **compiler))
             cursor += size
         require(sum(b["size"] for b in blocks) == areas[index]["size"], "Object XSEG size differs")
     for row in result:
@@ -314,10 +381,10 @@ def nonescape(row, graph, reference_index, debug):
     return True, "owner-only DPTR uses; initialized before read; no address transfer", references
 
 
-def analyze(root):
+def analyze(root, metadata_directory=None):
     artifacts = load(root)
     image, symbols, debug, listings, objects = artifacts
-    rows = inventory(root, artifacts)
+    rows = inventory(root, artifacts, metadata_directory)
     graph = call_graph(image, symbols, debug, listings, objects)
     from join_smoke_analysis import RUNTIME
     from join_smoke_stack import analyze_stack
@@ -350,6 +417,11 @@ def analyze(root):
         reference_index[row["key"]].append((pc, raw if valid else b"\0", assembly.get(pc, "")))
     for row in rows:
         if not row["owner"]:
+            continue
+        if (row.get("compiler_class") in {"STATIC_LOCAL", "UNKNOWN", "PARAM_CALLER_WRITTEN"} or
+                row.get("compiler_reentrant") or row.get("compiler_isr")):
+            row.update(reason="compiler storage is retained, unknown, reentrant, ISR or caller-written",
+                       candidate_for_overlay="no")
             continue
         if row["module"] in ("banked", "flash_exec") or "_PARM_" in row["symbol"]:
             row["reason"] = "runtime state or caller-written parameter home excluded"
@@ -427,8 +499,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("layout", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--compiler-metadata", type=Path,
+                        help="Compiler sidecar root; replaces source-based ownership classification")
     args = parser.parse_args()
-    result = analyze(args.layout)
+    result = analyze(args.layout, args.compiler_metadata)
+    if args.compiler_metadata:
+        result["compiler_metadata"] = compiler_metadata_identities(args.compiler_metadata)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({k: result[k] for k in ("xseg", "function_scoped", "categories", "cycles")}))
     print(json.dumps(result["groups"][:20], indent=2))

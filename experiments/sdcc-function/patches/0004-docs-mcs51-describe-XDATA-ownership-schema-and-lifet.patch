@@ -1,0 +1,135 @@
+From 02bf3da5bd2ab4c31da50ab4b88f402b7de8a8f4 Mon Sep 17 00:00:00 2001
+From: Aleksandr Faronov <faronov@gmail.com>
+Date: Fri, 2 Oct 2026 14:13:51 +0000
+Subject: [PATCH 4/4] docs(mcs51): describe XDATA ownership schema and lifetime
+ boundaries
+
+---
+ doc/README.txt          |   3 ++
+ doc/xdata-ownership.txt | 103 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 106 insertions(+)
+ create mode 100644 doc/xdata-ownership.txt
+
+diff --git a/doc/README.txt b/doc/README.txt
+index 3720fd6..cbed447 100644
+--- a/doc/README.txt
++++ b/doc/README.txt
+@@ -17,6 +17,9 @@ the binary kits.
+ 
+ See the share/sdcc/doc directory for more documentation.
+ 
++See xdata-ownership.txt for the opt-in MCS-51 --xdata-ownership sidecar,
++its storage classes and the distinction between ownership and lifetime.
++
+ See http://sdcc.sourceforge.net/ for the latest information on sdcc.
+ 
+ 
+diff --git a/doc/xdata-ownership.txt b/doc/xdata-ownership.txt
+new file mode 100644
+index 0000000..d8f8cb4
+--- /dev/null
++++ b/doc/xdata-ownership.txt
+@@ -0,0 +1,103 @@
++MCS-51 XDATA ownership metadata
++=============================
++
++--xdata-ownership writes <output-basename>.xdata.json when the MCS-51
++compiler emits assembly. The option is disabled by default and does not
++require --debug. For example:
++
++  sdcc -mmcs51 --model-large --debug --xdata-ownership -c input.c
++
++This is representation only, not an overlay allocator. All existing area
++directives, allocation order, assembler/debug symbols, instructions,
++calling conventions and startup routines are unchanged. Nothing is added
++to the assembler object or the linker command. Without the option no
++sidecar is written; an old sidecar is not removed. Build systems must keep
++metadata and its corresponding compilation artifacts together, reject
++stale inputs and archive metadata separately if needed.
++
++Version 1 schema
++----------------
++
++The top-level JSON object contains version (integer 1), module (compiler
++module name), and objects (an array in declaration emission order).
++Each entry describes an actually emitted XDATA declaration or absolute
++equate, after unused and external-only declarations have been filtered:
++
++  symbol             assembler spelling
++  name               compiler spelling
++  owner              lexical/allocated function name, or null
++  owner_symbol       function entry symbol, or null
++  class              one of the storage classes below
++  area               assembler area identifier, without attributes
++  cdb_key            corresponding debug key, even without --debug
++  size               object size including any flexible array extension
++  absolute           true for explicitly addressed objects
++  address            absolute address, or zero for relocatable objects
++  owner_reentrant    function is reentrant or --stack-auto is in effect
++  owner_isr          function is an interrupt handler
++  address_taken      compiler IR address-taken fact, NOT an escape proof
++
++The maps described are XSEG, XISEG and XABS. An absolute equate describes
++an object's width, not a new reservation of that many bytes. XINIT bytes
++are initializer CODE, not an additional XDATA object. Final relocatable
++addresses remain a linker fact. Consumers must correlate the symbol,
++area, size and debug key with the actual linked artifacts.
++
++Storage classes
++---------------
++
++GLOBAL                  ordinary object without a function owner
++FILE_STATIC             translation-unit static object
++STATIC_LOCAL            retained object with a lexical function owner
++LOCAL                   automatic function-owned home
++PARAM_CALLER_WRITTEN     non-register parameter allocated for the callee
++FIRST_ARGUMENT_HOME     home for the normal first register argument
++REGISTER_ARGUMENT_HOME  home for an additional register argument
++COMPILER_TEMP           IR/AST/compiler-generated temporary
++INLINE_RETURN_HOME      AST home joining returns of an inlined function
++UNKNOWN                 ownership/class cannot be established
++
++The AST provenance bits only annotate new temporaries and inlined return
++homes. They are never inputs to allocation or code generation; reusing
++the pre-existing cdef flag would not guarantee this property. Copies of
++symbols retain their provenance, while localof describes the containing
++function after inlining. Inlined formal locals belong to that containing
++function, not to a separately activated callee.
++
++A register argument need not have a physical home. Reentrant and
++--stack-auto stack objects are not invented as static XDATA reservations.
++Any retained XDATA objects associated with such functions carry the flags
++above. Existing register spills in DATA and normal register return values
++are likewise outside this manifest. Runtime source compiled with this
++option follows the same rules; prebuilt or assembly-only runtime objects
++have no implied ownership metadata. Missing metadata must remain unknown.
++
++Ownership is not lifetime
++-------------------------
++
++No class grants overlay permission. In particular, a caller may write a
++PARAM_CALLER_WRITTEN home before callee activation. STATIC_LOCAL persists
++between calls. ISR and reentrant storage requires independent concurrency
++reasoning. address_taken=false proves neither initialization nor nonescape.
++Indirect calls, recursion, nesting, relocation references, startup ranges,
++region fences and private pointer contracts require downstream proofs.
++
++Consumers must fail closed on unrecognized schema/classes, missing owners,
++unbound objects, stale sidecars or unsupported storage. This format contains
++no call graph, call-site frame use, physical placement or eligibility bit.
++
++Regression
++----------
++
++Build a stock control and patched compiler with the same configuration,
++retaining the executable name sdcc so sibling tool lookup is unchanged:
++
++  python3 support/regression/test-xdata-ownership.py \
++    --sdcc /path/to/patched/bin/sdcc --control /path/to/control/bin/sdcc
++
++The test checks disabled/enabled assembly, object, debug and linked-image
++identity; first/caller/register-bank parameters; automatic, static, global,
++address-taken, pointer, aggregate, array and inline-return storage;
++reentrant/stack-auto/ISR cases; external symbols; debug-off output;
++initialized and absolute XDATA; and an unwritable metadata destination.
++It does not run a target, allocate overlays or claim whole-program safety.

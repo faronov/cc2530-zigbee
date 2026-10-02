@@ -14,7 +14,7 @@ import tempfile
 from join_smoke_analysis import call_graph, instructions, load
 from join_smoke_image import identities, xdata
 from verify_firmware import require
-from xdata_lifetime import analyze, assembly_allocations, nonescape
+from xdata_lifetime import analyze, assembly_allocations, compiler_metadata_identities, nonescape
 from xdata_relocations import audit
 
 
@@ -87,7 +87,12 @@ def verify(root):
     require(identities(baseline) == manifest["baseline_identities"], "Overlay baseline identity changed")
     original = load(baseline)
     xdata(original[1], original[2], original[3], original[4])
-    study = analyze(baseline)
+    metadata_directory = None
+    if "compiler_metadata" in manifest:
+        metadata_directory = Path(manifest["compiler_metadata"])
+        require(compiler_metadata_identities(metadata_directory) == manifest["compiler_metadata_identities"],
+                "Compiler ownership artifact identity changed")
+    study = analyze(baseline, metadata_directory) if metadata_directory else analyze(baseline)
     plan = manifest["plan"]
     rows = {r["key"]: r for r in study["objects"] if r["key"]}
     selected = [rows[k] for k in plan["offsets"]]
@@ -173,9 +178,9 @@ def verify(root):
             "baseline_identities": manifest["baseline_identities"]}
 
 
-def prepare(baseline, root, module, limit):
+def prepare(baseline, root, module, limit, metadata_directory=None):
     require(not root.exists(), "Candidate output already exists")
-    study = analyze(baseline)
+    study = analyze(baseline, metadata_directory) if metadata_directory else analyze(baseline)
     plan = choose(study, module, limit)
     original = load(baseline)
     xdata(original[1], original[2], original[3], original[4])
@@ -194,6 +199,9 @@ def prepare(baseline, root, module, limit):
                     "--modules", *original[4]], check=True)
     manifest = {"baseline": str(baseline), "baseline_identities": study["identities"], "plan": plan,
                 "candidate_identities": identities(root)}
+    if metadata_directory:
+        manifest.update(compiler_metadata=str(metadata_directory),
+                        compiler_metadata_identities=compiler_metadata_identities(metadata_directory))
     (root / "xdata-overlay.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return verify(root)
 
@@ -205,10 +213,12 @@ def main():
     parser.add_argument("--module", default="nwk_aps")
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--compiler-metadata", type=Path)
     args = parser.parse_args()
     require(args.verify or args.baseline is not None, "Missing baseline")
     print(json.dumps(verify(args.output) if args.verify else
-                     prepare(args.baseline, args.output, args.module, args.limit), indent=2))
+                     prepare(args.baseline, args.output, args.module, args.limit,
+                             args.compiler_metadata), indent=2))
 
 
 if __name__ == "__main__":

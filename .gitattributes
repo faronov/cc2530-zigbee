@@ -2,3 +2,5 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+# Preserve the required single-space context lines in exported unified diffs.
+experiments/sdcc-function/patches/*.patch -whitespace

@@ -72,7 +72,7 @@ def linked_objects(root, report):
     objects += [(m, (root / (m + ".rel")).read_bytes()) for m in report["objects"]]
     mapping = (root / "join_smoke_unverified.map").read_text("ascii")
     libraries = mapping.split("Libraries Linked", 1)[1].split("User Base Address Definitions", 1)[0]
-    pairs = re.findall(r"^(/\S+\.lib)\s*\n\s*\[ (\w+)\.rel \]", libraries, re.M)
+    pairs = re.findall(r"^(/\S+\.lib)\s+\[ (\w+)\.rel \]", libraries, re.M)
     require([m for _, m in pairs] ==
             ["crtclear", "crtxinit", "crtxclear", "gptr_cmp", "crtstart", "_gptrget"],
             "Unreviewed implicitly linked library members")

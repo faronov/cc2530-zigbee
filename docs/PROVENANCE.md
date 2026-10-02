@@ -28,6 +28,19 @@ is copied. Recompiled runtime objects remain ignored build evidence under
 their existing upstream licenses. No SDK, private capture or equipment
 identity enters the committed inventory or measurements.
 
+The [compiler-owned XDATA study](SDCC_FUNCTION_XDATA_STUDY.md) exports a
+separate opt-in MCS51 patch series in `experiments/sdcc-function/patches`.
+Those modifications to SDCC retain its GPL-2.0-or-later terms; the existing
+GPL text is available in `experiments/sdcc/COPYING`. They do not become
+BSD firmware. The source archive is the exact public 4.2.0 archive/hash
+listed below; the full compiler source and binaries remain ignored build
+evidence. The project-side measurement, reconciliation and regression tools
+are original BSD-3-Clause work and use public generated allocation facts.
+The public IAR 8051 Assembler Guide, printed pp.113-114, is used only for
+documented metadata architecture, not copied proprietary code or formats.
+No application source, production pins, SDK, equipment data or private
+capture is imported or altered by this compiler representation experiment.
+
 The opt-in complete-radio replay uses an isolated build of the public
 [SDCC4.2.0+dfsg source archive](https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz),
 SHA256 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`.
