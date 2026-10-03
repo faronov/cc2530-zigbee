@@ -1,12 +1,12 @@
 # Multi-pool XDATA productionization
 
-1. **Productionization status: NOT READY** — hardware commissioning failed; the final CI retry is in progress.
+1. **Productionization status: NOT READY** — offline acceptance is complete, but real hardware commissioning failed.
 2. **Overlay default: OFF.**
 3. **Primary final l_XSEG: 7123 / 7680 bytes**, with 557 bytes free.
 4. **XDATA saving: 553 bytes** against application baseline `6ba00392d1a5ebd297fd0de809f2ccaa92571682`.
 5. **Clean build: PASS.**
 6. **Incremental/rebuild tests: PASS:** clean, no-op, touch, parallel, interrupted/recovery and real stale-artifact tests pass, including the completed compiler-change rebuild.
-7. **Full repository CI: PARTIAL.** The first full run passed the overlay release gate and 113/118 existing workers; five workers required the fixes described below. The full retry is running.
+7. **Full repository CI: PASS.** The final retry passed all 121 jobs: 118 existing matrix workers, selection, the overlay release gate and required offline acceptance.
 8. **Complete MCU successful join: PASS**, in the new productionized CI release gate, not merely the earlier experiment.
 9. **Directed pool runtime coverage:** 624 actual linked calls, 16 repetitions, 15 owners across five additional pools, on both baseline and overlay images; plus the existing 18-call, two-entry NWK BTR scenario.
 10. **Hardware/RF: FAIL.** Guarded programming, physical readback and boot/admission pass. The real fresh-identity trial associated, but timed out waiting for the network key before READY.
@@ -14,8 +14,9 @@
 12. **Unexplained regressions: 0 confirmed; 1 unresolved hardware failure.** The network-key timeout is not attributed to overlay, baseline behavior or RF loss without comparative evidence.
 13. **Ready to become default-on: NO.**
 
-These are current acceptance results, not a completed-release claim. The
-compiler algorithm, eligibility and primary application remain frozen.
+Offline productionization acceptance is complete; this is not a hardware
+production-release claim. The compiler algorithm, eligibility and primary
+application remain frozen.
 Original v1, compiler-metadata and multi-pool research artifacts are preserved.
 
 ## Build integration
@@ -188,9 +189,9 @@ counts became equal, using the other board's count ceased to be a negative
 test; the test now supplies the correct count minus one. No firmware behavior
 was changed to satisfy either assertion.
 
-**REMAINING EXTERNAL/BASELINE ISSUE:** none is declared exempt. The complete
-retry must actually finish successfully; previous red jobs are not converted
-to green by this report.
+**REMAINING EXTERNAL/BASELINE ISSUE:** no test is declared exempt. The complete
+retry actually passed after the documented repairs; no previous red job was
+waived or relabeled successful without execution.
 
 ## CI final results
 
@@ -215,8 +216,15 @@ One additional class was skipped in `setUpClass`; unittest reports
 21 skip events but does not add that class to `testsRun`.
 
 [Run 37103691293](https://github.com/faronov/cc2530-zigbee/actions/runs/37103691293),
-commit `028ef04`, is the full retry. It is currently unfinished. Its completed
-generic tools worker has already passed the full discovery command:
+commit `028ef04582d688805735aba0e5b5fb70d7dade67`, **passed all 121 jobs**:
+118 existing matrix workers, selection/publication policy, the overlay release
+gate and required offline acceptance. No job failed, was cancelled or was
+skipped. This is the completed full workflow, not just successful selection.
+[Final CI and release evidence](../experiments/xdata/productionization-release-retry.json)
+binds the exact run, artifact, receipt, simulator and results. Subsequent
+publication changes only documentation and evidence, not the tested code.
+
+The generic tools worker passed the full discovery command:
 951 test methods in 301.818s: 931 passed, 20 skipped, zero failures/errors,
 plus the one skipped class (`OK (skipped=21)`).
 The separate optional PyUSB host tests passed 283 tests in 2.382s.
@@ -263,20 +271,24 @@ Final virtual-IHX identity:
 ## Runtime validation
 
 [Productionized release evidence](../experiments/xdata/productionization-release.json)
-records a **new** complete CI execution:
+records the first **new** complete CI execution. The
+[all-green retry](../experiments/xdata/productionization-release-retry.json)
+independently repeated every phase with the same nine admitted identities.
+Exact commands are retained in the first record; the retry records and checks
+their two generation-directory substitutions instead of duplicating them.
 
-| Release phase | Result | Seconds |
-| --- | --- | ---: |
-| Fresh verified adapter header | PASS | 17.451 |
-| Native/sanitized shallow/deep join, ZCL and fresh replay vectors | PASS | 45.799 |
-| Repeated baseline directed owners | PASS | 47.616 |
-| Repeated overlay directed owners | PASS | 105.686 |
-| Existing actual-linked NWK BTR scenario | PASS | 98.734 |
-| Complete case2 | PASS | 85.879 |
-| Four-step case0 prefix | PASS | 110.905 |
-| Complete successful case0 | PASS | 4578.490 |
+| Release phase | Both results | First run, seconds | All-green retry, seconds |
+| --- | --- | ---: | ---: |
+| Fresh verified adapter header | PASS | 17.451 | 18.216 |
+| Native/sanitized shallow/deep join, ZCL and fresh replay vectors | PASS | 45.799 | 46.662 |
+| Repeated baseline directed owners | PASS | 47.616 | 47.601 |
+| Repeated overlay directed owners | PASS | 105.686 | 107.095 |
+| Existing actual-linked NWK BTR scenario | PASS | 98.734 | 99.118 |
+| Complete case2 | PASS | 85.879 | 85.142 |
+| Four-step case0 prefix | PASS | 110.905 | 111.365 |
+| Complete successful case0 | PASS | 4578.490 | 4618.006 |
 
-The last run reached phase 5 READY/serving in 1142 steps and 559709 peripheral
+Both runs reached phase 5 READY/serving in 1142 steps and 559709 peripheral
 stops, with peak SP 7B below 7C. Those incidental counts were measured, not made
 new semantic acceptance conditions. Incomplete, wrong-profile, faulted,
 wrong-image and out-of-bound-stack evidence cannot produce `acceptance.json`.
@@ -425,14 +437,16 @@ not a replacement for durable production counter management.
 
 ## Remaining blockers
 
-The complete CI retry must finish. Real RF commissioning must pass before
-interview/reporting/Identify/soak can be assessed; the observed network-key
-timeout remains unclassified. Retained-NV reset rejection has passed, but
-secure rejoin remains outside the unchanged application's implemented scope.
+There is no remaining offline CI blocker for the admitted primary build.
+Real RF commissioning must pass before interview/reporting/Identify/soak can
+be assessed; the observed network-key timeout remains unclassified.
+Retained-NV reset rejection has passed, but secure rejoin remains outside
+the unchanged application's implemented scope.
 No unsupported profile or exempt red test is being used to bypass these gates.
 
 ## Default-on decision
 
-**NO.** Keep the feature opt-in while those concrete acceptance tasks remain
-unfinished. A measured 553-byte saving, a clean image proof and one successful
-simulated join are not by themselves permission to enable it globally.
+**NO.** Keep the feature opt-in. Reproducible 553-byte saving, a green full
+matrix and two successful productionized simulated join runs establish the
+offline result, but do not resolve the observed hardware commissioning failure
+or supply the missing interview/reporting/Identify/soak evidence.

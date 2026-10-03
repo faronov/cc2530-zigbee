@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "result": "PASS",
+  "ci_run": 37103691293,
+  "commit": "028ef04582d688805735aba0e5b5fb70d7dade67",
+  "url": "https://github.com/faronov/cc2530-zigbee/actions/runs/37103691293",
+  "workflow": {
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": 121,
+    "successful_jobs": 121,
+    "matrix_workers": 118,
+    "failed_cancelled_or_skipped_jobs": 0,
+    "control_jobs": [
+      "Check selection and publication policy",
+      "Opt-in XDATA overlay and complete join release gate",
+      "Required offline acceptance"
+    ],
+    "overlay_job": 111148046756,
+    "required_gate_job": 111163035152,
+    "raw_run_report_sha256": "10061723b5224b19043d2a9d7dab8a1598bc35b90cd5fe76e8f30a76a65533a5"
+  },
+  "artifact": {
+    "id": 11268693675,
+    "name": "xdata-overlay-acceptance-028ef04582d688805735aba0e5b5fb70d7dade67",
+    "archive_digest": "sha256:02b08b88fea0b1afae74f5cbb2bd45da35800d943f960c0b796843f3dfa51d7f",
+    "acceptance_json_sha256": "f75827b09960654ab49c354e690aed8c025de35e35ce20ccc5e98fb7b921f06b"
+  },
+  "layout": "build/overlay/xdata-overlay/.generations/image-1mmp3dgm/join-smoke-layout",
+  "receipt_sha256": "00f03d6eb79f09734acb94b5d9e6654dc08731af523a055cc1d100f431058690",
+  "simulator_sha256": "1b1f13315a2e3dc659d9644fa744fbf93fd681973fea8f858e0c683d65ad0314",
+  "command_template": "productionization-release.json",
+  "command_substitutions": {
+    "image-3mrdrjgb": "image-1mmp3dgm",
+    "acceptance-4n10fo75": "acceptance-xhuazjvj"
+  },
+  "command_policy": "Apply these substitutions to each matching phase.command in command_template. Every resulting argument was compared with the raw accepted retry artifact after removing only its GitHub runner checkout prefix from simulator executable arguments.",
+  "identities_template": "productionization-release.json",
+  "identities_policy": "All nine identities and the complete full_join object were checked equal to identities_template; no new resource or semantic expectation was substituted.",
+  "phases": [
+    {"name": "adapter-header", "seconds": 18.216, "result": "PASS"},
+    {"name": "native-sanitized-shallow-deep-zcl", "seconds": 46.662, "result": "PASS"},
+    {"name": "directed-baseline", "seconds": 47.601, "result": "PASS"},
+    {"name": "directed-overlay", "seconds": 107.095, "result": "PASS"},
+    {"name": "btr", "seconds": 99.118, "result": "PASS"},
+    {"name": "case2", "seconds": 85.142, "result": "PASS"},
+    {"name": "case0-prefix", "seconds": 111.365, "result": "PASS"},
+    {"name": "case0-complete", "seconds": 4618.006, "result": "PASS"}
+  ],
+  "full_join": {
+    "complete": true,
+    "steps": 1142,
+    "peripheral_stops": 559709,
+    "peak_sp": 123,
+    "stack_boundary": 124,
+    "phase": 5,
+    "terminal": "serving",
+    "board": "lg_esl29_rev03",
+    "key_mode": "default-tc",
+    "case": 0,
+    "simulated": true,
+    "hardware_observed": false
+  },
+  "tools": {
+    "command": "python3 -m unittest discover -s tools -p 'test_*.py' -v",
+    "job": 111148048260,
+    "seconds": 301.818,
+    "test_methods_run": 951,
+    "passed_methods": 931,
+    "skipped_methods": 20,
+    "skipped_classes": 1,
+    "reported_skip_events": 21,
+    "failures": 0,
+    "errors": 0,
+    "skip_reasons": "18 macOS-only methods, two methods requiring a Nordic workspace, one optional PyUSB class covered by the separate installed-PyUSB run.",
+    "raw_job_log_sha256": "4047ff6d199fd2a4ee1b09c33dcf657588b3dfb5da7372ca2427dc860c33f904"
+  },
+  "optional_pyusb": {
+    "command": "build/usb-tests/bin/python -m unittest discover -s tools -p 'test_m1_*.py' -v",
+    "tests": 283,
+    "seconds": 2.382,
+    "result": "PASS"
+  },
+  "hardware_observed": false
+}
