@@ -171,3 +171,5 @@ or computed edge, valid C-object accesses, compiler metadata trust root and
 explicit CC2530 private-fence/region contracts. No IRAM alias bytes, NV pages,
 dead-function removal or protocol-buffer reduction contribute to the saving.
 See the [multi-pool study](XDATA_MULTIPOOL_STUDY.md) for the design evidence.
+Current acceptance results and remaining gates are recorded in the
+[productionization report](XDATA_MULTIPOOL_PRODUCTIONIZATION.md).

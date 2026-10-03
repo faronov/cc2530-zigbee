@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "result": "PASS",
+  "layout": "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/join-smoke-layout",
+  "receipt_sha256": "a3c85a4741a6af1cb7a46e8f9887f03b6913de08e3c5d48ca0bc1cead8c6d2a7",
+  "simulator_sha256": "1b1f13315a2e3dc659d9644fa744fbf93fd681973fea8f858e0c683d65ad0314",
+  "phases": [
+    {
+      "name": "adapter-header",
+      "command": [
+        "make",
+        "--no-print-directory",
+        "-s",
+        "-j2",
+        "BOARD=lg_esl29_rev03",
+        "JOIN_SMOKE_KEY_MODE=default-tc",
+        "BUILD=build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75",
+        "SDCC=sdcc",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/mac-adapter/mac_adapter_layout.h"
+      ],
+      "seconds": 17.451,
+      "result": "PASS"
+    },
+    {
+      "name": "native-sanitized-shallow-deep-zcl",
+      "command": [
+        "make",
+        "--no-print-directory",
+        "-s",
+        "-j2",
+        "BOARD=lg_esl29_rev03",
+        "JOIN_SMOKE_KEY_MODE=default-tc",
+        "BUILD=build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75",
+        "SDCC=sdcc",
+        "-B",
+        "-o",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/join-smoke-layout/join_smoke_layout.h",
+        "-o",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/mac-adapter/mac_adapter_layout.h",
+        "JOIN_SMOKE_LAYOUT_DIR=build/overlay/xdata-overlay/.generations/image-3mrdrjgb/join-smoke-layout",
+        "test-join-smoke-host",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/host-join-smoke-vectors",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/host-join-smoke-vectors-sanitize"
+      ],
+      "seconds": 45.799,
+      "result": "PASS"
+    },
+    {
+      "name": "directed-baseline",
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "tests/boot_xdata_pools.py",
+        "--layout",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/preliminary/join-smoke-layout",
+        "--baseline",
+        "--simulator",
+        "build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51",
+        "--output",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/directed-baseline.json"
+      ],
+      "seconds": 47.616,
+      "result": "PASS"
+    },
+    {
+      "name": "directed-overlay",
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "tests/boot_xdata_pools.py",
+        "--layout",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/join-smoke-layout",
+        "--xdata-overlay",
+        "--simulator",
+        "build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51",
+        "--output",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/directed-overlay.json"
+      ],
+      "seconds": 105.686,
+      "result": "PASS"
+    },
+    {
+      "name": "btr",
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "tests/boot_xdata_overlay.py",
+        "--layout",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/join-smoke-layout",
+        "--xdata-overlay",
+        "--simulator",
+        "build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51",
+        "--output",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75/btr.json"
+      ],
+      "seconds": 98.734,
+      "result": "PASS"
+    },
+    {
+      "name": "case2",
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "tests/boot_join_smoke.py",
+        "--output",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75",
+        "--board",
+        "lg_esl29_rev03",
+        "--key-mode",
+        "default-tc",
+        "--simulator",
+        "build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51",
+        "--xdata-overlay",
+        "--case",
+        "2"
+      ],
+      "seconds": 85.879,
+      "result": "PASS"
+    },
+    {
+      "name": "case0-prefix",
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "tests/boot_join_smoke.py",
+        "--output",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75",
+        "--board",
+        "lg_esl29_rev03",
+        "--key-mode",
+        "default-tc",
+        "--simulator",
+        "build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51",
+        "--xdata-overlay",
+        "--case",
+        "0",
+        "--limit",
+        "4"
+      ],
+      "seconds": 110.905,
+      "result": "PASS"
+    },
+    {
+      "name": "case0-complete",
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "tests/boot_join_smoke.py",
+        "--output",
+        "build/overlay/xdata-overlay/.generations/image-3mrdrjgb/acceptance-4n10fo75",
+        "--board",
+        "lg_esl29_rev03",
+        "--key-mode",
+        "default-tc",
+        "--simulator",
+        "build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51",
+        "--xdata-overlay",
+        "--case",
+        "0"
+      ],
+      "seconds": 4578.49,
+      "result": "PASS"
+    }
+  ],
+  "identities": {
+    "ihx": "df86611e04a22069067a2529c96dff527ec909aab95bb904f0bde04b71eae4e9",
+    "cdb": "1202aede1348e22c4fc4c5c3d536bc498a7ca012fa558486cfe3ee987bc3098c",
+    "memory": "afff2875fbd08ec0d71170e814181376bab8dc046091a8743832a39c7795a15e",
+    "map_prefix": "2d6465ff81b07ffe2247c8cc9dc34843b622cdd847232e4165025538ff3d4c67",
+    "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+    "noice": "273eff4eb69f13eac3ead7fd94e2bde6a0bd85bce0319fa0682a0baa1d865bf8",
+    "objects": "bf0ca351bb6d17f9bc6600d7e0182409ff092162bdf0525ade3f4faaaa8873d7",
+    "listings": "345571dab93afc72550660a588f0bf7262640ba44c131758e2b62d99719652b0",
+    "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+  },
+  "full_join": {
+    "complete": true,
+    "steps": 1142,
+    "peripheral_stops": 559709,
+    "peak_sp": 123,
+    "phase": 5,
+    "terminal": "serving",
+    "identities": {
+      "ihx": "df86611e04a22069067a2529c96dff527ec909aab95bb904f0bde04b71eae4e9",
+      "cdb": "1202aede1348e22c4fc4c5c3d536bc498a7ca012fa558486cfe3ee987bc3098c",
+      "memory": "afff2875fbd08ec0d71170e814181376bab8dc046091a8743832a39c7795a15e",
+      "map_prefix": "2d6465ff81b07ffe2247c8cc9dc34843b622cdd847232e4165025538ff3d4c67",
+      "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+      "noice": "273eff4eb69f13eac3ead7fd94e2bde6a0bd85bce0319fa0682a0baa1d865bf8",
+      "objects": "bf0ca351bb6d17f9bc6600d7e0182409ff092162bdf0525ade3f4faaaa8873d7",
+      "listings": "345571dab93afc72550660a588f0bf7262640ba44c131758e2b62d99719652b0",
+      "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+    },
+    "board": "lg_esl29_rev03",
+    "key_mode": "default-tc",
+    "case": 0,
+    "simulated": true,
+    "hardware_observed": false
+  },
+  "hardware_observed": false,
+  "ci_run": 37074346486,
+  "commit": "90c5e87e8fca20ab14fca27745836eef23bb332d",
+  "original_artifact_sha256": "b544d81e5102c1ac183e427a15b91140d4bc866e63bf9d5f1661ee73862821f8",
+  "path_projection": "Only the GitHub runner checkout prefix was removed from simulator executable arguments; result, identities, phases and timing are unchanged."
+}

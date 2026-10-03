@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "result": "PASS",
+  "source_commit": "028ef04582d688805735aba0e5b5fb70d7dade67",
+  "raw_report_sha256": "6217f0f3cbce35506a8cdaf486525ca08984290ccb5fd0da3737abfd6bd66683",
+  "command": [
+    "/usr/bin/python3.12", "-B", "tools/xdata_build.py",
+    "--output", "build/mutation-rehearsal/xdata-overlay",
+    "--sdcc", "$SELECTED_SDCC", "--board", "lg_esl29_rev03",
+    "--key-mode", "$SELECTED_KEY_MODE"
+  ],
+  "path_policy": "Replace only personal absolute compiler paths with explicit OLD_SDCC/NEW_SDCC inputs. These are different real compiler executables; the hashes below identify them.",
+  "compilers": {
+    "OLD_SDCC": "273315806c1316c6aaf88207ca27db307ddda9f764f9b8d6f44ebbf1688e0a99",
+    "NEW_SDCC": "eb674f7f1f75851c51351ff35bd94976688d230d439be6254eb2c7715e962963",
+    "sdcc": "b34caf6863460b150f2164d4842b2df6a71d27d1a66fe0a3b4a5f84d28315414"
+  },
+  "default_key_mode": "default-tc",
+  "initial_layout": "build/mutation-rehearsal/xdata-overlay/.generations/image-6l772e9p/join-smoke-layout",
+  "final_layout": "build/mutation-rehearsal/xdata-overlay/.generations/image-6frmahsd/join-smoke-layout",
+  "generations": 2,
+  "scenarios": [
+    {"name": "noop", "compiler": "OLD_SDCC", "expected": "admit", "result": "PASS", "seconds": 3.374, "publication_removed": false},
+    {"name": "touch-c", "compiler": "OLD_SDCC", "expected": "admit", "result": "PASS", "seconds": 3.273, "publication_removed": false},
+    {"name": "touch-h", "compiler": "OLD_SDCC", "expected": "admit", "result": "PASS", "seconds": 2.972, "publication_removed": false},
+    {"name": "contract-change", "compiler": "OLD_SDCC", "expected": "reject", "result": "PASS", "seconds": 0.817, "publication_removed": true},
+    {"name": "allocator-change", "compiler": "OLD_SDCC", "expected": "reject", "result": "PASS", "seconds": 0.917, "publication_removed": true},
+    {"name": "missing-sidecar", "compiler": "OLD_SDCC", "expected": "reject", "result": "PASS", "seconds": 3.022, "publication_removed": true},
+    {"name": "foreign-sidecar", "compiler": "OLD_SDCC", "expected": "reject", "result": "PASS", "seconds": 3.073, "publication_removed": true},
+    {"name": "stale-sidecar-for-changed-object", "compiler": "OLD_SDCC", "expected": "reject", "result": "PASS", "seconds": 3.123, "publication_removed": true},
+    {"name": "stock-compiler", "compiler": "sdcc", "expected": "reject", "result": "PASS", "seconds": 0.819, "publication_removed": true},
+    {"name": "install-code-rejected", "compiler": "OLD_SDCC", "key_mode": "install-code", "expected": "reject", "result": "PASS", "seconds": 0.817, "publication_removed": true},
+    {"name": "return-to-default-tc", "compiler": "OLD_SDCC", "expected": "admit", "result": "PASS", "seconds": 3.374, "publication_removed": false},
+    {"name": "actual-compiler-binary-change", "compiler": "NEW_SDCC", "expected": "admit", "result": "PASS", "seconds": 987.418, "publication_removed": false},
+    {"name": "new-compiler-noop", "compiler": "NEW_SDCC", "expected": "admit", "result": "PASS", "seconds": 2.872, "publication_removed": false}
+  ],
+  "real_compiler_and_artifacts": true,
+  "fixture_reset": "Between independent negatives, restore exact original bytes, verify the complete receipt and input hashes, then restore its original publication link. This fixture reset is not an automatic rebuild. Final recovery uses an actual compiler-change rebuild.",
+  "scope": "Thirteen actual CLI/file-mutation scenarios. Clean/concurrent and interrupted-build evidence is separate; no synthetic transaction test is counted as an actual compile."
+}
