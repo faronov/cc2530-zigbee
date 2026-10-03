@@ -223,7 +223,7 @@ class JoinObservationTests(unittest.TestCase):
             self.assertEqual(run.call_args_list[0].kwargs, {"limit": None, "failure": False})
             self.assertEqual(run.call_args_list[1].kwargs, {"failure": True})
             artifacts.assert_called_once_with("complete", join.layout.PINS[board])
-            artifacts.return_value = join.layout.NEGATIVES["generic"]
+            artifacts.return_value = join.layout.NEGATIVES[board] - 1
             alias.side_effect = [None, ValueError("missing alias")]
             run.reset_mock()
             with self.assertRaisesRegex(ValueError, "artifact-negative coverage"):

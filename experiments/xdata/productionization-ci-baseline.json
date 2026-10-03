@@ -377,5 +377,135 @@
       "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
     }
   ],
-  "unchanged_semantics_in_this_repair": true
+  "unchanged_semantics_in_this_repair": true,
+  "targeted_after_repairs": [
+    {
+      "family": "radio-autoack",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/radio-autoack",
+        "test-radio-autoack"
+      ],
+      "exit_code": 0,
+      "seconds": 401.57,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-radio",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-radio",
+        "test-mac-radio"
+      ],
+      "exit_code": 0,
+      "seconds": 324.339,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-attempt",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-attempt",
+        "test-mac-attempt"
+      ],
+      "exit_code": 0,
+      "seconds": 624.919,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-handoff",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-handoff",
+        "test-mac-handoff"
+      ],
+      "exit_code": 2,
+      "seconds": 549.287,
+      "diagnostics": [
+        "ValueError: Attempt artifact negative inventory",
+        "make: *** [Makefile:1443: test-mac-handoff] Error 1"
+      ]
+    },
+    {
+      "family": "mac-adapter",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-adapter",
+        "test-mac-adapter"
+      ],
+      "exit_code": 0,
+      "seconds": 462.192,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-smoke",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-smoke",
+        "test-mac-smoke"
+      ],
+      "exit_code": 0,
+      "seconds": 971.678,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-link-child-workspace",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-link-child-workspace",
+        "test-mac-link-child-workspace"
+      ],
+      "exit_code": 0,
+      "seconds": 114.033,
+      "diagnostics": []
+    },
+    {
+      "family": "banked-join-success",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/banked-join-success",
+        "test-banked-join-success"
+      ],
+      "exit_code": 0,
+      "seconds": 916.717,
+      "diagnostics": []
+    }
+  ],
+  "handoff_followup": {
+    "actual_complete_mutations": 87922,
+    "previous_stale_expected": 87888,
+    "delta": 34,
+    "protocol_cases": 76,
+    "original_runtime_inventory": [
+      1164,
+      438789,
+      121,
+      123
+    ],
+    "semantic_changes": false
+  }
 }

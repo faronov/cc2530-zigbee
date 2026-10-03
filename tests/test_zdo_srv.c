@@ -15,7 +15,8 @@ static const MCU_CODE zdo_srv_local_t config = {
     {0x5678, 0x1234, 0x2345, 2, 0, 8, 0x8c, 0x52, 0, 22, 0}, 0x1234, 0x0104, 1
 };
 static const MCU_CODE uint8_t simple_expected[] = {
-    0x5a, 0, 0x34, 0x12, 14, 1, 0x04, 0x01, 0xff, 0xff, 0, 3, 0, 0, 0x02, 0x04, 0x05, 0x04, 0
+    0x5a, 0, 0x34, 0x12, 18, 1, 0x04, 0x01, 0xff, 0xff, 0, 5,
+    0, 0, 1, 0, 3, 0, 0x02, 0x04, 0x05, 0x04, 0
 };
 static const MCU_CODE uint8_t query[] = {0x5a, 0x34, 0x12};
 static const MCU_CODE uint8_t expected[] = {
@@ -32,7 +33,7 @@ static zdo_srv_local_t local;
 static zdo_srv_rx_t rx;
 static zdo_srv_info_t info;
 static zdo_node_response_t decoded;
-static uint8_t input[101], output[21];
+static uint8_t input[101], output[sizeof(simple_expected) + 2];
 static nwk_header_t nwk;
 static nwk_frame_info_t network;
 static aps_header_t aps;
@@ -82,7 +83,8 @@ static uint16_t reply_cases(void)
             CHECK(zdo_srv_handle(&config, &rx, query, 3, output + 1, n, &info) == ZDO_SRV_OK);
             CHECK(info.kind == ZDO_SRV_REPLY && info.cluster_id == 0x8002 && info.endpoint == 7);
             CHECK(info.sequence == 0x5a && info.status == 0 && info.length == 17 && info.consumed == 3);
-            CHECK(output[0] == 0xc7 && output[18] == 0xc7 && memcmp(output + 1, expected, 17) == 0);
+            CHECK(output[0] == 0xc7 && filled(output + 18, sizeof(output) - 18, 0xc7)
+                  && memcmp(output + 1, expected, 17) == 0);
             CHECK(zdo_node_rsp_decode(output + 1, info.length, &decoded) == ZDO_NODE_OK);
             CHECK(decoded.address == local.address && decoded.descriptor.logical_type == 2);
         }
@@ -102,7 +104,8 @@ static uint16_t reply_cases(void)
     input[1] = 0x35;
     CHECK(zdo_srv_handle(&local, &rx, input, 3, output + 1, 4, &info) == ZDO_SRV_OK);
     CHECK(info.status == 0x80 && info.length == 4 && info.consumed == 3 && info.cluster_id == 0x8002);
-    CHECK(memcmp(output + 1, "\x5a\x80\x35\x12", 4) == 0 && filled(output + 5, 16, 0xc7));
+    CHECK(memcmp(output + 1, "\x5a\x80\x35\x12", 4) == 0
+          && filled(output + 5, sizeof(output) - 5, 0xc7));
     CHECK(zdo_node_rsp_decode(output + 1, 4, &decoded) == ZDO_NODE_OK);
     CHECK(decoded.address == 0x1235 && decoded.has_address == 1
           && filled(&decoded.descriptor, sizeof(decoded.descriptor), 0));
@@ -115,7 +118,7 @@ static uint16_t reply_cases(void)
         CHECK(info.kind == ZDO_SRV_REPLY && info.cluster_id == 0x9234 && info.length == 2
               && info.consumed == 1 && info.endpoint == rx.header.source_endpoint);
         CHECK(info.sequence == n && info.status == 0x84 && output[1] == n && output[2] == 0x84);
-        CHECK(output[0] == 0xc7 && filled(output + 3, 18, 0xc7));
+        CHECK(output[0] == 0xc7 && filled(output + 3, sizeof(output) - 3, 0xc7));
     }
     reset(); rx.header.cluster_id = 0x1234;
     CHECK(unchanged(ZDO_SRV_SPACE, 1, 0) == 0);
@@ -128,18 +131,18 @@ static uint16_t endpoint_reply(uint16_t cluster, uint16_t length, uint8_t status
 {
     memset(output, 0xc7, sizeof(output));
     memset(&info, 0xa5, sizeof(info));
-    CHECK(zdo_srv_handle(&local, &rx, input, length, output + 1, 19, &info) == ZDO_SRV_OK);
+    CHECK(zdo_srv_handle(&local, &rx, input, length, output + 1, sizeof(simple_expected), &info) == ZDO_SRV_OK);
     CHECK(info.kind == ZDO_SRV_REPLY && info.cluster_id == (cluster | 0x8000u) && info.endpoint == 7);
     CHECK(info.sequence == 0x5a && info.status == status && info.length == size);
     CHECK(info.consumed == (cluster == ZDO_SRV_SIMPLE_DESC_REQUEST ? 4 : 3));
     CHECK(output[1] == 0x5a && output[2] == status && output[3] == input[1] && output[4] == input[2]);
-    CHECK(output[0] == 0xc7 && filled(output + 1 + size, 20u - size, 0xc7));
+    CHECK(output[0] == 0xc7 && filled(output + 1 + size, sizeof(output) - 1u - size, 0xc7));
     return 0;
 }
 
 static uint16_t endpoint_cases(void)
 {
-    uint8_t n;
+    uint8_t n, capacity;
     reset(); rx.header.cluster_id = ZDO_SRV_ACTIVE_EP_REQUEST;
     CHECK(endpoint_reply(ZDO_SRV_ACTIVE_EP_REQUEST, 100, 0, 6) == 0);
     CHECK(output[5] == 1 && output[6] == 1);
@@ -155,10 +158,11 @@ static uint16_t endpoint_cases(void)
         reset(); rx.header.cluster_id = ZDO_SRV_SIMPLE_DESC_REQUEST; input[3] = 1;
         switch (n) {
         case 0:
-            CHECK(endpoint_reply(ZDO_SRV_SIMPLE_DESC_REQUEST, 100, 0, 19) == 0);
-            CHECK(memcmp(output + 1, simple_expected, 19) == 0);
-            CHECK(unchanged(ZDO_SRV_TRUNCATED, 3, 19) == 0);
-            CHECK(unchanged(ZDO_SRV_SPACE, 4, 18) == 0);
+            CHECK(endpoint_reply(ZDO_SRV_SIMPLE_DESC_REQUEST, 100, 0, sizeof(simple_expected)) == 0);
+            CHECK(memcmp(output + 1, simple_expected, sizeof(simple_expected)) == 0);
+            CHECK(unchanged(ZDO_SRV_TRUNCATED, 3, sizeof(simple_expected)) == 0);
+            for (capacity = 18; capacity < sizeof(simple_expected); capacity++)
+                CHECK(unchanged(ZDO_SRV_SPACE, 4, capacity) == 0);
             break;
         case 1: input[3] = 0; CHECK(endpoint_reply(ZDO_SRV_SIMPLE_DESC_REQUEST, 4, 0x82, 5) == 0); break;
         case 2: input[3] = 0xff; input[1] = 0x35; CHECK(endpoint_reply(ZDO_SRV_SIMPLE_DESC_REQUEST, 4, 0x82, 5) == 0); break;
@@ -354,7 +358,8 @@ static uint16_t exact_cases(void)
                 CHECK(out->kind == ZDO_SRV_REPLY && out->cluster_id == (cluster | 0x8000u));
                 CHECK(out->sequence == 0x5a && out->status == (cluster == 2 || cluster == 5 ? 0 : 0x84));
                 CHECK(out->length == (cluster == 2 ? 17 : cluster == 5 ? 6 : 2));
-                CHECK(output[0] == 0xc7 && filled(output + 1 + out->length, 18u - out->length, 0xc7));
+                CHECK(output[0] == 0xc7 && filled(output + 1 + out->length,
+                      sizeof(output) - 1u - out->length, 0xc7));
             }
         }
     }

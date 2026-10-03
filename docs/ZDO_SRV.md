@@ -129,7 +129,7 @@ make BOARD=lg_esl29_rev03 test-zdo-srv
 
 GitHub Actions is the full acceptance gate; local compilation and narrow
 stack/proof preparation do not replace both-board acceptance. The shared
-native/SDCC corpus has1818 checks; native tests total943,035 checks with exact
+native/SDCC corpus has1834 checks; native tests total943,051 checks with exact
 allocation/nonrecovering ASan/UBSan coverage. Native matrices cover every16-bit
 cluster in both lower-addressing classes, every profile, every queried/local
 address, all256 values of each supported context byte, all TSNs and source
@@ -140,16 +140,16 @@ response bytes.
 
 | Linked object | CODE including constants/startup | XDATA | DSEG | OSEG | BSEG bits |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| New `zdo_srv` production | 2439 | 71 | 0 | 0 | 0 |
+| New `zdo_srv` production | 2460 | 75 | 0 | 0 | 0 |
 | Unchanged `zdo_node` | 3133 | 86 | 32 | 0 | 1 |
 | Unchanged `aps_frame` | 1626 | 69 | 8 | 7 | 0 |
 | Unchanged `nwk_frame` | 2294 | 96 | 12 | 10 | 0 |
-| Test caller | 8586 | 505 | 4 | 0 | 1 |
-| Full image including runtime | 18605/24576 | 847+64/1024 | - | - | - |
+| Test caller | 8633 | 509 | 4 | 0 | 1 |
+| Full image including runtime | 18673/24576 | 855+64/1024 | - | - | - |
 
 Target local/rx/info objects occupy19/11/8 bytes. Production private XDATA is
-`[0,322)`, caller objects `[322,810)`, caller locals `[810,827)` and complete
-linked libc scratch `[827,847)`. Stack starts at4B, unwinds to4A, and has
+`[0,326)`, caller objects `[326,818)`, caller locals `[818,835)` and complete
+linked libc scratch `[835,855)`. Stack starts at4B, unwinds to4A, and has
 full-run peak65 under the unchanged7C cap. This is not whole-stack fit or
 ISR/concurrency headroom.
 
@@ -164,7 +164,12 @@ map and memory accounting, all relocatable objects except their build-path
 first lines, and five immediate relocated-listing snapshots. It checks
 explicit fields/generic-pointer/entry/return ABI, genuine service and
 NWK/APS calls, storage boundaries and the absence of peripheral instructions.
-The proof rejects54,487 artifact mutations,21 state-guard mutations,3
+The five-cluster descriptor uses23 staged bytes and a guarded25-byte test
+buffer. The corrected fixture retains the former insufficient-capacity18
+case and adds19..22, yielding16 additional shared checks; every reply's
+complete remaining buffer tail is checked.
+
+The proof rejects54,675 artifact mutations,21 state-guard mutations,3
 peak-metadata mutations and one disabled-alias control.
 The actual linked image executes under the existing alias-aware `s51` harness,
 with the unchanged15-second deadline, exact completed-check count, untouched

@@ -17,7 +17,7 @@ HANDOFF = Profile(
     mem_sha="e7572294bf2b5d3445e036c7a172cf2a4ea832ffd0d8ac803a7f5f896461735e",
     list_sha="5c52114711453bb76d26d97fe6c8b1e94036ceb43b800570034e95b42513c898",
     object_sha="7e2b1fbd9549f26a5b980c95fb62b4251c95c5bd569831eb98b3914e88fb42e1",
-    cases=76, inventory=(1164, 438789, 121, 123), negatives=87888, handoff=True,
+    cases=76, inventory=(1164, 438789, 121, 123), negatives=87922, handoff=True,
 )
 
 
