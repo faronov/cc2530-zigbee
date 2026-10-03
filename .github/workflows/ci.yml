@@ -174,19 +174,13 @@ jobs:
             test-join-smoke-overlay
 
       - name: Retain public synthetic acceptance summary, never hardware captures
-        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: xdata-overlay-acceptance-${{ github.sha }}
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
-          path: |
-            build/overlay/xdata-overlay/.generations/image-*/receipt.json
-            build/overlay/xdata-overlay/.generations/image-*/build.log
-            build/overlay/xdata-overlay/.generations/image-*/acceptance-*/acceptance.json
-            build/overlay/xdata-overlay/.generations/image-*/acceptance-*/progress.json
-            build/overlay/xdata-overlay/.generations/image-*/acceptance-*/*.log
+          path: build/overlay/xdata-overlay/.generations/image-*/acceptance-*/acceptance.json
 
   acceptance:
     name: Required offline acceptance
