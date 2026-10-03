@@ -10,9 +10,9 @@
 #endif
 #include "flash_exec.h"
 #include <stddef.h>
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+/* Every profile: the J3 shallow-read forms are identities outside DIRECT. */
 #include "mac_link_workspace_guard_internal.h"
-#endif
+/* DIRECT keeps operate's parameters and derived values in homes (J3). */
 
 MCU_XDATA flash_write_diagnostic_t flash_write_status;
 MCU_XDATA uint8_t flash_write_known, flash_write_used[128];
@@ -25,14 +25,14 @@ MCU_XDATA uint8_t flash_write_word[4], flash_write_check[FLASH_READ_MAX];
 extern MCU_XDATA uint8_t flash_write_reserved_end;
 
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
-#define flash_nv_read(...) CW_CALL(CW_READ,flash_nv_read(__VA_ARGS__))
-#define flash_exec_command(...) CW_CALL(CW_EXEC,flash_exec_command(__VA_ARGS__))
+#define flash_nv_read(p, ...) CW_CALL(CW_READ,flash_nv_read(LW_SHALLOW_READ(uint8_t, p), __VA_ARGS__))
+#define flash_exec_command(o, p, f, ...) CW_CALL(CW_EXEC,flash_exec_command(o, p, LW_SHALLOW_READ(uint16_t, f), __VA_ARGS__))
 #endif
 static flash_write_result_t operate(uint8_t operation, uint8_t page, uint16_t offset,
-                                   const uint8_t MCU_XDATA *word, uint16_t poll_limit)
+                                   const uint8_t MCU_XDATA * LW_SHALLOW_HOME word, LW_SHALLOW_HOME uint16_t poll_limit)
 {
-    uint16_t address, position;
-    uint8_t page_mask, index, mask, i, length;
+    uint16_t address; LW_SHALLOW_HOME uint16_t position;
+    LW_SHALLOW_HOME uint8_t page_mask, index, mask; uint8_t i; LW_SHALLOW_HOME uint8_t length;
     flash_write_result_t result;
     if (flash_write_status.result) return (flash_write_result_t)flash_write_status.result;
     if (!poll_limit || (operation == FLASH_EXEC_PROGRAM && word == NULL))

@@ -1,0 +1,251 @@
+From e6f1148293cc3a7a0f97cef32eb622715b4771c6 Mon Sep 17 00:00:00 2001
+From: Aleksandr Faronov <faronov@gmail.com>
+Date: Fri, 2 Oct 2026 14:13:51 +0000
+Subject: [PATCH 3/4] feat(mcs51): emit opt-in XDATA ownership without changing
+ allocation
+
+---
+ src/SDCCast.c    |   4 +-
+ src/SDCCglobl.h  |   1 +
+ src/SDCCglue.c   | 131 ++++++++++++++++++++++++++++++++++++++++++++++-
+ src/SDCCsymt.h   |   2 +
+ src/mcs51/main.c |   1 +
+ 5 files changed, 137 insertions(+), 2 deletions(-)
+
+diff --git a/src/SDCCast.c b/src/SDCCast.c
+index 04f2cc1..f468485 100644
+--- a/src/SDCCast.c
++++ b/src/SDCCast.c
+@@ -385,6 +385,7 @@ replaceAstWithTemporary (ast ** treeptr)
+   symbol *sym = newSymbol (genSymName (NestLevel), NestLevel);
+   ast *tempvar;
+ 
++  sym->astGenerated = 1;
+   /* Tell gatherImplicitVariables() to automatically give the
+      symbol the correct type */
+   sym->infertype = 1;
+@@ -7290,6 +7291,7 @@ inlineTempVar (sym_link * type, long level)
+   symbol *sym;
+ 
+   sym = newSymbol (genSymName (level), level);
++  sym->astGenerated = 1;
+   sym->type = copyLinkChain (type);
+   sym->etype = getSpec (sym->type);
+   SPEC_SCLS (sym->etype) = S_AUTO;
+@@ -7430,6 +7432,7 @@ expandInlineFuncs (ast * tree, ast * block)
+               /* {{inline_function_code}}, retsym                         */
+ 
+               retsym = inlineTempVar (func->type->next, block->level);
++              retsym->inlineReturn = 1;
+               SPEC_SCLS (retsym->etype) = S_FIXED;
+               inlineAddDecl (retsym, block, TRUE, TRUE);
+             }
+@@ -8706,4 +8709,3 @@ offsetofOp (sym_link *type, ast *snd)
+ 
+   return offsetofOp_rec (type, snd, &result_type);
+ }
+-
+diff --git a/src/SDCCglobl.h b/src/SDCCglobl.h
+index b49fa1b..64dd353 100644
+--- a/src/SDCCglobl.h
++++ b/src/SDCCglobl.h
+@@ -287,6 +287,7 @@ struct options
+     int stack_size;             /* MCS51/DS390 - Tells the linker to allocate this space for stack */
+     int acall_ajmp;             /* MCS51 - Use acall/ajmp instead of lcall/ljmp */
+     int no_ret_without_call;    /* MCS51 - Do not use ret independent of acall/lcall */
++    int xdata_ownership;        /* MCS51 - emit XDATA ownership without changing allocation */
+     int use_non_free;           /* Search / include non-free licensed libraries and header files */
+     /* starting address of the segments */
+     int xstack_loc;             /* initial location of external stack */
+diff --git a/src/SDCCglue.c b/src/SDCCglue.c
+index 83a00e7..b6b8932 100644
+--- a/src/SDCCglue.c
++++ b/src/SDCCglue.c
+@@ -134,6 +134,124 @@ emitDebugSym (struct dbuf_s *oBuf, symbol * sym)
+   dbuf_printf (oBuf, "%s$%ld_%ld$%d", sym->name, sym->level / LEVEL_UNIT, sym->level % LEVEL_UNIT, sym->block);
+ }
+ 
++/*-----------------------------------------------------------------*/
++/* XDATA ownership - describe allocations without changing them   */
++/*-----------------------------------------------------------------*/
++static struct dbuf_s xdataOwnership;
++static bool xdataOwnershipFirst;
++
++static void
++xdataOwnershipString (struct dbuf_s *buf, const char *text)
++{
++  const unsigned char *p = (const unsigned char *) text;
++
++  if (!text)
++    {
++      dbuf_append_str (buf, "null");
++      return;
++    }
++  dbuf_append_char (buf, '"');
++  for (; *p; p++)
++    {
++      if (*p == '"' || *p == '\\')
++        dbuf_append_char (buf, '\\');
++      if (*p < 32 || *p >= 127)
++        dbuf_printf (buf, "\\u%04x", *p);
++      else
++        dbuf_append_char (buf, *p);
++    }
++  dbuf_append_char (buf, '"');
++}
++
++static void
++emitXdataOwnership (memmap *map, symbol *sym)
++{
++  symbol *owner = sym->localof;
++  const char *kind;
++  struct dbuf_s key;
++
++  if (!TARGET_IS_MCS51 || !options.xdata_ownership ||
++      (map != xdata && map != xidata && map != x_abs))
++    return;
++
++  /* Ownership is not an activation-lifetime or an overlay permission.
++     Keep retained objects and caller-written arguments distinct. */
++  if (IS_STATIC (sym->etype))
++    kind = owner ? "STATIC_LOCAL" : "FILE_STATIC";
++  else if (sym->_isparm)
++    kind = !IS_REGPARM (sym->etype) ? "PARAM_CALLER_WRITTEN" :
++           SPEC_ARGREG (sym->etype) == 1 ? "FIRST_ARGUMENT_HOME" : "REGISTER_ARGUMENT_HOME";
++  else if (sym->inlineReturn)
++    kind = "INLINE_RETURN_HOME";
++  else if (sym->isitmp || sym->cdef || sym->astGenerated)
++    kind = "COMPILER_TEMP";
++  else if (owner)
++    kind = "LOCAL";
++  else
++    kind = sym->level ? "UNKNOWN" : "GLOBAL";
++
++  dbuf_append_str (&xdataOwnership, xdataOwnershipFirst ? "" : ",");
++  xdataOwnershipFirst = FALSE;
++  dbuf_append_str (&xdataOwnership, "\n{\"symbol\":");
++  xdataOwnershipString (&xdataOwnership, sym->rname);
++  dbuf_append_str (&xdataOwnership, ",\"name\":");
++  xdataOwnershipString (&xdataOwnership, sym->name);
++  dbuf_append_str (&xdataOwnership, ",\"owner\":");
++  xdataOwnershipString (&xdataOwnership, owner ? owner->name : NULL);
++  dbuf_append_str (&xdataOwnership, ",\"owner_symbol\":");
++  xdataOwnershipString (&xdataOwnership, owner ? owner->rname : NULL);
++  dbuf_append_str (&xdataOwnership, ",\"class\":");
++  xdataOwnershipString (&xdataOwnership, kind);
++  dbuf_append_str (&xdataOwnership, ",\"area\":");
++  dbuf_init (&key, 128);
++  dbuf_append (&key, map->sname, strcspn (map->sname, " \t"));
++  xdataOwnershipString (&xdataOwnership, dbuf_c_str (&key));
++  dbuf_set_length (&key, 0);
++  emitDebugSym (&key, sym);
++  dbuf_append_str (&xdataOwnership, ",\"cdb_key\":");
++  xdataOwnershipString (&xdataOwnership, dbuf_c_str (&key));
++  dbuf_destroy (&key);
++  dbuf_printf (&xdataOwnership,
++               ",\"size\":%u,\"absolute\":%s,\"address\":%u"
++               ",\"owner_reentrant\":%s,\"owner_isr\":%s,\"address_taken\":%s}",
++               (unsigned int) getSize (sym->type) + sym->flexArrayLength,
++               SPEC_ABSA (sym->etype) ? "true" : "false",
++               SPEC_ABSA (sym->etype) ? (unsigned int) SPEC_ADDR (sym->etype) : 0,
++               owner && (options.stackAuto || IFFUNC_ISREENT (owner->type)) ? "true" : "false",
++               owner && FUNC_ISISR (owner->type) ? "true" : "false",
++               sym->addrtaken ? "true" : "false");
++}
++
++static void
++writeXdataOwnership (void)
++{
++  struct dbuf_s name;
++  FILE *file;
++  bool failed;
++
++  dbuf_append_str (&xdataOwnership, "\n]}\n");
++  dbuf_init (&name, PATH_MAX);
++  dbuf_append_str (&name, dstFileName);
++  dbuf_append_str (&name, ".xdata.json");
++  file = fopen (dbuf_c_str (&name), "w");
++  if (!file)
++    {
++      werror (E_OUTPUT_FILE_OPEN_ERR, dbuf_c_str (&name), strerror (errno));
++      exit (EXIT_FAILURE);
++    }
++  failed = fwrite (dbuf_get_buf (&xdataOwnership), 1, dbuf_get_length (&xdataOwnership), file)
++           != dbuf_get_length (&xdataOwnership);
++  if (fclose (file))
++    failed = TRUE;
++  if (failed)
++    {
++      perror (dbuf_c_str (&name));
++      exit (EXIT_FAILURE);
++    }
++  dbuf_destroy (&name);
++  dbuf_destroy (&xdataOwnership);
++}
++
+ /*-----------------------------------------------------------------*/
+ /* emitRegularMap - emit code for maps with no special cases       */
+ /*-----------------------------------------------------------------*/
+@@ -339,6 +457,8 @@ emitRegularMap (memmap *map, bool addPublics, bool arFlag)
+             }
+         }
+ 
++      emitXdataOwnership (map, sym);
++
+       /* if it has an absolute address then generate
+          an equate for this no need to allocate space */
+       if (SPEC_ABSA (sym->etype) && !sym->ival)
+@@ -2274,6 +2394,14 @@ glue (void)
+ 
+   dbuf_init (&vBuf, 4096);
+   dbuf_init (&ovrBuf, 4096);
++  if (TARGET_IS_MCS51 && options.xdata_ownership)
++    {
++      dbuf_init (&xdataOwnership, 4096);
++      dbuf_append_str (&xdataOwnership, "{\"version\":1,\"module\":");
++      xdataOwnershipString (&xdataOwnership, moduleName);
++      dbuf_append_str (&xdataOwnership, ",\"objects\":[");
++      xdataOwnershipFirst = TRUE;
++    }
+ 
+   mcs51_like = (port->general.glue_up_main &&
+                 (TARGET_IS_MCS51 || TARGET_IS_DS390 || TARGET_IS_DS400));
+@@ -2657,6 +2785,8 @@ glue (void)
+       port->genAssemblerEnd (asmFile);
+     }
+   fclose (asmFile);
++  if (TARGET_IS_MCS51 && options.xdata_ownership)
++    writeXdataOwnership ();
+ }
+ 
+ /* will return 1 if the string is a part
+@@ -2693,4 +2823,3 @@ isTargetKeyword (const char *s)
+ 
+   return 0;
+ }
+-
+diff --git a/src/SDCCsymt.h b/src/SDCCsymt.h
+index c3cea30..5f74f6d 100644
+--- a/src/SDCCsymt.h
++++ b/src/SDCCsymt.h
+@@ -323,6 +323,8 @@ typedef struct symbol
+   unsigned isind:1;                 /* is an induction variable */
+   unsigned isinvariant:1;           /* is a loop invariant  */
+   unsigned cdef:1;                  /* compiler defined symbol */
++  unsigned astGenerated:1;          /* storage provenance only; not a codegen flag */
++  unsigned inlineReturn:1;          /* AST temporary holding an inlined return */
+   unsigned addrtaken:1;             /* address of the symbol was taken */
+   unsigned isreqv:1;                /* is the register equivalent of a symbol */
+   unsigned udChked:1;               /* use def checking has been already done */
+diff --git a/src/mcs51/main.c b/src/mcs51/main.c
+index a3b4eb3..a0eb0ea 100644
+--- a/src/mcs51/main.c
++++ b/src/mcs51/main.c
+@@ -53,6 +53,7 @@ static OPTION _mcs51_options[] =
+     { 0, "--parms-in-bank1", &options.parms_in_bank1, "use Bank1 for parameter passing"},
+     { 0, "--acall-ajmp",     &options.acall_ajmp, "Use acall/ajmp instead of lcall/ljmp" },
+     { 0, "--no-ret-without-call", &options.no_ret_without_call, "Do not use ret independent of acall/lcall" },
++    { 0, "--xdata-ownership", &options.xdata_ownership, "Write XDATA ownership to <output>.xdata.json without changing allocation" },
+     { 0, NULL }
+   };
+ 

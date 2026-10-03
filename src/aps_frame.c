@@ -11,9 +11,9 @@
 
 #include <stddef.h>
 #include <string.h>
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+/* Every profile: the J3 shallow-read forms are identities outside DIRECT. */
 #include "mac_link_workspace_guard_internal.h"
-#endif
+/* DIRECT rereads decode parameters from their homes across calls (J3). */
 
 static inline uint16_t read_le16(const uint8_t *bytes)
 {
@@ -55,14 +55,14 @@ aps_codec_result_t aps_frame_decode(const uint8_t *body, uint16_t length,
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (!child_work_enter(CW_APS_DECODE)) return APS_CODEC_INVALID_ARGUMENT;
 #endif
-
+#define result LW_SHALLOW_READ(aps_frame_info_t *, result)
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #define candidate (child_work_arena.wire.engine.parse.aps)
 #else
     aps_frame_info_t candidate;
 #endif
     aps_codec_result_t status;
-
+#define body LW_SHALLOW_READ(const uint8_t *, body)
     if (body == NULL || result == NULL)
         return CW_RETURN(CW_APS_DECODE,APS_CODEC_INVALID_ARGUMENT);
     if (length > APS_FRAME_MAX_BODY)
@@ -93,8 +93,8 @@ aps_codec_result_t aps_frame_decode(const uint8_t *body, uint16_t length,
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #undef candidate
 #endif
-
-
+#undef body
+#undef result
 /* Keep emission a leaf so SDCC can overlay its temporary IRAM. */
 static void emit_frame(const aps_header_t *header, const uint8_t *payload, uint8_t payload_length,
                         uint8_t *body)

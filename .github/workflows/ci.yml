@@ -114,10 +114,78 @@ jobs:
             build/${{ matrix.board }}/${{ matrix.image }}/${{ matrix.image }}.cdb
             build/${{ matrix.board }}/${{ matrix.image }}/build-info.json
 
+  overlay:
+    name: Opt-in XDATA overlay and complete join release gate
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stock feature-off toolchain and simulator build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential python3 bison flex m4 libboost-dev zlib1g-dev \
+            sdcc=4.2.0+dfsg-1 sdcc-ucsim=4.2.0+dfsg-1
+
+      - name: Prove feature-off primary artifacts still match the original baseline
+        run: |
+          make -s -j2 BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc \
+            BUILD=build/feature-off prepare-join-smoke-stack test-join-smoke-host
+          PYTHONPATH=tools:tests python3 -B - <<'PY'
+          from pathlib import Path
+          from xdata_overlay import verify_study
+          from verify_firmware import require
+          root = Path("build/feature-off")
+          require(not Path("build/toolchains").exists(), "Feature-off prepared the custom toolchain")
+          require(not list(root.rglob("*.xdata.json")), "Feature-off generated compiler metadata")
+          require(not list(root.rglob("xdata-overlay.json")), "Feature-off invoked the overlay")
+          artifacts, proof = verify_study(root / "join-smoke-layout", "lg_esl29_rev03", "default-tc")
+          require(artifacts[1]["l_XSEG"] == 7676, "Feature-off physical XDATA changed")
+          print("All nine original baseline identities and DATA/stack proofs PASS; no overlay")
+          PY
+
+      - name: Cache only the exact pinned compiler release
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: build/toolchains/sdcc-xdata
+          key: sdcc-xdata-linux-x86_64-${{ hashFiles('tools/xdata_toolchain_pins.json') }}
+
+      - name: Download or revalidate the pinned release and behavior probe
+        run: make -s prepare-xdata-toolchain
+
+      - name: Reproduce the debugger-only simulator
+        run: |
+          curl --fail --location --retry 3 \
+            https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz \
+            --output build/sdcc_4.2.0+dfsg.orig.tar.xz
+          python3 -B tools/prepare_join_simulator.py \
+            --archive build/sdcc_4.2.0+dfsg.orig.tar.xz --output build/join-simulator
+
+      - name: Build and release-gate the enabled primary image
+        run: |
+          make -s BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/overlay \
+            S51="$PWD/build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
+            test-join-smoke-overlay
+
+      - name: Retain public synthetic acceptance summary, never hardware captures
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: xdata-overlay-acceptance-${{ github.sha }}
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+          path: build/overlay/xdata-overlay/.generations/image-*/acceptance-*/acceptance.json
+
   acceptance:
     name: Required offline acceptance
     if: always()
-    needs: [plan, checks]
+    needs: [plan, checks, overlay]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -130,5 +198,13 @@ jobs:
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           WORKER_RESULT: ${{ needs.checks.result }}
+          OVERLAY_RESULT: ${{ needs.overlay.result }}
           COUNT: ${{ needs.plan.outputs.count }}
-        run: python3 -B tools/ci_plan.py --check-result "$PLAN_RESULT" "$WORKER_RESULT" "$COUNT"
+        run: |
+          python3 -B tools/ci_plan.py --check-result "$PLAN_RESULT" "$WORKER_RESULT" "$COUNT"
+          python3 -B tools/ci_plan.py --check-result "$PLAN_RESULT" "$OVERLAY_RESULT" "$COUNT"
+
+  compiler-source:
+    name: Independent source/release compiler equivalence
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/xdata-source.yml

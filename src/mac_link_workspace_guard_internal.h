@@ -4,6 +4,34 @@
 #ifndef MAC_LINK_WORKSPACE_GUARD_INTERNAL_H
 #define MAC_LINK_WORKSPACE_GUARD_INTERNAL_H
 #include "mac_link_ram.h"
+/* DIRECT-only shallow guard/decode code generation (J3). Every other profile
+ * keeps its pinned objects: owning files select alternate bodies only on
+ * source lines that emit no code or debug records. The deep reference is a
+ * host-only differential oracle with the identical DIRECT layout. */
+#if defined(CC2530_MAC_LINK_DEEP_REFERENCE) && \
+    (!defined(CC2530_HOST_TEST) || !defined(CC2530_MAC_LINK_DIRECT))
+#error The deep DIRECT reference is only a host differential oracle
+#endif
+#if defined(CC2530_MAC_LINK_DIRECT) && !defined(CC2530_MAC_LINK_DEEP_REFERENCE)
+#if defined(__SDCC) && (!defined(__SDCC_MODEL_LARGE) || defined(__SDCC_STACK_AUTO))
+#error DIRECT shallow reads require static large-model XDATA local homes
+#endif
+#define LINK_WORK_SHALLOW 1
+/* Keep these locals in their compiler homes rather than PUSHed registers. */
+#define LW_SHALLOW_HOME volatile
+/* Read a named local/parameter through its own address: an address-taken
+ * home is reloaded after each call instead of held in a PUSHed register. */
+#define LW_SHALLOW_READ(type, x) (*(type volatile MCU_XDATA *)&(x))
+/* DIRECT selects the second name: the shared codec body's internal name, or
+ * the plain address type where no home is needed (link_work_external). */
+#define LW_SHALLOW_NAME(original, shallow) shallow
+#define LW_SHALLOW_DECLARE(declaration) declaration
+#else
+#define LW_SHALLOW_HOME
+#define LW_SHALLOW_READ(type, x) x
+#define LW_SHALLOW_NAME(original, shallow) original
+#define LW_SHALLOW_DECLARE(declaration)
+#endif
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "cc2530_mmio.h"
 

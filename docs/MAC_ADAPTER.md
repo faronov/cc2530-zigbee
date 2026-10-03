@@ -118,6 +118,20 @@ from a valid timed delivery. No stale time is fed to the MAC as a fabricated
 FAILURE event. The fault is out of band and ownership is retained, without
 automatic reset/reinitialization/recovery.
 
+The `CC2530_MAC_LINK` exception is AUTOACK RX loss (`RX_LOST`). There the
+radio has already salvaged every complete, possibly acknowledged head, so the
+loss is accepted in normal RX and, with `normal_rx`, also in the TX windows
+(COLLECT, CLOSING or DRAINING for ACK-window, busy and retirement closures).
+A lost ACK is indistinguishable from an over-air ACK loss: RX_CLOSED still
+reports the pre-stop watermark but with `lossy` set, and `mac_tx` classifies
+it as NO_ACK and retries. The driver accepts `lossy` only in RUNTIME (see
+[MAC_LINK_DRIVER](MAC_LINK_DRIVER.md)). Raw (non-AUTOACK) TX windows and all
+non-LINK compositions keep the retained fault. LG hardware observed this
+fault after joining (ACK window, RXFIFO overflow at the closing stop, BDB NODE
+phase). The acceptance is host-tested (`loss_case` 4/5 in the LINK E2E and,
+as a retained fault, in the standalone adapter test). It has not yet been
+re-observed on hardware.
+
 The handoff only accepts the original first raw ACK and cannot be revived by
 an intervening radio operation. A later ACK is still preserved and subjected
 to the real interval classifier, including timing uncertainty; it does not
@@ -190,24 +204,24 @@ receipts are compared after each genuine call.
 
 | Resource | Actual composition |
 | --- | ---: |
-| Common CODE, including constants | 28557 bytes |
+| Common CODE, including constants | 29706 bytes |
 | Bank1: MAC codec and scheduler | 20148 bytes |
-| Bank2: action adapter | 6737 bytes |
-| Populated CODE total | 55442 bytes |
+| Bank2: action adapter | 6854 bytes |
+| Populated CODE total | 56708 bytes |
 | Ordinary XDATA, including caller and libc | 2848 bytes |
 | Status reservation | 64 bytes, eight used |
-| Initial SP / full-run maximum / cap | 55 / 78 / 7C |
+| Initial SP / unchanged replay cap | 55 / 7C |
 
 The virtual bank encoding is not additional physical flash. Physical DATA
 reservations cover08..1D and23..4B; banking owns1E/1F, bits20..22,
 OSEG4C..55 and stack56..7C. Actual relocated byte-liveness covers146
-functions and634 live-caller-byte/callee-write comparisons, including libc
+functions and560 live-caller-byte/callee-write comparisons, including libc
 clobbers and cross-bank lifetimes.
 No named `--dataseg` is treated as a physical allocation by itself.
 XDATA1F00..1FFF remains the real IRAM alias. None of the original standalone
 or complete-join resource budgets is relaxed.
 
-Eighteen fresh-reset sequences execute2410 genuine calls and210988 MMIO
+Eighteen fresh-reset sequences require2405 genuine calls and212147 MMIO
 events. They cover ACK/AUTOACK and raw leases, five busy CCAs, all four
 no-ACK attempts, wrong DSN/bad CRC, queued pre-stop and in-flight heads,
 preserved closure watermark, a maximum frame across FIFO wrap, held clock/
@@ -219,7 +233,7 @@ hardware fault or a run through billions of delivery-counter values.
 Every native transcript is raw-byte pinned and must equal its sanitizer
 counterpart. The image, raw CDB, map, memory account, all14 immediate listing
 snapshots and relocatable objects are fully pinned. Acceptance includes
-277229 complete CODE/address/metadata mutations, missing IRAM alias and live
+283559 complete CODE/address/metadata mutations, missing IRAM alias and live
 FMAP/XBANK mapping controls, exact timebase/clock/MMIO instructions, unowned
 RAM/SFR/XREG/flash guards and actual full-run stack peaks.
 
@@ -232,7 +246,52 @@ separate whole-transcript scan per dump; missing or duplicated dump boundaries
 still fail. CI has two dedicated15-minute workers and uploads no adapter
 image or reference.
 
-This increment is **host-tested, image-checked and simulated**. Code commit
+The current figures include the previously implemented F5 power admission:
+24 additional bank2 bytes and 13 common bytes. The artifact mutation count
+therefore grows by 185 (five per added CODE byte). This fixture repair does
+not change any API-call, MMIO, stack or protocol expectation.
+
+The preceding figures additionally included the `radio_autoack` stopped-head
+fix (a static `complete_head()` helper that requires PHR >= 5 and more FIFO
+bytes than PHR, used by the stopped-drain receive path, stop phase 6 and the
+overflow salvage, which now share one PHR read site: 171 exact MMIO sites)
+and the adapter-only RXOVERF resample in `observe()`. Relative to the
+preceding 56632-byte image only `radio_autoack` grew, by 39 common CODE
+bytes; the byte-liveness proof gains the helper (146 functions/560
+comparisons). Only held-overflow changed: one observation sample with
+RXOVERF-only RFERRF and no FIFO=0/FIFOP=1 is resampled once, adding nine
+identical MMIO reads (3252 to 3261); its outputs, call count, later events
+and stack peak are unchanged. The 283374 artifact mutations (195 more, five
+per added CODE byte) and all 18 MCU cases were rerun offline; this is
+simulated evidence only.
+
+The preceding resource/corpus figures included the
+`radio_autoack` scan filter and RX-loss salvage (four more exact MMIO sites,
+172 in total), the `mac_time` and `mac_adapter` changes of the same series and
+the resulting `__gptrput` relocation in the staged clock bytes. Relative to
+the preceding55442-byte image the growth is only in those changed modules:
+`radio_autoack` +804, `mac_time` +277, `mac_adapter` +93 and `mac_radio` +16
+CODE bytes. The byte-liveness proof is unchanged at145 functions/560
+comparisons. Only the absent-ACK (28229 to28977) and held-overflow (3059 to
+3252) MMIO counts changed; every call count, final result and observed stack
+peak is unchanged. The283179 artifact mutations (five per CODE byte plus
+nineteen metadata cases) and all18 MCU cases were rerun offline on both
+boards; this is simulated evidence only.
+
+The earlier revised resource/corpus figures included the bounded RSSI-only
+stop/restart, FIFO reserved-bit corrections, explicit D5 power support and
+reuse of the one-latch owner sampler during attempts and two original
+first-failure `mac_time` diagnostic bytes. All18 current raw native/
+sanitizer references agree and the current exact linked/DATA/MMIO proof passes.
+The279939 artifact rejections were executed on the preceding D5 revision;
+the current280044 inventory is retained, not claimed rerun. Current banked
+ACK/handoff case0 passes114 calls/10361 MMIO at SP78/7C. This is not a new
+full MCU-corpus, CI or hardware acceptance claim. The MMIO reader also retains
+five-digit SDCC source-line columns, including two handoff writes previously
+omitted by the old reader. Before D5, the LG busy-CCA MCU case passed380 calls,
+27433 MMIO events and peakSP78/7C with all mapping/alias controls.
+
+The original increment was **host-tested, image-checked and simulated**. Code commit
 `3cc26b0` passed
 [full Actions36187341754](https://github.com/faronov/cc2530-zigbee/actions/runs/36187341754),
 **106/106 jobs**, including both complete adapter workers and all102 previous

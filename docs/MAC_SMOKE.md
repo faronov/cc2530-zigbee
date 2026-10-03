@@ -190,6 +190,22 @@ CONST ends7A20 exclusive. Complete DATA liveness checks157 functions on LG
 module sums. No lower production source, old budget or old verifier pin is
 changed. The native model's address mapping is synthetic; the independent
 linked verifier establishes genuine source/compiler/libc placement.
+After the later committed scan, RX-overflow and time-guard lower-service
+changes, the current images use59339 (LG)/59299 (generic) CODE bytes with
+bank2=6830, LG CONST7E2E..7E69 exclusive, highest physical byte11AAD,
+2537 ordinary XDATA bytes, a172-site lower MMIO inventory and liveness over
+156/155 functions with560 combinations.
+The stopped-drain complete-head helper and the adapter-only RXOVERF resample
+then raise this to59378 (LG)/59338 (generic) CODE bytes (bank1/bank2 and the
+highest physical byte11AAD unchanged; LG CONST7E55..7E90 exclusive), merge
+the two adapter PHR reads into a171-site lower MMIO inventory and extend
+liveness to157/156 functions with the same560 combinations. Native smoke
+scenario MMIO counts are unchanged by these fixes.
+The subsequent F5 power admission adds eight `radio_autoack`, five
+`mac_radio_init` and 24 `mac_adapter_init` CODE bytes: totals are 59415
+(LG) and 59375 (generic), with bank1 unchanged and bank2=6854. The highest
+physical byte is11AC5 and LG CONST is7E62..7E9D exclusive. XDATA and the
+171-site lower MMIO inventory are unchanged.
 
 Raw CDB bytes are pinned before decoding. Complete CODE/address bytes,
 source objects, immediately snapshotted relocated listings, memory report

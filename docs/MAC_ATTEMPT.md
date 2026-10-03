@@ -8,8 +8,10 @@ collect operation, not another board demo and not a `mac_tx` event adapter.
 There is no declaration or successful fallback without the profile. Ordinary
 and legacy MAC_RADIO CODE and behavior remain unchanged without the new flag.
 
-The new service is **host-tested, image-checked and simulated**, not
-hardware-observed, calibrated, interoperability-tested or PHY/MAC conformant.
+The service is **host-tested, image-checked and simulated**. Separate
+[complete-caller hardware failures](ED_JOIN.md#2026-09-28-lg-physical-discovery-trials)
+exposed RSSI-only shutdown and FIFO reserved-bit defects; they are not
+successful interoperability, calibration or PHY/MAC conformance.
 No hardware/USB/RF operation is part of its build or tests.
 
 ## Ownership and public API
@@ -62,6 +64,16 @@ after STOPPED. Stopping a prepared but unsubmitted slot cancels it without
 an RX request, reset or recovery flush. A later explicit prepare may replace
 the idle TXFIFO; an operational fault never authorizes this.
 
+CCA_BUSY has no post-TX restart. Before changing RX_MODE11 to00, the owner
+verifies the still-exclusive RSSI-only profile, no TX/SFD/FIFO and cleared
+old RFIDLE, then issues ISRFOFF and requires fresh physical idle. Only then
+does it change mode, re-enable RX and confirm readiness before publishing
+the normal-RX `armed` sample. Hardware showed that merely clearing RXENABLE
+can leave RSSI-only RX active indefinitely. This scheduled empty-RX transition
+cannot abort an admitted frame: symbol search and AUTOACK remain disabled,
+and own CCA did not start TX. It does not add abort/recovery permission to
+normal reception, pending ACK, queued frames or faulted ownership.
+
 All calls retain the positive Sleep Timer timeout `<0x800000` and positive
 16-bit work cap. The attempt/consumer share one radio deadline and poll budget;
 they do not reset the budget when copying a frame. Each Timer2 latch also has
@@ -78,7 +90,7 @@ lost submission/completion, FIFO overflow, exhausted work/time and late arming
 are failures, not NO_ACK. Radio diagnostics distinguish
 `RADIO_AUTOACK_ATTEMPT_TIMER_ERROR` and `RADIO_AUTOACK_ATTEMPT_LATE_ARM`.
 RF, the timer and ownership may remain active on failure. There is no retry,
-abort, reset, RX flush, recovery or implicit release.
+packet abort, reset, RX flush, recovery or implicit release.
 
 ## Compact projection storage
 
@@ -172,8 +184,9 @@ imported. Hardware facts are from TI **SWRU191F**, April 2009/revised April
   RSSI readiness and the four-clock **pre-strobe** CCA-update requirement.
 - CCACTRL0/1 and RSSISTAT, p264: CCA1, recommended raw threshold,
   hysteresis, eight-symbol RSSI averaging and validity.
-- Section23.9.1, pp222-223; FRMCTRL0 p259; RXENABLE p260:
-  soft stop, disabled symbol search, normal RX and AUTOACK selection.
+- Section23.9.1, pp222-223; p226; ISRFOFF p253; FRMCTRL0 p259; RXENABLE p260:
+  soft versus hard shutdown, required mode-change restart, disabled symbol
+  search, normal RX and AUTOACK selection.
 - Section23.10, pp232-233; FIFO/status registers pp263-265:
   complete-head, count and pointer predicates and destructive FIFO access.
 - Timer2, pp197-206; SWRZ031 issue1.2: common coherent latch and complete
@@ -249,8 +262,9 @@ above the lower boundaries, not a privileged private-pointer exception.
 Caller buffers must be complete, disjoint, persistent allocated ordinary-XDATA
 objects; unused address space is not an implicit pool.
 
-The linked image uses **24621/32768 CODE**, **1475+64/2048 XDATA**, initial
-SP59 and full-run SP79/7C. Ordinary allocation remains below1E00; the eight-byte
+The RSSI-only-shutdown revision, before D5 power support, used
+**25120/32768 CODE**, **1475+64/2048 XDATA**, initial
+SP5A and full-run SP79/7C. Ordinary allocation remains below1E00; the eight-byte
 test record sits inside the unchanged 64-byte status reservation, and the
 1F00..1FFF IRAM alias is never separate storage.
 
@@ -261,19 +275,29 @@ publication, unallocated/reserved memory, GPIO/SFR/XREG ownership, genuine
 full-run stack usage, aliasing and the unchanged 15-second simulator limit.
 Negative controls retain every emitted CODE-byte mutation and every relevant
 F/S/L/T record mutation, plus map, listing, allocation, object and alias
-rejections. The corpus has 28 sequences, 326 genuine linked calls and 148638
-MMIO events, with 77713 artifact negatives and a missing-alias negative.
-Native/nonrecovering sanitizer runs exercise 5983 real-service calls, including
+rejections. The corpus has33 sequences,391 genuine linked calls and181287
+MMIO events, with79097 artifact negatives and a missing-alias negative.
+Native/nonrecovering sanitizer runs exercise6048 real-service calls, including
 private/scratch address sweeps. An independent 64-bit model checks containment
 of its actual TX/RX events, exact late-arm equality, and coarse-counter wrap;
 these synthetic events are not measurements. Listing serialization caches only
 immutable input text, never verification results or mutable images.
+The revised corpus retains every previous case and adds five failures around
+the bounded RSSI-only stop/restart. Its FIFO-wrap case also sets the documented
+reserved high pointer bits. The33-case actual-MCU replay and exhaustive
+negatives passed on the LG composition; this does not imply physical timing
+or full repository acceptance.
+The subsequent D5 extension uses25139 CODE with unchanged XDATA/stack bounds
+and79155 required artifact negatives. Current cases0/14 were executed with
+actual TXPOWER writes05/D5 respectively, including the maximum-frame FIFO
+wrap; both observed SP79/7C. The33-case complete-corpus result above is tied
+to the preceding revision, not a new full D5 acceptance claim.
 
-Fresh legacy CODE remains 2999/7007/15040 for Timer2/radio/MAC_RADIO and
-10758/10798 for generic/LG link fixtures, with their prior layouts and budgets.
-Only genuinely affected raw debug/object identities are refreshed. Full
-repository acceptance remains Actions; this component evidence does not
-by itself establish a full repository or hardware acceptance result.
+The older standalone Timer2/radio/MAC_RADIO and generic/LG link fixtures retain
+their independent immutable-artifact gates and resource budgets. The revised
+radio source requires its own acceptance in every affected composition. Full
+repository acceptance remains Actions; this component evidence does not by
+itself establish a full repository or hardware acceptance result.
 
 ## Guarded live RX handoff
 
@@ -340,15 +364,39 @@ receiving a complete frame are not an alternative.
 
 `make test-mac-handoff` runs four native/nonrecovering-sanitizer executables
 and a separate linked `mac_handoff_test.ihx` with all eight immediate listing
-snapshots. **Never flash this synthetic image.** Both board artifacts agree:
-27423/32768 CODE,1543 ordinary plus64 reserved status bytes/2048 XDATA,
-initial SP5B and full-run peak SP7B under the unchanged7C cap. Resident volatile
+snapshots. **Never flash this synthetic image.** Before the D5 extension, the LG artifacts used
+27922/32768 CODE,1543 ordinary plus64 reserved status bytes/2048 XDATA,
+initial SP5C and observed full-run peak SP7B under the unchanged7C cap. Resident volatile
 XDATA arguments/work prevent new compiler DATA spills; no stack or RAM
 limit is increased.
 
-The target corpus retains all28 attempt sequences and adds43 handoff/clock
-sequences:1099 genuine calls and409315 MMIO events. The complete artifact
-campaign retains86410 mutations plus the missing-alias rejection.
+The target corpus retains all33 attempt sequences and adds43 handoff/clock
+sequences:1164 genuine calls and442215 MMIO events. The complete artifact
+campaign requires87794 mutations plus the missing-alias rejection.
+The revised LG composition passed the complete76-case replay and all these
+negatives; the historical two-board Actions result below remains separate.
+D5 raised CODE to27941 and the required artifact inventory to87852,
+without changing XDATA or stack limits. Cases14/33 passed the D5
+write and first real handoff sequence at SP7B/7C; this targeted result does
+not replace the complete-corpus gate.
+The subsequent one-latch attempt sampler uses27711 CODE and1535 ordinary
+XDATA, with all76 cases retained:1164 calls/438415 MMIO events and87095
+required artifact mutations. All native/sanitizer references agree. Selected
+actual-MCU cases0/5/14/22/23/33 cover ACK, uncertain late observation, D5
+maximum-frame wrap, successful FF retry, retained work exhaustion and real
+handoff at SP7B/7C; the full new replay/mutation campaigns remain separate.
+The subsequent first-failure timer diagnostics add251 CODE and two XDATA
+bytes: the ordinary attempt uses25390/1477 and the handoff uses27962/1537.
+Required mutation inventories are79832 and87772, with every previous case
+retained. The handoff's1164 calls/438415 MMIO count is unchanged; all76
+native/sanitizer references agree, and current MCU cases14/23/33 retain SP7B.
+The committed RX-overflow, TX-turnaround and FIFO-pointer-mask guards make the
+current images25401/1477 and27973/1537, with181474/438789 MMIO events and
+79861/87801 required mutations; cases, calls and peak SP are unchanged.
+The stopped-drain complete-head helper (PHR0x619A plus count, accepted
+without FIFOP) adds25 CODE to each: the images are now25426/1477 and
+27998/1537 with79948/87888 required mutations; MMIO events, cases, calls,
+XDATA and peak SP are unchanged.
 It exercises SFD/clear/configuration races, retained faults,
 511/512/513-tick boundaries, whole-FF retry/exhaustion, invalid scoped fine/
 coarse tuples, buffer exclusions,
@@ -366,7 +414,7 @@ from `mac_attempt_now`, consumes genuine attempt bounds/ACK bytes, performs
 the handoff and retires the ordinary-TX owner while retaining an independent
 RX/receiver-ACK lease. It neither injects MAC success nor initializes private
 protocol state. That composition is **not** the isolated MCU image above.
-This increment is host-tested, image-checked and simulated, not
+The original increment was host-tested, image-checked and simulated, not
 hardware-observed or complete #13/#14 acceptance.
 Commit `166b15c` passed
 [full Actions36170918483](https://github.com/faronov/cc2530-zigbee/actions/runs/36170918483),

@@ -54,7 +54,9 @@ typedef struct {
     nwk_aps_duplicate_t broadcast[NWK_APS_DUPLICATES];
     NWK_APS_TX_T *owner;
     ccm_star_limits_t limits;
+#if !defined(CC2530_MAC_LINK_DIRECT)
     uint8_t mac[MAC_FRAME_MAX_BODY];
+#endif
     uint32_t last, deadline, counter_until, ack_wait, duplicate_time, transaction_until, broadcast_time;
     uint16_t nv_polls, profile;
     uint8_t endpoint, next_aps, next_nwk, length, mac_length;
@@ -69,7 +71,9 @@ typedef struct {
 } nwk_aps_t;
 
 /* A single foreground owner with one application/control TX, one priority ACK,
- * one RX and eight non-evictable live duplicate entries. Time uses the same
+ * one RX and eight live APS/NWK-command duplicate entries; a full table
+ * evicts the soonest-expiring entry, so an old retry may be redelivered and
+ * the authenticated frame counter remains replay protection. Time uses the same
  * uint32 16-us symbols as mac_tx (true gaps/intervals <2^31). No reset of a
  * leased/faulted MAC slot. Initialization never authenticates or resumes BDB.
  * ack_wait includes a caller-established encryption/decryption bound on top
@@ -83,6 +87,10 @@ typedef struct {
  * security processing. Protected TX is constructed after the fixed short/
  * short compressed MAC prefix, then the real codec emits only that header.
  * No overlapping payload/output is passed to a codec.
+ * CC2530_MAC_LINK_DIRECT removes the private MAC build buffer: the same NPDU
+ * and codec header are staged in the owner's IDLE engine frame under one
+ * explicit mac_tx_interval_stage loan and admitted in place, never copied.
+ * The frame is untouched unless the owner was IDLE before the first mutation.
  * init copies a complete, disjoint configuration; it retains no pointer to
  * that input. The grouped input avoids an eleven-argument SDCC caller frame.
  */

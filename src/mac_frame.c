@@ -9,7 +9,7 @@
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
 #endif
-
+LW_SHALLOW_DECLARE(static mac_codec_result_t command_parse(const uint8_t * volatile, volatile uint16_t, mac_command_t * volatile); static mac_codec_result_t beacon_fields(const uint8_t * volatile, uint16_t volatile, mac_beacon_info_t * volatile); static mac_codec_result_t command_header_policy(const mac_header_t * volatile, const uint8_t * volatile, uint16_t volatile, uint8_t volatile);)
 static inline uint16_t read_le16(const uint8_t *bytes)
 {
     return (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
@@ -63,11 +63,11 @@ static mac_codec_result_t command_policy(const mac_command_t *command)
     }
     return MAC_CODEC_OK;
 }
-
+#define mac_command_decode LW_SHALLOW_NAME(mac_command_decode, command_parse)
 mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
                                       mac_command_t * volatile result)
 {
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+#if defined(CC2530_MAC_LINK_WORKSPACE) && !defined(LINK_WORK_SHALLOW)
     if (!LW_IO(LW_CHILD_COMMAND, payload, length, 0) ||
         !LW_IO(LW_CHILD_COMMAND, result, sizeof(*result), 1)) return MAC_CODEC_INVALID_ARGUMENT;
 #endif
@@ -134,7 +134,7 @@ mac_codec_result_t mac_command_encode(const mac_command_t * volatile command,
     *length = size;
     return MAC_CODEC_OK;
 }
-
+#if !defined(LINK_WORK_SHALLOW)
 static mac_codec_result_t beacon_fields(const uint8_t *payload, uint16_t length,
                                         mac_beacon_info_t *result)
 {
@@ -184,7 +184,7 @@ static mac_codec_result_t beacon_fields(const uint8_t *payload, uint16_t length,
     return LW_RETURN(LW_BEACON, MAC_CODEC_OK);
 }
 #undef candidate
-
+#endif
 mac_codec_result_t mac_beacon_decode(const uint8_t *payload, uint16_t length,
                                      mac_beacon_info_t *result)
 {
@@ -260,7 +260,7 @@ static mac_codec_result_t address_policy(const mac_header_t *header)
         return MAC_CODEC_INVALID_HEADER;
     return MAC_CODEC_OK;
 }
-
+#if !defined(LINK_WORK_SHALLOW)
 static mac_codec_result_t command_header_policy(const mac_header_t *header,
                                                 const uint8_t *payload, uint16_t length,
                                                 uint8_t volatile mode)
@@ -307,7 +307,7 @@ static mac_codec_result_t command_header_policy(const mac_header_t *header,
         return MAC_CODEC_INVALID_HEADER;
     return MAC_CODEC_OK;
 }
-
+#endif
 mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint16_t length,
                                     mac_frame_info_t * volatile result, uint8_t volatile profile)
 {
@@ -316,8 +316,8 @@ mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint1
     if (!LW_IO(LW_MAC_DECODE, body, length, 0) ||
         !LW_IO(LW_MAC_DECODE, result, sizeof(*result), 1))
         return LW_RETURN(LW_MAC_DECODE, MAC_CODEC_INVALID_ARGUMENT);
-#endif
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+#define length LW_SHALLOW_READ(uint16_t, length)
+/* The WORKSPACE admission and arena candidate share one conditional. */
 #define candidate (link_work_arena.protocol.codec.candidate)
 #else
     mac_frame_info_t candidate;
@@ -384,7 +384,7 @@ mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint1
     return LW_RETURN(LW_MAC_DECODE, MAC_CODEC_OK);
 }
 #undef candidate
-
+#undef length
 mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
                                     mac_frame_info_t * volatile result)
 {
@@ -460,3 +460,115 @@ mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
     *length = (uint8_t)(header_size + payload_length);
     return LW_RETURN(LW_MAC_ENCODE, MAC_CODEC_OK);
 }
+#if defined(LINK_WORK_SHALLOW)
+/* J3 DIRECT shallow codec helpers. These are the WORKSPACE bodies above with
+ * the same checks, results and order, compiled from volatile parameter homes
+ * so SDCC holds no PUSHed register across their calls. The command header
+ * policy performs mac_command_decode()'s exact admission itself and then its
+ * shared parser, instead of a nested banked call. Other profiles and the
+ * host-only CC2530_MAC_LINK_DEEP_REFERENCE oracle compile the bodies above. */
+static mac_codec_result_t beacon_fields(const uint8_t * volatile payload, uint16_t volatile length,
+                                        mac_beacon_info_t * volatile result)
+{
+    LW_ENTER(LW_BEACON, MAC_CODEC_INVALID_ARGUMENT);
+    if (!LW_IO(LW_BEACON, payload, length, 0) ||
+        !LW_IO(LW_BEACON, result, result ? sizeof(*result) : 0, 1))
+        return LW_RETURN(LW_BEACON, MAC_CODEC_INVALID_ARGUMENT);
+#define candidate (link_work_arena.protocol.codec.beacon)
+    uint8_t i;
+
+    if (length > 4u + 8u * MAC_BEACON_MAX_PENDING + MAC_BEACON_MAX_PAYLOAD)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_TOO_LONG);
+    if (length < 4u)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_TRUNCATED);
+    if ((payload[1] & 0x20u) || (payload[2] & 0x78u))
+        return LW_RETURN(LW_BEACON, MAC_CODEC_INVALID_BEACON);
+    if (payload[2] & 7u)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_UNSUPPORTED_BEACON);
+    if (payload[3] & 0x88u)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_INVALID_BEACON);
+    memset(&candidate, 0, sizeof(candidate));
+    candidate.short_count = payload[3] & 7u;
+    candidate.extended_count = (payload[3] >> 4) & 7u;
+    if (candidate.short_count + candidate.extended_count > MAC_BEACON_MAX_PENDING)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_INVALID_BEACON);
+    candidate.short_offset = 4;
+    candidate.extended_offset = (uint8_t)(4u + 2u * candidate.short_count);
+    candidate.payload_offset = (uint8_t)(candidate.extended_offset + 8u * candidate.extended_count);
+    if (length < candidate.payload_offset)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_TRUNCATED);
+    if (length > candidate.payload_offset + MAC_BEACON_MAX_PAYLOAD)
+        return LW_RETURN(LW_BEACON, MAC_CODEC_TOO_LONG);
+    for (i = 4; i < candidate.extended_offset; i += 2)
+        if (read_le16(payload + i) == 0xffffu)
+            return LW_RETURN(LW_BEACON, MAC_CODEC_INVALID_BEACON);
+    candidate.superframe_specification = read_le16(payload);
+    candidate.gts_permit = payload[2] >> 7;
+    candidate.payload_length = (uint8_t)(length - candidate.payload_offset);
+    if (result != NULL)
+        *result = candidate;
+    return LW_RETURN(LW_BEACON, MAC_CODEC_OK);
+}
+#undef candidate
+
+static mac_codec_result_t command_header_policy(const mac_header_t * volatile header,
+                                                const uint8_t * volatile payload,
+                                                uint16_t volatile length, uint8_t volatile mode)
+{
+    /* Mode 0 is legacy RX, 1 is TX, and 2 is R22 Response RX. */
+    mac_command_t command;
+    mac_codec_result_t status;
+    uint8_t compressed;
+
+    if (length == 0u)
+        return MAC_CODEC_TRUNCATED;
+    if (!LW_IO(LW_CHILD_COMMAND, payload, length, 0) ||
+        !LW_IO(LW_CHILD_COMMAND, &command, sizeof(command), 1))
+        return MAC_CODEC_INVALID_ARGUMENT;
+    status = command_parse(payload, length, &command);
+    if (status != MAC_CODEC_OK)
+        return status;
+    /* The command parser writes only command; header is unchanged. */
+    compressed = (header->flags & MAC_FLAG_PAN_COMPRESSION) != 0u;
+    /* Pending is required to be zero on transmission, ignored on reception. */
+    if (mode == 1u && (header->flags & MAC_FLAG_PENDING))
+        return MAC_CODEC_INVALID_HEADER;
+    if (command.identifier == MAC_COMMAND_BEACON_REQUEST) {
+        if (header->destination_mode != MAC_ADDRESS_SHORT || header->source_mode != MAC_ADDRESS_NONE
+                || header->destination_pan != 0xffffu || read_le16(header->destination) != 0xffffu
+                || (header->flags & MAC_FLAG_ACK_REQUEST))
+            return MAC_CODEC_INVALID_HEADER;
+        return MAC_CODEC_OK;
+    }
+    if (!(header->flags & MAC_FLAG_ACK_REQUEST)
+            || (header->destination_mode == MAC_ADDRESS_SHORT && read_le16(header->destination) >= 0xfffeu)
+            || (header->source_mode == MAC_ADDRESS_SHORT && read_le16(header->source) >= 0xfffeu))
+        return MAC_CODEC_INVALID_HEADER;
+    if (command.identifier == MAC_COMMAND_DATA_REQUEST) {
+        if (header->source_mode == MAC_ADDRESS_NONE
+                || compressed != (header->destination_mode != MAC_ADDRESS_NONE))
+            return MAC_CODEC_INVALID_HEADER;
+        return MAC_CODEC_OK;
+    }
+    if (header->source_mode != MAC_ADDRESS_EXTENDED || header->destination_mode == MAC_ADDRESS_NONE)
+        return MAC_CODEC_INVALID_HEADER;
+    if (command.identifier == MAC_COMMAND_ASSOCIATION_REQUEST) {
+        if (compressed || header->source_pan != 0xffffu)
+            return MAC_CODEC_INVALID_HEADER;
+    } else if ((command.identifier == MAC_COMMAND_ASSOCIATION_RESPONSE
+                && header->destination_mode != MAC_ADDRESS_EXTENDED)
+               || (!compressed && !(mode == 2u
+                    && command.identifier == MAC_COMMAND_ASSOCIATION_RESPONSE)))
+        return MAC_CODEC_INVALID_HEADER;
+    return MAC_CODEC_OK;
+}
+
+#undef mac_command_decode
+mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
+                                      mac_command_t * volatile result)
+{
+    if (!LW_IO(LW_CHILD_COMMAND, payload, length, 0) ||
+        !LW_IO(LW_CHILD_COMMAND, result, sizeof(*result), 1)) return MAC_CODEC_INVALID_ARGUMENT;
+    return command_parse(payload, length, result);
+}
+#endif

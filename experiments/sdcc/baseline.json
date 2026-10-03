@@ -1,0 +1,1255 @@
+{
+  "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+  "layout": "build/sdcc-study/baseline/join-smoke-layout",
+  "code": 253445,
+  "common": 32714,
+  "banks": [
+    {
+      "bank": 0,
+      "populated": 32714,
+      "capacity": 32768,
+      "free": 54
+    },
+    {
+      "bank": 1,
+      "populated": 32083,
+      "capacity": 32768,
+      "free": 685
+    },
+    {
+      "bank": 2,
+      "populated": 32755,
+      "capacity": 32768,
+      "free": 13
+    },
+    {
+      "bank": 3,
+      "populated": 32734,
+      "capacity": 32768,
+      "free": 34
+    },
+    {
+      "bank": 4,
+      "populated": 31350,
+      "capacity": 32768,
+      "free": 1418
+    },
+    {
+      "bank": 5,
+      "populated": 32685,
+      "capacity": 32768,
+      "free": 83
+    },
+    {
+      "bank": 6,
+      "populated": 32741,
+      "capacity": 32768,
+      "free": 27
+    },
+    {
+      "bank": 7,
+      "populated": 26383,
+      "capacity": 26624,
+      "free": 241
+    }
+  ],
+  "xdata": 7676,
+  "physical_dseg": 51,
+  "linker_dseg_extent": 125,
+  "oseg": 10,
+  "bseg_bits": 88,
+  "bseg_bytes": 11,
+  "stack": 45,
+  "bank_depth": 8,
+  "jf_count": 106,
+  "jf_sum": 589,
+  "jf_max": 18,
+  "jf_frames": {
+    "JF_aes_aes128_encrypt_block": 18,
+    "JF_zdo_runtime_announce": 18,
+    "JF_nwk_aps_nwk_aps_receive": 17,
+    "JF_zdo_runtime_zdo_response": 17,
+    "JF_mac_association_mac_association_start": 15,
+    "JF_zdo_runtime_address_request": 15,
+    "JF_aps_frame_aps_frame_encode": 13,
+    "JF_mac_tx_mac_tx_interval_submit": 13,
+    "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+    "JF_nwk_frame_nwk_frame_encode": 13,
+    "JF_zdo_runtime_parent_response": 13,
+    "JF_mac_epoch_mac_epoch_step": 12,
+    "JF_mac_join_mac_join_step": 12,
+    "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+    "JF_zigbee_mmo_install_code_derive": 12,
+    "JF_zdo_node_zdo_node_rsp_encode": 11,
+    "JF_bdb_join_bdb_join_step": 10,
+    "JF_mac_association_mac_association_step_rx": 10,
+    "JF_mac_poll_step": 10,
+    "JF_nwk_beacon_nwk_beacon_decode": 10,
+    "JF_zdo_runtime_received": 10,
+    "JF_bdb_join_bdb_join_receive": 9,
+    "JF_mac_link_driver_mac_link_driver_step": 9,
+    "JF_ed_wire_ed_wire_crypt": 8,
+    "JF_mac_adapter_mac_adapter_step": 8,
+    "JF_mac_radio_mac_radio_attempt": 8,
+    "JF_mac_tx_mac_tx_step": 8,
+    "JF_zdo_node_zdo_node_req_encode": 8,
+    "JF_zdo_runtime_zdo_runtime_request": 8,
+    "JF_clock_request_and_wait": 7,
+    "JF_mac_tx_interval_publish": 7,
+    "JF_bdb_join_init_bdb_join_runtime_init": 6,
+    "JF_mac_link_driver_observe": 6,
+    "JF_mac_time_mac_time_attempt_read": 6,
+    "JF_mac_tx_mac_tx_interval_step": 6,
+    "JF_mac_tx_mac_tx_observed_step": 6,
+    "JF_nwk_aps_nwk_aps_step": 6,
+    "JF_security_counter_security_counter_take": 6,
+    "JF_zdo_node_read_descriptor": 6,
+    "JF_zdo_node_write_descriptor": 6,
+    "JF_zdo_node_zdo_node_rsp_decode": 6,
+    "JF_clock_clock_select_init": 5,
+    "JF_mac_link_driver_mac_link_driver_init": 5,
+    "JF_mac_radio_operate": 5,
+    "JF_mac_tx_mac_tx_interval_copy": 5,
+    "JF_radio_autoack_radio_autoack_attempt": 5,
+    "JF_aes_source_range": 4,
+    "JF_bdb_join_bdb_join_send": 4,
+    "JF_bdb_join_init_bdb_join_start": 4,
+    "JF_join_smoke_progress": 4,
+    "JF_mac_adapter_frame": 4,
+    "JF_mac_frame_mac_frame_encode": 4,
+    "JF_mac_join_receipt": 4,
+    "JF_mac_poll_accept_ack": 4,
+    "JF_mac_time_operate": 4,
+    "JF_nv_record_nv_record_load": 4,
+    "JF_nv_record_nv_record_replace": 4,
+    "JF_nv_record_select_record": 4,
+    "JF_nwk_candidates_nwk_candidates_consider": 4,
+    "JF_security_keys_security_keys_provision_default": 4,
+    "JF_zdo_runtime_advance": 4,
+    "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+    "JF_bdb_join_runtime": 3,
+    "JF_mac_attempt_mac_attempt_run": 3,
+    "JF_mac_link_child_workspace_child_work_address": 3,
+    "JF_mac_radio_mac_radio_configure": 3,
+    "JF_nv_record_scan_page": 3,
+    "JF_nwk_aps_nwk_aps_queue": 3,
+    "JF_radio_autoack_operate": 3,
+    "JF_radio_autoack_radio_autoack_configure": 3,
+    "JF_timebase_timebase_deadline_after": 3,
+    "JF_timebase_timebase_expired": 3,
+    "JF_zdo_runtime_zdo_runtime_step": 3,
+    "JF_zdo_runtime_zdo_runtime_take_application": 3,
+    "JF_zdo_runtime_zdo_runtime_take_result": 3,
+    "JF_aes_sample": 2,
+    "JF_mac_association_mac_association_step": 2,
+    "JF_mac_attempt_mac_attempt_prepare": 2,
+    "JF_mac_epoch_mac_epoch_start": 2,
+    "JF_mac_join_finish_window": 2,
+    "JF_mac_join_link_ram_disjoint": 2,
+    "JF_mac_join_mac_join_start": 2,
+    "JF_mac_link_child_workspace_child_work_disjoint": 2,
+    "JF_mac_link_driver_consumer": 2,
+    "JF_mac_link_workspace_link_work_enter": 2,
+    "JF_mac_poll_link_ram_disjoint": 2,
+    "JF_mac_poll_mac_poll_start": 2,
+    "JF_mac_radio_mac_radio_prepare": 2,
+    "JF_mac_scan_mac_scan_start": 2,
+    "JF_mac_scan_mac_scan_step": 2,
+    "JF_security_counter_floors": 2,
+    "JF_bdb_join_bdb_join_armed": 1,
+    "JF_bdb_join_bdb_join_disarmed": 1,
+    "JF_ed_wire_read_aps": 1,
+    "JF_mac_adapter_mac_adapter_accept": 1,
+    "JF_mac_attempt_mac_attempt_configure": 1,
+    "JF_mac_attempt_mac_attempt_init": 1,
+    "JF_mac_attempt_mac_attempt_now": 1,
+    "JF_mac_attempt_mac_attempt_receive": 1,
+    "JF_mac_radio_mac_radio_init": 1,
+    "JF_mac_radio_mac_radio_now": 1,
+    "JF_mac_radio_mac_radio_send": 1,
+    "JF_mac_time_poll": 1,
+    "JF_nwk_frame_nwk_frame_decode": 1,
+    "JF_radio_autoack_radio_autoack_prepare": 1,
+    "JF_radio_autoack_radio_autoack_send": 1
+  },
+  "data_verified": true,
+  "stack_verified": true,
+  "identities": {
+    "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+    "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+    "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+    "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+    "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+    "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+    "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+    "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+    "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+  },
+  "simulation_or_hardware_claim": false,
+  "assembly_analysis": {
+    "instructions": 158657,
+    "functions": 499,
+    "calls": 4769,
+    "mnemonics": {
+      "mov": 74894,
+      "movx": 29679,
+      "inc": 15837,
+      "clr": 5276,
+      "lcall": 4762,
+      "add": 4182,
+      "addc": 3974,
+      "ljmp": 2674,
+      "cjne": 2598,
+      "pop": 2324,
+      "push": 2257,
+      "sjmp": 1926,
+      "jz": 1727,
+      "subb": 1310,
+      "jnz": 1204,
+      "orl": 1022,
+      "jnc": 400,
+      "ret": 395,
+      "jc": 383,
+      "anl": 343,
+      "rlc": 248,
+      "jnb": 104,
+      "dec": 89,
+      "setb": 85,
+      "cpl": 72,
+      "movc": 70,
+      "xch": 70,
+      "jb": 65,
+      "xrl": 63,
+      "swap": 45,
+      "rrc": 38,
+      "djnz": 32,
+      "rr": 30,
+      "mul": 29,
+      "nop": 24,
+      "rl": 23,
+      "jbc": 2,
+      "div": 2,
+      "jmp": 1
+    },
+    "patterns": {
+      "jump_to_local_plain_RET": {
+        "count": 939,
+        "local_upper_bound_bytes": 1588,
+        "modules": {
+          "security_keys": 94,
+          "radio_autoack": 83,
+          "mac_radio": 64,
+          "mac_frame": 53,
+          "security_counter": 45,
+          "join_smoke": 44,
+          "mac_link_workspace": 40,
+          "mac_poll": 37,
+          "zcl_sensor": 36,
+          "nv_record": 31,
+          "mac_time": 30,
+          "zdo_runtime": 30,
+          "mac_link_child_workspace": 29,
+          "aps_frame": 22,
+          "nwk_frame": 21,
+          "nwk_candidates": 20,
+          "ed_wire": 18,
+          "mac_association": 17,
+          "nwk_aps": 17,
+          "ccm_star": 16,
+          "bdb_join": 15,
+          "mac_scan": 14,
+          "mac_link_driver": 14,
+          "clock": 13,
+          "aes": 13,
+          "mac_join": 13,
+          "zigbee_mmo": 12,
+          "nwk_parent": 12,
+          "flash": 11,
+          "flash_write": 10,
+          "nwk_aps_direct": 10,
+          "mac_adapter": 9,
+          "nwk_beacon": 9,
+          "flash_exec": 8,
+          "mac_epoch": 6,
+          "timebase": 5,
+          "banked": 4,
+          "zigbee_key_hash": 4,
+          "mac_attempt": 4,
+          "zdo_node": 3,
+          "bdb_join_init": 2,
+          "mac_tx": 1
+        },
+        "examples": [
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 929,
+            "bytes": 2,
+            "asm": "ljmp\t00126$"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1025,
+            "bytes": 2,
+            "asm": "ljmp\t00126$"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1081,
+            "bytes": 2,
+            "asm": "ljmp\t00126$"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1113,
+            "bytes": 1,
+            "asm": "sjmp\t00126$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:held",
+            "pc": 1308,
+            "bytes": 1,
+            "asm": "sjmp\t00106$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_enter",
+            "pc": 1434,
+            "bytes": 2,
+            "asm": "ljmp\t00124$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_enter",
+            "pc": 1493,
+            "bytes": 2,
+            "asm": "ljmp\t00124$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_enter",
+            "pc": 1570,
+            "bytes": 2,
+            "asm": "ljmp\t00124$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_enter",
+            "pc": 1719,
+            "bytes": 1,
+            "asm": "sjmp\t00124$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_leave",
+            "pc": 1809,
+            "bytes": 2,
+            "asm": "ljmp\t00113$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:location",
+            "pc": 2175,
+            "bytes": 2,
+            "asm": "ljmp\t00110$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:location",
+            "pc": 2198,
+            "bytes": 2,
+            "asm": "ljmp\t00110$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:location",
+            "pc": 2260,
+            "bytes": 1,
+            "asm": "sjmp\t00110$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:location",
+            "pc": 2321,
+            "bytes": 1,
+            "asm": "sjmp\t00110$"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_external",
+            "pc": 2394,
+            "bytes": 2,
+            "asm": "ljmp\t00115$"
+          }
+        ]
+      },
+      "spill_access_cost_not_removable_estimate": {
+        "count": 3494,
+        "local_upper_bound_bytes": 0,
+        "modules": {
+          "zdo_runtime": 587,
+          "zdo_node": 273,
+          "mac_tx": 240,
+          "mac_frame": 175,
+          "nwk_aps": 172,
+          "nwk_frame": 153,
+          "mac_association": 144,
+          "bdb_join": 128,
+          "aps_frame": 122,
+          "mac_poll": 119,
+          "mac_link_driver": 116,
+          "mac_radio": 105,
+          "aes": 98,
+          "mac_join": 97,
+          "mac_epoch": 88,
+          "mac_adapter": 87,
+          "nwk_aps_direct": 85,
+          "nv_record": 69,
+          "radio_autoack": 69,
+          "mac_link_child_workspace": 68,
+          "security_keys": 59,
+          "mac_link_workspace": 54,
+          "ed_wire": 43,
+          "clock": 39,
+          "mac_attempt": 38,
+          "zigbee_mmo": 34,
+          "security_counter": 32,
+          "nwk_beacon": 31,
+          "mac_time": 30,
+          "bdb_join_init": 30,
+          "mac_scan": 28,
+          "nwk_candidates": 27,
+          "banked": 18,
+          "join_smoke": 16,
+          "timebase": 14,
+          "flash_exec": 3,
+          "ccm_star": 3
+        },
+        "examples": [
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1040,
+            "bytes": 0,
+            "asm": "mov\t_banked_code_read_sloc0_1_0,r4"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1042,
+            "bytes": 0,
+            "asm": "mov\t(_banked_code_read_sloc0_1_0 + 1),r5"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1050,
+            "bytes": 0,
+            "asm": "subb\ta,_banked_code_read_sloc0_1_0"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1053,
+            "bytes": 0,
+            "asm": "subb\ta,(_banked_code_read_sloc0_1_0 + 1)"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1071,
+            "bytes": 0,
+            "asm": "subb\ta,_banked_code_read_sloc0_1_0"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1074,
+            "bytes": 0,
+            "asm": "subb\ta,(_banked_code_read_sloc0_1_0 + 1)"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1149,
+            "bytes": 0,
+            "asm": "mov\t_banked_code_read_sloc0_1_0,a"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1153,
+            "bytes": 0,
+            "asm": "mov\t(_banked_code_read_sloc0_1_0 + 1),a"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1155,
+            "bytes": 0,
+            "asm": "mov\t_banked_code_read_sloc1_1_0,r2"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1157,
+            "bytes": 0,
+            "asm": "mov\t(_banked_code_read_sloc1_1_0 + 1),#0x00"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1160,
+            "bytes": 0,
+            "asm": "mov\t_banked_code_read_sloc2_1_0,r3"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1162,
+            "bytes": 0,
+            "asm": "mov\t(_banked_code_read_sloc2_1_0 + 1),r6"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1164,
+            "bytes": 0,
+            "asm": "mov\tr1,_banked_code_read_sloc1_1_0"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1166,
+            "bytes": 0,
+            "asm": "mov\tr7,(_banked_code_read_sloc1_1_0 + 1)"
+          },
+          {
+            "module": "banked",
+            "function": "banked:banked_code_read",
+            "pc": 1169,
+            "bytes": 0,
+            "asm": "add\ta,_banked_code_read_sloc2_1_0"
+          }
+        ]
+      },
+      "generic_pointer_call_cost_not_removable_estimate": {
+        "count": 1916,
+        "local_upper_bound_bytes": 0,
+        "modules": {
+          "nwk_aps": 634,
+          "mac_tx": 278,
+          "zdo_runtime": 249,
+          "mac_frame": 161,
+          "zdo_node": 80,
+          "ed_wire": 70,
+          "nwk_aps_direct": 66,
+          "zdo_srv": 65,
+          "nwk_frame": 60,
+          "security_keys": 42,
+          "aps_frame": 40,
+          "clock": 34,
+          "nwk_candidates": 33,
+          "bdb_join_init": 24,
+          "nwk_parent": 18,
+          "ccm_star": 12,
+          "nwk_beacon": 12,
+          "bdb_join": 11,
+          "mac_link_workspace": 7,
+          "mac_poll": 6,
+          "timebase": 5,
+          "zigbee_mmo": 5,
+          "aes": 2,
+          "zigbee_key_hash": 2
+        },
+        "examples": [
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_request",
+            "pc": 3920,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_request",
+            "pc": 3975,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_request",
+            "pc": 4038,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_request",
+            "pc": 4123,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_object",
+            "pc": 4296,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_object",
+            "pc": 4357,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "mac_link_workspace",
+            "function": "mac_link_workspace:link_work_counter_object",
+            "pc": 4409,
+            "bytes": 0,
+            "asm": "lcall\t___gptr_cmp"
+          },
+          {
+            "module": "timebase",
+            "function": "timebase:timebase_deadline_after",
+            "pc": 8533,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "timebase",
+            "function": "timebase:timebase_deadline_after",
+            "pc": 8538,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "timebase",
+            "function": "timebase:timebase_deadline_after",
+            "pc": 8543,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "timebase",
+            "function": "timebase:timebase_deadline_after",
+            "pc": 8548,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "timebase",
+            "function": "timebase:timebase_expired",
+            "pc": 8768,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "clock",
+            "function": "clock:observe",
+            "pc": 8841,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "clock",
+            "function": "clock:observe",
+            "pc": 8878,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          },
+          {
+            "module": "clock",
+            "function": "clock:reset_diagnostics",
+            "pc": 8913,
+            "bytes": 0,
+            "asm": "lcall\t__gptrput"
+          }
+        ]
+      },
+      "near_call_then_RET_tailcall_candidate": {
+        "count": 85,
+        "local_upper_bound_bytes": 85,
+        "modules": {
+          "security_counter": 8,
+          "mac_poll": 8,
+          "clock": 5,
+          "radio_autoack": 5,
+          "mac_tx": 5,
+          "nwk_aps": 5,
+          "zcl_sensor": 5,
+          "mac_radio": 4,
+          "flash_write": 3,
+          "nv_record": 3,
+          "mac_time": 3,
+          "nwk_frame": 3,
+          "aps_frame": 3,
+          "zdo_node": 3,
+          "ccm_star": 2,
+          "zigbee_mmo": 2,
+          "mac_frame": 2,
+          "security_keys": 2,
+          "mac_association": 2,
+          "mac_join": 2,
+          "zdo_runtime": 2,
+          "flash": 1,
+          "zigbee_key_hash": 1,
+          "ed_wire": 1,
+          "nwk_beacon": 1,
+          "nwk_candidates": 1,
+          "nwk_parent": 1,
+          "nwk_aps_direct": 1,
+          "mac_link_driver": 1
+        },
+        "examples": [
+          {
+            "module": "clock",
+            "function": "clock:observe",
+            "pc": 8881,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "clock",
+            "function": "clock:publish_commands",
+            "pc": 9168,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "clock",
+            "function": "clock:publish_status",
+            "pc": 9241,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "clock",
+            "function": "clock:publish_count",
+            "pc": 9439,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "clock",
+            "function": "clock:publish_rollback",
+            "pc": 9471,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "flash",
+            "function": "flash:flash_nv_read",
+            "pc": 11474,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "flash_write",
+            "function": "flash_write:operate",
+            "pc": 12690,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "flash_write",
+            "function": "flash_write:flash_nv_erase",
+            "pc": 12739,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "flash_write",
+            "function": "flash_write:flash_nv_program",
+            "pc": 12807,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "nv_record",
+            "function": "nv_record:fault",
+            "pc": 13088,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "nv_record",
+            "function": "nv_record:nv_record_load",
+            "pc": 15244,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "nv_record",
+            "function": "nv_record:nv_record_replace",
+            "pc": 16952,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "security_counter",
+            "function": "security_counter:fail",
+            "pc": 17335,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "security_counter",
+            "function": "security_counter:commit",
+            "pc": 18036,
+            "bytes": 1,
+            "asm": "ret"
+          },
+          {
+            "module": "security_counter",
+            "function": "security_counter:security_counter_open",
+            "pc": 18558,
+            "bytes": 1,
+            "asm": "ret"
+          }
+        ]
+      },
+      "same_DPTR_immediate_in_basic_block": {
+        "count": 76,
+        "local_upper_bound_bytes": 228,
+        "modules": {
+          "radio_autoack": 46,
+          "zcl_sensor": 12,
+          "mac_tx": 8,
+          "join_smoke": 4,
+          "ccm_star": 2,
+          "security_keys": 2,
+          "zigbee_mmo": 1,
+          "ed_wire": 1
+        },
+        "examples": [
+          {
+            "module": "ccm_star",
+            "function": "ccm_star:encrypt",
+            "pc": 20578,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_child_work_arena + 0x021c)"
+          },
+          {
+            "module": "ccm_star",
+            "function": "ccm_star:feed",
+            "pc": 20887,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_child_work_arena + 0x021e)"
+          },
+          {
+            "module": "zigbee_mmo",
+            "function": "zigbee_mmo:compress",
+            "pc": 23511,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_child_work_arena + 0x008d)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:consume",
+            "pc": 235256,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_work + 0x0011)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:consume",
+            "pc": 235266,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_work + 0x0012)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236369,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_work + 0x000f)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236380,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236446,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_work + 0x0014)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236588,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236712,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236822,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 236947,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 237128,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 237180,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          },
+          {
+            "module": "radio_autoack",
+            "function": "radio_autoack:operate",
+            "pc": 237638,
+            "bytes": 3,
+            "asm": "mov\tdptr,#(_status + 0x000a)"
+          }
+        ]
+      },
+      "bank_call_sites_9byte_setup_call": {
+        "count": 200,
+        "local_upper_bound_bytes": 0,
+        "modules": {
+          "mac_link_driver": 46,
+          "bdb_join": 34,
+          "security_keys": 28,
+          "join_smoke": 20,
+          "zdo_runtime": 13,
+          "mac_tx": 11,
+          "mac_adapter": 11,
+          "nwk_aps_direct": 8,
+          "nwk_aps": 5,
+          "mac_poll": 4,
+          "mac_join": 4,
+          "bdb_join_init": 4,
+          "zdo_srv": 3,
+          "mac_association": 2,
+          "nwk_candidates": 2,
+          "mac_scan": 2,
+          "ccm_star": 1,
+          "zigbee_mmo": 1,
+          "mac_frame": 1
+        },
+        "examples": [
+          {
+            "module": "ccm_star",
+            "function": "ccm_star:encrypt",
+            "pc": 20682,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "zigbee_mmo",
+            "function": "zigbee_mmo:compress",
+            "pc": 23615,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_frame",
+            "function": "mac_frame:mac_frame_decode",
+            "pc": 381534,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_submit",
+            "pc": 426926,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_step",
+            "pc": 431380,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_init",
+            "pc": 433540,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_submit",
+            "pc": 433877,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_copy",
+            "pc": 434291,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_release",
+            "pc": 434400,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_step",
+            "pc": 435376,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_step",
+            "pc": 437764,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_observed_step",
+            "pc": 438898,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_observed_step",
+            "pc": 439497,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_tx",
+            "function": "mac_tx:mac_tx_interval_submit_staged",
+            "pc": 441299,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          },
+          {
+            "module": "mac_adapter",
+            "function": "mac_adapter:clock",
+            "pc": 385837,
+            "bytes": 0,
+            "asm": "lcall\t__sdcc_banked_call"
+          }
+        ]
+      }
+    },
+    "unreachable_from_reviewed_roots": [
+      {
+        "module": "security_keys",
+        "function": "seal",
+        "entry": 305439,
+        "bytes": 918
+      },
+      {
+        "module": "zigbee_mmo",
+        "function": "install_code_derive",
+        "entry": 24674,
+        "bytes": 734
+      },
+      {
+        "module": "mac_frame",
+        "function": "mac_command_encode",
+        "entry": 377918,
+        "bytes": 711
+      },
+      {
+        "module": "mac_time",
+        "function": "mac_time_attempt_read",
+        "entry": 232390,
+        "bytes": 683
+      },
+      {
+        "module": "zdo_node",
+        "function": "zdo_node_req_encode",
+        "entry": 194735,
+        "bytes": 369
+      },
+      {
+        "module": "mac_poll",
+        "function": "mac_poll_step",
+        "entry": 177779,
+        "bytes": 337
+      },
+      {
+        "module": "zdo_runtime",
+        "function": "zdo_runtime_take_application",
+        "entry": 324828,
+        "bytes": 332
+      },
+      {
+        "module": "banked",
+        "function": "banked_code_read",
+        "entry": 899,
+        "bytes": 316
+      },
+      {
+        "module": "mac_radio",
+        "function": "mac_radio_now",
+        "entry": 249584,
+        "bytes": 306
+      },
+      {
+        "module": "ed_wire",
+        "function": "ed_wire_aps",
+        "entry": 448576,
+        "bytes": 217
+      },
+      {
+        "module": "mac_time",
+        "function": "attempt_clock",
+        "entry": 232090,
+        "bytes": 186
+      },
+      {
+        "module": "mac_scan",
+        "function": "mac_scan_get",
+        "entry": 112283,
+        "bytes": 149
+      },
+      {
+        "module": "security_keys",
+        "function": "take",
+        "entry": 298069,
+        "bytes": 118
+      },
+      {
+        "module": "mac_link_workspace",
+        "function": "link_work_clean",
+        "entry": 4440,
+        "bytes": 101
+      },
+      {
+        "module": "mac_radio",
+        "function": "mac_radio_send",
+        "entry": 250708,
+        "bytes": 97
+      },
+      {
+        "module": "mac_association",
+        "function": "mac_association_step",
+        "entry": 166818,
+        "bytes": 96
+      },
+      {
+        "module": "mac_time",
+        "function": "mac_time_read_live",
+        "entry": 231910,
+        "bytes": 88
+      },
+      {
+        "module": "mac_frame",
+        "function": "read_le16",
+        "entry": 376998,
+        "bytes": 65
+      },
+      {
+        "module": "mac_frame",
+        "function": "write_le16",
+        "entry": 377063,
+        "bytes": 65
+      },
+      {
+        "module": "nwk_frame",
+        "function": "read_le16",
+        "entry": 441945,
+        "bytes": 65
+      },
+      {
+        "module": "nwk_frame",
+        "function": "write_le16",
+        "entry": 442010,
+        "bytes": 65
+      },
+      {
+        "module": "aps_frame",
+        "function": "read_le16",
+        "entry": 444851,
+        "bytes": 65
+      },
+      {
+        "module": "aps_frame",
+        "function": "write_le16",
+        "entry": 444916,
+        "bytes": 65
+      },
+      {
+        "module": "mac_attempt",
+        "function": "mac_attempt_diagnostic",
+        "entry": 255893,
+        "bytes": 21
+      },
+      {
+        "module": "mac_link_child_workspace",
+        "function": "child_work_poisoned",
+        "entry": 4934,
+        "bytes": 7
+      },
+      {
+        "module": "mac_adapter",
+        "function": "mac_adapter_record",
+        "entry": 392230,
+        "bytes": 6
+      },
+      {
+        "module": "flash_write",
+        "function": "flash_write_diagnostic",
+        "entry": 12808,
+        "bytes": 4
+      },
+      {
+        "module": "security_counter",
+        "function": "security_counter_status",
+        "entry": 20512,
+        "bytes": 4
+      },
+      {
+        "module": "mac_time",
+        "function": "mac_time_diagnostic",
+        "entry": 232086,
+        "bytes": 4
+      }
+    ],
+    "unreachable_code_bytes_upper_bound": 6194,
+    "function_scoped_xdata_bytes": 2849,
+    "unreachable_function_scoped_xdata_upper_bound": 169,
+    "xdata_caveat": "Includes parameter/local homes; not a lifetime or escape proof.",
+    "gc_caveat": "Symbolic reachability estimate only; not relocation GC or admission."
+  }
+}

@@ -25,8 +25,8 @@ uint32_t timebase_read_awake_ticks24(void)
 timebase_result_t timebase_deadline_after(uint32_t now, uint32_t delay,
                                           uint32_t *deadline)
 {
-#if defined(CC2530_MAC_LINK_WORKSPACE)
-    if (!LW_IO(LW_NONE, deadline, sizeof(*deadline), 1)) return TIMEBASE_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_LINK_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
+    if (!LW_IO(LW_NONE, *(uint32_t * volatile *)&deadline, sizeof(*deadline), 1)) return TIMEBASE_INVALID_ARGUMENT;
 #endif
     if (now > TIMEBASE_TICKS_MASK || delay >= TIMEBASE_HALF_RANGE || deadline == NULL)
         return TIMEBASE_INVALID_ARGUMENT;
@@ -36,8 +36,8 @@ timebase_result_t timebase_deadline_after(uint32_t now, uint32_t delay,
 
 timebase_result_t timebase_expired(uint32_t now, uint32_t deadline, bool *expired)
 {
-#if defined(CC2530_MAC_LINK_WORKSPACE)
-    if (!LW_IO(LW_NONE, expired, sizeof(*expired), 1)) return TIMEBASE_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_LINK_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
+    if (!LW_IO(LW_NONE, *(bool * volatile *)&expired, sizeof(*expired), 1)) return TIMEBASE_INVALID_ARGUMENT;
 #endif
     uint32_t delta;
 

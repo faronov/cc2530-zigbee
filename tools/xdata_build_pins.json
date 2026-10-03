@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "overlay_format": 4,
+  "algorithm_version": 1,
+  "platform_version": 1,
+  "compiler_version": "4.2.0 #13081",
+  "profiles": {
+    "lg_esl29_rev03/default-tc": {
+      "input_catalog": "experiments/xdata/multipool/input-identities.json",
+      "input_catalog_sha256": "8624b527bd9b3ba01687bbae487c333329971905003f1a177e3d685882ba05af",
+      "image_catalog": "experiments/xdata/multipool/identities.json",
+      "image_catalog_sha256": "466722da9b8a0c95d17c318edfc2ed4fe458e224b914edf1fddfad0cebff5972",
+      "resources": {
+        "ordinary": 7123,
+        "saving": 553,
+        "pools": 36,
+        "populated_code": 253445,
+        "common_code": 32714,
+        "data_backing": 51,
+        "oseg": 10,
+        "bseg_bits": 88,
+        "static_stack": 45,
+        "bank_depth": 8
+      }
+    }
+  }
+}

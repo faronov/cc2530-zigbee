@@ -1,0 +1,24 @@
+{
+  "complete": true,
+  "steps": 1142,
+  "peripheral_stops": 559709,
+  "peak_sp": 123,
+  "phase": 5,
+  "terminal": "serving",
+  "identities": {
+    "ihx": "df86611e04a22069067a2529c96dff527ec909aab95bb904f0bde04b71eae4e9",
+    "cdb": "1202aede1348e22c4fc4c5c3d536bc498a7ca012fa558486cfe3ee987bc3098c",
+    "memory": "afff2875fbd08ec0d71170e814181376bab8dc046091a8743832a39c7795a15e",
+    "map_prefix": "2d6465ff81b07ffe2247c8cc9dc34843b622cdd847232e4165025538ff3d4c67",
+    "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+    "noice": "273eff4eb69f13eac3ead7fd94e2bde6a0bd85bce0319fa0682a0baa1d865bf8",
+    "objects": "bf0ca351bb6d17f9bc6600d7e0182409ff092162bdf0525ade3f4faaaa8873d7",
+    "listings": "345571dab93afc72550660a588f0bf7262640ba44c131758e2b62d99719652b0",
+    "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+  },
+  "board": "lg_esl29_rev03",
+  "key_mode": "default-tc",
+  "case": 0,
+  "simulated": true,
+  "hardware_observed": false
+}

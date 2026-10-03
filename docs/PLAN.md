@@ -44,6 +44,11 @@ hardware work. Later features must not bypass their security or recovery gates.
 
 ### Current execution and issue ownership (2026-09-25)
 
+The active [radio-backed MCU join execution plan](LINK_JOIN_PLAN.md),
+started 2026-09-27, defines J1-J6 deliverables and unchanged memory/stack
+acceptance gates. It prioritizes a genuine complete simulated join, not a
+compiler rewrite or additional hardware preparation.
+
 [Roadmap #5](https://github.com/faronov/cc2530-zigbee/issues/5) is the current
 execution index; the milestone exit requirements below remain unchanged.
 The bounded testing/coverage/run-selection work (#87) is accepted. The current
@@ -128,6 +133,12 @@ overhead. Host/object and narrow pointer-ABI simulator evidence do not
 establish a combined fit. Code `e286b72` passed
 [full Actions36277911852](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852),
 116/116 jobs, preserving every prior worker and adding both CHILD workers.
+The opt-in [DIRECT staging](MAC_LINK_DRIVER.md#direct-mac-staging) removes
+the125-byte NWK/APS MAC build copy through an explicit single-use loan of
+the idle MAC frame. BDB and ZDO also reuse NWK/APS's refresh-before-use
+key-status snapshot. The result is a7473-byte floor at a cost of1386 CODE
+bytes, with 46 fewer XSEG bytes. It is host/object-checked and awaits full
+Actions acceptance.
 The separate [boot-disarmed MAC laboratory fixture](MAC_SMOKE.md), tracked
 in #88, is a bounded hardware-readiness step: one public no-ACK broadcast on
 channel26 through real CSMA/CA and explicit physical retirement. It is
@@ -625,7 +636,7 @@ replacement or fault recovery. The #73 extension adds one same-owner
 hardware-gated CCA/TX attempt and post-TX reception from stopped/drained idle.
 Its explicit response phase disables filtering/AUTOACK; stop/drain and resume
 restore them. TX_DONE is PHY completion, not ACK/delivery or timed MAC acceptance.
-Both-board host/image/alias-aware CI binds7007 CODE,450+64 XDATA and SP34.
+Both-board host/image/alias-aware CI binds7056 CODE,450+64 XDATA and SP34.
 This is an RF-transmitting hardware-service foundation, not itself a board image
 or silicon ACK observation. It leaves broadcast/ACK-filter compatibility,
 captured timing (#40), continuous ordinary-TX/RX arbitration, IFS and loss-aware

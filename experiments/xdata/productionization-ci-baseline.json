@@ -1,0 +1,511 @@
+{
+  "baseline": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+  "before_repairs": true,
+  "production_sources_unchanged": true,
+  "scope": "Eight additional previously red CI families, same commands and byte-identical fresh IHX/CDB in pristine and study worktrees; not an overlay regression",
+  "families": [
+    {
+      "family": "radio-autoack",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "radio-autoack",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/radio-autoack",
+          "test-radio-autoack"
+        ],
+        "exit_code": 2,
+        "seconds": 22.195,
+        "diagnostics": [
+          "    require(hashlib.sha256(raw).hexdigest() == RAW_CDB_DIGEST, \"Complete raw CDB identity changed\")",
+          "ValueError: Complete raw CDB identity changed",
+          "make: *** [Makefile:893: test-radio-autoack] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "radio-autoack",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/radio-autoack",
+          "test-radio-autoack"
+        ],
+        "exit_code": 2,
+        "seconds": 22.27,
+        "diagnostics": [
+          "    require(hashlib.sha256(raw).hexdigest() == RAW_CDB_DIGEST, \"Complete raw CDB identity changed\")",
+          "ValueError: Complete raw CDB identity changed",
+          "make: *** [Makefile:893: test-radio-autoack] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "radio_autoack_test.cdb": "b0bb8f9fa40076d938d28026bf2b9430e8fd34457427ad63ada4ea81e0c3696a",
+        "radio_autoack_test.ihx": "68df93cf6bcc57b254012c02f04ceac3aa14fb0dc4de9b7fea8ccf36d37f205a"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Previously added F5 admission changed exact CODE/CDB/listing identities and moved runtime/MMIO addresses; old fixture expectations were not updated",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "mac-radio",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "mac-radio",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-radio",
+          "test-mac-radio"
+        ],
+        "exit_code": 2,
+        "seconds": 14.72,
+        "diagnostics": [
+          "    require(sha(raw) == CDB_SHA, \"MAC radio complete raw CDB changed\")",
+          "ValueError: MAC radio complete raw CDB changed",
+          "make: *** [Makefile:1378: test-mac-radio] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "mac-radio",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-radio",
+          "test-mac-radio"
+        ],
+        "exit_code": 2,
+        "seconds": 14.772,
+        "diagnostics": [
+          "    require(sha(raw) == CDB_SHA, \"MAC radio complete raw CDB changed\")",
+          "ValueError: MAC radio complete raw CDB changed",
+          "make: *** [Makefile:1378: test-mac-radio] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "mac_radio_test.cdb": "cdb3bd38c3f8a6106de3c1dd44fd46baa1e57124fcdaa304a1be5e2749e15a39",
+        "mac_radio_test.ihx": "36b70eae0eb049127131f6b4d98061d532fcae76416cb9c06b5ea9e191ca06a6"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Previously added F5 admission changed exact CODE/CDB/listing identities and moved runtime/MMIO addresses; old fixture expectations were not updated",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "mac-attempt",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "mac-attempt",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-attempt",
+          "test-mac-attempt"
+        ],
+        "exit_code": 2,
+        "seconds": 42.623,
+        "diagnostics": [
+          "ValueError: Attempt complete raw CDB before decoding",
+          "make: *** [Makefile:1410: test-mac-attempt] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "mac-attempt",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-attempt",
+          "test-mac-attempt"
+        ],
+        "exit_code": 2,
+        "seconds": 42.67,
+        "diagnostics": [
+          "ValueError: Attempt complete raw CDB before decoding",
+          "make: *** [Makefile:1410: test-mac-attempt] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "mac_attempt_test.cdb": "0858c530cd765b959caf134fd678c25fcce2dbc4ccbf6af3804a9d3615acb242",
+        "mac_attempt_test.ihx": "e0aa641ddf0cedd6f614053b2f6d2b67aabc73997d8c642dfd92725452219b4d"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Previously added F5 admission changed exact CODE/CDB/listing identities and moved runtime/MMIO addresses; old fixture expectations were not updated",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "mac-handoff",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "mac-handoff",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-handoff",
+          "test-mac-handoff"
+        ],
+        "exit_code": 2,
+        "seconds": 53.146,
+        "diagnostics": [
+          "ValueError: Attempt complete raw CDB before decoding",
+          "make: *** [Makefile:1443: test-mac-handoff] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "mac-handoff",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-handoff",
+          "test-mac-handoff"
+        ],
+        "exit_code": 2,
+        "seconds": 53.713,
+        "diagnostics": [
+          "ValueError: Attempt complete raw CDB before decoding",
+          "make: *** [Makefile:1443: test-mac-handoff] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "mac_handoff_test.cdb": "484a9233b0c4468f911b2fc253c84c5f2433402b7eb68e90978e6e1bcb9586de",
+        "mac_handoff_test.ihx": "d85d824fe31656dd79e021327024915e2fd9cc977dc13f94b576f472861da23b"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Previously added F5 admission changed exact CODE/CDB/listing identities and moved runtime/MMIO addresses; old fixture expectations were not updated",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "mac-adapter",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "mac-adapter",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-adapter",
+          "test-mac-adapter"
+        ],
+        "exit_code": 2,
+        "seconds": 115.158,
+        "diagnostics": [
+          "ValueError: Adapter complete artifact rejection inventory",
+          "make: *** [Makefile:1495: test-mac-adapter] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "mac-adapter",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-adapter",
+          "test-mac-adapter"
+        ],
+        "exit_code": 2,
+        "seconds": 115.336,
+        "diagnostics": [
+          "ValueError: Adapter complete artifact rejection inventory",
+          "make: *** [Makefile:1495: test-mac-adapter] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "mac-adapter/mac_adapter.cdb": "1686aa4ca633a7569533799e509dbe1d6b458b322f1731d24a84f2762734f719",
+        "mac-adapter/mac_adapter.ihx": "345f887697a0318a1c8d83cba84abb83ef3e0ebc47b9fed439349055c7ddd981"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Previously added F5 admission changed exact CODE/CDB/listing identities and moved runtime/MMIO addresses; old fixture expectations were not updated",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "mac-smoke",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "mac-smoke",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-smoke",
+          "test-mac-smoke"
+        ],
+        "exit_code": 2,
+        "seconds": 62.589,
+        "diagnostics": [
+          "ValueError: Smoke complete raw CDB",
+          "make: *** [mac-smoke.mk:34: build/productionization-ci-triage/mac-smoke/mac-smoke/mac_smoke.physical.hex] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "mac-smoke",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-smoke",
+          "test-mac-smoke"
+        ],
+        "exit_code": 2,
+        "seconds": 62.031,
+        "diagnostics": [
+          "ValueError: Smoke complete raw CDB",
+          "make: *** [mac-smoke.mk:34: build/productionization-ci-triage/mac-smoke/mac-smoke/mac_smoke.physical.hex] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "mac-smoke/mac_smoke.cdb": "4ed27880b70f745e451701da3ad7d25a5de5f0d9c42a84e966ab130ba9968d83",
+        "mac-smoke/mac_smoke.ihx": "1a005b1dc94e7852ca00e840453f975a77d13740ee6b98f392ad9560b903aaa9"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Previously added F5 admission changed exact CODE/CDB/listing identities and moved runtime/MMIO addresses; old fixture expectations were not updated",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "mac-link-child-workspace",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "mac-link-child-workspace",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-link-child-workspace",
+          "test-mac-link-child-workspace"
+        ],
+        "exit_code": 2,
+        "seconds": 335.407,
+        "diagnostics": [
+          "ValueError: CHILD ABI complete raw CDB before decoding",
+          "FAILED (errors=1)",
+          "make: *** [Makefile:1748: test-mac-link-child-workspace] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "mac-link-child-workspace",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/mac-link-child-workspace",
+          "test-mac-link-child-workspace"
+        ],
+        "exit_code": 2,
+        "seconds": 338.325,
+        "diagnostics": [
+          "ValueError: CHILD ABI complete raw CDB before decoding",
+          "FAILED (errors=1)",
+          "make: *** [Makefile:1748: test-mac-link-child-workspace] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "mac-adapter/mac_adapter.cdb": "1686aa4ca633a7569533799e509dbe1d6b458b322f1731d24a84f2762734f719",
+        "mac-adapter/mac_adapter.ihx": "345f887697a0318a1c8d83cba84abb83ef3e0ebc47b9fed439349055c7ddd981",
+        "mac-link-child-workspace/abi/child_abi.cdb": "6f5314613233dd8a599d900668b794f97e33a76f3fe1233e30f09694ca3c6d41",
+        "mac-link-child-workspace/abi/child_abi.ihx": "a188596a11a422b3e6d434e9e53500476c06ed531909faf7ac367ae2ae483b60"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "Five-cluster descriptor grew the staged reply to 23 bytes; moving sensor serving removed board.h from zdo_runtime.h",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    },
+    {
+      "family": "banked-join-success",
+      "classification": "TEST INFRASTRUCTURE STALENESS",
+      "pristine": {
+        "family": "banked-join-success",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/banked-join-success",
+          "test-banked-join-success"
+        ],
+        "exit_code": 2,
+        "seconds": 97.395,
+        "diagnostics": [
+          "    require(sha(content) == expected, f\"Complete banked {name} changed\")",
+          "ValueError: Complete banked CODE changed",
+          "make: *** [Makefile:1253: test-banked-join-success] Error 1"
+        ]
+      },
+      "multipool": {
+        "family": "banked-join-success",
+        "command": [
+          "make",
+          "-s",
+          "-j2",
+          "BOARD=generic",
+          "BUILD=build/productionization-ci-triage/banked-join-success",
+          "test-banked-join-success"
+        ],
+        "exit_code": 2,
+        "seconds": 96.583,
+        "diagnostics": [
+          "    require(sha(content) == expected, f\"Complete banked {name} changed\")",
+          "ValueError: Complete banked CODE changed",
+          "make: *** [Makefile:1253: test-banked-join-success] Error 1"
+        ]
+      },
+      "identical_linked_files": {
+        "banked-join/banked_join.cdb": "8f5d6abb0dd2c5c7a95a218f45746b21d1f68419ad6556077db4a55d9c26cd9e",
+        "banked-join/banked_join.ihx": "4b7bcff60f7271a6df996366a3557c348a10a1286144f4ec7293a1324ac3fcf2",
+        "banked-join/banked_join_draft.cdb": "11f9f9d3f87a34367469580977a8a30630ea50e1adb39111115e0b59f6439106",
+        "banked-join/banked_join_draft.ihx": "a54de32105b21d432bf66e9d78892393ee5a0114c70bc9b0797ef61d12edc57a"
+      },
+      "baseline_source_change": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "root_cause": "READY keepalive six-attempt timing, five-cluster descriptor, and removal of embedded Basic serving changed the existing banked fixture and its native transcript",
+      "action": "Refresh complete immutable fixture identities and derived inventories; preserve original semantic corpora, resource limits and deadlines"
+    }
+  ],
+  "unchanged_semantics_in_this_repair": true,
+  "targeted_after_repairs": [
+    {
+      "family": "radio-autoack",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/radio-autoack",
+        "test-radio-autoack"
+      ],
+      "exit_code": 0,
+      "seconds": 401.57,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-radio",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-radio",
+        "test-mac-radio"
+      ],
+      "exit_code": 0,
+      "seconds": 324.339,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-attempt",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-attempt",
+        "test-mac-attempt"
+      ],
+      "exit_code": 0,
+      "seconds": 624.919,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-handoff",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-handoff",
+        "test-mac-handoff"
+      ],
+      "exit_code": 2,
+      "seconds": 549.287,
+      "diagnostics": [
+        "ValueError: Attempt artifact negative inventory",
+        "make: *** [Makefile:1443: test-mac-handoff] Error 1"
+      ]
+    },
+    {
+      "family": "mac-adapter",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-adapter",
+        "test-mac-adapter"
+      ],
+      "exit_code": 0,
+      "seconds": 462.192,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-smoke",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-smoke",
+        "test-mac-smoke"
+      ],
+      "exit_code": 0,
+      "seconds": 971.678,
+      "diagnostics": []
+    },
+    {
+      "family": "mac-link-child-workspace",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/mac-link-child-workspace",
+        "test-mac-link-child-workspace"
+      ],
+      "exit_code": 0,
+      "seconds": 114.033,
+      "diagnostics": []
+    },
+    {
+      "family": "banked-join-success",
+      "command": [
+        "make",
+        "-s",
+        "-j2",
+        "BOARD=generic",
+        "BUILD=build/productionization-ci-triage/banked-join-success",
+        "test-banked-join-success"
+      ],
+      "exit_code": 0,
+      "seconds": 916.717,
+      "diagnostics": []
+    }
+  ],
+  "handoff_followup": {
+    "actual_complete_mutations": 87922,
+    "previous_stale_expected": 87888,
+    "delta": 34,
+    "protocol_cases": 76,
+    "original_runtime_inventory": [
+      1164,
+      438789,
+      121,
+      123
+    ],
+    "semantic_changes": false
+  }
+}

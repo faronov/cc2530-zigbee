@@ -10,5 +10,9 @@ void security_aes_reset(void);
 void security_aes_stall(unsigned block);
 unsigned security_aes_blocks(void);
 void security_aes_trace(uint8_t enabled);
+/* A synchronous external peer may use this idle model, but must restore the
+ * DUT's retained AES owner, descriptors, peripheral registers and accounting. */
+void security_aes_peer_enter(void);
+void security_aes_peer_leave(void);
 
 #endif

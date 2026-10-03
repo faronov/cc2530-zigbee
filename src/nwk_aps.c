@@ -343,7 +343,8 @@ static void acknowledgment(nwk_aps_t * volatile ctx, const ed_packet_t * volatil
     if (p->aps.type == ED_APS_COMMAND) a->aps.flags = APS_FLAG_ACK_FORMAT;
     else {
         a->aps.destination_endpoint = p->aps.source_endpoint;
-        a->aps.source_endpoint = p->aps.destination_endpoint;
+        /* An ACK names the endpoint that accepted a broadcast-endpoint frame. */
+        a->aps.source_endpoint = p->aps.destination_endpoint == 255 ? ctx->endpoint : p->aps.destination_endpoint;
         a->aps.profile_id = p->aps.profile_id; a->aps.cluster_id = p->aps.cluster_id;
     }
     ctx->reply = 1; ctx->reply_secure = secured;
@@ -358,7 +359,7 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
 #endif
     nwk_aps_result_t result;
     security_keys_result_t accepted;
-    uint8_t event, i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0, slot = 0;
+    uint8_t event, i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0, slot = 0, oldest = 0;
     ed_packet_t * volatile p;
     if (!npdu) return NWK_APS_ARGUMENT;
     result = advance(ctx, now);
@@ -427,12 +428,16 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
         nwk_aps_duplicate_t * volatile entry = &ctx->duplicate[i];
         if (entry->used && reached(now, entry->until)) entry->used = 0;
         if (!entry->used) free_slot = i;
-        else if (entry->source == p->nwk.source && entry->counter == counter && entry->kind == kind)
-            duplicate = 1;
+        else {
+            if (entry->source == p->nwk.source && entry->counter == counter && entry->kind == kind)
+                duplicate = 1;
+            if ((uint32_t)(entry->until-now) < (uint32_t)(ctx->duplicate[oldest].until-now)) oldest = i;
+        }
     }
-    if (!duplicate && (free_slot == NWK_APS_DUPLICATES || ctx->receive_ready)) {
-        result = NWK_APS_FULL; goto discard;
-    }
+    if (!duplicate && ctx->receive_ready) { result = NWK_APS_FULL; goto discard; }
+    /* A full table forgets its soonest-expiring record; replay protection
+     * remains the authenticated frame counter, not this retry filter. */
+    if (free_slot == NWK_APS_DUPLICATES) free_slot = oldest;
     if (!p->nwk.type && (p->aps.flags & APS_FLAG_ACK_REQUEST)) {
         if (ctx->reply) { result = NWK_APS_FULL; goto discard; }
         acknowledgment(ctx, p, !!(event & 0x80u));

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Small M0 publication guardrails, not a complete secret/provenance scanner."""
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -21,6 +22,10 @@ SECRET_PATTERNS = (
 )
 PERSONAL_PATH = re.compile(r"/(?:Users|home)/[A-Za-z0-9_.-]+/")
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)\n]+)\)")
+REVIEWED_GENERATED_TEXT = {
+    Path("experiments/xdata/inventory.json"):
+        (1069021, "4b675f4f0e3f5d6d98a672537d6a2a9ece9d296e07a13383246cd3b9e628b260"),
+}
 
 
 def repository_paths():
@@ -46,8 +51,12 @@ def inspect_file(relative):
     if path.name == ".env" or path.name.startswith(".env."):
         errors.append(f"{relative}: environment files must not be published")
     if path.stat().st_size > 256 * 1024:
-        return errors + [f"{relative}: source file exceeds the M0 size guard"]
+        reviewed = REVIEWED_GENERATED_TEXT.get(relative)
+        if reviewed is None or path.stat().st_size != reviewed[0]:
+            return errors + [f"{relative}: source file exceeds the M0 size guard"]
     data = path.read_bytes()
+    if path.stat().st_size > 256 * 1024 and hashlib.sha256(data).hexdigest() != reviewed[1]:
+        return errors + [f"{relative}: reviewed generated evidence identity changed"]
     if b"\0" in data:
         return errors + [f"{relative}: binary assets require a separate reviewed policy"]
     try:

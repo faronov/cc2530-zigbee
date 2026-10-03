@@ -220,7 +220,13 @@ static uint8_t handoff_xload(uint16_t a)
     handoff_tick();
     if (a == 0x6081 || a == 0x6083) {
         advance_clocks(mmio_clocks); logs();
+#if defined(CC2530_MAC_LINK)
+        /* The armed attempt reads the immutable AR bit during its own TX. */
+        assert((handoff_started || (mode == 6 && a == 0x6081)) &&
+               tx_count >= 4 && tx_fifo[0] == tx_count + 1);
+#else
         assert(handoff_started && tx_count >= 4 && tx_fifo[0] == tx_count + 1);
+#endif
         value = tx_fifo[a - 0x6080];
         trace('r', a, value);
         return value;
@@ -430,6 +436,24 @@ static void handoff_case(unsigned selected)
         handoff_call(7, MAC_RADIO_STATE);
         goto finished;
     }
+#if defined(CC2530_MAC_LINK)
+    if (selected != 30) {
+        /* LINK arms AUTOACK during the requesting TX, so no later handoff exists. */
+        assert(receipt.autoack && radio_autoack_state == RADIO_AUTOACK_RX &&
+               XR(0x6180) == RADIO_AUTOACK_NORMAL_FILTER && XR(0x6189) == 0x60 &&
+               !handoff_configured);
+        handoff_call(7, MAC_RADIO_STATE);
+        if (selected) goto finished;
+        handoff_call(6, MAC_RADIO_READY);
+        deliver_data();
+        handoff_call(4, MAC_RADIO_FRAME);
+        handoff_call(1, MAC_RADIO_STOPPED);
+        assert(automatic_acks == 1 && !ack_active);
+        handoff_call(5, MAC_RADIO_READY);
+        goto finished;
+    }
+    assert(!receipt.autoack);
+#endif
     handoff_started = 1;
     if (selected >= 36 && selected <= 38) guard_span = 511u + selected-36u;
     if (selected == 39) { guard_ff = 1; mmio_clocks = 1; }

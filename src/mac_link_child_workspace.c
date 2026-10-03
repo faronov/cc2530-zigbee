@@ -145,12 +145,12 @@ static const MCU_CODE child_loan_t loans[] = {
     L(CW_EXEC,CW_WRITE,CW_EXEC_WORD,0,0,nv.writer.word),
     L(CW_READ,CW_RECORD_LOAD,CW_READ_OUTPUT,1,0,nv.record.chunk),
     L(CW_READ,CW_RECORD_REPLACE,CW_READ_OUTPUT,1,0,nv.record.chunk),
-    /* Reader length is1/4/32 in the writer. Outputs remain exact typed
-     * permitted prefixes, not arbitrary interior slices of the32-byte slot. */
+    /* Reader length is1/4/32 in the writer. Outputs remain exact typed permitted prefixes, not arbitrary interior slices of the32-byte slot. */
     {CW_READ,CW_WRITE,CW_READ_OUTPUT,1,0,O(nv.writer.check),1},
     {CW_READ,CW_WRITE,CW_READ_OUTPUT,1,0,O(nv.writer.check),4},
     L(CW_READ,CW_WRITE,CW_READ_OUTPUT,1,0,nv.writer.check)
 };
+#if !defined(LINK_WORK_SHALLOW)
 static uint8_t overlaps(child_address_t a,uint16_t n,child_address_t b,uint16_t m)
 {
     return a<=b ? b-a<n : a-b<m;
@@ -217,6 +217,83 @@ uint8_t child_work_disjoint(const void *a,uint16_t an,const void *b,uint16_t bn)
 #endif
     return !overlaps(aa,an,bb,bn);
 }
+#else
+/* J3 DIRECT shallow form of the four functions above, same checks in the
+ * same order. The overlap test is expanded with the original parameter
+ * conversions; each argument is a constant, a local or a parameter home.
+ * No value stays in a PUSHed register across the one remaining call (edge):
+ * base is the constant arena address, op/writing are reread from homes and
+ * offset/loan are only computed after that call. */
+#define overlaps(a,n,b,m) ((child_address_t)(a)<=(child_address_t)(b) ? \
+    (child_address_t)(b)-(child_address_t)(a)<(uint16_t)(n) : \
+    (child_address_t)(a)-(child_address_t)(b)<(uint16_t)(m))
+#define BASE ((child_address_t)&A)
+uint8_t child_work_address(uint8_t op, child_address_t volatile address,
+                          uint16_t volatile size, uint8_t writing)
+{
+    uint16_t offset;
+    const MCU_CODE child_loan_t *loan;
+#if defined(__SDCC)
+    extern MCU_XDATA uint8_t _gptrput_PARM_2,__memcpy_PARM_2[3],_mullong_PARM_2[4];
+    if (overlaps(address,size,(uint16_t)&_gptrput_PARM_2,1) ||
+        overlaps(address,size,(uint16_t)__memcpy_PARM_2,3) ||
+        overlaps(address,size,(uint16_t)_mullong_PARM_2,4)) return 0;
+#endif
+    if (overlaps(address,size,(child_address_t)&owner,sizeof(owner))) return 0;
+#if defined(__SDCC)
+    /* The tail covers actual compiler/parameter homes, not an implicit pool. */
+    if (address>=BASE+sizeof(A) && address<=(uint16_t)&child_work_reserved_end) return 0;
+#endif
+    if (!overlaps(address,size,BASE,sizeof(A))) return 2;
+    if (owner.poison || address<BASE || address-BASE>=sizeof(A) ||
+        size>sizeof(A)-(address-BASE) || !PENDING || !edge(TOP,PENDING)) return 0;
+    offset=(uint16_t)(address-BASE);
+    for (loan=loans;loan<loans+sizeof(loans)/sizeof(loans[0]);loan++) {
+        if (loan->target!=PENDING || loan->parent!=TOP || loan->op!=CW_READ_HOME(uint8_t,op) ||
+            loan->writing!=CW_READ_HOME(uint8_t,writing) || offset<loan->first) continue;
+        if (loan->array ? offset-loan->first<=loan->size &&
+            size<=loan->size-(offset-loan->first) :
+            offset==loan->first && size==loan->size) return 1;
+    }
+    return 0;
+}
+#undef BASE
+uint8_t child_work_inside(const void *p,uint16_t size)
+{
+    child_address_t a;
+#if defined(__SDCC)
+    union { const void *pointer; uint8_t byte[3]; } value;
+    value.pointer=p;
+    if (!p || !size || value.byte[2]) return 0;
+    a=(uint16_t)value.byte[0]|((uint16_t)value.byte[1]<<8);
+#else
+    if (!p || !size) return 0;
+    a=(uintptr_t)p;
+#endif
+    return overlaps(a,size,(child_address_t)&A,sizeof(A));
+}
+#if defined(__SDCC)
+/* Expanding overlaps makes this a leaf. Keep its compiler temporaries in the
+ * ordinary DATA frame, as for the call form, not in the shared OSEG overlay. */
+#pragma nooverlay
+#endif
+uint8_t child_work_disjoint(const void *a,uint16_t an,const void *b,uint16_t bn)
+{
+    child_address_t aa,bb;
+    if (!a || !b || !an || !bn) return 1;
+#if defined(__SDCC)
+    union { const void *pointer; uint8_t byte[3]; } left,right;
+    left.pointer=a; right.pointer=b;
+    if (left.byte[2]!=right.byte[2]) return 1;
+    aa=(uint16_t)left.byte[0]|((uint16_t)left.byte[1]<<8);
+    bb=(uint16_t)right.byte[0]|((uint16_t)right.byte[1]<<8);
+#else
+    aa=(uintptr_t)a; bb=(uintptr_t)b;
+#endif
+    return !overlaps(aa,an,bb,bn);
+}
+#undef overlaps
+#endif
 #if defined(CC2530_HOST_TEST)
 void child_work_full_reset(void)
 {

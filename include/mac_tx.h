@@ -19,8 +19,18 @@
 #define MAC_TX_MAX_BE 5u
 #define MAC_TX_MAX_BACKOFFS 4u
 #define MAC_TX_MAX_RETRIES 3u
+#if defined(CC2530_MAC_LINK)
+/* Retirement may drain a FIFO of network broadcasts queued before RX-off;
+ * LG hardware exceeded 1024 symbols on one 59-byte frame, needed about 1750
+ * for a full FIFO and 3094 to retire an ACKed Association Request on a busy
+ * channel. It stays below the 8192/128 scan, poll and join stop bounds.
+ */
+#define MAC_TX_STOP_SYMBOLS 6144u
+#define MAC_TX_STOP_STEPS 96u
+#else
 #define MAC_TX_STOP_SYMBOLS 1024u
 #define MAC_TX_STOP_STEPS 16u
+#endif
 
 #define MAC_TX_IDLE 0u
 #define MAC_TX_DRAW 1u

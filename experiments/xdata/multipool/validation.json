@@ -1,0 +1,138 @@
+{
+  "structural_proof": "PASS",
+  "ordinary": 7123,
+  "saving": 553,
+  "pools": 36,
+  "selected_homes": 434,
+  "selected_functions": 326,
+  "legacy_ownership_helpers_forbidden": true,
+  "native_sanitized_shallow_deep_cases": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "zcl": "PASS",
+  "fresh_relocated_header_sha256": "6a2029d4524ab6fcf041c796f221fcce68591decdf705fb7718c5912fe5f9302",
+  "focused_unit_tests": 47,
+  "negative_tests": 28,
+  "metadata_binding_negatives": 15,
+  "metadata_structural_negatives": 14,
+  "compiler_regressions": "PASS",
+  "v1_regressions": "PASS: 39 physical bytes, 12 negative cases, immutable identities unchanged",
+  "case2": {
+    "complete": true,
+    "steps": 1,
+    "peripheral_stops": 0,
+    "peak_sp": 83,
+    "phase": 6,
+    "terminal": "fault",
+    "identities": {
+      "ihx": "df86611e04a22069067a2529c96dff527ec909aab95bb904f0bde04b71eae4e9",
+      "cdb": "1202aede1348e22c4fc4c5c3d536bc498a7ca012fa558486cfe3ee987bc3098c",
+      "memory": "afff2875fbd08ec0d71170e814181376bab8dc046091a8743832a39c7795a15e",
+      "map_prefix": "2d6465ff81b07ffe2247c8cc9dc34843b622cdd847232e4165025538ff3d4c67",
+      "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+      "noice": "273eff4eb69f13eac3ead7fd94e2bde6a0bd85bce0319fa0682a0baa1d865bf8",
+      "objects": "bf0ca351bb6d17f9bc6600d7e0182409ff092162bdf0525ade3f4faaaa8873d7",
+      "listings": "345571dab93afc72550660a588f0bf7262640ba44c131758e2b62d99719652b0",
+      "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+    },
+    "board": "lg_esl29_rev03",
+    "key_mode": "default-tc",
+    "case": 2,
+    "simulated": true,
+    "hardware_observed": false
+  },
+  "bounded_case0": {
+    "complete": false,
+    "steps": 3,
+    "peripheral_stops": 1974,
+    "peak_sp": 113
+  },
+  "btr": {
+    "calls": 18,
+    "functions": [
+      "nwk_aps_broadcast_put",
+      "nwk_aps_broadcast_slot"
+    ],
+    "xdata": 7123,
+    "simulated": true,
+    "hardware_observed": false,
+    "scope": "Standalone real-image BTR fill/duplicate/full/expiry scenario; not complete join replay."
+  },
+  "complete_case0": {
+    "status": "PASS",
+    "report": "experiments/xdata/multipool/full-case0.json",
+    "log": "build/multipool-evidence/full-case0.log",
+    "complete": true,
+    "steps": 1142,
+    "peripheral_stops": 559709,
+    "peak_sp": 123,
+    "phase": 5,
+    "terminal": "serving",
+    "identities_match_catalog": true,
+    "simulated": true,
+    "hardware_observed": false
+  },
+  "full_application_ci": "PARTIAL",
+  "full_workers_not_run": 118,
+  "host_tools": {
+    "run": 927,
+    "seconds": 635.808,
+    "passed": 903,
+    "failures": 1,
+    "errors": 2,
+    "skipped": 21,
+    "diagnostics": [
+      "test_local_checks: 15 != 13",
+      "test_radio_link_fixture: generic/radio_link_fixture CODE extent changed",
+      "test_radio_tx_fixture: same generic/radio_link_fixture CODE extent changed"
+    ],
+    "failing_surfaces_unchanged_from": "98b7c4b",
+    "same_failures_previously_reproduced_on_pristine_v1": "af762a7",
+    "production_pins_changed": false
+  },
+  "repository_policy": {
+    "status": "FAIL",
+    "diagnostics": [
+      "inherited SDCC_FUNCTION_XDATA_STUDY.md personal absolute path",
+      "unchanged v1 inventory.json exceeds 256 KiB guard"
+    ]
+  },
+  "production_c_changed": false,
+  "abi_changed": false,
+  "dead_saving": 0,
+  "hardware_observed": false,
+  "additional_profile": {
+    "board": "lg_esl29_rev03",
+    "key_mode": "install-code",
+    "scope": "analysis-only; no physical overlay or runtime admission",
+    "ordinary": 7675,
+    "eligible_homes": 490,
+    "eligible_bytes": 996,
+    "live_groups": 336,
+    "live_group_bytes": 941,
+    "selected_homes": 432,
+    "selected_owners": 324,
+    "planned_saving": 549,
+    "hypothetical_xseg": 7126,
+    "pools": 36,
+    "pool_composition_differs": true,
+    "timings": {
+      "input_binding_seconds": 0.20532797600026242,
+      "analysis_seconds": 114.60268081098911
+    }
+  }
+}

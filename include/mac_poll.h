@@ -20,8 +20,14 @@
 #define MAC_POLL_VERSION 1u
 #define MAC_POLL_MAX_WORK 4096u
 #define MAC_POLL_MAX_TIME UINT32_C(0x10000000)
+#if defined(CC2530_MAC_LINK)
+/* Encloses the LINK MAC_TX_STOP_SYMBOLS/STEPS retirement bound. */
+#define MAC_POLL_STOP_SYMBOLS 8192u
+#define MAC_POLL_STOP_STEPS 128u
+#else
 #define MAC_POLL_STOP_SYMBOLS 4096u
 #define MAC_POLL_STOP_STEPS 64u
+#endif
 #define MAC_POLL_TX_STEPS 512u
 #define MAC_POLL_IDLE 0u
 #define MAC_POLL_ARM 1u

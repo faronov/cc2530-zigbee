@@ -8,8 +8,14 @@
 #include "mac_association.h"
 #define MAC_JOIN_RAM MAC_POLL_RAM
 #define MAC_JOIN_VERSION 1u
+#if defined(CC2530_MAC_LINK)
+/* Encloses the LINK MAC_TX_STOP_SYMBOLS/STEPS retirement bound. */
+#define MAC_JOIN_STOP_TIME 8192UL
+#define MAC_JOIN_STOP_WORK 128u
+#else
 #define MAC_JOIN_STOP_TIME 4096UL
 #define MAC_JOIN_STOP_WORK 64u
+#endif
 #define MAC_JOIN_IDLE 0u
 #define MAC_JOIN_PREPARE 1u
 #define MAC_JOIN_REQUEST 2u

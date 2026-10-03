@@ -19,6 +19,32 @@ full BDB support. Base-text development may proceed with unreviewed BDB errata
 recorded as a [conformance risk](docs/CONFORMANCE.md); implementation and
 security acceptance are not waived.
 
+The opt-in [ordinary-join profile](docs/ED_JOIN.md#ordinary-default-key-discovery)
+now discovers a permitting coordinator without a preloaded channel, PAN,
+Extended PAN or coordinator IEEE. It uses the public initial TC key, not an
+install code or injected Network Key. Its first LG image completed the
+strict MCU join replay and was actually programmed and run on the board.
+[Physical discovery trials](docs/ED_JOIN.md#2026-09-28-lg-physical-discovery-trials)
+exposed radio faults that prompted corrections. A D5-power run completed
+all16 scan channels, selected a direct coordinator and received a matching
+CRC-good ACK for its Association Request. Its live-time bounds could not
+prove timely ACK arrival, so association stopped rather than claiming success.
+Later first-failure diagnostics identified RX FIFO overflow during scan,
+reported through the timer preflight. After beacon-only scan filtering and
+further corrections, the LG board was **hardware-observed** on 2026-09-30 to
+complete an ordinary ZHA join to BDB READY and pass the zigpy interview; ZHA
+lists it as `cc2530-zigbee` `LG-ESL29` (see
+[the run](docs/ED_JOIN.md#2026-09-30-lg-ordinary-join-and-zha-interview)).
+Its endpoint now serves Basic, Power Configuration, Identify, Temperature
+and Relative Humidity Measurement with **synthetic (fake) values**,
+including a fake battery, for demonstration (see
+[the sensor demo](docs/ED_JOIN.md#synthetic-temperature-and-humidity-demo)).
+It supports Configure Reporting and coordinator-only ZDO Bind/Unbind,
+keeping both in RAM only; Read Reporting Configuration is unsupported.
+It serves until reset, but is not a real sensor, nor a sleepy, rejoining or
+production device. Router-parent joining is not
+implemented.
+
 [Русский обзор](README.ru.md)
 
 ## Start here
@@ -33,6 +59,8 @@ security acceptance are not waived.
 | [Conformance ledger](docs/CONFORMANCE.md) | Required behaviors, specification gates and implementation status |
 | [Sources and licensing](docs/PROVENANCE.md) | Permitted inputs and reference provenance |
 | [Contributing](CONTRIBUTING.md) | How to add a small, reviewable change |
+| [Opt-in XDATA overlay](docs/XDATA_OVERLAY.md) | Reproduce and verify the 553-byte physical RAM saving; default OFF |
+| [Pinned XDATA compiler](docs/XDATA_TOOLCHAIN.md) | Public SDCC release, checksums, cache, source reproduction and development override |
 
 ## Build the bootstrap
 
@@ -697,6 +725,23 @@ the 1 KiB application-reserve target still needs 988 bytes plus overhead.
 The full profile is host/object-checked. A separate simulated pointer/parameter
 ABI image is not a combined radio-backed MCU join. Code `e286b72` passed
 [full CI, 116/116 jobs](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852).
+
+The active [radio-backed MCU join plan](docs/LINK_JOIN_PLAN.md) integrates
+DIRECT staging and stack reductions with a real boot-disarmed caller.
+That caller reaches authenticated READY on the host peripheral model.
+Its both-board links fit7641/7680 ordinary XDATA, with linked control-flow
+and compiler-scratch lifetime checks. The actual linked static stack bound
+now meets45/45 bytes, with no spare stack. Immutable offline admission now
+also checks complete XDATA/private-prefix ownership. The generic image now
+reaches authenticated READY from reset in the alias-aware MCU simulator,
+through real radio/MAC, AES and flash instructions, at observedSP7B/7C.
+The complete caller additionally covers missing-key timeout, retained radio
+failure and a busy flash command that must never return: host-tested on
+both boards and simulated on generic. The replay distinguishes the real
+RAM stop from caller FAULT and proves it persists after later idle.
+The coordinator/peripherals are synthetic; full two-board/failure CI
+acceptance and a physical join remain separate. The resulting
+`join_smoke_unverified.ihx` is **not a programming image**.
 
 The separate [boot-disarmed MAC laboratory image](docs/MAC_SMOKE.md) prepares
 one public no-ACK broadcast through the real banked scheduler/adapter, with

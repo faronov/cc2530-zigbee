@@ -1,0 +1,444 @@
+{
+  "production": {
+    "XSEG": 7676,
+    "free": 4,
+    "CODE": 253445,
+    "common_CODE": 32714,
+    "OSEG": 10,
+    "BSEG": 88,
+    "static_stack": 45,
+    "bank_depth": 8,
+    "l_DSEG_span": 125,
+    "physical_DATA": 51,
+    "smallest_free_code_bank": 13,
+    "largest_free_code_bank": 1418,
+    "free_code_banks": [
+      685,
+      13,
+      34,
+      1418,
+      83,
+      27,
+      241
+    ]
+  },
+  "v1": {
+    "XSEG": 7637,
+    "free": 43,
+    "CODE": 253445,
+    "common_CODE": 32714,
+    "OSEG": 10,
+    "BSEG": 88,
+    "static_stack": 45,
+    "bank_depth": 8,
+    "l_DSEG_span": 125,
+    "physical_DATA": 51,
+    "smallest_free_code_bank": 13,
+    "largest_free_code_bank": 1418,
+    "free_code_banks": [
+      685,
+      13,
+      34,
+      1418,
+      83,
+      27,
+      241
+    ]
+  },
+  "multipool": {
+    "XSEG": 7123,
+    "free": 557,
+    "CODE": 253445,
+    "common_CODE": 32714,
+    "OSEG": 10,
+    "BSEG": 88,
+    "static_stack": 45,
+    "bank_depth": 8,
+    "l_DSEG_span": 125,
+    "physical_DATA": 51,
+    "smallest_free_code_bank": 13,
+    "largest_free_code_bank": 1418,
+    "free_code_banks": [
+      685,
+      13,
+      34,
+      1418,
+      83,
+      27,
+      241
+    ]
+  },
+  "algorithms": {
+    "algorithms": {
+      "greedy": {
+        "saving": 528,
+        "pools": 70,
+        "seconds": 0.017530837008962408,
+        "bounds": {},
+        "candidates": 521
+      },
+      "ancestor-chain": {
+        "saving": 553,
+        "pools": 36,
+        "seconds": 0.002588886010926217,
+        "bounds": {},
+        "candidates": 45
+      },
+      "bounded-exact-flat": {
+        "saving": 528,
+        "pools": 70,
+        "seconds": 0.030846353998640552,
+        "bounds": {
+          "aes:10": {
+            "nodes": 92,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 16,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "aps_frame:28": {
+            "nodes": 13,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 6,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "bdb_join:44": {
+            "nodes": 330,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 19,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "bdb_join_init:45": {
+            "nodes": 25,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 7,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "ccm_star:11": {
+            "nodes": 24,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 9,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "clock:5": {
+            "nodes": 5,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 2,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "ed_wire:29": {
+            "nodes": 72,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 19,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "flash:6": {
+            "nodes": 8,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 2,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "flash_write:7": {
+            "nodes": 8,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 4,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "join_smoke:47": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_adapter:26": {
+            "nodes": 270,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 32,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_association:31": {
+            "nodes": 16,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 6,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_attempt:22": {
+            "nodes": 32,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 13,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_epoch:18": {
+            "nodes": 10,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 4,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_frame:23": {
+            "nodes": 65,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 21,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_join:33": {
+            "nodes": 51,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 12,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_link_child_workspace:2": {
+            "nodes": 66,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 11,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_link_driver:46": {
+            "nodes": 49,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 15,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_link_workspace:1": {
+            "nodes": 265,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 20,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_poll:32": {
+            "nodes": 88,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 19,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_radio:19": {
+            "nodes": 29,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 16,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_radio:20": {
+            "nodes": 10,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 4,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_radio:21": {
+            "nodes": 10,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 3,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_scan:39": {
+            "nodes": 110,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 17,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_time:14": {
+            "nodes": 11,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 6,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_time:15": {
+            "nodes": 12,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 3,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_tx:24": {
+            "nodes": 669,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 34,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "mac_tx:25": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nv_record:8": {
+            "nodes": 50,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 19,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nwk_aps:40": {
+            "nodes": 98,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 19,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nwk_aps_direct:41": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nwk_beacon:36": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nwk_candidates:37": {
+            "nodes": 29,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 9,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nwk_frame:27": {
+            "nodes": 12,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 6,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "nwk_parent:38": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "radio_autoack:16": {
+            "nodes": 65,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 24,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "radio_autoack:17": {
+            "nodes": 43,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 8,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "security_counter:9": {
+            "nodes": 57,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 17,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "security_keys:30": {
+            "nodes": 594,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 44,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "timebase:4": {
+            "nodes": 10,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 3,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "zcl_sensor:43": {
+            "nodes": 52,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 13,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "zdo_node:34": {
+            "nodes": 32,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 9,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "zdo_runtime:42": {
+            "nodes": 159,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 23,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "zigbee_key_hash:13": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          },
+          "zigbee_mmo:12": {
+            "nodes": 3,
+            "node_limit": 20000,
+            "capped": false,
+            "greedy_candidates": 1,
+            "fallback": "deterministic greedy if it saves more"
+          }
+        },
+        "candidates": 4083
+      }
+    },
+    "groups": 337,
+    "regions": 45,
+    "conflict_edges": 4609,
+    "constraint_validation_seconds": 0.20591013800003566,
+    "allocation_seconds": 0.25694567398750223,
+    "optimum_same_region_saving": 553,
+    "proof": "Each region needs its heaviest ancestor chain; emitted intervals attain it. Nonselected groups stay allocated; selecting fewer cannot improve this bound."
+  },
+  "input_timings": {
+    "input_binding_seconds": 0.2606909669993911,
+    "analysis_seconds": 113.38175822599442,
+    "relink_seconds": 2.272032617009245
+  },
+  "changed_code_operand_bytes": 18851,
+  "dead_saving": 0,
+  "sidecar_read_parse_seconds": 0.010323331982363015,
+  "frozen_compiler_sha256": "273315806c1316c6aaf88207ca27db307ddda9f764f9b8d6f44ebbf1688e0a99",
+  "selected_compiler_classes": {
+    "FIRST_ARGUMENT_HOME": {
+      "homes": 290,
+      "bytes": 691
+    },
+    "INLINE_RETURN_HOME": {
+      "homes": 3,
+      "bytes": 3
+    },
+    "LOCAL": {
+      "homes": 141,
+      "bytes": 203
+    }
+  },
+  "initial_verifier_with_witnesses_seconds": 182.76139213499846,
+  "final_verifier_seconds": 164.92474351698183
+}

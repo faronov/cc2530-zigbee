@@ -1,11 +1,221 @@
 # Bounded authenticated end-device integration
 
 This is original C for a **host-exercised and banked8051-simulated
-R22/BDB3.0.1 join**, not a flashable networking board image.
+R22/BDB3.0.1 join**, not a networking firmware release. A separately authorized
+LG board trial now exercises real discovery, but has not joined HA.
 The synthetic coordinator and PHY adapter supply
 explicit public identities, frames, CRC results and captured times. They do
 not replace the production MAC controllers, key owner, CCM, HMAC, AES, counter,
 journal or flash services with successful stubs.
+
+## Ordinary default-key discovery
+
+The explicit `JOIN_SMOKE_KEY_MODE=default-tc` profile enables
+`CC2530_DEFAULT_TC_KEY`. The default build remains `install-code`; changing
+the mode refreshes a board/mode dependency before compiling the caller,
+host references and image. The two profiles have separate immutable pins.
+This is an explicit commissioning choice, never fallback from a failed
+install code, failed authentication or existing NV.
+
+The caller opens an empty key owner, then performs a real active scan.
+The supplied channel mask can cover all channels11-26; it does not need
+the target channel. The initial OFF channel is only a restoration snapshot.
+Channel/PAN/Extended PAN/Update ID and coordinator addressing come from the
+actual eligible beacon. The current bounded policy selects direct coordinator
+beacons only, including short address0000. Distinct eligible open networks,
+collector overflow or unscanned channels fail rather than silently choosing
+another network. Link cost remains explicit uncalibrated caller policy;
+this is not full primary/secondary steering or router-parent support.
+Neither an open beacon nor the publicly shared initial key proves that the
+network belongs to the intended HA installation.
+
+After contextual Association Response and genuine take/release, the key owner
+is provisioned with the discovered network and the observed source IEEE.
+A short-selected coordinator still reports `SOURCE_UNBOUND`: learning an
+address is not authentication. Initial protection uses the16 ASCII bytes of
+the public `ZigBeeAlliance09` key. The Network Key must arrive in a genuinely
+authenticated/decrypted Transport Key, followed by the existing durable
+counters, Device_annce, updated TC key/Verify/Confirm and parent negotiation.
+No host or debugger supplies a Network Key or successful security state.
+Existing persisted state is refused; secure restart/rejoin is still separate.
+
+The LG native/sanitizer and shallow/deep caller runs pass the original ten
+scenarios plus all16-channel discovery, two open networks, closed admission,
+candidate overflow and an Association Response IEEE inconsistent with the
+later protected Transport Key. The all-channel success performs24 actual
+modeled transmissions and2645 polls with the one-latch sampler, starting on idle channel11 rather than
+the peer's channel15; rejected discovery writes no NV.
+The first LG linked discovery candidate used7640/7680 ordinary XDATA and243770 populated CODE;
+the independent DATA and static-stack checks retain SP7C and bank depth8.
+That exact default-profile image also completed601 actual MCU observations,
+156100 peripheral stops and authenticated READY at observedSP7B/7C.
+Its external peer now saves/restores the idle DUT's AES owner, descriptors,
+buffers, peripheral model, registers and accounting around peer cryptography.
+Otherwise constructing the first Transport Key incorrectly changed a cold
+DUT's ENCCS from08 to48 before its first command. The caller regression checks
+the unchanged AES owner/control/accounting around every peer advance; no
+private target state is injected to hide the discrepancy.
+This is **host-tested, image-checked and simulated**, not a physical HA join
+or acceptance of subsequent radio corrections. Physical timing, flash/AES,
+RF delivery and full ZHA interview remain separate; Active Endpoints and
+Simple Descriptor replies are not supplied by this endpoint-zero caller.
+
+### 2026-09-28 LG physical discovery trials
+
+The operator explicitly authorized erase/program/run and ordinary HA admission,
+without preserving the old main flash. Each image was privately packed from
+its immutable linked identity, programmed with the reviewed no-run guard,
+externally verified, then independently read back through the guarded debugger,
+including every FF gap. A genuine full reset, DMA-enable transition26->22,
+boot-disarmed checkpoint and public ARM/RUN admission preceded uninterrupted RF
+execution. Inputs contained the factory own IEEE and OS-generated backoff draws,
+but no target channel/PAN/Extended PAN/TC identity, install code or Network Key.
+The initial restoration channel was11 and the scan mask covered11-26.
+The one-latch-sampler trials below continued on2026-09-29 UTC.
+
+| Image IHX SHA-256 | Hardware-observed result |
+| --- | --- |
+| `1fed3af96da8e2253f6776411678bd79ebf7d67aedd26fc1a4e1e763979c243b` | Scanned11-15 and retained three beacons belonging to the intended HA network, all router rather than direct coordinator candidates. Channel16 hit CCA_BUSY followed by radio-stop TIMEOUT. |
+| `840c1c61ffafb0fc3264cc7949437c737fea4e5fc9e830a08c121783b0a0a138` | Reached channel15, then rejected a queued29-byte frame: RXFIRST=7D and raw RXLAST=9A. The latter's reserved high bit was incorrectly treated as an error instead of using the documented7-bit offset. |
+| `f0d1e7164d686f352149eb8428e76a1ad3d424ac9a3396c0f75cf109274da9ac` | With pointer masking, reached channel18. CCA_BUSY still could not soft-stop RSSI-only RX: RXENABLE=0, RX_ACTIVE=1, empty FIFO, RX_MODE11 retained, no fresh RFIDLE, TIMEOUT after1029 raw ticks/80 polls. |
+| `b216a4fb8394734804366ebbecbaedc8e11d1890ec59ba8055b61538889ba6c4` | With guarded ISRFOFF, completed all16 channels: sent mask07FFF800, unscanned0, overflow0 and no radio fault. The retained scan result had zero eligible candidates, so BDB stopped with NO_PARENT before association. |
+| Same `b216a4fb...` image, fresh reset/readback/admission | Repeated with ordinary whole-network ZHA permit-join rather than coordinator-targeted admission. Again completed11-26 with no unscanned channel, overflow or radio fault. Retained two permitting, capacity-available Pro-profile router candidates on15, sharing one Extended PAN, with depths2/4, nonzero short addresses and PAN-coordinator flags clear. The direct-coordinator-only policy correctly returned NO_PARENT. |
+| `449f4915950def09abe919e8e8493bcbfb7b0a3813f52309aadf6c491101c95e` | First D5 run reached channel15, then retained MAC_RADIO_TIMER_ERROR. The timer rejected its entry preflight with MAC_TIME_UNSUPPORTED_STATE, phase1/polls0. The exact failed guard is not retained; this does not demonstrate counter corruption. |
+| Same `449f4915...` image, fresh reset/readback/admission | Second D5 run completed all16 channels, retained one eligible direct coordinator and transmitted an Association Request. A CRC-good three-byte ACK matched its DSN, but the conservative interval did not prove timely arrival. MAC_JOIN_TIMING_UNCERTAIN stopped association at the request stage, before Association Response extraction or key provisioning. |
+| `3676af5409917a2cfa9dfbecf18d1baab0e38831e7e414b8ca36e48a4c3aeedb` | First one-latch-sampler run completed all16 channels without a radio fault, but candidate overflow forced NO_PARENT. The four retained candidates were one direct coordinator and three permitting routers on15 in one Extended PAN; overflow means this is not the complete discovered set. No association timing result follows from this run. |
+| Same `3676af54...` image, fresh reset/readback/admission | With permit-join opened only on the HA coordinator, reached channel15, then retained MAC_RADIO_TIMER_ERROR. MAC_TIME_UNSUPPORTED_STATE occurred during the first preflight poll: phase1/polls1, with previously observed control13/select0/IRQ flags07. No association occurred. The failed guard's actual register/value is not retained. |
+| `0150118e145c4d65e5389ff3f644f324857f17725980f92913d1cab2d01e8575` | First guard-diagnostic run completed all16 channels with no radio fault or unscanned channel, but overflowed the four-entry candidate collector and returned NO_PARENT. Timer guard/value remained0/0. The ZHA permit-join helper accepted a coordinator-addressed request without confirming its effective scope; this is not coordinator-only admission evidence. |
+| Same `0150118e...` image, fresh reset/readback/admission | With explicit coordinator-only `zha.permit`, reached channel15 and retained MAC_RADIO_TIMER_ERROR. The original failed read is now preserved: MAC_TIME_UNSUPPORTED_STATE, phase1/polls0, guard14/value04, identifying RFERRF.RXOVERF. One candidate had been collected; no association occurred. This proves RX FIFO overflow in this run, not a Timer2 counter/latch failure. |
+
+The third observation disproves the proposed *soft-stop-before-mode-change*
+repair as a physical solution. The revised busy path uses ISRFOFF only after
+proving its exclusive RX_MODE11/AUTOACK-off profile, failed own CCA, no TX,
+SFD or FIFO, and cleared old RFIDLE. It still requires observed fresh idle
+before changing mode and restarting RX; it is neither an unconditional abort
+nor a fallback after timeout. Normal RX/ACK/frame closure remains soft and
+loss-preserving. The fourth run completed the full scan under this revision,
+but its terminal snapshot is not an individual-strobe trace proving which
+CCA attempts exercised ISRFOFF. The final retained CRC-good43-byte beacon
+had protocol ID3 and a26-byte upper payload, not a supported Zigbee beacon;
+the real production codecs reject it without exposing its identity.
+Zero eligible candidates does not establish absence of RF traffic or prove
+that the HA coordinator is out of range.
+
+The fourth image uses244269 populated CODE bytes,7640/7680 ordinary XDATA
+and unchanged SP7C/bank-depth8 static limits. Its updated lower LG corpora
+passed33 standalone and76 handoff MCU sequences, with79097/87794 artifact
+negatives plus alias controls. The banked busy-CCA case passed380 calls,
+27433 MMIO events and SP78/7C. These are host/image/simulator checks of the
+revised paths, separate from the physical scan and the first image's complete
+authenticated simulated join.
+
+The fifth run distinguishes the current parent-policy limitation from the
+earlier radio fault: the existing caller cannot join through a router.
+No eligible direct-coordinator beacon was retained. This does not prove its
+physical absence or RF range. The later D5 run did discover a direct
+coordinator; router-parent joining still requires separate TC-identity learning
+and security integration, not removing a selection predicate alone.
+
+All five runs used the original raw TXPOWER05 profile, characterized by TI
+as typical -22 dBm, not measured LG output. The operator then explicitly
+authorized a D5 (+1 dBm reference) trial before further router-parent work.
+The new caller selects D5 itself, through checked radio/MAC initialization
+and reconfiguration; there is no debugger register override. D5 retains
+full-byte readback, power bytes other than05/D5 remain rejected, and it does not
+improve receiver sensitivity. The D5 image, IHX
+`449f4915950def09abe919e8e8493bcbfb7b0a3813f52309aadf6c491101c95e`,
+uses244336 populated CODE and7640 ordinary XDATA with SP7C/bank depth8.
+It is host/image-checked with selected lower MCU power paths; the two D5
+physical results are recorded above. D5 is a checked firmware configuration,
+not a calibrated measurement of output power.
+
+After the parent-keepalive loss described in *Sensor demo*, the operator
+authorized the highest Table2 reference profile. The caller now selects raw
+F5 (typical +4.5 dBm, 34 mA on the TI EM); 05/D5/F5 are the only accepted
+bytes, all with full-byte readback. This is not a measured LG output, EIRP or
+receiver-sensitivity change.
+
+The second D5 run retained pre-strobe, TX-observation and RX-observation live
+Timer2 tuples. Relative to the pre-strobe sample, TX was observed at45007
+fine ticks and RX at67457; the19-byte request gives a conservative TX lower
+bound of27648 ticks. RX upper minus TX lower is39809 ticks, exceeding the
+54-symbol ACK window of27648 ticks. This is measurement uncertainty, not
+proof of an actually late ACK. The initial TX outcome is TIMING_UNCERTAIN;
+the later cleanup_error=MAC_JOIN_TX_ERROR is secondary, not a received
+Association Response error. No ACK deadline is extended and a matching DSN
+does not bypass timing or security.
+
+The next software revision reuses the existing active-scope one-latch reader
+for attempts in the HANDOFF profile. Full begin/end validation, whole-FF
+discard, radio-owned timeout/work checks, conservative live intervals and
+retained faults remain. It removes redundant per-sample deadline setup, not
+checks on when an ACK arrived. The standalone non-HANDOFF sampler is unchanged.
+The caller's finite service work cap is512 rather than256 polls: with less
+work per iteration, the original fine-grained synthetic clock exhausted256
+polls during a legitimate transmission. The maximum125-byte D5 attempt is
+covered under512; the1024-raw-tick service deadline and54-symbol ACK window
+are unchanged. All15 default-key caller cases pass native/sanitizer and
+shallow/deep comparisons. The two physical runs of this revision stopped
+during discovery, so neither establishes improved physical ACK timing.
+The new LG default-key IHX is
+`3676af5409917a2cfa9dfbecf18d1baab0e38831e7e414b8ca36e48a4c3aeedb`:
+244110 populated CODE and7632 ordinary XDATA. Its complete immutable image,
+DATA/private-prefix and static SP7C/bank-depth8 checks pass. Generic and LG
+install-code images are separately admitted, not aliases of this profile.
+Selected lower MCU and banked-adapter ACK/handoff runs remain distinct from
+a complete current-image MCU join replay, which has not been rerun.
+
+The ninth trial's timer failure is distinct from a demonstrated counter/latch error:
+the initial observation passed and the following preflight observation
+rejected an unsupported state before a live Timer2 tuple was published.
+The last radio diagnostic had a105-byte FIFO observation and no recorded
+RF error, but it predates the failing timer guard and cannot establish that
+guard's cause. That image lacked firmware-retained first-failure observations;
+the reviewed debugger does not permit arbitrary peripheral reads or banked
+breakpoints, and no private-instruction bypass was used.
+
+The diagnostic-only image appends `mac_time.guard/guard_value`,
+preserving the original failed read without rereading a peripheral.
+LG default-key IHX
+`0150118e145c4d65e5389ff3f644f324857f17725980f92913d1cab2d01e8575`
+uses244361 populated CODE and7634/7680 ordinary XDATA (46 bytes free).
+Actual linked DATA and static SP7C/bank-depth8 bounds are unchanged; the
+volatile staging byte does not add another byte beyond the two diagnostic
+fields in this emission. No timer/radio rejection, ACK window or recovery
+policy changes. All original timer traces keep their MMIO order/values;
+102 timer and54 co-owned-radio actual-MCU sequences verify the diagnostic,
+including a fault first appearing in the second preflight observation.
+All15 default-key caller scenarios and install-code0/10 pass native and
+nonrecovering sanitizer checks. Those offline checks establish diagnostic
+behavior, not a successful physical join or a physical RX-overflow diagnosis.
+
+The second physical run of this diagnostic image supplies that missing
+evidence: the initial preflight read of RFERRF returned exactly04
+(RXOVERF), with guard14 and phase1/polls0. The earlier guards, including
+FSMSTAT0, passed. Control/select/IRQ diagnostic bytes remained zero because
+the failing observation never reached their reads, not because the timer was
+observed stopped. The preceding successful radio operation retained FIFO
+count58 and errors0; these older values do not contradict a later overflow.
+The original RFERRF byte, not a debugger peripheral reread, identifies the
+failure. This supports the overflow hypothesis for the earlier unlocalized
+failures but does not retrospectively prove their exact failed guards.
+
+RX FIFO overflow and candidate-table overflow are separate failures. The
+former loses receive coverage and currently becomes a retained timer error;
+the latter reports more candidates than the four-entry collector can retain.
+Neither may be cleared or ignored to claim a complete loss-free scan or a
+timely ACK. RX service-latency reduction and explicit loss/recovery semantics
+remain unimplemented; neither diagnostic trial reached association, so the
+one-latch sampler's physical ACK-timing improvement remains unproved.
+
+Only the seventh trial reached Association Request; all eleven
+stopped before durable network provisioning or authenticated membership.
+HA admission was explicitly closed, private full
+RAM/CPU evidence retained, and a genuine full reset/halt observed after each
+failure. A fault checkpoint alone does not establish radio-off. Captures,
+factory/network identities and programming logs remain outside Git/CI.
+The filtered HA core journal contained no matching ZHA join/interview entry;
+that filter result is not proof that no frames reached HA.
 
 ## Complete banked MCU execution
 
@@ -15,12 +225,15 @@ durable counter, journal and flash-RAM services together. The synthetic PHY
 and coordinator supply external events and public packets only; they never
 write expected controller state or supply authentication-success flags.
 
-The measured image has143242 populated CODE bytes:28551 common bytes and
-four bank windows containing28018,28001,29185 and29487 bytes. Ordinary
-XDATA is7512/7680, leaving168 bytes before the status block. Both board
-definitions produce the same six pinned complete artifact identities.
+The measured image has145994 populated CODE bytes on generic and145995
+on LG:28760/28761 common bytes and four bank windows containing28126,
+28906,29755 and30447 bytes. Ordinary XDATA is7546/7680, leaving134 bytes
+before the status block. `zdo_runtime` embeds the board's Basic model
+string, so each board pins its own six complete artifact identities.
 The actual physical DATA reservations are08..1D and26..45, banking state
 1E..1F, bit storage20..25, compiler overlay46..4F and stack50..7C.
+Compiler spills are split into62 per-function `JF_<module>_<function>`
+frames, then placed inside those reservations as described below.
 XDATA1F00..1FFF still aliases IRAM; no allocation boundary or SP7C limit
 was increased.
 
@@ -35,11 +248,12 @@ MAC decoding, CCM, counter reservation and journal replacement; they do not
 change wire rules, counter floors, NV schema or persistence frequency.
 
 The linked proof decodes every source/runtime instruction, checks far
-entries/returns and analyzes279 functions with1262 live-byte/callee-write
-pairs, including OSEG and transitive libc scratch. Raw CDB, complete map,
-memory report, ordered relocated listings, relocatable objects and all
-CODE addresses/bytes are pinned before execution. The complete image
-corruption campaign passes716229 mutations.
+entries/returns and analyzes285 functions with1882 live-byte/callee-write
+pairs, including OSEG and transitive libc scratch. Raw CDB, complete
+NoICE-checked symbols, memory report, ordered relocated listings,
+relocatable objects and all CODE addresses/bytes are pinned per board before
+execution. The complete image corruption campaign passes729989 (generic)
+and729994 (LG) mutations.
 
 The native and nonrecovering-sanitizer transcript contains415 public calls
 and2791 real modeled AES/flash events. The generic MCU run executes all415:
@@ -137,6 +351,32 @@ server10m35s, below the unchanged15-minute limit; no corpus or guard was
 removed to fit. This completes #26's linked-image/simulated transport and
 endpoint-zero scope, not #27 recovery or physical #13/#14/#15/#28 acceptance.
 
+The ordinary-join tree keeps NWK floors and keepalive bits volatile between
+NV saves and stages provisioning/association until the first key save. Its
+refreshed host references keep every public call and AES block but carry
+fewer journal writes/erases:415 calls/1651 events originally and3234 edge
+calls/11445 events (`update-full` gains the two public calls of its
+duplicate-eviction check; `broadcast-table` now requires unchanged flash
+after unsecured broadcast data). The fixed `bdb_join_t` grows to1677 bytes.
+
+Its compiler spills no longer fit the former hand-placed module frames
+(`bdb_join`, `nwk_aps` and `zdo_runtime` would need26,26 and116 bytes).
+The complete image therefore uses the join-smoke method instead of source
+changes: modules compile with draft `JD_<module>` DATA (the banker keeps its
+DSEG), unchanged `tools/split_link_spills.py` emits per-function frames of
+at most24 bytes, and a deliberately unverified draft link exposes the actual
+linked call graph. `verify_banked_join.py --solve-data` collects every
+live-byte/callee-write pair from that graph and deterministically places
+whole frames inside08..1D/26..45. The final relink is accepted only by the
+strict per-call backwards liveness check above; the draft link itself is
+rejected by that check. Retained DATA, OSEG, bit storage, stack50..7C,
+libc scratch, indirect spill users and the copied flash-RAM engine checks
+are unchanged, and direct DATA accesses must stay in owned bytes.
+Both boards derive the same placement. Offline, all22 targets per board
+pass with `ARTIFACT_CAMPAIGN=full`; every scenario matches the host
+transcript and peaks atSP7B. This is simulated evidence, not hardware
+acceptance.
+
 ## Selected configuration and boundaries
 
 One awake end device associates directly with the centralized coordinator
@@ -203,6 +443,84 @@ The current bounded endpoint-zero server does not implement Active Endpoints
 or Simple Descriptor responses, so complete ZHA interview and useful
 application attribute exchange remain separate work rather than implied
 consequences of BDB READY.
+
+### Radio-backed board caller under construction
+
+The active [J1-J6 execution plan](LINK_JOIN_PLAN.md) separates integration,
+resource linking, stack reduction, DATA/ABI proof and genuine MCU replay.
+
+`join_smoke` is a **draft, not an accepted or flashable image**. Unlike the
+earlier synthetic-PHY caller, it explicitly provisions through the real
+key/counter/NV services and drives BDB through `mac_link_driver` and the
+radio adapter. Fresh-process native and nonrecovering-sanitizer execution
+of this actual caller reaches authenticated BDB READY through the independent
+synthetic peer:599 foreground polls,9 backoff inputs and9 transmitted frames.
+Nine failure/admission scenarios cover unarmed expiry, malformed mailbox,
+missing random-input count, existing durable state, exhausted random tape
+and no selected parent, plus withheld network key, retained radio error and
+nonreturning busy flash. These are host observations, not MCU or RF results.
+
+The first actual SDCC combined link was refused at7811 ordinary XDATA bytes.
+After integration of DIRECT staging/shared status and the shallow driver/
+guard and NV/wire/AES candidates, both real resource links now use **7641/7680
+XDATA**, including the real caller, banker and linked libc, and243593/243633
+populated CODE bytes (generic/LG) below the physical NV boundary. The39-byte remainder
+is actual linked space. Function-owned spill placement now passes the linked
+DATA/OSEG/libc byte-lifetime checker after an actual relink.
+An independent actual linked-instruction check now gives45 bytes aboveSP4F
+against45 available, with8/8 nested bank calls. Exact CRT/banker/flash-template
+checks support this static bound, not an observed MCU stack peak. The ten
+host caller cases also compare shallow/deep NV/wire/AES execution within each
+native/sanitizer mode. These **host-tested and statically image-checked**
+results alone do not establish MCU execution.
+The first trial need not reserve the later1024-byte application budget.
+Its required gate is a complete safe image, not a maximal RAM optimization.
+
+The explicit `CC2530_BANKED_LINK` ABI keeps the timing-sensitive lower radio,
+MAC timer and attempt implementation together, with banked top-level attempt,
+AES and MAC-codec entries and independently banked wire/key services.
+`tools/split_link_spills.py` preserves every emitted instruction while
+separating compiler-only DATA spill allocations by function. It also retains
+shared-header source-line locations under module-qualified debug labels
+instead of dropping the colliding records. Splitting alone is not permission
+to overlay live storage. The separate placement solver binds every spill to
+its owning function, and the post-link checker rejects actual live-across-call
+collisions, including OSEG/libc. Near dependencies colocate the complete
+association and BDB/scan/candidate groups; expected symbolic destinations
+are checked, not merely whether a call hits some valid entry. Final compiler
+identities and the unchanged SP7C execution cap still need complete acceptance.
+Original compiler assembly and debug records remain available.
+`make test-join-smoke-host` runs the real caller's ten scenarios.
+`make prepare-join-smoke-layout` creates only a marked unverified resource
+probe and report; no execution follows from that resource result alone.
+`make prepare-join-smoke-data` additionally solves, relinks and checks the
+compiler-scratch placement, saving the bound result in `analysis.json`.
+The layout reader preserves complete NoICE symbol identities and verifies
+their truncated map projection instead of accepting ambiguous map names.
+
+`make prepare-join-smoke-image` now adds immutable offline admission and
+the exact native admission header. It accounts for the full26-byte runtime
+prefix and1421 XDATA object/parameter declarations, including valid placement
+of `clock`'s private timebase outputs after the closed flash-executor prefix.
+The opt-in `test-join-smoke-mcu` consumes only this pinned image, not an
+arbitrary resource candidate. Its new debugger-only simulator build and
+reproduction commands are described in the [execution plan](LINK_JOIN_PLAN.md).
+The generic image now reaches authenticated JS_READY from reset through
+actual radio/MAC, AES/DMA and flash-RAM execution:602 caller polls,
+157320 peripheral checkpoints, observedSP7B/7C. The independent peer's9
+transmissions match actual DUT register/FIFO traffic. The real terminal
+READY loop preserves retained ownership and NV. This is **complete positive
+MCU simulation**, not a physical join, LG full replay or new CI acceptance;
+expanded failure execution is recorded separately in the
+[execution plan](LINK_JOIN_PLAN.md#complete-caller-failure-corpus).
+
+The caller uses the reserved status block at1E00 as `JSN1`, rather than
+linking or claiming the M0 status ABI. Its admission/configuration storage
+is reused for the driver only after successful provisioning and BDB start
+have returned; no bound driver is recycled. Random bytes are preloaded once,
+consumed without refill and explicitly exhausted, never generated from the
+public test tape on hardware. READY and FAULT retain radio ownership.
+No halted checkpoint, driver return or READY flag is a claim of RX shutdown.
 
 ## Ownership and successful sequence
 
@@ -417,14 +735,13 @@ sanitizer BDB corpus on both boards and the unchanged original target suites.
 This accepts the bounded runtime changes, not the still-missing whole-MCU
 composition below.
 
-The unchanged synthetic READY fixture begins with17 of64 per-power-epoch
-erase attempts consumed. Sixteen successful30-second keepalive cycles fit;
-the17th reaches the programmed NV quota at about510 seconds. Cleanup must
-not attempt another NV write or Leave, and a modeled reset retains VERIFIED.
-This is a software work/wear quota, not measured electrical endurance or
-acceptable long-running availability. Persistence-frequency work is still
-required; neither increasing quotas nor weakening durable replay/counter
-ownership is implied by these fixes.
+ED Timeout Request/Response keepalives no longer write NV: the request
+intent, parent information and NWK incoming floors are volatile (see
+SECURITY_KEYS.md, *Volatile floors and keepalive state*). The synthetic READY
+fixture now runs seventeen 30-second keepalive cycles with zero flash commands
+and stays READY. Outgoing NWK counter reservations and every APS/key event
+remain durable, so the erase quota still bounds key exchange and counter
+reservation, not idle keepalive time.
 
 This earlier evidence is **host-tested and SDCC compile-checked**, not a new linked-image,
 alias-aware execution or physical observation. Existing linked-image and
@@ -524,9 +841,189 @@ Faulted scan/association members are never replaced by runtime storage.
 The original Response timestamp remains in `record.association.stamp`;
 delayed restoration/runtime initialization cannot restart the network-key
 deadline. Association rejection retries do not reset nested generations,
-MAC DSN, generation or IFS. A flash-read failure during subsequent durable
-association cannot publish INSTALL, membership or readiness, and a genuine
-modeled reboot still sees PROVISIONED. This is not a secure-rejoin procedure.
+MAC DSN, generation or IFS.
+
+After association INSTALL is issued **before** durable admission: the parent
+sends Transport Key within ~10 ms of the Association Response, while the LG
+CC2530F256 NV write path (default-TC provisioning plus short-address
+admission) takes ~1.6 s of stalled CPU. Only the confirmed INSTALLED event for
+the RAM identity (discovered or provisioned, plus the associated short address)
+triggers the NV writes, which then run with AUTOACK RX open on that address, so
+an early unicast is hardware-acknowledged and held in the RX FIFO. The stored
+configuration must then equal the installed one exactly before WAIT_KEY.
+A flash-read failure during that admission cannot publish membership or
+readiness, and a genuine modeled reboot still sees PROVISIONED. An INSTALL
+stall or fault before admission leaves NV unchanged, so a fresh join may start.
+The MAC ACK of a frame the device later loses is not a membership claim: a
+lost key ends in KEY_TIMEOUT. This is not a secure-rejoin procedure.
+Host-tested (`tests/test_bdb_join.c`, E2E `EARLY_KEY`). Hardware-observed on the
+LG board with an HA/EmberZNet coordinator: the third Transport Key transmission
+was ACKed once RX opened, and Device Announce and the Node Descriptor exchange
+followed.
+
+The network-key, TC-link-key and Confirm Key deadlines judge a key frame when
+`bdb_join_receive` accepts it (`timely`), not when the next step runs. The
+durable key save inside that receive stalled the CPU for ~5 s on hardware. That
+alone turned a TC link key which arrived on time into TC_FAILED. A key that
+arrives at or after its deadline still fails. Host-tested (`test_bdb_join.c`
+cases 6–11). With both changes the LG board was hardware-observed to reach
+BDB READY against the HA/EmberZNet coordinator (~19 s). That covered the
+network key, TC link key, Verify/Confirm Key, the parent query and the permit
+broadcast. HA did not list the device. The join-smoke image stops at READY,
+and the ZDO server answers only Node_Desc_req, so the HA interview
+(Active_EP/Simple_Desc/ZCL Basic) cannot complete (superseded below).
+
+### 2026-09-30 LG ordinary join and ZHA interview
+
+The join-smoke image now serves after READY (stage 5, `JOIN_SMOKE_SERVE_TICKS`)
+instead of stopping, and reports Basic ModelIdentifier once. The ZDO server
+answers Active_EP_req (one endpoint) and Simple_Desc_req (HA profile, device
+`FFFF`, input cluster Basic only); the caller serves ZCL Basic reads of
+ManufacturerName/ModelIdentifier. The scan RX profile accepts beacons only,
+and NWK incoming floors plus ED Timeout keepalive state are volatile (see
+SECURITY_KEYS.md), so a READY device no longer spends ~1-2 s radio-deaf in an
+NV save per keepalive. A complete, loss-free scan with no eligible direct
+coordinator is repeated up to `BDB_JOIN_ATTEMPTS` times; one hardware run lost
+the only permitting coordinator beacon and otherwise ended in NO_PARENT.
+Host-tested (`test_security_keys.c`, `test_bdb_join.c`, link/join-smoke/E2E
+suites) and image-checked (`join_smoke_image.py`, XDATA 7680/7680).
+
+Hardware-observed with an ordinary ZHA permit (no install code, no injected
+network/channel/PAN identity) on the LG ESL29 board against a ZBT-1/EmberZNet
+coordinator, image IHX pinned in `tools/join_smoke_pins.json`: scan found the
+coordinator on channel15, association, Transport Key, Device_annce, TC-link-key
+Request/Verify/Confirm, End Device Timeout negotiation and the permit
+broadcast reached BDB READY. A private sniffer capture decrypted with the
+delivered keys confirms that sequence. zigpy then completed the interview
+(Node Descriptor, Active Endpoints `[1]`, Simple Descriptor, Basic read) and
+ZHA lists the device as manufacturer `cc2530-zigbee`, model `LG-ESL29`,
+EndDevice. In the same capture, each 30 s End Device Timeout keepalive
+advanced the outgoing NWK frame counter by exactly one (no 256-step NV
+reservation), so keepalives performed no NV save. Earlier attempts only failed to appear because zigpy retained a
+stale uninitialized device object; a ZHA integration reload cleared it.
+The endpoint exposes no application entities; that is still separate work.
+The run is bounded by the serving budget, not a long-running device, and no
+sleepy behaviour, rejoin after reset or production NV endurance is claimed.
+
+### Synthetic temperature and humidity demo
+
+**The values are synthetic demonstration data, not measurements.** The LG
+board has no temperature, humidity or battery sensor. Endpoint 1 (device ID
+still `FFFF`) advertises the input clusters Basic `0000`, Power Configuration
+`0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
+Measurement `0405`. `zdo_runtime` publishes endpoint frames and ZDO
+Bind/Unbind requests, and the banked application server `zcl_sensor` answers
+them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
+
+- **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
+  MeasuredValue/Min/Max for both measurement clusters, BatteryVoltage,
+  BatteryPercentageRemaining, IdentifyTime and ClusterRevision. Other
+  attributes return UNSUPPORTED_ATTRIBUTE.
+- **Values:** one sawtooth phase 0..40, one step per 2^22 MAC symbols
+  (~67 s). Temperature runs 21.0-25.0 °C in 0.1 °C steps and humidity
+  45.00-55.00 %RH in 0.25 % steps. The synthetic battery runs 100-80 % in
+  0.5 % steps and 3.0-2.8 V.
+- **Write Attributes:** only IdentifyTime is writable.
+- **Identify:** Identify and Identify Query are supported, counting
+  IdentifyTime down once per second. No LED is driven.
+- **Configure Reporting:** supported for the four reportable attributes, with
+  minimum/maximum interval and reportable change. A maximum of `FFFF`
+  disables reporting. The defaults are temperature 30/300 s/0.10 °C,
+  humidity 30/300 s/0.25 %, voltage 60/3600 s/0.1 V and percentage
+  60/3600 s/1 %.
+- **Read Reporting Configuration:** remains UNSUP_GENERAL_COMMAND (`0x81`),
+  never a fabricated success.
+- **ZDO Bind/Unbind:** a 64-bit destination is accepted only if it is the
+  trust center (coordinator), and only for the three clusters. A bind table
+  for any other target returns NOT_SUPPORTED, and unbinding an absent entry
+  returns NO_ENTRY.
+- **Persistence:** bindings and reporting configuration are RAM-only. A reset
+  restores the defaults: all three clusters bound to coordinator endpoint 1.
+
+READY has no serving budget: the join-smoke caller serves until reset or a
+fault. It first sends the Basic ModelIdentifier report. Then, whenever no
+application TX is outstanding, it queues at most one APS-acknowledged Report
+Attributes frame for the first due attribute, taken in the order temperature,
+humidity, voltage, percentage. An attribute is due when it is bound and
+enabled, its minimum interval has passed, and either its maximum interval or
+its reportable change is reached. The ZCL sequence number advances only when
+a report is committed. A FULL or APS counter-wrap quarantined report is
+rebuilt with the same number, so the peer sees consecutive numbers. An APS
+retransmission after a late ACK repeats the identical frame and APS counter.
+READY CSMA backoff bytes come from a maximal 8-bit Galois LFSR seeded by one
+nonzero qualified draw at READY entry. It is deterministic and **not
+entropy**, and it has no other consumer. In READY, the status `steps` wraps
+modulo 2^32.
+
+The application state overlays the association record, which is dead in
+READY. The tables live in the `zcl_sensor` bank; the linked-image analysis
+admits exactly those four constant tables as data after the bank's code, and
+everything else in the bank must decode as instructions. Common CODE, XDATA
+(7676/7680), the DATA/BSEG reservations and the 45-byte static stack bound
+remain within their limits. SDCC bit temporaries from compound ternaries are
+avoided because BSEG has no spare bit.
+
+Validation:
+
+- **Host-tested:** `test_zcl_sensor.c` covers every command, error status and
+  the report scheduling. `test_join_smoke.c` passes in both key modes: three
+  hours of unbounded READY with exact report counts (about one temperature
+  and humidity report per sample and 21/41 of samples for the percentage),
+  consecutive ZCL numbers and no further draws.
+- **Image-checked:** `prepare-join-smoke-stack` and `join_smoke_image.py`
+  with the repinned LG default-TC identity.
+
+Hardware-observed on the LG board (channel 15, ordinary join with
+coordinator-only `zha.permit`): ZHA interviewed the endpoint with all three
+clusters and created temperature and humidity entities. A device previously
+interviewed with the one-cluster signature must be removed from ZHA first,
+otherwise zigpy keeps the stale signature. The first READY runs faulted after
+about six minutes on a busy channel (~40k sniffed frames in 25 min), exposing
+two radio_autoack faults, both now fixed and host-tested in
+[RADIO_AUTOACK](RADIO_AUTOACK.md): a stopped drain with a complete second
+frame but FSMSTAT1.FIFOP low (`FIFO_ERROR`), and an RXOVERF latched between
+the FSMSTAT1 and RFERRF reads (`CONTROLLER_ERROR`). With both fixes the board
+stayed READY for the whole 25-minute window. HA recorded continuous reports
+about every 67 s, 21.1-23.2 °C and 45.00-50.25 %RH, and the final status was
+`ready=1`, reason 0, no radio errors and no recorded send failure. This is one
+run on one board, not a long-term reliability claim.
+
+In a later run of the earlier image, reports stopped after a parent keepalive
+went unacknowledged. With no rejoin, that loss was terminal. This led to the
+keepalive retries (six attempts 5 s apart), the F5 power selection and the
+`zcl_sensor` server.
+
+Hardware-observed with this image, after a full-erase reflash:
+
+- **Earlier image, rerun without reflashing:** stopped immediately at
+  JS_SECURITY. This is intended: the caller requires empty key NV.
+- **First attempt:** ZHA logged the unsecured join, but the device ended
+  BDB FAILED/KEY_TIMEOUT without the network key. The cause is not
+  established.
+- **Second attempt:** the key was received. The device then faulted with
+  MAC_RADIO_RX_LOST. The retained adapter state showed an RXFIFO overflow at
+  the stop that closes the ACK window of an unacknowledged ACK-requested
+  frame. That is the LINK loss policy now described in
+  [MAC_ADAPTER](MAC_ADAPTER.md).
+- **Run with the fix:** joined, verified the TC link key and passed the ZHA
+  interview with all five input clusters.
+  - Entities: temperature, humidity, battery and an Identify button.
+  - ZHA sent Bind_req for `0001`, `0402` and `0405`; each returned SUCCESS.
+  - Configure Reporting succeeded for BatteryVoltage/Percentage,
+    temperature and humidity.
+  - Identify Trigger Effect correctly returned UNSUP_COMMAND, and the
+    optional battery size/quantity attributes returned
+    UNSUPPORTED_ATTRIBUTE.
+  - With ZHA's reportable changes of 0.5 °C and 1 %, HA recorded temperature
+    reports per 0.5 °C (~5.6 min) and humidity per 1 % (~4.5 min).
+  - After 22 minutes the retained status was `ready=1`, reason 0, no radio
+    errors and no recorded send failure.
+
+This is one board on one channel, not a long-term reliability claim.
+
+NV record CRC-32 is now computed a byte at a time from two
+16-entry nibble tables rather than bit by bit; its format and results are
+unchanged (`test_nv_record.c` reference CRC).
 
 Measured at the phase-only step with the unchanged SDCC4.2.0 large-model flags
 (the subsequent wire reduction is recorded separately below):

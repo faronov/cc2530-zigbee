@@ -300,7 +300,8 @@ static void edge_broadcast_table(void)
     CHECK(blocks == security_joint_aes_blocks() && flash == security_joint_flash_commands());
     now = until-1; edge_receive(BDB_JOIN_FULL);
     now = until; edge_receive(BDB_JOIN_IGNORED);
-    CHECK(blocks < security_joint_aes_blocks() && flash < security_joint_flash_commands());
+    /* Unsecured-APS broadcast data advances only the volatile NWK floor. */
+    CHECK(blocks < security_joint_aes_blocks() && flash == security_joint_flash_commands());
     CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.response_tx);
     keepalive_success();
 }
@@ -338,12 +339,25 @@ static void edge_address_map(void)
 
 static void edge_fill_duplicates(void)
 {
-    uint8_t i, free = 0;
+    nwk_aps_duplicate_t saved[NWK_APS_DUPLICATES];
+    uint8_t i, free = 0, oldest = 0;
     for (i = 0; i < NWK_APS_DUPLICATES; i++) if (!runtime.transport.duplicate[i].used) free++;
     for (i = 0; i < free; i++) {
         application_from_peer(0x70+i); edge_receive(BDB_JOIN_OK); edge_step(); edge_take(0x70+i);
     }
-    application_from_peer(0x7f); edge_receive(BDB_JOIN_FULL);
+    /* A full table evicts its soonest-expiring record, not the new frame. */
+    for (i = 0; i < NWK_APS_DUPLICATES; i++) {
+        CHECK(runtime.transport.duplicate[i].used);
+        if ((uint32_t)(runtime.transport.duplicate[i].until-now) <
+            (uint32_t)(runtime.transport.duplicate[oldest].until-now)) oldest = i;
+    }
+    for (i = 0; i < NWK_APS_DUPLICATES; i++) saved[i] = runtime.transport.duplicate[i];
+    application_from_peer(0x7f); edge_receive(BDB_JOIN_OK); edge_step(); edge_take(0x7f);
+    for (i = 0; i < NWK_APS_DUPLICATES; i++) {
+        CHECK(runtime.transport.duplicate[i].used);
+        if (i != oldest) CHECK(!memcmp(&saved[i], &runtime.transport.duplicate[i], sizeof(saved[i])));
+    }
+    CHECK(runtime.transport.duplicate[oldest].until == now+runtime.transport.duplicate_time);
     CHECK(!runtime.transport.receive_ready && runtime.transport.ready);
 }
 

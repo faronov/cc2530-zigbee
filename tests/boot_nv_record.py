@@ -15,14 +15,14 @@ from boot_timebase import GUARD_SFRS
 from radio_fifo_fixture import instructions
 from verify_firmware import cdb_address, code_bytes, parse_ihex, parse_symbols, peripheral_accesses, require
 
-SIZE = 6937
-DIGEST = 'f99475c308cdca64589fc3a7e2772cb84549ccc5da5c3c8df752f32123aade12'
-PRIVATE = '958b8877f419e0e439e367fd8c545c7cbad6080bc6ad7ce62f204dd1b54a64ef'
-BEFORE, DONE, MAIN = (6720, 6815, 6817)
-READ_CALL, PROGRAM_CALL = (3730, 5308)
+SIZE = 7088
+DIGEST = 'e4fe6f613045d395995c663e055a2333f7ea060d474181a9a27679d2593a0e07'
+PRIVATE = '613a9088c7449b4ff77a3a20342026a5918fedb7e99cb96cf8e2fbe294d3dbed'
+BEFORE, DONE, MAIN = (6743, 6838, 6840)
+READ_CALL, PROGRAM_CALL = (3753, 5331)
 LENGTHS = engine.LENGTHS | {
     0xc8: 1, 0x68: 1, 0x5a: 1, 0x6b: 1, 0x6c: 1, 0x6d: 1, 0x6e: 1,
-    0xdf: 2, 0x63: 3, 0xa4: 1, 0x6f: 1, 0x3c: 1, 0x69: 1, 0x2b: 1,
+    0xdf: 2, 0x63: 3, 0xa4: 1, 0x6f: 1, 0x3c: 1, 0x69: 1, 0x2b: 1, 0x6a: 1,
 }
 OBJECTS = {'fault': (404, 1),
  'diagnostic': (405, 15),
@@ -76,8 +76,8 @@ def verify(image, symbols, debug, memory, listings):
     for name, value in {
         "_flash_exec_command": 0x1cf, "_flash_exec_template_end": 0xdd,
         "_flash_nv_read": 0x5e0, "_flash_nv_erase": 0xbc6, "_flash_nv_program": 0xbf7,
-        "_flash_write_reserved_end": 0x193, "_nv_record_load": 0x131f,
-        "_nv_record_replace": 0x14d7, "_nv_record_status": 0x1a3c,
+        "_flash_write_reserved_end": 0x193, "_nv_record_load": 0x1336,
+        "_nv_record_replace": 0x14ee, "_nv_record_status": 0x1a53,
         "_nv_record_before": BEFORE, "_nv_record_done": DONE, "_main": MAIN,
         "s_XSEG": 0, "l_XSEG": 798, "s_SSEG": 0x30, "l_OSEG": 4, "s_OSEG": 0x19, "l_BSEG": 2,
         "_nv_record_load_PARM_2": 0x284, "_nv_record_replace_PARM_2": 0x28c,

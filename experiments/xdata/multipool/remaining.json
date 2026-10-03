@@ -1,0 +1,283 @@
+{
+  "eligible_homes": 492,
+  "eligible_bytes": 1000,
+  "live_groups": 337,
+  "live_eligible_bytes": 940,
+  "unselected": [
+    {
+      "owner": "flash.observe",
+      "bytes": 10,
+      "region": "flash:6",
+      "objects": [
+        "Lflash.observe$bank$1_0$49",
+        "Lflash.observe$ien0$1_0$50",
+        "Lflash.observe$ien1$1_0$50",
+        "Lflash.observe$ien2$1_0$50",
+        "Lflash.observe$sleep$1_0$50",
+        "Lflash.observe$command$1_0$50",
+        "Lflash.observe$status$1_0$50",
+        "Lflash.observe$arm$1_0$50",
+        "Lflash.observe$request$1_0$50",
+        "Lflash.observe$mapping$1_0$50"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME",
+        "LOCAL"
+      ],
+      "conflicting_ancestors_in_region": [
+        "flash.flash_nv_read"
+      ],
+      "incremental_saving": 0,
+      "reason": "all region groups form an activation chain"
+    },
+    {
+      "owner": "nwk_parent.nwk_parent_select",
+      "bytes": 8,
+      "region": "nwk_parent:38",
+      "objects": [
+        "Lnwk_parent.nwk_parent_select$i$1_1$143",
+        "Lnwk_parent.nwk_parent_select$j$1_1$143",
+        "Lnwk_parent.nwk_parent_select$eligible$1_1$143",
+        "Lnwk_parent.nwk_parent_select$best$1_1$143",
+        "Lnwk_parent.nwk_parent_select$delta$1_1$143",
+        "Lnwk_parent.nwk_parent_select$dominates$1_1$143",
+        "Lnwk_parent.nwk_parent_select$any$1_1$143",
+        "Lnwk_parent.nwk_parent_select$all$1_1$143"
+      ],
+      "classes": [
+        "LOCAL"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    },
+    {
+      "owner": "nwk_aps_direct.nwk_aps_transmit",
+      "bytes": 7,
+      "region": "nwk_aps_direct:41",
+      "objects": [
+        "Lnwk_aps_direct.nwk_aps_transmit$frame$1_1$147",
+        "Lnwk_aps_direct.nwk_aps_transmit$p$1_1$147",
+        "Lnwk_aps_direct.nwk_aps_transmit$secured$1_1$147"
+      ],
+      "classes": [
+        "LOCAL"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    },
+    {
+      "owner": "zigbee_mmo.zigbee_mmo_hash",
+      "bytes": 6,
+      "region": "zigbee_mmo:12",
+      "objects": [
+        "Lzigbee_mmo.zigbee_mmo_hash$input$1_0$85",
+        "Lzigbee_mmo.zigbee_mmo_hash$offset$1_1$87",
+        "Lzigbee_mmo.zigbee_mmo_hash$remaining$1_1$87",
+        "Lzigbee_mmo.zigbee_mmo_hash$result$1_1$87"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME",
+        "LOCAL"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    },
+    {
+      "owner": "mac_tx.mac_tx_interval_stage",
+      "bytes": 3,
+      "region": "mac_tx:25",
+      "objects": [
+        "Lmac_tx.mac_tx_interval_stage$tx$1_0$243"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    },
+    {
+      "owner": "zigbee_key_hash.zigbee_key_hash",
+      "bytes": 3,
+      "region": "zigbee_key_hash:13",
+      "objects": [
+        "Lzigbee_key_hash.zigbee_key_hash$key$1_0$82"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    },
+    {
+      "owner": "nwk_beacon.nwk_beacon_decode",
+      "bytes": 2,
+      "region": "nwk_beacon:36",
+      "objects": [
+        "Lnwk_beacon.nwk_beacon_decode$any$1_1$143",
+        "Lnwk_beacon.nwk_beacon_decode$all$1_1$143"
+      ],
+      "classes": [
+        "LOCAL"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    },
+    {
+      "owner": "clock.clock_select_init",
+      "bytes": 1,
+      "region": "clock:5",
+      "objects": [
+        "Lclock.clock_select_init$source$1_0$25"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "all region groups form an activation chain"
+    },
+    {
+      "owner": "clock.effective_status",
+      "bytes": 1,
+      "region": "clock:5",
+      "objects": [
+        "Lclock.effective_status$command$1_0$5"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME"
+      ],
+      "conflicting_ancestors_in_region": [
+        "clock.clock_select_init"
+      ],
+      "incremental_saving": 0,
+      "reason": "all region groups form an activation chain"
+    },
+    {
+      "owner": "flash.flash_nv_read",
+      "bytes": 1,
+      "region": "flash:6",
+      "objects": [
+        "Lflash.flash_nv_read$page$1_0$51"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "all region groups form an activation chain"
+    },
+    {
+      "owner": "join_smoke.fault",
+      "bytes": 1,
+      "region": "join_smoke:47",
+      "objects": [
+        "Ljoin_smoke.fault$reason$1_0$207"
+      ],
+      "classes": [
+        "FIRST_ARGUMENT_HOME"
+      ],
+      "conflicting_ancestors_in_region": [],
+      "incremental_saving": 0,
+      "reason": "only eligible group in region"
+    }
+  ],
+  "rejected": [
+    {
+      "owner": "mac_time.mac_time_attempt_read",
+      "bytes": 9,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "zigbee_mmo.install_code_derive",
+      "bytes": 5,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_radio.mac_radio_now",
+      "bytes": 4,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_time.mac_time_read_live",
+      "bytes": 4,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "aps_frame.read_le16",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "aps_frame.write_le16",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "ed_wire.ed_wire_aps",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_frame.mac_command_encode",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_frame.read_le16",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_frame.write_le16",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "nwk_frame.read_le16",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "nwk_frame.write_le16",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "zdo_node.zdo_node_req_encode",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "zdo_runtime.zdo_runtime_take_application",
+      "bytes": 3,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_association.mac_association_step",
+      "bytes": 2,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_radio.mac_radio_send",
+      "bytes": 2,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "mac_scan.mac_scan_get",
+      "bytes": 2,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    },
+    {
+      "owner": "security_keys.seal",
+      "bytes": 2,
+      "reason": "unreachable owner retained unchanged; dead stripping excluded"
+    }
+  ],
+  "safe_same_region_unrealized_bytes": 0
+}

@@ -29,7 +29,7 @@ typedef struct {
     mac_epoch_stamp_t through;
     const radio_autoack_frame_t MCU_XDATA *frame;
     uint32_t token, rx_serial;
-    uint8_t kind, normal_rx, has_upper;
+    uint8_t kind, normal_rx, has_upper, lossy;
 } mac_adapter_observation_t;
 
 typedef struct {
@@ -38,7 +38,7 @@ typedef struct {
     uint16_t slot;
     uint8_t phase, fault, radio_result, mac_result, has_time, ready, held;
     uint8_t retry, nb, length, policy, normal_rx, transmitted, first, bound_valid;
-    uint8_t goal, stop_started, wait_through;
+    uint8_t goal, stop_started, wait_through, lossy;
 } mac_adapter_diagnostics_t;
 
 /* One full-reset foreground owner. No independent calls to the lower services.
@@ -83,6 +83,10 @@ mac_adapter_result_t mac_adapter_close(const mac_epoch_stamp_t MCU_XDATA * volat
  * are not bounded by this check; it does not attest exact PHY timing.
  * EVENT remains stable/backpressured until consume(token). Every complete head,
  * including bad CRC/non-ACK, is retained; no implicit frame overwrite or flush.
+ * Exception: raw no-ACK RX with no closure goal other than an explicit close
+ * may lose frames to an RX FIFO overflow. The radio returns complete heads,
+ * then flushes; lossy stays set on every later event until prepare/open.
+ * Loss in normal RX, ACK collection or retirement remains a fault.
  */
 mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
 mac_adapter_result_t mac_adapter_consume(uint32_t token) JOIN_FAR;

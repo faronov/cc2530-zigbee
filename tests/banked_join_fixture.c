@@ -51,7 +51,7 @@ MCU_XDATA uint16_t fixture_length;
 MCU_XDATA uint8_t fixture_command, fixture_arg, fixture_written;
 MCU_XDATA MCU_AT(0x1e00) fixture_status_t fixture_status;
 
-typedef char full_context_size[sizeof(bdb_join_t) == 1676 ? 1 : -1];
+typedef char full_context_size[sizeof(bdb_join_t) == 1677 ? 1 : -1];
 typedef char full_phase_size[sizeof(bdb_join_work_t) == 1290 ? 1 : -1];
 typedef char shadow_binding[
     offsetof(bdb_join_t, work.association.context) == 0 &&

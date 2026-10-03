@@ -6,13 +6,16 @@
  */
 #include "mac_link_peer.h"
 #include "security_joint_model.h"
+#include "flash_exec.h"
 #include "zigbee_key_hash.h"
 #include <assert.h>
 #include <string.h>
 
+#if !defined(CC2530_DEFAULT_TC_KEY)
 static const uint8_t install_code[18] = {
     0x83,0xfe,0xd3,0x40,0x7a,0x93,0x97,0x23,0xa5,0xc6,0x39,0xb2,0x69,0x16,0xd5,0x05,0xc3,0xb5
 };
+#endif
 const security_keys_config_t link_identity = {
     {1,2,3,4,5,6,7,8}, {17,18,19,20,21,22,23,24},
     {0x10,0x32,0x54,0x76,0x98,0xba,0xdc,0xfe}, 0x1234, 0xffff, 15, 0
@@ -27,6 +30,8 @@ static uint32_t peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device
 uint8_t link_beacon[48], link_response[27], link_peer_body[125];
 uint8_t link_beacon_length, link_response_length, link_peer_length, link_peer_pending;
 unsigned link_peer_tx, link_peer_checks, link_peer_app, link_peer_parent;
+uint16_t link_peer_report_cluster;
+uint8_t link_peer_report[ED_PAYLOAD_MAX], link_peer_report_length, link_peer_report_counter;
 #define CHECK(c) do { link_peer_checks++; assert(c); } while (0)
 
 static void base_peer(uint8_t nwk_command, uint8_t aps_type, uint16_t cluster)
@@ -192,7 +197,8 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1); permit = 1;
     } else {
         CHECK(permit && peer_in.aps.profile_id == 0x0104 && (peer_in.aps.flags & APS_FLAG_ACK_REQUEST));
-        link_peer_app++;
+        link_peer_app++; link_peer_report_cluster = peer_in.aps.cluster_id; link_peer_report_counter = peer_in.aps.counter;
+        link_peer_report_length = peer_in.length; memcpy(link_peer_report, peer_in.payload, peer_in.length);
         base_peer(0, ED_APS_ACK, peer_in.aps.cluster_id);
         peer_out.aps.counter = peer_in.aps.counter; peer_out.aps.profile_id = peer_in.aps.profile_id;
         peer_out.aps.destination_endpoint = peer_in.aps.source_endpoint;
@@ -224,6 +230,17 @@ void link_peer_application(ed_packet_t *packet)
     packet->length = 3; packet->payload[0] = 0x55;
 }
 
+void link_peer_receive_application(void)
+{
+    CHECK(verified && permit);
+    base_peer(0, 0, 6);
+    peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
+    peer_out.aps.source_endpoint = peer_out.aps.destination_endpoint = 1;
+    peer_out.aps.profile_id = 0x0104;
+    peer_out.length = 3; peer_out.payload[0] = 0x55;
+    seal_peer(0, 0, NULL, 1);
+}
+
 void link_peer_verify(void)
 {
     security_keys_status_t status;
@@ -235,16 +252,27 @@ void link_peer_setup(bdb_join_config_t *config)
 {
     mac_header_t mh;
     uint8_t payload[19], i;
+#if !defined(CC2530_DEFAULT_TC_KEY)
     zigbee_mmo_info_t info;
+#endif
     announced = described = requested = verified = permit = associated = extracted = 0;
     aps_counter = nwk_sequence = link_peer_pending = 0;
     link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
     last_device_nwk = last_device_aps = 0;
     peer_nwk_counter = peer_aps_counter = 1;
+    security_joint_physical_flash(1);
     CHECK(security_keys_open() == SECURITY_KEYS_EMPTY);
+#if defined(CC2530_DEFAULT_TC_KEY)
+    memcpy(link_a, "ZigBeeAlliance09", 16);
+#else
     CHECK(install_code_derive(install_code, sizeof(install_code), link_a, 1000, 1000, &info) == ZIGBEE_MMO_OK);
+#endif
     for (i = 0; i < 16; i++) { link_b[i] = (uint8_t)(0xa0u+i); network[i] = (uint8_t)(0x30u+i); }
-    CHECK(security_keys_provision(&identity, install_code, 1, 1, &limits, 2000) == SECURITY_KEYS_OK);
+#if defined(CC2530_DEFAULT_TC_KEY)
+    CHECK(security_keys_provision_default(&identity, 1, 1, &limits, FLASH_EXEC_POLL_MAX) == SECURITY_KEYS_OK);
+#else
+    CHECK(security_keys_provision(&identity, install_code, 1, 1, &limits, FLASH_EXEC_POLL_MAX) == SECURITY_KEYS_OK);
+#endif
     memset(config, 0, sizeof(*config));
     config->scan.channels = 1UL << 15; config->scan.lifetime = 100000; config->scan.work = 512;
     config->scan.saved.pan = 0xffff; config->scan.saved.channel = 11;
@@ -256,20 +284,27 @@ void link_peer_setup(bdb_join_config_t *config)
     config->association.extraction.local_mode = config->association.extraction.coordinator_mode = 3;
     memcpy(config->association.extraction.local, identity.own_ieee, 8);
     memcpy(config->association.extraction.coordinator, identity.tc_ieee, 8);
-    config->transport.limits = limits; config->transport.nv_polls = 2000; config->transport.profile = 0x0104;
+    config->transport.limits = limits; config->transport.nv_polls = FLASH_EXEC_POLL_MAX; config->transport.profile = 0x0104;
     config->transport.endpoint = 1; config->link_cost = 1; config->transport.ack_wait = NWK_APS_ACK_WAIT;
     config->transport.broadcast_time = 1000000;
     config->descriptor.logical_type = 2; config->descriptor.frequency_band = 8;
     config->descriptor.mac_capability = 0x88; config->descriptor.max_buffer = 127;
     config->descriptor.max_incoming = config->descriptor.max_outgoing = 64;
     config->descriptor.stack_revision = 22;
-    memset(&mh, 0, sizeof(mh)); mh.type = MAC_FRAME_BEACON; mh.source_mode = 3;
-    mh.source_pan = identity.pan; memcpy(mh.source, identity.tc_ieee, 8);
+    memset(&mh, 0, sizeof(mh)); mh.type = MAC_FRAME_BEACON;
+#if defined(CC2530_DEFAULT_TC_KEY)
+    mh.source_mode = MAC_ADDRESS_SHORT;
+#else
+    mh.source_mode = MAC_ADDRESS_EXTENDED;
+    memcpy(mh.source, identity.tc_ieee, 8);
+#endif
+    mh.source_pan = identity.pan;
     memset(payload, 0, sizeof(payload)); payload[0] = 0xff; payload[1] = 0xcf;
     payload[5] = 0x22; payload[6] = 0x84; memcpy(payload+7, identity.extended_pan, 8);
     payload[15] = payload[16] = payload[17] = 255;
     CHECK(mac_frame_encode(&mh, payload, sizeof(payload), link_beacon, sizeof(link_beacon), &link_beacon_length) == MAC_CODEC_OK);
-    mh.type = MAC_FRAME_COMMAND; mh.flags = 0x60; mh.destination_mode = 3;
+    mh.type = MAC_FRAME_COMMAND; mh.flags = 0x60; mh.destination_mode = mh.source_mode = 3;
+    memcpy(mh.source, identity.tc_ieee, 8);
     mh.destination_pan = identity.pan; mh.sequence = 0x91; memcpy(mh.destination, identity.own_ieee, 8);
     payload[0] = 2; payload[1] = 0x78; payload[2] = 0x56; payload[3] = 0;
     CHECK(mac_frame_encode(&mh, payload, 4, link_response, sizeof(link_response), &link_response_length) == MAC_CODEC_OK);

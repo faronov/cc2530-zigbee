@@ -11,6 +11,9 @@ typedef struct {
     radio_autoack_frame_t frame;
     uint16_t slot;
     uint8_t length, transmitted, received, within_window;
+#if defined(CC2530_MAC_LINK)
+    uint8_t autoack; /* normal filtered AUTOACK RX was armed during own TX */
+#endif
 } mac_attempt_record_t;
 
 /* Sole serialized foreground owner since full reset; all mac_radio ownership,
@@ -39,22 +42,22 @@ typedef struct {
  * COMPLETE linked runtime scratch suffix, not just the final generic byte.
  */
 mac_radio_result_t mac_attempt_init(const radio_autoack_config_t MCU_XDATA *configuration,
-                                    uint32_t timeout, uint16_t limit);
+                                    uint32_t timeout, uint16_t limit) LINK_FAR;
 mac_radio_result_t mac_attempt_prepare(const uint8_t MCU_XDATA *body, uint8_t length,
-                                       uint32_t timeout, uint16_t limit);
+                                       uint32_t timeout, uint16_t limit) LINK_FAR;
 mac_radio_result_t mac_attempt_run(uint16_t window, uint32_t timeout, uint16_t limit,
-                                   mac_attempt_record_t MCU_XDATA *output);
+                                   mac_attempt_record_t MCU_XDATA *output) LINK_FAR;
 mac_radio_result_t mac_attempt_receive(uint32_t timeout, uint16_t limit,
-                                       radio_autoack_frame_t MCU_XDATA *output);
-mac_radio_result_t mac_attempt_stop(uint32_t timeout, uint16_t limit);
-mac_radio_result_t mac_attempt_resume(uint32_t timeout, uint16_t limit);
-const mac_radio_diagnostics_t MCU_XDATA *mac_attempt_diagnostic(void);
+                                       radio_autoack_frame_t MCU_XDATA *output) LINK_FAR;
+mac_radio_result_t mac_attempt_stop(uint32_t timeout, uint16_t limit) LINK_FAR;
+mac_radio_result_t mac_attempt_resume(uint32_t timeout, uint16_t limit) LINK_FAR;
+const mac_radio_diagnostics_t MCU_XDATA *mac_attempt_diagnostic(void) LINK_FAR;
 #if defined(CC2530_MAC_HANDOFF)
 /* Complete top-level storage/fault guards also apply to live sampling, including
  * an immutable PREPARED slot. A live sample is never a captured frame end.
  */
 mac_radio_result_t mac_attempt_now(uint32_t timeout, uint16_t limit,
-                                   mac_epoch_stamp_t MCU_XDATA *output);
+                                   mac_epoch_stamp_t MCU_XDATA *output) LINK_FAR;
 /* Only immediately after this slot's first CRC-good, within-window ACK receipt,
  * with no intervening radio operation. Clock sampling is allowed. The lower
  * owner additionally matches the real TXFIFO DSN and ACK-request bit.
@@ -64,14 +67,14 @@ mac_radio_result_t mac_attempt_now(uint32_t timeout, uint16_t limit,
  * its own ACK timing before asking for this handoff. RF may remain active on
  * failure; retain the receipt and ownership. No automatic stop/reset/retry.
  */
-mac_radio_result_t mac_attempt_handoff(uint32_t timeout, uint16_t limit);
+mac_radio_result_t mac_attempt_handoff(uint32_t timeout, uint16_t limit) LINK_FAR;
 #endif
 #if defined(CC2530_MAC_RECONFIG)
 /* OFF-only PAN/short/channel update under the complete top-level storage and
  * retained-fault guards. It invalidates any earlier handoff eligibility.
  */
 mac_radio_result_t mac_attempt_configure(const radio_autoack_config_t MCU_XDATA *configuration,
-                                         uint32_t timeout, uint16_t limit);
+                                         uint32_t timeout, uint16_t limit) LINK_FAR;
 #endif
 #endif
 #endif

@@ -49,7 +49,7 @@ is imported.
 | Section 23.9.2, p.223; FSMCTRL, p.263 | `RX2RX_TIME_OFF=0` disables the default 12-symbol post-reception SFD-detection timeout. This is not MAC SIFS/LIFS completion or a loss-free receive guarantee. |
 | Figure 23-20, p.235; Table 23-3, p.236; FSMSTAT0/1, pp.262-263 | A soft stop allows an in-flight reception and its eligible ACK to finish. TX_ACTIVE covers ACK calibration/delay/TX/shutdown; RX_ACTIVE includes RX calibration. Do not drive control flow from fast numeric FSM state values. |
 | RFIRQF0/1 and RFERRF, pp.210-211 | Flags update even while IRQs are masked. RXMASKZERO is not idle. TXACKDONE is sticky, not a per-frame count, correlation token or timestamp. A separately cleared/verified RFIDLE plus physical idle is the stop completion gate. |
-| Section 23.10, pp.232-233; FSMSTAT1/FIFOPCTRL, p.263; FIFO registers, pp.264-265 | The 128-byte FIFO can contain multiple frames. RFD advances its read pointer; direct RAM access does not. Use the complete-frame indication with threshold 127, bounded count and head progression. RFIRQF0.FIFOP also documents notification when reading a complete packet leaves another complete packet. No one-frame/one-edge assumption is used. |
+| Section 23.10, pp.232-233; FSMSTAT1/FIFOPCTRL, p.263; FIFO registers, pp.264-265 | The 128-byte FIFO can contain multiple frames. RFD advances its read pointer; direct RAM access does not. Use the complete-frame indication with threshold 127, bounded count and head progression; p.232 drops FSMSTAT1.FIFOP at the next RFD read, so a stopped drain checks PHR/count instead. RFIRQF0.FIFOP also documents notification when reading a complete packet leaves another complete packet. No one-frame/one-edge assumption is used. |
 | Section 23.10.2, p.233 | Overflow, underflow and abort are errors, not permission to flush and claim drainage. Filtering can overflow before rejecting a frame. |
 | Table 23-6, p.256; FSCAL1, p.267; TXPOWER/TXCTRL, p.262 | Apply the recommended AGC/TX filter/VCO settings. Read back only FSCAL1's known VCO_CURR bits; its upper bits are R/W0, not read-as-zero. All other configured bytes require full readback. |
 | Section 23.8, pp.218-222; immediate instructions, pp.253-254 | With AUTOACK disabled at idle, replace TXFIFO using only ISFLUSHTX=EE and RFD writes. AUTOCRC PHR includes two FCS bytes; software supplies only the body. Use ISTXONCCA=EA, never unconditional TX. Successful TX retains FIFO contents. |
@@ -58,7 +58,7 @@ is imported.
 
 TI **SWRS081B, April 2009, revised February 2011**, Table 2 p.24
 ([CC2530 datasheet](https://www.ti.com/lit/pdf/swrs081)), characterizes raw
-TXPOWER `05` with the normal TXCTRL profile as typical -22 dBm on its CC2530 EM
+TXPOWER `05`, `D5` and `F5` with the normal TXCTRL profile as typical -22, +1 and +4.5 dBm on its CC2530 EM
 at 25 C, 3 V and 2440 MHz. This is not measured generic/LG output power, EIRP,
 calibration or regulatory permission.
 
@@ -94,7 +94,14 @@ handoff to one of those owners.
 configuration; it retains no caller pointer. IEEE bytes are supplied least
 significant first; PAN/short values are encoded little-endian. All address bit
 patterns are raw caller filter configuration, not validated identities.
-Channels 11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` are supported.
+Channels11..26 and explicit raw power `RADIO_AUTOACK_POWER_05`,
+`RADIO_AUTOACK_POWER_D5` or `RADIO_AUTOACK_POWER_F5` are supported. Power is copied at cold acquisition,
+fully read back and retained through stop/resume, ordinary TX, AUTOACK and
+channel reconfiguration. It cannot be changed within that ownership epoch.
+Other bytes remain unsupported; there is no clamp or fallback.
+The complete join caller explicitly selects `F5`; existing isolated board
+fixtures still request `05`. Increasing TX power does not improve RX sensitivity
+or establish board-specific RF output or reachability.
 
 | Setting | Written value |
 | --- | --- |
@@ -104,7 +111,7 @@ Channels 11..26 and explicit raw power `RADIO_AUTOACK_POWER_05` are supported.
 | FRMCTRL0 / FRMCTRL1 | `60 / 00`: AUTOCRC/AUTOACK, RSSI plus CRC/correlation, normal RX/TX, Pending0, underflow detection, no automatic TX mask bit |
 | FIFOPCTRL / FSMCTRL | `7F / 00`: threshold 127, unslotted ACK, RX-to-RX timeout disabled |
 | AGCCTRL1 / TXFILTCFG / FSCAL1 | `15 / 09 / 00`; only FSCAL1 readback is masked to bits 1:0 |
-| FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / 05 / 69` |
+| FREQCTRL / TXPOWER / TXCTRL | `11+5*(channel-11) / caller 05, D5 or F5 / 69` |
 
 Require unchanged MDMCTRL0/1 `85/14`, MDMTEST0/1 `75/08`, FREQTUNE `0F`,
 standard modem control and an idle CSP. Acquisition changes no CCA setting
@@ -134,7 +141,7 @@ publish a partial body. No heap or software packet queue is introduced.
 | Invalid argument/range/storage/state | No MMIO, output or diagnostic mutation. |
 | Operational error | Enter terminal FAULT and retain the first error and ownership. All later operations return it with no MMIO, output or diagnostic mutation, even with invalid arguments. |
 
-Receive masks only the PHR's documented high bit, bounds length 5..127, and
+Receive masks the PHR's documented high bit, bounds length 5..127, and
 returns `length=PHR-2` with 3..125 body bytes. `rssi_raw` is the uninterpreted
 RSSI byte; `crc_correlation` has CRC_OK in bit 7 and raw correlation in bits
 6:0, not calibrated LQI. Successful short frames preserve the inactive output
@@ -162,6 +169,20 @@ reception/ACK completion, including AUTOACK when enabled. Require fresh RFIDLE, 
 unlocked, SFD low and RX_ACTIVE/TX_ACTIVE both low. Once stopped, also require
 `(RXFIRST_PTR+RXFIFOCNT) mod 128 == RXLAST_PTR`; a full 128-byte FIFO is distinct
 from empty despite identical pointers. Complete frames remain available.
+FIFOP is not a per-frame indication: SWRU191F section 23.10.1 p.232 lets it
+fall at the next RFD read after a frame's last byte, even when another complete
+frame is queued (RFIRQF0.FIFOP, p.210, separately reports that case). A stopped
+stop/DRAIN head is therefore accepted with FIFOP or with `PHR>=5` and
+`RXFIFOCNT>=PHR+1` from RXFIRST; physical idle means no reception can extend it.
+Live RX still requires FIFOP and reports `EMPTY` otherwise. The LG board
+observed this in READY: after the first of two queued 56-byte frames was read,
+FSMSTAT1.FIFOP stayed low with the complete, CRC-valid second frame (57 bytes)
+still in the stopped FIFO; the earlier FIFOP-only rule faulted with `FIFO_ERROR`.
+Adapter compositions only: the observation reads FSMSTAT1 before RFERRF, and the
+LG board in READY captured RXOVERF with FSMSTAT1=`ED` (FIFO still high), which
+a later halted read showed as the documented overflow signature `5C`. When the
+only RF error is RXOVERF and the sample lacks FIFO=0/FIFOP=1, the observation
+is taken once more; a persistent mismatch remains `CONTROLLER_ERROR`.
 An unexplained partial FIFO, pointer/count contradiction or RF error is a
 fault, never drained success. There is no abort, SRXON, RX flush, hidden discard,
 automatic retry or recovery operation.
@@ -169,6 +190,11 @@ automatic retry or recovery operation.
 The ring identity follows the exact SWRU191F p.265 register definitions:
 `RXFIRST_PTR[6:0]` (`619D`) is the RAM offset of the first FIFO byte;
 `RXLAST_PTR[6:0]` (`619E`) is the offset of the **last byte +1 byte**.
+Their bit7 is reserved **R**, not guaranteed R0. The owner masks it in
+snapshots, destructive-read head checks and attempt admission, without
+masking count errors or documented RXP1 fields. The native and actual-MCU
+wrap cases also assert these reserved bits; changed low pointer bits remain
+errors. A real LG run exposed raw RXLAST=9A with first7D/count29.
 The latter is a one-past-last producer boundary, not the last occupied byte
 or permission to write when full. Page 264 defines RXFIFOCNT as the number of
 bytes in the FIFO. Section 23.9.7, Figure 23-15 p.230 shows the leading length
@@ -310,10 +336,10 @@ and unbanked linker flags produce byte-identical generic/LG images:
 | Object | CODE, including constants/startup | Ordinary XDATA | Permanent DATA | OSEG |
 | --- | ---: | ---: | ---: | ---: |
 | timebase | 404 | 25 | 0 | 3 |
-| radio_autoack | 5888 | 256 | 4 | 2 |
+| radio_autoack | 5945 | 256 | 4 | 2 |
 | test caller | 411 | 157 | 2 | 0 |
 
-Whole image: **7007/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
+Whole image: **7064/24576 CODE**, **450 ordinary XDATA + the entire 64-byte
 status reservation = 514/1536 bytes**. Runtime/startup adds 304 CODE and 12
 XDATA beyond those object totals. The separate 24 KiB/1536-byte budget covers
 the real timebase, one staged frame, copied configuration, diagnostics,
@@ -338,10 +364,10 @@ RAM are guarded.
 Whole emitted CODE SHA-256:
 
 ```text
-a06a14624e638adb49b87a23d7e2fe35711a32a23c53eaf53f74c6569a1bcde4
+5c67a615443cf2e05b47168b38b63b335f39b828f9c82659d8435bf411f40ee6
 ```
 
-**Host-test corpus:** 158362 API calls per board, both strict native and ASan/UBSan.
+**Host-test corpus:** 158409 API calls per board, both strict native and ASan/UBSan.
 Coverage includes all bounded lengths/CRC bytes, address/profile bits,
 every value of each caller address byte, copied-configuration independence,
 configuration/output ownership including every libc-scratch overlap, native
@@ -352,8 +378,8 @@ implement over-air filtering, FCS calculation or ACK generation. Lengths
 6..8 deliberately overapproximate the configured filter's possible frames
 to exercise byte bounds, not claim those are eligible over-air packets.
 
-**Image/simulator corpus:** 194 persistent sequences, 1732 genuine API calls,
-1157 exactly-once RFD reads, and 9017 artifact negatives plus one genuine
+**Image/simulator corpus:** 194 persistent sequences, 1730 genuine API calls,
+1163 exactly-once RFD reads, and 9088 artifact negatives plus one genuine
 missing-alias negative per board. Coverage includes delayed readiness/
 calibration, active receive/ACK soft stop, 21 queued frames, max-length circular
 FIFO, concurrent arrival, CRC classification, stale flags, partial/count/
@@ -398,17 +424,18 @@ status tail, upper IRAM, GPIO/IRQ/clock guards, stack unwind and simulator
 whole-run high-water remain enforced. Each simulator process retains its
 **15-second** limit.
 
-The original125 scenarios are also pinned independently to their pre-rearm
-native results, frame/diagnostic/input snapshots and complete ordered MMIO.
-Their canonical JSON digest is
-`d15ba16889fcb03932468342741390d9807a7ff652aa342aa6b2accdd87d0a32`.
-The verifier runs the same fixed synthetic-address corpus and requires exact
-identity, not only the same final return values. All157 pre-TX scenarios,
-including the32 rearm cases, also retain their complete native identity:
-`c19e89572bc7398c799d9a9240f703e1ac5ae92b93f9d397aeefcbf3859e411a`.
+The original125 scenarios are also pinned independently to their native
+results, frame/diagnostic/input snapshots and complete ordered MMIO
+(`LEGACY_DIGEST`), and all157 pre-TX scenarios including the32 rearm cases
+likewise (`REARM_DIGEST` in `tests/boot_radio_autoack.py`). The verifier runs
+the same fixed synthetic-address corpus and requires exact identity, not only
+the same final return values. The stopped-head fix intentionally changed three
+of them: case80 now returns the complete frame and STOPPED instead of
+`FIFO_ERROR`, and cases76/104 make one extra PHR read before the same
+`FIFO_ERROR`; every other scenario is identical to the previous pins.
 New cases never replace old ones. Historical pre-TX simulator-call envelopes
 were3.464s (generic) and3.356s (LG), with whole `run_vector` maxima4.591s/4.560s.
-Those measured the4692-byte rearm image, not this7007-byte extension; they
+Those measured the4692-byte rearm image, not this7064-byte extension; they
 are local observations, not portable timing guarantees.
 
 ### Historical overlap-partition acceptance before rearm

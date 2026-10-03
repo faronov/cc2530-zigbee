@@ -68,6 +68,7 @@ static uint16_t fine, fine_latch, timer_period, fine_write;
 static uint32_t overflow, overflow_latch, overflow_period, overflow_write, mac_step;
 static unsigned pending, stuck, force_ff, order, malformed, clock_failure, first;
 static unsigned exported, vectors, combined_calls;
+static unsigned late_preflight;
 static uint16_t shared_address = 0x400, raw_address = 0x410, staging_address = 0x430;
 static uint16_t stamp_address = 0x800, normal_stamp = 0x800, wrapper_end = 0x500;
 static uint32_t timeout = 1000;
@@ -118,6 +119,10 @@ static uint8_t timer_selected(uint8_t a)
 static uint8_t combined_load(uint8_t a, uint8_t value)
 {
     timer_advance(mac_step);
+    if (a == 0xa8 && late_preflight && !--late_preflight) {
+        if (vectors == 52) SOC_RFERRF = 4;
+        else XR(0x6192) = 0x81;
+    }
     if (a == 0x94) {
         if (pending && !stuck && !--pending) SOC_T2CTRL |= 4;
         value = SOC_T2CTRL;
@@ -178,6 +183,7 @@ static void combined_reset(void)
     fine = fine_latch = fine_write = timer_period = 0;
     overflow = overflow_latch = overflow_write = overflow_period = 0;
     pending = stuck = force_ff = order = malformed = clock_failure = 0;
+    late_preflight = 0;
     mac_step = 7; first = 1; timeout = 1000; limit = 100;
     stamp_address = normal_stamp; oracle_ready = 0; prior_raw = 0; oracle_symbols = 0;
     host_mmio_read_hook = combined_load; host_mmio_write_hook = combined_store;
@@ -252,15 +258,16 @@ static void combined_call(unsigned operation, unsigned expected)
         printf("\",\"stamp\":\""); emit_stamp(&stamp);
         printf("\",\"frame\":\""); hex(&frame.value, sizeof(frame.value));
         printf("\",\"radio\":["); emit_diagnostics();
-        printf("],\"timer\":[%lu,%u,%u,%u,%u,%u,%u,%u,%u]}",
+        printf("],\"timer\":[%lu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u]}",
             (unsigned long)mac_time_diagnostic()->elapsed_ticks, mac_time_diagnostic()->polls,
             mac_time_diagnostic()->discarded, mac_time_diagnostic()->result,
             mac_time_diagnostic()->phase, mac_time_diagnostic()->control,
             mac_time_diagnostic()->select, mac_time_diagnostic()->irq_flags,
-            mac_time_diagnostic()->timebase_status);
+            mac_time_diagnostic()->timebase_status, mac_time_diagnostic()->guard,
+            mac_time_diagnostic()->guard_value);
     }
 }
-#define COMBINED_CASES 52u
+#define COMBINED_CASES 54u
 static void combined_case(unsigned n)
 {
     unsigned op;
@@ -288,7 +295,14 @@ static void combined_case(unsigned n)
     } else {
         combined_call(0, MAC_RADIO_READY);
         assert(mac_time_ready && timer_period == 512 && overflow_period == 0xffffff && XR(0x618b) == 1);
-        if (n == 0) {
+        if (n >= 52) {
+            late_preflight = 2;
+            combined_call(1, MAC_RADIO_TIMER_ERROR);
+            assert(mac_time_diagnostic()->guard ==
+                       (n == 52 ? MAC_TIME_GUARD_RFERRF : MAC_TIME_GUARD_FSMSTAT0) &&
+                   mac_time_diagnostic()->guard_value == (n == 52 ? 4 : 0x81) &&
+                   mac_time_diagnostic()->phase == 1 && mac_time_diagnostic()->polls == 1);
+        } else if (n == 0) {
             combined_call(1, MAC_RADIO_READY); combined_call(2, MAC_RADIO_EMPTY);
             enqueue(11, 0xe9, 0x38); combined_call(2, MAC_RADIO_FRAME);
             enqueue(5, 0x69, 0x55); combined_call(3, MAC_RADIO_DRAIN);

@@ -16,7 +16,7 @@ static mac_epoch_stamp_t adapter_now, close_at;
 static uint16_t adapter_end = 0x1500, adapter_owner = 0x1680, adapter_action_address = 0x1800;
 static uint16_t adapter_clock_address = 0x1840, adapter_through_address = 0x1850;
 static unsigned replies, wrong_dsn, rx_seen, busy_seen, closed_seen, sent_seen, retired_seen;
-static unsigned later_reply;
+static unsigned later_reply, overflow_after_sent, lossy_closed;
 #define ADAPTER_CASES 18u
 static unsigned remaining_calls;
 static const uint8_t adapter_packet[] = {
@@ -24,6 +24,9 @@ static const uint8_t adapter_packet[] = {
 };
 #if defined(MAC_ADAPTER_TRACE)
 #include "mac_adapter_trace.h"
+#endif
+#ifndef ADAPTER_ADDRESS_HOOK
+#define ADAPTER_ADDRESS_HOOK adapter_address
 #endif
 
 static uint16_t adapter_address(const volatile void *p)
@@ -78,10 +81,10 @@ static void adapter_reset(void)
     memset((void *)mac_adapter_diagnostic(), 0, sizeof(mac_adapter_diagnostics_t));
     memset(&adapter_tx, 0, sizeof(adapter_tx));
     memset(&adapter_action, 0, sizeof(adapter_action));
-    host_mmio_xaddress_hook = adapter_address;
+    host_mmio_xaddress_hook = ADAPTER_ADDRESS_HOOK;
     host_mmio_read_hook = adapter_load; host_mmio_write_hook = adapter_store;
     body_length = sizeof(adapter_packet);
-    replies = 1; wrong_dsn = later_reply = 0;
+    replies = 1; wrong_dsn = later_reply = overflow_after_sent = lossy_closed = 0;
     rx_seen = busy_seen = closed_seen = sent_seen = retired_seen = 0;
     remaining_calls = 1000; response_fcf = 0xfffa;
 }
@@ -165,6 +168,14 @@ static mac_adapter_result_t finish_tx(uint8_t policy)
             if (view->tx.source.kind == MAC_TX_EVENT_BUSY_INTERVAL) busy_seen++;
             if (view->tx.source.kind == MAC_TX_EVENT_SENT_INTERVAL) sent_seen++;
             if (view->tx.source.kind == MAC_TX_EVENT_RETIRED) retired_seen++;
+            if (view->tx.source.kind == MAC_TX_EVENT_RX_CLOSED && view->lossy) lossy_closed++;
+            if (overflow_after_sent && view->tx.source.kind == MAC_TX_EVENT_SENT_INTERVAL) {
+                /* 1: overflow while collecting the ACK; 2: at the closing stop. */
+                enqueue(28, 0xe9, 0x40);
+                if (overflow_after_sent == 2) { overflow_on_stop = 1; stop_delay = 2; }
+                else inject_overflow(127);
+                overflow_after_sent = 0;
+            }
             if (later_reply && view->kind == MAC_ADAPTER_RX_EVENT && rx_seen == 1) {
                 enqueue(5, 0xe9, 0x5a); later_reply = 0;
             }
@@ -465,6 +476,82 @@ static void adapter_case(unsigned selected)
         assert(selected == 16); invalid_inputs();
     }
 }
+/* Raw no-ACK RX overflow: complete heads, then an explicit lossy closure.
+ * Native-only; not part of the traced MCU vector corpus.
+ */
+static void loss_case(unsigned variant)
+{
+    mac_adapter_result_t result;
+    unsigned frames = 0, closed = 0;
+    if (variant >= 4) {
+        /* AUTOACK RX overflow inside an unacknowledged ACK window. LINK: the
+         * salvaged head is delivered, the closure is lossy and retried as
+         * NO_ACK. Otherwise the loss remains a retained radio fault. */
+        start_adapter(); replies = 0; overflow_after_sent = variant - 3u;
+        submit_packet(1); arm_tx(MAC_ADAPTER_KEEP_AUTOACK);
+#if defined(CC2530_MAC_LINK)
+        assert(finish_tx(MAC_ADAPTER_KEEP_AUTOACK) == MAC_ADAPTER_OK);
+        assert(adapter_tx.engine.outcome == MAC_TX_NO_ACK && !overflow_after_sent &&
+               lossy_closed == 1 && rx_seen == 1 && !rx_overflow && !SOC_RFERRF &&
+               adapter_tx.engine.retries == MAC_TX_MAX_RETRIES);
+        /* Each retry starts a loss-free lease; the last closure turned RX off. */
+        assert(mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF && !mac_adapter_diagnostic()->lossy &&
+               !mac_adapter_observation()->lossy);
+        assert(mac_tx_interval_release(&adapter_tx) == MAC_TX_OK);
+#else
+        assert(finish_tx(MAC_ADAPTER_KEEP_AUTOACK) == MAC_ADAPTER_RADIO_ERROR && !overflow_after_sent &&
+               mac_adapter_diagnostic()->radio_result == MAC_RADIO_RX_LOST && !lossy_closed);
+        retained_fault();
+#endif
+        return;
+    }
+    if (variant == 3) {
+        /* Normal filtered AUTOACK RX: no salvage and no loss acceptance. */
+        start_receiver(); enqueue(28, 0xe9, 0x40); inject_overflow(127);
+        assert(adapter_tick() == MAC_ADAPTER_RADIO_ERROR && !mac_adapter_diagnostic()->held &&
+               mac_adapter_diagnostic()->radio_result == MAC_RADIO_DRIVER_ERROR &&
+               !mac_adapter_diagnostic()->lossy);
+        return;
+    }
+    start_adapter(); submit_packet(0); assert(drive_tx(MAC_ADAPTER_KEEP_RAW) == MAC_ADAPTER_OK);
+    assert(mac_adapter_diagnostic()->phase == MAC_ADAPTER_RX && !mac_adapter_diagnostic()->normal_rx &&
+           !mac_adapter_diagnostic()->lossy && radio_autoack_state == RADIO_AUTOACK_RX_NOACK);
+    while (tx_remaining || reply_remaining) assert(adapter_tick() == MAC_ADAPTER_WAIT);
+    assert(mode == 2);
+    enqueue(28, 0xe9, 0x41); enqueue(28, 0x69, 0x42);
+    /* 0: loss seen while open; 1: already latched at stop; 2: after RXMASKCLR. */
+    if (variant == 2) { overflow_on_stop = 1; stop_delay = 2; }
+    else inject_overflow(127);
+    if (variant) assert(mac_adapter_close(NULL) == MAC_ADAPTER_OK);
+    while (!closed) {
+        result = adapter_tick();
+        assert(result == MAC_ADAPTER_WAIT || result == MAC_ADAPTER_EVENT);
+        if (variant == 0 && !rx_overflow && mac_adapter_diagnostic()->lossy &&
+            mac_adapter_diagnostic()->phase == MAC_ADAPTER_RX) {
+            assert(frames == 2 && XR(0x618b) == 1 && !SOC_RFERRF);
+            assert(mac_adapter_close(NULL) == MAC_ADAPTER_OK);
+        }
+        if (result != MAC_ADAPTER_EVENT) continue;
+        if (mac_adapter_observation()->kind == MAC_ADAPTER_CLOSED_EVENT) closed = 1;
+        else {
+            assert(mac_adapter_observation()->kind == MAC_ADAPTER_RX_EVENT &&
+                   mac_adapter_observation()->frame->body[2] == 0x41u + frames &&
+                   mac_adapter_observation()->lossy == mac_adapter_diagnostic()->lossy);
+            frames++;
+        }
+        if (closed) assert(mac_adapter_observation()->lossy && !mac_adapter_observation()->normal_rx);
+        consume_observation();
+    }
+    assert(frames == 2 && mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF &&
+           mac_adapter_diagnostic()->lossy && !XR(0x618b) && !count && !SOC_RFERRF);
+    /* The next transaction starts a new, loss-free receive lease. */
+    assert(mac_tx_interval_release(&adapter_tx) == MAC_TX_OK);
+    submit_packet(0); assert(drive_tx(MAC_ADAPTER_KEEP_RAW) == MAC_ADAPTER_OK);
+    assert(!mac_adapter_diagnostic()->lossy);
+    close_receiver();
+    assert(!mac_adapter_observation()->lossy);
+}
+
 #ifndef MAC_ADAPTER_MAIN
 #define MAC_ADAPTER_MAIN main
 #endif
@@ -486,6 +573,7 @@ int MAC_ADAPTER_MAIN(int argc, char **argv)
 #endif
     assert(argc == 1);
     for (selected = 0; selected < ADAPTER_CASES; selected++) adapter_case(selected);
-    puts("MAC adapter: real actions/closure/drain, handoff, faults, backpressure, cancellation, expiry, wrap and storage guards PASS.");
+    for (selected = 0; selected < 6; selected++) loss_case(selected);
+    puts("MAC adapter: real actions/closure/drain, raw-RX loss reporting, handoff, faults, backpressure, cancellation, expiry, wrap and storage guards PASS.");
     return 0;
 }

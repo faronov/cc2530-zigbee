@@ -105,8 +105,10 @@ static void projection_case(mac_radio_result_t outcome, unsigned failure, unsign
     assert(receipt.transmitted == mac_attempt_raw.transmitted);
     assert(receipt.received == mac_attempt_raw.received);
     assert(receipt.within_window == mac_attempt_raw.within_window);
+    assert(receipt.autoack == mac_attempt_raw.autoack &&
+           receipt.autoack == (outcome != MAC_RADIO_CCA_BUSY));
     if (receipt.transmitted)
-        projection_stamps[0].symbols += 16u + 2u * body_length;
+        projection_stamps[0].symbols += RADIO_AUTOACK_TX_TURNAROUND + 16u + 2u * body_length;
     else
         memset(&projection_stamps[0], 0, sizeof(projection_stamps[0]));
     check_stamp(&receipt.tx_lower, &projection_stamps[0]);
@@ -123,12 +125,9 @@ static void projection_case(mac_radio_result_t outcome, unsigned failure, unsign
         assert(!receipt.frame.length && !receipt.frame.rssi_raw && !receipt.frame.crc_correlation);
     }
     for (i = receipt.frame.length; i < 125; i++) assert(!receipt.frame.body[i]);
-    handoff_started = 1;
-    if (outcome == MAC_RADIO_FRAME && size == 3)
-        handoff_call(7, MAC_RADIO_READY);
-    else
-        handoff_call(7, MAC_RADIO_STATE);
-    handoff_started = 0;
+    /* An armed AUTOACK attempt already owns normal RX; no handoff can follow. */
+    assert(radio_autoack_state == (receipt.autoack ? RADIO_AUTOACK_RX : RADIO_AUTOACK_RX_NOACK));
+    handoff_call(7, MAC_RADIO_STATE);
     reply_after_tx = 0;
     reply_remaining = 0;
     if (mode == 7) {
@@ -154,6 +153,6 @@ int main(int argc, char **argv)
         projection_case(MAC_RADIO_FRAME, 0, sizes[i]);
     for (failure = 1; failure <= 5; failure++)
         projection_case(MAC_RADIO_FRAME, failure, 125);
-    puts("Compact projection: 29 scenarios/22 injected projection failures; atomic receipt and retained handoff PASS.");
+    puts("Compact projection: 29 scenarios/22 injected projection failures; atomic receipt and armed AUTOACK state PASS.");
     return 0;
 }

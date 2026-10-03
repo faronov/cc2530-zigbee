@@ -120,12 +120,12 @@ static void basic(void)
     CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY && commands == 0);
     CHECK(security_counter_take(0, &counter_value, 3) == SECURITY_COUNTER_STATE);
     CHECK(security_counter_create(17, 9, counter_payload, 112, 3) == SECURITY_COUNTER_OK);
-    CHECK(STATUS.generation == 1 && STATUS.until[0] == 17 && STATUS.until[1] == 9);
+    CHECK(STATUS.generation == 0 && STATUS.until[0] == 17 && STATUS.until[1] == 9 && commands == 0);
     CHECK(security_counter_status() == &STATUS);
     CHECK(security_counter_read(counter_output, 112, &counter_length) == SECURITY_COUNTER_OK);
     CHECK(counter_length == 112 && !memcmp(counter_output, counter_payload, 112));
     take(0, 17);
-    CHECK(STATUS.until[0] == 273 && STATUS.generation == 2);
+    CHECK(STATUS.until[0] == 273 && STATUS.generation == 1);
     before = events;
     for (i = 18; i < 273; i++) take(0, i);
     CHECK(events == before);
@@ -143,6 +143,49 @@ static void basic(void)
     take(0, 1041); take(1, 521);
     CHECK(security_counter_create(0, 0, NULL, 0, 3) == SECURITY_COUNTER_STATE);
     CHECK(security_counter_open() == SECURITY_COUNTER_STATE);
+}
+
+static void staged_create(void)
+{
+    counter_reset(); memset(nv, 255, sizeof(nv));
+    CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY);
+    CHECK(security_counter_create(17, 9, counter_payload, 5, 3) == SECURITY_COUNTER_OK);
+    counter_payload[0] ^= 0xff;
+    CHECK(security_counter_create(19, 11, counter_payload, 7, 3) == SECURITY_COUNTER_OK);
+    CHECK(commands == 0 && STATUS.state == SECURITY_COUNTER_READY && STATUS.payload_length == 7);
+    CHECK(security_counter_read(counter_output, 112, &counter_length) == SECURITY_COUNTER_OK);
+    CHECK(counter_length == 7 && !memcmp(counter_output, counter_payload, 7));
+    CHECK(security_counter_status()->until[0] == 19 && STATUS.next[1] == 11);
+    CHECK(security_counter_restage(counter_payload, 4) == SECURITY_COUNTER_OK);
+    CHECK(commands == 0 && STATUS.generation == 0 && STATUS.payload_length == 4);
+    CHECK(STATUS.until[0] == 19 && STATUS.next[0] == 19 && STATUS.until[1] == 11);
+    CHECK(security_counter_restage(counter_payload, 113) == SECURITY_COUNTER_ARGUMENT);
+    counter_reset();
+    CHECK(security_counter_restage(counter_payload, 4) == SECURITY_COUNTER_STATE);
+    CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY && commands == 0);
+    CHECK(security_counter_restage(counter_payload, 4) == SECURITY_COUNTER_STATE);
+    CHECK(security_counter_create(19, 11, counter_payload, 112, 3) == SECURITY_COUNTER_OK);
+    CHECK(security_counter_save(counter_payload, 3, 3) == SECURITY_COUNTER_OK);
+    CHECK(STATUS.generation == 1 && STATUS.next[0] == 19 && STATUS.until[1] == 11);
+    CHECK(security_counter_restage(counter_payload, 3) == SECURITY_COUNTER_STATE);
+    CHECK(security_counter_create(19, 11, counter_payload, 3, 3) == SECURITY_COUNTER_STATE);
+    counter_reset();
+    CHECK(security_counter_open() == SECURITY_COUNTER_OK && STATUS.payload_length == 3);
+    take(0, 19); take(1, 11);
+    counter_reset(); memset(nv, 255, sizeof(nv));
+    CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY);
+    CHECK(security_counter_create(19, 11, counter_payload, 112, 3) == SECURITY_COUNTER_OK);
+    counter_record(0, 1, 5, 5, 0);
+    CHECK(security_counter_save(counter_payload, 112, 3) == SECURITY_COUNTER_ROLLBACK);
+    CHECK(STATUS.state == SECURITY_COUNTER_FAILED && commands == 0);
+    CHECK(security_counter_create(19, 11, counter_payload, 112, 3) == SECURITY_COUNTER_ROLLBACK);
+    CHECK(security_counter_restage(counter_payload, 112) == SECURITY_COUNTER_STATE);
+    counter_reset(); memset(nv, 255, sizeof(nv));
+    CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY);
+    CHECK(security_counter_create(19, 11, counter_payload, 112, 3) == SECURITY_COUNTER_OK);
+    counter_record(1, 1, 5, 5, 0);
+    CHECK(security_counter_take(1, &counter_value, 3) == SECURITY_COUNTER_ROLLBACK);
+    CHECK(counter_value == 0xa5a5a5a5UL && commands == 0);
 }
 
 static void formats(void)
@@ -273,7 +316,10 @@ static void interrupt_state(uint8_t clear)
 {
     if (!setjmp(power_cut)) {
         if (clear) (void)security_counter_save(NULL, 0, 3);
-        else (void)security_counter_create(529, 265, counter_payload, 112, 3);
+        else {
+            CHECK(security_counter_create(529, 265, counter_payload, 112, 3) == SECURITY_COUNTER_OK);
+            (void)security_counter_save(counter_payload, 112, 3);
+        }
         CHECK(0 && "State publication failed to reach requested cut");
     }
     CHECK(cut_reached);
@@ -326,7 +372,7 @@ static void destructive_failures(void)
 
 int main(void)
 {
-    basic(); formats(); bounds(); interrupted(); destructive_failures();
+    basic(); staged_create(); formats(); bounds(); interrupted(); destructive_failures();
     printf("Security counters: %u host checks PASS; real NV/flash, synthetic cuts, no physical durability.\n",
            counter_checks);
     return 0;

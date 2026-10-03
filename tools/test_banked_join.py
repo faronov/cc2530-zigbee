@@ -156,7 +156,7 @@ class JoinObservationTests(unittest.TestCase):
     def test_edge_reference_requires_complete_cold_case_and_peripheral_count(self):
         call = (f"CALL 12 1 0 0 165 {'00'*180} {'a5'*125}\n"
                 f"RESULT 0 0 165 {'00'*37} {'a5'*125}\n"
-                f"DEVICE {'00'*1676}\nMAC {'00'*168}\nNV {'ff'*4096}\n")
+                f"DEVICE {'00'*1677}\nMAC {'00'*168}\nNV {'ff'*4096}\n")
         valid = ("CASE edge\nRESET 1\n"+call+"DONE 1\n").encode("ascii")
         for raw, count, events, accepted in (
                 (valid, 1, 0, True), (valid, 2, 0, False), (valid, 1, 1, False),
@@ -183,7 +183,7 @@ class JoinObservationTests(unittest.TestCase):
     def test_edge_selection_replays_actual_case_and_compares_sanitizer(self):
         case = next(iter(join.EDGE_CASES))
         calls = [{"case": case, "reset": 1}]
-        with patch.object(sys, "argv", ["boot", "--output", "unused", "--case", case]), \
+        with patch.object(sys, "argv", ["boot", "--output", "unused", "--board", "generic", "--case", case]), \
                 patch.object(join.layout, "load", return_value=("artifacts",)), \
                 patch.object(join.layout, "verify"), \
                 patch.object(join, "reference", return_value=calls) as reference, \
@@ -204,26 +204,35 @@ class JoinObservationTests(unittest.TestCase):
     def test_all_preserves_original_edges_artifact_campaign_and_retained_flash(self):
         def reference(executable, selected=None):
             return [{"case": case, "reset": 1} for case in (join.CASES if selected is None else (selected,))]
-        with patch.object(sys, "argv", ["boot", "--output", "unused"]), \
+        board = "lg_esl29_rev03"
+        with patch.object(sys, "argv", ["boot", "--output", "unused", "--board", board]), \
                 patch.object(join.layout, "load", return_value=("artifacts",)), \
-                patch.object(join.layout, "verify"), \
+                patch.object(join.layout, "verify") as verify, \
                 patch.object(join.layout, "artifact_bytes", return_value="complete"), \
                 patch.object(join, "reference", side_effect=reference) as native, \
-                patch.object(join, "check_alias", side_effect=[None, ValueError("missing alias")]), \
-                patch.object(join.banking, "artifact_negatives", return_value=716229) as artifacts, \
+                patch.object(join, "check_alias", side_effect=[None, ValueError("missing alias")]) as alias, \
+                patch.object(join.banking, "artifact_negatives",
+                             return_value=join.layout.NEGATIVES[board]) as artifacts, \
                 patch.object(join, "run", return_value=0x7b) as run, patch("builtins.print"):
             join.main()
+            verify.assert_called_once_with("artifacts", board=board)
             self.assertEqual(native.call_count, 2*(1+len(join.EDGE_CASES)))
             self.assertEqual(tuple(call["case"] for call in run.call_args_list[0].args[2]),
                              join.CASES+tuple(join.EDGE_CASES))
             self.assertEqual(run.call_count, 2)
             self.assertEqual(run.call_args_list[0].kwargs, {"limit": None, "failure": False})
             self.assertEqual(run.call_args_list[1].kwargs, {"failure": True})
-            artifacts.assert_called_once_with("complete", join.layout.PINS)
+            artifacts.assert_called_once_with("complete", join.layout.PINS[board])
+            artifacts.return_value = join.layout.NEGATIVES[board] - 1
+            alias.side_effect = [None, ValueError("missing alias")]
+            run.reset_mock()
+            with self.assertRaisesRegex(ValueError, "artifact-negative coverage"):
+                join.main()
+            run.assert_not_called()
 
     def test_flash_case_requires_pinned_image_and_genuine_execution(self):
         calls = [{"case": case, "reset": 1} for case in join.CASES]
-        with patch.object(sys, "argv", ["boot", "--output", "unused", "--case", join.FLASH_FAILURE]), \
+        with patch.object(sys, "argv", ["boot", "--output", "unused", "--board", "generic", "--case", join.FLASH_FAILURE]), \
                 patch.object(join.layout, "load", return_value=("artifacts",)), \
                 patch.object(join.layout, "verify") as verify, \
                 patch.object(join, "reference", return_value=calls) as reference, \
@@ -231,7 +240,7 @@ class JoinObservationTests(unittest.TestCase):
                 patch.object(join, "run", return_value=0x7b) as run, \
                 patch("builtins.print"):
             join.main()
-            verify.assert_called_once_with("artifacts")
+            verify.assert_called_once_with("artifacts", board="generic")
             self.assertEqual(reference.call_count, 2)
             self.assertEqual(run.call_args.kwargs, {"limit": None, "failure": True})
             for peak, message in ((0x7a, "exact stack peak"), (0x7c, "exact stack peak"), (0x7d, "SP7C cap")):

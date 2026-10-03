@@ -9,9 +9,9 @@
 #define CW_CALL(f,e) (e)
 #endif
 #include <stddef.h>
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+/* Every profile: the J3 shallow-read forms are identities outside DIRECT. */
 #include "mac_link_workspace_guard_internal.h"
-#endif
+/* DIRECT rereads output/offset/length from their parameter homes (J3). */
 
 #define FCTL 0x6270u
 #define CHIPID 0x624au
@@ -27,7 +27,7 @@ static MCU_XDATA uint8_t saved_bank, saved_clock, saved_cache;
 static MCU_XDATA uint8_t staging[FLASH_READ_MAX], saved_bank, saved_clock, saved_cache;
 #endif
 extern MCU_XDATA uint8_t flash_reserved_end;
-
+#define child_work_inside(o, ...) child_work_inside(LW_SHALLOW_READ(uint8_t MCU_XDATA *, o), __VA_ARGS__)
 static flash_result_t observe(uint8_t bank)
 {
     uint8_t ien0, ien1, ien2, sleep, command, status, arm, request, control, mapping;
@@ -79,8 +79,8 @@ flash_result_t flash_nv_read(uint8_t page, uint16_t offset,
     if (!link_work_external(output, length)) return FLASH_BUFFER_OWNERSHIP;
 #endif
 #endif
-
-
+#define offset LW_SHALLOW_READ(uint16_t, offset)
+#define length LW_SHALLOW_READ(uint8_t, length)
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (!child_work_enter(CW_READ)) return FLASH_BUFFER_OWNERSHIP;
 #endif

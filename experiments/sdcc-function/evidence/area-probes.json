@@ -1,0 +1,102 @@
+[
+  {
+    "custom_areas": 3,
+    "custom_bytes": 9,
+    "first_custom_address": 257,
+    "last_custom_end": 266,
+    "l_XSEG": 1,
+    "ordinary_address": 256,
+    "relocated_pointer_operands": {
+      "foo": 257,
+      "bar": 260,
+      "baz": 264
+    },
+    "assembly_seconds": 0.0017377060139551759,
+    "link_seconds": 0.01413322298321873,
+    "sizes": {
+      "asm": 198,
+      "rel": 490,
+      "rst": 718
+    },
+    "memory_report": "Internal RAM layout:\n      0 1 2 3 4 5 6 7 8 9 A B C D E F\n0x00:|0|0|0|0|0|0|0|0|S|S|S|S|S|S|S|S|\n0x10:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x20:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x30:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x40:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x50:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x60:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x70:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x80:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x90:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xa0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xb0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xc0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xd0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xe0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xf0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0-3:Reg Banks, T:Bit regs, a-z:Data, B:Bits, Q:Overlay, I:iData, S:Stack, A:Absolute\n\n16 bit mode initial stack starts at: 0x08 (sp set to 0x07) with 248 bytes available.\nNo spare internal RAM space left.\n\nOther memory:\n   Name             Start    End      Size     Max     \n   ---------------- -------- -------- -------- --------\n   PAGED EXT. RAM                         0      256   \n   EXTERNAL RAM     0x0100   0x0109      10     8192   \n   ROM/EPROM/FLASH  0x0000   0x007c     125    16777216\n",
+    "crt_clears_ordinary": true,
+    "crt_clears_custom": false,
+    "linked_operands_and_debug_verified": true,
+    "memory_accounting_verified": true
+  },
+  {
+    "custom_areas": 300,
+    "custom_bytes": 306,
+    "first_custom_address": 257,
+    "last_custom_end": 563,
+    "l_XSEG": 1,
+    "ordinary_address": 256,
+    "relocated_pointer_operands": {
+      "foo": 257,
+      "bar": 260,
+      "baz": 264
+    },
+    "assembly_seconds": 0.012124653003411368,
+    "link_seconds": 0.030819003004580736,
+    "sizes": {
+      "asm": 22440,
+      "rel": 44120,
+      "rst": 70480
+    },
+    "memory_report": "Internal RAM layout:\n      0 1 2 3 4 5 6 7 8 9 A B C D E F\n0x00:|0|0|0|0|0|0|0|0|S|S|S|S|S|S|S|S|\n0x10:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x20:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x30:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x40:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x50:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x60:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x70:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x80:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x90:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xa0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xb0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xc0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xd0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xe0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xf0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0-3:Reg Banks, T:Bit regs, a-z:Data, B:Bits, Q:Overlay, I:iData, S:Stack, A:Absolute\n\n16 bit mode initial stack starts at: 0x08 (sp set to 0x07) with 248 bytes available.\nNo spare internal RAM space left.\n\nOther memory:\n   Name             Start    End      Size     Max     \n   ---------------- -------- -------- -------- --------\n   PAGED EXT. RAM                         0      256   \n   EXTERNAL RAM     0x0100   0x0232     307     8192   \n   ROM/EPROM/FLASH  0x0000   0x007c     125    16777216\n",
+    "crt_clears_ordinary": true,
+    "crt_clears_custom": false,
+    "linked_operands_and_debug_verified": true,
+    "memory_accounting_verified": true
+  },
+  {
+    "custom_areas": 1000,
+    "custom_bytes": 1006,
+    "first_custom_address": 257,
+    "last_custom_end": 1263,
+    "l_XSEG": 1,
+    "ordinary_address": 256,
+    "relocated_pointer_operands": {
+      "foo": 257,
+      "bar": 260,
+      "baz": 264
+    },
+    "assembly_seconds": 0.06983749702339992,
+    "link_seconds": 0.23246640397701412,
+    "sizes": {
+      "asm": 75640,
+      "rel": 147720,
+      "rst": 235680
+    },
+    "memory_report": "Internal RAM layout:\n      0 1 2 3 4 5 6 7 8 9 A B C D E F\n0x00:|0|0|0|0|0|0|0|0|S|S|S|S|S|S|S|S|\n0x10:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x20:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x30:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x40:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x50:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x60:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x70:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x80:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x90:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xa0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xb0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xc0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xd0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xe0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xf0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0-3:Reg Banks, T:Bit regs, a-z:Data, B:Bits, Q:Overlay, I:iData, S:Stack, A:Absolute\n\n16 bit mode initial stack starts at: 0x08 (sp set to 0x07) with 248 bytes available.\nNo spare internal RAM space left.\n\nOther memory:\n   Name             Start    End      Size     Max     \n   ---------------- -------- -------- -------- --------\n   PAGED EXT. RAM                         0      256   \n   EXTERNAL RAM     0x0100   0x04ee    1007     8192   \n   ROM/EPROM/FLASH  0x0000   0x007c     125    16777216\n",
+    "crt_clears_ordinary": true,
+    "crt_clears_custom": false,
+    "linked_operands_and_debug_verified": true,
+    "memory_accounting_verified": true
+  },
+  {
+    "custom_areas": 2000,
+    "custom_bytes": 2006,
+    "first_custom_address": 257,
+    "last_custom_end": 2263,
+    "l_XSEG": 1,
+    "ordinary_address": 256,
+    "relocated_pointer_operands": {
+      "foo": 257,
+      "bar": 260,
+      "baz": 264
+    },
+    "assembly_seconds": 0.37731966000865214,
+    "link_seconds": 1.4008006470103282,
+    "sizes": {
+      "asm": 154631,
+      "rel": 298711,
+      "rst": 474671
+    },
+    "memory_report": "Internal RAM layout:\n      0 1 2 3 4 5 6 7 8 9 A B C D E F\n0x00:|0|0|0|0|0|0|0|0|S|S|S|S|S|S|S|S|\n0x10:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x20:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x30:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x40:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x50:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x60:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x70:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x80:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0x90:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xa0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xb0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xc0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xd0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xe0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0xf0:|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|S|\n0-3:Reg Banks, T:Bit regs, a-z:Data, B:Bits, Q:Overlay, I:iData, S:Stack, A:Absolute\n\n16 bit mode initial stack starts at: 0x08 (sp set to 0x07) with 248 bytes available.\nNo spare internal RAM space left.\n\nOther memory:\n   Name             Start    End      Size     Max     \n   ---------------- -------- -------- -------- --------\n   PAGED EXT. RAM                         0      256   \n   EXTERNAL RAM     0x0100   0x08d6    2007     8192   \n   ROM/EPROM/FLASH  0x0000   0x007c     125    16777216\n",
+    "crt_clears_ordinary": true,
+    "crt_clears_custom": false,
+    "linked_operands_and_debug_verified": true,
+    "memory_accounting_verified": true
+  }
+]

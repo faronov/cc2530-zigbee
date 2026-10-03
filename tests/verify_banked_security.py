@@ -17,7 +17,7 @@ FRAMES = {'flash_exec': ('BS_EXEC', 8, 8),
  'flash': ('BS_READ', 16, 4),
  'flash_write': ('BS_WRITE', 20, 5),
  'nv_record': ('BS_NV', 35, 15),
- 'security_counter': ('BS_COUNTER', 58, 14),
+ 'security_counter': ('BS_COUNTER', 58, 8),
  'timebase': ('BS_TIME', 8, 0),
  'aes': ('BS_AES', 35, 32),
  'ccm_star': ('BS_CCM', 8, 0),
@@ -28,12 +28,12 @@ FRAMES = {'flash_exec': ('BS_EXEC', 8, 8),
  'ed_wire': ('BS_WIRE', 8, 9),
  'security_keys': ('BS_KEYS', 26, 4),
  'banked_security_fixture': ('BS_CALLER', 26, 0)}
-PINS = ('2f7a821e5ec260cbab0fd0cff8225338ff6f479bb5f073a79fea14b124c9634e',
- '897b00a1865f8f953f145165a11b9d75533d9f253c56f69fe603fbe0c1395268',
- 'add141c76980f464cb94be2f830891e1ca22fe40b9d3be345245c156f96e0f6f',
- 'fba3d29da20f6959937938b8eccee0e8bf8a50ef134d780b32080722d1ff49cb',
- 'e53594855467a5b4dcb2028853f738859e7d39c29cb69cfa906fa3fd2dae4b25',
- '125ec42b0fb641211ca7f83ac9859e7596f538266549f34950d26d75cc8d46b4')
+PINS = ('bfbfc31f742e3725613bd187607ae6a1eea074b816b8f34e4f7b66dbf6d42c16',
+ 'af9e3b8ea8c0e7ec2acd1e3662004f7808e1ec3c2d35f207c94dce8a60b1fa9f',
+ 'cb7e6873a457d983f9f75b0e5908db3268f14ab5815e93d6a1c7425d76947d3c',
+ '110d26dd0981dad0c54078db7976f97a5193f02dce9dd77f5b771dcb42486389',
+ 'db2edbe4b3f770a626fcf232f73b1031a7aa3f859699a13c59bafcd777927cfd',
+ '7b4bb9d12c6c8b1af6b09f5f109c24ca01841424a1ce796f785404fb8b0022e7')
 EDGES = (resident.EDGES - {e for e in resident.EDGES if e[0] == "zigbee_security"}) | {
     ("ed_wire", "nwk_frame"), ("ed_wire", "aps_frame"), ("ed_wire", "ccm_star"),
     ("security_keys", "security_counter"), ("security_keys", "zigbee_key_hash"),
@@ -57,7 +57,7 @@ def artifact_bytes(*artifacts):
 def verify(image, symbols, debug_raw, memory, listings, objects):
     banking.pin_artifacts(artifact_bytes(image, symbols, debug_raw, memory, listings, objects), PINS)
     require(len(image) <= 51200 and symbols["l_XSEG"]+64 <= 4096, "Banked key image exceeds its own budgets")
-    require(len(image) == len(banking.pack(image)) == 49236, "Complete banked security CODE extent changed")
+    require(len(image) == len(banking.pack(image)) == 49531, "Complete banked security CODE extent changed")
     areas = ("HOME", "GSINIT0", "GSINIT1", "GSINIT2", "GSINIT3", "GSINIT4", "GSINIT5",
              "GSINIT", "GSFINAL", "CSEG", "CONST", "BK_KEYS", "BK_WIRE")
     covered = set()
@@ -67,11 +67,11 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
         covered |= span
     require(covered == set(image), "Missing/unassigned banked security CODE")
     require((symbols["s_BK_KEYS"], symbols["l_BK_KEYS"], symbols["s_BK_WIRE"], symbols["l_BK_WIRE"]) ==
-            (0x18000, 17039, 0x28000, 7205), "Banked owner/wire placement changed")
+            (0x18000, 17147, 0x28000, 7205), "Banked owner/wire placement changed")
     require((symbols["s_XSEG"], symbols["l_XSEG"], symbols["s_SSEG"], symbols["l_SSEG"],
              symbols["s_OSEG"], symbols["l_OSEG"], symbols["s_BSEG_BYTES"], symbols["l_BSEG_BYTES"],
              symbols["_banked_depth"], symbols["_banked_fault"], symbols["_fixture_status"]) ==
-            (0, 3564, 0x52, 43, 0x48, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00),
+            (0, 3574, 0x52, 43, 0x48, 10, 0x20, 3, 0x1e, 0x1f, 0x1e00),
             "Physical banked security IRAM/XDATA allocation changed")
     require(b"16 bit mode initial stack starts at: 0x52 (sp set to 0x51) with 43 bytes available." in memory,
             "CPU stack/return-address ABI changed")
@@ -124,10 +124,10 @@ def verify(image, symbols, debug_raw, memory, listings, objects):
             owned |= span; storage |= span
         require(owned == set(range(offset, offset+len(owned))), "Noncontiguous source XDATA ownership")
         offset += len(owned)
-    require(offset == 3544 and symbols["___memcpy_PARM_2"] == offset,
+    require(offset == 3554 and symbols["___memcpy_PARM_2"] == offset,
             "Complete source/libc scratch boundary changed")
     require(storage == set(range(offset)), "Source XDATA has an ownership hole")
-    require(symbols["l_XSEG"]-offset == 20 and symbols["__gptrput_PARM_2"] == 3555,
+    require(symbols["l_XSEG"]-offset == 20 and symbols["__gptrput_PARM_2"] == 3565,
             "Complete libc scratch (not only gptrput) changed")
     pc = symbols["___memcpy"]
     end = symbols["s_CSEG"]+symbols["l_CSEG"]

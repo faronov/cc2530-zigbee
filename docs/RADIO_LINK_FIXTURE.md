@@ -97,13 +97,15 @@ The decoder rejects live RUNNING inspection and inconsistent completion.
 
 | Resource | Generic | LG Rev0.3 |
 | --- | --- | --- |
-| Complete populated CODE |10758|10798|
+| Complete populated CODE |10807|10847|
 | Ordinary XDATA |750|750|
 | Including status reservation |814/1024|814/1024|
 | Stack start / initial SP |21 /20|21 /20|
 | Corpus sampled / whole-run SP high-water |31 /37|31 /37|
 
-CODE limit is16384 and the exercised stack cap is7C; all values in the stack
+The beacon-only scan filter in `radio_autoack` added24 CODE bytes after the
+physical result below; XDATA/stack allocation is unchanged. The stopped-head PHR helper
+added25 more (the RXOVERF resample is adapter-only). CODE limit is16384 and the exercised stack cap is7C; all values in the stack
 rows are hexadecimal. Existing image budgets and15-second simulator limits
 are unchanged. This is an isolated diagnostic image, not complete-stack fit
 or interrupt-nesting acceptance.
@@ -129,7 +131,7 @@ diagnostic snapshots, terminal preservation, GPIO/SFR guards, alias negative
 control and cumulative stack high-water. They cover default/armed exhaustion,
 bad/reversed packets, last permitted admission, CRC-good/bad bodies, CCA busy,
 empty window, pre-TX capture, clock/acquire/TX/stop failures, capacity and
-late final drainage. There are34101/34250 artifact negatives (generic/LG)
+late final drainage. There are34161/34310 artifact negatives (generic/LG)
 plus one alias control per board.
 Every CODE byte, map symbol and F/S/L/T CDB record is exercised negatively.
 The target corpus does not establish silicon behavior.

@@ -63,6 +63,7 @@ static mac_adapter_result_t publish(uint8_t kind, uint8_t source)
     if (status.deliveries == UINT32_MAX) return fail(MAC_ADAPTER_EXHAUSTED);
     memset(&observation.tx, 0, sizeof(observation.tx));
     observation.kind = kind; observation.normal_rx = status.normal_rx;
+    observation.lossy = status.lossy;
     observation.has_upper = 1; observation.token = ++status.deliveries;
     observation.rx_serial = status.frames;
     observation.frame = &mac_adapter_receipt.frame;
@@ -107,7 +108,9 @@ mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * v
     if (status.phase != MAC_ADAPTER_COLD) return MAC_ADAPTER_STATE;
     result = storage(MMIO_XADDRESS(config), sizeof(*config));
     if (result != MAC_ADAPTER_OK) return result;
-    if (config->channel < 11 || config->channel > 26 || config->power != RADIO_AUTOACK_POWER_05)
+    if (config->channel < 11 || config->channel > 26 ||
+        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5 &&
+         config->power != RADIO_AUTOACK_POWER_F5))
         return MAC_ADAPTER_INVALID;
     memset(&status, 0, sizeof(status)); memset(&observation, 0, sizeof(observation));
     memset(&mac_adapter_receipt, 0, sizeof(mac_adapter_receipt));
@@ -153,7 +156,7 @@ mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * vol
     owner = tx; status.generation = tx->engine.generation;
     status.retry = tx->engine.retries; status.nb = tx->engine.nb;
     status.policy = policy; status.normal_rx = 0; status.transmitted = status.first = 0;
-    status.stop_started = status.wait_through = 0;
+    status.stop_started = status.wait_through = status.lossy = 0;
     status.goal = CLOSE_NONE; settled = 0;
     status.phase = MAC_ADAPTER_PREPARED;
     return MAC_ADAPTER_OK;
@@ -256,6 +259,10 @@ mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16
             status.radio_result != MAC_RADIO_EMPTY && status.radio_result != MAC_RADIO_CCA_BUSY)
             return fail(MAC_ADAPTER_RADIO_ERROR);
         status.transmitted = mac_adapter_receipt.transmitted; status.slot = mac_adapter_receipt.slot;
+#if defined(CC2530_MAC_LINK)
+        /* Armed during own TX: the ACK and every later frame are normal RX. */
+        status.normal_rx = mac_adapter_receipt.autoack;
+#endif
         status.held = mac_adapter_receipt.received; status.bound_valid = status.held;
         status.first = status.held;
         if (status.held) status.frames++;
@@ -281,8 +288,14 @@ mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16
     if (status.held) return frame();
     if (status.phase == MAC_ADAPTER_RETIRING && !status.stop_started) {
         if (requested.control.outcome == MAC_TX_ACKED && status.policy == MAC_ADAPTER_KEEP_AUTOACK) {
+#if defined(CC2530_MAC_LINK)
+            if (!status.normal_rx) {
+#endif
             status.radio_result = mac_attempt_handoff(timeout, limit);
             if (status.radio_result != MAC_RADIO_READY) return fail(MAC_ADAPTER_RADIO_ERROR);
+#if defined(CC2530_MAC_LINK)
+            }
+#endif
             status.normal_rx = 1; status.phase = MAC_ADAPTER_RX; status.goal = CLOSE_RETIRE;
             settled = 0;
             return MAC_ADAPTER_WAIT;
@@ -343,7 +356,23 @@ mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16
         status.held = 1; status.bound_valid = status.first = 0; status.frames++;
         return MAC_ADAPTER_WAIT;
     }
-    if (status.radio_result != MAC_RADIO_EMPTY) return fail(MAC_ADAPTER_RADIO_ERROR);
+    if (status.radio_result == MAC_RADIO_RX_LOST) {
+        /* LINK normal RX too: the radio salvaged every AUTOACKed head first.
+         * There a loss inside a TX window equals an over-air loss: an unseen
+         * ACK closes as NO_ACK and is retried, and the closure stays lossy. */
+        if (
+#if defined(CC2530_MAC_LINK)
+            (!status.normal_rx && status.goal != CLOSE_NONE && status.goal != CLOSE_USER) ||
+            (status.phase == MAC_ADAPTER_COLLECT && !status.normal_rx) ||
+            (status.phase != MAC_ADAPTER_RX && status.phase != MAC_ADAPTER_COLLECT &&
+#else
+            status.normal_rx || (status.goal != CLOSE_NONE && status.goal != CLOSE_USER) ||
+            (status.phase != MAC_ADAPTER_RX &&
+#endif
+             status.phase != MAC_ADAPTER_CLOSING && status.phase != MAC_ADAPTER_DRAINING))
+            return fail(MAC_ADAPTER_RADIO_ERROR);
+        status.lossy = 1;
+    } else if (status.radio_result != MAC_RADIO_EMPTY) return fail(MAC_ADAPTER_RADIO_ERROR);
     if (status.phase == MAC_ADAPTER_DRAINING) {
         status.phase = MAC_ADAPTER_CLOSING; status.wait_through = 0;
     }
@@ -386,7 +415,9 @@ mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDAT
     if (result != MAC_ADAPTER_OK) return result;
     result = idle_off(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
-    if (config->channel < 11 || config->channel > 26 || config->power != RADIO_AUTOACK_POWER_05)
+    if (config->channel < 11 || config->channel > 26 ||
+        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5 &&
+         config->power != RADIO_AUTOACK_POWER_F5))
         return MAC_ADAPTER_INVALID;
     radio = mac_attempt_configure(config, timeout, limit);
     if (radio == MAC_RADIO_INVALID_ARGUMENT) return MAC_ADAPTER_INVALID;
@@ -408,7 +439,7 @@ mac_adapter_result_t mac_adapter_open(volatile uint32_t timeout, volatile uint16
     status.radio_result = mac_attempt_resume(timeout, limit);
     if (status.radio_result != MAC_RADIO_READY) return fail(MAC_ADAPTER_RADIO_ERROR);
     status.phase = MAC_ADAPTER_RX; status.normal_rx = 1;
-    status.stop_started = status.wait_through = 0; settled = 0;
+    status.stop_started = status.wait_through = status.lossy = 0; settled = 0;
     result = clock(timeout, limit);
     if (result == MAC_ADAPTER_OK) *opened = status.live;
     return result;

@@ -10,6 +10,82 @@ At M0, no third-party radio or Zigbee stack implementation is vendored.
 Standard compiler/runtime dependencies retain their own upstream licenses.
 BSD-3-Clause does not relicense SDCC, its runtime, uCsim, or external tools.
 
+The optional [SDCC code-generation study](SDCC_STUDY.md) includes
+`experiments/sdcc/local-returns.peep`, a restricted adaptation of SDCC 4.2
+mcs51 `peeph.def` rules 251.a/251.b, under GPL-2.0-or-later. It is a compiler
+input, not linked firmware or an imported protocol implementation.
+Its upstream GPL text is preserved verbatim in `experiments/sdcc/COPYING`.
+The accompanying Python/C regression fixtures and measurement tool are
+original BSD-3-Clause work. Source-built compiler experiments and upstream
+patches remain in isolated ignored build output with their upstream licenses.
+All measurements use public source and synthetic inputs, not equipment data.
+
+The separate [physical XDATA lifetime study](XDATA_LIFETIME_STUDY.md) uses
+original Python analyzers, an original simulator caller and generated public
+compiler-allocation facts. Its ASxxxx relocation decoder was written against
+the observed object format and linker behavior; no upstream implementation
+is copied. Recompiled runtime objects remain ignored build evidence under
+their existing upstream licenses. No SDK, private capture or equipment
+identity enters the committed inventory or measurements.
+
+The [compiler-owned XDATA study](SDCC_FUNCTION_XDATA_STUDY.md) exports a
+separate opt-in MCS51 patch series in `experiments/sdcc-function/patches`.
+Those modifications to SDCC retain its GPL-2.0-or-later terms; the existing
+GPL text is available in `experiments/sdcc/COPYING`. They do not become
+BSD firmware. The source archive is the exact public 4.2.0 archive/hash
+listed below; the full compiler source and binaries remain ignored build
+evidence. The project-side measurement, reconciliation and regression tools
+are original BSD-3-Clause work and use public generated allocation facts.
+The public IAR 8051 Assembler Guide, printed pp.113-114, is used only for
+documented metadata architecture, not copied proprietary code or formats.
+No application source, production pins, SDK, equipment data or private
+capture is imported or altered by this compiler representation experiment.
+
+Normal overlay builds now consume the separate public
+[SDCC fork release](https://github.com/faronov/sdcc/releases/tag/v4.2.0-xdata-ownership.1),
+with exact tag/source/archive/executable/manifest pins in
+`tools/xdata_toolchain_pins.json`. The fork preserves the upstream SVN r13081
+history, exact DFSG archive normalization and four original patch contents
+as separate source commits. The tag workflow built and compared two clean
+packages and publishes corresponding modified source alongside the binary.
+GPL/component notices and runtime exceptions remain with the toolchain;
+this repository's independently written downloader/probes remain BSD-3-Clause.
+No toolchain binary is added to Git, no source/ABI/protocol limit is changed,
+and no hardware commissioning conclusion follows. See
+[release and consumer evidence](XDATA_TOOLCHAIN.md).
+
+The [multi-pool XDATA study](XDATA_MULTIPOOL_STUDY.md) keeps that compiler
+frozen and adds original BSD-3-Clause allocation, binding and verification
+tools. Its committed evidence contains public compiler allocations,
+linked-image identities, synthetic simulator observations and reconstructed
+read/write sites. No third-party allocator, linker implementation, SDK or
+equipment data was imported. Production sources and production pin catalogs
+remain unchanged; the new identities are explicitly experimental.
+
+The preserved `experiments/xdata/inventory.json` is the one reviewed large
+text artifact: 1,069,021 bytes, SHA256
+`4b675f4f0e3f5d6d98a672537d6a2a9ece9d296e07a13383246cd3b9e628b260`.
+Its complete public allocation/reference/lifetime ledger remains inspectable
+and reproducible using the lifetime-study command. The repository checker
+allows only that exact path, length and digest above its ordinary 256-KiB
+guard. All UTF-8, binary, credential and personal-path checks still apply;
+other experimental or JSON files receive no exemption.
+
+The opt-in complete-radio replay uses an isolated build of the public
+[SDCC4.2.0+dfsg source archive](https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz),
+SHA256 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`.
+`tools/prepare_join_simulator.py` adds null checks only to the `memchip`
+symbol-lookup paths in uCsim `sim.src/uc.cc` and `sim.src/var.cc`. The package's
+banker has no direct chip: both bank-window labels and direct-register
+disassembly can otherwise dereference null. CPU execution, memory/banker
+implementation, instruction bytes and simulator deadlines are unchanged.
+The upstream simulator remains GPL-2.0-or-later, with its original notices;
+its source and binary stay in ignored build output, are not installed and
+are never linked into BSD firmware. The preparation tool records archive,
+before/after source, builder and binary hashes. It does not download sources
+or install dependencies. This exception is separate from the older
+[numeric-name workaround](BANKED_CODE.md); no existing worker changes tools.
+
 The M1 debugger fixture and its test patterns are original BSD-3-Clause work.
 Its MOV/NOP/RET probe uses ordinary 8051 instructions and synthetic constants,
 not bytes from an OEM image or an external programmer/debugger implementation.
@@ -193,6 +269,34 @@ flash services and existing controller model. The narrow ABI image links
 real SDCC runtime helpers and verifies actual pointer tags/parameter homes;
 it contains no substitute hardware result. No equipment was accessed and
 no complete radio-backed MCU fit or hardware observation follows.
+
+The DIRECT staging profile is original refactoring of the existing NWK/APS
+builder and interval MAC admission: a single-use owner/generation loan and
+in-place decode by the existing codec. It imports no code or packet builder.
+Its shared key-status snapshot renames existing storage and adds no code.
+Its host tests compare against the existing copying admission and reuse the
+existing E2E peer, NV and join corpora. The original poison harness uses the
+GNU linker's `--wrap` in native builds only. No hardware was accessed.
+
+The real `join_smoke` caller and its resource-link preparation likewise use
+original project services and the existing public synthetic coordinator.
+Function-spill area splitting preserves compiler instructions and complete
+debug identities. ASlink's emitted map and NoICE `DEF` records establish
+the resource reader's full-symbol cross-check; no debugger command is run.
+No new compiler/backend, third-party firmware, private key or hardware
+capture is imported. Resource linking does not establish DATA/stack safety.
+The shallow guard/codec differential and function-spill solver are also
+original work. They reuse the existing source paths, public synthetic inputs
+and linked byte-liveness engine. Expected bank destinations are established
+from actual relocated symbols/instructions; no vendor linker implementation
+or proprietary optimizer is imported. The post-link DATA result is distinct
+from stack or hardware evidence.
+The subsequent NV/wire/AES reloads and linked stack walker are original
+refactoring and analysis. They use existing C bodies, emitted SDCC4.2
+instructions and this project's banker/flash-engine bytes. The flash-template
+identity is the same previously reviewed123-byte engine, not imported code.
+CRT and runtime dependencies retain their upstream licenses. No proprietary
+optimizer, SDK, private capture or hardware observation is introduced.
 
 | Reference | Status and permitted use |
 | --- | --- |
@@ -843,8 +947,12 @@ unproved. Sticky TXACKDONE supplies neither a per-frame ACK count nor time.
 RX-to-RX timeout removal is not MAC IFS; physical stop/drain is not receiver-on
 POLL CLOSED. These limits are part of the contract, not hidden test restrictions.
 
-SWRS081B (revised February2011), Table2 p24 supplies the reference raw05 power
-profile, not calibrated board output. SWRZ031 (April2009), sections1.1-1.2
+SWRS081B (revised February2011), Table2 p24 supplies the reference raw05/D5/F5
+power profiles, typical -22/+1/+4.5 dBm on the CC2530 EM at25C,3V,2440MHz, not
+calibrated board output. The D5 and later F5 extensions reread the original TI PDF,
+SHA-256 `78d47f4ae373c95a1c452954a843b561b35ffa96bfb3061ddbab095c337d11bd`;
+they preserve full-byte TXPOWER readback and reject other power bytes.
+SWRZ031 (April2009), sections1.1-1.2
 pp2-3 covers DMA/Timer2 issues; this owner uses neither. All implementation,
 synthetic controller/vector and linked proof code is original BSD-3-Clause.
 No SDK code, Contiki implementation, capture, identity or hardware observation
@@ -884,6 +992,21 @@ complete-head upper predicates use sections23.8.11/23.10, pp222,232-233.
 No analog correction, undocumented zero-flag latency or capture offset is
 assumed. Original code and genuine linked/MMIO simulation are separate from
 hardware timing, calibrated CCA and protocol confirmation evidence.
+
+The 2026-09-28 complete-caller hardware investigation reread that same
+SWRU191F SHA-256, particularly pp222-223/226/253/259-260/265. RX_MODE11
+disables symbol search; changing back to00 requires RX restart. ISRFOFF=EF
+is a hard shutdown, unlike clearing RXENABLE. The bounded revised path
+therefore permits it only in verified empty, nontransmitting RSSI-only RX,
+not during ordinary reception or as fault recovery. Two real CCA_BUSY
+observations retained RX_ACTIVE after clearing RXENABLE, including one
+which kept RX_MODE11 throughout the failed stop. Page265 defines the
+RXFIRST/RXLAST offsets as bits6:0 and their high bits as reserved R, not
+R0; the real raw RXLAST high-bit observation prompted field masking.
+SWRZ031 adds no documented exception resolving these failures. Original
+host models and actual-instruction checks were expanded; no vendor code or
+private identity/capture is imported. See the
+[dated hardware evidence](ED_JOIN.md#2026-09-28-lg-physical-discovery-trials).
 
 The #72 same-owner rearm extension reread SWRU191F23.9.1-2 pp222-223,
 Fig23-20/Table23-3 pp235-236 and RXENABLE/RXMASKSET/RXMASKCLR p260 from the
@@ -1671,6 +1794,16 @@ section 4.3.4 p.416. Exact errata/test-plan revisions and contents have **not**
 been reviewed; do not infer that the errata is empty or substitute the older
 BDB 1.0 errata 15-02020 or test specification 14-0439.
 
+For the ordinary-discovery profile, the same hash-pinned PDF was reread:
+section10.3.2, pp.80-83, distinguishes install-code admission from the default
+global TC key and retains actual Network Key transport and replacement TC
+key exchange. The16-byte ASCII key is public protocol material, not a
+device secret. Discovery reuses the already reviewed scan, beacon, parent
+and contextual Association Response implementations. Refusing multiple
+open coordinator networks or incomplete/overflowed scans is conservative
+project policy, not a claimed BDB requirement. No external implementation,
+private network identity, Network Key or hardware capture is imported.
+
 The maintainer's 2026-09-23 decision permits implementation against this
 pinned base without first obtaining21-65431. It defers a development
 prerequisite, not primary review or conformance: the errata's contents and
@@ -1937,6 +2070,16 @@ first start, positive period replacement, RUN versus STATE, CC253x event
 selectors, common live latching and masked flags. The exact register/page
 derivations are recorded in the dedicated contract. SWRZ031, April2009/history
 2009-04-29, section1.2 pp.2-3 supplies the low-byte-FF latch workaround.
+
+The later first-failure diagnostic uses the same SWRU191F register definitions:
+RFERRF p211 identifies bit2 as RXOVERF, and section23.10.2 p233 describes
+RX FIFO overflow. FSMSTAT0.7 is Reserved R on p262, not guaranteed-zero R0;
+the existing rejection remains unchanged. Original guard/value staging
+preserves the first unmasked read without importing a driver or adding
+peripheral reads, flag clears or recovery. The complete caller's subsequent
+[physical guard14/value04 observation](ED_JOIN.md#2026-09-28-lg-physical-discovery-trials)
+is recorded separately from these primary-document facts. Private RAM/frame
+captures and identities remain outside Git and CI.
 
 SWRS081B, April2009/revised February2011, p.21 and SWRU191F's overview p.22
 advertise end capture, whereas the register-level procedure in section22.1.10 p.199

@@ -68,7 +68,9 @@ mac_radio_result_t mac_radio_init(const radio_autoack_config_t MCU_XDATA *config
     result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
     if (result != MAC_RADIO_READY) return result;
     if (configuration->channel < 11 || configuration->channel > 26 ||
-        configuration->power != RADIO_AUTOACK_POWER_05) return MAC_RADIO_INVALID_ARGUMENT;
+        (configuration->power != RADIO_AUTOACK_POWER_05 &&
+         configuration->power != RADIO_AUTOACK_POWER_D5 &&
+         configuration->power != RADIO_AUTOACK_POWER_F5)) return MAC_RADIO_INVALID_ARGUMENT;
     mac_radio_config = *configuration;
     status.phase = MAC_RADIO_STARTING;
     status.radio_result = 255;
@@ -130,6 +132,9 @@ static mac_radio_result_t operate(uint8_t operation, const uint8_t MCU_XDATA *bo
         if (status.radio_result == RADIO_AUTOACK_FRAME) result = MAC_RADIO_FRAME;
         else if (status.radio_result == RADIO_AUTOACK_BAD_CRC) result = MAC_RADIO_BAD_CRC;
         else if (status.radio_result == RADIO_AUTOACK_EMPTY) result = MAC_RADIO_EMPTY;
+#if defined(CC2530_MAC_ADAPTER)
+        else if (status.radio_result == RADIO_AUTOACK_RX_LOST) result = MAC_RADIO_RX_LOST;
+#endif
         else return fail(MAC_RADIO_DRIVER_ERROR);
     } else if (operation == 1) {
         status.radio_result = radio_autoack_send(body, length, timeout, limit);

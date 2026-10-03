@@ -40,8 +40,9 @@ The next [occupancy-owned runtime-slot step](ED_JOIN.md#occupancy-owned-runtime-
 removes duplicate NWK/APS receive/encapsulation storage and ZDO receive/BDB
 broadcast packets; occupied slots and server responses remain independent.
 Real tagged event/action unions also shrink caller I/O. Current SDCC BDB
-size is1428, the services+BDB/MAC lower bound7891, and explicit caller
-configuration/I/O raises it to8090. Both-board81722-check native/sanitizer
+size is1429, including the later one-byte association `timely` flag. At the
+earlier1428-byte size the services+BDB/MAC lower bound was7891, and explicit
+caller configuration/I/O raised it to8090. Both-board81722-check native/sanitizer
 evidence and retained exact key-image identities do not establish complete
 target fit or execution.
 
@@ -156,6 +157,35 @@ roles and grants admit only real lower-service arguments. The581-byte net
 reduction yields a7644-byte floor, leaving36 before uncounted overhead and
 still988 above the application target. The separate simulated pointer/
 parameter ABI image does not establish the full40-module placement or SP.
+
+The active [complete radio-backed join plan](LINK_JOIN_PLAN.md) combines
+the subsequent DIRECT profile and shallow driver with the real `join_smoke`
+caller. The current link fits7641 ordinary XDATA on both boards, including
+caller, banker and libc. Near-call groups are checked against their intended
+symbols; function-spill placement is solved and independently relink-checked
+for DATA/OSEG/libc byte lifetimes. The actual linked static stack bound is
+45/45 bytes, including bank transitions and libc; startup and the flash
+template are also checked. This leaves no stack margin and does not grant
+executable acceptance or replace alias-aware MCU stack observation.
+Immutable offline admission separately binds the full image and proves
+every XDATA allocation/private fence, including the26-byte libc prefix.
+`flash_exec` precedes `timebase` and `clock`: the latter's real private
+deadline/expired outputs must lie outside the workspace guard's closed
+prefix. The generic image now executes from reset through authenticated
+READY under the true IRAM alias, with real radio/MAC, AES/DMA and the copied
+RAM flash engine. Its602 caller polls match the independent peer reference;
+observedSP7B remains below7C. This is synthetic-peripheral MCU evidence,
+not physical RF or full two-board/failure acceptance.
+The shared status copy and
+single-use IDLE-frame loan do not replace durable key/counter ownership.
+Both host and generic MCU authenticated READY are established.
+The subsequent complete-caller failure corpus distinguishes ordinary
+terminal FAULT from a provisioning call that never returns. Its synthetic
+busy erase must retain the real XMAP RAM loop, pending writer/journal and
+unchanged caller ownership even after FCTL later becomes idle. Generic MCU
+execution now covers that retained stop, a radio error during real scan
+closure and genuine missing-key timeout/cleanup. No new recovery path,
+successful fault cleanup or extra RAM is introduced.
 
 The M1 target addition is a separate non-RF debugger fixture, not a protocol
 layer. Its deterministic pattern logic is host-testable; its SDCC register
@@ -1184,7 +1214,7 @@ Receive/stop retain existing bounded publication/drain semantics; resume
 restores filtering then AUTOACK only while stopped and empty. There is no
 concurrent live-AUTOACK admission claim or hidden RX gap.
 
-Both-board host/image/alias-aware CI binds7007 CODE,450+64 reserved
+Both-board host/image/alias-aware CI binds7056 CODE,450+64 reserved
 XDATA and whole-run SP34 within separate24576/1536/SP7C limits. No board image
 links this synthetic test composition. Broadcast-AR behavior, global ACK-FCF
 compatibility, same-clock captured timing, continuous RX/ordinary-TX arbitration
@@ -2117,6 +2147,13 @@ caller frame remain intact. Recovery requires a separately authorized reset,
 not a fabricated safe timeout return to possibly busy flash. The nine-byte
 private `flash_exec_work` contains command, four word bytes, little-endian
 limit, result at byte7 and last RAM-observed FCTL at byte8.
+
+Each completed poll takes at least 21 CPU cycles (SWRU191 instruction table),
+so a page erase (20 ms, SWRU191 section 6.3) needs over 30,000 polls at 32 MHz.
+Callers that may erase use `FLASH_EXEC_POLL_MAX` (65,535, at least 43 ms).
+Hardware-observed on LG Rev0.3: the join caller's former 2,000-poll budget
+(about 1.3 ms) stopped the first post-association erase in `RAM_STOP` with
+FCTL `0x85`.
 
 The exact standalone image has 1,451 CODE bytes, 168 ordinary XDATA bytes
 plus the unchanged 64-byte status reservation, and observed peak SP `2B`.

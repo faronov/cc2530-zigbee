@@ -73,6 +73,10 @@ static uint16_t cap = 1000;
 static unsigned first_call, case_number, fail_after_arm;
 static unsigned ff_after_arm;
 static unsigned equal_arm, arm_pending;
+static unsigned busy_stops, armed_autoack;
+#if defined(CC2530_MAC_LINK)
+static unsigned beacon_filters;
+#endif
 static uint16_t shared_address = 0x500, radio_end = 0x700, owner_end = 0xb00;
 static uint16_t raw_address = 0x510, config_staging = 0x530, attempt_raw_address = 0x710;
 static uint16_t epoch_address = 0x900, receipt_address = 0xc00, normal_receipt = 0xc00;
@@ -110,7 +114,10 @@ static void advance_clocks(uint32_t delta)
             model_rx_end = model_clocks-delta+reply_remaining;
             reply_remaining = 0; mode = 2; XR(0x6192) = 0;
             XR(0x6193) = (XR(0x6193) & 0xc8) | 5; XR(0x6199) = 1;
-            if (reply_after_tx && XR(0x6189) == 0x40) {
+            /* Raw RX, or armed normal filtering with ACCEPT_FT_2_ACK (p226). */
+            if (reply_after_tx && (XR(0x6189) == 0x40 ||
+                (XR(0x6189) == 0x60 && XR(0x6180) == RADIO_AUTOACK_NORMAL_FILTER &&
+                 (XR(0x6181) & 0x20)))) {
                 reply_after_tx = 0; enqueue(5, bad_reply ? 0x69 : 0xe9, 0x5a);
             }
         } else reply_remaining -= delta;
@@ -144,7 +151,7 @@ static uint8_t attempt_load(uint8_t a, uint8_t value)
     advance_clocks(mmio_clocks);
     if (a == 0xa2 && arm_pending) {
         uint64_t target = (uint64_t)mac_attempt_raw.before.periods*512u +
-            mac_attempt_raw.before.fine + (16u+2u*body_length)*512u;
+            mac_attempt_raw.before.fine + (RADIO_AUTOACK_TX_TURNAROUND+16u+2u*body_length)*512u;
         uint64_t now = (uint64_t)coarse*512u+fine;
         uint64_t delta = (target + UINT64_C(0x1fffffe00)-now) % UINT64_C(0x1fffffe00);
         assert(delta < UINT64_C(0xffffff00)); advance_clocks((uint32_t)delta);
@@ -160,6 +167,12 @@ static uint8_t attempt_load(uint8_t a, uint8_t value)
 static uint8_t attempt_xload(uint16_t a)
 {
     advance_clocks(mmio_clocks);
+#if defined(CC2530_MAC_LINK)
+    if (a == 0x6081) {
+        assert(mode == 6 && tx_count >= 2 && tx_fifo[0] == tx_count + 1);
+        logs(); trace('r', a, tx_fifo[1]); return tx_fifo[1];
+    }
+#endif
     if ((mode == 6 || mode == 7) && a == 0x624a) {
         logs(); trace('r', a, XR(a)); return XR(a);
     }
@@ -171,6 +184,16 @@ static uint8_t attempt_xload(uint16_t a)
 static void attempt_store(uint8_t a, uint8_t before, uint8_t value)
 {
     advance_clocks(mmio_clocks);
+    if (a == 0xe1 && value == 0xef) {
+        assert(write_count == 1 && writes[0].address == a && writes[0].after == value);
+        write_count = 0; logs(); trace('w', a, value);
+        assert(mode == 2 && XR(0x6189) == 0x4c && XR(0x618b) == 1 &&
+               !count && !packets && !tx_remaining && !(SOC_RFIRQF1 & 6) &&
+               !(XR(0x6193) & 0xea));
+        busy_stops++;
+        XR(0x618b) = 0; SOC_RFIRQF0 |= 0x80; mode = 3; phase = 0;
+        return;
+    }
     if ((a == 0xd9 || (a == 0xe1 && value == 0xee)) && XR(0x6189) == 0x4c) {
         assert(write_count == 1 && writes[0].address == a && writes[0].after == value);
         write_count = 0; logs(); trace('w', a, value);
@@ -222,6 +245,36 @@ static void attempt_store(uint8_t a, uint8_t before, uint8_t value)
 static void attempt_xstore(uint16_t a, uint8_t value)
 {
     advance_clocks(mmio_clocks);
+#if defined(CC2530_MAC_LINK)
+    /* Arming during own TX: only an ACK-requesting slot, filter then AUTOACK. */
+    if (mode == 6 && (tx_fifo[1] & 0x20) &&
+        ((a == 0x6180 && value == RADIO_AUTOACK_NORMAL_FILTER && XR(a) == 0x0c &&
+          XR(0x6189) == 0x4c) ||
+         (a == 0x6189 && value == 0x60 && XR(a) == 0x4c &&
+          XR(0x6180) == RADIO_AUTOACK_NORMAL_FILTER))) {
+        assert(xwrite_count == 1 && xwrites[0].address == a && xwrites[0].value == value);
+        xwrite_count = 0; logs(); trace('w', a, value);
+        XR(a) = value ^ (a == phase_write_fault ? 1u : 0u);
+        if (a == 0x6189) {
+            armed_autoack++;
+            model_arm = model_clocks; arm_pending = equal_arm;
+            advance_clocks(extra_arm);
+            ff = ff_after_arm;
+            if (fail_after_arm) SOC_RFERRF = 8;
+        }
+        return;
+    }
+    /* Beacon Request during own TX: beacon-only FRMFILT1, then filter on. */
+    if (mode == 6 && tx_fifo[1] == 3u &&
+        ((a == 0x6181 && value == 0x08 && XR(a) == 0x70 && XR(0x6180) == 0x0c) ||
+         (a == 0x6180 && value == 0x0d && XR(a) == 0x0c && XR(0x6181) == 0x08))) {
+        assert(xwrite_count == 1 && xwrites[0].address == a && xwrites[0].value == value);
+        xwrite_count = 0; logs(); trace('w', a, value);
+        XR(a) = value ^ (a == phase_write_fault ? 1u : 0u);
+        if (a == 0x6180) beacon_filters++;
+        return;
+    }
+#endif
     if ((a == 0x6189 && (value == 0x4c || XR(a) == 0x4c)) ||
         (a == 0x6196 && value == 0xf8) || (a == 0x6197 && value == 0x0a) ||
         (a == 0x618c && XR(0x6189) == 0x4c)) {
@@ -232,7 +285,7 @@ static void attempt_xstore(uint16_t a, uint8_t value)
             XR(0x618b) = 1; XR(0x6192) = 0x40; XR(0x6193) = (XR(0x6193)&8u)|1u; XR(0x6199) = 0;
             mode = 1; phase = 0;
         } else {
-            assert(mode == 5 || (a == 0x6189 && value == 0x40 && (mode == 6 || mode == 2)));
+            assert(mode == 5 || (a == 0x6189 && value == 0x40 && mode == 6));
             XR(a) = value ^ (a == phase_write_fault ? 1u : 0u);
             if (a == 0x6189 && value == 0x40) {
                 model_arm = model_clocks; arm_pending = equal_arm;
@@ -278,7 +331,7 @@ static void attempt_reset(void)
     fine = fine_latch = fine_write = fine_period = 0;
     coarse = coarse_latch = coarse_write = coarse_period = 0;
     pending = order = ff = broken = clock_failure = fail_after_arm = ff_after_arm = 0;
-    equal_arm = arm_pending = 0;
+    equal_arm = arm_pending = busy_stops = armed_autoack = 0;
     model_clocks = epoch_origin = model_tx_end = model_rx_end = model_arm = 0;
     clocks = tx_remaining = reply_remaining = extra_arm = extra_rx = 0;
     mmio_clocks = 32; first_call = 1; bound = 10000; cap = 1000; window = 64;
@@ -367,14 +420,16 @@ static void attempt_call(unsigned op, unsigned expected)
             d->has_time, d->clock_result, d->timer_result, d->epoch_result, d->radio_result);
     }
 }
-#define ATTEMPT_CASES 28u
+#define ATTEMPT_CASES 33u
 static void attempt_case(unsigned n)
 {
     unsigned op;
     case_number = n; attempt_reset();
+    if (n == 14) config.value.power = RADIO_AUTOACK_POWER_D5;
     if (printing_vector) printf("{\"case\":%u,\"steps\":[", n);
     attempt_call(3, MAC_RADIO_STATE);
     attempt_call(0, MAC_RADIO_READY);
+    assert(XR(0x6190) == config.value.power);
     if (n == 26) {
         for (op = 0; op < 3; op++) {
             advance_clocks(0x7ffff000UL); attempt_call(4, MAC_RADIO_EMPTY);
@@ -383,7 +438,11 @@ static void attempt_case(unsigned n)
     attempt_call(2, MAC_RADIO_STATE);
     attempt_call(1, MAC_RADIO_STOPPED);
     if (n == 25) SOC_RFIRQF1 |= 1;
-    if (n == 14) body_length = 125;
+    if (n == 14) {
+        body_length = 125;
+        pointer_reserved = 0x80; head = tail = 125; signals();
+        cap = 512;
+    }
     if (n == 15) body_length = 1;
     if (n == 20) { cap = 1; attempt_call(2, MAC_RADIO_TIMER_ERROR); goto finished; }
     if (n == 21) {
@@ -391,7 +450,7 @@ static void attempt_case(unsigned n)
     }
     attempt_call(2, MAC_RADIO_READY);
     attempt_call(2, MAC_RADIO_STATE);
-    if (n == 1) { cca_clear = 0; XR(0x6193) |= 8; }
+    if (n == 1 || n >= 28) { cca_clear = 0; XR(0x6193) |= 8; }
     if (n == 2) bad_reply = 1;
     if (n == 3) reply_after_tx = 0;
     if (n == 4) extra_arm = 65536;
@@ -423,11 +482,31 @@ static void attempt_case(unsigned n)
         assert(delta < UINT64_C(0xffffff00)); advance_clocks((uint32_t)delta);
     }
     if (n == 27) equal_arm = 1;
+    if (n == 28) { hold_stop = 1; cap = 120; }
+    if (n == 29) { suppress_idle = 1; cap = 120; }
+    if (n == 30) ignored_clear = 1;
+    if (n == 31) phase_write_fault = 0x6189;
+    if (n == 32) ignored_enable = 1;
     attempt_call(3, n == 1 ? MAC_RADIO_CCA_BUSY : n == 2 ? MAC_RADIO_BAD_CRC :
         n == 3 || n == 16 ? MAC_RADIO_EMPTY : n == 8 || n == 9 || n == 13 ? MAC_RADIO_TIMER_ERROR :
-        n == 4 || n == 6 || n == 10 || n == 11 || n == 12 || n == 18 || n == 23 || n == 27 ?
+        n == 4 || n == 6 || n == 10 || n == 11 || n == 12 || n == 18 || n == 23 || n == 27 || n >= 28 ?
         MAC_RADIO_DRIVER_ERROR :
         MAC_RADIO_FRAME);
+    if (n == 1)
+        assert(busy_stops == 1 && !receipt.transmitted && !receipt.received &&
+               XR(0x6189) == 0x40 && XR(0x618b) == 1 && mode == 2);
+#if defined(CC2530_MAC_HANDOFF)
+    if (n == 23)
+        assert(radio_autoack_diagnostic()->result == RADIO_AUTOACK_WORK_LIMIT &&
+               radio_autoack_diagnostic()->polls == cap &&
+               mac_time_diagnostic()->result == MAC_TIME_PENDING &&
+               mac_time_attempt_active);
+#endif
+    if (n >= 28) {
+        assert(!tx_started && busy_stops == (n == 30 ? 0u : 1u));
+        assert(radio_autoack_diagnostic()->result == (n == 28 || n == 29 ?
+            RADIO_AUTOACK_WORK_LIMIT : RADIO_AUTOACK_STATE_CHANGED));
+    }
     if (n == 26) assert(mac_attempt_raw.before.periods > 0xffff00 && mac_attempt_raw.rx.periods < 100);
     if (!mac_attempt_diagnostic()->fault) {
         attempt_call(3, MAC_RADIO_STATE);

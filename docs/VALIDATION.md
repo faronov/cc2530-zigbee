@@ -83,7 +83,7 @@ release events are always full. Shared headers/build/verification/runtime
 changes and unknown dependency mappings also select full.
 
 The expensive banked-key artifact corruption campaign is explicit:
-`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all246199
+`ARTIFACT_CAMPAIGN=full` remains the Make default and requires all247674
 current CODE/address and complete metadata mutations. A selected affected run
 may defer this campaign, **not** the immutable
 CODE/address/raw-CDB/map/listing/object identities, physical
@@ -406,6 +406,69 @@ Code `e286b72` passed
 exposed stale exact mutation totals after source-line record additions;
 both-board targeted executions confirmed the increased totals before this
 complete acceptance. No generator, runtime case or deadline was removed.
+
+The [DIRECT staging profile](MAC_LINK_DRIVER.md#direct-mac-staging) adds
+two workers and nine native/sanitizer runs per board beside CHILD. Its
+initial staging-only40-object ledger is238278 CODE +1507 CONST,5681 XSEG and1792 caller bytes:
+a7473-byte floor, still not a combined image. The focused test checks exact
+equivalence with copying admission, loan consumption, argument/busy/guard
+rejections and absence of NWK mutation on a busy owner. The NV, E2E and
+POLL/join corpora run unchanged. A native `--wrap` rerun of the E2E/compact/
+UPPER corpus poisons the shared key-status snapshot at every exported
+refresher entry. It requires at least1000 poisonings and unchanged
+results. No legacy image, pin or count changes.
+
+Those DIRECT workers also run the actual `join_smoke` caller's ten
+fresh-process native/sanitizer scenarios, with shallow/deep caller comparison
+covering the integrated NV/wire/AES reloads, and the same-mode shallow/deep
+guard/codec differential (95,789,977 records per executable).
+The separate opt-in
+[resource-link preparation](LINK_JOIN_PLAN.md) is not a new MCU worker:
+both boards currently link7641 XDATA and243593/243633 CODE. The additional
+`prepare-join-smoke-data` solves102 function areas, relinks actual objects and
+checks2338 live-byte inequalities against DATA/OSEG/libc on both boards.
+The report also checks complete near/far destinations, physical reservations,
+raw metadata identities and dedicated bit storage. Its separate `analysis.json`
+can certify that linked compiler-scratch result.
+`prepare-join-smoke-stack` retains the DATA gate and independently bounds
+actual linked PUSH/POP, near/far calls and libc, with exact CRT/trampoline/
+flash-template checks. Both boards meet45/45 bytes aboveSP4F and8/8 bank
+depth; startup is2/4 bytes (generic/LG). Mutations cover every checked
+startup/trampoline/template byte, recursive/unbalanced paths, unknown SP
+writes, interrupt enables and the exact45-byte boundary. Only
+`static_stack_verified` becomes true; accepted-image, observed-stack,
+simulation and hardware acceptance remain false. The shared DATA checker still returns
+279 functions/1262 pairs for the old complete banked caller.
+All previous corpora remain; final combined execution/ABI acceptance is a
+later gate, not inferred from host READY.
+
+The separate `prepare-join-smoke-image` gate now pins complete raw images,
+metadata and explicit unchanged runtime members on both boards. It checks
+all7641 ordinary XDATA bytes,1421 CDB objects/parameter homes, complete private
+fences and the required positive `clock`-to-timebase output path. Regressions
+reject stale admission/header output, changed artifact identities, compiler
+home/fence mutations, invalid native scalar/pointer schemas, unauthorized
+stimulus and duplicate logical-PC breakpoints across CODE banks/XMAP.
+`test-join-smoke-mcu` is opt-in, not a new accepted CI worker. The generic
+image now executes reset through authenticated READY:602 caller polls and
+157320 peripheral checkpoints, matching the independent native/sanitizer
+reference's9 transmissions, with observedSP7B/7C and intact guards.
+The actual READY loop retains ownership and media. Its completed JSON report
+binds the board and immutable image identities. A partial `--limit` run
+publishes no completed report, including when the limit covers every step.
+The failure extension adds explicit returned/nonreturning transcript markers
+and a real XMAP RAM-stop boundary for a busy provisioning erase. Later FCTL
+idle must leave the entire stopped machine unchanged except that external
+peripheral byte. Host cases also cover withheld key and retained radio error;
+replay mutation tests reject fabricated returns and lost pending ownership.
+The generic missing-key replay executes411 caller observations/53021
+peripheral checkpoints atSP7B. The retained-radio replay executes23/7623
+peripheral checkpoints atSP78; the busy-flash replay executes3/3254 atSP6E
+and retains the actual RAM stop after later idle. All keep theSP7C ceiling,
+immutable image identity and complete memory/owner retention checks.
+LG full execution and Actions acceptance remain open; the
+[execution plan](LINK_JOIN_PLAN.md#complete-caller-failure-corpus)
+records the failure evidence separately. No hardware observation is claimed.
 
 The separate [boot-disarmed MAC board fixture](MAC_SMOKE.md) adds two workers
 without replacing an existing image or uploading a banked programming artifact.

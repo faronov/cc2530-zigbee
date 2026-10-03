@@ -64,8 +64,11 @@ only: no callbacks, ISR entry, recursion, concurrent observers or nested use.
   explicitly clears parent information and Timeout Request context.
 * `receive(raw_npdu, length, output, event, limits, nv_polls)` selects actual
   keys internally, verifies required MICs and identities/selectors, checks
-  replay, and durably saves all admitted incoming floors and transitions
-  **before** returning a packet/event. Initial unsecured NWK is accepted only
+  replay, and durably saves transitions, key/slot changes, APS-secured input
+  and every event above MANAGEMENT **before** returning a packet/event.
+  DATA/MANAGEMENT frames without APS security or a key-slot change (ordinary
+  data, Network Status, ED Timeout Response) update only the volatile incoming
+  floors and keepalive bits; see *Volatile floors and keepalive state*. Initial unsecured NWK is accepted only
   for the APS-protected initial Network Transport-Key. All later traffic
   requires NWK security. No authenticated boolean is accepted from callers.
   The output event's low seven bits are the semantic event
@@ -110,7 +113,7 @@ only: no callbacks, ISR entry, recursion, concurrent observers or nested use.
   clears durable identity/key/replay history.
 * `status(&metadata)` copies config, phase, active sequence, valid-slot bits,
   newer-pending flag, `parent_information` (recognized low3 bits),
-  `timeout_pending` (durable request intent), and a nonsecret result.
+  `timeout_pending` (volatile request intent), and a nonsecret result.
   Neither parent field is proof of delivery, a live deadline or BDB readiness.
   It does not export key material,
   incoming floors, lower secret caches or an authentication capability.
@@ -217,19 +220,18 @@ RX (`0C, status0..1, parentInformation`) require both IEEE addresses,
 unicast destination and radius 1. The request is sent with `aps_secure=0`
 because it is a NWK command, not an APDU; genuine NWK protection is mandatory.
 Both protected forms require exactly45 NPDU bytes with those headers.
-Before publishing a genuinely encrypted outgoing `0B`, the owner durably sets
-one outstanding-request bit. Retries reconstruct a new protected request and
+Before publishing a genuinely encrypted outgoing `0B`, the owner sets one
+outstanding-request bit in RAM (the NWK counter reservation is still durable). Retries reconstruct a new protected request and
 retain that context without resetting incoming floors. A response requires
 this outstanding context in addition to the real NWK MIC, source short0,
 bound TC auxiliary/header IEEE, own short/IEEE, both IEEE fields and radius1.
 An unsolicited response cannot establish parent information.
 On status0, the owner stores `parentInformation & 07`; status1 clears the
 outstanding bit without changing previously accepted parent information.
-The consumed context, successful metadata update and incoming replay floor
-are in the same atomic journal payload save before publication.
+The consumed context, parent-information update and incoming replay floor
+change together in RAM before publication, without an NV write.
 An admitted response returns the entire three-byte nonsecret payload with
-event exactly `SECURITY_KEYS_EVENT_MANAGEMENT` (no APS-secured bit), after
-that save succeeds. It does not modify key verification or application readiness.
+event exactly `SECURITY_KEYS_EVENT_MANAGEMENT` (no APS-secured bit). It does not modify key verification or application readiness.
 The reverse directions
 are unsupported in this ED-only owner.
 Parent-information bits, including reserved bits and MAC-poll-only values,
@@ -242,16 +244,16 @@ keepalive support), explicitly rejects MAC-poll-only parents, and matches
 its outstanding request, deadline, addresses and status before accepting
 the parent information. Repeated Timeout Request sends consume fresh NWK
 security counters; the upper procedure owns scheduling and retry bounds.
-Persisted request intent is not proof that RF transmission occurred or that
-a response arrived in the current timed transaction. Restart remains
-recovery-required in the parent integration.
+Request intent is not proof that RF transmission occurred or that a response
+arrived in the current timed transaction. Restart remains recovery-required
+in the parent integration.
 
 For **every outgoing NPDU**, the owner clears the caller's End Device
-Initiator assertion and then sets EDI iff persisted `parent_information != 0`,
+Initiator assertion and then sets EDI iff current `parent_information != 0`,
 before authenticating the header. This includes Timeout Request retries,
 ordinary Data/ACK, Request/Verify and Leave. A successful response containing
 only reserved bits stores zero and cannot set EDI. Parent information survives
-key changes and Leave as durable history; Leave clears outstanding Timeout
+key changes and Leave (it is persisted by their saves); Leave clears outstanding Timeout
 context, not that history. Core3.3.1.1.9's EDI condition is a separate wire
 requirement from the upper profile's bit1/readiness test.
 The owner also admits bounded NWK Network Status bodies as
@@ -335,10 +337,28 @@ rejoin, PAN update or Leave. Every save burns unused outgoing reservations.
 
 `security_counter` remains the sole NV writer. Its degraded-journal refusal,
 runtime snapshot/generation checks, 32-erases/page/power-epoch bound and
-fail-stop RAM executor are unchanged. Saving a floor for every admitted frame
-is deliberately conservative and quickly reaches that bound; this is not a
-production flash-endurance solution. Two pages do not detect coherent cold
-rollback or total erasure without an external trusted history/anchor.
+fail-stop RAM executor are unchanged.
+
+### Volatile floors and keepalive state
+
+The NWK incoming floors (offsets 80..87) and the PHASE byte's keepalive bits
+(bits4..7: parent information and outstanding Timeout Request) have RAM
+copies. `open` and every successful save set them from the record; `load`
+overlays them on the NV record, so the next durable save persists them.
+Ordinary DATA/MANAGEMENT receive and an ED Timeout Request send update only
+these copies; the phase nibble never changes lazily. This keeps a READY
+device's 30-second keepalive from consuming the per-power-epoch erase budget
+(previously two saves per keepalive exhausted it in about 15 minutes, with
+1-2 s radio deafness per save on LG hardware).
+
+The accepted trade-off: after reset the incoming NWK floors revert to the last
+saved values, so frames first admitted after that save can be replayed once
+until a newer frame or durable save raises the floor. APS floors, key slots,
+selectors, TC verification and every APS command stay durable. Reset also
+reverts parent information and request intent to the saved record: a replayed
+ED Timeout Response is then refused with CONTEXT, and parent information is
+refreshed by the next keepalive. The two journal pages do not detect coherent cold rollback or total erasure without an
+external trusted history/anchor.
 
 ## Primary sources and policy distinctions
 

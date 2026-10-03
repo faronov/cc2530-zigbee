@@ -1,0 +1,165 @@
+From 4282c3d1c683028994f504d81c5b2b3555884e90 Mon Sep 17 00:00:00 2001
+From: Aleksandr Faronov <faronov@gmail.com>
+Date: Fri, 2 Oct 2026 14:13:51 +0000
+Subject: [PATCH 2/4] test(mcs51): cover inline return provenance and storage
+ modes
+
+---
+ support/regression/test-xdata-ownership.py | 98 ++++++++++++++++++----
+ support/regression/xdata-ownership.c       |  9 +-
+ 2 files changed, 92 insertions(+), 15 deletions(-)
+
+diff --git a/support/regression/test-xdata-ownership.py b/support/regression/test-xdata-ownership.py
+index 0b9e492..b94bed9 100644
+--- a/support/regression/test-xdata-ownership.py
++++ b/support/regression/test-xdata-ownership.py
+@@ -7,11 +7,18 @@ import subprocess
+ import tempfile
+ 
+ 
+-def compile_case(compiler, root, text, flags):
++def run(command, cwd):
++    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True)
++    if result.returncode:
++        raise RuntimeError(f"{command!r}\n{result.stdout}\n{result.stderr}")
++    return result
++
++
++def compile_case(compiler, root, text, flags, debug=True):
+     root.mkdir()
+     (root / "input.c").write_text(text)
+-    subprocess.run([compiler, "-mmcs51", "--model-large", "--debug", *flags,
+-                    "-c", "input.c"], cwd=root, check=True, capture_output=True)
++    run([compiler, "-mmcs51", "--model-large", *(["--debug"] if debug else []),
++         *flags, "-c", "input.c"], root)
+     return root
+ 
+ 
+@@ -54,28 +61,91 @@ def main():
+         assert one("foo", "aggregate")["size"] == 3
+         assert one("foo", "pointer")["size"] == 2
+         assert one("foo", "first")["address_taken"]
++        assert one("sibling", "local")["class"] == "LOCAL"
+         assert one("interrupt_owner", "local")["owner_isr"]
+         assert one("rent", "retained")["owner_reentrant"]
+         assert one("rent", "retained")["class"] == "STATIC_LOCAL"
+         assert not any(o["owner"] == "rent" and o["class"] != "STATIC_LOCAL" for o in objects)
+-        no_regs = compile_case(args.sdcc, root / "no-regs", source,
+-                               ["--no-reg-params", "--xdata-ownership"])
+-        rows = json.loads((no_regs / "input.xdata.json").read_bytes())["objects"]
+-        assert not any(o["class"] == "FIRST_ARGUMENT_HOME" for o in rows)
+-        assert any(o["owner"] == "foo" and o["symbol"] == "_foo_PARM_1" and
+-                   o["class"] == "PARAM_CALLER_WRITTEN" for o in rows)
++        bank1 = compile_case(args.sdcc, root / "bank1", source,
++                             ["--parms-in-bank1", "--xdata-ownership"])
++        rows = json.loads((bank1 / "input.xdata.json").read_bytes())["objects"]
++        assert any(o["owner"] == "foo" and o["name"] == "second" and
++                   o["class"] == "REGISTER_ARGUMENT_HOME" for o in rows)
++        bank1_control = compile_case(args.control, root / "bank1-control", source,
++                                     ["--parms-in-bank1"])
++        assert (bank1 / "input.rel").read_bytes() == (bank1_control / "input.rel").read_bytes()
+         external = compile_case(args.sdcc, root / "extern",
+                                 "extern __xdata char missing; void f(void) { missing = 3; }\n",
+                                 ["--xdata-ownership"])
+         rows = json.loads((external / "input.xdata.json").read_bytes())["objects"]
+         assert not any(o["symbol"] == "_missing" for o in rows)
+         assert b"S _missing Ref" in (external / "input.rel").read_bytes()
+-        for compiled in (control, off, on):
+-            subprocess.run([args.sdcc, "-mmcs51", "--model-large", "--debug",
+-                            "-o", "image.ihx", "input.rel"],
+-                           cwd=compiled, check=True, capture_output=True)
++        for flags, debug in (([], False), (["--stack-auto"], True)):
++            suffix = "debug-off" if not debug else "stack-auto"
++            variant = source if not flags else (
++                "__xdata volatile char global;\n"
++                "char f(char a, char b) { volatile char local; static __xdata char retained;\n"
++                "local = a + b; retained++; return local + retained; }\n"
++                "void main(void) { global = f(1, 2); }\n")
++            a = compile_case(args.control, root / (suffix+"-control"), variant, flags, debug)
++            b = compile_case(args.sdcc, root / suffix, variant,
++                             flags+["--xdata-ownership"], debug)
++            for ext in ("asm", "rel", "lst", "sym"):
++                assert (a / ("input."+ext)).read_bytes() == (b / ("input."+ext)).read_bytes()
++            data = json.loads((b / "input.xdata.json").read_bytes())
++            if flags:
++                assert all(o["owner_reentrant"] and o["class"] == "STATIC_LOCAL"
++                           for o in data["objects"] if o["owner"])
++        special_source = (
++            "__xdata unsigned char initialized = 7;\n"
++            "__xdata __at(0x1234) unsigned char absolute;\n"
++            "unsigned char * __xdata generic_pointer;\n"
++            "void f(void) { extern __xdata unsigned char outside; outside = initialized; }\n")
++        a = compile_case(args.control, root / "special-control", special_source, [])
++        b = compile_case(args.sdcc, root / "special", special_source, ["--xdata-ownership"])
++        assert (a / "input.rel").read_bytes() == (b / "input.rel").read_bytes()
++        data = {o["name"]: o for o in json.loads((b / "input.xdata.json").read_bytes())["objects"]}
++        assert data["initialized"]["area"] == "XISEG"
++        assert data["absolute"]["absolute"] and data["absolute"]["address"] == 0x1234
++        assert data["generic_pointer"]["size"] == 3
++        assert all(o["owner"] is None for o in data.values())
++        assert "outside" not in data
++        assert b"S _outside Ref" in (b / "input.rel").read_bytes()
++        inline_source = (
++            "extern void consume(unsigned char *p);\n"
++            "static inline unsigned char callee(unsigned char arg) {\n"
++            "if (arg == 1) return 3; consume(&arg); if (arg == 2) return 4; return arg; }\n"
++            "unsigned char caller(unsigned char arg) {\n"
++            "return callee(arg) + callee(arg + 1); }\n")
++        a = compile_case(args.control, root / "inline-control", inline_source, ["--std-c99"])
++        b = compile_case(args.sdcc, root / "inline", inline_source, ["--std-c99", "--xdata-ownership"])
++        assert (a / "input.rel").read_bytes() == (b / "input.rel").read_bytes()
++        rows = json.loads((b / "input.xdata.json").read_bytes())["objects"]
++        assert any(o["class"] == "INLINE_RETURN_HOME" for o in rows), rows
++        assert all(o["owner"] in ("callee", "caller") for o in rows)
++        rmw_source = (
++            "extern unsigned char *advance(void);\n"
++            "extern unsigned char fetched(void);\n"
++            "void rmw(void) { (*advance()) += fetched(); }\n")
++        a = compile_case(args.control, root / "rmw-control", rmw_source, [])
++        b = compile_case(args.sdcc, root / "rmw", rmw_source, ["--xdata-ownership"])
++        assert (a / "input.rel").read_bytes() == (b / "input.rel").read_bytes()
++        rows = json.loads((b / "input.xdata.json").read_bytes())["objects"]
++        assert not rows, "This fixture keeps its AST temporary out of static XDATA"
++        blocked = root / "blocked"
++        blocked.mkdir()
++        (blocked / "input.c").write_text(source)
++        (blocked / "input.xdata.json").mkdir()
++        failed = subprocess.run([args.sdcc, "-mmcs51", "--model-large",
++                                 "--xdata-ownership", "-c", "input.c"],
++                                cwd=blocked, text=True, capture_output=True)
++        assert failed.returncode and "input.xdata.json" in failed.stderr
++        for compiler, compiled in ((args.control, control), (args.sdcc, off), (args.sdcc, on)):
++            run([compiler, "-mmcs51", "--model-large", "--debug",
++                 "-o", "image.ihx", "input.rel"], compiled)
+         for suffix in ("ihx", "cdb", "mem"):
+-            assert (control / ("image."+suffix)).read_bytes() == (on / ("image."+suffix)).read_bytes(), suffix
++            for compiled in (off, on):
++                assert (control / ("image."+suffix)).read_bytes() == (compiled / ("image."+suffix)).read_bytes(), suffix
+         print("XDATA ownership/classes, unchanged disabled/enabled artifacts and linked image PASS")
+ 
+ 
+diff --git a/support/regression/xdata-ownership.c b/support/regression/xdata-ownership.c
+index 6a7fb28..697a552 100644
+--- a/support/regression/xdata-ownership.c
++++ b/support/regression/xdata-ownership.c
+@@ -40,6 +40,13 @@ byte bar(byte first)
+   return foo(local, 19);
+ }
+ 
++byte sibling(byte first)
++{
++  volatile __xdata byte local;
++  local = first;
++  return local;
++}
++
+ byte rent(byte first, byte second) __reentrant
+ {
+   volatile byte local;
+@@ -59,5 +66,5 @@ void interrupt_owner(void) __interrupt(1)
+ __xdata byte external;
+ void main(void)
+ {
+-  global = bar(3) + rent(4, 5);
++  global = bar(3) + rent(4, 5) + sibling(6);
+ }

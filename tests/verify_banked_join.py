@@ -3,13 +3,18 @@
 """Complete-join artifact loading and typed native/SDCC observation bridge."""
 import argparse
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 
 import boot_banked as banking
-from boot_nwk_candidates import records
+from boot_nwk_candidates import INSTRUCTION, records
 from boot_security_resident import LENGTHS, branch
-from verify_firmware import cdb_address, parse_ihex, parse_symbols, require
+from join_smoke_layout import link_symbols
+from verify_firmware import cdb_address, parse_ihex, require
 
 
 COMMON = ("flash_exec", "flash", "flash_write", "nv_record", "security_counter", "timebase",
@@ -27,24 +32,53 @@ RUNTIME_XDATA = {
     "__mulint_PARM_2": 12, "__mullong_PARM_2": 14,
     "_memcmp_PARM_2": 18, "_memcmp_PARM_3": 21,
 }
-# LINK, link-driver ARM and compact/UPPER refreshes: CODE, parsed
-# map and memory pins unchanged; raw CDB, listing and object pins differ only
-# in source-line records.
-PINS = (
-    "91ea23b1b068e8fa913dba7e0537a2524b7ed0506d9e174b25b7d456c370fcf7",
-    "58cea0511650c88eeabfc063c4bba41a3e7307d35c807385475c73b74342d7e0",
-    "7fb1c112771859b05891f13aff1c817284d111c8a4392753b8610cdfab2a3714",
-    "eba2323d9f2b2b4a34158005e6de57bf08ee568192fe7e5834c810cc1e437bda",
-    "e51f32054358b53c63e861d4b9dd661d7a56fd1f77169e16f114b1a7e2120053",
-    "fc1509766a7bc292d6b2c11453beb8c8eb9e2d00d57739b59098673a5b502b02",
-)
+BOARDS = ("generic", "lg_esl29_rev03")
+# CDB/listings/objects remain board-specific. CODE/symbols/memory now coincide:
+# the Basic model string moved to zcl_sensor, which is not linked here.
+# Per-function spill split link: CODE, NoICE-complete symbols, raw CDB,
+# memory, relocated listings and normalized split objects. Repinned for the
+# READY keepalive retry, five-cluster descriptor and Bind/Unbind publication;
+# radio_autoack is not linked here.
+PINS = {
+    "generic": (
+        "1eba32f768ce5bef32b972a27ebd50de15924765d3698ecbfa752ce5b5601ee0",
+        "4b8955fe700e38eb1a44681151c175dd67be0cd388a3d58feec2c1c6d9362e9c",
+        "8f5d6abb0dd2c5c7a95a218f45746b21d1f68419ad6556077db4a55d9c26cd9e",
+        "80fb8bfc5816edbe9d6feca6af45c2705346aa255fcb45f65646489453e4c3fc",
+        "051572cdd6ab3ded92afee71cad885f1f83e0fe04bc8dd85ab71f64c6ea4dacc",
+        "857a306e86dfacce006cb3f2a3d564f631ca342e857e3e5def100823a6636816",
+    ),
+    "lg_esl29_rev03": (
+        "1eba32f768ce5bef32b972a27ebd50de15924765d3698ecbfa752ce5b5601ee0",
+        "4b8955fe700e38eb1a44681151c175dd67be0cd388a3d58feec2c1c6d9362e9c",
+        "c08b0ff9e9c8196290b2a3ea1a544590c742f19133fbe1224cb86bc3d6fcfd6e",
+        "80fb8bfc5816edbe9d6feca6af45c2705346aa255fcb45f65646489453e4c3fc",
+        "cfa8cb0dae234325d37d70b717cefc6b6a118243dddb14f22f8a95751da59253",
+        "8476d7d8135af44f3ea18e60ae83b431608882d25b7ac039398e1ca7ec8b34f6",
+    ),
+}
+NEGATIVES = {"generic": 723054, "lg_esl29_rev03": 723054}
+# Functions with frames/overlay analysed, live-byte x clobber pairs checked.
+LIFETIME = (284, 1831)
+# Physical DATA owned by banked_join_iram_low/high; compiler frames may reuse
+# only these bytes, and only where backwards liveness proves them dead.
+RESERVATIONS = frozenset(range(8, 0x1e)) | frozenset(range(0x26, 0x46))
+OVERLAY = frozenset(range(0x46, 0x50))
+FRAME_LIMIT = 32
+DRAFT, FINAL = "banked_join_draft", "banked_join"
 
 
-def load(output):
-    path = output/"banked-join"/"banked_join.ihx"
-    return (parse_ihex(path.read_text()), parse_symbols(path.with_suffix(".map").read_text()),
+def load(output, name=FINAL):
+    path = output/"banked-join"/f"{name}.ihx"
+    noice = path.with_suffix(".noi").read_text("ascii")
+    loads = re.findall(r"^LOAD (.+)$", noice, re.M)
+    require(len(loads) == 1 and Path(loads[0]).resolve() == path.resolve(),
+            "NoICE names a different linked image")
+    # ASlink truncates map names; the complete NoICE names are cross-checked.
+    symbols = link_symbols(noice, path.with_suffix(".map").read_text("ascii"), loads[0])
+    return (parse_ihex(path.read_text()), symbols,
             path.with_suffix(".cdb").read_bytes(), path.with_suffix(".mem").read_bytes(),
-            {m: (path.parent/f"banked_join.{m}.rst").read_bytes() for m in MODULES},
+            {m: (path.parent/f"{name}.{m}.rst").read_bytes() for m in MODULES},
             {m: (path.parent/f"{m}.rel").read_bytes() for m in MODULES})
 
 
@@ -52,16 +86,17 @@ def artifact_bytes(*artifacts):
     return banking.artifact_bytes(*artifacts, modules=MODULES)
 
 
-def verify(*artifacts):
-    banking.pin_artifacts(artifact_bytes(*artifacts), PINS)
-    require(check_layout(artifacts) == (279, 1262), "Complete join DATA/OSEG lifetime proof changed")
+def verify(*artifacts, board):
+    require(board in BOARDS, "Unknown complete-join board")
+    banking.pin_artifacts(artifact_bytes(*artifacts), PINS[board])
+    require(check_layout(artifacts) == LIFETIME, "Complete join DATA/OSEG lifetime proof changed")
 
 
 def transfers(image, symbols, listings, debug, *, modules=MODULES,
               areas=("CSEG", "BJ_BANK1", "BJ_BANK2", "BJ_BANK3", "BJ_BANK4"),
               library=("___memcpy", "_memset", "__gptrput", "__gptrget",
                        "__mulint", "__mullong", "_memcmp"),
-              indirect_sites=((0xe5, b"\x73"),)):
+              indirect_sites=((0xe5, b"\x73"),), runtime_spans=None):
     decoded, owners, covered = {}, {}, set()
     for module, listing in listings.items():
         for pc, raw in records(listing.decode("ascii")):
@@ -71,15 +106,22 @@ def transfers(image, symbols, listings, debug, *, modules=MODULES,
                     "Actual join instruction overlaps or differs from linked CODE")
             decoded[pc], owners[pc] = raw, module
             covered |= span
-    pc = min(symbols[n] for n in library)
-    end = symbols["s_CSEG"]+symbols["l_CSEG"]
-    while pc < end:
-        size = LENGTHS[image[pc]]
-        span = set(range(pc, pc+size))
-        require(pc+size <= end and not span & covered, "Runtime instruction escapes CODE ownership")
-        decoded[pc], owners[pc] = bytes(image[a] for a in range(pc, pc+size)), "libc"
-        covered |= span
-        pc += size
+    if runtime_spans is None:
+        runtime_spans = ((min(symbols[n] for n in library),
+                          symbols["s_CSEG"]+symbols["l_CSEG"]),)
+    for start, end in runtime_spans:
+        require(0 <= start < end <= 0x8000, "Runtime span escapes common CODE")
+        pc = start
+        while pc < end:
+            require(pc in image and image[pc] != 0xa5, "Missing/reserved runtime instruction")
+            size = LENGTHS[image[pc]]
+            span = set(range(pc, pc+size))
+            require(pc+size <= end and not span & covered, "Runtime instruction escapes CODE ownership")
+            decoded[pc], owners[pc] = bytes(image[a] for a in range(pc, pc+size)), "libc"
+            covered |= span
+            pc += size
+    require(all(owners.get(symbols[n]) == "libc" for n in library),
+            "Runtime entry lacks a decoded library owner")
     for area in areas:
         require(set(range(symbols["s_"+area], symbols["s_"+area]+symbols["l_"+area])) <= covered,
                 "Incomplete actual join CODE decode")
@@ -127,7 +169,8 @@ def transfers(image, symbols, listings, debug, *, modules=MODULES,
         if owners[target] == "libc" and source != "libc":
             require(target in {symbols[n] for n in library}, "Unreviewed runtime entry")
         if raw[0] == 0x12 or raw[0] & 31 == 17:
-            require(target in entries or owners[target] == "libc", "Call enters the middle of a function")
+            require(target in entries or owners[target] == "libc",
+                    f"Call enters the middle of a function: {pc:x}->{target:x}")
             calls[pc] = target
             if not far and target in entries:
                 require(not entries[target][2], "Ordinary call enters a banked function")
@@ -190,6 +233,15 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
                 span = set(range(int(address, 16), int(address, 16)+int(size)))
                 require(module in frames and span and span <= overlay, "Compiler overlay escapes physical ownership")
                 frames[module] |= span
+    frame_ids = {entry: module for entry, (module, name, _) in entries.items()
+                 if module in frames and (module != "banked" or name == "banked_code_read")}
+    return data_liveness(symbols, decoded, owners, functions, entries, targets, calls,
+                         frames, frame_ids, reservations, overlay)
+
+
+def data_liveness(symbols, decoded, owners, functions, entries, targets, calls,
+                  frames, frame_ids, reservations, overlay, *, constraints=None):
+    """Check declared byte owners, or collect placement constraints without acceptance."""
     for pc, raw in decoded.items():
         if raw[0] in (0x10, 0x20, 0x30, 0x72, 0x82, 0x92, 0xa0, 0xa2, 0xb0, 0xb2, 0xc2, 0xd2):
             require(raw[1] >= 0x80 or raw[1] < symbols["l_BSEG"], "Bit access escapes physical bit ownership")
@@ -222,8 +274,7 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
 
     bodies = {}
     for pc, entry in functions.items():
-        module, name, _ = entries[entry]
-        if module in frames and (module != "banked" or name == "banked_code_read"):
+        if entry in frame_ids:
             bodies.setdefault(entry, []).append(pc)
     visited, active, conflicts = {}, set(), 0
 
@@ -233,16 +284,16 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
             return visited[entry]
         require(entry not in active, "Recursive compiler DATA lifetime")
         active.add(entry)
-        module = entries[entry][0]
+        owner = frame_ids[entry]
         body = sorted(bodies[entry])
         uses, defines, successors, modified, callees = {}, {}, {}, set(), {}
         for pc in body:
             raw = decoded[pc]
             read, write = direct_accesses(raw)
             relevant = (read | write) & tracked
-            require(relevant <= frames[module], "Linked direct access escapes its module frame")
-            uses[pc] = {(module, a) for a in read & tracked}
-            defines[pc] = {(module, a) for a in write & tracked}
+            require(relevant <= frames[owner], "Linked direct access escapes its declared frame")
+            uses[pc] = {(owner, a) for a in read & tracked}
+            defines[pc] = {(owner, a) for a in write & tracked}
             modified |= defines[pc]
             following = pc+len(raw)
             successors[pc] = {following} if following in functions and functions[following] == entry else set()
@@ -277,8 +328,11 @@ def live_data(symbols, debug, listings, decoded, owners, functions, entries, tar
         require(not live[entry], f"Uninitialized/retained shared DATA in {entries[entry][:2]}")
         for pc, writes in callees.items():
             after = set().union(*(live[p] for p in successors[pc]))
-            require(not {a for _, a in after} & {a for _, a in writes},
-                    f"Live DATA overwritten across actual call {pc:x}")
+            if constraints is None:
+                require(not {a for _, a in after} & {a for _, a in writes},
+                        f"Live DATA overwritten across actual call {pc:x}")
+            elif after and writes:
+                constraints.append((pc, after, writes))
             conflicts += len(after)*len(writes)
         active.remove(entry)
         visited[entry] = (live[entry], modified)
@@ -325,7 +379,7 @@ def check_layout(artifacts):
         require(symbols["_"+name] == address, "Actual physical reservation moved")
     schema = Schema(raw)
     require(schema.globals["fixture_status"].size == 64 and
-            schema.globals["fixture_device"].size == 1676 and
+            schema.globals["fixture_device"].size == 1677 and
             schema.at("fixture_device", "work").size == 1290, "Complete caller/status extent changed")
     shadow = schema.at("fixture_device", "work", "association", "staged")
     require(shadow.offset == shadow.size == 645 and
@@ -361,8 +415,225 @@ def check_layout(artifacts):
     require(banking.sha(bytes(image[a] for a in range(0x62, 0xdd))) ==
             "87ac19a19ee72052c542b9b159adc1d1f2618e506324522ffb0ebfd8db504f8d",
             "Copied flash RAM engine changed")
+    require(not any(name.startswith(("s_BJ_", "l_BJ_")) and not name.startswith(("s_BJ_BANK", "l_BJ_BANK"))
+                    for name in symbols) and
+            all(value == 0 for name, value in symbols.items() if name.startswith("l_JD_")),
+            "Unsplit module-wide compiler DATA remains linked")
     graph = transfers(image, symbols, listings, debug)
-    return live_data(symbols, debug, listings, *graph)
+    physical_data(graph)
+    frames, frame_ids, _, _ = function_frames(symbols, debug, listings, graph)
+    return data_liveness(symbols, *graph, frames, frame_ids, RESERVATIONS, OVERLAY)
+
+
+def physical_data(graph):
+    """Direct DATA use stays within registers, reservations, overlay and bank state."""
+    decoded, owners = graph[:2]
+    for pc, raw in decoded.items():
+        reads, writes = direct_accesses(raw)
+        ram = {a for a in reads | writes if a < 0x80}
+        require(ram <= set(range(8)) | RESERVATIONS | OVERLAY | {0x1e, 0x1f},
+                f"Direct access reaches unowned DATA or bit backing: {pc:x}")
+        require(not writes & {0x1e, 0x1f} or owners[pc] == "banked",
+                "Non-banker instruction writes retained bank state")
+
+
+def function_frames(symbols, debug, listings, graph, *, reservations=RESERVATIONS, overlay=OVERLAY):
+    """Bind each compiler spill to its actual function, not its whole module."""
+    decoded, owners, functions, entries, _, _ = graph
+    identities = {(module, name): entry for entry, (module, name, _) in entries.items()}
+    require(len(identities) == len(entries), "Duplicate function identity")
+    frame_ids = {entry: entry for entry, (module, name, _) in entries.items()
+                 if module != "banked" or name == "banked_code_read"}
+    frames = {entry: set() for entry in frame_ids}
+    locations, areas, declared, bits = {}, {}, {}, {}
+    bit_storage = set()
+    pattern = re.compile(
+        r"^\s+[0-9A-F]{6}\s+\d+\s+(L(\w+)\.(\w+)\$sloc(\d+)\$(\d+)_(\d+)\$0)==\.\n"
+        r"\s+([0-9A-F]{6})\s+\d+\s+(_\w+):\n"
+        r"\s+([0-9A-F]{6})\s+\d+\s+\.ds (\d+)$", re.M)
+    for module, listing in listings.items():
+        text = listing.decode("ascii")
+        require(not re.search(r"#\(?_\w+_sloc\d+", text), "Compiler DATA address escapes to an indirect user")
+        labels = {}
+        for segment in re.split(r"\.area\s+", text)[1:]:
+            area = re.match(r"\w+", segment)[0]
+            if not area.startswith("JF_") and area not in ("OSEG", "BSEG"):
+                continue
+            matches = tuple(pattern.finditer(segment))
+            require(len(matches) == len(re.findall(r"\s\.ds\s+\d+", segment)),
+                    "Unclassified compiler frame allocation")
+            allocated = set()
+            for match in matches:
+                key, owner, name, number, block, level, address, label, storage, size = match.groups()
+                address, size = int(address, 16), int(size)
+                require(owner == module and (module, name) in identities
+                        and label == f"_{name}_sloc{number}_{level}_{block}"
+                        and address == int(storage, 16)
+                        and 1 <= size <= 4, "Spill/listing/CDB identity differs")
+                entry = identities[module, name]
+                span = set(range(address, address+size))
+                require(label not in labels, "Duplicate spill label")
+                labels[label] = entry
+                if area == "BSEG":
+                    require(size == 1 and key not in bits and not span & bit_storage
+                            and span <= set(range(symbols["l_BSEG"])), "Bit spills overlap/escape")
+                    bits[key] = size
+                    bit_storage |= span
+                    continue
+                require(address == cdb_address(debug, "L:"+key), "Spill CDB address differs")
+                require(entry in frames and not frames[entry] & span,
+                        "Function spill declarations overlap")
+                if area == "OSEG":
+                    require(span <= overlay, "Compiler overlay escapes physical ownership")
+                else:
+                    require(area == f"JF_{module}_{name}" and span <= reservations,
+                            "Function spill escapes its reserved area")
+                    require(key not in declared, "Duplicate compiler DATA declaration")
+                    declared[key] = (address, size)
+                base, width = symbols["s_"+area], symbols["l_"+area]
+                require(span <= set(range(base, base+width)), "Spill escapes linked area")
+                areas[area] = (base, width)
+                frames[entry] |= span
+                allocated |= span
+                for address in span:
+                    locations[entry, address] = (area, address-base)
+            if area.startswith("JF_"):
+                base, width = symbols["s_"+area], symbols["l_"+area]
+                require(matches and allocated == set(range(base, base+width)),
+                        "Undeclared function-area bytes")
+        for pc, raw, asm in ((int(m[1], 16), bytes.fromhex(m[2]), re.split(r"\]\s*\d+\s+", m[0], 1)[1])
+                             for m in INSTRUCTION.finditer(text)):
+            for label in re.findall(r"_\w+_sloc\d+_\d+_\d+", asm):
+                require(label in labels and functions.get(pc) == labels[label],
+                        f"Instruction uses unowned compiler spill: {module}:{pc:x}:{label}")
+            require(raw[0] & 0xfe not in (0x06, 0x16, 0x26, 0x36, 0x46, 0x56, 0x66,
+                                          0x76, 0x86, 0x96, 0xa6, 0xb6, 0xc6, 0xd6, 0xe6, 0xf6),
+                    "Unreviewed indirect IRAM access in source CODE")
+    direct = {}
+    for key, size in re.findall(r"^S:(L[^(]+)\(\{(\d+)\}.*\),E,0,0$", debug, re.M):
+        require(key not in direct, "Duplicate CDB compiler DATA declaration")
+        direct[key] = (cdb_address(debug, "L:"+key), int(size))
+    require(direct == declared, "CDB and listing compiler DATA inventories differ")
+    bit_records = re.findall(r"^S:(L[^(]+)\(\{(\d+)\}SB0\$0:S\),H,0,0$", debug, re.M)
+    require(len(bit_records) == len(bits) and {key: int(size) for key, size in bit_records} == bits
+            and bit_storage == set(range(symbols["l_BSEG"])),
+            "CDB and listing bit inventories differ")
+    require({name[2:] for name in symbols if name.startswith("l_JF_")}
+            == {name for name in areas if name.startswith("JF_")}, "Function-area inventory differs")
+    return frames, frame_ids, locations, areas
+
+
+def solve_data(constraints, locations, areas, *, reservations=RESERVATIONS, overlay=OVERLAY,
+               limit=FRAME_LIMIT):
+    """Place whole function areas under byte-level, live-across-call inequalities.
+
+    Deterministic backtracking; the result is only a candidate. Acceptance is
+    the strict data_liveness() check of the subsequently linked image.
+    """
+    forbidden = {name: {} for name in areas}
+    fixed = min(overlay)
+
+    def location(owner, address):
+        if owner == "libc":
+            require(address in overlay, "Runtime write outside fixed overlay")
+            return "OSEG", address-fixed
+        require((owner, address) in locations, "Constraint lacks a declared byte owner")
+        return locations[owner, address]
+
+    for pc, after, writes in constraints:
+        for live in after:
+            left, a = location(*live)
+            for write in writes:
+                right, b = location(*write)
+                if left == right:
+                    require(a != b, f"Unplaceable fixed-area clobber across call {pc:x}")
+                else:
+                    forbidden[left].setdefault(right, set()).add(b-a)
+                    forbidden[right].setdefault(left, set()).add(a-b)
+    domains = {}
+    for name, (base, size) in areas.items():
+        if name == "OSEG":
+            require((base, size) == (fixed, len(overlay)), "Fixed overlay moved")
+            domains[name] = (base,)
+        else:
+            require(name.startswith("JF_") and 0 < size <= limit, "Unreviewed placement area")
+            choices = tuple(a for a in sorted(reservations)
+                            if set(range(a, a+size)) <= reservations)
+            domains[name] = tuple(sorted(choices, key=lambda a: (a != base, a)))
+    nodes = 0
+
+    def search(pending, assigned):
+        nonlocal nodes
+        nodes += 1
+        require(nodes <= 100000, "DATA placement search exhausted its explicit work limit")
+        if not pending:
+            return assigned
+        name = min(pending, key=lambda n: (len(pending[n]), -len(forbidden[n]), -areas[n][1], n))
+        for base in pending[name]:
+            remaining = {}
+            for other, choices in pending.items():
+                if other == name:
+                    continue
+                differences = forbidden[name].get(other, set())
+                remaining[other] = tuple(a for a in choices if base-a not in differences)
+                if not remaining[other]:
+                    break
+            else:
+                result = search(remaining, assigned | {name: base})
+                if result is not None:
+                    return result
+        return None
+
+    solution = search(domains, {})
+    require(solution is not None, "Live compiler DATA cannot fit its physical reservations")
+    return {name: base for name, base in sorted(solution.items()) if name != "OSEG"}
+
+
+def spill_areas(root):
+    """Function frames produced by split_link_spills for exactly this composition."""
+    manifest = json.loads((root/"spill-manifest.json").read_text("ascii"))
+    require(set(manifest) == set(MODULES)-{"banked_join_iram_low", "banked_join_iram_high"},
+            "Spill manifest composition differs")
+    areas = {}
+    for module in MODULES[2:]:
+        for name, width in manifest[module]["areas"].items():
+            require(name.startswith(f"JF_{module}_") and name not in areas and
+                    type(width) is int and 0 < width <= FRAME_LIMIT, "Unreviewed function frame")
+            areas[name] = width
+    require(not manifest["banked"]["areas"], "Banker DATA was split")
+    return areas
+
+
+def draft_placement(root):
+    """Deliberately unverified first link: exposes actual call graph and spills."""
+    return {name: 8 if width <= 22 else 0x26 for name, width in spill_areas(root).items()}
+
+
+def link_flags(placements):
+    for name, base in placements.items():
+        require(re.fullmatch(r"JF_\w+", name) and type(base) is int, "Invalid DATA placement")
+    return " ".join(f"-Wl-b{name}=0x{base:02x}" for name, base in sorted(placements.items())) + "\n"
+
+
+def solve(output):
+    root = output/"banked-join"
+    draft = draft_placement(root)
+    image, symbols, raw, _, listings, objects = load(output, DRAFT)
+    require(all(symbols["s_"+name] == base and symbols["l_"+name] == spill_areas(root)[name]
+                for name, base in draft.items()), "Draft link placement differs")
+    debug = raw.decode("ascii")
+    graph = transfers(image, symbols, listings, debug)
+    physical_data(graph)
+    frames, frame_ids, locations, areas = function_frames(symbols, debug, listings, graph)
+    constraints = []
+    data_liveness(symbols, *graph, frames, frame_ids, RESERVATIONS, OVERLAY, constraints=constraints)
+    placements = solve_data(constraints, locations, areas)
+    require(placements.keys() == draft.keys(), "Placement does not cover every function frame")
+    return {"objects": {m: hashlib.sha256(objects[m]).hexdigest() for m in MODULES},
+            "spill_manifest": hashlib.sha256((root/"spill-manifest.json").read_bytes()).hexdigest(),
+            "draft": {suffix: hashlib.sha256((root/(DRAFT+suffix)).read_bytes()).hexdigest()
+                      for suffix in (".ihx", ".cdb", ".noi")},
+            "placements": placements}
 
 
 @dataclass(frozen=True)
@@ -550,13 +821,39 @@ class Schema:
         return bytes(result)
 
 
+def split_draft(output):
+    """Run the unchanged spill splitter, then emit the unverified draft flags."""
+    root = output/"banked-join"
+    for name in ("spill-manifest.json", "draft.flags"):
+        (root/name).unlink(missing_ok=True)
+    tool = Path(__file__).resolve().parents[1]/"tools"/"split_link_spills.py"
+    subprocess.run([sys.executable, "-B", str(tool), "--input", str(root/"objects"),
+                    "--output", str(root)], check=True)
+    (root/"draft.flags").write_text(link_flags(draft_placement(root)), "ascii")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--emit-header", required=True, type=Path)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--emit-header", type=Path)
+    mode.add_argument("--split-draft", action="store_true",
+                      help="split compiler spills; write unverified first-link DATA flags")
+    mode.add_argument("--solve-data", action="store_true",
+                      help="write a candidate placement; accepted only by check_layout")
     args = parser.parse_args()
-    artifacts = load(args.output)
-    args.emit_header.write_text(Schema(artifacts[2]).emit_header())
+    root = args.output/"banked-join"
+    if args.split_draft:
+        split_draft(args.output)
+    elif args.solve_data:
+        for name in ("data-placement.json", "final.flags"):
+            (root/name).unlink(missing_ok=True)
+        solution = solve(args.output)
+        (root/"data-placement.json").write_text(json.dumps(solution, indent=2)+"\n", "ascii")
+        (root/"final.flags").write_text(link_flags(solution["placements"]), "ascii")
+    else:
+        artifacts = load(args.output)
+        args.emit_header.write_text(Schema(artifacts[2]).emit_header())
 
 
 if __name__ == "__main__":

@@ -13,24 +13,26 @@ import subprocess
 from boot_image import (ALIAS, check_alias, check_pc, marker, memory_dump, simulate,
                         snapshot_commands, verify_component_layout)
 from boot_radio_tx_fixture import sections, snap, stack_high_water
+from boot_nwk_candidates import records
 from clock_fixture import verify_clock_code
-from radio_link_fixture import LABEL, SETTINGS, records
+from radio_link_fixture import LABEL, SETTINGS
 from verify_firmware import (cdb_address, code_bytes, parse_ihex, parse_symbols,
                              peripheral_accesses, require, verify_timebase_reader)
 
 MODULES = ("timebase", "clock", "mac_time", "radio_autoack", "mac_epoch",
            "mac_radio", "mac_attempt", "test_mac_attempt")
-CASES = 28
-SIZE, XDATA, STACK = 24621, 1475, 0x5a
-CODE_SHA = "64acf106f577d774b333cfb063c26f0b4a6f092b2901a1db343e052eb6191cbc"
-# Compact projection and UPPER change source lines, not this image's CODE/ABI.
-CDB_SHA = "ea4f0b821e6eba5d590640574992f0fd44233b7748794a7f991c897a28bab3f2"
-MAP_SHA = "822ec1514503e149578cb17132d92e9ddb2a46be5ba4619ee9cbabe98763aba6"
-MEM_SHA = "3a9a8cd7acb4a495df6504761e0bef4e015590f03be0ca5e5270288f39914a55"
-LIST_SHA = "dbc898ee53bb6f58333751bebc2dc8ad8c28405b445c93f029c8d3fb371fab11"
-OBJECT_SHA = "cc2819f1064a8f9c895e07964a49a89de342cd197b04e851d91583bee42ba5b5"
-INVENTORY = (326, 148638, 119, 121)
-NEGATIVES = 77713
+CASES = 33
+# radio_autoack complete_head() (stopped drain without FIFOP): +25 CODE,
+# relinked identities and +87 required mutations; MMIO trace unchanged.
+SIZE, XDATA, STACK = 25439, 1477, 0x5a
+CODE_SHA = "0a0cf7413ba2b25931b8057a59fd48582b1311696f2c95256dec951767ca5612"
+CDB_SHA = "0858c530cd765b959caf134fd678c25fcce2dbc4ccbf6af3804a9d3615acb242"
+MAP_SHA = "5bc66444502e1844418a40c0ce77dcb34bc56cc1301e865eb8eaa65fd69f4230"
+MEM_SHA = "b136d38cbbc2724474f71f671aa08bfdae96769103caa35874ed0bb2d4a71438"
+LIST_SHA = "2a48198b367e960dd0e3366393167abf7af52a55907a16559d5c658238f1de91"
+OBJECT_SHA = "0a96dd21f240d10126c5972ed2420653ddc09c2b6d96af1b4d1952bf7a24ce66"
+INVENTORY = (391, 181474, 119, 121)
+NEGATIVES = 79982
 CALLER_SIZES = {"config": 14, "frame": 128, "record": 164, "operation": 1,
                 "return": 1, "length": 1, "input": 2, "output": 2, "limit": 2,
                 "window": 2, "timeout": 4}
@@ -91,6 +93,21 @@ def caller(symbols, profile=LEGACY):
     return {name: (symbols["_mac_attempt_test_"+name], size) for name, size in profile.caller_sizes}
 
 
+def switch_table(code, pc, raw):
+    """SDCC switch dispatch: MOV DPTR,#table; JMP @A+DPTR; table of LJMPs.
+
+    The immediate is the CODE address of the table that immediately follows
+    the JMP in the same module, so it cannot be an XDATA/XREG access.
+    """
+    table = pc+4
+    if int.from_bytes(raw[1:], "big") != table or code.get(pc+3) != b"\x73":
+        return False
+    count = 0
+    while len(code.get(table+3*count, b"")) == 3 and code[table+3*count][0] == 0x02:
+        count += 1
+    return count >= 2
+
+
 def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
     require(profile.size <= 32768 and sha(code_bytes(image, profile.size)) == profile.code_sha,
             "Attempt complete CODE")
@@ -139,15 +156,18 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
     require(used == spans[profile.modules[-1]], "Attempt unaccounted caller storage")
     for module in profile.modules[4:]:
         require(not peripheral_accesses(codes[module]) and not any(
-            raw[0] == 0x90 and 0x6000 <= int.from_bytes(raw[1:], "big") < 0x6400
-            for raw in codes[module].values()), "Attempt upper-layer MMIO bypass")
+            raw[0] == 0x90 and 0x6000 <= int.from_bytes(raw[1:], "big") < 0x6400 and
+            not switch_table(codes[module], pc, raw)
+            for pc, raw in codes[module].items()), "Attempt upper-layer MMIO bypass")
     for module, names in (
         ("mac_attempt", ("mac_radio_init", "mac_radio_prepare", "mac_radio_attempt",
                          "mac_radio_receive", "mac_radio_stop", "mac_radio_resume", "mac_epoch_step")),
         ("mac_radio", ("clock_select_init", "mac_time_init", "mac_time_read_radio", "mac_epoch_start",
                        "mac_epoch_step", "radio_autoack_acquire", "radio_autoack_prepare",
                        "radio_autoack_attempt")),
-        ("radio_autoack", ("mac_time_attempt_begin", "mac_time_attempt_read", "mac_time_attempt_end",
+        ("radio_autoack", ("mac_time_attempt_begin",
+                           "mac_time_handoff_read" if profile.handoff else "mac_time_attempt_read",
+                           "mac_time_attempt_end",
                            "mac_epoch_start", "mac_epoch_step")),
         (profile.modules[-1], ("mac_attempt_init", "mac_attempt_prepare", "mac_attempt_run",
                               "mac_attempt_receive", "mac_attempt_stop", "mac_attempt_resume")),
@@ -156,6 +176,9 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
             require(b"\x12"+symbols["_"+name].to_bytes(2, "big") in codes[module].values(),
                     "Attempt bypasses genuine API: "+name)
     if profile.handoff:
+        require(b"\x12"+symbols["_mac_time_attempt_read"].to_bytes(2, "big")
+                not in codes["radio_autoack"].values(),
+                "Handoff attempt reintroduced per-sample deadline setup")
         for module, names in (
             (profile.modules[-1], ("mac_attempt_now", "mac_attempt_handoff")),
             ("mac_attempt", ("mac_radio_attempt_now", "mac_radio_handoff")),
@@ -170,9 +193,9 @@ def verify(image, symbols, debug, memory, listings, objects, profile=LEGACY):
     return allocated, mmio_sites(image, debug, listings, handoff=profile.handoff)
 
 
-def mmio_sites(image, debug, listings, *, handoff=False):
+def mmio_sites(image, debug, listings, *, handoff=False, reconfigure=False, instruction_records=records):
     """Decode the actual common lower-service MMIO, including indexed settings."""
-    codes = {m: dict(records(listings[m])) for m in MODULES[:4]}
+    codes = {m: dict(instruction_records(listings[m])) for m in MODULES[:4]}
     sites = {}
     for module in MODULES[:4]:
         code = codes[module]
@@ -198,20 +221,26 @@ def mmio_sites(image, debug, listings, *, handoff=False):
     radio = codes["radio_autoack"]
     labels = {n: int(a, 16) for a, n in LABEL.findall(listings["radio_autoack"])}
     indexed = [pc for pc, raw in radio.items()
-               if raw == b"\x12"+labels["_setting_address"].to_bytes(2, "big")]
-    require(len(indexed) == 2, "Attempt indexed configuration call inventory")
+               if raw == b"\x12"+(labels["_setting_address"] & 0xffff).to_bytes(2, "big")]
+    require(len(indexed) == (3 if reconfigure else 2), "Attempt indexed configuration call inventory")
     read = indexed[0]+13
     write = indexed[1]+31
     require(radio.get(read) == b"\xe0" and radio.get(write) == b"\xf0",
             "Attempt indexed configuration instruction operands")
     sites[read] = ("r", None, 0xe0); sites[write] = ("w", None, None)
+    if reconfigure:
+        call = indexed[2]
+        require(bytes(image[a] for a in range(call+3, call+15)) ==
+                bytes.fromhex("ab82ac83d0058b828c83edf0"),
+                "Reconfiguration indexed MOVX/data-register handoff changed")
+        sites[call+14] = ("w", None, None)
     rfd, settle = labels["_read_fifo"], labels["_cca_settle"]
-    require(sum(raw == b"\x12"+labels["_receive_head"].to_bytes(2, "big")
+    require(sum(raw == b"\x12"+(labels["_receive_head"] & 0xffff).to_bytes(2, "big")
                 for raw in radio.values()) == 2, "Attempt bypasses the shared exact head consumer")
     require(bytes(image[a] for a in range(rfd, rfd+4)) == b"\x85\xd9\x82\x22" and
-            sum(raw == b"\x12"+rfd.to_bytes(2, "big") for raw in radio.values()) == 1 and
+            sum(raw == b"\x12"+(rfd & 0xffff).to_bytes(2, "big") for raw in radio.values()) == 1 and
             bytes(image[a] for a in range(settle, settle+5)) == b"\0\0\0\0\x22" and
-            sum(raw == b"\x12"+settle.to_bytes(2, "big") for raw in radio.values()) == 2,
+            sum(raw == b"\x12"+(settle & 0xffff).to_bytes(2, "big") for raw in radio.values()) == 2,
             "Attempt unique destructive RFD / four pre-strobe NOPs")
     sites[settle] = ("c", 0, None)
     if handoff:
@@ -219,7 +248,7 @@ def mmio_sites(image, debug, listings, *, handoff=False):
         expected = bytes.fromhex("906193e020e50a75e9fde05420440180027420f58222")
         require(bytes(image[a] for a in range(clear, clear+len(expected))) == expected,
                 "Handoff SFD-read/clear/read instructions; timing needs live samples")
-        require(sum(raw == b"\x12"+clear.to_bytes(2, "big") for raw in radio.values()) == 1,
+        require(sum(raw == b"\x12"+(clear & 0xffff).to_bytes(2, "big") for raw in radio.values()) == 1,
                 "Handoff SFD guard call inventory")
         require(sites[clear+3] == ("r", 0x6193, 0xe0) and
                 sites[clear+7] == ("w", 0xe9, 0xe9), "Handoff SFD guard MMIO")
@@ -313,7 +342,11 @@ def run_vector(simulator, path, symbols, debug, allocated, sites, vector, profil
                         "Handoff unapproved RXFIFO read")
             if kind == "w" and address in (0xe1, 0xd9):
                 require((step["operation"] == 2 and (address == 0xd9 or value == 0xee)) or
-                        (step["operation"] == 3 and address == 0xe1 and value == 0xea),
+                        (step["operation"] == 3 and address == 0xe1 and value == 0xea) or
+                        (step["operation"] == 3 and address == 0xe1 and value == 0xef and
+                         current[0x6189] == 0x4c and current[0x618b] == 1 and
+                         not current[0x619b] and not current[0x6193] & 0xea and
+                         not current[0x91] & 6),
                         "Attempt unapproved submission/FIFO/flush")
             if profile.handoff and kind == "w" and address == 0xe9:
                 require(step["operation"] == 7 and value == 0xfd, "Handoff unapproved SFD clear")

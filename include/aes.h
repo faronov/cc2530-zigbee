@@ -5,6 +5,7 @@
 #define AES_H
 
 #include "cc2530_mmio.h"
+#include "banked_link.h"
 
 typedef enum {
     AES_OK = 0, AES_INVALID_ARGUMENT, AES_INVALID_RANGE, AES_BUFFER_OWNERSHIP,
@@ -66,6 +67,6 @@ typedef struct {
  */
 aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,
-                                  uint16_t limit, aes_diagnostics_t MCU_XDATA *diagnostics);
+                                  uint16_t limit, aes_diagnostics_t MCU_XDATA *diagnostics) LINK_FAR;
 
 #endif

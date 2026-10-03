@@ -123,6 +123,14 @@ The reporting application's binding, reporting and attribute requirements are
 added with its pinned profile/ZCL revision. Synthetic lab values must be
 clearly identified; they are not physical sensor evidence.
 
+The LG join-smoke demo's `zcl_sensor` server is a bounded interoperability
+demonstration with ZHA. It is not an implementation of these requirements. It
+advertises device ID `FFFF` (no HA/BDB device type), serves synthetic values,
+supports Configure Reporting and coordinator-only Bind/Unbind in RAM only, and
+rejects Read Reporting Configuration with UNSUP_GENERAL_COMMAND
+([ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo)). BDB-09 and
+the profile/device selection remain open.
+
 ## Preparatory ZCL foundation evidence
 
 These references use the printed chapter-page numbering of ZCL Revision 8,
@@ -150,7 +158,7 @@ errata-aware conformance before reviewing the corrections.
 | --- | --- | --- | --- | --- |
 | BDB-01 | An ED must be able to join both centralized and distributed security networks; the first project configuration covers only centralized networks | sections 6.1-2 p.32; 10.2.1 p.74 | Centralized path planned; distributed unsupported, not an optional-role exemption | Full BDB conformance remains out of scope |
 | BDB-02 | Preserve `bdbNodeIsOnANetwork`; restore persistent state and attempt secure NWK rejoin for a previously joined ED, announcing only on successful rejoin | sections 6.9 p.38; 7.1 pp.39-40 | Planned / none | M4-M5 |
-| BDB-03 | Provide unjoined network steering: primary/secondary channel discovery, suitable permit-joining networks, MAC association, bounded authentication/network-key wait and explicit failure | sections 5.1,5.3.8-10; 6.5; 8.2 pp.43-47 | Planned / none | M5 |
+| BDB-03 | Provide unjoined network steering: primary/secondary channel discovery, suitable permit-joining networks, MAC association, bounded authentication/network-key wait and explicit failure | sections 5.1,5.3.8-10; 6.5; 8.2 pp.43-47 | [Explicit default-key profile](ED_JOIN.md#ordinary-default-key-discovery): bounded channel-mask discovery, unique permitting direct coordinator, learned Association Response IEEE and actual security exchange; host-tested and statically image-checked | M5; primary/secondary sequencing, router parents, complete BDB policy and physical joining remain unproved |
 | BDB-04 | Fresh-join completion includes a `Mgmt_Permit_Joining_req` broadcast, duration at least 180 seconds and `TC_Significance = 1`; this is not local child admission | section 5.1.2 p.22; section 8.2 steps 14-16 pp.46-47 | Planned / none | M5 |
 | BDB-05 | For the R22 TC path, request a new unique TC link key, reject the wrong key type or unchanged key, then verify/confirm before accepting key exchange | section 10.2.5 pp.75-79; R22 section 4.4.8.2.3 pp.445-446 | Planned / none | M4-M5 |
 | BDB-06 | ED link-key provisioning includes the default TC key, distributed key and install-code-derived key; install codes use 16 random bytes plus a two-byte CRC and AES-MMO derivation including that CRC | Table 8 p.33; sections 6.4 p.34,10.1 pp.72-74 | #22 CRC/derivation host-tested, image-checked and simulated; no private or production keys imported | M4; generation/provisioning and verified TC state still required; distributed path deferred |

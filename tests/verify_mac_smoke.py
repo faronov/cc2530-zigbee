@@ -161,7 +161,8 @@ def structure(artifacts, board):
                          overlay=set(range(0x4c,0x56)),frame_areas=frame_areas,
                          physical=("mac_smoke_iram_low","mac_smoke_iram_high"))
     sites = mmio_sites(image,debug,{m:v.decode("ascii") for m,v in listings.items()},handoff=True)
-    require(len(sites)==165, "Smoke unchanged lower MMIO inventory")
+    # 171: radio_autoack complete_head() merged the two adapter PHR (0x619A) reads.
+    require(len(sites)==171, "Smoke unchanged lower MMIO inventory")
     for name in ("wait","end","fault"):
         require(symbols["_mac_smoke_"+name] < 0x8000, "Smoke checkpoint outside common CODE")
     require("S:G$mac_smoke_status$0_0$0({64}" in debug and
@@ -173,6 +174,7 @@ def structure(artifacts, board):
 def verify(artifacts, board):
     expected = json.loads(Path(__file__).with_name("mac_smoke_pins.json").read_text("ascii"))[board]
     # No decoding of CDB precedes its immutable complete-byte identity.
+    # Pins refreshed for radio_autoack complete_head()/RXOVERF resample relink.
     require(type(artifacts[2]) is bytes and banking.sha(artifacts[2]) == expected["cdb"], "Smoke complete raw CDB")
     require(identities(artifacts,board) == expected, "Smoke complete immutable artifacts")
     return structure(artifacts,board)

@@ -35,6 +35,8 @@ static void nv_seed(uint8_t *payload)
     for(i=0;i<112;i++) payload[i]=(uint8_t)(i^0x35);
     NV_CHECK(security_counter_open()==SECURITY_COUNTER_EMPTY);
     NV_CHECK(security_counter_create(256,768,payload,112,64)==SECURITY_COUNTER_OK);
+    NV_CHECK(!security_joint_flash_commands()); /* staged until the first commit */
+    NV_CHECK(security_counter_save(payload,112,64)==SECURITY_COUNTER_OK);
     NV_CHECK(security_joint_flash_commands()==38 && nv_record_status()->generation==1);
     NV_CHECK(child_work_clean() && link_work_clean());
 }

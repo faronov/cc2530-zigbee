@@ -36,30 +36,53 @@ extern MCU_XDATA uint8_t __memcpy_PARM_2[3];
 static mac_time_result_t observe(void)
 {
     uint8_t command;
-    if (MMIO_READ(SOC_IEN0) || MMIO_READ(SOC_IEN1) || MMIO_READ(SOC_IEN2) ||
-        (MMIO_READ(SOC_SLEEPCMD) & 7u) != 4u ||
-        MMIO_READ(SOC_DMAARM) || MMIO_READ(SOC_DMAREQ))
-        return MAC_TIME_UNSUPPORTED_STATE;
-    command = MMIO_READ(SOC_CLKCONCMD);
-    if ((command & 0x47u) || MMIO_READ(SOC_CLKCONSTA) != command)
-        return MAC_TIME_UNSUPPORTED_STATE;
+    /* Force one peripheral read even when SDCC reuses the failure value. */
+    volatile uint8_t value;
+#define GUARD(read, invalid, id) do { \
+    value = (read); \
+    if (invalid) { status.guard = (id); goto unsupported; } \
+} while (0)
+    GUARD(MMIO_READ(SOC_IEN0), value, MAC_TIME_GUARD_IEN0);
+    GUARD(MMIO_READ(SOC_IEN1), value, MAC_TIME_GUARD_IEN1);
+    GUARD(MMIO_READ(SOC_IEN2), value, MAC_TIME_GUARD_IEN2);
+    GUARD(MMIO_READ(SOC_SLEEPCMD), (value & 7u) != 4u, MAC_TIME_GUARD_SLEEPCMD);
+    GUARD(MMIO_READ(SOC_DMAARM), value, MAC_TIME_GUARD_DMAARM);
+    GUARD(MMIO_READ(SOC_DMAREQ), value, MAC_TIME_GUARD_DMAREQ);
+    GUARD(MMIO_READ(SOC_CLKCONCMD), value & 0x47u, MAC_TIME_GUARD_CLKCONCMD);
+    command = value;
+    GUARD(MMIO_READ(SOC_CLKCONSTA), value != command, MAC_TIME_GUARD_CLKCONSTA);
     if (command != saved_clock) return MAC_TIME_STATE_CHANGED;
-    if (MMIO_XREAD(0x624a) != 0xa5 || MMIO_XREAD(0x61e1) ||
+    GUARD(MMIO_XREAD(0x624a), value != 0xa5, MAC_TIME_GUARD_CHIPID);
+    GUARD(MMIO_XREAD(0x61e1), value, MAC_TIME_GUARD_CSPSTAT);
 #if defined(CC2530_MAC_RADIO)
-        /* SWRU191F pp260,262-263: only the co-owned reader permits RX requests,
-         * CAL_RUNNING, PLL/SFD and RX/TX_ACTIVE. Reserved FSMSTAT0.7 stays zero.
-         * This is NOT evidence of owner history; the caller must know it.
-         */
-        (!work.radio && MMIO_XREAD(0x618b)) ||
-        (MMIO_XREAD(0x6192) & (work.radio ? 0x80u : 0xc0u)) ||
-        (!work.radio && (MMIO_XREAD(0x6193) & 0x27u)) || MMIO_READ(SOC_RFERRF) ||
+    if (!work.radio) {
+        GUARD(MMIO_XREAD(0x618b), value, MAC_TIME_GUARD_RXENABLE);
+    }
+    /* Retain the existing bit7 guard pending first-failure hardware evidence;
+     * SWRU191F p262 specifies Reserved R, not guaranteed-zero R0.
+     */
+    GUARD(MMIO_XREAD(0x6192), value & (work.radio ? 0x80u : 0xc0u),
+          MAC_TIME_GUARD_FSMSTAT0);
+    if (!work.radio) {
+        GUARD(MMIO_XREAD(0x6193), value & 0x27u, MAC_TIME_GUARD_FSMSTAT1);
+    }
 #else
-        MMIO_XREAD(0x618b) || (MMIO_XREAD(0x6192) & 0xc0u) ||
-        (MMIO_XREAD(0x6193) & 0x27u) || MMIO_READ(SOC_RFERRF) ||
+    GUARD(MMIO_XREAD(0x618b), value, MAC_TIME_GUARD_RXENABLE);
+    GUARD(MMIO_XREAD(0x6192), value & 0xc0u, MAC_TIME_GUARD_FSMSTAT0);
+    GUARD(MMIO_XREAD(0x6193), value & 0x27u, MAC_TIME_GUARD_FSMSTAT1);
 #endif
-        MMIO_XREAD(0x61a3) || MMIO_XREAD(0x61a4) || MMIO_XREAD(0x61a5) ||
-        MMIO_READ(SOC_T2IRQM))
-        return MAC_TIME_UNSUPPORTED_STATE;
+#if defined(CC2530_MAC_ADAPTER)
+    /* The radio owner reports raw-RX FIFO overflow as bounded receive loss. */
+    GUARD(MMIO_READ(SOC_RFERRF), value & (work.radio ? 0xfbu : 0xffu),
+          MAC_TIME_GUARD_RFERRF);
+#else
+    GUARD(MMIO_READ(SOC_RFERRF), value, MAC_TIME_GUARD_RFERRF);
+#endif
+    GUARD(MMIO_XREAD(0x61a3), value, MAC_TIME_GUARD_RFIRQM0);
+    GUARD(MMIO_XREAD(0x61a4), value, MAC_TIME_GUARD_RFIRQM1);
+    GUARD(MMIO_XREAD(0x61a5), value, MAC_TIME_GUARD_RFERRM);
+    GUARD(MMIO_READ(SOC_T2IRQM), value, MAC_TIME_GUARD_T2IRQM);
+#undef GUARD
     status.control = MMIO_READ(SOC_T2CTRL);
     status.select = MMIO_READ(SOC_T2MSEL);
     status.irq_flags = MMIO_READ(SOC_T2IRQF);
@@ -69,6 +92,9 @@ static mac_time_result_t observe(void)
         MMIO_READ(SOC_T2EVTCFG) != work.event)
         return MAC_TIME_STATE_CHANGED;
     return MAC_TIME_OK;
+unsupported:
+    status.guard_value = value;
+    return MAC_TIME_UNSUPPORTED_STATE;
 }
 
 static mac_time_result_t poll(void)

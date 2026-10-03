@@ -5,6 +5,7 @@
 #define MAC_FRAME_H
 
 #include <stdint.h>
+#include "banked_link.h"
 
 #define MAC_FRAME_MAX_BODY 125u
 #define MAC_FRAME_MAX_HEADER 23u
@@ -113,25 +114,25 @@ typedef struct {
  * bytes; caller storage/lifetime requirements are unchanged.
  */
 mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
-                                    mac_frame_info_t * volatile result);
+                                    mac_frame_info_t * volatile result) LINK_FAR;
 /* Explicit RX-only profile. R22 additionally recognizes uncompressed
  * Association Responses; all other command, version/security/IE rules stay
  * unchanged. Raw PAN fields are not selected-context or membership evidence.
  * The original decode entry always uses IEEE2006; encoding is unchanged.
  */
 mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint16_t length,
-                                    mac_frame_info_t * volatile result, uint8_t volatile profile);
+                                    mac_frame_info_t * volatile result, uint8_t volatile profile) LINK_FAR;
 mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
                                     const uint8_t * volatile payload, uint16_t payload_length,
-                                    uint8_t * volatile body, uint16_t capacity, uint8_t * volatile length);
+                                    uint8_t * volatile body, uint16_t capacity, uint8_t * volatile length) LINK_FAR;
 
 /* Command payloads include their identifier. Unused fields decode as zero.
  * Payload-only success does not validate a frame header or perform a procedure.
  */
 mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
-                                      mac_command_t * volatile result);
+                                      mac_command_t * volatile result) LINK_FAR;
 mac_codec_result_t mac_command_encode(const mac_command_t * volatile command,
-                                      uint8_t * volatile payload, uint16_t capacity, uint8_t * volatile length);
+                                      uint8_t * volatile payload, uint16_t capacity, uint8_t * volatile length) LINK_FAR;
 
 /* Decode the MAC payload (starting with Superframe Specification), not the MHR.
  * GTS descriptors are unsupported. Offsets refer to this input; no bytes are
@@ -139,6 +140,6 @@ mac_codec_result_t mac_command_encode(const mac_command_t * volatile command,
  * Superframe fields are raw metadata, not a validated schedule.
  */
 mac_codec_result_t mac_beacon_decode(const uint8_t *payload, uint16_t length,
-                                     mac_beacon_info_t *result);
+                                     mac_beacon_info_t *result) LINK_FAR;
 
 #endif

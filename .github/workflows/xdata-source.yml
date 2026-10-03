@@ -1,0 +1,54 @@
+name: XDATA compiler source reproduction
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 3 * * 0'
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install source reproduction and pristine-control dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential python3 bison flex m4 libboost-dev \
+            sdcc=4.2.0+dfsg-1
+      - name: Rebuild the preserved compiler patch series and regress against stock
+        run: |
+          mkdir -p build
+          curl --fail --location --retry 3 \
+            https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz \
+            --output build/sdcc_4.2.0+dfsg.orig.tar.xz
+          python3 -B tools/prepare_xdata_compiler.py \
+            --archive build/sdcc_4.2.0+dfsg.orig.tar.xz --output build/source-compiler
+      - name: Compare released and explicitly selected development compiler behavior
+        run: |
+          make -s prepare-xdata-toolchain
+          PYTHONPATH=tools:tests python3 -B - <<'PY'
+          from pathlib import Path
+          from xdata_build import toolchain
+          from verify_firmware import require
+          _, released = toolchain(None)
+          _, source = toolchain(str(Path("build/source-compiler/sdcc-4.2.0+dfsg/bin/sdcc").resolve()))
+          require(source["selection"]["mode"] == "development", "Source compiler impersonated release")
+          require(released["selection"]["mode"] == "release", "Release identity missing")
+          require(source["selection"]["capability"] == released["selection"]["capability"],
+                  "Source/release compiler probe semantics differ")
+          print("Source/release schema and ordinary output equivalence PASS; identities remain distinct")
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: xdata-source-reproduction-${{ github.sha }}
+          path: |
+            build/source-compiler/build.json
+            build/source-compiler/build.log
+            build/source-compiler/regressions.txt
+          retention-days: 7

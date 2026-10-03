@@ -78,8 +78,8 @@ class BankedSecurityTests(unittest.TestCase):
 
     def test_artifact_campaign_is_explicit_and_complete_for_current_image(self):
         with patch.object(lifecycle.layout, "artifact_bytes", return_value=()), \
-                patch.object(lifecycle.banking, "artifact_negatives", return_value=246199) as negative:
-            self.assertEqual(lifecycle.artifact_campaign((), "full"), "246199 artifact negatives")
+                patch.object(lifecycle.banking, "artifact_negatives", return_value=247674) as negative:
+            self.assertEqual(lifecycle.artifact_campaign((), "full"), "247674 artifact negatives")
             negative.assert_called_once()
             negative.reset_mock()
             self.assertIn("explicitly deferred", lifecycle.artifact_campaign((), "deferred"))
@@ -99,7 +99,7 @@ class BankedSecurityTests(unittest.TestCase):
                 patch.object(lifecycle.banking, "artifact_negatives", side_effect=AssertionError("deferred")), \
                 patch.object(lifecycle, "reference", return_value=["calls"]) as reference, \
                 patch.object(lifecycle, "check_alias") as alias, \
-                patch.object(lifecycle, "run", return_value=(0x77, 10345)) as run, \
+                patch.object(lifecycle, "run", return_value=(0x77, 10335)) as run, \
                 patch("builtins.print"):
             lifecycle.main()
             verify.assert_called_once_with("artifacts")

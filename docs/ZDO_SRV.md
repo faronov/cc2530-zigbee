@@ -32,7 +32,10 @@ admission flag, replay check or security-success stub is added.
 | --- | --- |
 | Unicast `Node_Desc_req`, queried address equals local address | `REPLY`: cluster8002, echoed TSN/address, SUCCESS and caller's descriptor |
 | Unicast `Node_Desc_req`, another queried address | `REPLY`: cluster8002, echoed TSN/address and INV_REQUESTTYPE, no descriptor |
+| Unicast `Active_EP_req`0005 | `REPLY`: cluster8005, echoed TSN/address, SUCCESS and the caller's single application endpoint (none if0), or INV_REQUESTTYPE for another address |
+| Unicast `Simple_Desc_req`0004 | `REPLY`: cluster8004; INVALID_EP for endpoint00/FF, INV_REQUESTTYPE for another address, NOT_ACTIVE for another endpoint, else the caller's profile, `ZDO_SRV_DEVICE` and five input clusters, Basic `0000`, Power Configuration `0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity Measurement `0405` (the caller must actually serve them) |
 | Other low-bit unicast request except the special cases below | `REPLY`: request cluster with bit15 set, echoed TSN and NOT_SUPPORTED only |
+| `Bind_req`0021/`Unbind_req`0022 in the READY runtime | Not passed to `zdo_srv`: `zdo_runtime` publishes them to the application, whose `zcl_sensor` server answers (see [ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo)); `zdo_srv_handle` alone still returns NOT_SUPPORTED |
 | Broadcast-addressed request | `DROP_BROADCAST`: no serialized reply |
 | `Parent_annce`001F, unicast or broadcast | `DROP_PARENT`: no further processing by this ED |
 | Any response cluster (bit15 set) | `NOT_REQUEST` error; do not feed a response back into server fallback |
@@ -126,7 +129,7 @@ make BOARD=lg_esl29_rev03 test-zdo-srv
 
 GitHub Actions is the full acceptance gate; local compilation and narrow
 stack/proof preparation do not replace both-board acceptance. The shared
-native/SDCC corpus has1694 checks; native tests total942,914 checks with exact
+native/SDCC corpus has1834 checks; native tests total943,051 checks with exact
 allocation/nonrecovering ASan/UBSan coverage. Native matrices cover every16-bit
 cluster in both lower-addressing classes, every profile, every queried/local
 address, all256 values of each supported context byte, all TSNs and source
@@ -137,25 +140,36 @@ response bytes.
 
 | Linked object | CODE including constants/startup | XDATA | DSEG | OSEG | BSEG bits |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| New `zdo_srv` production | 1534 | 69 | 0 | 0 | 0 |
+| New `zdo_srv` production | 2460 | 75 | 0 | 0 | 0 |
 | Unchanged `zdo_node` | 3133 | 86 | 32 | 0 | 1 |
 | Unchanged `aps_frame` | 1626 | 69 | 8 | 7 | 0 |
 | Unchanged `nwk_frame` | 2294 | 96 | 12 | 10 | 0 |
-| Test caller | 6688 | 494 | 4 | 0 | 1 |
-| Full image including runtime | 15802/16384 | 834+64/1024 | - | - | - |
+| Test caller | 8633 | 509 | 4 | 0 | 1 |
+| Full image including runtime | 18673/24576 | 855+64/1024 | - | - | - |
 
-Target local/rx/info objects occupy16/11/8 bytes. Production private XDATA is
-`[0,320)`, caller objects `[320,803)`, caller locals `[803,814)` and complete
-linked libc scratch `[814,834)`. Stack starts at4B, unwinds to4A, and has
+Target local/rx/info objects occupy19/11/8 bytes. Production private XDATA is
+`[0,326)`, caller objects `[326,818)`, caller locals `[818,835)` and complete
+linked libc scratch `[835,855)`. Stack starts at4B, unwinds to4A, and has
 full-run peak65 under the unchanged7C cap. This is not whole-stack fit or
 ISR/concurrency headroom.
+
+The Active_EP, Simple_Desc and Basic-cluster server work grew `zdo_srv` from
+1534 to2416 CODE bytes and the test caller from6688 to8582, so the composed
+image (previously15802 bytes) no longer fits the original16384-byte budget.
+The CODE budget is now24576, matching the other synthetic compositions; the
+XDATA budget, stack cap, deadlines and every other check are unchanged.
 
 The proof pins full CODE/runtime/constants, raw CDB before decoding, complete
 map and memory accounting, all relocatable objects except their build-path
 first lines, and five immediate relocated-listing snapshots. It checks
 explicit fields/generic-pointer/entry/return ABI, genuine service and
 NWK/APS calls, storage boundaries and the absence of peripheral instructions.
-The proof rejects46,446 artifact mutations,21 state-guard mutations,3
+The five-cluster descriptor uses23 staged bytes and a guarded25-byte test
+buffer. The corrected fixture retains the former insufficient-capacity18
+case and adds19..22, yielding16 additional shared checks; every reply's
+complete remaining buffer tail is checked.
+
+The proof rejects54,675 artifact mutations,21 state-guard mutations,3
 peak-metadata mutations and one disabled-alias control.
 The actual linked image executes under the existing alias-aware `s51` harness,
 with the unchanged15-second deadline, exact completed-check count, untouched

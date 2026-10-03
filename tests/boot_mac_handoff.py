@@ -4,18 +4,20 @@
 from boot_mac_attempt import CALLER_SIZES, MODULES, Profile, main
 
 
+# radio_autoack complete_head() (stopped drain without FIFOP): +25 CODE,
+# relinked identities and +87 required mutations; MMIO trace unchanged.
 HANDOFF = Profile(
     stem="mac_handoff_test", prefix="mh", native="host-mac-handoff-tests",
     modules=MODULES[:-1]+("test_mac_handoff",),
     caller_sizes=tuple(CALLER_SIZES.items())+(("clock", 6),),
-    size=27423, xdata=1543, stack=0x5c,
-    code_sha="dbf1a0c52e734fe6ced409d2803c95071483fb841ad1b3b6f96276b8f6ac155b",
-    cdb_sha="b171cada2f20a2acb576d70412e87635774d28780286ec86dc0d88e032ff364d",
-    map_sha="8109ec57d792f75040e97b95ee42b61b34daf700c6a056c9dc5bc9fa84996fca",
-    mem_sha="2888fc77d37261c0d98b43c114f27ed21fe294cc1df656927a745d257595bcf0",
-    list_sha="0f14a2200973e7df3a853f31ba964c0556b4d243d3db11a3db7aa9ce2da0dd34",
-    object_sha="fefcee908351746672c0b8e213d01b60d706990ac836b0b6fd162a453a8cc824",
-    cases=71, inventory=(1099, 409315, 121, 123), negatives=86410, handoff=True,
+    size=28011, xdata=1537, stack=0x5c,
+    code_sha="a7daaee4ebe1f60c3dacc63b5f1dbb09d19fc9f48f7ecb248db7fe1715eb7189",
+    cdb_sha="484a9233b0c4468f911b2fc253c84c5f2433402b7eb68e90978e6e1bcb9586de",
+    map_sha="d5ea6300ace48671e6e111bb9581576d61c4feab8656aa0d99570a6191da2a10",
+    mem_sha="e7572294bf2b5d3445e036c7a172cf2a4ea832ffd0d8ac803a7f5f896461735e",
+    list_sha="5c52114711453bb76d26d97fe6c8b1e94036ceb43b800570034e95b42513c898",
+    object_sha="7e2b1fbd9549f26a5b980c95fb62b4251c95c5bd569831eb98b3914e88fb42e1",
+    cases=76, inventory=(1164, 438789, 121, 123), negatives=87922, handoff=True,
 )
 
 

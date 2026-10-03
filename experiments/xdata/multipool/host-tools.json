@@ -1,0 +1,16 @@
+{
+  "run": 927,
+  "seconds": 635.808,
+  "passed": 903,
+  "failures": 1,
+  "errors": 2,
+  "skipped": 21,
+  "diagnostics": [
+    "test_local_checks: 15 != 13",
+    "test_radio_link_fixture: generic/radio_link_fixture CODE extent changed",
+    "test_radio_tx_fixture: same generic/radio_link_fixture CODE extent changed"
+  ],
+  "failing_surfaces_unchanged_from": "98b7c4b",
+  "same_failures_previously_reproduced_on_pristine_v1": "af762a7",
+  "production_pins_changed": false
+}

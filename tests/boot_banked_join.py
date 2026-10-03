@@ -21,34 +21,34 @@ from boot_image import check_alias, simulate_binary_dumps
 from boot_zdo_node import rejected
 from verify_firmware import require
 
-REFERENCE_SHA = "9897c6467d17df75491aa33a6654bc20ca5117e55fa12538d19ae03799cba579"
+REFERENCE_SHA = "f9ba89f873003f97b71e6763329e2ec5d4ca9c3ac02d4d1f46538c4693a881eb"
 CASES = ("joined-data-update-loss-restart", "missing-network-key", "retained-radio-fault")
 FLASH_FAILURE = "retained-flash-fault"
 EDGE_CASES = {
-    "rx-queues": ("88e72147bb38a77a48b61539dd71fb3ad37c7cfb2ef22824f54775e48bf56f20", 136, 1309),
-    "wrap-quarantine": ("98ca74aa0323b21e6fa368016d453d5c06105f944b91665877dd8ef68ad1007d", 1154, 1108),
-    "ack-correlation": ("ec1d2b312eaea518d79eb4de24c831a74f3f69cc8ed6b19bbd519085f7b6a5f4", 136, 1411),
-    "ack-deadlines": ("f453528673a362e8699130dd886e02d796173f3d92f0a8739d1ab93d7a9885a8", 148, 1437),
-    "zdo-server": ("4aa750331c2f19b20d32c00b995fc19e5c36fcd741ac58cbb1de17135e943099", 239, 2409),
-    "broadcast-table": ("eeb59b035a9513d38c5344a045ea8680f3dd421954e2200bbc243cd1ba735c5e", 138, 1396),
-    "address-map": ("272666a6dec9ec250ab25261fa70f1262d86ab4b1860ac957afc2aa9390fddb3", 143, 1358),
-    "update-full": ("16c754fa2f7c10d12f1d5154071130d6bb45519a4ced34843e38f431a35df6a9", 146, 1273),
-    "install-timeout": ("cbaf01f00def4c3a47112d4fd17505412f5b2680df9c29725d0bde7c829b907e", 127, 909),
-    "node-correlation": ("a8c6235a902db9d157e05265fccce605b9fbc3af3137c9d113c5789a8d5073c3", 129, 1071),
-    "node-timeout": ("e84675f07629dcfb4f9e25276ddbe769fcf44625b0ea3c75e6e6be32c8ae3d05", 89, 598),
-    "node-status": ("08fd69c7f023117154ced88c12b04f08ab0fb16e53b19d8ec0d240557fc7681b", 71, 324),
-    "tc-key-timeout": ("7d49bb12f9b8ec00c8162de45e1dafdc9e8548f5cb8cabcc87fab886efe51fcc", 101, 764),
-    "tc-confirm-timeout": ("21ce7f0b57534d1bc6e238e8b5df8ae0842f0958af3097fc35b3ca2faf4358d2", 113, 852),
-    "parent-status": ("e48f46efd708908e27f3e3420e2c78d5af1ba007c7a266e6906b5477bb95fc34", 114, 903),
-    "network-key-late": ("ca047178558505135b37ebee3c8faddbaf0535cb145b38f28bc27e21e96fd386", 58, 228),
-    "tc-key-late": ("71cebf6232bd07b8b4b09ce6e91fdb4ccb933b3f1b56cae9bef2e1b55d2da3f6", 88, 585),
-    "tc-confirm-late": ("645ec7676aa2f8903caaec810ffd6729febdb816b8d8cd7e1abee1f40ee6826b", 102, 768),
+    "rx-queues": ("ca392fb2ae9140f502705894394559aa8366ec3c581b5d89f426f3e9969cc556", 136, 967),
+    "wrap-quarantine": ("808bbb650b7d32f56def29854cfdb153a7f478d1ac1f68c499402ad76941d66a", 1154, 614),
+    "ack-correlation": ("35f5a1c6808aa77d85d3a1940917e63be849ab760ec51f85449d65ee9d405dba", 136, 1069),
+    "ack-deadlines": ("2efcdeb63de9d54545fbbeaa308e1f1c6e451056e1d234f063b831fe40b1226a", 148, 1133),
+    "zdo-server": ("54886309390d1e587f5071aae1c81b373ba30ad6b586bd4dfdfaa7f88c52b43c", 239, 813),
+    "broadcast-table": ("746c9964ec981701341a33d1bf088ad679f19b0f23da1dbfdf1e22a13d7b563e", 138, 636),
+    "address-map": ("999415873edc901c37f8c4c5496ba4d34a80c9771f6afdda8cf33a7e4e3cffc0", 143, 674),
+    "update-full": ("bbd7b61be17007660efaf8446ce88b9d2dbe0db91a94574cf98745e3c4174954", 148, 969),
+    "install-timeout": ("3d52f3d38658c91d2672cf87a21132ea9464511ae162e50b562dbd15baf7303b", 127, 605),
+    "node-correlation": ("6eba97697f65d696dd31e4acb44726eb44354527213c28cf7af1c79b6057346d", 129, 615),
+    "node-timeout": ("a3cae3e8dc5328212ee7bd438a6c479677fb807f127a4ce32072345b22c8dc5b", 89, 218),
+    "node-status": ("aede5ca8bc36b100e84d6f6af230b127a02a0b960bdd8c370b693c74041a495a", 71, 172),
+    "tc-key-timeout": ("e0268f19a14a314e9cd01b03f0d76b3f268c2bbf176d90e52f3acedb6426781e", 101, 574),
+    "tc-confirm-timeout": ("bfdf42ab0178d1717de00c5bc1d6a33561cdbfcc262ff734e8e7f8cd8086967a", 113, 662),
+    "parent-status": ("e031f7cbfeec069252b684f518c78c2957dfcfbfce39db3f45a13b4b52c8c502", 114, 599),
+    "network-key-late": ("5afc62c4a0ad53858df8ec4dd43117b5967b249762cc97d290374126e98668bf", 58, 152),
+    "tc-key-late": ("01390761da751ec330d3edf221cec875101d78634efc20ea97c24148cf0f1d04", 88, 395),
+    "tc-confirm-late": ("965fd9bb3f97d372a934f60289b48ee04571c2a44d16563d415105c54f9b0da6", 102, 578),
 }
 
 
 def reference(executable, selected=None):
     require(selected is None or selected in EDGE_CASES, "Unknown complete join reference")
-    digest, expected_calls, expected_events = ((REFERENCE_SHA, 415, 2791) if selected is None
+    digest, expected_calls, expected_events = ((REFERENCE_SHA, 465, 1672) if selected is None
                                               else EDGE_CASES[selected])
     raw = subprocess.run([str(executable)]+([] if selected is None else [selected]), capture_output=True,
                          check=True, timeout=15).stdout
@@ -99,7 +99,7 @@ def reference(executable, selected=None):
             require(current is not None and "result" in current and len(fields) == 2 and name not in current,
                     "Invalid join object outcome")
             current[name] = bytes.fromhex(fields[1])
-            require(len(current[name]) == {"device": 1676, "mac": 168, "nv": 4096}[name],
+            require(len(current[name]) == {"device": 1677, "mac": 168, "nv": 4096}[name],
                     "Invalid join observation extent")
             if name == "nv":
                 require("device" in current and "mac" in current, "Missing public owner")
@@ -346,13 +346,14 @@ def run(output, simulator, calls, *, limit=None, failure=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--board", choices=layout.BOARDS, required=True)
     parser.add_argument("--simulator", default="s51")
     parser.add_argument("--limit", type=int, help="Development prefix only; not complete acceptance")
     parser.add_argument("--case", choices=("all",)+CASES+(FLASH_FAILURE,)+tuple(EDGE_CASES), default="all")
     args = parser.parse_args()
     require(args.limit is None or args.limit > 0, "Development prefix must contain operations")
     artifacts = layout.load(args.output)
-    layout.verify(*artifacts)
+    layout.verify(*artifacts, board=args.board)
     selected = args.case if args.case in EDGE_CASES else None
     calls = reference(args.output/"host-banked-join-vectors", selected)
     require(calls == reference(args.output/"host-banked-join-vectors-sanitize", selected),
@@ -370,8 +371,8 @@ def main():
     check_alias(args.simulator)
     rejected(lambda: check_alias(args.simulator, False))
     if args.limit is None and args.case in ("all", "missing-network-key"):
-        count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS)
-        require(count == 716229, "Complete join artifact-negative coverage changed")
+        count = banking.artifact_negatives(layout.artifact_bytes(*artifacts), layout.PINS[args.board])
+        require(count == layout.NEGATIVES[args.board], "Complete join artifact-negative coverage changed")
         print(f"Complete join: {count} immutable artifact negatives", flush=True)
     peak = run(args.output, args.simulator, calls, limit=args.limit, failure=args.case == FLASH_FAILURE)
     if args.case == "all" and args.limit is None:

@@ -14,6 +14,11 @@
 #define BDB_JOIN_SECURITY_WAIT 625000UL
 #define BDB_JOIN_EXCHANGE_WAIT 312500UL
 #define BDB_JOIN_KEEPALIVE 1875000UL
+/* READY keepalive loss: retries are 5 s apart and the sixth consecutive
+ * failure is final, so a short RF burst cannot consume every attempt while
+ * the last failure still precedes the requested 2-minute parent timeout. */
+#define BDB_JOIN_KEEPALIVE_RETRY 312500UL
+#define BDB_JOIN_KEEPALIVE_ATTEMPTS 6u
 #define BDB_JOIN_ATTEMPTS 3u
 #define BDB_JOIN_STALL_STEPS 4096u
 
@@ -107,10 +112,14 @@ typedef union {
 
 /* Retained scan outcome after release; the selected parent is copied below.
  * The candidate table itself is available only while WORK_SCAN is retained.
+ * lossy marks channels whose final window lost frames to RX FIFO overflow.
  */
 typedef struct {
     uint32_t generation, sent, unscanned;
     uint8_t reason, cleanup_error, overflow, tx_outcome, candidates;
+#if defined(CC2530_MAC_LINK)
+    uint32_t lossy;
+#endif
 } bdb_join_scan_result_t;
 
 typedef struct {
@@ -124,12 +133,18 @@ typedef struct {
     uint16_t token, steps;
     uint8_t version, phase, result, cleanup_error, attempts, issued, member;
     uint8_t got_tc, got_confirm, application_pending, application_done, application_result;
-    uint8_t receive_result, abandon;
+    uint8_t receive_result, abandon, timely;
     uint8_t workspace;
 } bdb_join_t;
 
-/* Original bounded R22/BDB3.0.1 centralized, install-code, awake direct-TC ED.
- * start requires explicit real provisioning, not EMPTY-media initialization.
+/* Bounded R22/BDB3.0.1 centralized, awake direct-TC ED.
+ * The original profile requires explicit install-code provisioning at start.
+ * CC2530_DEFAULT_TC_KEY instead requires an opened UNPROVISIONED key owner.
+ * Scan learns one permitting coordinator network; incomplete/overflowed scans
+ * and distinct open networks are refused. The contextual Association Response
+ * supplies the TC IEEE for explicit default-key provisioning. A short-selected
+ * source remains UNBOUND metadata, not authenticated identity or membership.
+ * Actual Transport Key authentication and the updated TC exchange still follow.
  * Existing verified storage returns RECOVERY_REQUIRED; it is not resumed join.
  * scan/association actions preserve the real lower-controller grant contracts.
  * Event/action data is a real tagged union: construct/read only the member

@@ -1,0 +1,39 @@
+{
+  "source_archive": "https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz",
+  "source_archive_sha256": "ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578",
+  "source_import_commit": "2f950e49be05b53572be4c422491a267d964e0bb",
+  "final_compiler_commit": "02bf3da5bd2ab4c31da50ab4b88f402b7de8a8f4",
+  "final_compiler_tree": "80970186f983c4b91e3a7e09df8c3c7861423477",
+  "application_input_commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+  "application_inputs_unchanged": [
+    "Makefile",
+    "src",
+    "include",
+    "examples",
+    "boards"
+  ],
+  "target": {
+    "board": "lg_esl29_rev03",
+    "key_mode": "default-tc"
+  },
+  "patch_replay_exact_tree": true,
+  "patches": {
+    "0001-test-mcs51-cover-opt-in-XDATA-ownership-and-artifact.patch": "2bdfc1afd47f7ac955a6d2f0669bca24c00a92f6d02523b0f9f07d608cfcd238",
+    "0002-test-mcs51-cover-inline-return-provenance-and-storag.patch": "4c8aecace1e481e491c4a77afa6c5e79d774a48b38e5f134866ba44f2d301586",
+    "0003-feat-mcs51-emit-opt-in-XDATA-ownership-without-chang.patch": "bf70f8e58f00d17e3dca5e7c921d9300014d257ca226550c5dd62dd577f71405",
+    "0004-docs-mcs51-describe-XDATA-ownership-schema-and-lifet.patch": "4deb9cb2cb0a3af09ba55cfee3033bef761ed6e7fda681787c9fb80d24ae3878"
+  },
+  "evidence": {
+    "area-probes.json": "a415f6a4d381a68948d69ff71d8aceccdbaf52791b2293d0539107c352b88d93",
+    "compiler-regressions.txt": "a56baa9b336e940a9ab7f32049b25e7d2d2ecaa3a8310e62aa04b6c23cce7a6d",
+    "existing-verifier-tests.txt": "145dca317c930afd79838d06e6b0c784955c7fee3fce985c7965459f1825e1b5",
+    "lifetime-regressions.txt": "4c74f77adb4bf3b6d2e795d664e8423fa460724ec4e09d8d04518d845420c424",
+    "measurements.json": "d2682462b866893f97b3f72f25c59f24e969fe72931856b47713764c84ddd87a",
+    "metadata-overlay.json": "e366190c4627b8c745cba75ec42bae29794bcf5e94d2c634f2c49cda680ca4d2",
+    "metadata-regressions.json": "b8949b9463965e2fa1dc9692c606616f5585821f46ca3d19de470f5b52de207c",
+    "reconciliation.tsv": "744f52c3f4e2dafe03c4f2bfb3f2b89d2f9d95123eb38fd634bf0b87cac4272b"
+  },
+  "full_CI": "NOT RUN",
+  "full_upstream_regressions": "NOT RUN",
+  "hardware_observed": false
+}

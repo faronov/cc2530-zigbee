@@ -68,7 +68,7 @@ class AdapterMetadataTests(unittest.TestCase):
 
     def test_raw_reference_pin_and_sanitizer_are_mandatory_before_execution(self):
         self.assertEqual(len(proof.CASES), 18)
-        self.assertEqual((sum(c.calls for c in proof.CASES), sum(c.events for c in proof.CASES)), (2410, 210988))
+        self.assertEqual((sum(c.calls for c in proof.CASES), sum(c.events for c in proof.CASES)), (2405, 212147))
         with self.assertRaises(FrozenInstanceError):
             proof.CASES[0].calls = 0
         with patch.object(proof.subprocess, "check_output", return_value=b"{}\r\n"):
@@ -91,7 +91,7 @@ class AdapterMetadataTests(unittest.TestCase):
         with patch.object(sys, "argv", ["proof", "--output", "unused"]), \
                 patch.object(layout, "load", return_value=("actual",)), patch.object(layout, "verify") as verify, \
                 patch.object(layout, "artifact_bytes", return_value="immutable"), \
-                patch.object(proof.banking, "artifact_negatives", return_value=277229) as negatives, \
+                patch.object(proof.banking, "artifact_negatives", return_value=283559) as negatives, \
                 patch.object(proof, "check_alias", side_effect=[None, ValueError("no alias")]) as alias, \
                 patch.object(proof.banking, "check_mapping",
                              side_effect=[None, ValueError("no banking"), ValueError("no alias")]) as mapping, \

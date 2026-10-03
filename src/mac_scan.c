@@ -86,6 +86,10 @@ static void next_channel(mac_scan_t MAC_SCAN_RAM * volatile scan, uint32_t now)
     scan->remaining = bit;
     scan->phase = MAC_SCAN_CONFIG;
     scan->issued = 0;
+#if defined(CC2530_MAC_LINK)
+    scan->retries = 0;
+    scan->busy = 0;
+#endif
 }
 
 mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * volatile scan)
@@ -244,8 +248,16 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
                 scan->phase = MAC_SCAN_OPEN;
                 if (scan->stopping)
                     stop(scan, scan->reason, now);
-                else if (scan->tx_outcome == MAC_TX_CHANNEL_ACCESS)
+                else if (scan->tx_outcome == MAC_TX_CHANNEL_ACCESS) {
+#if defined(CC2530_MAC_LINK)
+                    if (scan->busy < MAC_SCAN_BUSY_RETRIES) {
+                        scan->busy++;
+                        scan->phase = MAC_SCAN_CONFIG;
+                        scan->issued = 0;
+                    } else
+#endif
                     next_channel(scan, now);
+                }
                 else if (scan->tx_outcome != MAC_TX_UNACKNOWLEDGED)
                     stop(scan, MAC_SCAN_TX_ERROR, now);
             }
@@ -282,7 +294,28 @@ mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
 #endif
                     || !scan_state(&event->state, scan->channel, 0))
                 stop(scan, MAC_SCAN_ADAPTER_ERROR, now);
+#if defined(CC2530_MAC_LINK)
+            else if (event->lossy > 1u)
+                stop(scan, MAC_SCAN_ADAPTER_ERROR, now);
+            else if (event->lossy && scan->retries < MAC_SCAN_LOSSY_RETRIES) {
+                /* Candidates already merged; repeat the request on this channel. */
+                bits = UINT32_C(1) << scan->channel;
+                bits |= scan->lossy;
+                scan->lossy = bits;
+                scan->retries++;
+                scan->phase = MAC_SCAN_CONFIG;
+                scan->issued = 0;
+            }
+#endif
             else {
+#if defined(CC2530_MAC_LINK)
+                bits = UINT32_C(1) << scan->channel;
+                if (event->lossy)
+                    bits |= scan->lossy;
+                else
+                    bits = scan->lossy & ~bits;
+                scan->lossy = bits;
+#endif
                 bits = ~(UINT32_C(1) << scan->channel);
                 bits &= scan->unscanned;
                 scan->unscanned = bits;

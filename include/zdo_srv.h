@@ -10,6 +10,23 @@
 #define ZDO_SRV_DEVICE_ANNCE 0x0013u
 #define ZDO_SRV_PARENT_ANNCE 0x001fu
 #define ZDO_SRV_UPDATE_NOTIFY 0x003bu
+#define ZDO_SRV_SIMPLE_DESC_REQUEST 0x0004u
+#define ZDO_SRV_ACTIVE_EP_REQUEST 0x0005u
+#define ZDO_SRV_INVALID_EP 0x82u
+#define ZDO_SRV_NOT_ACTIVE 0x83u
+#define ZDO_SRV_BIND_REQUEST 0x0021u
+#define ZDO_SRV_UNBIND_REQUEST 0x0022u
+#define ZDO_SRV_BASIC_CLUSTER 0x0000u
+#define ZDO_SRV_POWER_CLUSTER 0x0001u
+#define ZDO_SRV_IDENTIFY_CLUSTER 0x0003u
+#define ZDO_SRV_TEMPERATURE_CLUSTER 0x0402u
+#define ZDO_SRV_HUMIDITY_CLUSTER 0x0405u
+#define ZDO_SRV_INPUT_CLUSTERS 5u
+/* No Home Automation device type is claimed: the endpoint's minimal
+ * application servers (zcl_sensor.h) have not been conformance-tested
+ * against any HA/BDB device definition. */
+#define ZDO_SRV_DEVICE 0xffffu
+#define ZDO_SRV_DEVICE_VERSION 0u
 
 typedef enum {
     ZDO_SRV_OK = 0,
@@ -32,6 +49,9 @@ typedef enum {
 typedef struct {
     zdo_node_descriptor_t descriptor;
     uint16_t address;
+    /* endpoint0: no active application endpoint; else 1..F0 with profile!=0. */
+    uint16_t profile;
+    uint8_t endpoint;
 } zdo_srv_local_t;
 
 typedef struct {
@@ -58,7 +78,12 @@ typedef struct {
  * local is a caller-supplied truthful ED descriptor with logical_type2 and
  * address1..FFF7. No membership/address assignment or production defaults.
  * Node_Desc_req returns the local descriptor or INV_REQUESTTYPE for another
- * queried address. Other unicast requests get TSN/status-only NOT_SUPPORTED.
+ * queried address. Active_EP_req lists the single application endpoint, if
+ * any. Simple_Desc_req returns INVALID_EP for 0/FF, INV_REQUESTTYPE for another
+ * address, NOT_ACTIVE for other endpoints, else profile, ZDO_SRV_DEVICE and
+ * three input clusters: Basic, Temperature and Relative Humidity Measurement;
+ * the caller must actually serve those clusters.
+ * Other unicast requests get TSN/status-only NOT_SUPPORTED.
  * Unknown mandatory services are still missing, not made conformant by fallback.
  *
  * Inputs include TSN; at most ZDO_NODE_MAX_BODY bytes. Mandatory fields required;

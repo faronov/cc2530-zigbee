@@ -11,9 +11,9 @@
 
 #include <stddef.h>
 #include <string.h>
-#if defined(CC2530_MAC_LINK_WORKSPACE)
+/* Every profile: the J3 shallow-read forms are identities outside DIRECT. */
 #include "mac_link_workspace_guard_internal.h"
-#endif
+/* DIRECT rereads decode parameters from their homes across calls (J3). */
 
 static inline uint16_t read_le16(const uint8_t *bytes)
 {
@@ -65,7 +65,7 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (!child_work_enter(CW_NWK_DECODE)) return NWK_CODEC_INVALID_ARGUMENT;
 #endif
-
+#define body LW_SHALLOW_READ(const uint8_t *, body)
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #define candidate (child_work_arena.wire.engine.parse.nwk)
 #else
@@ -74,7 +74,7 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     nwk_codec_result_t status;
     uint16_t control;
     uint8_t size, position;
-
+#define length LW_SHALLOW_READ(uint16_t, length)
     if (body == NULL || result == NULL)
         return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_INVALID_ARGUMENT);
     if (length > NWK_FRAME_MAX_BODY)
@@ -111,8 +111,8 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #undef candidate
 #endif
-
-
+#undef body
+#undef length
 /* Keep emission a leaf so SDCC can overlay its temporary IRAM. */
 static void emit_frame(const nwk_header_t *header, const uint8_t *payload, uint8_t payload_length,
                         uint8_t *body)

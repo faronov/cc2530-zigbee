@@ -62,10 +62,19 @@ typedef struct {
  * No key-export, authentication-boolean, reset, recovery or NV bypass API.
  */
 security_keys_result_t security_keys_open(void) SECURITY_FAR;
+#if defined(CC2530_DEFAULT_TC_KEY)
+/* Explicit ordinary centralized commissioning profile; never an install-code
+ * failure fallback. The public default key protects only initial admission. */
+security_keys_result_t security_keys_provision_default(
+    const security_keys_config_t * volatile config,
+    volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
+    const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
+#else
 security_keys_result_t security_keys_provision(
     const security_keys_config_t * volatile config, const uint8_t * volatile install_code18,
     volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
+#endif
 security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR;
 security_keys_result_t security_keys_receive(
     const uint8_t * volatile raw_npdu, volatile uint16_t length,

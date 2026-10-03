@@ -1,0 +1,1970 @@
+{
+  "variants": {
+    "baseline": {
+      "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "layout": "build/sdcc-study/baseline/join-smoke-layout",
+      "code": 253445,
+      "common": 32714,
+      "banks": [
+        {
+          "bank": 0,
+          "populated": 32714,
+          "capacity": 32768,
+          "free": 54
+        },
+        {
+          "bank": 1,
+          "populated": 32083,
+          "capacity": 32768,
+          "free": 685
+        },
+        {
+          "bank": 2,
+          "populated": 32755,
+          "capacity": 32768,
+          "free": 13
+        },
+        {
+          "bank": 3,
+          "populated": 32734,
+          "capacity": 32768,
+          "free": 34
+        },
+        {
+          "bank": 4,
+          "populated": 31350,
+          "capacity": 32768,
+          "free": 1418
+        },
+        {
+          "bank": 5,
+          "populated": 32685,
+          "capacity": 32768,
+          "free": 83
+        },
+        {
+          "bank": 6,
+          "populated": 32741,
+          "capacity": 32768,
+          "free": 27
+        },
+        {
+          "bank": 7,
+          "populated": 26383,
+          "capacity": 26624,
+          "free": 241
+        }
+      ],
+      "xdata": 7676,
+      "physical_dseg": 51,
+      "linker_dseg_extent": 125,
+      "oseg": 10,
+      "bseg_bits": 88,
+      "bseg_bytes": 11,
+      "stack": 45,
+      "bank_depth": 8,
+      "jf_count": 106,
+      "jf_sum": 589,
+      "jf_max": 18,
+      "jf_frames": {
+        "JF_aes_aes128_encrypt_block": 18,
+        "JF_zdo_runtime_announce": 18,
+        "JF_nwk_aps_nwk_aps_receive": 17,
+        "JF_zdo_runtime_zdo_response": 17,
+        "JF_mac_association_mac_association_start": 15,
+        "JF_zdo_runtime_address_request": 15,
+        "JF_aps_frame_aps_frame_encode": 13,
+        "JF_mac_tx_mac_tx_interval_submit": 13,
+        "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+        "JF_nwk_frame_nwk_frame_encode": 13,
+        "JF_zdo_runtime_parent_response": 13,
+        "JF_mac_epoch_mac_epoch_step": 12,
+        "JF_mac_join_mac_join_step": 12,
+        "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+        "JF_zigbee_mmo_install_code_derive": 12,
+        "JF_zdo_node_zdo_node_rsp_encode": 11,
+        "JF_bdb_join_bdb_join_step": 10,
+        "JF_mac_association_mac_association_step_rx": 10,
+        "JF_mac_poll_step": 10,
+        "JF_nwk_beacon_nwk_beacon_decode": 10,
+        "JF_zdo_runtime_received": 10,
+        "JF_bdb_join_bdb_join_receive": 9,
+        "JF_mac_link_driver_mac_link_driver_step": 9,
+        "JF_ed_wire_ed_wire_crypt": 8,
+        "JF_mac_adapter_mac_adapter_step": 8,
+        "JF_mac_radio_mac_radio_attempt": 8,
+        "JF_mac_tx_mac_tx_step": 8,
+        "JF_zdo_node_zdo_node_req_encode": 8,
+        "JF_zdo_runtime_zdo_runtime_request": 8,
+        "JF_clock_request_and_wait": 7,
+        "JF_mac_tx_interval_publish": 7,
+        "JF_bdb_join_init_bdb_join_runtime_init": 6,
+        "JF_mac_link_driver_observe": 6,
+        "JF_mac_time_mac_time_attempt_read": 6,
+        "JF_mac_tx_mac_tx_interval_step": 6,
+        "JF_mac_tx_mac_tx_observed_step": 6,
+        "JF_nwk_aps_nwk_aps_step": 6,
+        "JF_security_counter_security_counter_take": 6,
+        "JF_zdo_node_read_descriptor": 6,
+        "JF_zdo_node_write_descriptor": 6,
+        "JF_zdo_node_zdo_node_rsp_decode": 6,
+        "JF_clock_clock_select_init": 5,
+        "JF_mac_link_driver_mac_link_driver_init": 5,
+        "JF_mac_radio_operate": 5,
+        "JF_mac_tx_mac_tx_interval_copy": 5,
+        "JF_radio_autoack_radio_autoack_attempt": 5,
+        "JF_aes_source_range": 4,
+        "JF_bdb_join_bdb_join_send": 4,
+        "JF_bdb_join_init_bdb_join_start": 4,
+        "JF_join_smoke_progress": 4,
+        "JF_mac_adapter_frame": 4,
+        "JF_mac_frame_mac_frame_encode": 4,
+        "JF_mac_join_receipt": 4,
+        "JF_mac_poll_accept_ack": 4,
+        "JF_mac_time_operate": 4,
+        "JF_nv_record_nv_record_load": 4,
+        "JF_nv_record_nv_record_replace": 4,
+        "JF_nv_record_select_record": 4,
+        "JF_nwk_candidates_nwk_candidates_consider": 4,
+        "JF_security_keys_security_keys_provision_default": 4,
+        "JF_zdo_runtime_advance": 4,
+        "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+        "JF_bdb_join_runtime": 3,
+        "JF_mac_attempt_mac_attempt_run": 3,
+        "JF_mac_link_child_workspace_child_work_address": 3,
+        "JF_mac_radio_mac_radio_configure": 3,
+        "JF_nv_record_scan_page": 3,
+        "JF_nwk_aps_nwk_aps_queue": 3,
+        "JF_radio_autoack_operate": 3,
+        "JF_radio_autoack_radio_autoack_configure": 3,
+        "JF_timebase_timebase_deadline_after": 3,
+        "JF_timebase_timebase_expired": 3,
+        "JF_zdo_runtime_zdo_runtime_step": 3,
+        "JF_zdo_runtime_zdo_runtime_take_application": 3,
+        "JF_zdo_runtime_zdo_runtime_take_result": 3,
+        "JF_aes_sample": 2,
+        "JF_mac_association_mac_association_step": 2,
+        "JF_mac_attempt_mac_attempt_prepare": 2,
+        "JF_mac_epoch_mac_epoch_start": 2,
+        "JF_mac_join_finish_window": 2,
+        "JF_mac_join_link_ram_disjoint": 2,
+        "JF_mac_join_mac_join_start": 2,
+        "JF_mac_link_child_workspace_child_work_disjoint": 2,
+        "JF_mac_link_driver_consumer": 2,
+        "JF_mac_link_workspace_link_work_enter": 2,
+        "JF_mac_poll_link_ram_disjoint": 2,
+        "JF_mac_poll_mac_poll_start": 2,
+        "JF_mac_radio_mac_radio_prepare": 2,
+        "JF_mac_scan_mac_scan_start": 2,
+        "JF_mac_scan_mac_scan_step": 2,
+        "JF_security_counter_floors": 2,
+        "JF_bdb_join_bdb_join_armed": 1,
+        "JF_bdb_join_bdb_join_disarmed": 1,
+        "JF_ed_wire_read_aps": 1,
+        "JF_mac_adapter_mac_adapter_accept": 1,
+        "JF_mac_attempt_mac_attempt_configure": 1,
+        "JF_mac_attempt_mac_attempt_init": 1,
+        "JF_mac_attempt_mac_attempt_now": 1,
+        "JF_mac_attempt_mac_attempt_receive": 1,
+        "JF_mac_radio_mac_radio_init": 1,
+        "JF_mac_radio_mac_radio_now": 1,
+        "JF_mac_radio_mac_radio_send": 1,
+        "JF_mac_time_poll": 1,
+        "JF_nwk_frame_nwk_frame_decode": 1,
+        "JF_radio_autoack_radio_autoack_prepare": 1,
+        "JF_radio_autoack_radio_autoack_send": 1
+      },
+      "data_verified": true,
+      "stack_verified": true,
+      "identities": {
+        "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+        "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+        "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+        "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+        "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+        "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+        "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+        "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+        "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+      },
+      "simulation_or_hardware_claim": false
+    },
+    "omit-frame": {
+      "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "layout": "build/sdcc-study/omit-frame/join-smoke-layout",
+      "code": 253445,
+      "common": 32714,
+      "banks": [
+        {
+          "bank": 0,
+          "populated": 32714,
+          "capacity": 32768,
+          "free": 54
+        },
+        {
+          "bank": 1,
+          "populated": 32083,
+          "capacity": 32768,
+          "free": 685
+        },
+        {
+          "bank": 2,
+          "populated": 32755,
+          "capacity": 32768,
+          "free": 13
+        },
+        {
+          "bank": 3,
+          "populated": 32734,
+          "capacity": 32768,
+          "free": 34
+        },
+        {
+          "bank": 4,
+          "populated": 31350,
+          "capacity": 32768,
+          "free": 1418
+        },
+        {
+          "bank": 5,
+          "populated": 32685,
+          "capacity": 32768,
+          "free": 83
+        },
+        {
+          "bank": 6,
+          "populated": 32741,
+          "capacity": 32768,
+          "free": 27
+        },
+        {
+          "bank": 7,
+          "populated": 26383,
+          "capacity": 26624,
+          "free": 241
+        }
+      ],
+      "xdata": 7676,
+      "physical_dseg": 51,
+      "linker_dseg_extent": 125,
+      "oseg": 10,
+      "bseg_bits": 88,
+      "bseg_bytes": 11,
+      "stack": 45,
+      "bank_depth": 8,
+      "jf_count": 106,
+      "jf_sum": 589,
+      "jf_max": 18,
+      "jf_frames": {
+        "JF_aes_aes128_encrypt_block": 18,
+        "JF_zdo_runtime_announce": 18,
+        "JF_nwk_aps_nwk_aps_receive": 17,
+        "JF_zdo_runtime_zdo_response": 17,
+        "JF_mac_association_mac_association_start": 15,
+        "JF_zdo_runtime_address_request": 15,
+        "JF_aps_frame_aps_frame_encode": 13,
+        "JF_mac_tx_mac_tx_interval_submit": 13,
+        "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+        "JF_nwk_frame_nwk_frame_encode": 13,
+        "JF_zdo_runtime_parent_response": 13,
+        "JF_mac_epoch_mac_epoch_step": 12,
+        "JF_mac_join_mac_join_step": 12,
+        "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+        "JF_zigbee_mmo_install_code_derive": 12,
+        "JF_zdo_node_zdo_node_rsp_encode": 11,
+        "JF_bdb_join_bdb_join_step": 10,
+        "JF_mac_association_mac_association_step_rx": 10,
+        "JF_mac_poll_step": 10,
+        "JF_nwk_beacon_nwk_beacon_decode": 10,
+        "JF_zdo_runtime_received": 10,
+        "JF_bdb_join_bdb_join_receive": 9,
+        "JF_mac_link_driver_mac_link_driver_step": 9,
+        "JF_ed_wire_ed_wire_crypt": 8,
+        "JF_mac_adapter_mac_adapter_step": 8,
+        "JF_mac_radio_mac_radio_attempt": 8,
+        "JF_mac_tx_mac_tx_step": 8,
+        "JF_zdo_node_zdo_node_req_encode": 8,
+        "JF_zdo_runtime_zdo_runtime_request": 8,
+        "JF_clock_request_and_wait": 7,
+        "JF_mac_tx_interval_publish": 7,
+        "JF_bdb_join_init_bdb_join_runtime_init": 6,
+        "JF_mac_link_driver_observe": 6,
+        "JF_mac_time_mac_time_attempt_read": 6,
+        "JF_mac_tx_mac_tx_interval_step": 6,
+        "JF_mac_tx_mac_tx_observed_step": 6,
+        "JF_nwk_aps_nwk_aps_step": 6,
+        "JF_security_counter_security_counter_take": 6,
+        "JF_zdo_node_read_descriptor": 6,
+        "JF_zdo_node_write_descriptor": 6,
+        "JF_zdo_node_zdo_node_rsp_decode": 6,
+        "JF_clock_clock_select_init": 5,
+        "JF_mac_link_driver_mac_link_driver_init": 5,
+        "JF_mac_radio_operate": 5,
+        "JF_mac_tx_mac_tx_interval_copy": 5,
+        "JF_radio_autoack_radio_autoack_attempt": 5,
+        "JF_aes_source_range": 4,
+        "JF_bdb_join_bdb_join_send": 4,
+        "JF_bdb_join_init_bdb_join_start": 4,
+        "JF_join_smoke_progress": 4,
+        "JF_mac_adapter_frame": 4,
+        "JF_mac_frame_mac_frame_encode": 4,
+        "JF_mac_join_receipt": 4,
+        "JF_mac_poll_accept_ack": 4,
+        "JF_mac_time_operate": 4,
+        "JF_nv_record_nv_record_load": 4,
+        "JF_nv_record_nv_record_replace": 4,
+        "JF_nv_record_select_record": 4,
+        "JF_nwk_candidates_nwk_candidates_consider": 4,
+        "JF_security_keys_security_keys_provision_default": 4,
+        "JF_zdo_runtime_advance": 4,
+        "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+        "JF_bdb_join_runtime": 3,
+        "JF_mac_attempt_mac_attempt_run": 3,
+        "JF_mac_link_child_workspace_child_work_address": 3,
+        "JF_mac_radio_mac_radio_configure": 3,
+        "JF_nv_record_scan_page": 3,
+        "JF_nwk_aps_nwk_aps_queue": 3,
+        "JF_radio_autoack_operate": 3,
+        "JF_radio_autoack_radio_autoack_configure": 3,
+        "JF_timebase_timebase_deadline_after": 3,
+        "JF_timebase_timebase_expired": 3,
+        "JF_zdo_runtime_zdo_runtime_step": 3,
+        "JF_zdo_runtime_zdo_runtime_take_application": 3,
+        "JF_zdo_runtime_zdo_runtime_take_result": 3,
+        "JF_aes_sample": 2,
+        "JF_mac_association_mac_association_step": 2,
+        "JF_mac_attempt_mac_attempt_prepare": 2,
+        "JF_mac_epoch_mac_epoch_start": 2,
+        "JF_mac_join_finish_window": 2,
+        "JF_mac_join_link_ram_disjoint": 2,
+        "JF_mac_join_mac_join_start": 2,
+        "JF_mac_link_child_workspace_child_work_disjoint": 2,
+        "JF_mac_link_driver_consumer": 2,
+        "JF_mac_link_workspace_link_work_enter": 2,
+        "JF_mac_poll_link_ram_disjoint": 2,
+        "JF_mac_poll_mac_poll_start": 2,
+        "JF_mac_radio_mac_radio_prepare": 2,
+        "JF_mac_scan_mac_scan_start": 2,
+        "JF_mac_scan_mac_scan_step": 2,
+        "JF_security_counter_floors": 2,
+        "JF_bdb_join_bdb_join_armed": 1,
+        "JF_bdb_join_bdb_join_disarmed": 1,
+        "JF_ed_wire_read_aps": 1,
+        "JF_mac_adapter_mac_adapter_accept": 1,
+        "JF_mac_attempt_mac_attempt_configure": 1,
+        "JF_mac_attempt_mac_attempt_init": 1,
+        "JF_mac_attempt_mac_attempt_now": 1,
+        "JF_mac_attempt_mac_attempt_receive": 1,
+        "JF_mac_radio_mac_radio_init": 1,
+        "JF_mac_radio_mac_radio_now": 1,
+        "JF_mac_radio_mac_radio_send": 1,
+        "JF_mac_time_poll": 1,
+        "JF_nwk_frame_nwk_frame_decode": 1,
+        "JF_radio_autoack_radio_autoack_prepare": 1,
+        "JF_radio_autoack_radio_autoack_send": 1
+      },
+      "data_verified": true,
+      "stack_verified": true,
+      "identities": {
+        "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+        "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+        "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+        "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+        "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+        "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+        "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+        "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+        "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+      },
+      "simulation_or_hardware_claim": false,
+      "delta": {
+        "code": 0,
+        "common": 0,
+        "xdata": 0,
+        "physical_dseg": 0,
+        "oseg": 0,
+        "bseg_bits": 0,
+        "stack": 0,
+        "bank_depth": 0,
+        "jf_count": 0,
+        "jf_sum": 0
+      },
+      "bank_free_delta": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "peep-return": {
+      "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "layout": "build/sdcc-study/peep-return/join-smoke-layout",
+      "code": 251106,
+      "common": 32018,
+      "banks": [
+        {
+          "bank": 0,
+          "populated": 32018,
+          "capacity": 32768,
+          "free": 750
+        },
+        {
+          "bank": 1,
+          "populated": 31840,
+          "capacity": 32768,
+          "free": 928
+        },
+        {
+          "bank": 2,
+          "populated": 32538,
+          "capacity": 32768,
+          "free": 230
+        },
+        {
+          "bank": 3,
+          "populated": 32328,
+          "capacity": 32768,
+          "free": 440
+        },
+        {
+          "bank": 4,
+          "populated": 31066,
+          "capacity": 32768,
+          "free": 1702
+        },
+        {
+          "bank": 5,
+          "populated": 32476,
+          "capacity": 32768,
+          "free": 292
+        },
+        {
+          "bank": 6,
+          "populated": 32583,
+          "capacity": 32768,
+          "free": 185
+        },
+        {
+          "bank": 7,
+          "populated": 26257,
+          "capacity": 26624,
+          "free": 367
+        }
+      ],
+      "xdata": 7676,
+      "physical_dseg": 51,
+      "linker_dseg_extent": 125,
+      "oseg": 10,
+      "bseg_bits": 88,
+      "bseg_bytes": 11,
+      "stack": null,
+      "bank_depth": null,
+      "jf_count": 106,
+      "jf_sum": 589,
+      "jf_max": 18,
+      "jf_frames": {
+        "JF_aes_aes128_encrypt_block": 18,
+        "JF_zdo_runtime_announce": 18,
+        "JF_nwk_aps_nwk_aps_receive": 17,
+        "JF_zdo_runtime_zdo_response": 17,
+        "JF_mac_association_mac_association_start": 15,
+        "JF_zdo_runtime_address_request": 15,
+        "JF_aps_frame_aps_frame_encode": 13,
+        "JF_mac_tx_mac_tx_interval_submit": 13,
+        "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+        "JF_nwk_frame_nwk_frame_encode": 13,
+        "JF_zdo_runtime_parent_response": 13,
+        "JF_mac_epoch_mac_epoch_step": 12,
+        "JF_mac_join_mac_join_step": 12,
+        "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+        "JF_zigbee_mmo_install_code_derive": 12,
+        "JF_zdo_node_zdo_node_rsp_encode": 11,
+        "JF_bdb_join_bdb_join_step": 10,
+        "JF_mac_association_mac_association_step_rx": 10,
+        "JF_mac_poll_step": 10,
+        "JF_nwk_beacon_nwk_beacon_decode": 10,
+        "JF_zdo_runtime_received": 10,
+        "JF_bdb_join_bdb_join_receive": 9,
+        "JF_mac_link_driver_mac_link_driver_step": 9,
+        "JF_ed_wire_ed_wire_crypt": 8,
+        "JF_mac_adapter_mac_adapter_step": 8,
+        "JF_mac_radio_mac_radio_attempt": 8,
+        "JF_mac_tx_mac_tx_step": 8,
+        "JF_zdo_node_zdo_node_req_encode": 8,
+        "JF_zdo_runtime_zdo_runtime_request": 8,
+        "JF_clock_request_and_wait": 7,
+        "JF_mac_tx_interval_publish": 7,
+        "JF_bdb_join_init_bdb_join_runtime_init": 6,
+        "JF_mac_link_driver_observe": 6,
+        "JF_mac_time_mac_time_attempt_read": 6,
+        "JF_mac_tx_mac_tx_interval_step": 6,
+        "JF_mac_tx_mac_tx_observed_step": 6,
+        "JF_nwk_aps_nwk_aps_step": 6,
+        "JF_security_counter_security_counter_take": 6,
+        "JF_zdo_node_read_descriptor": 6,
+        "JF_zdo_node_write_descriptor": 6,
+        "JF_zdo_node_zdo_node_rsp_decode": 6,
+        "JF_clock_clock_select_init": 5,
+        "JF_mac_link_driver_mac_link_driver_init": 5,
+        "JF_mac_radio_operate": 5,
+        "JF_mac_tx_mac_tx_interval_copy": 5,
+        "JF_radio_autoack_radio_autoack_attempt": 5,
+        "JF_aes_source_range": 4,
+        "JF_bdb_join_bdb_join_send": 4,
+        "JF_bdb_join_init_bdb_join_start": 4,
+        "JF_join_smoke_progress": 4,
+        "JF_mac_adapter_frame": 4,
+        "JF_mac_frame_mac_frame_encode": 4,
+        "JF_mac_join_receipt": 4,
+        "JF_mac_poll_accept_ack": 4,
+        "JF_mac_time_operate": 4,
+        "JF_nv_record_nv_record_load": 4,
+        "JF_nv_record_nv_record_replace": 4,
+        "JF_nv_record_select_record": 4,
+        "JF_nwk_candidates_nwk_candidates_consider": 4,
+        "JF_security_keys_security_keys_provision_default": 4,
+        "JF_zdo_runtime_advance": 4,
+        "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+        "JF_bdb_join_runtime": 3,
+        "JF_mac_attempt_mac_attempt_run": 3,
+        "JF_mac_link_child_workspace_child_work_address": 3,
+        "JF_mac_radio_mac_radio_configure": 3,
+        "JF_nv_record_scan_page": 3,
+        "JF_nwk_aps_nwk_aps_queue": 3,
+        "JF_radio_autoack_operate": 3,
+        "JF_radio_autoack_radio_autoack_configure": 3,
+        "JF_timebase_timebase_deadline_after": 3,
+        "JF_timebase_timebase_expired": 3,
+        "JF_zdo_runtime_zdo_runtime_step": 3,
+        "JF_zdo_runtime_zdo_runtime_take_application": 3,
+        "JF_zdo_runtime_zdo_runtime_take_result": 3,
+        "JF_aes_sample": 2,
+        "JF_mac_association_mac_association_step": 2,
+        "JF_mac_attempt_mac_attempt_prepare": 2,
+        "JF_mac_epoch_mac_epoch_start": 2,
+        "JF_mac_join_finish_window": 2,
+        "JF_mac_join_link_ram_disjoint": 2,
+        "JF_mac_join_mac_join_start": 2,
+        "JF_mac_link_child_workspace_child_work_disjoint": 2,
+        "JF_mac_link_driver_consumer": 2,
+        "JF_mac_link_workspace_link_work_enter": 2,
+        "JF_mac_poll_link_ram_disjoint": 2,
+        "JF_mac_poll_mac_poll_start": 2,
+        "JF_mac_radio_mac_radio_prepare": 2,
+        "JF_mac_scan_mac_scan_start": 2,
+        "JF_mac_scan_mac_scan_step": 2,
+        "JF_security_counter_floors": 2,
+        "JF_bdb_join_bdb_join_armed": 1,
+        "JF_bdb_join_bdb_join_disarmed": 1,
+        "JF_ed_wire_read_aps": 1,
+        "JF_mac_adapter_mac_adapter_accept": 1,
+        "JF_mac_attempt_mac_attempt_configure": 1,
+        "JF_mac_attempt_mac_attempt_init": 1,
+        "JF_mac_attempt_mac_attempt_now": 1,
+        "JF_mac_attempt_mac_attempt_receive": 1,
+        "JF_mac_radio_mac_radio_init": 1,
+        "JF_mac_radio_mac_radio_now": 1,
+        "JF_mac_radio_mac_radio_send": 1,
+        "JF_mac_time_poll": 1,
+        "JF_nwk_frame_nwk_frame_decode": 1,
+        "JF_radio_autoack_radio_autoack_prepare": 1,
+        "JF_radio_autoack_radio_autoack_send": 1
+      },
+      "data_verified": false,
+      "stack_verified": false,
+      "identities": {
+        "ihx": "fcf761a8132b2385cb8c289adbc9974b374505dd64bd1f5e6f6f5285bdf18bca",
+        "cdb": "92a1c4d9b58e49c266f9bbeb61a78697c3feabe11d8817436f458dee162a847c",
+        "memory": "9f957abee1ae527ed6a94fbdf9de9cb45e21470fc39d795d1d3213fc30c3eff3",
+        "map_prefix": "6e64f0eb903abeaeef15ac9a91396425249209c5c4a473be5caeff976a9f8c7f",
+        "map_suffix": "6195e0ce5e461c53f10b9cdd8b1911cfea980cbea0b4e12ff80ab7dceb5374b0",
+        "noice": "541b1f18ae7dd40031720b3d5a3e0f1b7ccb4f2f83ac24072ee75efc1728e3f1",
+        "objects": "b35ecfcb653d137bb7fd25671ede56c8a09a964bc4dffa34a276c861c5f31528",
+        "listings": "a0129aefb6871da53d347466a71b70b2c76f6c948b2a6ced09ee97fb65293f25",
+        "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+      },
+      "simulation_or_hardware_claim": false,
+      "delta": {
+        "code": -2339,
+        "common": -696,
+        "xdata": 0,
+        "physical_dseg": 0,
+        "oseg": 0,
+        "bseg_bits": 0,
+        "jf_count": 0,
+        "jf_sum": 0
+      },
+      "bank_free_delta": [
+        696,
+        243,
+        217,
+        406,
+        284,
+        209,
+        158,
+        126
+      ]
+    },
+    "both": {
+      "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "layout": "build/sdcc-study/both/join-smoke-layout",
+      "code": 251106,
+      "common": 32018,
+      "banks": [
+        {
+          "bank": 0,
+          "populated": 32018,
+          "capacity": 32768,
+          "free": 750
+        },
+        {
+          "bank": 1,
+          "populated": 31840,
+          "capacity": 32768,
+          "free": 928
+        },
+        {
+          "bank": 2,
+          "populated": 32538,
+          "capacity": 32768,
+          "free": 230
+        },
+        {
+          "bank": 3,
+          "populated": 32328,
+          "capacity": 32768,
+          "free": 440
+        },
+        {
+          "bank": 4,
+          "populated": 31066,
+          "capacity": 32768,
+          "free": 1702
+        },
+        {
+          "bank": 5,
+          "populated": 32476,
+          "capacity": 32768,
+          "free": 292
+        },
+        {
+          "bank": 6,
+          "populated": 32583,
+          "capacity": 32768,
+          "free": 185
+        },
+        {
+          "bank": 7,
+          "populated": 26257,
+          "capacity": 26624,
+          "free": 367
+        }
+      ],
+      "xdata": 7676,
+      "physical_dseg": 51,
+      "linker_dseg_extent": 125,
+      "oseg": 10,
+      "bseg_bits": 88,
+      "bseg_bytes": 11,
+      "stack": null,
+      "bank_depth": null,
+      "jf_count": 106,
+      "jf_sum": 589,
+      "jf_max": 18,
+      "jf_frames": {
+        "JF_aes_aes128_encrypt_block": 18,
+        "JF_zdo_runtime_announce": 18,
+        "JF_nwk_aps_nwk_aps_receive": 17,
+        "JF_zdo_runtime_zdo_response": 17,
+        "JF_mac_association_mac_association_start": 15,
+        "JF_zdo_runtime_address_request": 15,
+        "JF_aps_frame_aps_frame_encode": 13,
+        "JF_mac_tx_mac_tx_interval_submit": 13,
+        "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+        "JF_nwk_frame_nwk_frame_encode": 13,
+        "JF_zdo_runtime_parent_response": 13,
+        "JF_mac_epoch_mac_epoch_step": 12,
+        "JF_mac_join_mac_join_step": 12,
+        "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+        "JF_zigbee_mmo_install_code_derive": 12,
+        "JF_zdo_node_zdo_node_rsp_encode": 11,
+        "JF_bdb_join_bdb_join_step": 10,
+        "JF_mac_association_mac_association_step_rx": 10,
+        "JF_mac_poll_step": 10,
+        "JF_nwk_beacon_nwk_beacon_decode": 10,
+        "JF_zdo_runtime_received": 10,
+        "JF_bdb_join_bdb_join_receive": 9,
+        "JF_mac_link_driver_mac_link_driver_step": 9,
+        "JF_ed_wire_ed_wire_crypt": 8,
+        "JF_mac_adapter_mac_adapter_step": 8,
+        "JF_mac_radio_mac_radio_attempt": 8,
+        "JF_mac_tx_mac_tx_step": 8,
+        "JF_zdo_node_zdo_node_req_encode": 8,
+        "JF_zdo_runtime_zdo_runtime_request": 8,
+        "JF_clock_request_and_wait": 7,
+        "JF_mac_tx_interval_publish": 7,
+        "JF_bdb_join_init_bdb_join_runtime_init": 6,
+        "JF_mac_link_driver_observe": 6,
+        "JF_mac_time_mac_time_attempt_read": 6,
+        "JF_mac_tx_mac_tx_interval_step": 6,
+        "JF_mac_tx_mac_tx_observed_step": 6,
+        "JF_nwk_aps_nwk_aps_step": 6,
+        "JF_security_counter_security_counter_take": 6,
+        "JF_zdo_node_read_descriptor": 6,
+        "JF_zdo_node_write_descriptor": 6,
+        "JF_zdo_node_zdo_node_rsp_decode": 6,
+        "JF_clock_clock_select_init": 5,
+        "JF_mac_link_driver_mac_link_driver_init": 5,
+        "JF_mac_radio_operate": 5,
+        "JF_mac_tx_mac_tx_interval_copy": 5,
+        "JF_radio_autoack_radio_autoack_attempt": 5,
+        "JF_aes_source_range": 4,
+        "JF_bdb_join_bdb_join_send": 4,
+        "JF_bdb_join_init_bdb_join_start": 4,
+        "JF_join_smoke_progress": 4,
+        "JF_mac_adapter_frame": 4,
+        "JF_mac_frame_mac_frame_encode": 4,
+        "JF_mac_join_receipt": 4,
+        "JF_mac_poll_accept_ack": 4,
+        "JF_mac_time_operate": 4,
+        "JF_nv_record_nv_record_load": 4,
+        "JF_nv_record_nv_record_replace": 4,
+        "JF_nv_record_select_record": 4,
+        "JF_nwk_candidates_nwk_candidates_consider": 4,
+        "JF_security_keys_security_keys_provision_default": 4,
+        "JF_zdo_runtime_advance": 4,
+        "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+        "JF_bdb_join_runtime": 3,
+        "JF_mac_attempt_mac_attempt_run": 3,
+        "JF_mac_link_child_workspace_child_work_address": 3,
+        "JF_mac_radio_mac_radio_configure": 3,
+        "JF_nv_record_scan_page": 3,
+        "JF_nwk_aps_nwk_aps_queue": 3,
+        "JF_radio_autoack_operate": 3,
+        "JF_radio_autoack_radio_autoack_configure": 3,
+        "JF_timebase_timebase_deadline_after": 3,
+        "JF_timebase_timebase_expired": 3,
+        "JF_zdo_runtime_zdo_runtime_step": 3,
+        "JF_zdo_runtime_zdo_runtime_take_application": 3,
+        "JF_zdo_runtime_zdo_runtime_take_result": 3,
+        "JF_aes_sample": 2,
+        "JF_mac_association_mac_association_step": 2,
+        "JF_mac_attempt_mac_attempt_prepare": 2,
+        "JF_mac_epoch_mac_epoch_start": 2,
+        "JF_mac_join_finish_window": 2,
+        "JF_mac_join_link_ram_disjoint": 2,
+        "JF_mac_join_mac_join_start": 2,
+        "JF_mac_link_child_workspace_child_work_disjoint": 2,
+        "JF_mac_link_driver_consumer": 2,
+        "JF_mac_link_workspace_link_work_enter": 2,
+        "JF_mac_poll_link_ram_disjoint": 2,
+        "JF_mac_poll_mac_poll_start": 2,
+        "JF_mac_radio_mac_radio_prepare": 2,
+        "JF_mac_scan_mac_scan_start": 2,
+        "JF_mac_scan_mac_scan_step": 2,
+        "JF_security_counter_floors": 2,
+        "JF_bdb_join_bdb_join_armed": 1,
+        "JF_bdb_join_bdb_join_disarmed": 1,
+        "JF_ed_wire_read_aps": 1,
+        "JF_mac_adapter_mac_adapter_accept": 1,
+        "JF_mac_attempt_mac_attempt_configure": 1,
+        "JF_mac_attempt_mac_attempt_init": 1,
+        "JF_mac_attempt_mac_attempt_now": 1,
+        "JF_mac_attempt_mac_attempt_receive": 1,
+        "JF_mac_radio_mac_radio_init": 1,
+        "JF_mac_radio_mac_radio_now": 1,
+        "JF_mac_radio_mac_radio_send": 1,
+        "JF_mac_time_poll": 1,
+        "JF_nwk_frame_nwk_frame_decode": 1,
+        "JF_radio_autoack_radio_autoack_prepare": 1,
+        "JF_radio_autoack_radio_autoack_send": 1
+      },
+      "data_verified": false,
+      "stack_verified": false,
+      "identities": {
+        "ihx": "fcf761a8132b2385cb8c289adbc9974b374505dd64bd1f5e6f6f5285bdf18bca",
+        "cdb": "92a1c4d9b58e49c266f9bbeb61a78697c3feabe11d8817436f458dee162a847c",
+        "memory": "9f957abee1ae527ed6a94fbdf9de9cb45e21470fc39d795d1d3213fc30c3eff3",
+        "map_prefix": "6e64f0eb903abeaeef15ac9a91396425249209c5c4a473be5caeff976a9f8c7f",
+        "map_suffix": "6195e0ce5e461c53f10b9cdd8b1911cfea980cbea0b4e12ff80ab7dceb5374b0",
+        "noice": "541b1f18ae7dd40031720b3d5a3e0f1b7ccb4f2f83ac24072ee75efc1728e3f1",
+        "objects": "b35ecfcb653d137bb7fd25671ede56c8a09a964bc4dffa34a276c861c5f31528",
+        "listings": "a0129aefb6871da53d347466a71b70b2c76f6c948b2a6ced09ee97fb65293f25",
+        "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+      },
+      "simulation_or_hardware_claim": false,
+      "delta": {
+        "code": -2339,
+        "common": -696,
+        "xdata": 0,
+        "physical_dseg": 0,
+        "oseg": 0,
+        "bseg_bits": 0,
+        "jf_count": 0,
+        "jf_sum": 0
+      },
+      "bank_free_delta": [
+        696,
+        243,
+        217,
+        406,
+        284,
+        209,
+        158,
+        126
+      ]
+    },
+    "local-returns": {
+      "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "layout": "build/sdcc-study/local-returns/join-smoke-layout",
+      "code": 251671,
+      "common": 32171,
+      "banks": [
+        {
+          "bank": 0,
+          "populated": 32171,
+          "capacity": 32768,
+          "free": 597
+        },
+        {
+          "bank": 1,
+          "populated": 31895,
+          "capacity": 32768,
+          "free": 873
+        },
+        {
+          "bank": 2,
+          "populated": 32626,
+          "capacity": 32768,
+          "free": 142
+        },
+        {
+          "bank": 3,
+          "populated": 32411,
+          "capacity": 32768,
+          "free": 357
+        },
+        {
+          "bank": 4,
+          "populated": 31127,
+          "capacity": 32768,
+          "free": 1641
+        },
+        {
+          "bank": 5,
+          "populated": 32485,
+          "capacity": 32768,
+          "free": 283
+        },
+        {
+          "bank": 6,
+          "populated": 32679,
+          "capacity": 32768,
+          "free": 89
+        },
+        {
+          "bank": 7,
+          "populated": 26277,
+          "capacity": 26624,
+          "free": 347
+        }
+      ],
+      "xdata": 7676,
+      "physical_dseg": 51,
+      "linker_dseg_extent": 125,
+      "oseg": 10,
+      "bseg_bits": 88,
+      "bseg_bytes": 11,
+      "stack": 45,
+      "bank_depth": 8,
+      "jf_count": 106,
+      "jf_sum": 589,
+      "jf_max": 18,
+      "jf_frames": {
+        "JF_aes_aes128_encrypt_block": 18,
+        "JF_zdo_runtime_announce": 18,
+        "JF_nwk_aps_nwk_aps_receive": 17,
+        "JF_zdo_runtime_zdo_response": 17,
+        "JF_mac_association_mac_association_start": 15,
+        "JF_zdo_runtime_address_request": 15,
+        "JF_aps_frame_aps_frame_encode": 13,
+        "JF_mac_tx_mac_tx_interval_submit": 13,
+        "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+        "JF_nwk_frame_nwk_frame_encode": 13,
+        "JF_zdo_runtime_parent_response": 13,
+        "JF_mac_epoch_mac_epoch_step": 12,
+        "JF_mac_join_mac_join_step": 12,
+        "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+        "JF_zigbee_mmo_install_code_derive": 12,
+        "JF_zdo_node_zdo_node_rsp_encode": 11,
+        "JF_bdb_join_bdb_join_step": 10,
+        "JF_mac_association_mac_association_step_rx": 10,
+        "JF_mac_poll_step": 10,
+        "JF_nwk_beacon_nwk_beacon_decode": 10,
+        "JF_zdo_runtime_received": 10,
+        "JF_bdb_join_bdb_join_receive": 9,
+        "JF_mac_link_driver_mac_link_driver_step": 9,
+        "JF_ed_wire_ed_wire_crypt": 8,
+        "JF_mac_adapter_mac_adapter_step": 8,
+        "JF_mac_radio_mac_radio_attempt": 8,
+        "JF_mac_tx_mac_tx_step": 8,
+        "JF_zdo_node_zdo_node_req_encode": 8,
+        "JF_zdo_runtime_zdo_runtime_request": 8,
+        "JF_clock_request_and_wait": 7,
+        "JF_mac_tx_interval_publish": 7,
+        "JF_bdb_join_init_bdb_join_runtime_init": 6,
+        "JF_mac_link_driver_observe": 6,
+        "JF_mac_time_mac_time_attempt_read": 6,
+        "JF_mac_tx_mac_tx_interval_step": 6,
+        "JF_mac_tx_mac_tx_observed_step": 6,
+        "JF_nwk_aps_nwk_aps_step": 6,
+        "JF_security_counter_security_counter_take": 6,
+        "JF_zdo_node_read_descriptor": 6,
+        "JF_zdo_node_write_descriptor": 6,
+        "JF_zdo_node_zdo_node_rsp_decode": 6,
+        "JF_clock_clock_select_init": 5,
+        "JF_mac_link_driver_mac_link_driver_init": 5,
+        "JF_mac_radio_operate": 5,
+        "JF_mac_tx_mac_tx_interval_copy": 5,
+        "JF_radio_autoack_radio_autoack_attempt": 5,
+        "JF_aes_source_range": 4,
+        "JF_bdb_join_bdb_join_send": 4,
+        "JF_bdb_join_init_bdb_join_start": 4,
+        "JF_join_smoke_progress": 4,
+        "JF_mac_adapter_frame": 4,
+        "JF_mac_frame_mac_frame_encode": 4,
+        "JF_mac_join_receipt": 4,
+        "JF_mac_poll_accept_ack": 4,
+        "JF_mac_time_operate": 4,
+        "JF_nv_record_nv_record_load": 4,
+        "JF_nv_record_nv_record_replace": 4,
+        "JF_nv_record_select_record": 4,
+        "JF_nwk_candidates_nwk_candidates_consider": 4,
+        "JF_security_keys_security_keys_provision_default": 4,
+        "JF_zdo_runtime_advance": 4,
+        "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+        "JF_bdb_join_runtime": 3,
+        "JF_mac_attempt_mac_attempt_run": 3,
+        "JF_mac_link_child_workspace_child_work_address": 3,
+        "JF_mac_radio_mac_radio_configure": 3,
+        "JF_nv_record_scan_page": 3,
+        "JF_nwk_aps_nwk_aps_queue": 3,
+        "JF_radio_autoack_operate": 3,
+        "JF_radio_autoack_radio_autoack_configure": 3,
+        "JF_timebase_timebase_deadline_after": 3,
+        "JF_timebase_timebase_expired": 3,
+        "JF_zdo_runtime_zdo_runtime_step": 3,
+        "JF_zdo_runtime_zdo_runtime_take_application": 3,
+        "JF_zdo_runtime_zdo_runtime_take_result": 3,
+        "JF_aes_sample": 2,
+        "JF_mac_association_mac_association_step": 2,
+        "JF_mac_attempt_mac_attempt_prepare": 2,
+        "JF_mac_epoch_mac_epoch_start": 2,
+        "JF_mac_join_finish_window": 2,
+        "JF_mac_join_link_ram_disjoint": 2,
+        "JF_mac_join_mac_join_start": 2,
+        "JF_mac_link_child_workspace_child_work_disjoint": 2,
+        "JF_mac_link_driver_consumer": 2,
+        "JF_mac_link_workspace_link_work_enter": 2,
+        "JF_mac_poll_link_ram_disjoint": 2,
+        "JF_mac_poll_mac_poll_start": 2,
+        "JF_mac_radio_mac_radio_prepare": 2,
+        "JF_mac_scan_mac_scan_start": 2,
+        "JF_mac_scan_mac_scan_step": 2,
+        "JF_security_counter_floors": 2,
+        "JF_bdb_join_bdb_join_armed": 1,
+        "JF_bdb_join_bdb_join_disarmed": 1,
+        "JF_ed_wire_read_aps": 1,
+        "JF_mac_adapter_mac_adapter_accept": 1,
+        "JF_mac_attempt_mac_attempt_configure": 1,
+        "JF_mac_attempt_mac_attempt_init": 1,
+        "JF_mac_attempt_mac_attempt_now": 1,
+        "JF_mac_attempt_mac_attempt_receive": 1,
+        "JF_mac_radio_mac_radio_init": 1,
+        "JF_mac_radio_mac_radio_now": 1,
+        "JF_mac_radio_mac_radio_send": 1,
+        "JF_mac_time_poll": 1,
+        "JF_nwk_frame_nwk_frame_decode": 1,
+        "JF_radio_autoack_radio_autoack_prepare": 1,
+        "JF_radio_autoack_radio_autoack_send": 1
+      },
+      "data_verified": true,
+      "stack_verified": true,
+      "identities": {
+        "ihx": "8a2db85315f584ca547f04707ac564f0134887611ee34431459e0754183df6a2",
+        "cdb": "373a07898034bb930999c2bcf08909617727ec5049e1658f54d4d461db2d9533",
+        "memory": "705cb9643e7ac9e43941fbf58f67ef18fb669ddcc6a08813b31811eeb9861ca5",
+        "map_prefix": "89d81fcd4d5c2774036e7247a4bd30ef57f97b6128c40377cf2cbc0395ccf0be",
+        "map_suffix": "5f4bba077d608d128e66ee59a61c442d9719e96f1e56c9b6e7e7b0bf232be973",
+        "noice": "35a0bdaee1c35cf7f6347a9331d7469c10009df006c96e7b93252cf6bb63e3d2",
+        "objects": "9fda3393c3df38f8e27a037e7c9928565965b13d77c8053df8c8ce8999fd0b8c",
+        "listings": "97a6f17fb20ce9bb2c20f2943add48bea55f066925fce9d9591275f2cd042ffd",
+        "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+      },
+      "simulation_or_hardware_claim": false,
+      "delta": {
+        "code": -1774,
+        "common": -543,
+        "xdata": 0,
+        "physical_dseg": 0,
+        "oseg": 0,
+        "bseg_bits": 0,
+        "stack": 0,
+        "bank_depth": 0,
+        "jf_count": 0,
+        "jf_sum": 0
+      },
+      "bank_free_delta": [
+        543,
+        188,
+        129,
+        323,
+        223,
+        200,
+        62,
+        106
+      ]
+    },
+    "compiler-control": {
+      "commit": "6ba00392d1a5ebd297fd0de809f2ccaa92571682",
+      "layout": "build/sdcc-study/compiler-control/join-smoke-layout",
+      "code": 253445,
+      "common": 32714,
+      "banks": [
+        {
+          "bank": 0,
+          "populated": 32714,
+          "capacity": 32768,
+          "free": 54
+        },
+        {
+          "bank": 1,
+          "populated": 32083,
+          "capacity": 32768,
+          "free": 685
+        },
+        {
+          "bank": 2,
+          "populated": 32755,
+          "capacity": 32768,
+          "free": 13
+        },
+        {
+          "bank": 3,
+          "populated": 32734,
+          "capacity": 32768,
+          "free": 34
+        },
+        {
+          "bank": 4,
+          "populated": 31350,
+          "capacity": 32768,
+          "free": 1418
+        },
+        {
+          "bank": 5,
+          "populated": 32685,
+          "capacity": 32768,
+          "free": 83
+        },
+        {
+          "bank": 6,
+          "populated": 32741,
+          "capacity": 32768,
+          "free": 27
+        },
+        {
+          "bank": 7,
+          "populated": 26383,
+          "capacity": 26624,
+          "free": 241
+        }
+      ],
+      "xdata": 7676,
+      "physical_dseg": 51,
+      "linker_dseg_extent": 125,
+      "oseg": 10,
+      "bseg_bits": 88,
+      "bseg_bytes": 11,
+      "stack": 45,
+      "bank_depth": 8,
+      "jf_count": 106,
+      "jf_sum": 589,
+      "jf_max": 18,
+      "jf_frames": {
+        "JF_aes_aes128_encrypt_block": 18,
+        "JF_zdo_runtime_announce": 18,
+        "JF_nwk_aps_nwk_aps_receive": 17,
+        "JF_zdo_runtime_zdo_response": 17,
+        "JF_mac_association_mac_association_start": 15,
+        "JF_zdo_runtime_address_request": 15,
+        "JF_aps_frame_aps_frame_encode": 13,
+        "JF_mac_tx_mac_tx_interval_submit": 13,
+        "JF_nwk_aps_direct_nwk_aps_transmit": 13,
+        "JF_nwk_frame_nwk_frame_encode": 13,
+        "JF_zdo_runtime_parent_response": 13,
+        "JF_mac_epoch_mac_epoch_step": 12,
+        "JF_mac_join_mac_join_step": 12,
+        "JF_zdo_runtime_zdo_runtime_broadcast": 12,
+        "JF_zigbee_mmo_install_code_derive": 12,
+        "JF_zdo_node_zdo_node_rsp_encode": 11,
+        "JF_bdb_join_bdb_join_step": 10,
+        "JF_mac_association_mac_association_step_rx": 10,
+        "JF_mac_poll_step": 10,
+        "JF_nwk_beacon_nwk_beacon_decode": 10,
+        "JF_zdo_runtime_received": 10,
+        "JF_bdb_join_bdb_join_receive": 9,
+        "JF_mac_link_driver_mac_link_driver_step": 9,
+        "JF_ed_wire_ed_wire_crypt": 8,
+        "JF_mac_adapter_mac_adapter_step": 8,
+        "JF_mac_radio_mac_radio_attempt": 8,
+        "JF_mac_tx_mac_tx_step": 8,
+        "JF_zdo_node_zdo_node_req_encode": 8,
+        "JF_zdo_runtime_zdo_runtime_request": 8,
+        "JF_clock_request_and_wait": 7,
+        "JF_mac_tx_interval_publish": 7,
+        "JF_bdb_join_init_bdb_join_runtime_init": 6,
+        "JF_mac_link_driver_observe": 6,
+        "JF_mac_time_mac_time_attempt_read": 6,
+        "JF_mac_tx_mac_tx_interval_step": 6,
+        "JF_mac_tx_mac_tx_observed_step": 6,
+        "JF_nwk_aps_nwk_aps_step": 6,
+        "JF_security_counter_security_counter_take": 6,
+        "JF_zdo_node_read_descriptor": 6,
+        "JF_zdo_node_write_descriptor": 6,
+        "JF_zdo_node_zdo_node_rsp_decode": 6,
+        "JF_clock_clock_select_init": 5,
+        "JF_mac_link_driver_mac_link_driver_init": 5,
+        "JF_mac_radio_operate": 5,
+        "JF_mac_tx_mac_tx_interval_copy": 5,
+        "JF_radio_autoack_radio_autoack_attempt": 5,
+        "JF_aes_source_range": 4,
+        "JF_bdb_join_bdb_join_send": 4,
+        "JF_bdb_join_init_bdb_join_start": 4,
+        "JF_join_smoke_progress": 4,
+        "JF_mac_adapter_frame": 4,
+        "JF_mac_frame_mac_frame_encode": 4,
+        "JF_mac_join_receipt": 4,
+        "JF_mac_poll_accept_ack": 4,
+        "JF_mac_time_operate": 4,
+        "JF_nv_record_nv_record_load": 4,
+        "JF_nv_record_nv_record_replace": 4,
+        "JF_nv_record_select_record": 4,
+        "JF_nwk_candidates_nwk_candidates_consider": 4,
+        "JF_security_keys_security_keys_provision_default": 4,
+        "JF_zdo_runtime_advance": 4,
+        "JF_zigbee_mmo_zigbee_mmo_hash": 4,
+        "JF_bdb_join_runtime": 3,
+        "JF_mac_attempt_mac_attempt_run": 3,
+        "JF_mac_link_child_workspace_child_work_address": 3,
+        "JF_mac_radio_mac_radio_configure": 3,
+        "JF_nv_record_scan_page": 3,
+        "JF_nwk_aps_nwk_aps_queue": 3,
+        "JF_radio_autoack_operate": 3,
+        "JF_radio_autoack_radio_autoack_configure": 3,
+        "JF_timebase_timebase_deadline_after": 3,
+        "JF_timebase_timebase_expired": 3,
+        "JF_zdo_runtime_zdo_runtime_step": 3,
+        "JF_zdo_runtime_zdo_runtime_take_application": 3,
+        "JF_zdo_runtime_zdo_runtime_take_result": 3,
+        "JF_aes_sample": 2,
+        "JF_mac_association_mac_association_step": 2,
+        "JF_mac_attempt_mac_attempt_prepare": 2,
+        "JF_mac_epoch_mac_epoch_start": 2,
+        "JF_mac_join_finish_window": 2,
+        "JF_mac_join_link_ram_disjoint": 2,
+        "JF_mac_join_mac_join_start": 2,
+        "JF_mac_link_child_workspace_child_work_disjoint": 2,
+        "JF_mac_link_driver_consumer": 2,
+        "JF_mac_link_workspace_link_work_enter": 2,
+        "JF_mac_poll_link_ram_disjoint": 2,
+        "JF_mac_poll_mac_poll_start": 2,
+        "JF_mac_radio_mac_radio_prepare": 2,
+        "JF_mac_scan_mac_scan_start": 2,
+        "JF_mac_scan_mac_scan_step": 2,
+        "JF_security_counter_floors": 2,
+        "JF_bdb_join_bdb_join_armed": 1,
+        "JF_bdb_join_bdb_join_disarmed": 1,
+        "JF_ed_wire_read_aps": 1,
+        "JF_mac_adapter_mac_adapter_accept": 1,
+        "JF_mac_attempt_mac_attempt_configure": 1,
+        "JF_mac_attempt_mac_attempt_init": 1,
+        "JF_mac_attempt_mac_attempt_now": 1,
+        "JF_mac_attempt_mac_attempt_receive": 1,
+        "JF_mac_radio_mac_radio_init": 1,
+        "JF_mac_radio_mac_radio_now": 1,
+        "JF_mac_radio_mac_radio_send": 1,
+        "JF_mac_time_poll": 1,
+        "JF_nwk_frame_nwk_frame_decode": 1,
+        "JF_radio_autoack_radio_autoack_prepare": 1,
+        "JF_radio_autoack_radio_autoack_send": 1
+      },
+      "data_verified": true,
+      "stack_verified": true,
+      "identities": {
+        "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+        "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+        "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+        "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+        "map_suffix": "bc56e77c1a5dc3f84115cc0023a14874166ed47ab2aae7a7553350eb8054ad64",
+        "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+        "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+        "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+        "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+      },
+      "simulation_or_hardware_claim": false,
+      "delta": {
+        "code": 0,
+        "common": 0,
+        "xdata": 0,
+        "physical_dseg": 0,
+        "oseg": 0,
+        "bseg_bits": 0,
+        "stack": 0,
+        "bank_depth": 0,
+        "jf_count": 0,
+        "jf_sum": 0
+      },
+      "bank_free_delta": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "return_fixture": {
+    "baseline": {
+      "code": 476,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": true
+    },
+    "local-returns": {
+      "code": 472,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": true
+    },
+    "peep-return": {
+      "code": 468,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": false
+    },
+    "omit-frame": {
+      "code": 466,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": true
+    },
+    "both": {
+      "code": 458,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": false
+    },
+    "debug-last": {
+      "code": 468,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": false
+    },
+    "no-debug": {
+      "code": 468,
+      "oracle_bytes": 1024,
+      "call_boundary_retained": false
+    }
+  },
+  "linker_fixture": {
+    "areas": 13,
+    "archive": 9
+  },
+  "complete_ci": false,
+  "hardware_observed": false,
+  "validation": {
+    "original_pin_catalog": "rejected clean baseline; restored unchanged after study",
+    "temporary_exact_identity_refresh": true,
+    "test_prerequisites": [
+      "signed host lower-bound comparisons without -Werror suppression",
+      "exact reset ABI version changed from stale 1 to firmware version 2"
+    ],
+    "host_passed": [
+      "baseline",
+      "omit-frame",
+      "peep-return",
+      "both",
+      "local-returns"
+    ],
+    "image_admission": {
+      "baseline": {
+        "xdata": {
+          "ordinary": 7676,
+          "libc_prefix": 26,
+          "declarations": 1438,
+          "modules": {
+            "banked": [
+              26,
+              34
+            ],
+            "mac_link_workspace": [
+              34,
+              740
+            ],
+            "mac_link_child_workspace": [
+              740,
+              1356
+            ],
+            "flash_exec": [
+              1356,
+              1511
+            ],
+            "timebase": [
+              1511,
+              1536
+            ],
+            "clock": [
+              1536,
+              1590
+            ],
+            "flash": [
+              1590,
+              1612
+            ],
+            "flash_write": [
+              1612,
+              1775
+            ],
+            "nv_record": [
+              1775,
+              1835
+            ],
+            "security_counter": [
+              1835,
+              2046
+            ],
+            "aes": [
+              2046,
+              2237
+            ],
+            "ccm_star": [
+              2237,
+              2288
+            ],
+            "zigbee_mmo": [
+              2288,
+              2327
+            ],
+            "zigbee_key_hash": [
+              2327,
+              2344
+            ],
+            "mac_time": [
+              2344,
+              2470
+            ],
+            "radio_autoack": [
+              2470,
+              2814
+            ],
+            "mac_epoch": [
+              2814,
+              2836
+            ],
+            "mac_radio": [
+              2836,
+              3053
+            ],
+            "mac_attempt": [
+              3053,
+              3365
+            ],
+            "mac_frame": [
+              3365,
+              3552
+            ],
+            "mac_tx": [
+              3552,
+              3745
+            ],
+            "mac_adapter": [
+              3745,
+              4166
+            ],
+            "nwk_frame": [
+              4166,
+              4233
+            ],
+            "aps_frame": [
+              4233,
+              4290
+            ],
+            "ed_wire": [
+              4290,
+              4402
+            ],
+            "security_keys": [
+              4402,
+              4627
+            ],
+            "mac_association": [
+              4627,
+              4675
+            ],
+            "mac_poll": [
+              4675,
+              4769
+            ],
+            "mac_join": [
+              4769,
+              4836
+            ],
+            "zdo_node": [
+              4836,
+              4902
+            ],
+            "zdo_srv": [
+              4902,
+              4926
+            ],
+            "nwk_beacon": [
+              4926,
+              4936
+            ],
+            "nwk_candidates": [
+              4936,
+              4974
+            ],
+            "nwk_parent": [
+              4974,
+              4995
+            ],
+            "mac_scan": [
+              4995,
+              5074
+            ],
+            "nwk_aps": [
+              5074,
+              5321
+            ],
+            "nwk_aps_direct": [
+              5321,
+              5337
+            ],
+            "zdo_runtime": [
+              5337,
+              5474
+            ],
+            "zcl_sensor": [
+              5474,
+              5490
+            ],
+            "bdb_join": [
+              5490,
+              5641
+            ],
+            "bdb_join_init": [
+              5641,
+              5673
+            ],
+            "mac_link_driver": [
+              5673,
+              5746
+            ],
+            "join_smoke": [
+              5746,
+              7676
+            ]
+          }
+        },
+        "DATA_functions": 496,
+        "DATA_pairs": 2832,
+        "static_stack": {
+          "functions": 504,
+          "initial_sp": 79,
+          "limit_sp": 124,
+          "maximum_sp": 124,
+          "roots": {
+            "_main": {
+              "bytes": 45,
+              "bank_depth": 8,
+              "path": [
+                {
+                  "function": "join_smoke_main:main",
+                  "site": 31015,
+                  "bytes": 2
+                },
+                {
+                  "function": "join_smoke:join_smoke_poll",
+                  "site": 29121,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_link_driver:mac_link_driver_step",
+                  "site": 376656,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_link_driver:consumer",
+                  "site": 361356,
+                  "bytes": 3
+                },
+                {
+                  "function": "bdb_join:bdb_join_step",
+                  "site": 124750,
+                  "bytes": 3
+                },
+                {
+                  "function": "nwk_aps:nwk_aps_step",
+                  "site": 500566,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_tx:mac_tx_observed_step",
+                  "site": 439497,
+                  "bytes": 7
+                },
+                {
+                  "function": "mac_tx:mac_tx_interval_step",
+                  "site": 435376,
+                  "bytes": 7
+                },
+                {
+                  "function": "mac_tx:mac_tx_step",
+                  "site": 431380,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_frame:mac_frame_decode",
+                  "site": 381534,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_frame:mac_frame_decode_profile",
+                  "site": 381342,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_frame:beacon_fields",
+                  "site": 383413,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_link_workspace:link_work_return_word",
+                  "site": 1984,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_link_workspace:link_work_leave",
+                  "site": 1816,
+                  "bytes": 3
+                }
+              ]
+            },
+            "__sdcc_external_startup": {
+              "bytes": 4,
+              "bank_depth": 0,
+              "path": [
+                {
+                  "function": "startup:_sdcc_external_startup",
+                  "site": 27392,
+                  "bytes": 2
+                }
+              ]
+            }
+          }
+        },
+        "simulation_admitted": true,
+        "simulated": false,
+        "hardware_observed": false,
+        "identities": {
+          "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+          "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+          "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+          "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+          "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+          "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+          "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+          "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+          "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+        }
+      },
+      "local-returns": {
+        "xdata": {
+          "ordinary": 7676,
+          "libc_prefix": 26,
+          "declarations": 1438,
+          "modules": {
+            "banked": [
+              26,
+              34
+            ],
+            "mac_link_workspace": [
+              34,
+              740
+            ],
+            "mac_link_child_workspace": [
+              740,
+              1356
+            ],
+            "flash_exec": [
+              1356,
+              1511
+            ],
+            "timebase": [
+              1511,
+              1536
+            ],
+            "clock": [
+              1536,
+              1590
+            ],
+            "flash": [
+              1590,
+              1612
+            ],
+            "flash_write": [
+              1612,
+              1775
+            ],
+            "nv_record": [
+              1775,
+              1835
+            ],
+            "security_counter": [
+              1835,
+              2046
+            ],
+            "aes": [
+              2046,
+              2237
+            ],
+            "ccm_star": [
+              2237,
+              2288
+            ],
+            "zigbee_mmo": [
+              2288,
+              2327
+            ],
+            "zigbee_key_hash": [
+              2327,
+              2344
+            ],
+            "mac_time": [
+              2344,
+              2470
+            ],
+            "radio_autoack": [
+              2470,
+              2814
+            ],
+            "mac_epoch": [
+              2814,
+              2836
+            ],
+            "mac_radio": [
+              2836,
+              3053
+            ],
+            "mac_attempt": [
+              3053,
+              3365
+            ],
+            "mac_frame": [
+              3365,
+              3552
+            ],
+            "mac_tx": [
+              3552,
+              3745
+            ],
+            "mac_adapter": [
+              3745,
+              4166
+            ],
+            "nwk_frame": [
+              4166,
+              4233
+            ],
+            "aps_frame": [
+              4233,
+              4290
+            ],
+            "ed_wire": [
+              4290,
+              4402
+            ],
+            "security_keys": [
+              4402,
+              4627
+            ],
+            "mac_association": [
+              4627,
+              4675
+            ],
+            "mac_poll": [
+              4675,
+              4769
+            ],
+            "mac_join": [
+              4769,
+              4836
+            ],
+            "zdo_node": [
+              4836,
+              4902
+            ],
+            "zdo_srv": [
+              4902,
+              4926
+            ],
+            "nwk_beacon": [
+              4926,
+              4936
+            ],
+            "nwk_candidates": [
+              4936,
+              4974
+            ],
+            "nwk_parent": [
+              4974,
+              4995
+            ],
+            "mac_scan": [
+              4995,
+              5074
+            ],
+            "nwk_aps": [
+              5074,
+              5321
+            ],
+            "nwk_aps_direct": [
+              5321,
+              5337
+            ],
+            "zdo_runtime": [
+              5337,
+              5474
+            ],
+            "zcl_sensor": [
+              5474,
+              5490
+            ],
+            "bdb_join": [
+              5490,
+              5641
+            ],
+            "bdb_join_init": [
+              5641,
+              5673
+            ],
+            "mac_link_driver": [
+              5673,
+              5746
+            ],
+            "join_smoke": [
+              5746,
+              7676
+            ]
+          }
+        },
+        "DATA_functions": 496,
+        "DATA_pairs": 2832,
+        "static_stack": {
+          "functions": 504,
+          "initial_sp": 79,
+          "limit_sp": 124,
+          "maximum_sp": 124,
+          "roots": {
+            "_main": {
+              "bytes": 45,
+              "bank_depth": 8,
+              "path": [
+                {
+                  "function": "join_smoke_main:main",
+                  "site": 30472,
+                  "bytes": 2
+                },
+                {
+                  "function": "join_smoke:join_smoke_poll",
+                  "site": 28638,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_link_driver:mac_link_driver_step",
+                  "site": 376632,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_link_driver:consumer",
+                  "site": 361352,
+                  "bytes": 3
+                },
+                {
+                  "function": "bdb_join:bdb_join_step",
+                  "site": 124564,
+                  "bytes": 3
+                },
+                {
+                  "function": "nwk_aps:nwk_aps_step",
+                  "site": 500535,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_tx:mac_tx_observed_step",
+                  "site": 390485,
+                  "bytes": 7
+                },
+                {
+                  "function": "mac_tx:mac_tx_interval_step",
+                  "site": 386364,
+                  "bytes": 7
+                },
+                {
+                  "function": "mac_tx:mac_tx_step",
+                  "site": 382368,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_frame:mac_frame_decode",
+                  "site": 444233,
+                  "bytes": 3
+                },
+                {
+                  "function": "mac_frame:mac_frame_decode_profile",
+                  "site": 444041,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_frame:beacon_fields",
+                  "site": 446110,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_link_workspace:link_work_return_word",
+                  "site": 1964,
+                  "bytes": 2
+                },
+                {
+                  "function": "mac_link_workspace:link_work_leave",
+                  "site": 1797,
+                  "bytes": 3
+                }
+              ]
+            },
+            "__sdcc_external_startup": {
+              "bytes": 4,
+              "bank_depth": 0,
+              "path": [
+                {
+                  "function": "startup:_sdcc_external_startup",
+                  "site": 26932,
+                  "bytes": 2
+                }
+              ]
+            }
+          }
+        },
+        "simulation_admitted": true,
+        "simulated": false,
+        "hardware_observed": false,
+        "identities": {
+          "ihx": "8a2db85315f584ca547f04707ac564f0134887611ee34431459e0754183df6a2",
+          "cdb": "373a07898034bb930999c2bcf08909617727ec5049e1658f54d4d461db2d9533",
+          "memory": "705cb9643e7ac9e43941fbf58f67ef18fb669ddcc6a08813b31811eeb9861ca5",
+          "map_prefix": "89d81fcd4d5c2774036e7247a4bd30ef57f97b6128c40377cf2cbc0395ccf0be",
+          "map_suffix": "5f4bba077d608d128e66ee59a61c442d9719e96f1e56c9b6e7e7b0bf232be973",
+          "noice": "35a0bdaee1c35cf7f6347a9331d7469c10009df006c96e7b93252cf6bb63e3d2",
+          "objects": "9fda3393c3df38f8e27a037e7c9928565965b13d77c8053df8c8ce8999fd0b8c",
+          "listings": "97a6f17fb20ce9bb2c20f2943add48bea55f066925fce9d9591275f2cd042ffd",
+          "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+        }
+      }
+    },
+    "mcu_case2": {
+      "baseline": {
+        "complete": true,
+        "steps": 1,
+        "peripheral_stops": 0,
+        "peak_sp": 83,
+        "phase": 6,
+        "terminal": "fault",
+        "identities": {
+          "ihx": "10155c95fceb837c68ac3ed5d6177a87d1d5601afb9f84acb775a6f191ab8534",
+          "cdb": "ac0f9c510e41b18aec1f012b4a484f84cffd8f84d28839635347b2a5678feb57",
+          "memory": "aaabd0b63b07e46874c79e3cb9fc40062a19437253d60c45b7f56dfe8b3e0987",
+          "map_prefix": "a19d384988b7ba58dd00eb72c79b5fc4c977e45b1d6940f3c0fca409a577f77e",
+          "map_suffix": "63d8be327b492d63a75faee6ac3a67ded438570bbe68ddd5cc6c79691072665b",
+          "noice": "e2610a1c6c529d6a38271a39891a30b5d8f960a93210bb0cf403cfc848cb5fb5",
+          "objects": "808b06f21a84f4562d40458c8e5625bd6256a5193fe90849711b68356eac7c3c",
+          "listings": "9a9075a7197bc81cc2ebd05ca1fa290a1617531f5a5955a95637caab9a47b0f1",
+          "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+        },
+        "board": "lg_esl29_rev03",
+        "key_mode": "default-tc",
+        "case": 2,
+        "simulated": true,
+        "hardware_observed": false
+      },
+      "local-returns": {
+        "complete": true,
+        "steps": 1,
+        "peripheral_stops": 0,
+        "peak_sp": 83,
+        "phase": 6,
+        "terminal": "fault",
+        "identities": {
+          "ihx": "8a2db85315f584ca547f04707ac564f0134887611ee34431459e0754183df6a2",
+          "cdb": "373a07898034bb930999c2bcf08909617727ec5049e1658f54d4d461db2d9533",
+          "memory": "705cb9643e7ac9e43941fbf58f67ef18fb669ddcc6a08813b31811eeb9861ca5",
+          "map_prefix": "89d81fcd4d5c2774036e7247a4bd30ef57f97b6128c40377cf2cbc0395ccf0be",
+          "map_suffix": "5f4bba077d608d128e66ee59a61c442d9719e96f1e56c9b6e7e7b0bf232be973",
+          "noice": "35a0bdaee1c35cf7f6347a9331d7469c10009df006c96e7b93252cf6bb63e3d2",
+          "objects": "9fda3393c3df38f8e27a037e7c9928565965b13d77c8053df8c8ce8999fd0b8c",
+          "listings": "97a6f17fb20ce9bb2c20f2943add48bea55f066925fce9d9591275f2cd042ffd",
+          "runtime": "36491a123d897ae248f0e403398e395d842c38363869868bf34686a0338d7b89"
+        },
+        "board": "lg_esl29_rev03",
+        "key_mode": "default-tc",
+        "case": 2,
+        "simulated": true,
+        "hardware_observed": false
+      }
+    },
+    "mcu_case0_prefix": {
+      "baseline": {
+        "complete": false,
+        "steps": 3,
+        "peripheral_stops": 1974,
+        "peak_sp": 113,
+        "log_sha256": "a69acc92a540646b953d46f39e5b39c66006316466e8771cfc2f10b41111e0af"
+      },
+      "local-returns": {
+        "complete": false,
+        "steps": 3,
+        "peripheral_stops": 1974,
+        "peak_sp": 113,
+        "log_sha256": "a69acc92a540646b953d46f39e5b39c66006316466e8771cfc2f10b41111e0af"
+      }
+    },
+    "full_mcu_case0": {
+      "completed": false,
+      "attempt_stopped": true,
+      "total_steps": 1111,
+      "total_peripheral_events": 2291167
+    },
+    "full_ci": false,
+    "hardware_observed": false
+  },
+  "upstream_experiment": {
+    "control": "4.2.0 #13081 source-built, identical resources",
+    "candidate": "patch 466 backport with June-2025 peepholes, bank trampoline rules excluded",
+    "build": "passed",
+    "firmware": "failed assembly after generic carry-name compatibility correction",
+    "firmware_saving": null,
+    "backport_sha256": "9051420e9d73e4327cbe6d428dc78aaaf878924339ef855316fcbb468c477643"
+  }
+}

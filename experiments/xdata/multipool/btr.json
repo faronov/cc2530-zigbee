@@ -1,0 +1,11 @@
+{
+  "calls": 18,
+  "functions": [
+    "nwk_aps_broadcast_put",
+    "nwk_aps_broadcast_slot"
+  ],
+  "xdata": 7123,
+  "simulated": true,
+  "hardware_observed": false,
+  "scope": "Standalone real-image BTR fill/duplicate/full/expiry scenario; not complete join replay."
+}

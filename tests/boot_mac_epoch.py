@@ -20,7 +20,7 @@ from verify_firmware import code_bytes, parse_ihex, parse_symbols, peripheral_ac
 MODULES = ("mac_epoch", "mac_epoch_test")
 SIZE, XDATA, CHECKS, PEAK = 5442, 119, 5766, 0x2f
 CODE_SHA = "f3b736e20ab790097034cb4e0676dc37279033c18d2bda0a5444a0a1f58e58f5"
-CDB_SHA = "3ccacc99c08c9a3780a249573ae829c2957b2ec592fb9c8ec15962c6249ab4ad"
+CDB_SHA = "c6fd741405367815fd51fe312ca30f6abd037f3cf2baf484490b9c8a4e5d3973"
 MAP_SHA = "9f327fed260bbd8f69b59dd1d18a8a1fa4191bfc9966c50dda2a5d7bc84da118"
 LISTINGS = {
     "mac_epoch": (643, 954, "af972028de085a191358349cb4ddf5fca4bb5e59a500f3e02e2e6df891447b7b"),

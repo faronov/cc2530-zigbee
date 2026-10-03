@@ -317,8 +317,11 @@ int main(int argc, char **argv)
     CHECK(device.phase == BDB_JOIN_READY && !leave_sent);
     CHECK(recorded_confirm(&device, &result) == BDB_JOIN_OK && result == NWK_APS_RADIO);
     now = device.keepalive;
-    for (iterations = 0; iterations < 256 && device.phase == BDB_JOIN_READY; iterations++) drive();
-    CHECK(iterations < 256);
+    for (iterations = 0; iterations < 512 && device.phase == BDB_JOIN_READY; iterations++) {
+        if (!runtime.zdo.query && (int32_t)(device.keepalive-now) > 0) now = device.keepalive;
+        drive();
+    }
+    CHECK(iterations < 512);
     drain();
     CHECK(device.phase == BDB_JOIN_FAILED && !leave_sent && !device.member);
     CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_VERIFIED);

@@ -91,6 +91,23 @@ ACK was sent. There is no secondary RX queue. If `bdb_join_receive` returns
 retained `CONSUMER` fault. The original adapter head and the unexecuted grant
 are kept, and no frame is silently dropped.
 
+Receive loss (`lossy`) is a `COVERAGE` fault during scan-less association
+work only. Once RUNTIME owns the workspace, a normal AUTOACK RX FIFO overflow
+is an accepted loss: completed frames ahead of the overflow are salvaged, the
+halted partial frame never passed its FCS and so was never acknowledged
+(SWRU191F §23.10.2). Upper-layer timeouts and retries handle the loss. This
+includes AUTOACK loss inside an ACK window, which closes lossy as NO_ACK and is
+retried like an over-air ACK loss ([MAC_ADAPTER](MAC_ADAPTER.md)). The
+adapter observation samples FSMSTAT1 before RFERRF, so an overflow can latch
+between the two reads; an RXOVERF-only RFERRF without the FIFO=0/FIFOP=1
+overflow signature is resampled once, and a persistent mismatch stays a
+`CONTROLLER_ERROR` (LG READY observed FSMSTAT1=ED with RXOVERF, then 5C). In raw
+(non-AUTOACK) RX during association, a command or data frame after the
+Beacon/Association exchange, such as a neighbour's network frame following a
+busy-CCA Data Request, is never acknowledged. It is dropped, not delivered,
+and does not fault `COVERAGE`. That fault was hardware-observed on LG; the
+drop is host-tested (E2E `POLL_BUSY`).
+
 Three consumer checks changed, all only under `CC2530_MAC_LINK`:
 - **POLL ACK acceptance.** Report order is now checked separately from the
   physical bounds. The ACK's lower bound may legitimately precede the last
@@ -115,7 +132,7 @@ explicit test RANDOM inputs**:
 | Case | Verified outcome |
 | --- | --- |
 | Authenticated join | READY with verified TC key, protected application exchange and a real periodic parent keepalive |
-| No beacon | `NO_PARENT` |
+| No beacon | `NO_PARENT` after three complete loss-free scans (ambiguous, closed, overflowed or unscanned results fail on the first scan) |
 | Association refusal | `ASSOCIATION_FAILED`, status 1, after three real attempts |
 | Missing Transport Key | `KEY_TIMEOUT` |
 | Late Response (ambiguous interval) | `MAC_JOIN_TIMING_UNCERTAIN`; no accepted Response or protocol success |
@@ -523,7 +540,7 @@ typed slots with a contiguous synthetic address mapping that preserves native
 padding and overlap; target layout is checked separately, never inferred from
 host offsets.
 
-Both-board SDCC4.2 object measurements:
+Initial staging-only SDCC4.2 object measurements on both boards:
 
 | Allocation | Shared UPPER | UPPER + CHILD | Delta |
 | --- | ---: | ---: | ---: |
@@ -580,6 +597,27 @@ coverage therefore increases by6,12 and18 respectively; the exact count
 guards are refreshed, not relaxed. MMO/key-hash standalone counts, runtime
 cases, stack limits and all existing mutation generators remain unchanged.
 
+### Join-chain stack reduction candidate
+
+The draft radio-backed caller needs77 bytes above the initial SP4F under a
+fail-closed bound over emitted calls (near call +2, banked call
+max(5,3+callee), measured library helpers). The unchanged cap SP7C allows45.
+The driver keeps its public API and ordering. The frame consumer and serial
+update run inside observation, a close/drain result is returned to one
+step-level drain instead of nesting another observation, and one
+`mac_adapter_prepare` site serves ARM and TX-draw with the existing policy
+selection. Profile-gated AES, MMO, key-hash and timebase guards reload their
+existing parameter homes rather than keeping pushed register copies.
+
+Old-profile and non-workspace objects of the four gated files are
+byte-identical. On both boards the bound drops77→64, with CODE-747,
+XDATA-11 and raw DATA-24 (driver34→22, AES30→26, MMO19→16, key hash3→0,
+timebase8→6). The ledgers are compact211786/7018, UPPER230419/6292 and CHILD
+236145 CODE/1507 CONST/5716 XDATA (floor7633). The deepest path remains the
+shared MAC decode and workspace-guard chain (64), then NV/flash57, key
+receive55 and CCM/wire54. This is **host-tested and object/stack-analyzed**
+only. Linked DATA placement, simulation and SP7C remain open gates.
+
 Implementation `317e0f7`, with the exact mutation-count correction in
 `e286b72`, passed
 [full Actions36277911852](https://github.com/faronov/cc2530-zigbee/actions/runs/36277911852):
@@ -588,13 +626,174 @@ compact workers, every previous image/simulator corpus and the complete
 artifact campaigns. It accepts the experimental profile and narrow ABI
 proof, not a combined radio-backed MCU join or application headroom.
 
+## Direct MAC staging
+
+`CC2530_MAC_LINK_DIRECT` requires the CHILD profile and remains opt-in. It
+removes the private125-byte MAC build buffer from `nwk_aps_t`. In this
+profile only, `src/nwk_aps_direct.c` replaces `src/nwk_aps_transmit.c`:
+before any NWK/APS sequence, counter or security mutation it borrows the
+idle interval owner's engine frame with `mac_tx_interval_stage()`, builds and
+protects the frame there and admits it in place with
+`mac_tx_interval_submit_staged()`. The copying `mac_tx_interval_submit()`,
+`nwk_aps_transmit.c` and every legacy image remain unchanged.
+
+- A loan is issued only for an arena-admitted IDLE owner and records owner
+  plus generation; another stage replaces it. A busy owner yields
+  `NWK_APS_STATE` with no NWK/APS/counter change.
+- INVALID arguments and FULL (not IDLE) return before the loan is examined
+  and keep it. A missing or mismatched loan is STATE. A matching loan is
+  consumed whatever the subsequent result, so a rejected frame cannot be
+  resubmitted without restaging.
+- The ordinary clock and generation checks then apply. The in-place decode
+  admits only DATA frames without pending, broadcast PAN or `FFFE` source/
+  destination; NWK/APS never emits commands. Rejection leaves owner control
+  unchanged. The DSN is inserted only on admission.
+- The IDLE engine frame is dead storage: copy-out is STATE while IDLE, the
+  adapter copies only at prepare and ACK matching reads the DSN only while
+  STOPPING. `nwk_aps_step` transmits only after its own IDLE check.
+- Reinitializing an owner with an outstanding loan is a caller error, because
+  its generation restarts at zero.
+- `mac_tx_interval_stage()` is the join stack's first `__banked` function
+  that returns a generic pointer. SDCC returns it in DPL/DPH/B, a subset of
+  the32-bit DPL/DPH/B/A return exercised by the linked banked foundation
+  fixture ([banked ABI](BANKED_ABI.md#compiler-call-and-return-abi)).
+  `_sdcc_banked_ret` saves A/PSW and uses only R0/R3/R4 as scratch. No DIRECT
+  image has linked or simulated this call yet.
+
+The same profile also removes two of the three 37-byte
+`security_keys_status_t` snapshots. `bdb_join` and `zdo_runtime` name
+`nwk_aps_keys` through private macros, so one XDATA definition remains in
+`nwk_aps.c`. The snapshot is a copy of status and configuration only, never
+key material or a durable counter. Each module calls
+`security_keys_status()` in the same activation before reading it and
+returns on any failure; a successful call writes all 37 bytes. Among the 22
+functions that can transitively refresh the snapshot, none is called
+between a reader's own refresh and a later read, and none retains a
+pointer. `nwk_aps_complete()` is called in `nwk_aps_transmit()` only just
+before returning. The ZDO announce and address-request builders run only
+from `received()` after its refresh.
+
+Both-board SDCC4.2 object measurements:
+
+| Allocation | UPPER + CHILD | + DIRECT | Delta |
+| --- | ---: | ---: | ---: |
+| Production CODE | 236892 | 238278 | +1386 |
+| CONST | 1507 | 1507 | 0 |
+| Production XSEG | 5727 | 5681 | -46 |
+| Raw DATA sum | 562 | 562 | 0 |
+| Raw OSEG sum | 74 | 74 | 0 |
+| BSEG bits | 86 | 87 | +1 |
+| Caller contexts | 1917 | 1792 | -125 |
+| Object-plus-context floor | 7644 | **7473** | **-171** |
+
+Staging adds 28 XSEG bytes: the7-byte loan, two3-byte owner-pointer homes
+and 12 parameter-home bytes in `mac_tx`, plus the3-byte volatile frame
+pointer in `nwk_aps_direct`. Snapshot sharing removes 74 (`bdb_join`
+186 to149, `zdo_runtime`174 to137) and changes no CODE, DATA, OSEG or BSEG.
+Apart from the removed definitions, those objects' instructions differ only
+in the referenced symbol. CODE/CONST reaches239785 bytes. With the23-byte
+libc runtime the floor is7496, still before banker/additional caller storage
+and not a proven fit. The6656 application target needs817 more plus
+overhead.
+
+The reduction stops below1024 because SDCC4.2 large-model parameter/local
+homes (2826 of the5681 XSEG bytes) are never overlaid, and stack-auto, xstack
+and private overlays remain excluded. The remaining large buffers are
+retained or backpressure storage: radio/receipt/attempt frames, key and
+counter state, diagnostics/history, DMA/executable RAM, the ZDO response/
+application slots and the separate security input/output packets.
+
+`make BOARD=<board> test-mac-link-direct` builds all40 production objects
+and the SDCC layout probe, then runs native and nonrecovering-sanitizer
+executions of the focused staging test (6 cases,153 checks), the real CHILD
+NV corpus (2737 checks), all15 E2E scenarios (1815278 UPPER checks) and the
+146-case POLL/join corpus (8185 checks). The focused test compares admitted
+state byte for byte with the copying submit. The target then reruns the E2E,
+compact and UPPER corpus with `tests/mac_link_direct_poison.c`, linked
+through GNU ld `--wrap`. Before each of the11 exported refresher entries,
+the harness overwrites the shared snapshot with a changing pattern: 20003
+times, with output unchanged. Corrupting the snapshot just after a refresh
+fails at the first `bdb_join_start`. Eleven staging mutations were killed. An
+offline differential trace showed the complete TX FIFO sequence of the E2E
+and NV cases byte-identical to CHILD on both boards. Unchanged CHILD objects
+were reproduced exactly; the five layout-dependent DIRECT objects differ
+only in numeric field offsets. All legacy compilations of the snapshot
+modules, on both boards, remain byte-identical. This is **host-tested and
+object-checked** only for this staging-only step: no SP proof, simulation or hardware.
+
+### Shallow call lowering
+
+The integrated DIRECT-only workspace/codec path preserves guard order and
+ownership while reducing register saves across nested calls. Volatile static
+parameter homes and the private near command parser are used only in this
+profile. The deep reference remains host-only, and the other profiles retain
+their original code paths. A four-way native/sanitizer, shallow/deep comparison
+checks95,789,977 records per executable on each board; comparisons are within
+one build mode, not across native/sanitizer address layouts.
+
+Together with the shallow driver/time/crypto changes, the object-level stack
+bound fell from77 through64 to53 bytes aboveSP4F. The workspace step costs4
+XDATA bytes and removes23 summed function DATA bytes. The subsequent
+NV/counter/wire/AES reloads bring the bound to45, at8 additional XDATA bytes,
+16 fewer summed function DATA and363 fewer CODE bytes. The current production
+ledger is237434 CODE,1507 CONST,5682 XSEG and1792 caller-context bytes
+(floor7474); the initial staging-only table above is historical. Its XSEG
+ceiling changes5681 to5682, not the complete7680-byte memory limit.
+
+An independent actual linked-instruction check now confirms45/45 stack bytes
+on both boards, including bank transitions and actual libc. Bank nesting
+also reaches8/8, so neither allowance has margin. The complete ten-case
+caller additionally compares shallow/deep NV/wire/AES execution in native
+and sanitizer modes. None of these static bounds is an observed MCU peak. The
+[execution plan](LINK_JOIN_PLAN.md#execution-record) records the complete
+linked caller and its separate compiler-scratch lifetime proof.
+
+### Current object ledger after the ZHA-join series
+
+The tables above are historical measurements. The later scan filter, RX-loss
+salvage/lossy scan reporting, ZDO Basic/Active_EP/Simple_Desc serving and the
+security-counter/NV/crypto changes move the exact SDCC4.2 object ledgers
+(both boards) and the measured contexts to `bdb_join_t` 1438 (was1433: a
+32-bit lossy scan count and a timeliness byte) and `mac_link_driver_t` 305
+(was304: one drop flag). Caller contexts are therefore1923 bytes (DIRECT
+1798):
+
+| Profile | CODE | CONST | XSEG | Raw DATA | OSEG | Bits | Floor |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Compact | 217183 | 205/206 | 7051 | 607 | 81 | 70 | 8974 |
+| Shared UPPER | 236052 | 1112/1113 | 6322 | 646 | 74 | 80 | 8245 |
+| UPPER + CHILD | 241708 | 1657/1658 | 5746 | 644 | 74 | 86 | 7669 |
+| DIRECT | 242997 | 1657/1658 | 5712 | 605 | 74 | 87 | 7510 |
+
+CONST is generic/LG: the Basic model string is one byte longer on LG.
+The synthetic sensor demo (zdo_srv three-cluster list +2 XSEG, zdo_runtime
++2 DATA/-1 XSEG) and the radio_autoack stopped-head/RXOVERF fixes (+39 CODE)
+are included. The CHILD floor leaves11 bytes below7680 before runtime/additional caller
+storage; this remains object arithmetic, not a fit. The raw DATA growth is
+mainly compiler spill frames of the new ZDO serving functions, not
+simultaneous IRAM. The CHILD pointer-ABI image keeps11105 CODE,1551+64
+XDATA,43098 checks and peakSP59/7C; only nine typed-loan size/offset
+constants in `mac_link_workspace` changed, following the three added
+`zdo_srv_local_t` bytes (profile, endpoint: 16 to19) and the resulting ZDO
+server/descriptor union (37 to38). The later five-cluster descriptor grows
+the staged reply from19 to23 bytes, changing three offsets from47/85/19
+to51/89/23. Since the sensor server moved to `zcl_sensor`, `zdo_runtime.h`
+no longer includes `board.h`. Both boards again have identical complete
+CDB/map/object/listing identities; the proof selects this single complete
+set by its raw CDB before decoding, never by mixing per-file pins.
+
 ## Remaining #13/#14 work
 
 The next increment is one combined banked MCU image containing the adapter,
 driver and link consumers, within 7680 ordinary XDATA. It needs DATA/stack/ABI
-and alias proofs. The returning-work, projection, UPPER and CHILD experiments
-lower the floor from9444 to7644 before banker/libc/additional caller storage.
-The36-byte arithmetic remainder is not sufficient evidence of a combined
-fit; further application headroom and a real bank partition are required.
+and alias proofs. The returning-work, projection, UPPER, CHILD and DIRECT
+experiments lower the floor from9444 to7473 before banker/libc/additional
+caller storage. The207-byte arithmetic remainder is not sufficient evidence
+of a combined fit. The [J1-J6 execution plan](LINK_JOIN_PLAN.md) now records
+the integrated caller's actual both-board resource links:7641 XDATA and
+243593/243633 CODE (generic/LG). Linked near/far destinations, function-owned
+DATA/OSEG/libc lifetimes and the45-byte static stack bound now pass.
+Full image admission and alias-aware MCU execution remain open. The later
+1024-byte application reserve does not block the first bounded join.
 After that come the #45
 decision, documentation and closure at the documented offline evidence level.

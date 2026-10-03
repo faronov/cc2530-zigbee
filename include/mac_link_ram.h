@@ -7,6 +7,9 @@
 #if defined(CC2530_MAC_LINK_WORKSPACE) && !defined(CC2530_MAC_LINK_RAM)
 #error CC2530_MAC_LINK_WORKSPACE requires the compact LINK profile
 #endif
+#if defined(CC2530_MAC_LINK_DIRECT) && !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#error CC2530_MAC_LINK_DIRECT requires the explicit UPPER/CHILD composition
+#endif
 
 /* Experimental composition only, not a default or a complete MCU image.
  * The existing serialized/disjoint-object foreground contracts still apply.

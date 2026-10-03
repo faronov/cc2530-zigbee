@@ -5,6 +5,7 @@
 #define CC2530_RADIO_AUTOACK_H
 
 #include "cc2530_mmio.h"
+#include "banked_link.h"
 
 #if defined(CC2530_MAC_HANDOFF)
 #if !defined(CC2530_MAC_ATTEMPT) || !defined(CC2530_MAC_RADIO)
@@ -17,6 +18,8 @@
 
 #define RADIO_AUTOACK_BODY_MAX 125u
 #define RADIO_AUTOACK_POWER_05 0x05u
+#define RADIO_AUTOACK_POWER_D5 0xd5u
+#define RADIO_AUTOACK_POWER_F5 0xf5u
 
 typedef enum {
     RADIO_AUTOACK_READY = 0, RADIO_AUTOACK_FRAME, RADIO_AUTOACK_BAD_CRC,
@@ -32,6 +35,10 @@ typedef enum {
 #endif
 #if defined(CC2530_MAC_HANDOFF)
     , RADIO_AUTOACK_HANDOFF_RACE
+#endif
+#if defined(CC2530_MAC_ADAPTER)
+    /* Raw no-ACK RX overflowed; complete heads were returned, the rest flushed. */
+    , RADIO_AUTOACK_RX_LOST
 #endif
 } radio_autoack_result_t;
 
@@ -75,7 +82,7 @@ typedef struct {
  *
  * Cold acquisition copies the configuration; no pointer is retained. All PAN,
  * short and IEEE values are raw caller-owned filter configuration, not identity
- * validation or security. Channel11..26; only raw power05. The normal profile is
+ * validation or security. Channel11..26; only raw power05, D5 or F5. The normal profile is
  * version<=0, reserved-FCF mask0, non-coordinator, DATA/ACK/command accepted,
  * filtering/AUTOCRC/AUTOACK on, unslotted, RX-to-RX timeout off, Pending0 and
  * source matching/AUTOPEND off. Security-enabled bodies are NOT excluded.
@@ -153,18 +160,25 @@ radio_autoack_result_t radio_autoack_resume(uint32_t timeout, uint16_t limit);
  */
 radio_autoack_result_t radio_autoack_send(
     const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit);
-const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void);
+const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void) LINK_FAR;
 
 #if defined(CC2530_MAC_ATTEMPT)
 #include "mac_time.h"
 #define RADIO_AUTOACK_CCA_ENERGY_ONLY 1u
 #define RADIO_AUTOACK_CCA_THRESHOLD_RAW 0xf8u
 #define RADIO_AUTOACK_ATTEMPT_PREPARED 8u
+/* SWRU191F 23.8.2 p218: preamble starts 192 us after STXONCCA. The earliest
+ * TX end after the pre-strobe sample adds SHR/PHR/FCS 16 plus 2 per body byte.
+ */
+#define RADIO_AUTOACK_TX_TURNAROUND 12u
 
 typedef struct {
     mac_time_stamp_t before, armed, tx, rx, last;
     radio_autoack_frame_t frame;
     uint8_t transmitted, received, sampled_cca, within_window;
+#if defined(CC2530_MAC_LINK)
+    uint8_t autoack;
+#endif
 } radio_autoack_attempt_t;
 
 /* Co-owner hooks only. prepare needs OFF/empty and owns the immutable TX slot.
@@ -174,6 +188,11 @@ typedef struct {
  * Output is provisional internal staging, including on operational error.
  * Only the top-level composition may publish a fully checked receipt.
  * EMPTY is an observation boundary, not NO_ACK.
+ * CC2530_MAC_LINK: an ACK-requesting TX that starts arms normal filtering and
+ * AUTOACK while TX is still active, so no RX frame can straddle the switch
+ * (half-duplex). ACK frames still pass FRMFILT1.ACCEPT_FT_2_ACK (p226).
+ * Parents may send an indirect response ~1 ms after the Data Request ACK;
+ * autoack=1 leaves normal RX. TX ending before the switch is HANDOFF_RACE.
  */
 radio_autoack_result_t radio_autoack_prepare(
     const uint8_t MCU_XDATA *body, uint8_t length, uint32_t timeout, uint16_t limit);

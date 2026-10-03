@@ -65,7 +65,7 @@ class HandoffProofTests(unittest.TestCase):
         self.assertEqual(self.check(), (0, 0x7b))
         self.assertIs(proof.LEGACY, legacy)
         self.assertEqual((legacy.size, legacy.xdata, legacy.stack, legacy.cases),
-                         (24621, 1475, 0x5a, 28))
+                         (25439, 1477, 0x5a, 33))
         self.assertEqual(legacy.caller_sizes, tuple(proof.CALLER_SIZES.items()))
         self.assertNotEqual(HANDOFF.code_sha, legacy.code_sha)
 

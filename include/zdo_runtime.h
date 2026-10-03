@@ -53,6 +53,10 @@ typedef struct {
  * application_ready alone publishes it; other consumed input is cleared.
  * A pending application blocks taking another transport packet, but does not
  * block client timeout/TX retirement or discard a separate server response.
+ * Every endpoint/profile frame and every ZDO Bind_req/Unbind_req is
+ * published unanswered: the application owns those servers and may answer
+ * through the free server response slot (see zcl_sensor.h). An application
+ * that discards a published Bind/Unbind request leaves it unanswered.
  */
 zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     const zdo_node_descriptor_t * volatile local, volatile uint32_t now) JOIN_FAR;
@@ -71,6 +75,9 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t 
 zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
     uint8_t * volatile which, uint8_t * volatile result) JOIN_FAR;
 zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile ctx, ed_packet_t * volatile packet) JOIN_FAR;
+/* An application without endpoint clusters of its own releases a published
+ * frame unread; it is cleared exactly as a take would clear it. */
+zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * volatile ctx) JOIN_FAR;
 
 /* BDB commissioning messages, not a successful-join input: construct either
  * the local Device_annce or final 180-second permit broadcast in an EMPTY

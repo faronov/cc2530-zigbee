@@ -1,0 +1,61 @@
+{
+  "objects": 1437,
+  "function_objects": 1316,
+  "function_bytes": 2849,
+  "owner_mismatches": 0,
+  "eligible_objects": 492,
+  "eligible_bytes": 1000,
+  "source_parsing": false,
+  "negative_cases": [
+    "module",
+    "schema",
+    "size",
+    "owner",
+    "entry",
+    "symbol",
+    "key",
+    "global",
+    "parameter",
+    "area",
+    "flags",
+    "address",
+    "class",
+    "missing",
+    "duplicate"
+  ],
+  "independently_rejected_structural_mutations": 14,
+  "selected_plan": {
+    "module": "nwk_aps",
+    "width": 6,
+    "offsets": {
+      "Lnwk_aps.acknowledgment$ctx$1_0$204": 0,
+      "Lnwk_aps.acknowledgment$a$1_0$205": 3,
+      "Lnwk_aps.acknowledgment_matches$ctx$1_0$202": 0,
+      "Lnwk_aps.acknowledgment_matches$sent$1_0$203": 3,
+      "Lnwk_aps.nwk_aps_broadcast_put$ctx$1_0$173": 0,
+      "Lnwk_aps.nwk_aps_broadcast_put$entry$1_0$174": 3,
+      "Lnwk_aps.nwk_aps_broadcast_slot$ctx$1_0$169": 0,
+      "Lnwk_aps.nwk_aps_broadcast_slot$entry$3_0$172": 3,
+      "Lnwk_aps.nwk_aps_complete$ctx$1_0$166": 0,
+      "Lnwk_aps.nwk_aps_complete$p$1_0$167": 3,
+      "Lnwk_aps.advance$ctx$1_0$146": 0,
+      "Lnwk_aps.allocated$ctx$1_0$154": 0,
+      "Lnwk_aps.arm$ctx$1_0$175": 0,
+      "Lnwk_aps.nwk_aps_armed$ctx$1_0$177": 0,
+      "Lnwk_aps.nwk_aps_confirm$ctx$1_0$232": 0
+    },
+    "saving": 39,
+    "owners": [
+      "nwk_aps.acknowledgment",
+      "nwk_aps.acknowledgment_matches",
+      "nwk_aps.nwk_aps_broadcast_put",
+      "nwk_aps.nwk_aps_broadcast_slot",
+      "nwk_aps.nwk_aps_complete",
+      "nwk_aps.advance",
+      "nwk_aps.allocated",
+      "nwk_aps.arm",
+      "nwk_aps.nwk_aps_armed",
+      "nwk_aps.nwk_aps_confirm"
+    ]
+  }
+}

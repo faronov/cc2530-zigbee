@@ -29,11 +29,38 @@ typedef mac_tx_t mac_scan_tx_t;
 #define MAC_SCAN_VERSION 1u
 #define MAC_SCAN_MAX_LIFETIME UINT32_C(0x10000000)
 #define MAC_SCAN_MAX_WORK 4096u
+#if defined(CC2530_MAC_LINK)
+/* LG hardware spent about 1500 symbols per busy CSMA attempt; 4096 expired
+ * before the fifth CCA. This fits all macMaxCSMABackoffs+1 attempts.
+ */
+#define MAC_SCAN_TX_SYMBOLS 16384u
+#else
 #define MAC_SCAN_TX_SYMBOLS 4096u
+#endif
 #define MAC_SCAN_TX_STEPS 64u
+#if defined(CC2530_MAC_LINK)
+/* Encloses the LINK MAC_TX_STOP_SYMBOLS/STEPS retirement bound. */
+#define MAC_SCAN_STOP_SYMBOLS 8192u
+#define MAC_SCAN_STOP_STEPS 128u
+#else
 #define MAC_SCAN_STOP_SYMBOLS 4096u
 #define MAC_SCAN_STOP_STEPS 64u
+#endif
+#if defined(CC2530_MAC_LINK)
+/* Closure delivers the stopped FIFO's queued beacons first. A full 128-byte
+ * FIFO of beacons took about 1750 symbols on LG hardware. This bounds late
+ * confirmation only; an overflow flush may briefly lengthen listening.
+ */
+#define MAC_SCAN_CLOSE_GRACE 4096u
+#else
 #define MAC_SCAN_CLOSE_GRACE 1024u
+#endif
+#if defined(CC2530_MAC_LINK)
+/* Extra beacon requests on a channel whose receive window reported loss. */
+#define MAC_SCAN_LOSSY_RETRIES 2u
+/* Extra complete CSMA-CA requests on a channel whose request met a busy channel. */
+#define MAC_SCAN_BUSY_RETRIES 3u
+#endif
 
 #define MAC_SCAN_IDLE 0u
 #define MAC_SCAN_CONFIG 1u
@@ -104,6 +131,9 @@ typedef struct {
     const uint8_t *body;
     uint16_t length;
     mac_scan_radio_state_t state;
+#if defined(CC2530_MAC_LINK)
+    uint8_t lossy;
+#endif
 } mac_scan_event_t;
 
 typedef struct {
@@ -125,6 +155,11 @@ typedef struct {
     uint16_t steps, token;
     uint8_t version, phase, channel, issued, reason, cleanup_error;
     uint8_t uncertain, overflow, stopping, stop_steps, tx_outcome;
+#if defined(CC2530_MAC_LINK)
+    /* Channels whose last window lost frames; retries on the current channel. */
+    uint32_t lossy;
+    uint8_t retries, busy;
+#endif
 } mac_scan_t;
 
 /* Fresh storage/epoch only, never recovery of an outstanding lease or TX fault. */
@@ -151,7 +186,11 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
  * foreground watermark. No gap or transaction interval may reach half-range.
  * CC2530_MAC_LINK instead grants one mac_tx_observed_step with interval input.
  * OPENED is then a post-open observation, BEACON is ordered delivery before
- * CLOSED, and CLOSED carries a loss-free watermark at or after window_end.
+ * CLOSED, and CLOSED carries a watermark at or after window_end. CLOSED.lossy
+ * reports receiver overflow in that window: the channel is rescanned up to
+ * MAC_SCAN_LOSSY_RETRIES times, then accepted as scanned with its lossy bit set.
+ * A CHANNEL_ACCESS request is repeated up to MAC_SCAN_BUSY_RETRIES times; the
+ * channel then stays unscanned. This local policy never marks it scanned.
  * That saved pre-stop watermark may precede the foreground delivery clock
  * and earlier drain-report clocks; it is never moved forward while RX is off.
  */
