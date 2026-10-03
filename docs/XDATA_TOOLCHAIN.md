@@ -13,14 +13,15 @@
 9. Compiler CI: PASS, [run 37132323644](https://github.com/faronov/sdcc/actions/runs/37132323644).
 10. Packaged-toolchain self-test: PASS, including both extracted packages in
     [tag release run 37132681995](https://github.com/faronov/sdcc/actions/runs/37132681995).
-11. cc2530-zigbee clean download/build: local real download, default overlay,
-    independent verification and offline reuse PASS; clean-checkout CI running.
+11. cc2530-zigbee clean download/build: PASS, including the clean-checkout
+    full CI run below, local independent verification and offline reuse.
 12. Overlay final l_XSEG: 7123, image-checked with all original final identities.
-13. Overlay full simulator release gate: RUNNING in CI, not yet PASS.
+13. Overlay full simulator release gate: PASS, complete case0 reached serving.
 14. Feature-off build unchanged: YES; original identities/DATA/stack and
     absence of metadata/custom toolchain preparation passed in CI.
 15. Source reproduction: PASS, two clean tag-source packages byte-identical
-    in the declared Ubuntu 24.04 release environment.
+    in the declared Ubuntu 24.04 release environment; independent consumer
+    source/release equivalence also passed in full CI.
 16. GPL/source distribution: COMPLETE conventional source/binary distribution;
     component licensing is preserved, not a legal opinion.
 
@@ -237,14 +238,14 @@ catalog was repinned. The second command reused the same generation offline.
 The first full CI attempt identified an unintentionally widened artifact
 upload list, not a compiler or firmware mismatch. The original
 acceptance-summary-only boundary was restored without changing its test;
-the exact upload-policy and mandatory-gate regressions passed. Feature-off,
-release preparation and fresh source/release equivalence already passed
-in that run. Full current-revision CI and complete simulator acceptance
-remain pending; cancelled/superseded workflows are not counted as full PASS.
-The corrected run is
+the exact upload-policy and mandatory-gate regressions passed. The corrected
+full run
 [37135042736](https://github.com/faronov/cc2530-zigbee/actions/runs/37135042736),
 testing commit `c72ee862317b261ed04aaf43548037c0cae19b01` on
-`xdata-toolchain-release`. The policy correction was checked with:
+`xdata-toolchain-release`, completed with all 122 jobs successful, including
+feature-off, fresh source/release equivalence and full simulator acceptance.
+Cancelled/superseded workflows are not counted as full PASS.
+The policy correction was checked with:
 
 ```sh
 PYTHONPATH=tools:tests python3 -B -m unittest \
@@ -253,8 +254,55 @@ PYTHONPATH=tools:tests python3 -B -m unittest \
   -k test_workflow_full_triggers_readonly_permissions_and_mandatory_gate -v
 ```
 
-Result: PASS, two tests. The full CI result must still include the completed
-overlay replay; this targeted result is not its substitute.
+Result: PASS, two tests. These targeted checks are separate from the complete
+acceptance below.
+
+## Clean-checkout full acceptance
+
+The corrected CI run finished at 2026-10-03T17:24:52Z. Its overlay job started
+from a clean checkout without an experimental compiler worktree, proved
+the stock feature-off baseline, downloaded/validated the pinned release,
+reproduced the debugger-only simulator and executed:
+
+```sh
+make -s BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/overlay \
+  S51="$PWD/build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
+  test-join-smoke-overlay
+```
+
+Result: PASS. All 118 ordinary workers, the selection job, the overlay job,
+the independent source/release job and the required final gate succeeded.
+The complete host-tool suite ran 969 tests with 21 declared optional skips;
+the separate PyUSB environment ran 283 tests successfully. No existing
+semantic expectations, image catalogs, ceilings or deadlines were weakened.
+
+The public artifact is
+`xdata-overlay-acceptance-c72ee862317b261ed04aaf43548037c0cae19b01`.
+Its `image-woows15d/acceptance-g5iuauxn/acceptance.json` has SHA256
+`34711b0fe02c26a719e45ea67b4156a2f3d61e6a716d5dff82db8c44a2a05d27`
+and binds build receipt SHA256
+`dcf4ff914e877725de2af7e4ba2197f1f444bfad18f8ad01524bda7f849429da`.
+Only this synthetic acceptance summary is uploaded, not build logs,
+instrumented artifacts or hardware captures.
+
+| Acceptance phase | Result | Seconds |
+| --- | --- | ---: |
+| Adapter header | PASS | 13.552 |
+| Native/sanitized, shallow/deep and ZCL | PASS | 35.644 |
+| Directed baseline | PASS | 38.470 |
+| Directed overlay | PASS | 86.547 |
+| BTR | PASS | 80.068 |
+| Case2 | PASS | 70.338 |
+| Bounded case0 prefix | PASS | 92.613 |
+| Complete successful-join case0 | PASS | 4221.077 |
+
+The complete replay reports `complete=true`, terminal `serving`, 1142 steps,
+559709 peripheral stops and peak SP `0x7B` under the `0x7C` bound. All nine
+image identities in both the acceptance summary and complete replay equal
+the independently verified local 7123-byte image. This is the unchanged
+non-diagnostic image, not JSN2; `simulated=true` and
+`hardware_observed=false`. The full workflow succeeded; optional test skips
+do not become claims of additional platform or hardware coverage.
 
 ## Upgrade procedure and remaining limitations
 
