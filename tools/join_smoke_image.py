@@ -20,6 +20,44 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def runtime_map_identity(suffix, *, ownership, overlay):
+    header = b"                          [ object file ]\n\n"
+    require(suffix.startswith(header), "Join runtime table header")
+    remaining, rows = suffix[len(header):], []
+    expected = [("mcs51.lib", name) for name in
+                ("crtclear", "crtxinit", "crtxclear", "gptr_cmp", "crtstart")]
+    expected.append(("libsdcc.lib", "_gptrget"))
+    for library, member in expected:
+        match = re.match(rb"(/\S+\.lib)(?: +\[ (\w+)\.rel \]|\n {42}\[ (\w+)\.rel \])\n", remaining)
+        require(match is not None, "Malformed join runtime table row")
+        path, module = match[1], match[2] or match[3]
+        prefix = path.ljust(42) if len(path) <= 40 else path + b"\n" + b" " * 42
+        require(match[0] == prefix + b"[ " + module + b".rel ]\n" and
+                Path(path.decode("ascii")).name == library and module.decode("ascii") == member,
+                "Changed join runtime library/member/order or row formatting")
+        rows.append((Path(path.decode("ascii")), module))
+        remaining = remaining[len(match[0]):]
+    require(remaining.startswith(b"\n\fASxxxx Linker ") and
+            len({p.parent for p, _ in rows}) == 1, "Extra runtime rows or mixed runtime ownership")
+    parent = rows[0][0].parent
+    # Keep historical identities unchanged; relocate only content-proven runtimes.
+    legacy = (Path("/usr/share/sdcc/lib/large"), Path("/usr/bin/../share/sdcc/lib/large"))
+    if parent in legacy:
+        return suffix
+    from xdata_toolchain import load_pins
+    wanted = load_pins()["runtime_archives"]
+    for path in {p for p, _ in rows}:
+        require(path.is_file() and sha(path.read_bytes()) == wanted[path.name],
+                "Relocated runtime archive identity changed")
+    canonical = legacy[0] if ownership and not overlay else legacy[1]
+    result = header
+    for path, module in rows:
+        name = str(canonical / path.name).encode("ascii")
+        result += (name.ljust(42) if len(name) <= 40 else name + b"\n" + b" " * 42)
+        result += b"[ " + module + b".rel ]\n"
+    return result + remaining
+
+
 def identities(root):
     report = json.loads((root / "layout.json").read_bytes())
     names = tuple(report["objects"])
@@ -27,6 +65,8 @@ def identities(root):
     target = root / "join_smoke_unverified"
     mapping = target.with_suffix(".map").read_bytes()
     prefix, suffix = map_parts(mapping.replace(b"/runtime/", b"/"), runtime + names)
+    suffix = runtime_map_identity(suffix, ownership=any(root.glob("*.xdata.json")),
+                                  overlay=(root / "xdata-overlay.json").is_file())
     noi = target.with_suffix(".noi").read_bytes()
     require(noi.endswith(b"LOAD " + str(target.with_suffix(".ihx")).encode() + b"\n"),
             "Join NoICE load identity")

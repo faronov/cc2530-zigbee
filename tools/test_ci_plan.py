@@ -263,9 +263,15 @@ class SelectionTests(unittest.TestCase):
         overlay = workflow.split("\n  overlay:\n", 1)[1].split("\n  acceptance:\n", 1)[0]
         for text in ("needs: plan", "if: needs.plan.outputs.count != '0'",
                      "prepare-join-smoke-stack test-join-smoke-host", "test-join-smoke-overlay",
-                     "prepare_xdata_compiler.py", "prepare_join_simulator.py",
+                     "prepare-xdata-toolchain", "prepare_join_simulator.py",
                      "Feature-off physical XDATA changed"):
             self.assertIn(text, overlay)
+        self.assertNotIn("prepare_xdata_compiler.py", overlay)
+        self.assertIn("hashFiles('tools/xdata_toolchain_pins.json')", overlay)
+        source = (plan.ROOT / ".github/workflows/xdata-source.yml").read_text()
+        for text in ("workflow_dispatch:", "schedule:", "prepare_xdata_compiler.py",
+                     'source["selection"]["capability"] == released["selection"]["capability"]'):
+            self.assertIn(text, source)
         self.assertIn('--check-result "$PLAN_RESULT" "$OVERLAY_RESULT" "$COUNT"', workflow)
 
 

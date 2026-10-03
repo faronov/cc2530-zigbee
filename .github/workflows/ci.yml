@@ -126,7 +126,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pinned toolchain and isolated compiler build dependencies
+      - name: Install stock feature-off toolchain and simulator build dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install --yes --no-install-recommends \
@@ -142,6 +142,7 @@ jobs:
           from xdata_overlay import verify_study
           from verify_firmware import require
           root = Path("build/feature-off")
+          require(not Path("build/toolchains").exists(), "Feature-off prepared the custom toolchain")
           require(not list(root.rglob("*.xdata.json")), "Feature-off generated compiler metadata")
           require(not list(root.rglob("xdata-overlay.json")), "Feature-off invoked the overlay")
           artifacts, proof = verify_study(root / "join-smoke-layout", "lg_esl29_rev03", "default-tc")
@@ -149,31 +150,43 @@ jobs:
           print("All nine original baseline identities and DATA/stack proofs PASS; no overlay")
           PY
 
-      - name: Reproduce the frozen compiler and debugger-only simulator
+      - name: Cache only the exact pinned compiler release
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: build/toolchains/sdcc-xdata
+          key: sdcc-xdata-linux-x86_64-${{ hashFiles('tools/xdata_toolchain_pins.json') }}
+
+      - name: Download or revalidate the pinned release and behavior probe
+        run: make -s prepare-xdata-toolchain
+
+      - name: Reproduce the debugger-only simulator
         run: |
           curl --fail --location --retry 3 \
             https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz \
             --output build/sdcc_4.2.0+dfsg.orig.tar.xz
-          python3 -B tools/prepare_xdata_compiler.py \
-            --archive build/sdcc_4.2.0+dfsg.orig.tar.xz --output build/xdata-compiler
           python3 -B tools/prepare_join_simulator.py \
             --archive build/sdcc_4.2.0+dfsg.orig.tar.xz --output build/join-simulator
 
       - name: Build and release-gate the enabled primary image
         run: |
           make -s BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/overlay \
-            SDCC="$PWD/build/xdata-compiler/sdcc-4.2.0+dfsg/bin/sdcc" \
             S51="$PWD/build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
             test-join-smoke-overlay
 
       - name: Retain public synthetic acceptance summary, never hardware captures
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: xdata-overlay-acceptance-${{ github.sha }}
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
-          path: build/overlay/xdata-overlay/.generations/image-*/acceptance-*/acceptance.json
+          path: |
+            build/overlay/xdata-overlay/.generations/image-*/receipt.json
+            build/overlay/xdata-overlay/.generations/image-*/build.log
+            build/overlay/xdata-overlay/.generations/image-*/acceptance-*/acceptance.json
+            build/overlay/xdata-overlay/.generations/image-*/acceptance-*/progress.json
+            build/overlay/xdata-overlay/.generations/image-*/acceptance-*/*.log
 
   acceptance:
     name: Required offline acceptance

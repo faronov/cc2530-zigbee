@@ -120,8 +120,12 @@ separately for native and nonrecovering-sanitizer builds.
 
 The separate [opt-in XDATA overlay](docs/XDATA_OVERLAY.md) has one verified
 build target, `prepare-join-smoke-overlay`, and an independent verification
-target, `verify-join-smoke-overlay`. Both require the explicit ownership-enabled
-compiler and the admitted LG/default-TC profile. `test-join-smoke-overlay`
+target, `verify-join-smoke-overlay`. Both automatically resolve the
+[hash-pinned public compiler release](docs/XDATA_TOOLCHAIN.md) and require
+the admitted LG/default-TC profile. `make prepare-xdata-toolchain` prepares
+that dependency separately; `XDATA_SDCC=/path/to/sdcc` selects an explicitly
+different development identity. Feature-off targets never prepare it.
+`test-join-smoke-overlay`
 additionally requires complete successful case0 and repeated directed pool
 execution. Its separate CI job includes both disabled/enabled primary builds;
 it does not replace any existing worker or enable overlay by default.

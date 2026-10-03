@@ -1901,18 +1901,25 @@ JOIN_SMOKE_HOST_CASES := $(JOIN_SMOKE_CASES) $(if $(filter default-tc,$(JOIN_SMO
 prepare-join-smoke-image: $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h
 	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE)
 
-.PHONY: prepare-join-smoke-overlay verify-join-smoke-overlay test-join-smoke-overlay
+XDATA_SDCC ?= $(if $(filter default file undefined,$(origin SDCC)),,$(SDCC))
+XDATA_TOOLCHAIN_OFFLINE ?= 0
+XDATA_COMPILER_ARGUMENT = $(if $(XDATA_SDCC),--sdcc "$(XDATA_SDCC)")
+
+.PHONY: prepare-xdata-toolchain prepare-join-smoke-overlay verify-join-smoke-overlay test-join-smoke-overlay
+prepare-xdata-toolchain:
+	XDATA_TOOLCHAIN_OFFLINE="$(XDATA_TOOLCHAIN_OFFLINE)" $(PYTHON) -B tools/xdata_toolchain.py $(XDATA_TOOLCHAIN_FLAGS)
+
 prepare-join-smoke-overlay:
-	$(PYTHON) -B tools/xdata_build.py --output $(BUILD)/xdata-overlay \
-		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --sdcc "$(SDCC)"
+	XDATA_TOOLCHAIN_OFFLINE="$(XDATA_TOOLCHAIN_OFFLINE)" $(PYTHON) -B tools/xdata_build.py --output $(BUILD)/xdata-overlay \
+		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) $(XDATA_COMPILER_ARGUMENT)
 
 verify-join-smoke-overlay:
-	$(PYTHON) -B tools/xdata_build.py --output $(BUILD)/xdata-overlay \
-		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --sdcc "$(SDCC)" --verify
+	XDATA_TOOLCHAIN_OFFLINE="$(XDATA_TOOLCHAIN_OFFLINE)" $(PYTHON) -B tools/xdata_build.py --output $(BUILD)/xdata-overlay \
+		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) $(XDATA_COMPILER_ARGUMENT) --verify
 
 test-join-smoke-overlay:
-	$(PYTHON) -B tools/xdata_acceptance.py --output $(BUILD)/xdata-overlay \
-		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --sdcc "$(SDCC)" --simulator "$(S51)"
+	XDATA_TOOLCHAIN_OFFLINE="$(XDATA_TOOLCHAIN_OFFLINE)" $(PYTHON) -B tools/xdata_acceptance.py --output $(BUILD)/xdata-overlay \
+		--board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) $(XDATA_COMPILER_ARGUMENT) --simulator "$(S51)"
 
 define JOIN_SMOKE_MCU_CASE
 .PHONY: test-join-smoke-mcu-$(1)

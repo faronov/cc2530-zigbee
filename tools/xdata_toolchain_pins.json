@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "repository": "faronov/sdcc",
+  "tag": "v4.2.0-xdata-ownership.1",
+  "asset": "sdcc-4.2.0-xdata-ownership.1-linux-x86_64.tar.xz",
+  "archive_sha256": "1d326c551a94149be9904da5335f1f82552a43f10bfad33a3f54cb0c68c92794",
+  "source_commit": "3ae36e48f54f787c095d5ffc77a964e59cf85652",
+  "executable_sha256": "48dac1fd659a36a74adfcb2166043ed33fc850deb7229e3684d414feb5c988fd",
+  "manifest_sha256": "2cee108d8b48b7ceeaf1296ec0daa98885041c938d13b8b5e8e89b76b00409e5",
+  "ownership_schema": 1,
+  "runtime_archives": {
+    "mcs51.lib": "47d5a638d52abf017b530d4474e6ba0a759135efa72aefb24d583bd5288070e8",
+    "libsdcc.lib": "3c589da8436fb795f4aa89a1f24eb2da4b389c1bec5415b33abf76aad0688512"
+  }
+}

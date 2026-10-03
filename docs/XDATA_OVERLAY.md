@@ -21,41 +21,47 @@ The first command builds the non-networking bootstrap. The second prepares
 the ordinary experimental join image with DATA/stack checks; it does not
 authorize flashing or change its existing admission requirements.
 
-## Prepare the explicit toolchain
+## Prepare the pinned toolchain
 
-The opt-in integration uses Linux, Python 3.12, GNU Make, the installed
-SDCC 4.2.0 #13081 assembler/linker/runtime libraries, and the frozen
-ownership-metadata-only compiler patch series. Neither preparation script
-installs a compiler or simulator. Use new output directories.
+The normal overlay build uses the immutable public
+[SDCC ownership release](XDATA_TOOLCHAIN.md), not an experimental worktree
+or a reconstructed compiler. Linux x86_64, Python 3.12, GNU Make and a host
+C compiler are required. The package contains its own SDCC, preprocessor,
+assembler, linker, archiver, headers and model-large libraries.
 
-On Ubuntu 24.04, the additional source-build dependencies are `bison`, `flex`,
-`m4`, `libboost-dev` and `zlib1g-dev`, alongside `build-essential`, Python,
-Git, `sdcc=4.2.0+dfsg-1` and `sdcc-ucsim=4.2.0+dfsg-1`.
+```sh
+make prepare-xdata-toolchain
+```
 
+The command verifies the pinned archive and complete extracted package,
+then compiles/links a real option-off/on schema-1 probe. Repeat builds reuse
+the cache; `XDATA_TOOLCHAIN_OFFLINE=1` prohibits downloads. No system compiler
+is installed or replaced. Stock SDCC remains the separate feature-off
+dependency. Explicit local compiler development and deliberate cache repair
+are documented in [XDATA_TOOLCHAIN.md](XDATA_TOOLCHAIN.md).
+
+The complete simulator gate still needs the isolated debugger-only uCsim
+build. Its source-build dependencies on Ubuntu 24.04 are `build-essential`,
+Python, `bison`, `flex`, `m4` and `zlib1g-dev`:
 ```sh
 mkdir -p build
 curl --fail --location --retry 3 \
   https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz \
   --output build/sdcc_4.2.0+dfsg.orig.tar.xz
-python3 -B tools/prepare_xdata_compiler.py \
-  --archive build/sdcc_4.2.0+dfsg.orig.tar.xz --output build/xdata-compiler
 python3 -B tools/prepare_join_simulator.py \
   --archive build/sdcc_4.2.0+dfsg.orig.tar.xz --output build/join-simulator
 ```
 
-Both scripts verify the exact archive SHA-256
+The simulator preparation verifies the exact archive SHA-256
 `ebe7bfb0894380cd92798b57fb9de96e6c0b913a02b6854d0a01cd70328c1578`
-before extraction. Compiler preparation verifies all four committed patch
-hashes and runs the ownership compiler regressions against the installed
-control compiler. The simulator changes only two debugger null guards,
+before extraction. The simulator changes only two debugger null guards,
 not CPU execution; the acceptance harness still checks alias/bank behavior.
-An existing external compiler/simulator can instead be supplied explicitly.
+An existing external simulator can instead be supplied explicitly.
 
 ## One build target
 
 ```sh
 make BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/overlay \
-  SDCC="$PWD/build/xdata-compiler/sdcc-4.2.0+dfsg/bin/sdcc" \
   prepare-join-smoke-overlay
 ```
 
@@ -93,7 +99,6 @@ Virtual banked IHX is **not** directly suitable for a hardware programmer.
 
 ```sh
 make BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/overlay \
-  SDCC="$PWD/build/xdata-compiler/sdcc-4.2.0+dfsg/bin/sdcc" \
   verify-join-smoke-overlay
 ```
 
@@ -114,8 +119,9 @@ can create a fresh generation. Concurrent builds of the same output directory
 serialize with a file lock; different output roots remain independent.
 Changes during generation are rejected before publication.
 
-The receipt includes compiler binary/version, actual compiler subprocesses,
-installed headers/runtime libraries, source and tool hashes, all preliminary
+The version-2 receipt includes release tag/archive/source/manifest identities,
+compiler binary/version and actual behavior probe, invoked supporting tools,
+headers/runtime libraries, source and tool hashes, all preliminary
 and final artifacts, and algorithm/format versions. This prevents accidental
 stale mixing; it is not a signed software-supply-chain attestation. Immutable
 image/metadata admission and the structural verifier remain separate gates.
@@ -124,7 +130,6 @@ image/metadata admission and the structural verifier remain separate gates.
 
 ```sh
 make BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/overlay \
-  SDCC="$PWD/build/xdata-compiler/sdcc-4.2.0+dfsg/bin/sdcc" \
   S51="$PWD/build/join-simulator/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
   test-join-smoke-overlay
 ```
@@ -153,7 +158,8 @@ ordinary worker and per-simulator deadlines.
 
 | Failure | Action |
 | --- | --- |
-| `lacks --xdata-ownership` | Supply the explicit patched compiler; stock SDCC remains valid only for feature-off builds. |
+| Toolchain download/cache/probe failure | Follow [cache recovery](XDATA_TOOLCHAIN.md#cache-and-offline-behavior); no stock-compiler fallback is permitted. |
+| `lacks --xdata-ownership` with an override | Fix the explicitly selected development compiler; stock SDCC remains valid only for feature-off builds. |
 | Unsupported profile/version | Use the admitted primary profile and matching format4 / algorithm1 / platform1 artifacts. |
 | Input or sidecar identity mismatch | Inspect the named expected/actual digest; rebuild from the declared source/toolchain, never copy a sidecar alone. |
 | Generated artifact mismatch | Publication is invalidated; preserve the failed generation for diagnosis and request a fresh build. |

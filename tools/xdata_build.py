@@ -19,10 +19,11 @@ from join_smoke_image import CallerSchema, identities, structure
 from verify_firmware import require
 from xdata_multipool import XDATA_OVERLAY_FORMAT_VERSION, check_identities, prepare
 from xdata_pool_allocator import ALLOCATOR_ALGORITHM_VERSION
+from xdata_toolchain import capability, compiler_path, prepare as prepare_toolchain
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = ROOT / "tools/xdata_build_pins.json"
-BUILD_RECEIPT_VERSION = 1
+BUILD_RECEIPT_VERSION = 2
 
 
 def sha(path):
@@ -71,7 +72,15 @@ def toolchain(sdcc):
     for name in ("SDCC_HOME", "SDCC_INCLUDE", "SDCC_LIB", "SDCC_ASM", "CPATH",
                  "C_INCLUDE_PATH", "LIBRARY_PATH", "GCC_EXEC_PREFIX", "COMPILER_PATH"):
         require(not os.environ.get(name), f"Unset toolchain override {name} for an admitted overlay build")
-    compiler = executable(sdcc)
+    if sdcc is None:
+        compiler, selection = prepare_toolchain()
+    else:
+        compiler, selection = executable(sdcc), {"mode": "development"}
+    with compiler_path(compiler):
+        return describe_toolchain(compiler, selection)
+
+
+def describe_toolchain(compiler, selection):
     tools = {"compiler": compiler, "python": Path(sys.executable).resolve(),
              **{name: executable(name) for name in ("sdcc", "sdcpp", "sdas8051", "sdld", "sdar", "make")}}
     version = subprocess.check_output([str(compiler), "--version"], text=True)
@@ -79,6 +88,8 @@ def toolchain(sdcc):
     help_text = subprocess.check_output([str(compiler), "--help"], text=True)
     require("--xdata-ownership" in help_text,
             f"{compiler.name} lacks --xdata-ownership; use the documented patched compiler")
+    if selection["mode"] == "development":
+        selection["capability"] = capability(compiler)
     support = {}
     for name in ("compiler", "sdcc"):
         search = subprocess.check_output(
@@ -103,6 +114,7 @@ def toolchain(sdcc):
             require(files, f"{name}: missing {label}")
             support[name + "/" + label] = files
     return compiler, {
+        "selection": selection,
         "executables": {name: sha(path) for name, path in tools.items()},
         "compiler_version": version.strip(),
         "link_driver_version": subprocess.check_output([str(tools["sdcc"]), "--version"], text=True).strip(),
@@ -194,13 +206,13 @@ def resource_check(artifacts, proof, expected):
     return actual
 
 
-def admit(root, board, key_mode, *, sdcc=None):
+def admit(root, board, key_mode, *, sdcc=None, verify_toolchain=False):
     root, receipt = checked_receipt(root)
     _, entry = policy(board, key_mode)
     require((receipt["inputs"]["board"], receipt["inputs"]["key_mode"]) == (board, key_mode),
             "Overlay receipt belongs to another profile")
     check_identities(source_inputs(), receipt["inputs"]["sources"], "Build input")
-    if sdcc is not None:
+    if sdcc is not None or verify_toolchain:
         _, current = inputs(sdcc, board, key_mode)
         require(current == receipt["inputs"], "Compiler/toolchain or build inputs changed; rebuild overlay")
     image_catalog = json.loads((ROOT / entry["image_catalog"]).read_bytes())
@@ -213,6 +225,11 @@ def admit(root, board, key_mode, *, sdcc=None):
 
 
 def generate(generation, compiler, board, key_mode, entry):
+    with compiler_path(compiler):
+        return generate_selected(generation, compiler, board, key_mode, entry)
+
+
+def generate_selected(generation, compiler, board, key_mode, entry):
     preliminary = generation / "preliminary"
     final = generation / "join-smoke-layout"
     flags = "-mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror " \
@@ -276,7 +293,7 @@ def build(output, sdcc, board, key_mode, *, rebuild=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--sdcc", default="sdcc")
+    parser.add_argument("--sdcc", help="Explicit development compiler; default is the pinned release")
     parser.add_argument("--board", required=True)
     parser.add_argument("--key-mode", required=True)
     parser.add_argument("--verify", action="store_true")
@@ -286,7 +303,8 @@ def main():
     try:
         if args.verify:
             with locked(canonical(args.output)):
-                admit(args.output / "join-smoke-layout", args.board, args.key_mode, sdcc=args.sdcc)
+                admit(args.output / "join-smoke-layout", args.board, args.key_mode,
+                      sdcc=args.sdcc, verify_toolchain=True)
             print("Independent overlay/source/toolchain/resource verification PASS")
         else:
             build(args.output, args.sdcc, args.board, args.key_mode, rebuild=args.rebuild)

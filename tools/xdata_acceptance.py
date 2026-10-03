@@ -29,6 +29,7 @@ def successful_join(report, expected):
 
 def accept(output, sdcc, simulator, board, key_mode):
     root = build(output, sdcc, board, key_mode)
+    compiler, _ = inputs(sdcc, board, key_mode)
     root, receipt = checked_receipt(root)
     simulator = executable(simulator)
     simulator_hash = sha(simulator)
@@ -37,6 +38,7 @@ def accept(output, sdcc, simulator, board, key_mode):
     phases = []
     environment = {k: v for k, v in os.environ.items()
                    if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES")}
+    environment["PATH"] = str(compiler.parent) + os.pathsep + os.environ.get("PATH", os.defpath)
 
     def command(name, arguments):
         started = time.monotonic()
@@ -49,7 +51,7 @@ def accept(output, sdcc, simulator, board, key_mode):
         write_json(run / "progress.json", phases)
 
     make = ["make", "--no-print-directory", "-s", "-j2", f"BOARD={board}",
-            f"JOIN_SMOKE_KEY_MODE={key_mode}", f"BUILD={run}", "SDCC=sdcc"]
+            f"JOIN_SMOKE_KEY_MODE={key_mode}", f"BUILD={run}", f"SDCC={compiler}"]
     adapter = run / "mac-adapter/mac_adapter_layout.h"
     command("adapter-header", [*make, adapter])
     require(adapter.is_file(), "Verified adapter header was not generated")
@@ -90,7 +92,7 @@ def accept(output, sdcc, simulator, board, key_mode):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--sdcc", required=True)
+    parser.add_argument("--sdcc", help="Explicit development compiler; default is the pinned release")
     parser.add_argument("--simulator", required=True)
     parser.add_argument("--board", required=True)
     parser.add_argument("--key-mode", required=True)

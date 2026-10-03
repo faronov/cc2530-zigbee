@@ -60,6 +60,7 @@ implemented.
 | [Sources and licensing](docs/PROVENANCE.md) | Permitted inputs and reference provenance |
 | [Contributing](CONTRIBUTING.md) | How to add a small, reviewable change |
 | [Opt-in XDATA overlay](docs/XDATA_OVERLAY.md) | Reproduce and verify the 553-byte physical RAM saving; default OFF |
+| [Pinned XDATA compiler](docs/XDATA_TOOLCHAIN.md) | Public SDCC release, checksums, cache, source reproduction and development override |
 
 ## Build the bootstrap
 

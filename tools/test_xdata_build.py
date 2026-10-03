@@ -91,6 +91,13 @@ class BuildTransactionTests(unittest.TestCase):
                         self.run_build()
                     self.assertFalse((self.output / "join-smoke-layout").exists())
 
+    def test_verification_rejects_receipt_from_another_compiler(self):
+        root = self.run_build()
+        self.state["toolchain"] = "another compiler"
+        with patch.object(build, "source_inputs", return_value=self.state["sources"]), \
+                self.assertRaisesRegex(ValueError, "Compiler/toolchain"):
+            build.admit(root, "lg_esl29_rev03", "default-tc", sdcc="compiler")
+
     def test_failed_or_interrupted_generation_never_publishes_and_next_build_recovers(self):
         for failure in (ValueError("proof rejected"), subprocess.CalledProcessError(1, "compiler"),
                         KeyboardInterrupt()):
@@ -210,6 +217,13 @@ class BuildTransactionTests(unittest.TestCase):
 
 
 class BuildPolicyTests(unittest.TestCase):
+    def test_explicit_override_cannot_masquerade_as_pinned_release(self):
+        with patch.object(build, "executable", return_value=Path("/compiler")), \
+                patch.object(build, "prepare_toolchain", return_value=(Path("/compiler"), {"mode": "release"})), \
+                patch.object(build, "describe_toolchain", side_effect=lambda compiler, identity: (compiler, identity)):
+            self.assertEqual(build.toolchain(None)[1]["mode"], "release")
+            self.assertEqual(build.toolchain("/compiler")[1]["mode"], "development")
+
     def test_only_primary_profile_is_admitted(self):
         build.policy("lg_esl29_rev03", "default-tc")
         for board, key in (("generic", "default-tc"), ("lg_esl29_rev03", "install-code")):

@@ -41,6 +41,19 @@ documented metadata architecture, not copied proprietary code or formats.
 No application source, production pins, SDK, equipment data or private
 capture is imported or altered by this compiler representation experiment.
 
+Normal overlay builds now consume the separate public
+[SDCC fork release](https://github.com/faronov/sdcc/releases/tag/v4.2.0-xdata-ownership.1),
+with exact tag/source/archive/executable/manifest pins in
+`tools/xdata_toolchain_pins.json`. The fork preserves the upstream SVN r13081
+history, exact DFSG archive normalization and four original patch contents
+as separate source commits. The tag workflow built and compared two clean
+packages and publishes corresponding modified source alongside the binary.
+GPL/component notices and runtime exceptions remain with the toolchain;
+this repository's independently written downloader/probes remain BSD-3-Clause.
+No toolchain binary is added to Git, no source/ABI/protocol limit is changed,
+and no hardware commissioning conclusion follows. See
+[release and consumer evidence](XDATA_TOOLCHAIN.md).
+
 The [multi-pool XDATA study](XDATA_MULTIPOOL_STUDY.md) keeps that compiler
 frozen and adds original BSD-3-Clause allocation, binding and verification
 tools. Its committed evidence contains public compiler allocations,
