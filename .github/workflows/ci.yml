@@ -209,3 +209,8 @@ jobs:
         run: |
           python3 -B tools/ci_plan.py --check-result "$PLAN_RESULT" "$WORKER_RESULT" "$COUNT"
           python3 -B tools/ci_plan.py --check-result "$PLAN_RESULT" "$OVERLAY_RESULT" "$COUNT"
+
+  compiler-source:
+    name: Independent source/release compiler equivalence
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/xdata-source.yml

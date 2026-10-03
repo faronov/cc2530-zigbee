@@ -88,7 +88,10 @@ proves feature-off absence of metadata/toolchain preparation, restores an
 exact-pin cache, revalidates/downloads the release, builds the overlay and
 runs the unchanged complete simulator release gate. A separate weekly/manual
 `xdata-source.yml` workflow retains source reconstruction and compares
-source/release probe behavior with explicitly distinct identities.
+source/release probe behavior with explicitly distinct identities. Full
+manual/nightly CI also calls that workflow from the same checked-out
+revision, so it can be exercised before the new standalone workflow reaches
+the default branch.
 
 ## Normal firmware consumer
 
