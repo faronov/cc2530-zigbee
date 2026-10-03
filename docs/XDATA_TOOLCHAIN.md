@@ -13,12 +13,12 @@
 9. Compiler CI: PASS, [run 37132323644](https://github.com/faronov/sdcc/actions/runs/37132323644).
 10. Packaged-toolchain self-test: PASS, including both extracted packages in
     [tag release run 37132681995](https://github.com/faronov/sdcc/actions/runs/37132681995).
-11. cc2530-zigbee clean download/build: download/probe/offline reuse PASS;
-    final release-backed overlay build pending.
-12. Overlay final l_XSEG: pending; exact required value remains 7123.
-13. Overlay full simulator release gate: NOT RUN for this integration yet.
-14. Feature-off build unchanged: no source/flags/default dependency changes;
-    new full-CI confirmation pending.
+11. cc2530-zigbee clean download/build: local real download, default overlay,
+    independent verification and offline reuse PASS; clean-checkout CI running.
+12. Overlay final l_XSEG: 7123, image-checked with all original final identities.
+13. Overlay full simulator release gate: RUNNING in CI, not yet PASS.
+14. Feature-off build unchanged: YES; original identities/DATA/stack and
+    absence of metadata/custom toolchain preparation passed in CI.
 15. Source reproduction: PASS, two clean tag-source packages byte-identical
     in the declared Ubuntu 24.04 release environment.
 16. GPL/source distribution: COMPLETE conventional source/binary distribution;
@@ -217,7 +217,44 @@ Real `make -s prepare-xdata-toolchain` and its offline repeat passed.
 An unchanged-source pilot using the packaged suite reproduced the eight
 non-path baseline identities, 7676 XDATA, 253445 CODE, DATA and static-stack
 proofs; raw library paths were the only identity difference. The new default
-overlay and full-CI/simulator result are pending, not inferred from that pilot.
+overlay subsequently passed:
+
+```sh
+make -s BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc \
+  BUILD=build/release-overlay prepare-join-smoke-overlay
+make -s XDATA_TOOLCHAIN_OFFLINE=1 BOARD=lg_esl29_rev03 \
+  JOIN_SMOKE_KEY_MODE=default-tc BUILD=build/release-overlay prepare-join-smoke-overlay
+make -s BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc \
+  BUILD=build/release-overlay verify-join-smoke-overlay
+```
+
+All three commands passed. The physically linked/admitted image has 7123
+ordinary XDATA bytes, 557 free, 36 pools, 553 saved, 253445 populated CODE,
+32714 common CODE, 51 physical DATA, 10 OSEG, 88 BSEG bits, 45 stack bytes and bank
+depth 8. All nine existing immutable final identities match; no image
+catalog was repinned. The second command reused the same generation offline.
+
+The first full CI attempt identified an unintentionally widened artifact
+upload list, not a compiler or firmware mismatch. The original
+acceptance-summary-only boundary was restored without changing its test;
+the exact upload-policy and mandatory-gate regressions passed. Feature-off,
+release preparation and fresh source/release equivalence already passed
+in that run. Full current-revision CI and complete simulator acceptance
+remain pending; cancelled/superseded workflows are not counted as full PASS.
+The corrected run is
+[37135042736](https://github.com/faronov/cc2530-zigbee/actions/runs/37135042736),
+testing commit `c72ee862317b261ed04aaf43548037c0cae19b01` on
+`xdata-toolchain-release`. The policy correction was checked with:
+
+```sh
+PYTHONPATH=tools:tests python3 -B -m unittest \
+  tools.test_timebase_fixture tools.test_ci_plan \
+  -k test_ci_uploads_only_selected_board_artifacts \
+  -k test_workflow_full_triggers_readonly_permissions_and_mandatory_gate -v
+```
+
+Result: PASS, two tests. The full CI result must still include the completed
+overlay replay; this targeted result is not its substitute.
 
 ## Upgrade procedure and remaining limitations
 
