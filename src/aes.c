@@ -18,7 +18,10 @@
 volatile MCU_XDATA uint8_t aes_dma0[8], aes_dma1[32];
 volatile MCU_XDATA uint8_t aes_key[16], aes_iv[16], aes_input[16], aes_output[16];
 MCU_XDATA uint8_t aes_fault, aes_used;
-extern MCU_XDATA uint8_t aes_reserved_end, _gptrput_PARM_2;
+extern MCU_XDATA uint8_t aes_reserved_end;
+#if defined(__SDCC)
+extern MCU_XDATA uint8_t _gptrput_PARM_2;
+#endif
 
 typedef struct {
     uint32_t start, previous, deadline;
@@ -27,12 +30,16 @@ typedef struct {
 } aes_wait_t;
 static MCU_XDATA aes_wait_t w;
 
-static uint32_t pointer_location(const uint8_t *p)
+static uint32_t pointer_location(const MCU_GENERIC uint8_t *p)
 {
 #if defined(__SDCC)
-    union { const uint8_t *pointer; uint8_t byte[3]; } value;
+    union { const MCU_GENERIC uint8_t *pointer; uint8_t byte[3]; } value;
     value.pointer = p;
     return (uint32_t)value.byte[0] | ((uint32_t)value.byte[1] << 8) | ((uint32_t)value.byte[2] << 16);
+#elif defined(CC2530_CLANG)
+    union { const MCU_GENERIC uint8_t *pointer; uint32_t value; } location;
+    location.pointer = p;
+    return location.value & 0x00ffffffUL;
 #else
     extern uint32_t host_aes_pointer(const uint8_t *object);
     return host_aes_pointer(p);
@@ -46,8 +53,13 @@ static uint8_t overlaps(uint16_t a, uint8_t an, uint16_t b, uint8_t bn)
 
 static uint8_t owned(uint16_t address, uint8_t count)
 {
-    return address > MMIO_XADDRESS(&aes_reserved_end) &&
-           !overlaps(address, count, MMIO_XADDRESS(&_gptrput_PARM_2), 1);
+    if (address <= MMIO_XADDRESS(&aes_reserved_end)) return 0;
+#if defined(__SDCC)
+    if (overlaps(address, count, MMIO_XADDRESS(&_gptrput_PARM_2), 1)) return 0;
+#else
+    (void)count;
+#endif
+    return 1;
 }
 
 static uint8_t ordinary(uint16_t address, uint8_t count)
@@ -100,6 +112,9 @@ static void arm_output(void) __naked
         ret
     __endasm;
 }
+#elif defined(CC2530_CLANG)
+static void arm_input(void) { MMIO_WRITE(SOC_DMAARM, 1); __asm__ volatile("nop\nnop\nnop\nnop\nnop\nnop\nnop\nnop\nnop"); }
+static void arm_output(void) { MMIO_WRITE(SOC_DMAARM, 2); __asm__ volatile("nop\nnop\nnop\nnop\nnop\nnop\nnop\nnop\nnop"); }
 #else
 static void arm_input(void) { MMIO_WRITE(SOC_DMAARM, 1); host_mmio_system_cycles(9); }
 static void arm_output(void) { MMIO_WRITE(SOC_DMAARM, 2); host_mmio_system_cycles(9); }
@@ -162,7 +177,8 @@ static aes_result_t sample(aes_diagnostics_t MCU_XDATA *d, uint8_t final)
     now = timebase_read_awake_ticks24();
     d->elapsed_ticks = (now - w.start) & TIMEBASE_TICKS_MASK;
     d->sample_valid |= 2;
-    d->timebase_status = timebase_expired(now, w.deadline, &expired);
+    d->timebase_status = timebase_expired(
+        now, w.deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (d->timebase_status != TIMEBASE_OK)
         return AES_TIMEBASE_ERROR;
     if (d->elapsed_ticks >= TIMEBASE_HALF_RANGE ||
@@ -183,7 +199,8 @@ static void input_descriptor(uint16_t source)
     aes_dma0[4] = 0; aes_dma0[5] = 16; aes_dma0[6] = 29; aes_dma0[7] = 0x41;
 }
 #undef timebase_expired
-aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
+aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
+                                  const MCU_GENERIC uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,
                                   uint16_t limit, aes_diagnostics_t MCU_XDATA *d)
 {
@@ -248,7 +265,8 @@ aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
     w.cfg0_low = d->cfg0_low; w.cfg0_high = d->cfg0_high;
     w.cfg1_low = d->cfg1_low; w.cfg1_high = d->cfg1_high;
     w.start = timebase_read_awake_ticks24(); w.previous = w.start; w.limit = limit;
-    d->timebase_status = timebase_deadline_after(w.start, timeout, &w.deadline);
+    d->timebase_status = timebase_deadline_after(
+        w.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &w.deadline));
     if (d->timebase_status != TIMEBASE_OK) { result = AES_TIMEBASE_ERROR; goto failed; }
     for (i = 0; i < 16; i++) { aes_key[i] = key[i]; aes_input[i] = input[i]; aes_iv[i] = 0; }
     result = sample(d, 0);

@@ -4,6 +4,12 @@
 #include "bdb_join_internal.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(__clang__)
+#define MCS51_PARAM_VOLATILE
+#else
+#define MCS51_PARAM_VOLATILE volatile
+#endif
+
 
 BDB_JOIN_KEYS_STORAGE security_keys_status_t bdb_join_keys;
 /* Parent selection and runtime reception are separate returning operations.
@@ -110,7 +116,7 @@ static uint8_t finished(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volati
     return nwk_aps_confirm(&ctx->work.runtime.transport, result) == NWK_APS_OK;
 }
 
-static void runtime(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
 {
     uint8_t which, result;
     zdo_runtime_result_t rc;
@@ -228,13 +234,13 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * volatile ctx)
     }
 }
 
-bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now,
-    const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action)
+bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
+    const bdb_join_event_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE event, bdb_join_action_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE action)
 {
     bdb_join_result_t result;
     nwk_aps_result_t transported;
     uint8_t outcome, which;
-    volatile uint8_t handled = 0, ignored = 0, pending;
+    MCS51_PARAM_VOLATILE uint8_t handled = 0, ignored = 0, pending;
     if (!action) return BDB_JOIN_ARGUMENT;
     result = bdb_join_advance(ctx, now);
     if (result) return result;

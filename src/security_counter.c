@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "security_counter.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
@@ -119,7 +120,7 @@ static security_counter_result_t commit(uint16_t poll_limit)
     return finish(SECURITY_COUNTER_OK);
 }
 
-static void payload(const uint8_t MCU_XDATA * volatile data, uint8_t length)
+static void payload(const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length)
 {
     uint8_t i;
     security_counter_blob[5] = length;
@@ -184,7 +185,7 @@ static security_counter_result_t stage(const uint8_t MCU_XDATA * volatile data,
 }
 
 security_counter_result_t security_counter_create(
-    uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * volatile data,
+    uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * SDCC_VOLATILE data,
     uint8_t length, uint16_t poll_limit)
 {
     security_counter_result_t result;
@@ -214,9 +215,9 @@ security_counter_result_t security_counter_restage(
 }
 
 security_counter_result_t security_counter_take(
-    volatile uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit)
+    SDCC_VOLATILE uint8_t domain, uint32_t MCU_XDATA * SDCC_VOLATILE value, uint16_t poll_limit)
 {
-    volatile uint32_t end;
+    SDCC_VOLATILE uint32_t end;
     uint32_t taken;
     security_counter_result_t result = ready();
     if (result != SECURITY_COUNTER_OK)
@@ -254,7 +255,7 @@ if (D.next[domain] == D.until[domain]) {
 }
 #define commit(limit) commit(LW_SHALLOW_READ(uint16_t, limit))
 security_counter_result_t security_counter_save(
-    const uint8_t MCU_XDATA * volatile data, uint8_t length, uint16_t poll_limit)
+    const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length, uint16_t poll_limit)
 {
     security_counter_result_t result = ready();
     if (result != SECURITY_COUNTER_OK)
@@ -284,7 +285,7 @@ result = current();
 }
 
 security_counter_result_t security_counter_read(
-    uint8_t MCU_XDATA * volatile data, uint8_t capacity, uint8_t MCU_XDATA * volatile length)
+    uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t capacity, uint8_t MCU_XDATA * SDCC_VOLATILE length)
 {
     uint8_t i;
     security_counter_result_t result = ready();

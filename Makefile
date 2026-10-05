@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 SDCC ?= sdcc
+SDCC_LIB ?=
+LLVM_CLANG ?= ../llvm-mcs51-build/bin/clang
+LLVM_OBJCOPY ?= ../llvm-mcs51-build/bin/llvm-objcopy
+LLVM_CC2530_LD ?= ../llvm-mcs51/llvm/lib/Target/MCS51/cc2530.ld
+LLVM_BUILD ?= build/llvm/$(BOARD)$(if $(filter-out bringup,$(IMAGE)),/$(IMAGE))
 HOST_CC ?= cc
 PYTHON ?= python3
 S51 ?= s51
@@ -38,9 +43,9 @@ endif
 
 TARGET := $(BUILD)/$(IMAGE)
 HEADERS := $(wildcard include/*.h src/*_internal.h)
-DEFINES := -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
+DEFINES := -Itoolchain/clang/include -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
 SDCC_FLAGS := -mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror $(DEFINES)
-LINK_FLAGS := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 --code-size 0x8000
+LINK_FLAGS := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 --code-size 0x8000 $(if $(strip $(SDCC_LIB)),-L$(SDCC_LIB))
 HOST_FLAGS := -std=c99 -O2 -Wall -Wextra -Werror -pedantic -DCC2530_HOST_TEST $(DEFINES) -Itests
 OBJECTS := $(BUILD)/startup_$(BOARD).rel $(BUILD)/status_$(BOARD).rel \
            $(BUILD)/board_$(BOARD).rel $(BUILD)/example_$(IMAGE)_$(BOARD).rel
@@ -85,7 +90,7 @@ ifeq ($(IMAGE),radio_link_fixture)
 OBJECTS := $(BUILD)/timebase.rel $(BUILD)/clock.rel $(BUILD)/radio_autoack.rel $(OBJECTS) $(BUILD)/radio_link_fixture_state.rel
 endif
 
-.PHONY: all test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
+.PHONY: all llvm llvm-zigbee-modules test test-timebase test-clock test-irq test-radio-fifo test-dma test-aes test-prng test-nwk-beacon test-nwk-frame test-aps-frame test-protocol-frame force-link
 .PHONY: test-zcl-frame test-zcl-value test-zcl-attributes test-zcl-dispatch test-zcl-basic test-zcl-identify
 .PHONY: test-zcl-temperature test-zdo-node test-zdo-srv
 .PHONY: test-zigbee-security test-zigbee-mmo test-zigbee-key-hash test-security-counter test-security-resident
@@ -113,6 +118,115 @@ PROTOCOL_MODULES := mac_frame nwk_frame aps_frame zcl_frame zcl_value zcl_attrib
 ZCL_DISPATCH_SRC := src/zcl_dispatch.c src/zcl_write.c
 all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
+
+# Experimental LLVM CC2530 project build.
+LLVM_FLAGS := -target mcs51 -mcpu=cc2530 -std=c99 -Os -fno-function-sections -fno-data-sections \
+              -Itoolchain/clang/include -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
+LLVM_TARGET := $(LLVM_BUILD)/$(IMAGE)
+LLVM_PROJECT_LD := $(LLVM_BUILD)/cc2530-zigbee.ld
+LLVM_MODULES :=
+ifeq ($(IMAGE),timebase_fixture)
+LLVM_MODULES := timebase_fixture_state timebase
+endif
+LLVM_OBJECTS := $(LLVM_BUILD)/status.o $(LLVM_BUILD)/board.o $(LLVM_BUILD)/example.o \
+                $(addprefix $(LLVM_BUILD)/,$(addsuffix .o,$(LLVM_MODULES)))
+
+ifneq ($(filter $(IMAGE),bringup timebase_fixture),)
+llvm: $(LLVM_TARGET).hex $(LLVM_TARGET).bin
+else
+llvm:
+	$(error LLVM path currently supports IMAGE=bringup and IMAGE=timebase_fixture)
+endif
+
+$(LLVM_BUILD):
+	mkdir -p $@
+
+$(LLVM_PROJECT_LD): Makefile | $(LLVM_BUILD)
+	printf 'INCLUDE "%s"\n' "$(abspath $(LLVM_CC2530_LD))" > $@
+	printf '%s\n' 'ASSERT(ADDR(.data) + SIZEOF(.data) <= 0x1e00, "CC2530 .data overlaps M0 status")' >> $@
+	printf '%s\n' 'ASSERT(ADDR(.bss) + SIZEOF(.bss) <= 0x1e00, "CC2530 .bss overlaps M0 status")' >> $@
+
+$(LLVM_BUILD)/status.o: src/status.c $(HEADERS) Makefile | $(LLVM_BUILD)
+	$(LLVM_CLANG) $(LLVM_FLAGS) -c $< -o $@
+
+$(LLVM_BUILD)/board.o: boards/$(BOARD).c $(HEADERS) Makefile | $(LLVM_BUILD)
+	$(LLVM_CLANG) $(LLVM_FLAGS) -c $< -o $@
+
+$(LLVM_BUILD)/example.o: examples/$(IMAGE).c $(HEADERS) Makefile | $(LLVM_BUILD)
+	$(LLVM_CLANG) $(LLVM_FLAGS) -c $< -o $@
+
+$(LLVM_BUILD)/%.o: src/%.c $(HEADERS) Makefile | $(LLVM_BUILD)
+	$(LLVM_CLANG) $(LLVM_FLAGS) -c $< -o $@
+
+# Compile the current Zigbee module set with Clang. This is an object-only
+# milestone; the complete banked image still uses the SDCC-specific ABI.
+LLVM_ZIGBEE_MODULES := aes aps_frame bdb_join bdb_join_init ccm_star clock dma \
+	ed_wire flash flash_exec flash_write irq mac_association mac_epoch mac_frame \
+	mac_join mac_poll mac_scan mac_stamp mac_time mac_tx noise_health nv_record \
+	nwk_aps nwk_aps_transmit nwk_beacon nwk_candidates nwk_frame nwk_parent prng \
+	radio_autoack radio_fifo radio_noise radio_queue radio_rx radio_tx \
+	security_counter security_keys timebase zcl_attributes zcl_basic zcl_dispatch \
+	zcl_frame zcl_identify zcl_temperature zcl_value zcl_write zdo_node \
+	zdo_runtime zdo_srv zigbee_key_hash zigbee_mmo zigbee_security
+LLVM_ZIGBEE_OBJECTS := $(addprefix $(LLVM_BUILD)/zigbee/,$(addsuffix .o,$(LLVM_ZIGBEE_MODULES)))
+
+.PHONY: llvm-zigbee-modules llvm-zigbee-image
+llvm-zigbee-modules: $(LLVM_ZIGBEE_OBJECTS)
+
+# Link the synthetic full join path with Clang/LLD on the CC2530's physical
+# 256-KiB bank map. Keep these objects separate from the module-only profile:
+# the join workspace alias and common-bank placements are link-profile ABI.
+LLVM_ZIGBEE_IMAGE_DIR := $(LLVM_BUILD)/zigbee-image
+LLVM_ZIGBEE_IMAGE_OPT ?= -Oz
+LLVM_ZIGBEE_IMAGE_FLAGS := -target mcs51 -mcpu=cc2530 -std=c99 $(LLVM_ZIGBEE_IMAGE_OPT) \
+	-ffunction-sections -fdata-sections -Itoolchain/clang/include -Iinclude \
+	-DCC2530_BOARD=$(BOARD_NUMBER) -DCC2530_BANKED_JOIN -DCC2530_JOIN_WORKSPACE \
+	-DBANKED_STACK_FIRST=0x50
+LLVM_ZIGBEE_IMAGE_OBJECTS := $(addprefix $(LLVM_ZIGBEE_IMAGE_DIR)/,$(addsuffix .o,$(LLVM_ZIGBEE_MODULES))) \
+	$(LLVM_ZIGBEE_IMAGE_DIR)/flash_exec_mcs51.o \
+	$(LLVM_ZIGBEE_IMAGE_DIR)/banked_join_fixture.o
+
+llvm-zigbee-image: $(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.hex
+
+$(LLVM_ZIGBEE_IMAGE_DIR):
+	mkdir -p $@
+
+$(LLVM_ZIGBEE_IMAGE_DIR)/%.o: src/%.c $(HEADERS) Makefile | $(LLVM_ZIGBEE_IMAGE_DIR)
+	$(LLVM_CLANG) $(LLVM_ZIGBEE_IMAGE_FLAGS) -c $< -o $@
+
+$(LLVM_ZIGBEE_IMAGE_DIR)/flash_exec_mcs51.o: src/flash_exec_mcs51.s Makefile | $(LLVM_ZIGBEE_IMAGE_DIR)
+	$(LLVM_CLANG) -target mcs51 -mcpu=cc2530 -c $< -o $@
+
+$(LLVM_ZIGBEE_IMAGE_DIR)/banked_join_fixture.o: tests/banked_join_fixture.c $(HEADERS) Makefile | $(LLVM_ZIGBEE_IMAGE_DIR)
+	$(LLVM_CLANG) $(LLVM_ZIGBEE_IMAGE_FLAGS) -c $< -o $@
+
+$(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.elf: $(LLVM_ZIGBEE_IMAGE_OBJECTS) $(LLVM_CC2530_LD)
+	$(LLVM_CLANG) -target mcs51 -mcpu=cc2530 $(LLVM_ZIGBEE_IMAGE_OPT) \
+	  -Wl,-T,$(LLVM_CC2530_LD) -Wl,--no-check-sections \
+	  -Wl,--defsym,mac_join_staged=fixture_device+654 -Wl,--gc-sections \
+	  $(LLVM_ZIGBEE_IMAGE_OBJECTS) -o $@
+
+$(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.hex: $(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.elf
+	$(LLVM_OBJCOPY) --output-target=ihex $< $@
+
+$(LLVM_BUILD)/zigbee:
+	mkdir -p $@
+
+$(LLVM_BUILD)/zigbee/%.o: src/%.c $(HEADERS) Makefile | $(LLVM_BUILD)/zigbee
+	$(LLVM_CLANG) $(LLVM_FLAGS) -c $< -o $@
+
+$(LLVM_BUILD)/zigbee/nwk_aps.o: LLVM_FLAGS := $(filter-out -Os,$(LLVM_FLAGS)) -O2
+$(LLVM_BUILD)/zigbee/security_keys.o: LLVM_FLAGS := $(filter-out -Os,$(LLVM_FLAGS)) -O1
+
+$(LLVM_TARGET).elf: $(LLVM_OBJECTS) $(LLVM_PROJECT_LD)
+	$(LLVM_CLANG) $(LLVM_FLAGS) -Wl,--no-check-sections -Wl,--defsym,m0_status=0x1e00 \
+	  -Wl,--gc-sections -Wl,-T,$(LLVM_PROJECT_LD) $(LLVM_OBJECTS) -o $@
+
+$(LLVM_TARGET).hex: $(LLVM_TARGET).elf
+	$(LLVM_OBJCOPY) --output-target=ihex $< $@
+
+$(LLVM_TARGET).bin: $(LLVM_TARGET).elf
+	$(LLVM_OBJCOPY) --output-target=binary $< $@
 
 $(BUILD):
 	mkdir -p $@

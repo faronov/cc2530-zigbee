@@ -6,9 +6,13 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "cc2530_mmio.h"
 
 #define TIMEBASE_TICKS_MASK 0x00ffffffUL
 #define TIMEBASE_HALF_RANGE 0x00800000UL
+
+#define TIMEBASE_POINTER MCU_GENERIC
+#define TIMEBASE_POINTER_CAST(type, pointer) ((type MCU_GENERIC *)(pointer))
 
 typedef enum {
     TIMEBASE_OK = 0,
@@ -31,7 +35,7 @@ uint32_t timebase_read_awake_ticks24(void);
  * out-of-window true separation cannot be detected from these raw values.
  */
 timebase_result_t timebase_deadline_after(uint32_t now, uint32_t delay,
-                                          uint32_t *deadline);
-timebase_result_t timebase_expired(uint32_t now, uint32_t deadline, bool *expired);
+                                          TIMEBASE_POINTER uint32_t *deadline);
+timebase_result_t timebase_expired(uint32_t now, uint32_t deadline, TIMEBASE_POINTER bool *expired);
 
 #endif

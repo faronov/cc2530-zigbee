@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "nv_record.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
@@ -181,7 +182,7 @@ static nv_record_result_t select_record(void)
     return NV_RECORD_OK;
 }
 
-nv_record_result_t nv_record_load(uint8_t MCU_XDATA * volatile output, uint8_t capacity)
+nv_record_result_t nv_record_load(uint8_t MCU_XDATA * SDCC_VOLATILE output, uint8_t capacity)
 {
     uint8_t i, selected;
     nv_record_result_t result;
@@ -214,11 +215,11 @@ static nv_record_result_t program(uint8_t page, uint16_t offset, uint16_t limit)
     return NV_RECORD_OK;
 }
 
-nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * volatile data, uint8_t length,
-                                    volatile uint16_t poll_limit, uint8_t allow_recovery)
+nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length,
+                                    SDCC_VOLATILE uint16_t poll_limit, uint8_t allow_recovery)
 {
     uint16_t position;
-    volatile uint8_t page;
+    SDCC_VOLATILE uint8_t page;
     uint8_t i, value;
     nv_record_result_t result;
     if (nv_record_fault) return (nv_record_result_t)nv_record_fault;

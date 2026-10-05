@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "mac_scan.h"
 #include <stddef.h>
 #include <string.h>
+
 
 /* IEEE 2006 7.3.7: source-less, uncompressed short/PAN broadcast, no ACK.
  * mac_tx_submit validates through the actual codec and replaces byte2 by DSN.
@@ -25,25 +27,25 @@ static uint8_t reached(uint32_t now, uint32_t at)
     return (uint32_t)(now - at) < MAC_TX_HALF;
 }
 
-static uint8_t valid(const mac_scan_t MAC_SCAN_RAM * volatile scan)
+static uint8_t valid(const mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan)
 {
     return scan->version == MAC_SCAN_VERSION && scan->phase <= MAC_SCAN_FAULT;
 }
 
-static uint8_t radio_state(const mac_scan_radio_state_t MAC_SCAN_RAM * volatile state)
+static uint8_t radio_state(const mac_scan_radio_state_t MAC_SCAN_RAM * SDCC_VOLATILE state)
 {
     return state->channel >= 11u && state->channel <= 26u
         && state->filter <= MAC_SCAN_FILTER_BEACONS && state->rx_on <= 1u;
 }
 
-static uint8_t scan_state(const mac_scan_radio_state_t MAC_SCAN_RAM * volatile state,
+static uint8_t scan_state(const mac_scan_radio_state_t MAC_SCAN_RAM * SDCC_VOLATILE state,
                           uint8_t channel, uint8_t rx)
 {
     return state->pan == 0xffffu && state->channel == channel
         && state->filter == MAC_SCAN_FILTER_BEACONS && state->rx_on == rx;
 }
 
-static void stop(mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t reason, uint32_t now)
+static void stop(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan, uint8_t reason, uint32_t now)
 {
     if (!scan->reason)
         scan->reason = reason;
@@ -60,7 +62,7 @@ static void stop(mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t reason, uint32
     }
 }
 
-static void fault(mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t reason)
+static void fault(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan, uint8_t reason)
 {
     if (!scan->reason)
         scan->reason = reason;
@@ -70,9 +72,9 @@ static void fault(mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t reason)
     scan->phase = MAC_SCAN_FAULT;
 }
 
-static void next_channel(mac_scan_t MAC_SCAN_RAM * volatile scan, uint32_t now)
+static void next_channel(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan, uint32_t now)
 {
-    volatile uint32_t bit = 0;
+    SDCC_VOLATILE uint32_t bit = 0;
     if (!scan->remaining) {
         stop(scan, MAC_SCAN_FINISHED, now);
         return;
@@ -92,7 +94,7 @@ static void next_channel(mac_scan_t MAC_SCAN_RAM * volatile scan, uint32_t now)
 #endif
 }
 
-mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * volatile scan)
+mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan)
 {
     if (scan == NULL)
         return MAC_SCAN_INVALID;
@@ -101,12 +103,12 @@ mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * volatile scan)
     return MAC_SCAN_OK;
 }
 
-mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                 mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
-                                 const mac_scan_request_t MAC_SCAN_RAM * volatile request,
-                                 uint32_t volatile now)
+mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan,
+                                 mac_scan_tx_t MAC_SCAN_RAM * SDCC_VOLATILE tx,
+                                 const mac_scan_request_t MAC_SCAN_RAM * SDCC_VOLATILE request,
+                                 SDCC_VOLATILE uint32_t now)
 {
-    volatile uint32_t dwell;
+    SDCC_VOLATILE uint32_t dwell;
     if (scan == NULL || tx == NULL || request == NULL
             || !request->channels || (request->channels & ~NWK_CANDIDATES_CHANNEL_MASK)
             || request->duration > 14u || !request->work || request->work > MAC_SCAN_MAX_WORK
@@ -145,14 +147,14 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
     return MAC_SCAN_OK;
 }
 
-mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
-                                uint32_t volatile now,
-                                const mac_scan_event_t MAC_SCAN_RAM * volatile event,
-                                mac_scan_action_t MAC_SCAN_RAM * volatile action)
+mac_scan_result_t MCU_COMMON_CODE mac_scan_step(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan,
+                                mac_scan_tx_t MAC_SCAN_RAM * SDCC_VOLATILE tx,
+                                SDCC_VOLATILE uint32_t now,
+                                const mac_scan_event_t MAC_SCAN_RAM * SDCC_VOLATILE event,
+                                mac_scan_action_t MAC_SCAN_RAM * SDCC_VOLATILE action)
 {
-    volatile uint8_t kind, candidate;
-    volatile uint32_t bits;
+    SDCC_VOLATILE uint8_t kind, candidate;
+    SDCC_VOLATILE uint32_t bits;
 
     if (scan == NULL || tx == NULL || action == NULL
             || (event != NULL && (event->kind < MAC_SCAN_EVENT_CONFIGURED
@@ -370,8 +372,8 @@ publish:
     return MAC_SCAN_OK;
 }
 
-mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t index,
-                               nwk_candidate_t MAC_SCAN_RAM * volatile result)
+mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan, uint8_t index,
+                               nwk_candidate_t MAC_SCAN_RAM * SDCC_VOLATILE result)
 {
     if (scan == NULL || result == NULL)
         return MAC_SCAN_INVALID;
@@ -382,8 +384,8 @@ mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * volatile scan, ui
     return MAC_SCAN_OK;
 }
 
-mac_scan_result_t mac_scan_release(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                   mac_scan_tx_t MAC_SCAN_RAM * volatile tx)
+mac_scan_result_t mac_scan_release(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan,
+                                   mac_scan_tx_t MAC_SCAN_RAM * SDCC_VOLATILE tx)
 {
     if (scan == NULL || tx == NULL)
         return MAC_SCAN_INVALID;

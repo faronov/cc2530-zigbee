@@ -114,7 +114,7 @@ static radio_rx_result_t poll(rx_wait_t MCU_XDATA *w, radio_rx_diagnostics_t MCU
     d->elapsed_ticks = (now - w->start) & TIMEBASE_TICKS_MASK;
     if (result != RADIO_RX_OK)
         return result;
-    d->timebase_status = timebase_expired(now, w->deadline, &expired);
+    d->timebase_status = timebase_expired(now, w->deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (d->timebase_status != TIMEBASE_OK)
         return RADIO_RX_TIMEBASE_ERROR;
     if (d->elapsed_ticks >= TIMEBASE_HALF_RANGE ||
@@ -157,7 +157,7 @@ radio_rx_result_t radio_rx_receive_init(uint8_t channel, uint32_t timeout, uint1
     if (!empty(d)) { result = RADIO_RX_NOT_EMPTY; goto failed; }
     w.limit = limit;
     w.start = timebase_read_awake_ticks24(); w.previous = w.start;
-    d->timebase_status = timebase_deadline_after(w.start, timeout, &w.deadline);
+    d->timebase_status = timebase_deadline_after(w.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &w.deadline));
     if (d->timebase_status != TIMEBASE_OK) { result = RADIO_RX_TIMEBASE_ERROR; goto failed; }
     d->phase = 1;
     for (i = 0; i < sizeof(values); i++) {

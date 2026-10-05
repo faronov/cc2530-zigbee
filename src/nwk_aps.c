@@ -4,6 +4,12 @@
 #include "nwk_aps_internal.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(__clang__)
+#define MCS51_PARAM_VOLATILE
+#else
+#define MCS51_PARAM_VOLATILE volatile
+#endif
+
 
 MCU_XDATA security_keys_status_t nwk_aps_keys;
 /* The active-MAC step returns before transmit construction. Receive parsing
@@ -207,8 +213,8 @@ nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
 }
 #endif
 
-nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
-    const NWK_APS_EVENT_T * volatile event, NWK_APS_ACTION_T * volatile action)
+nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
+    const NWK_APS_EVENT_T * MCS51_PARAM_VOLATILE event, NWK_APS_ACTION_T * MCS51_PARAM_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -350,8 +356,8 @@ static void acknowledgment(nwk_aps_t * volatile ctx, const ed_packet_t * volatil
     ctx->reply = 1; ctx->reply_secure = secured;
 }
 
-nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
-    volatile uint16_t length, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uint8_t * MCS51_PARAM_VOLATILE npdu,
+    MCS51_PARAM_VOLATILE uint16_t length, MCS51_PARAM_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -360,7 +366,7 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
     nwk_aps_result_t result;
     security_keys_result_t accepted;
     uint8_t event, i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0, slot = 0, oldest = 0;
-    ed_packet_t * volatile p;
+    ed_packet_t * MCS51_PARAM_VOLATILE p;
     if (!npdu) return NWK_APS_ARGUMENT;
     result = advance(ctx, now);
     if (result) return result;

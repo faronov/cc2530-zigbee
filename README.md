@@ -82,9 +82,35 @@ On macOS, place an installed SDCC 4.2.0 toolchain, including `s51`, on `PATH`,
 then use the same `make` commands. No IAR SDK is needed. Linux is the hosted CI
 platform; additional toolchain/OS versions are not implied to be tested.
 
+For an uninstalled SDCC build tree, set SDCC to its bin/sdcc and SDCC_LIB to
+its device/lib/build/large directory. The firmware compiler and linker can use
+newer SDCC versions, but the strict artifact validator currently pins its
+machine-code checks and acceptance metadata to SDCC 4.2.0; other versions need
+a separately reviewed validator baseline.
+
 Outputs are under `build/<board>/`, including `bringup.hex`, `bringup.bin`,
 linker/debug information and `build-info.json`. **These are bootstrap images,
 not Zigbee firmware releases.** Builds and CI never flash a device.
+
+### Experimental LLVM build
+
+The sibling LLVM checkout also has a project build path for the bootstrap and
+timebase fixture:
+
+    make BOARD=generic IMAGE=bringup llvm
+    make BOARD=generic IMAGE=timebase_fixture llvm
+
+Outputs go under `build/llvm/<board>/` for bringup and `build/llvm/<board>/<image>/` for fixtures. `LLVM_CLANG`, `LLVM_OBJCOPY`, and
+`LLVM_CC2530_LD` can select tool paths. This path uses the LLVM CC2530 startup
+and runtime, preserves the M0 status block at XDATA `0x1e00`, and checks that
+`.data` and `.bss` stay below it. Other project images still use SDCC; the LLVM
+path does not yet link a Zigbee firmware image or establish simulator or
+hardware acceptance. `make llvm-zigbee-modules` compiles the current 53-module
+Zigbee source set to LLVM object files under `build/llvm/<board>/zigbee/`; it
+does not link those modules. `nwk_aps.c` and `security_keys.c` currently need
+per-file optimization levels because the MCS-51 backend runs out of DPTR-class
+registers at `-Os` for selected functions. The banked firmware composition
+still depends on the reviewed SDCC banking ABI.
 
 The generic board performs no application-specific pin control. The
 `lg_esl29_rev03` board keeps its known display controls off. A board name is not

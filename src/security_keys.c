@@ -13,6 +13,12 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(__clang__)
+#define MCS51_PARAM_VOLATILE
+#else
+#define MCS51_PARAM_VOLATILE volatile
+#endif
+
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
 #define w link_work_arena.keys
@@ -631,8 +637,8 @@ static security_keys_result_t open_aps(void)
 }
 
 security_keys_result_t security_keys_receive(
-    const uint8_t * volatile raw_npdu, volatile uint16_t length,
-    ed_packet_t * volatile output, uint8_t * volatile event,
+    const uint8_t * MCS51_PARAM_VOLATILE raw_npdu, MCS51_PARAM_VOLATILE uint16_t length,
+    ed_packet_t * MCS51_PARAM_VOLATILE output, uint8_t * MCS51_PARAM_VOLATILE event,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)

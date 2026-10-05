@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zcl_wire.h"
 
 #include <stddef.h>
@@ -93,7 +94,7 @@ zcl_codec_result_t zcl_value_decode(uint8_t type, const uint8_t *body, uint16_t 
 zcl_codec_result_t zcl_value_encode(const zcl_value_t *value, uint8_t *body,
                                     uint16_t capacity, uint8_t *length)
 {
-    const uint8_t * volatile data;
+    const uint8_t * SDCC_VOLATILE data;
     uint16_t data_length;
     uint8_t shape, width, kind, size, position, string_non_value;
 

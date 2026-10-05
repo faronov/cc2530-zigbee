@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "nwk_aps_internal.h"
 #include <stddef.h>
 #include <string.h>
+
 
 /* Frame control/DSN(3), destination PAN/short(4), compressed source short(2).
  * This profile never changes MAC addressing shape. Keep the real codec's
@@ -12,13 +14,13 @@
 #define MAC_PREFIX 9u
 typedef char mac_payload_extent[MAC_PREFIX+NWK_FRAME_MAX_BODY == MAC_FRAME_MAX_BODY ? 1 : -1];
 
-nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t acknowledgment, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t acknowledgment, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
 #endif
-    ed_packet_t * volatile p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
+    ed_packet_t * SDCC_VOLATILE p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
     security_keys_result_t secured;
     nwk_aps_result_t btr;
     uint8_t slot;

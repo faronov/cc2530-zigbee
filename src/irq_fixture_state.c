@@ -73,7 +73,7 @@ static uint8_t wait_begin(void)
     polls = 0;
     start = timebase_read_awake_ticks24();
     previous = start;
-    irq_fixture_state.helper_status = (uint8_t)timebase_deadline_after(start, IRQ_FIXTURE_TIMEOUT, &deadline);
+    irq_fixture_state.helper_status = (uint8_t)timebase_deadline_after(start, IRQ_FIXTURE_TIMEOUT, TIMEBASE_POINTER_CAST(uint32_t, &deadline));
     if (irq_fixture_state.helper_status != TIMEBASE_OK) {
         fault(IRQ_REASON_TIMEBASE);
         return 0;
@@ -255,7 +255,7 @@ void irq_fixture_poll(void)
         put16(irq_fixture_state.pending_polls, polls);
         put24(irq_fixture_state.pending_elapsed, elapsed);
     }
-    irq_fixture_state.helper_status = (uint8_t)timebase_expired(now, deadline, &expired);
+    irq_fixture_state.helper_status = (uint8_t)timebase_expired(now, deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (irq_fixture_state.helper_status != TIMEBASE_OK) {
         fault(IRQ_REASON_TIMEBASE);
         return;

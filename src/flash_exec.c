@@ -138,6 +138,13 @@ static void enter_ram(void) __naked
 
 #define TEMPLATE ((const uint8_t MCU_CODE *)flash_exec_template)
 #define TEMPLATE_SIZE ((uint16_t)&flash_exec_template_end - (uint16_t)flash_exec_template)
+#elif defined(CC2530_CLANG)
+extern const MCU_CODE uint8_t flash_exec_template[];
+extern const MCU_CODE uint8_t flash_exec_template_end[];
+extern void flash_exec_enter_ram(void);
+#define TEMPLATE ((const uint8_t MCU_CODE *)flash_exec_template)
+#define TEMPLATE_SIZE ((uint16_t)flash_exec_template_end - (uint16_t)flash_exec_template)
+#define enter_ram() flash_exec_enter_ram()
 #else
 extern const uint8_t flash_exec_host_template[FLASH_EXEC_RAM_SIZE];
 extern void flash_exec_host_enter(void);
@@ -146,7 +153,7 @@ extern void flash_exec_host_enter(void);
 #define enter_ram() flash_exec_host_enter()
 #endif
 
-static uint8_t idle(uint8_t expected_mapping)
+static uint8_t MCU_COMMON_CODE idle(uint8_t expected_mapping)
 {
     uint8_t ien0, ien1, ien2, arm, request, sleep, command, status, control, bank;
     ien0 = MMIO_READ(SOC_IEN0); ien1 = MMIO_READ(SOC_IEN1); ien2 = MMIO_READ(SOC_IEN2);

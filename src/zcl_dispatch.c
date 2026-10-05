@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zcl_dispatch.h"
 #include "zcl_write.h"
 
@@ -34,12 +35,12 @@ static const zcl_attribute_t *next_attribute(const zcl_attribute_set_t *set, uin
     return chosen;
 }
 
-static zcl_codec_result_t discover(const zcl_attribute_set_t * volatile set, const uint8_t * volatile request,
-                                    zcl_header_t * volatile reply, uint8_t * volatile response, uint16_t capacity,
-                                    zcl_dispatch_info_t * volatile info)
+static zcl_codec_result_t discover(const zcl_attribute_set_t * SDCC_VOLATILE set, const uint8_t * SDCC_VOLATILE request,
+                                    zcl_header_t * SDCC_VOLATILE reply, uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                                    zcl_dispatch_info_t * SDCC_VOLATILE info)
 {
     uint8_t payload[1u + 3u * ZCL_ATTRIBUTE_MAX_COUNT];
-    const zcl_attribute_t * volatile attribute;
+    const zcl_attribute_t * SDCC_VOLATILE attribute;
     uint16_t start;
     uint8_t budget, header_size, count = 0, used = 1;
     zcl_codec_result_t status;
@@ -84,19 +85,19 @@ static zcl_codec_result_t discover(const zcl_attribute_set_t * volatile set, con
     return ZCL_CODEC_OK;
 }
 
-zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * volatile set,
-                                       const uint8_t * volatile request, uint16_t request_length,
-                                       uint8_t * volatile response, uint16_t capacity,
-                                       zcl_dispatch_info_t * volatile info)
+zcl_codec_result_t zcl_dispatch_unicast(const zcl_attribute_set_t * SDCC_VOLATILE set,
+                                       const uint8_t * SDCC_VOLATILE request, uint16_t request_length,
+                                       uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                                       zcl_dispatch_info_t * SDCC_VOLATILE info)
 {
     zcl_frame_info_t frame;
     zcl_header_t reply;
     zcl_read_info_t read;
     zcl_dispatch_info_t candidate;
     zcl_codec_result_t status;
-    const uint8_t * volatile payload;
+    const uint8_t * SDCC_VOLATILE payload;
     uint8_t error[2];
-    volatile uint8_t context_matches;
+    SDCC_VOLATILE uint8_t context_matches;
 
     if (set == NULL || request == NULL || response == NULL || info == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;

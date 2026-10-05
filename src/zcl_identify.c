@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zcl_identify.h"
 #include "zcl_write.h"
 
 #include <stddef.h>
 #include <string.h>
 
-static zcl_codec_result_t advance(const zcl_id_t * volatile ctx, uint32_t now,
-                                  zcl_id_t * volatile next)
+static zcl_codec_result_t advance(const zcl_id_t * SDCC_VOLATILE ctx, uint32_t now,
+                                  zcl_id_t * SDCC_VOLATILE next)
 {
     uint32_t elapsed, seconds;
     elapsed = now - ctx->stamp;
@@ -56,14 +57,14 @@ zcl_codec_result_t zcl_id_tick(zcl_id_t *ctx, uint32_t now)
 /* Only a two-attribute transient view, not a copied frame or endpoint registry.
  * The existing read/dispatch path owns all global command/status semantics.
  */
-static zcl_codec_result_t global(zcl_id_t * volatile next,
-                                 const uint8_t * volatile request, const zcl_frame_info_t * volatile frame,
-                                 uint8_t * volatile response, uint16_t capacity,
-                                 zcl_dispatch_info_t * volatile info)
+static zcl_codec_result_t global(zcl_id_t * SDCC_VOLATILE next,
+                                 const uint8_t * SDCC_VOLATILE request, const zcl_frame_info_t * SDCC_VOLATILE frame,
+                                 uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                                 zcl_dispatch_info_t * SDCC_VOLATILE info)
 {
     zcl_attribute_set_t set;
     zcl_attribute_t attributes[2];
-    zcl_attribute_t * volatile attribute = attributes;
+    zcl_attribute_t * SDCC_VOLATILE attribute = attributes;
     zcl_wr_t edit;
     zcl_codec_result_t rc;
     uint8_t values[4], i;
@@ -102,10 +103,10 @@ static zcl_codec_result_t global(zcl_id_t * volatile next,
                                  response, capacity, info);
 }
 
-zcl_codec_result_t zcl_id_rx(zcl_id_t * volatile ctx, uint32_t now,
-                            const uint8_t * volatile request, uint16_t length,
-                            uint8_t * volatile response, uint16_t capacity,
-                            zcl_dispatch_info_t * volatile info)
+zcl_codec_result_t zcl_id_rx(zcl_id_t * SDCC_VOLATILE ctx, uint32_t now,
+                            const uint8_t * SDCC_VOLATILE request, uint16_t length,
+                            uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                            zcl_dispatch_info_t * SDCC_VOLATILE info)
 {
     zcl_id_t next;
     zcl_frame_info_t frame;
@@ -113,7 +114,7 @@ zcl_codec_result_t zcl_id_rx(zcl_id_t * volatile ctx, uint32_t now,
     zcl_header_t reply;
     zcl_codec_result_t rc;
     uint8_t payload[2];
-    const uint8_t * volatile input;
+    const uint8_t * SDCC_VOLATILE input;
     if (ctx == NULL || request == NULL || response == NULL || info == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
     rc = advance(ctx, now, &next);

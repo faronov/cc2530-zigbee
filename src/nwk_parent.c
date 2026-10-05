@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "nwk_parent.h"
 
 #include <stddef.h>
@@ -13,9 +14,9 @@
 #define PARENT_CANDIDATE candidate
 #endif
 
-nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * volatile table,
-                                      const nwk_parent_policy_t * volatile policy,
-                                      nwk_parent_choice_t * volatile output)
+nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * SDCC_VOLATILE table,
+                                      const nwk_parent_policy_t * SDCC_VOLATILE policy,
+                                      nwk_parent_choice_t * SDCC_VOLATILE output)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_PARENT, NWK_PARENT_INVALID_ARGUMENT);
@@ -29,7 +30,7 @@ nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * volatile table,
 #endif
     nwk_candidates_result_t fetched;
     uint8_t updates[NWK_CANDIDATES_CAPACITY];
-    volatile uint8_t i, j, eligible, best, delta, dominates, any, all;
+    SDCC_VOLATILE uint8_t i, j, eligible, best, delta, dominates, any, all;
 
     if (table == NULL || policy == NULL || output == NULL || policy->minimum_known > 1u)
         return LW_RETURN(LW_PARENT, NWK_PARENT_INVALID_ARGUMENT);

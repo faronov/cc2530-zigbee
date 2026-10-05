@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "mac_poll.h"
 #include <stddef.h>
 #include <string.h>
+
 #include "mac_link_workspace_guard_internal.h"
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
@@ -80,12 +82,12 @@ static uint32_t MAC_POLL_RAM step_time;
 /* Sequential argument staging avoids a forwarding call's four SDCC IRAM
  * spills. Both entries replace every argument, including the RX profile.
  */
-static mac_poll_t MAC_POLL_RAM * volatile step_poll;
-static MAC_POLL_OWNER_T MAC_POLL_RAM * volatile step_tx;
-static const mac_poll_event_t MAC_POLL_RAM * volatile step_event;
-static mac_poll_action_t MAC_POLL_RAM * volatile step_action;
-static volatile uint32_t MAC_POLL_RAM step_now;
-static volatile uint8_t MAC_POLL_RAM step_profile;
+static mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE step_poll;
+static MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE step_tx;
+static const mac_poll_event_t MAC_POLL_RAM * SDCC_VOLATILE step_event;
+static mac_poll_action_t MAC_POLL_RAM * SDCC_VOLATILE step_action;
+static SDCC_VOLATILE uint32_t MAC_POLL_RAM step_now;
+static SDCC_VOLATILE uint8_t MAC_POLL_RAM step_profile;
 #endif
 
 #if defined(CC2530_MAC_LINK_RAM)
@@ -202,7 +204,7 @@ static void decide(uint8_t protocol, uint8_t cause, uint32_t stamp)
 }
 
 #if defined(CC2530_MAC_LINK)
-static uint8_t accept_ack(mac_tx_interval_t MAC_POLL_RAM * volatile tx)
+static uint8_t accept_ack(mac_tx_interval_t MAC_POLL_RAM * SDCC_VOLATILE tx)
 {
     if (!(control.tx_phase == MAC_TX_ACK_WAIT && tx->engine.phase == MAC_TX_STOPPING
         && tx->engine.outcome == MAC_TX_ACKED
@@ -235,7 +237,7 @@ static uint8_t accept_ack(mac_tx_interval_t MAC_POLL_RAM * volatile tx)
     return 1;
 }
 #else
-static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * volatile tx)
+static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * SDCC_VOLATILE tx)
 {
     if (!(control.tx_phase == MAC_TX_ACK_WAIT && tx->phase == MAC_TX_STOPPING
         && input.source.kind == MAC_TX_EVENT_ACK && input.crc_valid
@@ -262,7 +264,7 @@ static uint8_t accept_ack(mac_tx_t MAC_POLL_RAM * volatile tx)
 }
 #endif
 
-mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile p)
+mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_POLL_INIT, MAC_POLL_INVALID);
@@ -283,9 +285,9 @@ mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile p)
     return POLL_RETURN(MAC_POLL_OK);
 }
 
-mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx,
-    const mac_poll_request_t MAC_POLL_RAM * volatile request, uint32_t volatile now)
+mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx,
+    const mac_poll_request_t MAC_POLL_RAM * SDCC_VOLATILE request, uint32_t SDCC_VOLATILE now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_POLL_START, MAC_POLL_INVALID);
@@ -294,7 +296,7 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
         !LW_IO(LW_POLL_START, request, sizeof(*request), 0)) return LW_RETURN(LW_POLL_START, MAC_POLL_INVALID);
 #endif
     uint8_t command = MAC_COMMAND_DATA_REQUEST;
-    volatile uint32_t generation;
+    SDCC_VOLATILE uint32_t generation;
     if (p == NULL || tx == NULL || request == NULL)
         return POLL_RETURN(MAC_POLL_INVALID);
 #if defined(CC2530_MAC_LINK_RAM)
@@ -370,8 +372,8 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile p,
 
 static mac_poll_result_t step(void)
 {
-    volatile uint8_t kind, observation, status, unbound, response;
-    volatile uint32_t remaining;
+    SDCC_VOLATILE uint8_t kind, observation, status, unbound, response;
+    SDCC_VOLATILE uint32_t remaining;
     if (step_poll == NULL || step_tx == NULL || step_action == NULL || step_profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return MAC_POLL_INVALID;
 #if defined(CC2530_MAC_LINK_RAM)
@@ -631,10 +633,10 @@ publish:
     return MAC_POLL_OK;
 }
 
-mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
-    const mac_poll_event_t MAC_POLL_RAM * volatile event,
-    mac_poll_action_t MAC_POLL_RAM * volatile action)
+mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx, uint32_t SDCC_VOLATILE now,
+    const mac_poll_event_t MAC_POLL_RAM * SDCC_VOLATILE event,
+    mac_poll_action_t MAC_POLL_RAM * SDCC_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_POLL_STEP, MAC_POLL_INVALID);
@@ -652,10 +654,10 @@ mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile p,
     return POLL_RETURN(step());
 }
 
-mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
-    const mac_poll_event_t MAC_POLL_RAM * volatile event,
-    mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile)
+mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx, uint32_t SDCC_VOLATILE now,
+    const mac_poll_event_t MAC_POLL_RAM * SDCC_VOLATILE event,
+    mac_poll_action_t MAC_POLL_RAM * SDCC_VOLATILE action, uint8_t SDCC_VOLATILE profile)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_POLL_STEP, MAC_POLL_INVALID);
@@ -673,8 +675,8 @@ mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile p,
     return POLL_RETURN(step());
 }
 
-mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,
-    mac_poll_record_t MAC_POLL_RAM * volatile record)
+mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p,
+    mac_poll_record_t MAC_POLL_RAM * SDCC_VOLATILE record)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_POLL_OTHER, MAC_POLL_INVALID);
@@ -697,8 +699,8 @@ mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile p,
     return POLL_RETURN(MAC_POLL_OK);
 }
 
-mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile p,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx)
+mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_POLL_OTHER, MAC_POLL_INVALID);

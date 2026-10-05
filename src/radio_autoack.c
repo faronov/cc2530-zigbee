@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "radio_autoack.h"
 #include "timebase.h"
 #include <stddef.h>
@@ -232,7 +233,7 @@ static radio_autoack_result_t progress(void)
     now = timebase_read_awake_ticks24();
     status.polls++;
     status.elapsed_ticks = (now - work.start) & TIMEBASE_TICKS_MASK;
-    status.timebase_status = timebase_expired(now, work.deadline, &expired);
+    status.timebase_status = timebase_expired(now, work.deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (status.timebase_status != TIMEBASE_OK || status.elapsed_ticks >= TIMEBASE_HALF_RANGE ||
         ((now - work.previous) & TIMEBASE_TICKS_MASK) >= TIMEBASE_HALF_RANGE)
         return RADIO_AUTOACK_TIME_ERROR;
@@ -350,7 +351,7 @@ static radio_autoack_result_t operate(uint8_t operation,
     memset(&status, 0, sizeof(status));
     work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     if (operation == 0 || operation == 3) {
         if (operation == 0) {
@@ -561,6 +562,8 @@ static void cca_settle(void) __naked
         ret
     __endasm;
 }
+#elif defined(CC2530_CLANG)
+static void cca_settle(void) { __asm__ volatile("nop\nnop\nnop\nnop"); }
 #else
 static void cca_settle(void) { host_mmio_system_cycles(4); }
 #endif
@@ -594,7 +597,7 @@ radio_autoack_result_t radio_autoack_send(
     memset(&status, 0, sizeof(status));
     work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 11;
     CHECK(poll()); CHECK(tx_idle());
@@ -668,7 +671,7 @@ static MCU_XDATA mac_epoch_t attempt_epoch;
 static MCU_XDATA mac_epoch_stamp_t attempt_delta;
 static radio_autoack_attempt_t MCU_XDATA * MCU_XDATA attempt_output;
 /* Keep long-lived arithmetic in XDATA, not SDCC's scarce DATA spill cache. */
-static volatile MCU_XDATA struct {
+static SDCC_VOLATILE MCU_XDATA struct {
     uint32_t ticks, duration, until;
     uint8_t head, phr;
 } attempt;
@@ -712,7 +715,7 @@ radio_autoack_result_t radio_autoack_prepare(
     if (result != RADIO_AUTOACK_READY) return result;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 17;
     CHECK(poll()); CHECK(tx_idle());
@@ -779,7 +782,7 @@ radio_autoack_result_t radio_autoack_attempt(
     attempt_output = output;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     CHECK(poll()); CHECK(tx_idle());
     REQUIRE(work.search_disabled && work.cca == 4 && !(status.flags1 & 2u) &&
@@ -1003,7 +1006,7 @@ static radio_autoack_result_t handoff_empty(void)
         RADIO_AUTOACK_READY : RADIO_AUTOACK_HANDOFF_RACE;
 }
 
-static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volatile output)
+static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * SDCC_VOLATILE output)
 {
     const mac_time_stamp_t MCU_XDATA *raw;
     mac_time_result_t sampled;
@@ -1022,10 +1025,11 @@ static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volati
     return RADIO_AUTOACK_WORK_LIMIT;
 }
 
-radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile uint16_t limit,
-                                            radio_autoack_handoff_clock_t MCU_XDATA * volatile clock)
+radio_autoack_result_t radio_autoack_handoff(SDCC_VOLATILE uint32_t timeout,
+                                            SDCC_VOLATILE uint16_t limit,
+                                            radio_autoack_handoff_clock_t MCU_XDATA * SDCC_VOLATILE clock)
 {
-    volatile MCU_XDATA radio_autoack_result_t result;
+    SDCC_VOLATILE MCU_XDATA radio_autoack_result_t result;
     if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
     if (!clock || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
         return RADIO_AUTOACK_INVALID_ARGUMENT;
@@ -1034,7 +1038,7 @@ radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile
     if (result != RADIO_AUTOACK_READY) return result;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 22;
     CHECK(poll()); CHECK(handoff_empty());
@@ -1109,7 +1113,7 @@ radio_autoack_result_t radio_autoack_configure(
         if (configuration->ieee[i] != owned.ieee[i]) return RADIO_AUTOACK_INVALID_ARGUMENT;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 24;
     CHECK(poll()); CHECK(stopped());

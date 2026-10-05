@@ -492,8 +492,14 @@ def verify_artifacts(output, board, image_name="bringup"):
     memory = (output / f"{image_name}.mem").read_text(encoding="utf-8")
     debug = (output / f"{image_name}.cdb").read_bytes().decode("utf-8")
     metrics = verify_layout(symbols, memory, debug, image_name)
-    for name in ("_main", "_bringup_initialize", "_bringup_tick", "__sdcc_external_startup"):
-        require(symbols[name] in image, f"Code symbol {name} is outside image")
+    for name in ("_main", "_bringup_initialize", "_bringup_tick"):
+        require(name in symbols and symbols[name] in image,
+                f"Code symbol {name} is outside image")
+    startup = next((name for name in
+                    ("__sdcc_external_startup", "___sdcc_external_startup")
+                    if name in symbols), None)
+    require(startup is not None, "Missing SDCC external startup hook")
+    require(symbols[startup] in image, "SDCC external startup hook is outside image")
     address = symbols["_board_description"]
     require(all(image.get(address + offset) == BOARDS[board] for offset in range(2)),
             "Linked board identity/policy does not match selected board")
@@ -543,10 +549,14 @@ def verify_artifacts(output, board, image_name="bringup"):
         r"ROM/EPROM/FLASH\s+0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\d+)\s+(\d+)",
         memory,
     )
-    holes = IRQ_VECTOR_HOLES if image_name == "irq_fixture" else ()
-    require(set(range(max(image) + 1)) - image.keys() == set(holes), "Unexpected board CODE holes")
+    holes = set(IRQ_VECTOR_HOLES) if image_name == "irq_fixture" else set()
+    missing = set(range(max(image) + 1)) - image.keys()
+    # SDCC 4.5 reserves the unused five-byte interrupt-0 slot explicitly;
+    # older releases emit bytes there. Accept either exact layout.
+    vector0_slot = set(range(3, 8))
+    require(missing in (holes, holes | vector0_slot), "Unexpected board CODE holes")
     require(flash is not None and int(flash[1], 16) == 0
-            and int(flash[2], 16) == max(image) and int(flash[3]) == len(image) + len(holes)
+            and int(flash[2], 16) == max(image) and int(flash[3]) == len(image) + len(missing)
             and int(flash[4]) == CODE_LIMIT, "Linked flash accounting mismatch")
     metrics["code_bytes"] = len(image)
     metrics["image_extent_bytes"] = len(binary)
