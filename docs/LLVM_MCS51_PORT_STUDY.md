@@ -425,6 +425,11 @@ SDCC numbers come from the TM study document, not re-measured here.
     These two latent defects show that upstream CI does not exercise an
     assertion-enabled build on real C.
 13. `--no-check-sections` required; `-fstack-usage` underestimates.
+14. **Stack arguments through bank thunks** (found in §19.8; shipped and fixed
+    toolchains). The callee reads incoming stack arguments 3 bytes too low
+    when it is entered via the cc2530 bank thunk. This affects 45 callees and
+    86 call sites. Reduced test: `E/banking/stackarg-thunk/run.sh`. The
+    "0 incorrect thunks" result in §10–§11 covers bank/target encoding only.
 
 Validation of the study fixes: the assertion-enabled `build-llvm-fix` (clang +
 lld at `4c0e1ff15`) passes 11/11 tests: `clang/test/MCS51` (3, including
@@ -469,15 +474,432 @@ image runs.
 8. Interrupts across bank switches: not applicable / not proven (no ISRs; thunk not IRQ-safe).
 9. Fixed-address objects: production yes (1 object); test images no.
 10. Generic pointers: no in general (two defects + escape miscompile); firmware exposure avoided.
-11. Clang changes alter SDCC: yes (+1578 CODE, +19 XSEG, −1 BSEG).
-12. LLVM populated CODE: 222090.
+11. Clang changes alter SDCC: yes (+1578 CODE, +19 XSEG, −1 BSEG). *Superseded:*
+    byte-identical after `5b5687b`/`b3542de` (§19.1).
+12. LLVM populated CODE: 222090. *Corrected:* 196172 on the identical source (§19.1).
 13. Common CODE: 12389.
 14. Raw XDATA: 4842 + absolute status.
 15. Internal DATA/IDATA: 8 register + 24 pseudo-register bytes; 0 globals; 128 B stack.
-16. Stack demand/capacity: 529 / 128 (fail).
+16. Stack demand/capacity: 529 / 128 (fail). *Corrected:* 476 (plain), 162 with the
+    static-frame study flags (§19.8).
 17. Minimum bank headroom: 0 B.
 18. Full simulator join: no.
 19. `--gc-sections` saving: 0 B.
 20. Overlay saving: 0 B.
 21. Full LTO usable: no.
 22. UNSUITABLE (not production-ready).
+
+## 19. Backend-architecture study (static machine frames)
+
+This section follows the classification in §18 and adds a backend-architecture
+study. Its evidence lives under `E/` = `build/llvm-study/`.
+
+* LLVM: `study/fixes` at `a52aea89d`, which sits on `4c0e1ff15`. It adds the
+  following study-only options (`-mllvm`):
+  * `-mcs51-frame-census`
+  * `-mcs51-static-frames`
+  * `-mcs51-csr=default|r|none`
+  * `-mcs51-overlay-census`
+
+  Default codegen is unchanged: there are 0 disassembly differences over the 45
+  firmware objects.
+* Firmware: branch `llvm-study/compat-v2`, commits `5b5687b` and `b3542de`.
+
+The banking, the fixed lld and the fixed startup are frozen, as described in
+§10–§11. No hardware was flashed.
+
+### 19.1 Baseline integrity
+
+**`-fpack-struct=1`.** With the fixed clang (`2f70dd019`, ShortAlign = 8), the
+option is a no-op:
+
+* `-Oz` and `-Oz -fpack-struct=1` produce identical objects in all 45 TUs
+  (`E/layout/fix-{plain,pack}`).
+* The shipped clang needs the option only to work around the ShortAlign = 16
+  bug, which is what reproduces SDCC's 1-byte alignment.
+
+A probe of 140 firmware records against SDCC `sizeof`/`offsetof`
+(`E/layout/probe/sdcc-vs-fix.txt`) found:
+
+* 120 records identical;
+* 20 records differing only because of pointer width. A pointer is 3 bytes in
+  SDCC (generic) and 2 bytes in clang. For example, `zcl_basic_t` is 152/145 B,
+  `bdb_join_t` 1313/1312, `mac_link_driver_t` 305/302 and `nwk_aps_t` 583/582.
+
+All 20 are internal-only C state. None of them is a wire, NV, DMA, assembly,
+fixed-offset or aliased layout; those layouts use byte arrays and explicit
+serialisation and match SDCC.
+
+**SDCC source identity.** The +1578 CODE / +19 XSEG / −1 BSEG regression in §3
+was attributed per symbol (`E/audit/`):
+
+| Cause | Effect |
+|---|---|
+| `mac_tx` save/load_control rewritten from `memcpy` to per-field copies | +649 / +616 |
+| `zdo_runtime` helper refactor | +358 ×2, plus 13 B of parameters |
+| `-Itoolchain/clang/include` in the SDCC defines, which swapped the `memcpy`/`memset` prototypes | +2/+4/+6 at many call sites |
+| `aes` `owned()` rewrite | BSEG −1 |
+
+All four were redesigned in `5b5687b`. `b3542de` then routes the SDCC
+spill-hint `volatile` locals through `SDCC_VOLATILE`. These are 288 of the 294
+IR allocas, used only via `addrspacecast` + `volatile`, so on clang they were a
+pure pessimisation.
+
+The SDCC image of the compatibility source is **byte-identical** to the base:
+ihx `10155c95…`. All LLVM numbers below come from this same source.
+
+**Corrected LLVM baseline (LLVM-PLAIN, `Oz-v4-plain`).**
+Configuration: `-Oz`, no pack, no LTO, overlay off, fixed lld/startup/banking.
+
+| Metric | Value |
+|---|---:|
+| CODE | 196172 |
+| Common CODE | 16179 |
+| Raw XDATA | 4841 `.bss`, plus the absolute status block at 0x1E00 |
+| Register bytes | 8 |
+| Pseudo-register bytes | 24 |
+| Ordinary globals | 0 |
+| Stack | 476 / 128 (fail) |
+| Thunks | 373, 0 encoding errors |
+
+* Banks 1–5 are full (0–2 B free).
+* Bank 6 holds 16156 B and bank 7 holds 0 B.
+* Aggregate bank slack is 43239 B.
+
+The earlier `Oz-fix` figures (222090 CODE / 12389 common / 4842 XDATA /
+529 stack) are superseded.
+
+Why the numbers changed:
+
+* About 25 KB of the CODE drop is the clang-only `SDCC_VOLATILE` change.
+* Common CODE grew because `zdo_runtime` code is now inlined into
+  `MCU_COMMON_CODE` functions.
+
+### 19.2 Stack decomposition
+
+The census tool (`-mcs51-frame-census` plus `E/stack/stack_analysis.py`)
+attributes every byte on the worst path (`E/stack/census-Oz-*.json`). The
+analyzer fails closed on recursion and on any `jmp @a+dptr` other than the save
+helpers and the RAM-exec entry. It found neither.
+
+| Category (worst path) | v2 Oz-plain | **v4-plain** |
+|---|---:|---:|
+| `main` return | 2 | 2 |
+| Nested return addresses (19 calls) | 38 | 38 |
+| Bank thunk: return + FMAP (19 banked calls) | 38 + 19 | 38 + 19 |
+| Callee-saved R2–R7 | 96 | 89 |
+| Callee-saved IM8–IM23 (pseudo-registers) | 138 | 170 |
+| Outgoing arguments | 40 | 40 |
+| RA spills | 66 | 55 |
+| Fixed locals / allocas | 90 | 25 |
+| Interrupts | 0 (no ISRs; vectors 3 B) | 0 |
+| **Total** | **527** | **476** |
+
+Worst path for v4-plain, 476 B:
+
+`main → join_smoke_poll → mac_link_driver_step → observe → bdb_join_step →
+nwk_aps_step → nwk_aps_transmit → security_keys_send → seal → ed_wire_crypt →
+ccm_star_crypt → feed → flush → encrypt → aes128_encrypt_block → sample →
+timebase_expired → link_work_io → child_work_address → edge`.
+
+All of the top 20 paths (476…) run through the same crypto chain.
+
+Top functions by hardware-stack bytes (frame, CSR, of which IM):
+
+| Function | Total | Frame | CSR | CSR IM |
+|---|---:|---:|---:|---:|
+| `aes128_encrypt_block` | 54 | 26 | 22 | 16 |
+| `ed_wire_crypt` | 53 | 15 | 22 | 16 |
+| `ccm_star_crypt` | 44 | 20 | 22 | 16 |
+| `mac_join_step` | 36 | 4 | 22 | 16 |
+| `zigbee_key_hash` | 36 | 8 | 20 | 14 |
+| `zdo_runtime_step` | 33 | 3 | 22 | 16 |
+| `mac_poll` `step` | 32 | 2 | 20 | 14 |
+| `mac_scan_step` | 32 | 0 | 22 | 16 |
+| `mac_tx_interval_submit` | 32 | 6 | 16 | 10 |
+| `security_keys_receive` | 32 | 4 | 22 | 16 |
+
+The JSON holds the top 50 functions and top 20 paths.
+
+Static totals over 380 functions:
+
+| Object | v4 | v2 |
+|---|---:|---:|
+| Allocas | 52 B | 548 B |
+| Spills | 279 B | 393 B |
+| CSR R | 963 B | 988 B |
+| CSR IM | 1826 B | 1498 B |
+| Outgoing arguments (max) | 245 B | – |
+
+**Conclusion.** About 54% of the demand (259 of 476 B) is callee-saved register
+traffic. Spills add 12% and argument/local slots 14%. The irreducible part
+(return addresses and bank thunks) is 97 B.
+
+### 19.3 Why the existing overlay saves 0 B
+
+The `-mcs51-overlay-census` run (`E/overlay/`) shows that `MCS51Overlay` sees
+only IR allocas: **294 allocas, 597 B, 0 eligible**.
+
+* 219 are rejected because their function has external linkage.
+* 75 are rejected as escaping.
+* 288 of the 294 (586 B) are used only through `addrspacecast` to the IDATA
+  space plus `volatile`. These are the SDCC spill-hint idioms, and the pass
+  treats `addrspacecast` as an escape.
+
+The pass runs before instruction selection. The objects created later are
+invisible to it:
+
+| Created after the pass (v2) | Bytes |
+|---|---:|
+| RA spills | 393 |
+| CSR saves | 2486 |
+| Outgoing arguments | 245 |
+| **Total** | **3124** |
+
+That is about 85% of all frame bytes. The answer is **yes**: most problematic
+stack bytes are created after the overlay pass. Even a perfect IR-level overlay
+could not address CSR or spills.
+
+### 19.4 Frame-object classification
+
+The analyzer proves for this firmware that there is:
+
+* no recursion;
+* no ISR (vectors are 3 B);
+* no unresolved indirect call.
+
+The prototype still fails closed per function:
+
+* recursive, `interrupt` or variadic functions keep stack frames;
+* functions with dynamic allocas keep stack frames.
+
+| Object class | Bytes (v4, static) | Classification |
+|---|---:|---|
+| RA spill slots | 279 | **Static-overlay eligible** (not addressable, function-private) |
+| CSR save slots | 2789 | Eligible as static save areas, or removable by CSR policy |
+| Outgoing stack arguments | 245 (max) | Eligible only with static argument frames, an ABI change. Currently **must stay on the stack** |
+| Address-taken locals (FRAMEADDR8 IDATA pointers) | 52 | **Must stay on the hardware stack** in this prototype. An 8-bit IDATA pointer cannot address PDATA; moving them needs generic or XDATA pointers |
+| Return addresses, bank thunk FMAP | 97 on the worst path | **Must stay on the hardware stack** |
+| Variable-sized objects | 0 | – |
+| Interrupt-sensitive state | 0 | – |
+| Non-overlayable static | 0 | – |
+
+### 19.5 Architecture comparison
+
+| | A. Hardware-stack frames (current) | B. XDATA/PDATA software stack | C. Static frames + overlay |
+|---|---|---|---|
+| Stack/RAM | 476 B demand, does not fit | Frames off the 128 B stack; RAM equals the dynamic peak | 97–162 B hardware stack; the PDATA pool is the overlay peak (55–222 B measured) |
+| Per-access cost | `mov a,sp; add; mov r0,a; mov a,@r0` | Pointer arithmetic + `movx`, about 6–10 B | `mov r1,#sym; movx`: 3 B, plus A save if live |
+| CODE (measured/estimate) | baseline | Estimated well above C (not prototyped) | spills: −1443; spills + CSR none: +23.6 KB |
+| Reentrancy | full | full | none; fails closed |
+| ISR safety | yes | needs an atomic SP update | needs separate ISR frames or exclusion |
+| Complexity | existing | new frame lowering + runtime | frame lowering + link-time allocator |
+| LTO needed | no | no | **no**: a per-function metadata section plus a prelink allocator |
+
+B was not prototyped. C was chosen because the firmware is provably
+nonrecursive and ISR-free, and because SDCC's overlay already succeeds on the
+same program.
+
+### 19.6 Static-frame design without LTO
+
+Compiler side:
+
+* Each eligible function gets a section `.mcs51.pdata.bss.sframe.<fn>`,
+  holding the symbol `__sframe.<fn>`.
+* Eligible frame indices are rewritten by
+  `MCS51RegisterInfo::eliminateStaticFrameIndex` to `MOV R1,#__sframe.<fn>+off`
+  followed by `MOVX`.
+
+Link side (`E/sframe/sframe_link.py`):
+
+* **Pass 1** links the program with the frames packed. The code size is
+  independent of the frame addresses, so layout is final.
+* It builds the linked call graph with the fail-closed analyzer.
+* It assigns `offset(f) = max over callers (offset(c) + size(c))`, so the
+  frames of simultaneously active functions never overlap.
+* **Pass 2** relinks with the fixed PDATA addresses and verifies the result.
+
+This is the SDCC overlay model, driven by linked-image facts instead of LTO.
+Production would want:
+
+* compiler-emitted call-edge and frame metadata, rather than disassembly;
+* an lld or prelink pass instead of the Python script.
+
+### 19.7 Spills, CSR and pseudo-registers
+
+**Spills.** Generic RA creates ordinary spill frame indices
+(`MFI.isSpillSlotObjectIndex`), and they can be redirected without touching the
+register allocator. `-mcs51-static-frames` does exactly that.
+
+**CSR (Phase 10).** The default callee-saved set is R2–R7 plus IM8–IM23, which
+is 22 bytes:
+
+* 250 of 380 functions save IM8/IM9;
+* 51 functions save 8 IMs and 14 functions save 16.
+
+The bank thunk adds no preservation beyond FMAP.
+
+The shipped backend attaches **no call-preserved regmask** to calls. Changing
+the CSR list alone therefore miscompiles: callers assume preservation. The
+study flag adds the regmask in `LowerCall` and in the `ICALL_W` inserter.
+
+| Option | Stack | CODE |
+|---|---:|---:|
+| `-mcs51-csr=r` | 253 | +23.5 KB |
+| `-mcs51-csr=none` | 162 | +25.1 KB |
+
+The CODE grows because values now live across calls in static spill slots
+(each access costs 3–5 B). The CSR set is therefore not "too broad" in a
+CODE sense: it trades stack for code density.
+
+The better design is to keep the CSR policy and move the **save area** into the
+static frame. This could be done with a shared save/restore helper operating
+through `@R1`. Expected result: about v4-sfn stack at about v4-sf CODE. This is
+an estimate and is not prototyped.
+
+**Pseudo-registers (Phase 11).** All 24 bytes are used, and IM0/IM1 are the
+hottest (about 6.7k and 6.3k references in v4-plain). IM20–IM23 are saved by
+14–35 functions.
+
+A larger IM file would reduce spills (at most 55 B on the worst path) but would
+add CSR bytes unless the IMs are caller-saved. With `csr=r` the IMs become
+scratch space and the stack is still 253 B. Enlarging the IM file is therefore
+not the main lever: the save policy is.
+
+### 19.8 Prototype (`-mcs51-static-frames`, ± CSR study)
+
+| Metric | SDCC 4.2 | SDCC TM | LLVM plain (v4) | LLVM frame (v4-sf) | Frame + `csr=none` (v4-sfn) |
+|---|---:|---:|---:|---:|---:|
+| CODE | 253445 | 247449 | 196172 | 194729 | 219805 |
+| Common CODE | 32714 | 31922 | 16179 | 16155 | 17560 |
+| Raw XDATA | 7676 | 7676 | 4841 | 4841 + 55 pool | 4841 + 222 pool |
+| DATA/IDATA | – | – | 8 reg + 24 IM | same | same |
+| Static frames (in image) | – | – | 0 | 100 frames, 265 B → overlaid 55 B | 219 frames, 1873 B → overlaid 222 B |
+| Hardware stack demand | 45 | 45/46 | 476 | 421 | **162** |
+| Stack capacity | 128 | 128 | 128 | 128 | 128 |
+| Peak SP (sim, cases 1–3) | – | – | 0x93–0x9E | 0x93 | 0x8B (case 4: 0xB5) |
+| Worst bank free | 13 | 90 | 0 | 0 | 0 |
+| Aggregate bank slack | – | – | 43239 | 44658 | 20987 |
+| Simulator cases passed (0–4) | ref | ref | 1, 2, 3 | 1, 2, 3 | 1, 2, 3, 4 |
+
+* **Per-bank deltas vs plain.** v4-sf: bank 6 −1418 B, the other banks
+  unchanged. v4-sfn: banks 1–6 full and bank 7 +5641 B used.
+* "Worst bank free 0" comes from the greedy fill-first auto-banking in every
+  LLVM image. The bank-7 tail is the real margin. There was no rebalancing.
+* The compiler emitted 109 frames / 331 B for v4-sf; 100 frames / 265 B are in
+  the linked image. The cause of the difference was not verified.
+
+**Simulator (patched ucsim; `E/ucsim-fix`).** Upstream ucsim had a
+use-after-free in `~cl_banker`, which this study fixed. The harness also missed
+the high-water mark of the reset stage; this is now fixed (`reset_peak_sp`).
+
+* plain and sf, cases 0 and 4: stack overflow at step 2, event 3.
+* sfn, case 4: passes, peak 54 B.
+* sfn, case 0: passes event 3 and reaches step 2, event 259, where it fails on
+  the new banking defect below. This is not a stack failure.
+
+**New generic defect: stack arguments through bank thunks** (all LLVM images,
+shipped and fixed toolchains).
+
+`LowerFormalArguments` addresses incoming stack arguments at
+`-(LocMemOffset+2)`, which assumes a bare LCALL. The cc2530 bank thunk
+(`push FMAP; mov FMAP,#b; lcall f; pop FMAP; ret`) inserts 3 more bytes, so the
+callee reads the saved FMAP and the caller's return address as its arguments.
+
+* Observed: `mac_radio_init → clock_select_init` read `&clock_status` as 0xDA05
+  and wrote XDATA 0xDA17.
+* Scale: 45 stack-argument callees are reached through 86 thunked call sites
+  (`E/banking/stackarg-*.json`). `thunk_audit.py` verified only the
+  bank/target encoding of the thunks; it did not check stack-argument offsets.
+  Simulator cases 1–3 do not check these calls.
+* Reduced test: `E/banking/stackarg-thunk/run.sh`. The banked call returns
+  0x0100 instead of 0x1234; the direct call is correct.
+
+It is not fixed because banking is frozen. The fix options are:
+
+* callee offset +3, with every banked entry going through the thunk;
+* a layout-preserving thunk;
+* static argument frames, which also removes 38–40 B from the stack.
+
+**Generic pointers.** The two defects from §9 are still not reached:
+`-mcs51-static-frames` uses only `MOVX @R1` and no generic pointers. Their
+reduced tests are kept.
+
+**Full LTO** remains deferred (§16).
+
+**Economics.** On the same source, LLVM is smaller than SDCC TM:
+
+| LLVM image | CODE vs TM | Raw XDATA vs TM |
+|---|---:|---:|
+| plain (v4) | −51.3 KB (−20.7%) | about −2.8 KB |
+| frame + `csr=none` (v4-sfn) | −27.6 KB (−11.2%) | about −2.6 KB |
+
+The advantage became larger after the baseline correction, not smaller.
+
+### 19.9 Answers (backend-architecture study)
+
+**Baseline integrity**
+
+1. `-fpack-struct` required: **no** with the fixed clang (no-op in 45/45 TUs);
+   only as a workaround for the ShortAlign bug in the shipped clang.
+2. Layout semantic equivalence: yes for every externally observable layout. 20
+   internal records differ only by the 2-byte versus 3-byte pointer width.
+3. SDCC compatibility-source identity: **byte-identical** (ihx `10155c95…`,
+   `5b5687b` + `b3542de`).
+4. Corrected LLVM CODE: 196172 (common 16179).
+5. Corrected LLVM XDATA: 4841, plus the absolute status block.
+
+**Stack decomposition (v4-plain)**
+
+6. Total demand: 476 B (v2: 527; earlier: 529).
+7. Locals: 25 B.
+8. Spills: 55 B.
+9. Saved registers: 259 B (89 R2–R7 + 170 IM).
+10. Arguments: 40 B.
+11. Return addresses: 40 B (38 nested + 2 `main`).
+12. Banking: 57 B (19 thunks × 3).
+13. Interrupt contribution: 0 B (no ISRs).
+
+**Existing overlay failure**
+
+14. IR allocas seen: 294 (597 B); 0 eligible.
+15. Machine spill slots missed: all of them, 393 B (v2) / 279 B (v4). CSR
+    (2486 B) and arguments (245 B) were missed as well: about 85% of frame
+    bytes are created after the pass.
+16. Why the overlay saves 0: `addrspacecast` is treated as an escape; the SDCC
+    volatile idioms; external linkage; and the pass runs before ISel/RA.
+
+**Static frame design**
+
+17. Eligible frame bytes: 279 (spills) + 2789 (CSR save areas) = 3068 static
+    bytes.
+18. Non-overlayable bytes: 0.
+19. Must-stack bytes: return addresses + bank (97 on the worst path); 52
+    address-taken bytes; arguments (245 max) unless static argument frames are
+    added.
+20. Recursion/reentrancy blockers: none in this firmware (proven). The compiler
+    fails closed for others.
+21. Proposed storage: an overlaid PDATA page (`MOVX @R1`, at most 256 B) for
+    frames; DATA/IDATA only for IMs; XDATA via DPTR as overflow.
+
+**Prototype**
+
+22. Functions converted: 100 (spills only) / 219 (with `csr=none`).
+23. Stack before: 476.
+24. Stack after: 421 (sf) / 162 (sfn).
+25. CODE delta: −1443 / +23633.
+26. XDATA delta: +55 / +222 (overlaid PDATA pool).
+27. Bank-headroom delta: worst bank 0 → 0; aggregate slack +1419 / −22252.
+28. Simulator result: sfn passes cases 1–4. Case 0 is blocked by the bank-thunk
+    stack-argument defect, not by the stack.
+
+**Recommendation**
+
+29. Continue LLVM backend work: **YES**. The CODE/XDATA advantage holds on the
+    same source, and the static-frame mechanism scales.
+30. Likely path to a stack of at most 128 B: **PLAUSIBLE**. The v4-sfn worst
+    path is 162 B. Static argument frames (−38) and IDATA→static allocas (−25)
+    leave about 99 B, but this is not yet proven, and moving the CSR save area
+    must also avoid the +25 KB CODE cost.
+
+The classification remains **UNSUITABLE** for production for now.
