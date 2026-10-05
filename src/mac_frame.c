@@ -71,7 +71,7 @@ mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile
     if (!LW_IO(LW_CHILD_COMMAND, payload, length, 0) ||
         !LW_IO(LW_CHILD_COMMAND, result, sizeof(*result), 1)) return MAC_CODEC_INVALID_ARGUMENT;
 #endif
-    mac_command_t candidate;
+    MCU_ESCAPED_LOCAL mac_command_t candidate;
     mac_codec_result_t status;
     uint8_t size;
 
@@ -266,7 +266,7 @@ static mac_codec_result_t command_header_policy(const mac_header_t *header,
                                                 uint8_t volatile mode)
 {
     /* Mode 0 is legacy RX, 1 is TX, and 2 is R22 Response RX. */
-    mac_command_t command;
+    MCU_ESCAPED_LOCAL mac_command_t command;
     mac_codec_result_t status;
     uint8_t compressed = (header->flags & MAC_FLAG_PAN_COMPRESSION) != 0u;
 
@@ -323,7 +323,8 @@ mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint1
     mac_frame_info_t candidate;
 #endif
     mac_codec_result_t status;
-    uint8_t destination_size, source_size, header_size, position;
+    MCU_ESCAPED_LOCAL uint8_t destination_size, source_size, header_size;
+    uint8_t position;
 
     if (body == NULL || result == NULL || profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return LW_RETURN(LW_MAC_DECODE, MAC_CODEC_INVALID_ARGUMENT);
@@ -430,7 +431,7 @@ mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
         !LW_IO(LW_MAC_ENCODE, length, 1, 1)) return LW_RETURN(LW_MAC_ENCODE, MAC_CODEC_INVALID_ARGUMENT);
 #endif
     mac_codec_result_t status;
-    uint8_t destination_size, source_size, header_size;
+    MCU_ESCAPED_LOCAL uint8_t destination_size, source_size, header_size;
 
     if (header == NULL || body == NULL || length == NULL || (payload == NULL && payload_length != 0u))
         return LW_RETURN(LW_MAC_ENCODE, MAC_CODEC_INVALID_ARGUMENT);
@@ -516,7 +517,7 @@ static mac_codec_result_t command_header_policy(const mac_header_t * volatile he
                                                 uint16_t volatile length, uint8_t volatile mode)
 {
     /* Mode 0 is legacy RX, 1 is TX, and 2 is R22 Response RX. */
-    mac_command_t command;
+    MCU_ESCAPED_LOCAL mac_command_t command;
     mac_codec_result_t status;
     uint8_t compressed;
 

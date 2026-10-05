@@ -78,7 +78,7 @@ zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, descriptor, sizeof(*descriptor), 0))
         return LW_RETURN(LW_ZDO_INIT, ZDO_RUNTIME_ARGUMENT);
 #endif
-    uint8_t length;
+    MCU_ESCAPED_LOCAL uint8_t length;
     if (!ctx || !descriptor || descriptor->logical_type != 2) return LW_RETURN(LW_ZDO_INIT, ZDO_RUNTIME_ARGUMENT);
     memset(&work.descriptor.node, 0, sizeof(work.descriptor.node)); work.descriptor.node.descriptor = *descriptor; work.descriptor.node.address = 1;
     if (zdo_node_rsp_encode(&work.descriptor.node, work.descriptor.descriptor_bytes, sizeof(work.descriptor.descriptor_bytes), &length) != ZDO_NODE_OK)
@@ -244,7 +244,7 @@ static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t received(
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;
     const ed_packet_t *p = &ctx->application;
-    uint8_t event;
+    MCU_ESCAPED_LOCAL uint8_t event;
     if (nwk_aps_take(transport, &ctx->application, &event) != NWK_APS_OK) return ZDO_RUNTIME_STATE;
     if (security_keys_status(&keys) != SECURITY_KEYS_OK) return ZDO_RUNTIME_SECURITY;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -368,7 +368,7 @@ zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(
     LW_ROOT(ZDO_RUNTIME_STATE);
     if (!LW_IO(LW_NONE, transport, sizeof(*transport), 1)) return ZDO_RUNTIME_ARGUMENT;
 #endif
-    uint8_t result;
+    MCU_ESCAPED_LOCAL uint8_t result;
 #if defined(__clang__)
     zdo_runtime_result_t rc = prepare_runtime_step(ctx, transport, now, &result);
 #else

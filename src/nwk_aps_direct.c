@@ -28,7 +28,7 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t ack
     ed_packet_t * volatile p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
     security_keys_result_t secured;
     nwk_aps_result_t btr;
-    uint8_t slot;
+    MCU_ESCAPED_LOCAL uint8_t slot;
     if (!frame) return NWK_APS_STATE;
     if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
     p->nwk.source = nwk_aps_keys.config.address; p->nwk.sequence = ctx->next_nwk++;

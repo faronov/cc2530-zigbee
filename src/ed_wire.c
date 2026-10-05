@@ -239,7 +239,7 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t * SDCC_VOLATILE packet
 
 #endif
     SDCC_VOLATILE uint8_t n, control;
-    uint8_t total, encoded_length;
+    MCU_ESCAPED_LOCAL uint8_t total, encoded_length;
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     total=encoded_length=0;
 #endif
@@ -304,7 +304,7 @@ static zigbee_security_result_t header(uint8_t layer, const uint8_t * SDCC_VOLAT
 static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * SDCC_VOLATILE frame, SDCC_VOLATILE uint16_t length)
 {
     zigbee_security_result_t result;
-    uint8_t h;
+    MCU_ESCAPED_LOCAL uint8_t h;
     SDCC_VOLATILE uint8_t c, a;
     result = header(layer, frame, length, &h);
     if (result) return result;

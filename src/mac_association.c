@@ -89,7 +89,7 @@ mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATI
 #else
     mac_frame_info_t frame;
 #endif
-    mac_command_t command;
+    MCU_ESCAPED_LOCAL mac_command_t command;
     uint8_t decision = MAC_ASSOCIATION_WAITING;
 
     if (!valid(ctx) || observation == NULL || profile > MAC_RX_R22_ASSOCIATION_RESPONSE)

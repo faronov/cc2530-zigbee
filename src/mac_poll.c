@@ -295,7 +295,8 @@ mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE p,
         !LW_IO(LW_POLL_START, tx, sizeof(*tx), 1) ||
         !LW_IO(LW_POLL_START, request, sizeof(*request), 0)) return LW_RETURN(LW_POLL_START, MAC_POLL_INVALID);
 #endif
-    uint8_t command = MAC_COMMAND_DATA_REQUEST;
+    MCU_ESCAPED_LOCAL uint8_t command;
+    command = MAC_COMMAND_DATA_REQUEST;
     SDCC_VOLATILE uint32_t generation;
     if (p == NULL || tx == NULL || request == NULL)
         return POLL_RETURN(MAC_POLL_INVALID);

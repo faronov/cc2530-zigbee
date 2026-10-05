@@ -118,7 +118,7 @@ static uint8_t finished(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volati
 
 static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
 {
-    uint8_t which, result;
+    MCU_ESCAPED_LOCAL uint8_t which, result;
     zdo_runtime_result_t rc;
     rc = zdo_runtime_step(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ctx->last);
     ctx->receive_result = (uint8_t)rc;
@@ -239,7 +239,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
 {
     bdb_join_result_t result;
     nwk_aps_result_t transported;
-    uint8_t outcome, which;
+    MCU_ESCAPED_LOCAL uint8_t outcome, which;
     MCS51_PARAM_VOLATILE uint8_t handled = 0, ignored = 0, pending;
     if (!action) return BDB_JOIN_ARGUMENT;
     result = bdb_join_advance(ctx, now);

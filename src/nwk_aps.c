@@ -365,7 +365,12 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uin
 #endif
     nwk_aps_result_t result;
     security_keys_result_t accepted;
-    uint8_t event, i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0, slot = 0, oldest = 0;
+    MCU_ESCAPED_LOCAL uint8_t event;
+    uint8_t i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0;
+    MCU_ESCAPED_LOCAL uint8_t slot;
+    uint8_t oldest;
+    slot = 0;
+    oldest = 0;
     ed_packet_t * MCS51_PARAM_VOLATILE p;
     if (!npdu) return NWK_APS_ARGUMENT;
     result = advance(ctx, now);

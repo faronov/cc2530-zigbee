@@ -31,12 +31,15 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     zdo_node_response_t reply;
 #endif
-    zdo_node_request_t request;
+    MCU_ESCAPED_LOCAL zdo_node_request_t request;
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     zdo_srv_info_t candidate;
-    uint8_t staged[23], size, simple;
+    uint8_t staged[23];
+    MCU_ESCAPED_LOCAL uint8_t size;
+    uint8_t simple;
 #else
-    uint8_t size, simple;
+    MCU_ESCAPED_LOCAL uint8_t size;
+    uint8_t simple;
 #endif
 
     if (local == NULL || rx == NULL || body == NULL || response == NULL || info == NULL)

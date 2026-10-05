@@ -251,7 +251,7 @@ mac_tx_result_t mac_tx_step(mac_tx_t * SDCC_VOLATILE tx, uint32_t now,
     uint8_t emitted = MAC_TX_ACTION_NONE;
     uint8_t kind = 0;
     uint8_t phase;
-    uint8_t normalized[3];
+    MCU_ESCAPED_LOCAL uint8_t normalized[3];
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     mac_frame_info_t decoded;
 #endif

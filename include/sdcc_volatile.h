@@ -13,4 +13,15 @@
 #define SDCC_VOLATILE
 #endif
 
+/* LLVM MCS51 keeps automatic objects in IDATA, and a local whose address is
+ * passed as a default (XDATA) pointer keeps its 8-bit value, so the callee
+ * accesses XDATA 0x00xx.  SDCC --model-large without --stack-auto already gives
+ * these objects static XDATA storage; Clang builds use the same storage class.
+ */
+#if defined(__clang__) && defined(__8051__) && defined(__CC2530__)
+#define MCU_ESCAPED_LOCAL static
+#else
+#define MCU_ESCAPED_LOCAL
+#endif
+
 #endif
