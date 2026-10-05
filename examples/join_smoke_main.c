@@ -27,6 +27,10 @@ void join_smoke_fault(void) __naked
 #endif
 void main(void)
 {
+#if defined(CC2530_CLANG)
+    /* LLVM cc2530_startup does not call the SDCC external-startup hook. */
+    CC2530_EXTERNAL_STARTUP();
+#endif
     join_smoke_initialize();
     for(;;) {
         if(join_smoke_status.phase!=JS_RUNNING && join_smoke_status.phase!=JS_READY) join_smoke_wait();

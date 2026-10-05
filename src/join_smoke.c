@@ -12,7 +12,9 @@ MCU_XDATA radio_autoack_config_t join_smoke_initial;
 MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
+#if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
+#endif
 
 static MCU_XDATA uint8_t initialized, gate, i;
 /* Admission scratch is dead once started; the start loop and RUNNING/READY
