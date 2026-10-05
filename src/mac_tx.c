@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 #include <string.h>
-
 #include "mac_link_workspace_guard_internal.h"
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
@@ -32,6 +31,18 @@ typedef struct {
     CONTROL_FIELDS(CONTROL_MEMBER)
 } control_t;
 #undef CONTROL_MEMBER
+#define CONTROL_LAYOUT(type, name) \
+    typedef char control_layout_##name[ \
+        offsetof(mac_tx_t, name) == offsetof(mac_tx_t, last) + offsetof(control_t, name) \
+        && sizeof(((mac_tx_t *)0)->name) == sizeof(((control_t *)0)->name) ? 1 : -1];
+CONTROL_FIELDS(CONTROL_LAYOUT)
+#undef CONTROL_LAYOUT
+#undef CONTROL_FIELDS
+typedef char control_layout_tail[
+    sizeof(mac_tx_t) - offsetof(mac_tx_t, last) == sizeof(control_t) ? 1 : -1];
+typedef char control_layout_frame[
+    offsetof(mac_tx_t, frame) == 0 && sizeof(((mac_tx_t *)0)->frame) == MAC_FRAME_MAX_BODY
+    && offsetof(mac_tx_t, last) >= MAC_FRAME_MAX_BODY ? 1 : -1];
 #define CONTROL_BYTES (offsetof(control_t, stop_steps) + sizeof(uint8_t))
 
 /* Serialized foreground calls stage only control, never a second frame.
@@ -56,19 +67,15 @@ static TX_RAM SDCC_VOLATILE struct {
 } input;
 #endif
 
-#define CONTROL_COPY_IN(type, name) control.name = tx->name;
 static void load_control(const mac_tx_t *tx)
 {
-    CONTROL_FIELDS(CONTROL_COPY_IN)
+    memcpy(&control, (const unsigned char *)tx + offsetof(mac_tx_t, last), CONTROL_BYTES);
 }
-#undef CONTROL_COPY_IN
 
-#define CONTROL_COPY_OUT(type, name) tx->name = control.name;
 static void save_control(mac_tx_t *tx)
 {
-    CONTROL_FIELDS(CONTROL_COPY_OUT)
+    memcpy((unsigned char *)tx + offsetof(mac_tx_t, last), &control, CONTROL_BYTES);
 }
-#undef CONTROL_COPY_OUT
 
 static uint8_t reached(uint32_t now, uint32_t at)
 {

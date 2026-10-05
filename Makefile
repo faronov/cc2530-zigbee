@@ -43,7 +43,7 @@ endif
 
 TARGET := $(BUILD)/$(IMAGE)
 HEADERS := $(wildcard include/*.h src/*_internal.h)
-DEFINES := -Itoolchain/clang/include -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
+DEFINES := -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
 SDCC_FLAGS := -mmcs51 --model-large --std-c99 --debug --opt-code-size --Werror $(DEFINES)
 LINK_FLAGS := --iram-size 0x100 --xram-loc 0 --xram-size 0x1e00 --code-size 0x8000 $(if $(strip $(SDCC_LIB)),-L$(SDCC_LIB))
 HOST_FLAGS := -std=c99 -O2 -Wall -Wextra -Werror -pedantic -DCC2530_HOST_TEST $(DEFINES) -Itests

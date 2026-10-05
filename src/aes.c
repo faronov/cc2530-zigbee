@@ -18,9 +18,10 @@
 volatile MCU_XDATA uint8_t aes_dma0[8], aes_dma1[32];
 volatile MCU_XDATA uint8_t aes_key[16], aes_iv[16], aes_input[16], aes_output[16];
 MCU_XDATA uint8_t aes_fault, aes_used;
+#if defined(CC2530_CLANG)
 extern MCU_XDATA uint8_t aes_reserved_end;
-#if defined(__SDCC)
-extern MCU_XDATA uint8_t _gptrput_PARM_2;
+#else
+extern MCU_XDATA uint8_t aes_reserved_end, _gptrput_PARM_2;
 #endif
 
 typedef struct {
@@ -53,13 +54,14 @@ static uint8_t overlaps(uint16_t a, uint8_t an, uint16_t b, uint8_t bn)
 
 static uint8_t owned(uint16_t address, uint8_t count)
 {
-    if (address <= MMIO_XADDRESS(&aes_reserved_end)) return 0;
-#if defined(__SDCC)
-    if (overlaps(address, count, MMIO_XADDRESS(&_gptrput_PARM_2), 1)) return 0;
-#else
+#if defined(CC2530_CLANG)
+    /* No SDCC generic-pointer runtime parameter exists to protect. */
     (void)count;
+    return address > MMIO_XADDRESS(&aes_reserved_end);
+#else
+    return address > MMIO_XADDRESS(&aes_reserved_end) &&
+           !overlaps(address, count, MMIO_XADDRESS(&_gptrput_PARM_2), 1);
 #endif
-    return 1;
 }
 
 static uint8_t ordinary(uint16_t address, uint8_t count)

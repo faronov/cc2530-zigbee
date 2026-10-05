@@ -8,17 +8,6 @@
 #include <stddef.h>
 #include <string.h>
 #include "mac_link_workspace_guard_internal.h"
-#if defined(__clang__)
-#define ZDO_RUNTIME_NOINLINE __attribute__((noinline))
-#define ZDO_RUNTIME_CTX(name) zdo_runtime_t *name
-#define ZDO_RUNTIME_TRANSPORT(name) nwk_aps_t *name
-#define ZDO_RUNTIME_NOW(name) uint32_t name
-#else
-#define ZDO_RUNTIME_NOINLINE
-#define ZDO_RUNTIME_CTX(name) zdo_runtime_t * volatile name
-#define ZDO_RUNTIME_TRANSPORT(name) nwk_aps_t * volatile name
-#define ZDO_RUNTIME_NOW(name) volatile uint32_t name
-#endif
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
 #define work (link_work_arena.protocol.parent.zdo.work)
@@ -51,7 +40,7 @@ static uint8_t expired(uint32_t now, uint32_t until)
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-static zdo_runtime_result_t advance(ZDO_RUNTIME_CTX(context), ZDO_RUNTIME_NOW(now))
+static zdo_runtime_result_t advance(zdo_runtime_t * SDCC_VOLATILE context, SDCC_VOLATILE uint32_t now)
 {
     zdo_runtime_t *ctx = context;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -239,8 +228,7 @@ static zdo_runtime_result_t zdo_response(zdo_runtime_t * volatile context, nwk_a
     return ZDO_RUNTIME_OK;
 }
 
-static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t received(
-    ZDO_RUNTIME_CTX(context), ZDO_RUNTIME_TRANSPORT(link))
+static zdo_runtime_result_t received(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link)
 {
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;
@@ -290,126 +278,49 @@ static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t received(
     return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_OK);
 }
 
-static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t queue_pending_response(
-    zdo_runtime_t *ctx, nwk_aps_t *transport, uint32_t now)
-{
-    nwk_aps_result_t queued;
-    if (!ctx->response_pending || transport->queued || transport->completed)
-        return ZDO_RUNTIME_OK;
-    queued = nwk_aps_queue(transport, &ctx->response, 0, now);
-    if (queued == NWK_APS_EXHAUSTED) {
-        ctx->response_pending = 0; ctx->response_result = (uint8_t)queued;
-        return ZDO_RUNTIME_DROPPED;
-    }
-    if (queued != NWK_APS_OK)
-        return queued == NWK_APS_FULL ? ZDO_RUNTIME_FULL : ZDO_RUNTIME_TRANSMIT;
-    ctx->response_pending = 0; ctx->response_tx = 1;
-    return ZDO_RUNTIME_OK;
-}
-
-static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t complete_transmission(
-    zdo_runtime_t *ctx, nwk_aps_t *transport, uint8_t *result)
-{
-    if (!(ctx->query_tx || ctx->response_tx) || !transport->completed)
-        return ZDO_RUNTIME_OK;
-    if (nwk_aps_confirm(transport, result) != NWK_APS_OK)
-        return ZDO_RUNTIME_TRANSMIT;
-    if (ctx->query_tx) {
-        ctx->query_tx = 0; ctx->tx_done = 1;
-        if (*result && ctx->result != ZDO_RUNTIME_TIMEOUT &&
-            ctx->result != ZDO_RUNTIME_CANCELLED)
-            ctx->result = ZDO_RUNTIME_TRANSMIT;
-    } else {
-        ctx->response_tx = 0; ctx->response_result = *result;
-        if (*result) return ZDO_RUNTIME_DROPPED;
-    }
-    return ZDO_RUNTIME_OK;
-}
-
-#if defined(__clang__)
-static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t expire_query(
-    ZDO_RUNTIME_CTX(ctx), ZDO_RUNTIME_TRANSPORT(transport), ZDO_RUNTIME_NOW(now))
-{
-    if (!ctx->query || ctx->result != ZDO_RUNTIME_NO_EVENT ||
-        !expired(now, ctx->deadline))
-        return ZDO_RUNTIME_OK;
-    ctx->result = ZDO_RUNTIME_TIMEOUT;
-    if (ctx->query_tx && nwk_aps_cancel(transport, now) != NWK_APS_OK)
-        return ZDO_RUNTIME_TRANSMIT;
-    return ZDO_RUNTIME_OK;
-}
-
-static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t process_received_packet(
-    ZDO_RUNTIME_CTX(ctx), ZDO_RUNTIME_TRANSPORT(transport))
-{
-    if (!transport->receive_ready || ctx->application_ready)
-        return ZDO_RUNTIME_OK;
-    zdo_runtime_result_t result = received(ctx, transport);
-    if (!ctx->application_ready)
-        memset(&ctx->application, 0, sizeof(ctx->application));
-    return result;
-}
-
-static ZDO_RUNTIME_NOINLINE zdo_runtime_result_t prepare_runtime_step(
-    ZDO_RUNTIME_CTX(ctx), ZDO_RUNTIME_TRANSPORT(transport), ZDO_RUNTIME_NOW(now),
-    uint8_t *result)
-{
-    zdo_runtime_result_t status = advance(ctx, now);
-    if (status) return status;
-    if (!transport) return ZDO_RUNTIME_ARGUMENT;
-    ctx->security_event = ZDO_RUNTIME_NO_EVENT;
-    return complete_transmission(ctx, transport, result);
-}
-#endif
-
-zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(
-    ZDO_RUNTIME_CTX(ctx), ZDO_RUNTIME_TRANSPORT(transport), ZDO_RUNTIME_NOW(now))
+zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(ZDO_RUNTIME_STATE);
     if (!LW_IO(LW_NONE, transport, sizeof(*transport), 1)) return ZDO_RUNTIME_ARGUMENT;
 #endif
     MCU_ESCAPED_LOCAL uint8_t result;
-#if defined(__clang__)
-    zdo_runtime_result_t rc = prepare_runtime_step(ctx, transport, now, &result);
-#else
     zdo_runtime_result_t rc = advance(ctx, now);
-#endif
+    nwk_aps_result_t queued;
     if (rc) return rc;
-#if !defined(__clang__)
     if (!transport) return ZDO_RUNTIME_ARGUMENT;
     ctx->security_event = ZDO_RUNTIME_NO_EVENT;
-#endif
-#if !defined(__clang__)
-    zdo_runtime_result_t confirmed = complete_transmission(ctx, transport, &result);
-    if (confirmed) return confirmed;
-#endif
-#if defined(__clang__)
-    zdo_runtime_result_t timeout = expire_query(ctx, transport, now);
-    if (timeout) return timeout;
-#else
+    if ((ctx->query_tx || ctx->response_tx) && transport->completed) {
+        if (nwk_aps_confirm(transport, &result) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
+        if (ctx->query_tx) {
+            ctx->query_tx = 0; ctx->tx_done = 1;
+            if (result && ctx->result != ZDO_RUNTIME_TIMEOUT && ctx->result != ZDO_RUNTIME_CANCELLED)
+                ctx->result = ZDO_RUNTIME_TRANSMIT;
+        } else {
+            ctx->response_tx = 0; ctx->response_result = result;
+            if (result) return ZDO_RUNTIME_DROPPED;
+        }
+    }
     if (ctx->query && ctx->result == ZDO_RUNTIME_NO_EVENT && expired(now, ctx->deadline)) {
         ctx->result = ZDO_RUNTIME_TIMEOUT;
         if (ctx->query_tx && nwk_aps_cancel(transport, now) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
     }
-#endif
-#if defined(__clang__)
-    rc = process_received_packet(ctx, transport);
-#else
     if (transport->receive_ready && !ctx->application_ready) {
         rc = received(ctx, transport);
         if (!ctx->application_ready) memset(&ctx->application, 0, sizeof(ctx->application));
     }
-#endif
-    zdo_runtime_result_t queued = queue_pending_response(ctx, transport, now);
-    if (queued) return queued;
+    if (ctx->response_pending && !transport->queued && !transport->completed) {
+        queued = nwk_aps_queue(transport, &ctx->response, 0, now);
+        if (queued == NWK_APS_EXHAUSTED) {
+            ctx->response_pending = 0; ctx->response_result = (uint8_t)queued;
+            return ZDO_RUNTIME_DROPPED;
+        }
+        if (queued != NWK_APS_OK) return queued == NWK_APS_FULL ? ZDO_RUNTIME_FULL : ZDO_RUNTIME_TRANSMIT;
+        ctx->response_pending = 0; ctx->response_tx = 1;
+    }
     return rc;
 }
-
-#undef ZDO_RUNTIME_NOINLINE
-#undef ZDO_RUNTIME_CTX
-#undef ZDO_RUNTIME_TRANSPORT
-#undef ZDO_RUNTIME_NOW
 
 zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
     volatile uint32_t now)
