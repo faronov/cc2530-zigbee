@@ -7,7 +7,7 @@ __attribute__((naked, noinline)) void join_smoke_wait(void)
 }
 __attribute__((naked, noinline)) void join_smoke_fault(void)
 {
-    __asm__ volatile("nop\n1:\n\tsjmp 1b");
+    __asm__ volatile("nop\n\tsjmp join_smoke_fault");
 }
 #else
 void join_smoke_wait(void) __naked
