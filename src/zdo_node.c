@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zdo_node.h"
+#include "sdcc_volatile.h"
 
 #include <stddef.h>
 #include <string.h>

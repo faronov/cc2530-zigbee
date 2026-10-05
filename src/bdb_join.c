@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "bdb_join_internal.h"
+#include "sdcc_volatile.h"
 #include <stddef.h>
 #include <string.h>
 #if defined(__clang__)

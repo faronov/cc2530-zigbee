@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zdo_runtime.h"
+#include "sdcc_volatile.h"
 #include "security_keys.h"
 #include "board.h"
 #include <stddef.h>

@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "mac_frame.h"
+#include "sdcc_volatile.h"
 
 #include <stddef.h>
 #include <string.h>

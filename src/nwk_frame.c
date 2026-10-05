@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "nwk_frame.h"
+#include "sdcc_volatile.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
 #else
