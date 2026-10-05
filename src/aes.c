@@ -227,12 +227,24 @@ aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
     key_location = pointer_location(key); input_location = pointer_location(input);
     result = source_range(key_location);
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#if defined(CC2530_CLANG)
+    /* LLVM generic pointers carry a tag: only XDATA (tag 0) can be in the arena. */
+    if (result==AES_BUFFER_OWNERSHIP && !(key_location >> 16) &&
+        child_work_inside((const void *)(uint16_t)key_location,16)) result=AES_OK;
+#else
     if (result==AES_BUFFER_OWNERSHIP && child_work_inside(key,16)) result=AES_OK;
+#endif
 #endif
     if (result != AES_OK) return result;
     result = source_range(input_location);
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
+#if defined(CC2530_CLANG)
+    /* LLVM generic pointers carry a tag: only XDATA (tag 0) can be in the arena. */
+    if (result==AES_BUFFER_OWNERSHIP && !(input_location >> 16) &&
+        child_work_inside((const void *)(uint16_t)input_location,16)) result=AES_OK;
+#else
     if (result==AES_BUFFER_OWNERSHIP && child_work_inside(input,16)) result=AES_OK;
+#endif
 #endif
     if (result != AES_OK) return result;
     out = MMIO_XADDRESS(output); diag = MMIO_XADDRESS(d);
