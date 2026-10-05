@@ -5,6 +5,7 @@
 #define SECURITY_COUNTER_H
 
 #include "nv_record.h"
+#include "sdcc_volatile.h"
 
 #define SECURITY_COUNTER_NWK 0u
 #define SECURITY_COUNTER_APS 1u
@@ -69,16 +70,16 @@ typedef struct {
  */
 security_counter_result_t security_counter_open(void);
 security_counter_result_t security_counter_create(
-    uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * volatile data,
+    uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * SDCC_VOLATILE data,
     uint8_t length, uint16_t poll_limit);
 security_counter_result_t security_counter_restage(
-    const uint8_t MCU_XDATA * volatile data, uint8_t length);
+    const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length);
 security_counter_result_t security_counter_take(
-    volatile uint8_t domain, uint32_t MCU_XDATA * volatile value, uint16_t poll_limit);
+    SDCC_VOLATILE uint8_t domain, uint32_t MCU_XDATA * SDCC_VOLATILE value, uint16_t poll_limit);
 security_counter_result_t security_counter_save(
-    const uint8_t MCU_XDATA * volatile data, uint8_t length, uint16_t poll_limit);
+    const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length, uint16_t poll_limit);
 security_counter_result_t security_counter_read(
-    uint8_t MCU_XDATA * volatile data, uint8_t capacity, uint8_t MCU_XDATA * volatile length);
+    uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t capacity, uint8_t MCU_XDATA * SDCC_VOLATILE length);
 const security_counter_status_t MCU_XDATA *security_counter_status(void);
 
 #endif

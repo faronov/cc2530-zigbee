@@ -5,6 +5,7 @@
 #define MAC_ASSOCIATION_H
 
 #include <stdint.h>
+#include "sdcc_volatile.h"
 #include "mac_frame.h"
 
 #ifdef __SDCC
@@ -130,7 +131,7 @@ mac_association_result_t mac_association_start(mac_association_t MAC_ASSOCIATION
  * Last allowed step may record/cancel; otherwise it terminates EXHAUSTED.
  * Volatile parameter copies bound SDCC spills; pointed-to bytes are unchanged.
  */
-mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * volatile ctx,
+mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * SDCC_VOLATILE ctx,
                     uint32_t now,
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
                     uint8_t MAC_ASSOCIATION_RAM *observation);
@@ -143,7 +144,7 @@ mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_
 mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATION_RAM *ctx,
                     uint32_t now,
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
-                    uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t volatile profile);
+                    uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t SDCC_VOLATILE profile);
 /* One-shot copy of a terminal record, then IDLE; generation/time are preserved.
  * Taking/cancelling a memory context does NOT stop/release a radio, transmitter
  * lease or outstanding ACK. Caller must separately finish confirmed cleanup.

@@ -5,6 +5,7 @@
 #define MAC_SCAN_H
 
 #include "mac_tx.h"
+#include "sdcc_volatile.h"
 #include "nwk_candidates.h"
 #include "mac_link.h"
 
@@ -163,16 +164,16 @@ typedef struct {
 } mac_scan_t;
 
 /* Fresh storage/epoch only, never recovery of an outstanding lease or TX fault. */
-mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * volatile scan);
+mac_scan_result_t mac_scan_init(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan);
 /* Only page0, unsecured active scanning, duration0..14, nonempty channels11..26.
  * saved is a truthful confirmed snapshot; no hardware operation occurs here.
  * tx must be the initialized, idle, single device-wide transmitter. Never reset
  * its DSN/generation to start a scan. The lease lasts until successful release.
  */
-mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                 mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
-                                 const mac_scan_request_t MAC_SCAN_RAM * volatile request,
-                                 uint32_t volatile now);
+mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan,
+                                 mac_scan_tx_t MAC_SCAN_RAM * SDCC_VOLATILE tx,
+                                 const mac_scan_request_t MAC_SCAN_RAM * SDCC_VOLATILE request,
+                                 uint32_t SDCC_VOLATILE now);
 /* NULL event polls. One-shot actions require real confirmations; see MAC_SCAN.md.
  * Step owns TX submit/release, never initialization. ACTION_TX delegates exactly
  * one serialized foreground mac_tx_step to the caller, using real source events
@@ -194,16 +195,16 @@ mac_scan_result_t mac_scan_start(mac_scan_t MAC_SCAN_RAM * volatile scan,
  * That saved pre-stop watermark may precede the foreground delivery clock
  * and earlier drain-report clocks; it is never moved forward while RX is off.
  */
-mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                mac_scan_tx_t MAC_SCAN_RAM * volatile tx,
-                                uint32_t volatile now,
-                                const mac_scan_event_t MAC_SCAN_RAM * volatile event,
-                                mac_scan_action_t MAC_SCAN_RAM * volatile action);
+mac_scan_result_t mac_scan_step(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan,
+                                mac_scan_tx_t MAC_SCAN_RAM * SDCC_VOLATILE tx,
+                                uint32_t SDCC_VOLATILE now,
+                                const mac_scan_event_t MAC_SCAN_RAM * SDCC_VOLATILE event,
+                                mac_scan_action_t MAC_SCAN_RAM * SDCC_VOLATILE action);
 /* Copies available preliminary candidates only after DONE/FAULT, before release. */
-mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * volatile scan, uint8_t index,
-                               nwk_candidate_t MAC_SCAN_RAM * volatile result);
-mac_scan_result_t mac_scan_release(mac_scan_t MAC_SCAN_RAM * volatile scan,
-                                   mac_scan_tx_t MAC_SCAN_RAM * volatile tx);
+mac_scan_result_t mac_scan_get(const mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan, uint8_t index,
+                               nwk_candidate_t MAC_SCAN_RAM * SDCC_VOLATILE result);
+mac_scan_result_t mac_scan_release(mac_scan_t MAC_SCAN_RAM * SDCC_VOLATILE scan,
+                                   mac_scan_tx_t MAC_SCAN_RAM * SDCC_VOLATILE tx);
 
 /* All arguments denote accessible disjoint ordinary caller objects, never
  * invented MMIO/compiler-private/status/alias pointers. All storage, including

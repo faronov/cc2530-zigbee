@@ -76,7 +76,7 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NW
 
 #if defined(CC2530_DEFAULT_TC_KEY)
 /* RAM only: the identity the association discovered, before any NV write. */
-void bdb_join_discovered_config(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+void bdb_join_discovered_config(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     memcpy(bdb_join_keys.config.own_ieee, ctx->config.association.extraction.local, 8);
     memcpy(bdb_join_keys.config.tc_ieee, ctx->record.association.source_ieee, 8);
@@ -87,7 +87,7 @@ void bdb_join_discovered_config(bdb_join_t BDB_JOIN_RAM * volatile ctx)
     bdb_join_keys.config.address = 0xffffu;
 }
 
-bdb_join_result_t bdb_join_provision_discovered(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+bdb_join_result_t bdb_join_provision_discovered(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     bdb_join_discovered_config(ctx);
     if (security_keys_provision_default(&bdb_join_keys.config, 1, 1,

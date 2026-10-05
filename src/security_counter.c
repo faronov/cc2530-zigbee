@@ -164,7 +164,7 @@ D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
 }
 
 /* Validates and stages a payload; the floors are the caller's. */
-static security_counter_result_t stage(const uint8_t MCU_XDATA * volatile data,
+static security_counter_result_t stage(const uint8_t MCU_XDATA * SDCC_VOLATILE data,
     uint8_t length, uint16_t poll_limit)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -207,7 +207,7 @@ security_counter_result_t security_counter_create(
 }
 
 security_counter_result_t security_counter_restage(
-    const uint8_t MCU_XDATA * volatile data, uint8_t length)
+    const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length)
 {
     if (D.state != SECURITY_COUNTER_READY || D.generation)
         return SECURITY_COUNTER_STATE;

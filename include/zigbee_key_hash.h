@@ -5,6 +5,7 @@
 #define ZIGBEE_KEY_HASH_H
 
 #include "zigbee_mmo.h"
+#include "sdcc_volatile.h"
 
 #define ZIGBEE_HASH_TRANSPORT 0u
 #define ZIGBEE_HASH_LOAD 2u
@@ -25,7 +26,7 @@
  * Serialized foreground only, nonreentrant; no retry or recovery.
  */
 zigbee_mmo_result_t zigbee_key_hash(
-    const uint8_t * volatile key, uint8_t purpose, uint8_t * volatile output,
-    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info);
+    const uint8_t * SDCC_VOLATILE key, uint8_t purpose, uint8_t * SDCC_VOLATILE output,
+    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info);
 
 #endif

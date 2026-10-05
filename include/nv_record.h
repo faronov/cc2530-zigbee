@@ -5,6 +5,7 @@
 #define NV_RECORD_H
 
 #include "flash_write.h"
+#include "sdcc_volatile.h"
 
 #define NV_RECORD_MAX 128u
 #define NV_RECORD_ERASE_LIMIT 32u
@@ -64,9 +65,9 @@ typedef struct {
  * security-counter/key/membership API or physical power-loss/endurance proof.
  * A valid older record after recovery must never authorize counter rollback.
  */
-nv_record_result_t nv_record_load(uint8_t MCU_XDATA * volatile output, uint8_t capacity);
-nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * volatile data, uint8_t length,
-                                    volatile uint16_t poll_limit, uint8_t allow_recovery);
+nv_record_result_t nv_record_load(uint8_t MCU_XDATA * SDCC_VOLATILE output, uint8_t capacity);
+nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * SDCC_VOLATILE data, uint8_t length,
+                                    SDCC_VOLATILE uint16_t poll_limit, uint8_t allow_recovery);
 /* Read-only diagnostic; phase0 means no admitted operation since reset.
  * Phases: scan1, load recheck2, erase3, body4, integrity5, commit6, verify7, done8.
  * selected=FF means no record selected; reader/writer=FF means not invoked.

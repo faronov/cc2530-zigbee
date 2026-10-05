@@ -78,7 +78,7 @@ static mac_adapter_result_t publish(uint8_t kind, uint8_t source)
 }
 static mac_adapter_result_t frame(void)
 {
-    volatile MCU_XDATA mac_adapter_result_t result;
+    SDCC_VOLATILE MCU_XDATA mac_adapter_result_t result;
     uint8_t kind = 0;
     if (!status.bound_valid) {
         mac_adapter_receipt.rx_upper = status.live;
@@ -101,7 +101,7 @@ static mac_adapter_result_t frame(void)
 }
 
 mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * SDCC_VOLATILE config,
-                                      volatile uint32_t timeout, volatile uint16_t limit)
+                                      SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit)
 {
     mac_adapter_result_t result = bounds(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
@@ -123,7 +123,7 @@ mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * S
     return clock(timeout, limit);
 }
 
-mac_adapter_result_t mac_adapter_now(volatile uint32_t timeout, volatile uint16_t limit,
+mac_adapter_result_t mac_adapter_now(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit,
                                      mac_epoch_stamp_t MCU_XDATA * SDCC_VOLATILE output)
 {
     mac_adapter_result_t result = bounds(timeout, limit);
@@ -138,7 +138,7 @@ mac_adapter_result_t mac_adapter_now(volatile uint32_t timeout, volatile uint16_
 }
 
 mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * SDCC_VOLATILE tx,
-    volatile uint8_t policy, volatile uint32_t timeout, volatile uint16_t limit)
+    SDCC_VOLATILE uint8_t policy, SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit)
 {
     mac_adapter_result_t result = bounds(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
@@ -164,7 +164,7 @@ mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * SDC
 }
 
 mac_adapter_result_t mac_adapter_unprepare(const mac_tx_interval_t MCU_XDATA * SDCC_VOLATILE tx,
-    volatile uint32_t timeout, volatile uint16_t limit)
+    SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit)
 {
     mac_adapter_result_t result = bounds(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
@@ -239,10 +239,10 @@ mac_adapter_result_t mac_adapter_close(const mac_epoch_stamp_t MCU_XDATA * SDCC_
     return MAC_ADAPTER_OK;
 }
 
-mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16_t limit)
+mac_adapter_result_t mac_adapter_step(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit)
 {
-    volatile MCU_XDATA mac_adapter_result_t result = bounds(timeout, limit);
-    volatile MCU_XDATA uint8_t source;
+    SDCC_VOLATILE MCU_XDATA mac_adapter_result_t result = bounds(timeout, limit);
+    SDCC_VOLATILE MCU_XDATA uint8_t source;
     if (result != MAC_ADAPTER_OK) return result;
     if (status.phase == MAC_ADAPTER_COLD) return MAC_ADAPTER_STATE;
     if (status.ready) return MAC_ADAPTER_EVENT;
@@ -406,7 +406,7 @@ static mac_adapter_result_t idle_off(uint32_t timeout, uint16_t limit)
 }
 
 mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDATA * SDCC_VOLATILE config,
-    volatile uint32_t timeout, volatile uint16_t limit)
+    SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit)
 {
     mac_adapter_result_t result = bounds(timeout, limit);
     mac_radio_result_t radio;
@@ -427,7 +427,7 @@ mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDAT
     return clock(timeout, limit);
 }
 
-mac_adapter_result_t mac_adapter_open(volatile uint32_t timeout, volatile uint16_t limit,
+mac_adapter_result_t mac_adapter_open(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit,
     mac_epoch_stamp_t MCU_XDATA * SDCC_VOLATILE opened)
 {
     mac_adapter_result_t result = bounds(timeout, limit);

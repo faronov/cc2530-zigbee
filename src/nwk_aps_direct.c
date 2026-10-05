@@ -21,12 +21,12 @@
 #define MAC_PREFIX 9u
 typedef char mac_payload_extent[MAC_PREFIX+NWK_FRAME_MAX_BODY == MAC_FRAME_MAX_BODY ? 1 : -1];
 
-nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * volatile ctx, volatile uint8_t acknowledgment, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t acknowledgment, SDCC_VOLATILE uint32_t now)
 {
     LW_ROOT(NWK_APS_STATE);
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
-    uint8_t * volatile frame = mac_tx_interval_stage(ctx->owner);
-    ed_packet_t * volatile p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
+    uint8_t * SDCC_VOLATILE frame = mac_tx_interval_stage(ctx->owner);
+    ed_packet_t * SDCC_VOLATILE p = acknowledgment ? &ctx->acknowledgment : &ctx->outgoing;
     security_keys_result_t secured;
     nwk_aps_result_t btr;
     MCU_ESCAPED_LOCAL uint8_t slot;

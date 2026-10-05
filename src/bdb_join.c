@@ -28,7 +28,7 @@ static uint8_t expired(uint32_t now, uint32_t until)
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now)
+bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return BDB_JOIN_CLOCK;
@@ -36,7 +36,7 @@ bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * volatile ctx, volat
     return BDB_JOIN_OK;
 }
 
-static void fail(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint8_t result)
+static void fail(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t result)
 {
     ctx->abandon = result == BDB_JOIN_ADDRESS_CONFLICT ||
         (result != BDB_JOIN_WORK_LIMIT && ctx->phase < BDB_JOIN_READY &&
@@ -48,7 +48,7 @@ static void fail(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint8_t result
     }
 }
 
-static void scan_result(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+static void scan_result(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     ctx->scan_result.generation = ctx->work.scan.generation;
     ctx->scan_result.sent = ctx->work.scan.sent;
@@ -63,7 +63,7 @@ static void scan_result(bdb_join_t BDB_JOIN_RAM * volatile ctx)
 #endif
 }
 
-static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     uint8_t i;
     memset(&work.policy, 0, sizeof(work.policy));
@@ -75,7 +75,7 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * volatile ctx)
     if (ctx->work.scan.overflow || ctx->work.scan.unscanned) return BDB_JOIN_NO_PARENT;
 #endif
     for (i = 0; i < ctx->work.scan.candidates.count; i++) {
-        const nwk_candidate_t * volatile c = &ctx->work.scan.candidates.entries[i];
+        const nwk_candidate_t * SDCC_VOLATILE c = &ctx->work.scan.candidates.entries[i];
         work.policy.link_cost[i] = ctx->config.link_cost;
 #if defined(CC2530_DEFAULT_TC_KEY)
         if (!(c->superframe & MAC_SUPERFRAME_PAN_COORDINATOR) ||
@@ -105,14 +105,14 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * volatile ctx)
     return BDB_JOIN_OK;
 }
 
-static void install(bdb_join_t BDB_JOIN_RAM * volatile ctx)
+static void install(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     if (ctx->token == 0xffffu) { fail(ctx, BDB_JOIN_INSTALL_FAILED); return; }
     ctx->token++; ctx->issued = 0; ctx->phase = BDB_JOIN_INSTALLING;
     ctx->until = ctx->last+BDB_JOIN_EXCHANGE_WAIT;
 }
 
-static uint8_t finished(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result)
+static uint8_t finished(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t * SDCC_VOLATILE result)
 {
     return nwk_aps_confirm(&ctx->work.runtime.transport, result) == NWK_APS_OK;
 }
@@ -443,8 +443,8 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
     return ignored ? BDB_JOIN_IGNORED : BDB_JOIN_OK;
 }
 
-bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now)
+bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
+    const uint8_t * SDCC_VOLATILE body, SDCC_VOLATILE uint16_t length, SDCC_VOLATILE uint8_t crc_valid, SDCC_VOLATILE uint32_t now)
 {
     bdb_join_result_t result = bdb_join_advance(ctx, now);
     nwk_aps_result_t received;
@@ -484,8 +484,8 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     return BDB_JOIN_SECURITY;
 }
 
-bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now)
+bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
+    const ed_packet_t * SDCC_VOLATILE packet, SDCC_VOLATILE uint8_t aps_secure, SDCC_VOLATILE uint32_t now)
 {
     nwk_aps_result_t result;
     if (!ctx || ctx->version != BDB_JOIN_VERSION || !packet) return BDB_JOIN_ARGUMENT;
@@ -501,7 +501,7 @@ bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     return BDB_JOIN_OK;
 }
 
-bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result)
+bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t * SDCC_VOLATILE result)
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION || !result) return BDB_JOIN_ARGUMENT;
     if (ctx->workspace != BDB_JOIN_WORK_RUNTIME || !ctx->application_done) return BDB_JOIN_STATE;
@@ -509,7 +509,7 @@ bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8
     return BDB_JOIN_OK;
 }
 #if defined(CC2530_MAC_LINK)
-bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
     uint32_t generation, uint8_t retry, uint8_t nb)
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
@@ -518,7 +518,7 @@ bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
     return nwk_aps_armed(&ctx->work.runtime.transport, generation, retry, nb) == NWK_APS_OK ?
         BDB_JOIN_OK : BDB_JOIN_STATE;
 }
-bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
     uint32_t generation, uint8_t retry, uint8_t nb)
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;

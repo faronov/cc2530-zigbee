@@ -688,7 +688,7 @@ static radio_autoack_result_t attempt_elapsed(
 }
 
 #if defined(CC2530_MAC_HANDOFF)
-static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volatile output);
+static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * SDCC_VOLATILE output);
 /* Reuse the one-latch reader inside this owner's bounded begin/end scope.
  * Per-sample deadline setup/polling needlessly widens the ACK upper bound.
  */

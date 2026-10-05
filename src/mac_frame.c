@@ -10,7 +10,7 @@
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
 #endif
-LW_SHALLOW_DECLARE(static mac_codec_result_t command_parse(const uint8_t * volatile, volatile uint16_t, mac_command_t * volatile); static mac_codec_result_t beacon_fields(const uint8_t * volatile, uint16_t volatile, mac_beacon_info_t * volatile); static mac_codec_result_t command_header_policy(const mac_header_t * volatile, const uint8_t * volatile, uint16_t volatile, uint8_t volatile);)
+LW_SHALLOW_DECLARE(static mac_codec_result_t command_parse(const uint8_t * SDCC_VOLATILE, SDCC_VOLATILE uint16_t, mac_command_t * SDCC_VOLATILE); static mac_codec_result_t beacon_fields(const uint8_t * SDCC_VOLATILE, uint16_t SDCC_VOLATILE, mac_beacon_info_t * SDCC_VOLATILE); static mac_codec_result_t command_header_policy(const mac_header_t * SDCC_VOLATILE, const uint8_t * SDCC_VOLATILE, uint16_t SDCC_VOLATILE, uint8_t SDCC_VOLATILE);)
 static inline uint16_t read_le16(const uint8_t *bytes)
 {
     return (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
@@ -65,8 +65,8 @@ static mac_codec_result_t command_policy(const mac_command_t *command)
     return MAC_CODEC_OK;
 }
 #define mac_command_decode LW_SHALLOW_NAME(mac_command_decode, command_parse)
-mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
-                                      mac_command_t * volatile result)
+mac_codec_result_t mac_command_decode(const uint8_t * SDCC_VOLATILE payload, SDCC_VOLATILE uint16_t length,
+                                      mac_command_t * SDCC_VOLATILE result)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE) && !defined(LINK_WORK_SHALLOW)
     if (!LW_IO(LW_CHILD_COMMAND, payload, length, 0) ||
@@ -105,8 +105,8 @@ mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile
     return MAC_CODEC_OK;
 }
 
-mac_codec_result_t mac_command_encode(const mac_command_t * volatile command,
-                                      uint8_t * volatile payload, uint16_t capacity, uint8_t * volatile length)
+mac_codec_result_t mac_command_encode(const mac_command_t * SDCC_VOLATILE command,
+                                      uint8_t * SDCC_VOLATILE payload, uint16_t capacity, uint8_t * SDCC_VOLATILE length)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, command, sizeof(*command), 0) ||
@@ -309,8 +309,8 @@ static mac_codec_result_t command_header_policy(const mac_header_t *header,
     return MAC_CODEC_OK;
 }
 #endif
-mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint16_t length,
-                                    mac_frame_info_t * volatile result, uint8_t volatile profile)
+mac_codec_result_t mac_frame_decode_profile(const uint8_t * SDCC_VOLATILE body, uint16_t length,
+                                    mac_frame_info_t * SDCC_VOLATILE result, uint8_t SDCC_VOLATILE profile)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_MAC_DECODE, MAC_CODEC_INVALID_ARGUMENT);
@@ -387,8 +387,8 @@ mac_codec_result_t mac_frame_decode_profile(const uint8_t * volatile body, uint1
 }
 #undef candidate
 #undef length
-mac_codec_result_t mac_frame_decode(const uint8_t * volatile body, uint16_t length,
-                                    mac_frame_info_t * volatile result)
+mac_codec_result_t mac_frame_decode(const uint8_t * SDCC_VOLATILE body, uint16_t length,
+                                    mac_frame_info_t * SDCC_VOLATILE result)
 {
     return mac_frame_decode_profile(body, length, result, MAC_RX_IEEE2006);
 }
@@ -420,9 +420,9 @@ static void emit_frame(const mac_header_t *header, const uint8_t *payload, uint8
         body[position++] = payload[i];
 }
 
-mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
-                                    const uint8_t * volatile payload, uint16_t payload_length,
-                                    uint8_t * volatile body, uint16_t capacity, uint8_t * volatile length)
+mac_codec_result_t mac_frame_encode(const mac_header_t * SDCC_VOLATILE header,
+                                    const uint8_t * SDCC_VOLATILE payload, uint16_t payload_length,
+                                    uint8_t * SDCC_VOLATILE body, uint16_t capacity, uint8_t * SDCC_VOLATILE length)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_MAC_ENCODE, MAC_CODEC_INVALID_ARGUMENT);
@@ -469,8 +469,8 @@ mac_codec_result_t mac_frame_encode(const mac_header_t * volatile header,
  * policy performs mac_command_decode()'s exact admission itself and then its
  * shared parser, instead of a nested banked call. Other profiles and the
  * host-only CC2530_MAC_LINK_DEEP_REFERENCE oracle compile the bodies above. */
-static mac_codec_result_t beacon_fields(const uint8_t * volatile payload, uint16_t volatile length,
-                                        mac_beacon_info_t * volatile result)
+static mac_codec_result_t beacon_fields(const uint8_t * SDCC_VOLATILE payload, uint16_t SDCC_VOLATILE length,
+                                        mac_beacon_info_t * SDCC_VOLATILE result)
 {
     LW_ENTER(LW_BEACON, MAC_CODEC_INVALID_ARGUMENT);
     if (!LW_IO(LW_BEACON, payload, length, 0) ||
@@ -513,9 +513,9 @@ static mac_codec_result_t beacon_fields(const uint8_t * volatile payload, uint16
 }
 #undef candidate
 
-static mac_codec_result_t command_header_policy(const mac_header_t * volatile header,
-                                                const uint8_t * volatile payload,
-                                                uint16_t volatile length, uint8_t volatile mode)
+static mac_codec_result_t command_header_policy(const mac_header_t * SDCC_VOLATILE header,
+                                                const uint8_t * SDCC_VOLATILE payload,
+                                                uint16_t SDCC_VOLATILE length, uint8_t SDCC_VOLATILE mode)
 {
     /* Mode 0 is legacy RX, 1 is TX, and 2 is R22 Response RX. */
     MCU_ESCAPED_LOCAL mac_command_t command;
@@ -566,8 +566,8 @@ static mac_codec_result_t command_header_policy(const mac_header_t * volatile he
 }
 
 #undef mac_command_decode
-mac_codec_result_t mac_command_decode(const uint8_t * volatile payload, volatile uint16_t length,
-                                      mac_command_t * volatile result)
+mac_codec_result_t mac_command_decode(const uint8_t * SDCC_VOLATILE payload, SDCC_VOLATILE uint16_t length,
+                                      mac_command_t * SDCC_VOLATILE result)
 {
     if (!LW_IO(LW_CHILD_COMMAND, payload, length, 0) ||
         !LW_IO(LW_CHILD_COMMAND, result, sizeof(*result), 1)) return MAC_CODEC_INVALID_ARGUMENT;

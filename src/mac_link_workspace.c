@@ -116,7 +116,7 @@ uint8_t link_work_leave(uint8_t frame)
     TOP = ANCESTOR[frame]; ANCESTOR[frame] = 0;
     return 1;
 }
-uint8_t link_work_return_word(uint16_t volatile pair)
+uint8_t link_work_return_word(uint16_t SDCC_VOLATILE pair)
 {
     /* An impossible mismatched release is an error, never reported as OK.
      * It leaves the actual owner held rather than clearing unrelated work. */
@@ -161,7 +161,7 @@ static uint8_t outside_prefix(work_address_t address)
     return 1;
 #endif
 }
-uint8_t link_work_external(const void * SDCC_VOLATILE p, uint16_t volatile size)
+uint8_t link_work_external(const void * SDCC_VOLATILE p, uint16_t SDCC_VOLATILE size)
 {
     work_address_t a, b = (work_address_t)&A;
     uint8_t space;
@@ -267,7 +267,7 @@ static const MCU_CODE loan_t loans[] = {
     {LW_CHILD_MMO,LW_KEYS,LW_INSTALL_CODE,1,0,OFF(keys.record)+LINK_WORK_LK_OFFSET,16},
     LOAN(LW_CHILD_MMO,LW_KEYS,LW_INSTALL_CODE,1,0,keys.hash_info)
 };
-uint8_t link_work_io(uint8_t operation, const void * SDCC_VOLATILE p, uint16_t volatile size, uint8_t writing)
+uint8_t link_work_io(uint8_t operation, const void * SDCC_VOLATILE p, uint16_t SDCC_VOLATILE size, uint8_t writing)
 {
     work_address_t a, base = (work_address_t)&A;
     LW_SHALLOW_HOME uint16_t offset;

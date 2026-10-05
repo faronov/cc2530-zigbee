@@ -4,6 +4,7 @@
 #ifndef MAC_ADAPTER_H
 #define MAC_ADAPTER_H
 #include "mac_attempt.h"
+#include "sdcc_volatile.h"
 #include "mac_tx_observed.h"
 
 #if defined(CC2530_MAC_ADAPTER)
@@ -48,35 +49,35 @@ typedef struct {
  * Invalid API input is atomic. Operational faults retain ownership and frames;
  * no stale clock value or fabricated successful PHY event is returned.
  */
-mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * volatile config,
-                                      volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
-mac_adapter_result_t mac_adapter_now(volatile uint32_t timeout, volatile uint16_t limit,
-                                     mac_epoch_stamp_t MCU_XDATA * volatile output) JOIN_FAR;
+mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * SDCC_VOLATILE config,
+                                      SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit) JOIN_FAR;
+mac_adapter_result_t mac_adapter_now(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit,
+                                     mac_epoch_stamp_t MCU_XDATA * SDCC_VOLATILE output) JOIN_FAR;
 /* Explicit close/drain must have completed before prepare. Copy through the
  * real interval MAC API before drawing backoff. The device-wide owner persists
  * across retries/transactions; do not reset its DSN or change the owner object.
  * KEEP_AUTOACK requires an ACK-requesting transaction and a successful guarded
  * first-ACK handoff; uncertainty is terminal, never an implicit stop/resume gap.
  */
-mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * volatile tx,
-    volatile uint8_t policy, volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
+mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * SDCC_VOLATILE tx,
+    SDCC_VOLATILE uint8_t policy, SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit) JOIN_FAR;
 /* Cancel a prepared slot whose MAC finished before issuing an ATTEMPT (for
  * example cancellation during RANDOM). No receive-coverage claim is made.
  */
-mac_adapter_result_t mac_adapter_unprepare(const mac_tx_interval_t MCU_XDATA * volatile tx,
-    volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
+mac_adapter_result_t mac_adapter_unprepare(const mac_tx_interval_t MCU_XDATA * SDCC_VOLATILE tx,
+    SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit) JOIN_FAR;
 /* Queue a genuine one-shot ATTEMPT/COLLECT/QUIESCE action. RANDOM remains an
  * explicit caller responsibility: supply a qualified uniform byte to the MAC.
  * Use mac_tx_observed_step for returned sources, not the captured-end API.
  */
-mac_adapter_result_t mac_adapter_accept(const mac_tx_interval_t MCU_XDATA * volatile tx,
-    const mac_tx_interval_action_t MCU_XDATA * volatile action) JOIN_FAR;
+mac_adapter_result_t mac_adapter_accept(const mac_tx_interval_t MCU_XDATA * SDCC_VOLATILE tx,
+    const mac_tx_interval_action_t MCU_XDATA * SDCC_VOLATILE action) JOIN_FAR;
 /* Independent RX lease closure. NULL closes now; otherwise through must be
  * no earlier than the last observed live point and less than half an epoch
  * ahead. Continue receiving until actual time reaches it; no future watermark.
  * Soft stop, all complete heads, then verified empty/idle establish closure.
  */
-mac_adapter_result_t mac_adapter_close(const mac_epoch_stamp_t MCU_XDATA * volatile through) JOIN_FAR;
+mac_adapter_result_t mac_adapter_close(const mac_epoch_stamp_t MCU_XDATA * SDCC_VOLATILE through) JOIN_FAR;
 /* Bounded foreground progress, with at most one radio operation per call.
  * SCHEDULED waits for observed time >= requested at and will not start a run
  * when that observation is at/after until. CPU latency and actual CCA start
@@ -88,7 +89,7 @@ mac_adapter_result_t mac_adapter_close(const mac_epoch_stamp_t MCU_XDATA * volat
  * then flushes; lossy stays set on every later event until prepare/open.
  * Loss in normal RX, ACK collection or retirement remains a fault.
  */
-mac_adapter_result_t mac_adapter_step(volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
+mac_adapter_result_t mac_adapter_step(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit) JOIN_FAR;
 mac_adapter_result_t mac_adapter_consume(uint32_t token) JOIN_FAR;
 const mac_adapter_observation_t MCU_XDATA *mac_adapter_observation(void) JOIN_FAR;
 const mac_adapter_diagnostics_t MCU_XDATA *mac_adapter_diagnostic(void) JOIN_FAR;
@@ -103,8 +104,8 @@ const mac_attempt_record_t MCU_XDATA *mac_adapter_record(void) JOIN_FAR;
  * the initialization values (INVALID, no MMIO). The radio stays OFF.
  * This is not network membership, PIB validation or recovery.
  */
-mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDATA * volatile config,
-    volatile uint32_t timeout, volatile uint16_t limit) JOIN_FAR;
+mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDATA * SDCC_VOLATILE config,
+    SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit) JOIN_FAR;
 /* OFF only, same preconditions. Starts a NEW normal filtered RX/AUTOACK
  * episode through the real resume service. opened is a live sample taken
  * after the receiver was confirmed ready: a conservative coverage start, not
@@ -112,8 +113,8 @@ mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDAT
  * explicit and never continuous coverage. RX_EVENT tx.lower is not a frame
  * lower bound outside a transmission; order frames by rx_serial.
  */
-mac_adapter_result_t mac_adapter_open(volatile uint32_t timeout, volatile uint16_t limit,
-    mac_epoch_stamp_t MCU_XDATA * volatile opened) JOIN_FAR;
+mac_adapter_result_t mac_adapter_open(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit,
+    mac_epoch_stamp_t MCU_XDATA * SDCC_VOLATILE opened) JOIN_FAR;
 #endif
 #endif
 #endif
