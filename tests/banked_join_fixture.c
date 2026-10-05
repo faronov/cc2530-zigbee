@@ -68,9 +68,9 @@ typedef char status_extent[sizeof(fixture_status_t) == 64 ? 1 : -1];
 typedef char input_extent[sizeof(fixture_input_t) == 180 ? 1 : -1];
 #elif defined(CC2530_CLANG)
 typedef char clang_staged_offset[
-    offsetof(bdb_join_t, work.association.staged) == 654 ? 1 : -1];
+    offsetof(bdb_join_t, work.association.staged) == 645 ? 1 : -1];
 typedef char clang_staged_size[
-    sizeof(fixture_device.work.association.staged) == 654 ? 1 : -1];
+    sizeof(fixture_device.work.association.staged) == 645 ? 1 : -1];
 #endif
 
 void main(void)

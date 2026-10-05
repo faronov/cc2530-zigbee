@@ -203,7 +203,7 @@ $(LLVM_ZIGBEE_IMAGE_DIR)/banked_join_fixture.o: tests/banked_join_fixture.c $(HE
 $(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.elf: $(LLVM_ZIGBEE_IMAGE_OBJECTS) $(LLVM_CC2530_LD)
 	$(LLVM_CLANG) -target mcs51 -mcpu=cc2530 $(LLVM_ZIGBEE_IMAGE_OPT) \
 	  -Wl,-T,$(LLVM_CC2530_LD) -Wl,--no-check-sections \
-	  -Wl,--defsym,mac_join_staged=fixture_device+654 -Wl,--gc-sections \
+	  -Wl,--defsym,mac_join_staged=fixture_device+645 -Wl,--gc-sections \
 	  $(LLVM_ZIGBEE_IMAGE_OBJECTS) -o $@
 
 $(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.hex: $(LLVM_ZIGBEE_IMAGE_DIR)/cc2530-zigbee.elf
