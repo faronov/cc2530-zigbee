@@ -120,7 +120,7 @@ all: $(TARGET).hex $(TARGET).bin
 	$(PYTHON) -B tools/verify_firmware.py --board $(BOARD) --image $(IMAGE) --compiler "$(SDCC)" --output $(BUILD)
 
 # Experimental LLVM CC2530 project build.
-LLVM_FLAGS := -target mcs51 -mcpu=cc2530 -std=c99 -Os -fno-function-sections -fno-data-sections \
+LLVM_FLAGS := -target mcs51 -mcpu=cc2530 -std=c99 -Os -fpack-struct=1 -fno-function-sections -fno-data-sections \
               -Itoolchain/clang/include -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER)
 LLVM_TARGET := $(LLVM_BUILD)/$(IMAGE)
 LLVM_PROJECT_LD := $(LLVM_BUILD)/cc2530-zigbee.ld
@@ -178,7 +178,7 @@ llvm-zigbee-modules: $(LLVM_ZIGBEE_OBJECTS)
 # the join workspace alias and common-bank placements are link-profile ABI.
 LLVM_ZIGBEE_IMAGE_DIR := $(LLVM_BUILD)/zigbee-image
 LLVM_ZIGBEE_IMAGE_OPT ?= -Oz
-LLVM_ZIGBEE_IMAGE_FLAGS := -target mcs51 -mcpu=cc2530 -std=c99 $(LLVM_ZIGBEE_IMAGE_OPT) \
+LLVM_ZIGBEE_IMAGE_FLAGS := -target mcs51 -mcpu=cc2530 -std=c99 $(LLVM_ZIGBEE_IMAGE_OPT) -fpack-struct=1 \
 	-ffunction-sections -fdata-sections -Itoolchain/clang/include -Iinclude \
 	-DCC2530_BOARD=$(BOARD_NUMBER) -DCC2530_BANKED_JOIN -DCC2530_JOIN_WORKSPACE \
 	-DBANKED_STACK_FIRST=0x50

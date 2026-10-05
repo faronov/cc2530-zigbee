@@ -20,6 +20,10 @@
  */
 #if defined(__clang__) && defined(__8051__) && defined(__CC2530__)
 #define MCU_ESCAPED_LOCAL static
+/* Clang's MCS51 target leaves short at 2-byte alignment, unlike SDCC and its own
+ * i16:8 data layout; builds must pass -fpack-struct=1 to keep SDCC struct layout. */
+typedef char mcu_sdcc_struct_layout[
+    sizeof(struct { unsigned char a; unsigned short b; }) == 3 ? 1 : -1];
 #else
 #define MCU_ESCAPED_LOCAL
 #endif
