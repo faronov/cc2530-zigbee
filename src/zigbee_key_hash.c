@@ -26,7 +26,7 @@ static MCU_XDATA struct {
 #endif
 
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
-#define zigbee_mmo_hash(m,n,h,t,p,s) CW_CALL(CW_MMO,zigbee_mmo_hash(m,n,h,*(volatile uint32_t *)&(t),*(volatile uint16_t *)&(p),s))
+#define zigbee_mmo_hash(m,n,h,t,p,s) CW_CALL(CW_MMO,zigbee_mmo_hash(m,n,h,*(SDCC_VOLATILE uint32_t *)&(t),*(SDCC_VOLATILE uint16_t *)&(p),s))
 #endif
 static void account(void)
 {

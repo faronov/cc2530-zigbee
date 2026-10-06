@@ -216,9 +216,9 @@ aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
         timeout >= TIMEBASE_HALF_RANGE || !limit)
         return AES_INVALID_ARGUMENT;
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
-    if (!child_work_leaf(CW_AES) || !LW_IO(CW_AES_KEY,*(const uint8_t * volatile *)&key,16,0) ||
-        !LW_IO(CW_AES_INPUT,*(const uint8_t * volatile *)&input,16,0) || !LW_IO(CW_AES_OUTPUT,*(uint8_t MCU_XDATA * volatile *)&output,16,1) ||
-        !LW_IO(CW_AES_INFO,*(aes_diagnostics_t MCU_XDATA * volatile *)&d,sizeof(*d),1)) return AES_BUFFER_OWNERSHIP;
+    if (!child_work_leaf(CW_AES) || !LW_IO(CW_AES_KEY,*(const uint8_t * SDCC_VOLATILE *)&key,16,0) ||
+        !LW_IO(CW_AES_INPUT,*(const uint8_t * SDCC_VOLATILE *)&input,16,0) || !LW_IO(CW_AES_OUTPUT,*(uint8_t MCU_XDATA * SDCC_VOLATILE *)&output,16,1) ||
+        !LW_IO(CW_AES_INFO,*(aes_diagnostics_t MCU_XDATA * SDCC_VOLATILE *)&d,sizeof(*d),1)) return AES_BUFFER_OWNERSHIP;
 #else
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!link_work_external(key, 16) || !link_work_external(input, 16) ||

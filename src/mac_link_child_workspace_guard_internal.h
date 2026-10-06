@@ -52,7 +52,7 @@ uint8_t child_work_clean(void);
  * carries these values across admission calls in extra saved registers;
  * adding volatile to the public definition alone causes error98.
  * Only named parameters, never caller spans or arena fields, belong here. */
-#define CW_READ_HOME(type,home) (*(type volatile *)&(home))
+#define CW_READ_HOME(type,home) (*(type SDCC_VOLATILE *)&(home))
 #else
 #define CW_RETURN(f,r) (r)
 #define CW_CALL(f,e) (e)

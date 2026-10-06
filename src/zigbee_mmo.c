@@ -65,7 +65,7 @@ zigbee_mmo_result_t zigbee_mmo_hash(
     uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
-    if (!LW_IO(LW_CHILD_MMO,input,*(volatile uint16_t *)&length,0) || !LW_IO(LW_CHILD_MMO,output,16,1) ||
+    if (!LW_IO(LW_CHILD_MMO,input,*(SDCC_VOLATILE uint16_t *)&length,0) || !LW_IO(LW_CHILD_MMO,output,16,1) ||
         !LW_IO(LW_CHILD_MMO,info,sizeof(*info),1)) return ZIGBEE_MMO_ARGUMENT;
 #endif
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
