@@ -903,3 +903,321 @@ The advantage became larger after the baseline correction, not smaller.
     must also avoid the +25 KB CODE cost.
 
 The classification remains **UNSUITABLE** for production for now.
+
+## 20. Backend development: ABI fixes, stack ≤128 B, simulator commissioning
+
+Toolchain: `devbis/llvm-mcs51` `23.1.2-mcs51-20261004` (`44a8e3000`) plus the
+study branch `study/fixes`. All fixes are generic, have lit tests, and contain
+no firmware-specific code. Firmware: the same compat source, `lg_esl29_rev03`,
+`JOIN_SMOKE_KEY_MODE=default-tc`. No LTO. Banking is frozen: fixed lld, fixed
+startup, fill-first auto-banking.
+
+### 20.1 Generic compiler defects fixed in this phase
+
+| Commit | Defect | Effect in the firmware | Test |
+|---|---|---|---|
+| `6204dbdcf` | Odd-width (i24) generic-pointer access crashed ISel | not reached (§9) | `generic-pointer-odd-width.ll` |
+| `70695a362` | `ICALL_W` inserter dropped the implicit argument-register uses, so every register argument of an indirect call was dead | 0 indirect calls in the firmware | `icall-arg-registers.ll` |
+| `f0e7a932b` | Banked callees read stack arguments 3 B too high (20.2) | 45 callees / 86 thunked sites | `bank-stack-arg-bias.ll`, `mcs51-external-bank-thunk-common.s` |
+| `01683fe51` | PEI ignored stack-argument pushes for frame indices inside a call sequence (`SPAdj`) | wrong locals between pushes (`mac_tx_submit`, `seal`, …); case 0 step 2 ev508 | `frame-index-inside-call-sequence.mir` |
+| `55cf933ea` | Escaping CODE constants were read with `MOVX` from XDATA addresses | wrong rodata reads; now an XDATA copy (35 B `.data`) | 3 lit tests |
+| `d137a4e3e` | DPTR was reused across pseudos that were not expanded yet | `mac_scan.c:369` stored to the wrong offset; case 0 step 21 | `dptr-reuse-pending-pseudo.ll` |
+| `59e068541` | Constant i8 call arguments were selected into `A`, so all but one went through the hardware stack | `f(1,2,3,4)` built a 4-byte SP frame | `call-const-byte-args.ll`, `call-i8.c` |
+| `b5fafbbe2` | New opt-in ABI `-mcs51-wide-args`: words 5–8 in IP4–IP7, bytes 5–12 in IM16–IM23. Refused with the default CSR set. | removes outgoing-argument pushes | `wide-args.ll` |
+| `dc1ca97a3` | The ALU-pseudo expander's "operand is still in A" scans checked only physical `A`. A def of a virtual register in `MCS51AReg` in between (later allocated to `A`) was missed, so `0 - (x & 1)` computed `0 - 0`. Also present in the pinned upstream toolchain. | the READY CSMA backoff LFSR in `join_smoke.c` (`(s>>1) ^ (s&1 ? 0xB8 : 0)`) never applied the tap; case 0 step 808 drew backoff 4 instead of 0, failing at step 811 | `sub-from-const-acc-clobber.ll` |
+| `709c6d3c0` | Under `minsize`, i8 `udiv`/`urem` select `DIV AB`. The `urem` expansion read the remainder with a generic direct load of 0xF0 that carries no use of `B`, so `DIV AB` (both results apparently dead) and its `mov a,lhs` were erased by dead-instruction elimination: `x % 41` returned 41. Now uses `MOV_A_B` (`Uses=[B]`). | `zcl_sensor.c` `ZCL_SENSOR_PHASE` (`sample % 41`) was always 41, so the initial report baselines were 2510/5525/28/159 and no value ever changed; case 0 queued no ZCL report at step 908 and missed the step-909 APS seal | `urem-i8-div-ab.ll` |
+
+Lit gate (`CodeGen/8051` + `lld/test/ELF` mcs51): **153/154**. The single
+failure is the pre-existing assertions-only `cc2530-pdata-overflow.c`.
+
+The `dc1ca97a3` fix changes the code of one firmware object
+(`join_smoke.o`, three instructions, same size). The runtime library
+disassembly is unchanged. CODE, banks, thunks and the stack census of
+`Oz-v9wc` are unchanged.
+
+The `709c6d3c0` fix changes only `zcl_sensor.o` (the only firmware object with
+`DIV AB`): CODE 213093 → **213132** (+39, bank 6). The runtime (built at
+`-O2`, magic-multiply division) disassembles identically. Thunks 367/0 bad,
+0 entry violations, census 106 are unchanged.
+
+How it was found: case 0 then failed at step 909 event 153. The reference
+does an AES operation there; the image did not. Backtraces in the instrumented
+host model showed the AES was `nwk_aps_step` → `security_keys_send` → `seal`
+for a ZCL report queued one step earlier by `join_smoke.c` `serve()`, when
+`zdo.last` crossed 0x400000 and the synthetic sensor sample went 0 → 1. The
+image's XDATA (`ZCL_SENSOR_STATE`) held `last` = 2510 = 2100 + 41·10, an
+impossible phase for `% 41`; a 3-line reduction reproduced it.
+
+How it was found: case 0 failed at step 811 inside `mac_adapter_step`
+(SCHEDULED, `reached(live, at)` false). An instrumented copy of the host
+reference model showed `requested.at` = 0x2F9685 against 0x2F96D5 in the
+image, a difference of four 20-symbol backoffs. Per-step XDATA dumps from the
+simulator then showed the LFSR state 0x28 where the host had 0x90
+(0x51 → 0x28 is the shift without the tap).
+
+**Harness and tool defects found (not compiler defects).**
+
+* `llvm_join_replay.py` loaded `.data` from the VMA instead of the LMA, so every
+  earlier run of an image with `.data` started with wrong initial values.
+* Every earlier LLVM link used the **shipped** `mcs51-runtime.o` (sha
+  `d1062d34…`), which the unfixed compiler built with the default ABI.
+  `rt/mk_rt.sh` now builds ABI-matched runtimes with the fixed compiler for each
+  CSR/argument policy, and `link.sh` takes `RESOURCE_DIR`. This is mandatory for
+  `-mcs51-wide-args` because the 5th byte argument of `__mcs51_gptrput*` moves
+  to IM16.
+* The ucsim `~cl_banker` use-after-free is fixed (§19.8).
+* The host reference vectors encode the **SDCC** addresses of the AES DMA
+  descriptors (`TARGET_aes_dma0/1` = 0x07FE/0x0806 in
+  `ref/join_smoke_layout.h`). They appear as DMA0CFG/DMA1CFG writes and reads.
+  The LLVM image correctly programs its own `_aes_dma0/1` (0x0798/0x07A0).
+  Cases 0 and 10 failed at step 395 until the harness relocated those event
+  values at load time (`relocate_dma_cfg`). The relocation first requires the
+  reference byte to equal the SDCC layout byte; descriptor contents were
+  already checked against the image symbols.
+* `next_pc` returned "unknown" for sites inside the RAM copy of the flash
+  template. So the adjacency check could not see that, after `w FCTL`, the
+  check read `movx a,@dptr` is the very next instruction. A `run` then
+  executed that read without an event, using the stale written value. This
+  shifted every later poll by one event. The symptoms were:
+  * case 10 reached `ram_stop` one poll early;
+  * cases 0 and 8 hung after the erase completed (the B.7 mismatch path).
+
+  The SDCC harness hard-codes this adjacency. `next_pc` now decodes template
+  sites through their ROM copy. No earlier passing case ran a flash command.
+* **Placement-contract defect in the LLVM link profile (fixed in compat
+  source).** `flash_exec.h` requires `flash_exec_command` to be in common CODE
+  below 0x8000, and the SDCC join-smoke build places it in `CSEG`
+  (`JOIN_SMOKE_COMMON`). The LLVM auto-banker had put it in bank 4 (0xB95C).
+  The RAM flash template runs with XMAP set and returns with `RET` while XMAP
+  is still set, so its caller must not sit in the XMAP-hidden 0x8000–0x9FFF
+  window of a bank. In this image the banked address (0xB95C) happened to be
+  outside that window. The cases 0/8 hang was later traced to the template
+  defect below, not to this placement. The fix is kept because it restores the
+  documented contract.
+  * The fix is `MCU_COMMON_CODE` on the definition. It is the same mechanism
+    `idle` already used, and it expands to nothing under SDCC: the SDCC ihx is
+    still `10155c95…`.
+  * `flash_exec_command` is the only function that writes MEMCTR.XMAP.
+    `flash_nv_read` writes only XBANK, which does not change code fetch, so it
+    may stay banked.
+  * This is a link-profile/source-contract issue, not a compiler defect.
+* **Flash RAM-template result-offset defect (compat source, fixed).** The
+  hand-written LLVM template `src/flash_exec_mcs51.s` (from the original
+  `clang_compat.diff`) stored the result and the last FCTL value at
+  `flash_exec_work[0..1]`. The SDCC template stores them through the pointer
+  left after its seven argument reads, which is `flash_exec_work[7..8]`.
+  `flash_exec_command` presets `work[7] = 0xFF` and returns `work[7]`, so every
+  LLVM flash command reported failure. After the first completed erase, the NV
+  layer took its error/recovery path (a long fill loop) instead of the
+  reference `flash_nv_read` verify. Cases 0 and 8 timed out there.
+  * Fix: both stores use `#(flash_exec_work + 7)`. The template size is
+    unchanged.
+  * The link now takes the template from the compat tree (`wt-sdcc`,
+    `TEMPLATE_SRC` overridable) instead of `wt-llvm`.
+  * SDCC does not assemble this file, so the SDCC ihx is unaffected.
+  * This is a source-port defect, not a compiler defect. Cases without a
+    completed flash command (1–6, 9) could not see it. Case 10 ends at the
+    poll-limit `ram_stop`, so it could not see it either.
+* The harness can snapshot and resume (`SNAP_DIR`, `SNAP_EVENTS`, `RESUME`).
+  A snapshot stores the ELF sha and the full captured state.
+
+**Compat source.** `1649965` (compat-v4) routes the remaining SDCC
+cast-reload spill hints (`CW_READ_HOME`, `*(T volatile *)&x`) through
+`SDCC_VOLATILE`. Under LLVM they produced 52 B of address-taken stack objects
+(25 B on the worst path). The SDCC ihx is unchanged (`10155c95…`).
+
+### 20.2 Bank-thunk stack argument fix
+
+1. **Exact three-byte cause.** The bank thunk is
+   `push FMAP; mov FMAP,#b; lcall F; pop FMAP; ret`. A banked callee therefore
+   sees `[args][caller ret 2][FMAP 1][thunk ret 2]`.
+   `LowerFormalArguments` assumed a bare `LCALL` and used
+   `-(LocMemOffset+2)`, so it read the saved FMAP byte and the caller's
+   return address as arguments. Observed:
+   `mac_radio_init → clock_select_init` read `&clock_status` as 0xDA05.
+2. **Backend layer fixed.** The ABI is fixed in three places:
+   * **ISel.** `MCS51Banking.h` adds `isMCS51BankedFunction` and
+     `getMCS51IncomingStackArgBias` (2 + 3 for banked functions).
+     `LowerFormalArguments` and the varargs fixed object use this bias.
+     `LowerCall` routes an explicit-bank callee through the thunk when it has
+     stack arguments, even from the same bank.
+   * **AsmPrinter.** The thunk is unchanged.
+   * **lld.** A weak thunk whose target is common is redirected to the direct
+     target.
+3. **Direct-call regression.** Common and near callees keep their offset
+   (`#252` in `bank-stack-arg-bias.ll`). A same-bank call with only register
+   arguments stays direct (`cc2530-banked-call.c`). Runtime ABI matrix
+   (`banking/abi-matrix`, 14 scenarios): shipped 0/14, fixed **14/14**.
+4. **Banked-call regression.** In `bank-stack-arg-bias.ll` a banked callee
+   reads at `#249` (auto-bank and explicit). A same-bank call with stack
+   arguments goes through `__mcs51_bankcall_*`. lld test
+   `mcs51-external-bank-thunk-common.s`. Reduced runtime proof
+   `banking/stackarg-thunk/run.sh`: shipped `0x0100`, fixed `0x1234`.
+5. **Firmware affected call sites.** Before the fix: 45 stack-argument callees
+   through 86 thunked call sites (v4-sfn).
+   * After the fix (v5-sfn), `stackarg_entry_audit.py` found 48 stack-argument
+     functions: 85 thunk entries, 1 direct entry to a common function, and **0
+     violations**.
+   * Final image (v9w/v9wc, wide args): 2 stack-argument functions, 3 thunk entries,
+     0 violations.
+6. **Simulator result after fix.** Case 0 passed the old step 2 / ev259 failure.
+   It then exposed independent defects in turn: PEI `SPAdj` (ev508), the
+   harness LMA bug (step 6), and DPTR reuse (step 21). After each fix the
+   replay moved further. The final result is in 20.5.
+
+### 20.3 Final hardware-stack architecture
+
+The bound is static and whole-program (`stack/stack_census.py`, from
+`-mcs51-frame-census` plus the linked call graph).
+* There is no recursion.
+* There are no indirect calls.
+* Interrupt vectors are unpopulated, and nothing writes `IEN0`/`EA` (`idle`
+  only reads `IEN0`).
+
+**Callee-save / argument policy matrix.** Every policy is built with
+`-mcs51-static-frames -mcs51-frame-census` and an ABI-matched runtime. Every
+policy has 367 thunks, 0 bad, and 0 stack-argument entry violations.
+
+| Policy | CODE | Common | PDATA frame pool | Stack | Worst-path composition | Stack-arg fns |
+|---|---:|---:|---:|---:|---|---:|
+| v4-plain (no static frames, default CSR) | 196172 | 16179 | 0 | 476 | ret 40, bank 57, csr 259, args 40, locals 25, spills 55 | – |
+| v9-def (static frames, default CSR) | 191300 | 16159 | 48 | 398 | ret 40, bank 57, csr 260, push 40, frame 1 | 48 |
+| v9-r (`-mcs51-csr=r`) | 214241 | 17576 | 180 | 232 | … csr 94, push 40 | 48 |
+| v9-rw (`csr=r` + wide args) | 212141 | 17584 | 173 | 200 | … csr 94, push 8 | 2 |
+| v9 (`csr=none`) | 215954 | 17529 | 212 | 138 | … csr 2, push 38 | 48 |
+| **v9w (`csr=none` + wide args)** | **213005** | **17506** | **203** | **106** | ret 40, bank 57, push 8, frame 1 | **2** |
+| **v9wc (v9w + `flash_exec_command` common, 20.1)** | **213132** | **18711** | **203** | **106** | same as v9w | **2** |
+
+`csr=none` + wide args is selected. It is the only policy at or below 128 B.
+It is also smaller than `csr=none` alone (−2949 B CODE) because outgoing
+argument pushes disappear. The measured image is **v9wc**: v9w with the
+placement contract fix of 20.1. It has the same flags, the same stack census
+and the same audits (367 thunks, 0 bad, 0 entry violations).
+
+7. Starting stack: **476**.
+8. No-callee-saved prototype: **162** (v4-sfn/v7d). Then 138 with compat-v4
+   (−24 address-taken reload objects).
+9. Final selected callee-save policy: **none** (`-mcs51-csr=none`), plus
+   `-mcs51-wide-args`. Values live across calls go to the per-function static
+   frame instead of being pushed.
+10. Static machine-frame bytes moved: **1684 B** in 215 linked frames, overlaid
+    by the call graph into a **203 B** PDATA pool (`MOVX @R1`).
+11. Unavoidable dynamic bytes (worst path):
+    * 40 return addresses (19 nested + `main`);
+    * 57 banking (19 thunks × [thunk ret 2 + FMAP 1]).
+
+    That is **97 B** with the current thunk protocol. A further 9 B are
+    avoidable in principle: 8 B of argument pushes beyond the wide-argument
+    registers (`ed_wire_crypt`, `encrypt`) and 1 B for an address-taken local
+    (`sample`).
+12. Final whole-program stack: **106 B** (`main` → … → `child_work_address` →
+    `edge`, 19 banked hops; the top 20 paths are all 106).
+13. Interrupt-inclusive bound: **106 B**. There are no ISRs, so the interrupt
+    contribution is 0. Any future ISR must fit in the remaining 22 B.
+14. Physical capacity: **128**.
+
+Further levers, not implemented:
+* **bank-ret thunk protocol.** Projected −2 B per hop, about −38 on the worst
+  path, but every banked entry would have to go through a thunk.
+* **Static argument frames** for the remaining 8 B.
+
+### 20.4 Cost
+
+| Metric | LLVM baseline (v4-plain) | Final LLVM (v9wc) | SDCC 4.2 | SDCC TM |
+|---|---:|---:|---:|---:|
+| CODE | 196172 | **213132** | 253445 | 247449 |
+| Common CODE | 16179 | 18711 | 32714 | 31922 |
+| Raw XDATA | 4841 | **5079** (4841 bss + 35 data + 203 frame pool) | 7676 | 7676 |
+| Internal DATA | 8 regs + 24 IM, 0 globals | 8 regs + 24 IM, 0 globals | 51 + OSEG 10, 88 bits | 51 + OSEG 10, 80 bits |
+| Hardware stack | 476 | **106** | 45 | 45/46 |
+| Stack capacity | 128 | 128 | 45 | 46 |
+| Minimum bank headroom | 0 | 0 | 13 | 90 |
+| Aggregate bank slack | 43239 | 28811 | – | – |
+| Bank thunks (named) | 367 | 367 | SDCC banker | SDCC banker |
+| Incorrect thunks | 0 | 0 | – | – |
+
+The SDCC columns come from §14, measured on the same benchmark source; they
+were not re-measured. The absolute status block at 0x1E00 is excluded from raw
+XDATA in all columns.
+
+15. Final CODE: **213132**.
+16. CODE delta vs LLVM baseline: **+16960** (+8.6%). This is mostly the
+    `csr=none` static-frame save/restore (`MOVX @R1`) that replaces push/pop.
+17. CODE delta vs SDCC TM: **−34317** (−13.9%). Against SDCC 4.2: −40313.
+18. Final XDATA: **5079** raw (+238 vs the baseline: the 203 B frame pool and
+    35 B of CODE-constant copies).
+19. XDATA delta vs SDCC TM: **−2597**.
+20. Minimum bank headroom: **0** (banks 1, 3, 4, 5).
+    * Bank 2 has 1 B free, bank 6 has 2186 B, and bank 7 has 26624 B.
+    * Every LLVM image so far has a worst bank free of 0, because the auto-banker
+      packs fill-first. The real margin is the 28811 B of aggregate slack.
+    * No rebalancing was done.
+
+Per-bank used bytes (v9wc): b1 32768, b2 32767, b3–b5 32768, b6 30582, b7 0.
+Compared with v4-plain, bank 6 is +14426 and bank 7 is unchanged. Compared
+with v9w, the common area grew by 1205 B and bank 6 shrank by 1117 B (the
+banked copy and its internal thunk are gone).
+
+### 20.5 Runtime (patched ucsim, `sim/llvm_join_replay.py`, image `Oz-v9wc`)
+
+`complete` means that every step's status block (0x1E00–0x1E30) and NV journal
+matched the host reference vectors.
+
+| Case | Steps | Result | Terminal | Peak SP | Stack used |
+|---|---:|---|---|---:|---:|
+| 0 | 1142/1142 | complete | serving | 0xE4 | 101 B |
+| 1 | 256/256 | complete | fault | 0x8B | 12 B |
+| 2 | 1/1 | complete | fault | 0x8B | 12 B |
+| 3 | 1/1 | complete | fault | 0x8B | 12 B |
+| 4 | 3/3 | complete | fault | 0xB3 | 52 B |
+| 5 | 130/130 | complete | fault | 0xC8 | 73 B |
+| 6 | 405/405 | complete | fault | 0xC8 | 73 B |
+| 8 | 406/406 | complete | fault | 0xDB | 92 B |
+| 9 | 25/25 | complete | fault | 0xC8 | 73 B |
+| 10 | 396/396 | complete | flash-ram-stop | 0xDA | 91 B |
+
+Every terminal is the one the host reference vector ends in. Cases 1–6, 8 and 9
+are fault-injection vectors that end in `fault`. Case 10 ends at the
+flash poll-limit `ram_stop`. Case 0 is the nominal join. It ran 559709
+peripheral stops in 4.8 h with 10 adjacency retries.
+
+21. Simulator cases passed: **10/10** (every step's status block and NV journal match).
+22. Complete join: **YES** (case 0, 1142/1142 steps: scan, association, key transport, NV commit, device announce).
+23. Final READY/serving: **YES** (terminal `serving`; ZCL reports sealed and sent).
+
+### 20.6 Classification
+
+24. Stack ≤128: **YES** (106 static and whole-program; measured peak SP 0xE4 = **101 B** in case 0, 27 B below capacity).
+25. Banking ABI proven: **YES**.
+    * 367 thunks, 0 incorrect.
+    * 0 stack-argument entry violations.
+    * ABI matrix 14/14.
+    * Lit tests for the bias, the thunk routing and the lld redirect.
+26. Continue backend work: **YES**. The stack blocker is resolved and the
+    advantage holds: −34317 B CODE and −2597 B raw XDATA vs SDCC TM. The
+    remaining work is bank headroom (0 B fill-first), the two generic-pointer
+    defects of §9, ISR support within the 22 B margin, and hardware
+    validation.
+27. LLVM profile classification: **SIMULATOR-PROVEN RESEARCH PROFILE**.
+    Stop condition (A) is met: a reproducible ≤128 B profile completes the
+    full simulator join to READY/serving. It is not production-ready:
+    it has not run on hardware and has no bank headroom.
+
+Not production-ready. Hardware remains a later phase.
+
+Reproduce:
+* Compiler flags: `-Oz -mllvm -mcs51-frame-census -mllvm -mcs51-static-frames
+  -mllvm -mcs51-csr=none -mllvm -mcs51-wide-args`.
+* Runtime: `rt/mk_rt.sh` variant `none-wide`.
+* Link: fixed lld and `startup/cc2530_startup_fixed.o` via
+  `sframe/sframe_link.py`.
+* Audits: `banking/thunk_audit.py`, `banking/stackarg_entry_audit.py`,
+  `stack/stack_census.py`.
+* Toolchain: `study/fixes` at `709c6d3c0`, built with `ninja clang llc lld`.
+* Simulator: patched ucsim (`ucsim-fix`), run from `sim/` as
+  `llvm_join_replay.py --simulator S51 --elf ../link/Oz-v9wc.elf --case N`
+  for N in 0–6 and 8–10. Reference vectors: `sim/ref/out/vN.json` from the
+  host model (`sim/ref/cc.sh`).
+* SDCC identity: `make BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc
+  prepare-join-smoke-image` gives `join_smoke_unverified.ihx` sha256
+  `10155c95…8534`.

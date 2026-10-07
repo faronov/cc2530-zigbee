@@ -58,7 +58,9 @@ flash_exec_template:
   mov a, r0
   orl a, r1
   jnz .Lram_poll
-  mov dptr, #flash_exec_work
+  ; Result and last FCTL go to flash_exec_work[7] and [8], as in the SDCC
+  ; template (which writes through the pointer left after the 7 argument reads).
+  mov dptr, #(flash_exec_work + 7)
   mov a, #0x07
   movx @dptr, a
   inc dptr
@@ -82,7 +84,7 @@ flash_exec_template:
 .Lram_error:
   mov a, #0x06
 .Lram_return:
-  mov dptr, #flash_exec_work
+  mov dptr, #(flash_exec_work + 7)
   movx @dptr, a
   inc dptr
   mov a, r4

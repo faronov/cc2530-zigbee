@@ -168,7 +168,8 @@ static uint8_t MCU_COMMON_CODE idle(uint8_t expected_mapping)
         control == cache_mode && bank == expected_mapping;
 }
 
-flash_exec_result_t flash_exec_command(uint8_t operation, uint8_t page,
+/* The RAM template returns here with XMAP set: this caller must be common. */
+flash_exec_result_t MCU_COMMON_CODE flash_exec_command(uint8_t operation, uint8_t page,
                                      uint16_t offset, const uint8_t MCU_XDATA *word,
                                      uint16_t poll_limit)
 {
