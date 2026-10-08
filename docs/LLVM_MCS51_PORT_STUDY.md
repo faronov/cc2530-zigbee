@@ -1221,3 +1221,199 @@ Reproduce:
 * SDCC identity: `make BOARD=lg_esl29_rev03 JOIN_SMOKE_KEY_MODE=default-tc
   prepare-join-smoke-image` gives `join_smoke_unverified.ihx` sha256
   `10155c95…8534`.
+
+## 21. Hardware candidate 1 (frozen compiler + STACK_COMMIT)
+
+LLVM remains an experimental profile. SDCC remains the production compiler.
+No build defaults changed, and no compiler optimization, LTO or static-frame
+change went into this phase.
+
+Bundle: `artifacts/llvm-hw-candidate-1/` (read-only, `SHA256SUMS`).
+Pipeline: `build/llvm-hw1/`.
+
+### 21.1 Compiler freeze and provenance
+
+* **Authoritative compiler: `frozen-hw/`.**
+  * Fresh configure and full build of `a3c9a84a4ffe7cf4ea56e6dc1c6a433825cd7beb`
+    in `build-hw`, from a clean detached worktree.
+  * Release, assertions ON, `clang;lld`, target MCS51, g++ 13.3.0.
+  * `clang --version` and `ld.lld --version` both report `a3c9a84a4…`.
+    The string `a93ae54e0` occurs nowhere in the binaries.
+  * The old `frozen-gp` had captured `a93ae54e0` as its VCS revision at
+    configure time. It is retained only as history.
+* **Generated code is unchanged by the re-freeze.**
+  * The hardware pipeline built the firmware with both compilers.
+  * All 45 objects and the runtime object are byte-identical once the
+    `.comment` (compiler identification) section is removed.
+  * The startup object, linker scripts and flash template are identical.
+  * All 11 PT_LOAD segments of the linked ELF are byte-identical.
+  * The linker map is identical up to the build directory.
+* **Upstream base.** devbis/llvm-mcs51 `mcs51` `949d7acb4`, tree-identical to
+  the linearized upstream `3638e20c2`.
+  * Later upstream commits `b60674dc9`, `39734661c` and `dd5ea65cf` are not
+    included.
+* **Local commits.** The full commit → PR table is in `PROVENANCE.txt`.
+  * 19 commits over the base.
+  * 5 are already upstream (PRs #2, #4, #5, #6).
+  * 14 are in open PRs (#3, #7 draft, #8–#15).
+  * Uncommitted compiler changes: none.
+  * The compiler ref is preserved as `mcs51-llvm-hw-candidate-1`. Upstream
+    rebases do not alter this candidate.
+* **lit.** In `build-hw`, the CodeGen/8051, MC/MCS51, lld `mcs51-*` and clang
+  MCS51 suites ran 182 tests: 182 passed, 0 failed, 0 XFAIL, 0 assertions.
+* **Firmware build tree.** `b27f950` is STACK_COMMIT plus the LLVM
+  compatibility layer.
+  * The SDCC build of this tree reproduces the accepted physical HEX
+    `518c8aa4…` exactly (§20 STACK_COMMIT validation).
+  * The application behaviour is that of STACK_COMMIT.
+
+### 21.2 Per-bank admission (exact image)
+
+Physical bank N starts at N×0x8000. Bank 7 ends at 0x3E800, where the NV
+partition and lock page begin.
+
+| Bank | Physical start | Used | Free | Note |
+|---|---|---:|---:|---|
+| 0 common/root | 0x00000 | 18746 | 14022 | 18711 CODE + 35 `.data` load image |
+| 1 | 0x08000 | 32768 | 0 | **ZERO-MARGIN BANK**, ends with `ed_wire_inspect` `ret` @0xFFFF |
+| 2 | 0x10000 | 32767 | 1 | |
+| 3 | 0x18000 | 32768 | 0 | **ZERO-MARGIN BANK**, ends with `bdb_join` `finished` `ret` @0xFFFF |
+| 4 | 0x20000 | 32768 | 0 | **ZERO-MARGIN BANK**, ends with `nv_record` `encode` `ret` @0xFFFF |
+| 5 | 0x28000 | 32768 | 0 | **ZERO-MARGIN BANK**, ends with `join_smoke_wait` `ret` @0xFFFF |
+| 6 | 0x30000 | 30582 | 2186 | |
+| 7 | 0x38000 | 0 | 26624 | capacity 0x6800 |
+
+* Minimum bank headroom is **0**. Thunks: **367**, 0 incorrect.
+* **Zero-margin proof (`proofs.json`).** For each of banks 1, 3, 4 and 5:
+  * the input-section byte sum equals the output size;
+  * the last input section ends at VMA 0x10000;
+  * the last instruction is a `ret` at 0xFFFF;
+  * no PT_LOAD crosses a physical bank boundary or overlaps another;
+  * lld reported no truncation or overflow;
+  * no runtime data, fill or code is placed or expected there (`.data` loads
+    from bank 0).
+* No rebalancing was done.
+* HEX-populated bytes per bank agree, except that bank 0 also contains 145
+  bytes of linker zero-fill in the vector segment (§21.4).
+
+### 21.3 Memory admission
+
+| Item | Value |
+|---|---|
+| Populated CODE | 213132 (HEX: 213312 including `.data` init 35 and vector fill 145) |
+| Physical image extent | 0x37776 (bank 6 end); nothing ≥ 0x3E800 |
+| Common/root CODE | 18711 |
+| Raw XDATA | 5079 = frame pool 0x0000–0x00CA (203) + `.data` 0x00CB–0x00ED (35) + `.bss` 0x00EE–0x13D6 (4841) |
+| Fixed XDATA | `join_smoke_status` 0x1E00–0x1E2F; IRAM alias 0x1F00–0x1FFF; XREG 0x6000–0x63FF; SFR mirror 0x7080–0x70FF |
+| DATA | R0–R7 0x00–0x07; pseudo-registers 0x30–0x47 (24 B); 0 globals; no other direct DATA address used |
+| IDATA | 0 globals (0x80–0xFF is hardware stack) |
+| PDATA | 203 B static-frame pool in XDATA page 0 (215 frames, 1684 B before overlay) |
+| BIT | 0 |
+| Hardware stack | SP init 0x7F, first push 0x80, top 0xFF, capacity 128 |
+| Static stack bound | **106 / 128**: ret 40 + bank 57 + push 8 + frame 1; worst path has 19 banked calls |
+| Predicted peak SP | 0xE9 |
+
+The three absolute symbols `__memcpy_PARM_2`, `_gptrput_PARM_2` and
+`_mullong_PARM_2` all sit at 0x1E00. They come from the study project script.
+* The firmware uses them only as address operands of ownership-overlap
+  guards (`MMIO_XADDRESS(&sym)` comparisons). They are never dereferenced.
+* Binding them to the M0 boundary makes each guard a no-op.
+
+### 21.4 Final-machine-code proofs (frozen-hw, clean build)
+
+| Proof | Result |
+|---|---|
+| Bank thunks | 367, incorrect 0 |
+| Stack-argument entries | 401 trampolines, 2 stack-argument functions (MIR `fixedStack`), 3 thunk entries, 0 violations |
+| Static stack | 106 ≤ 128 PASS |
+| Fixed addresses | absolute symbols = status block + 3 guard aliases; `.data`/`.bss` < 0x1E00; no PT_LOAD overlap |
+| Generic pointers | 18/18 firmware call sites; semantic sims `sem`/`semd` 26/26 at −O0/1/2/s/z, `semi` 14/14 at −O0/2/z (all 13 builds PASS) |
+| SFR | 3 port writes, all in `board_early_off`, all pin-read RMW (known P0/P1 hazard, §13 item 9) |
+| Interrupts | only `IEN0`/`IEN1`/`IEN2 = 0` in startup; EA is never set, so the zero-filled vectors 0x03–0x93 are unreachable |
+| Startup | reset `ljmp __mcs51_start`; 221 B, 0 mismatches vs object; SP 0x7F; clears XDATA 0x0000–0x1EFF and IRAM 0x01–0xFF; `.data` 35 B copied from 0x49A8 |
+| Runtime | 8 helpers linked, byte-identical to `mcs51-runtime.o`; 5 placed in bank 6 behind thunks |
+| Simulator | 10/10 PASS (`sim-summary.json`); case 0 full commissioning replay `serving`, 1142/1142 steps, peak SP 0xE4 = 101 B; cases 1–6, 8, 9 reach their expected `fault` terminals; case 10 reaches `flash-ram-stop`; max stack over all cases 101 B |
+
+* The final link log (`link/hw1.log`) is clean: rc=0 and no warnings.
+  * The pass-1 census link is used only to size static frames before
+    overlay.
+  * It emits expected `R_8051_8` out-of-range warnings for the un-overlaid
+    frames. Its output is discarded.
+* The bundle manifest `SHA256SUMS` lists 134 files and has sha256
+  `77b08c8935865ca57c5f4b00b19fc1679acbcc820bbc6e402db7a0e21dcc6d88`.
+  * It contains the ELF, HEX, map, link inputs, objects, runtime,
+    receipts, compressed simulator logs, compiler provenance, the firmware
+    source archive and the pipeline.
+  * No BIN is produced: the CC2530 flow programs the HEX.
+
+### 21.5 Pre-hardware differential (measured from each physical HEX / receipt)
+
+| Metric | SDCC 4.2 (accepted HW) | SDCC TM/D | LLVM candidate 1 |
+|---|---:|---:|---:|
+| Populated CODE | 253445 | 247448 | 213132 |
+| Common/root CODE | 32714 | 31921 | 18711 |
+| Raw XDATA | 7676 | 7676 | 5079 |
+| Final XDATA | 7123 | 7123 | 5079 |
+| Internal DATA | DATA 51 + OSEG 10 + BIT 11 B | DATA 51 + OSEG 10 + BIT 10 B | R0-R7 8 + pseudo-regs 24 B; globals 0; BIT 0 |
+| Static stack | 45 / 45 | 45 / 46 | 106 / 128 |
+| Physical image extent | 0x3e70f | 0x3e729 | 0x37776 |
+| Minimum bank headroom | 13 | 90 | 0 |
+| Bank thunk count | n/a (SDCC __sdcc_banked_call) | n/a (SDCC banker; 200 banked call sites) | 367 (incorrect 0) |
+| Complete simulator join | hardware-accepted reference (not re-simulated here) | PASS (receipt) | PASS |
+| Physical capacity | 256000 (0x3E800) | 256000 (0x3E800) | 256000 (0x3E800) |
+| Bank 0 used/free | 32714 / 54 | 31921 / 847 | 18891 / 13877 |
+| Bank 1 used/free | 32083 / 685 | 31131 / 1637 | 32768 / 0 |
+| Bank 2 used/free | 32755 / 13 | 32424 / 344 | 32767 / 1 |
+| Bank 3 used/free | 32734 / 34 | 32678 / 90 | 32768 / 0 |
+| Bank 4 used/free | 31350 / 1418 | 32463 / 305 | 32768 / 0 |
+| Bank 5 used/free | 32685 / 83 | 31260 / 1508 | 32768 / 0 |
+| Bank 6 used/free | 32741 / 27 | 29162 / 3606 | 30582 / 2186 |
+| Bank 7 used/free | 26383 / 241 | 26409 / 215 | 0 / 26624 |
+
+* SDCC 4.2 is the accepted hardware artifact (`518c8aa4`). Its simulator column
+  is a reference and was not re-simulated here.
+* SDCC TM/D values come from its sealed `resource-receipt.json` and
+  `simulator-receipt.json` (HEX `f03f2f7c…`).
+* LLVM per-bank values are HEX-populated bytes. Bank 0 includes the `.data`
+  init and the vector fill.
+
+### Frozen hardware candidate
+
+1. Firmware STACK_COMMIT: `7b0eb693a720a9bef77cd639badd4d24cec337c2`. The
+   build tree is `b27f9504e7ea542cc612bdc896099776c551cf7d` (STACK_COMMIT plus
+   the SDCC-neutral LLVM compatibility layer).
+2. Compiler commit: `a3c9a84a4ffe7cf4ea56e6dc1c6a433825cd7beb`, over
+   devbis/llvm-mcs51 `949d7acb4`. There are 19 local commits; open PRs #3,
+   #7–#15 are not required to be merged.
+3. Clang SHA256: `c66ad13392e8dfc6e4fbd6b3f32799b40bb145c1feb245f06d38a9956b8d4ce5`.
+   * llc: `a39a49141e71c08a7d998ad7eb576713bfea3b372b4f347610ea044dd2343235`
+   * llvm-objcopy: `4e9e7dbf22ebc84df15f439a1f9c82e13dee82e537efdc4871bd9d70d152195f`
+4. LLD SHA256: `d913aa2aeb7b9243d2e72903ee96238c1a2622102249fb4e620cb5aeb26cdf9b`.
+5. Startup/runtime identity:
+   * `cc2530_startup.o` `51ef0a47…`
+   * `cc2530.ld` `bc3f3b70…`
+   * `hw1-project.ld` `f2684a23…`
+   * `libmcs51builtins.a` `83f6e49a…`
+   * `mcs51-runtime.o` `ee6747bb…`
+   * flash template `7e5ee37d…`
+6. LLVM CODE: **213132**.
+7. Common/root CODE: **18711**.
+8. Raw XDATA: **5079**, plus the status block at 0x1E00.
+9. Internal DATA: R0–R7 plus 24 pseudo-register bytes. There are 0 DATA,
+   IDATA or BIT globals.
+10. Static stack: **106 / 128**.
+11. Simulator peak: **101 B** (peak SP 0xE4, case 0).
+12. Bank thunks: **367**.
+13. Incorrect thunks: **0**.
+14. Minimum bank headroom: **0**.
+15. Zero-margin bank(s): **1, 3, 4, 5**. Placement is exactly proven (§21.2).
+16. LLVM/MCS51 tests: passed **182**, failed **0**.
+17. All 10 simulator cases: **PASS** (10/10).
+18. Full join: **PASS**, final state `serving`, 1142 / 1142.
+19. Hardware HEX SHA256: `1b865401c616aab655b46992f9464f4e74ee9f39acdec8daeee18e0e4b8f2afd`.
+20. Hardware ELF SHA256: `69dd18dbe673b41bf8e7a3b77e66e868134c11e34278e2dd9dffc0729d833bc0`.
+21. Ready to flash: **YES**. This waits on explicit user authorization to
+    program the board. It has not been flashed.
+
+LLVM classification: **READY FOR HARDWARE VALIDATION**. It is not
+production-ready.
