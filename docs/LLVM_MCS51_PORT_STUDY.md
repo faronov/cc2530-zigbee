@@ -1417,3 +1417,137 @@ The three absolute symbols `__memcpy_PARM_2`, `_gptrput_PARM_2` and
 
 LLVM classification: **READY FOR HARDWARE VALIDATION**. It is not
 production-ready.
+
+### First real CC2530 LLVM hardware validation
+
+The exact sealed candidate (§21) was programmed once onto the same physical
+CC2530 board used for the SDCC acceptance runs. The run used the same
+procedure as those runs:
+
+* guarded cc-tool programming, with the NV pages and the information page
+  preserved and the factory identity checked before and after;
+* a full debugger readback;
+* breakpoint admission DISARMED → ARMED → ADMITTED;
+* one permit-bound RF resume and status-only polling;
+* a terminal debugger halt.
+
+The coordinator, network, channel, Trust Center/security configuration and
+placement were unchanged. The controlled HA environment equalled the baseline
+before and after the run. Permit-join was coordinator-only (254 s) and was
+verified closed afterwards. The previous lab node was removed, and a fresh
+locally-administered lab identity was used. Nothing was rebuilt, and the
+artifact hashes were identical after the run.
+
+Two host-side operator defects affected the automated verdict. Both are
+described in the verdict note below.
+
+1. Firmware STACK_COMMIT: `7b0eb693a720a9bef77cd639badd4d24cec337c2`
+2. LLVM compatibility tree: `b27f950`
+3. Compiler commit: `a3c9a84a4`
+4. HEX SHA256: `1b865401c616aab655b46992f9464f4e74ee9f39acdec8daeee18e0e4b8f2afd`
+5. ELF SHA256: `69dd18dbe673b41bf8e7a3b77e66e868134c11e34278e2dd9dffc0729d833bc0`
+6. Hashes verified before programming: **YES**. Re-verified immediately
+   before cc-tool and again after the run.
+7. Programming: **PASS**. cc-tool returned 86 with all five guard/LAB
+   markers. Pages 0..126 were written and verified, NV stayed blank, and
+   page 127 and the information page were preserved. The factory identity
+   was identical before and after.
+8. Full readback: **PASS**. The readback covered 0x00000–0x3E7FF (256000 B,
+   213312 populated) and equals the HEX image padded with 0xFF.
+   Readback SHA256 = image SHA256 = `dcb92220…55d3`.
+9. Boot: **PASS**. Reset vector → `__mcs51_start` → `main`. The DISARMED
+   checkpoint was reached at the wait thunk 0x426C with SP 0x83 and FMAP 1.
+   The return address 0x4298 was on the stack and the JSN1 status-block
+   guards were intact. ARMED and ADMITTED were then reached via the mailbox.
+   The admission bytes equal the SDCC-admitted bytes (IEEE fields masked).
+10. Association: **PASS**. The coordinator saw exactly one
+    `trustCenterJoinHandler` (STANDARD_SECURITY_UNSECURED_JOIN) and one
+    `childJoinHandler` (joining, END_DEVICE). The node was available 49 s
+    after the RF resume.
+11. Authenticated key exchange: **PASS**. The key-establishment sequence was
+    `TC_RESPONDED_TO_KEY_REQUEST` → `TC_REQUESTER_VERIFY_KEY_SUCCESS`, once
+    each.
+12. SECURITY_KEYS_VERIFIED: **YES**. At the terminal halt, `security_keys_phase`
+    was 8 (VERIFIED). The phase was never FAILED or LEFT, and there was no
+    rejoin.
+13. BDB READY/result: **PASS**. JSN1 phase READY (5), reason 0, `saw_ready` 1.
+    `bdb_join`: phase 13, result 0, member, got_tc and got_confirm all set.
+14. ZHA interview: **PASS**. Device initialized as `LG-ESL29` /
+    `cc2530-zigbee`.
+15. Expected clusters: **PASS**. Endpoint 1 has profile 0x0104, input
+    clusters {0x0000, 0x0001, 0x0003, 0x0402, 0x0405} and no output clusters.
+    These semantics match the SDCC acceptance.
+16. Bind: **PASS**. ZDO Bind_rsp SUCCESS for 0x0001, 0x0402 and 0x0405.
+17. Configure Reporting: **PASS**. Configure_Reporting_rsp SUCCESS for 0x0001,
+    0x0402 and 0x0405.
+18. Application reporting: **PASS**. Natural Report_Attributes arrived for
+    temperature (0x0402, value 2150) and humidity (0x0405, value 4600) about
+    4.5–5.5 minutes after join, consistent with the SDCC acceptance.
+    Uncached reads returned temperature 2110 and humidity 4525. These values
+    are synthetic.
+19. Battery: **PASS**. Uncached reads returned voltage 30 and percentage 199,
+    and PowerConfiguration reporting was configured.
+20. Identify/Query: **PASS**. Identify(60) was accepted and IdentifyTime read
+    back 59. Identify Query returned `identify_query_response(timeout=49)`.
+21. Hardware flash execution: **NOT RUN**. No approved non-NV scratch
+    procedure exists for this firmware. At the halt, `flash_fault` = 0 and the
+    flash-exec result = 0.
+22. Observed peak SP: **0xE4**, a stack depth of at least 101 B. This is the
+    non-invasive IRAM high-water mark (highest non-zero byte above the
+    zero-initialized stack base), so it is a lower bound. It equals the
+    simulator peak and is within the admitted static bound of 0xE9 (106 B).
+    SP sampled at the halt was 0x9A.
+23. Banking anomaly: **NO**.
+    * Halt PC 0xEC4B with FMAP 2 maps, in the sealed ELF, to `nwk_aps_step`
+      +175 in `.bank2`, within the function.
+    * The fault-thunk breakpoint was never hit.
+    * There was no reset and no unexpected bank.
+24. Stack anomaly: **NO**.
+25. Generic-pointer anomaly: **NO**.
+26. Driver/adapter fault: driver fault 0 (dropped 0, gaps 50, 5968 RX frames)
+    and adapter fault 0 (lossy 0, policy 2). Stage/adapter/consumer results
+    were 0/1/0, the same values as the SDCC terminals.
+27. Radio error/loss observation: radio errors 0 and status-block radio
+    errors 0. Radio phase 4 / result 3, the same as SDCC. Lossy 0, and the
+    coordinator logged no leave or rejoin.
+28. First LLVM hardware gate: **PASS**. See the verdict note below.
+29. LLVM classification: **HARDWARE-PROVEN RESEARCH PROFILE**. It is not
+    production-ready. SDCC remains the production toolchain, and LLVM is not
+    the default.
+30. Further soak recommended: **YES**. A 35-minute continuous run is
+    recommended. It was not started.
+
+**Verdict note.** The session operator's automated verdict for the single run
+was `FAIL`. Offline re-evaluation of the same preserved evidence traced all
+three failing checks to operator criteria, not to firmware behaviour. There
+was no rerun, no hardware access and no rebuild.
+
+* **`authenticated_application_exchange` and `no_leave_rejoin`.** bellows logs
+  every EZSP callback twice: `[bellows.ezsp.protocol] Received command X` and
+  `[bellows.zigbee.application] Received X frame with`. The two lines carry
+  the same event at the same millisecond, and the parser counted both.
+  Counting only the protocol line gives exactly one TC join, one child join
+  and the key sequence 6 → 52.
+* **`security_keys_verified`.** The operator wrongly required
+  `security_keys_result == 0`.
+  * `security_keys_result` is the result of the *last* keys call: `finish()`
+    writes it on every call, and any later successful call resets it to 0.
+  * The halt-time value was 9 (`SECURITY_KEYS_IDENTITY`).
+  * The receive path rejects every frame addressed to 0xFFFC with IDENTITY by
+    design: `broadcast()` accepts only 0xFFFF and 0xFFFD, following the R22
+    rule cited in the source that an ED is not a recipient of FFFC. NWK Link
+    Status frames from the coordinator and routers use 0xFFFC and recur about
+    every 15 s.
+  * The LLVM halt came 88.6 s after the node's last exchange, so a
+    by-design rejection is the expected last result.
+  * All 10 SDCC terminal snapshots read (8, 0), but they were taken 25–78 s
+    after start, immediately after coordinator exchanges.
+  * The phase stayed VERIFIED, and TC-sourced reads and Identify traffic were
+    accepted throughout.
+  * The specific frame cannot be recovered, because the keys workspace is
+    scrubbed on return. This residual is recorded rather than hidden.
+
+A later controlled run should use a corrected observer (single-logger
+counting, VERIFIED = phase 8) and include the recommended soak. A second
+commissioning on this board needs a fresh program/erase epoch with a new lab
+identity. It was not performed, per the stop condition.
