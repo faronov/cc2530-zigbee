@@ -27,6 +27,7 @@ import re
 
 PASS, FAIL, AMBIGUOUS = "PASS", "FAIL", "AMBIGUOUS"
 ECHO_WINDOW = timedelta(seconds=1)
+LEAVE_WINDOW = timedelta(seconds=2)
 PROTOCOL, APPLICATION = "bellows.ezsp.protocol", "bellows.zigbee.application"
 CALLBACK_FIELDS = {"trustCenterJoinHandler": 5, "childJoinHandler": 5, "zigbeeKeyEstablishmentHandler": 2}
 ASSOCIATION = "STANDARD_SECURITY_UNSECURED_JOIN"
@@ -179,8 +180,9 @@ def zigpy_membership(records, ieee):
     for r in records:
         if r.logger != "zigpy.application":
             continue
-        # zigpy handle_join logs "New device .." for an unknown IEEE and "Device .." otherwise;
-        # bellows calls it for every trust-center join and every child join(true).
+        # zigpy handle_join logs "New device .." for an unknown IEEE and "Device .." otherwise. It runs
+        # for a trust-center join and for a ZDO Device_annce, NOT for childJoinHandler (H2 evidence:
+        # child join without announce produced no zigpy join record).
         m = re.match(r"(?:New device|Device) 0x([0-9a-fA-F]{4}) \(([0-9a-fA-F:]{23})\) (joined|left) the network$",
                      r.message)
         if m and m[2].lower() == ieee:
@@ -216,10 +218,28 @@ def membership(records, ieee):
         else:
             raise Ambiguous("unknown child-join flag")
     zjoined, zleft = zigpy_membership(records, ieee)
-    if len(zjoined) != len(associations) + len(rejoins) + len(child_joins):
-        raise Ambiguous("zigpy join records disagree with trust-center/child join events")
-    # A zigpy leave without a matching callback (e.g. ZDO leave) is still a leave.
-    leaves += [dict(ts=z["ts"], nwk=z["nwk"], status="ZIGPY_LEFT") for z in zleft[len(leaves):]]
+    # Each trust-center join must be corroborated by its own zigpy join record; remaining zigpy
+    # joins are Device_annce announcements (semantic events in their own right).
+    unpaired = sorted(zjoined, key=lambda z: z["ts"])
+    for row in sorted(associations + rejoins, key=lambda x: x["ts"]):
+        match = [z for z in unpaired if z["nwk"] == row["nwk"] and timedelta(0) <= z["ts"] - row["ts"] <= ECHO_WINDOW]
+        if not match:
+            raise Ambiguous("trust-center join without its zigpy join record")
+        unpaired.remove(match[0])
+    announces = [dict(ts=z["ts"], nwk=z["nwk"]) for z in unpaired]
+    # One physical leave is reported as DEVICE_LEFT, childJoin(false) and zigpy "left"; merge
+    # different representations close in time, never two records of the same representation.
+    leaves += [dict(ts=z["ts"], nwk=z["nwk"], status="ZIGPY_LEFT") for z in zleft]
+    semantic_leaves = []
+    for row in sorted(leaves, key=lambda x: x["ts"]):
+        last = semantic_leaves[-1] if semantic_leaves else None
+        if last and row["nwk"] == last["nwk"] and row["status"] not in last["representations"] \
+                and row["ts"] - last["ts"] <= LEAVE_WINDOW:
+            last["representations"].append(row["status"])
+        else:
+            semantic_leaves.append(dict(ts=row["ts"], nwk=row["nwk"], status=row["status"],
+                                        representations=[row["status"]]))
+    leaves = semantic_leaves
     key_events = []
     for e in keys:
         name = e.fields[1][0] if isinstance(e.fields[1], tuple) else None
@@ -227,7 +247,8 @@ def membership(records, ieee):
             raise Ambiguous(f"unknown key-establishment status {name}")
         key_events.append(dict(ts=e.ts, status=name, code=e.fields[1][1]))
     return dict(associations=associations, rejoins=rejoins, leaves=sorted(leaves, key=lambda x: x["ts"]),
-                child_joins=child_joins, keys=key_events, zigpy_joins=len(zjoined), dedup=dedup)
+                child_joins=child_joins, announces=announces, keys=key_events, zigpy_joins=len(zjoined),
+                dedup=dedup)
 
 
 def _serialized(message):
@@ -393,7 +414,7 @@ def steady_state(records, ieee, nwk, soak_start, soak_end, reads, post_identify_
     except Ambiguous as error:
         return _verdict({"evidence": AMBIGUOUS, "_ambiguity": [str(error)]}, {})
     checks["no_association_rejoin_or_leave"] = PASS if not (
-        m["associations"] or m["rejoins"] or m["leaves"] or m["child_joins"]) else FAIL
+        m["associations"] or m["rejoins"] or m["leaves"] or m["child_joins"] or m["announces"]) else FAIL
     checks["no_key_reestablishment"] = PASS if not m["keys"] else FAIL
     cadence, observations = {}, []
     for cluster, maximum in profile.report_max_interval:
@@ -426,7 +447,8 @@ def steady_state(records, ieee, nwk, soak_start, soak_end, reads, post_identify_
     checks["post_identify_query"] = PASS if identify_ok(app, post_identify_active) else FAIL
     ev.update(cadence=cadence, observations=observations, reports=len(app["reports"]),
               membership=dict(associations=len(m["associations"]), rejoins=len(m["rejoins"]),
-                              leaves=len(m["leaves"]), keys=len(m["keys"])), reads=len(reads))
+                              leaves=len(m["leaves"]), announces=len(m["announces"]), keys=len(m["keys"])),
+              reads=len(reads))
     return _verdict(checks, ev)
 
 

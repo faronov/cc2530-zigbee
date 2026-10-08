@@ -54,16 +54,19 @@ class Log:
                                                     f"{verb} the network", "INFO")
         return self
 
-    def child(self, s, joining=True, ieee=IEEE, nwk=NWK, zigpy=True):
+    def child(self, s, joining=True, ieee=IEEE, nwk=NWK):
         flag = "<Bool.true: 1>" if joining else "<Bool.false: 0>"
-        self.callback(s, "childJoinHandler",
-                      f"'index': 0, 'joining': {flag}, 'childId': 0x{nwk:04X}, 'childEui64': {ieee}, "
-                      f"'childType': <EmberNodeType.END_DEVICE: 3>",
-                      f"0, {flag}, 0x{nwk:04X}, {ieee}, <EmberNodeType.END_DEVICE: 3>")
-        if zigpy:
-            self.add(s + 0.008, "zigpy.application",
-                     f"Device 0x{nwk:04x} ({ieee}) {'joined' if joining else 'left'} the network", "INFO")
-        return self
+        return self.callback(s, "childJoinHandler",
+                             f"'index': 0, 'joining': {flag}, 'childId': 0x{nwk:04X}, 'childEui64': {ieee}, "
+                             f"'childType': <EmberNodeType.END_DEVICE: 3>",
+                             f"0, {flag}, 0x{nwk:04X}, {ieee}, <EmberNodeType.END_DEVICE: 3>")
+
+    def announce(self, s, ieee=IEEE, nwk=NWK):
+        """ZDO Device_annce: zigpy handle_join logs 'Device .. joined' (not the child join)."""
+        self.add(s, "zigpy.application", f"Device 0x{nwk:04x} ({ieee}) joined the network", "INFO")
+        return self.add(s + 0.002, "zigpy.application", f"Received frame on uninitialized device <Device "
+                        f"model=None manuf=None nwk=0x{nwk:04X} ieee={ieee} is_initialized=False> from ep 0 to "
+                        "ep 0, cluster 19: Serialized[b'\\x00']")
 
     def key(self, s, status="TC_RESPONDED_TO_KEY_REQUEST", code=6, ieee=IEEE, **kw):
         return self.callback(s, "zigbeeKeyEstablishmentHandler",
@@ -110,7 +113,7 @@ class Log:
 def h1_like(log=None, keys=True):
     """Normal successful commissioning in H1 order (all EZSP callbacks logged twice)."""
     log = log or Log()
-    log.filler(0).tc(5).child(7.5)
+    log.filler(0).tc(5).child(7.5).announce(7.51)
     if keys:
         log.key(10).key(14, "TC_REQUESTER_VERIFY_KEY_SUCCESS", 52)
     log.add(43, "zigpy.application", f"Device is initialized <Device model='LG-ESL29' manuf='cc2530-zigbee' "
@@ -176,12 +179,27 @@ class DuplicateLogging(unittest.TestCase):
         self.assertEqual((len(m["associations"]), len(m["rejoins"]), len(m["child_joins"])), (1, 1, 2))
 
     def test_join_then_leave_and_rejoin_are_distinct_events(self):
-        log = Log().tc(1).child(3).tc(100, "LEFT").child(100.5, joining=False, zigpy=False)
-        log.tc(130, "SECURED_REJOIN", new=False).child(131)
+        log = Log().tc(1).child(3).announce(3.1).tc(100, "LEFT").child(100.5, joining=False)
+        log.tc(130, "SECURED_REJOIN", new=False).child(131).announce(131.1)
         m = v.membership(log.records(), IEEE)
         self.assertEqual(len(m["associations"]), 1)
         self.assertEqual([r["status"] for r in m["rejoins"]], ["STANDARD_SECURITY_SECURED_REJOIN"])
-        self.assertEqual([x["status"] for x in m["leaves"]], ["DEVICE_LEFT", "CHILD_LEFT"])
+        self.assertEqual([x["representations"] for x in m["leaves"]], [["DEVICE_LEFT", "ZIGPY_LEFT", "CHILD_LEFT"]])
+        self.assertEqual(len(m["announces"]), 2)
+
+    def test_one_physical_leave_in_three_representations_is_one_leave(self):
+        log = Log().tc(1).child(3).child(50, joining=False).tc(50.006, "LEFT")
+        m = v.membership(log.records(), IEEE)
+        self.assertEqual(len(m["leaves"]), 1)
+        self.assertEqual(sorted(m["leaves"][0]["representations"]), ["CHILD_LEFT", "DEVICE_LEFT", "ZIGPY_LEFT"])
+
+    def test_two_separate_leaves_stay_two(self):
+        log = Log().tc(1).child(3).tc(50, "LEFT").tc(51, "SECURED_REJOIN", new=False).tc(51.5, "LEFT")
+        self.assertEqual(len(v.membership(log.records(), IEEE)["leaves"]), 2)
+
+    def test_child_join_without_announce_has_no_zigpy_join(self):
+        m = v.membership(Log().tc(1).child(3).records(), IEEE)
+        self.assertEqual((len(m["associations"]), len(m["child_joins"]), len(m["announces"])), (1, 1, 0))
 
     def test_duplicated_key_records_are_one_exchange(self):
         log = Log().tc(1).child(3).key(5).key(9, "TC_REQUESTER_VERIFY_KEY_SUCCESS", 52)
@@ -209,7 +227,7 @@ class DuplicateLogging(unittest.TestCase):
         with self.assertRaises(v.Ambiguous):
             v.membership(log.records(), IEEE)
 
-    def test_zigpy_join_count_must_agree(self):
+    def test_trust_center_join_without_zigpy_record_is_ambiguous(self):
         with self.assertRaises(v.Ambiguous):
             v.membership(Log().tc(1, zigpy=False).child(3).records(), IEEE)
 
@@ -251,6 +269,14 @@ class Commissioning(unittest.TestCase):
         log = h1_like().tc(200, new=False).child(202)
         checks = commission(log)["checks"]
         self.assertEqual((checks["association"], checks["no_leave_or_rejoin"]), (v.FAIL, v.FAIL))
+
+    def test_join_then_firmware_abandon_before_key_exchange_fails(self):
+        """H2 shape: association + child join, no announce, no TC link key, orderly leave."""
+        log = Log().filler(0).tc(5).child(7.5).child(12.7, joining=False).tc(12.706, "LEFT").filler(420)
+        verdict = commission(log)
+        self.assertFalse(verdict["passed"])
+        for name in ("authenticated_key_exchange", "no_leave_or_rejoin", "interview"):
+            self.assertEqual(verdict["checks"][name], v.FAIL, name)
 
     def test_failed_bind_fails(self):
         log = h1_like().bind(60, 20, 0x0402, status=0x8C)
@@ -384,6 +410,10 @@ class Soak(unittest.TestCase):
     def test_key_reestablishment_during_soak_fails(self):
         verdict = soak(soak_log([1200, 2100, 2940], lambda log: log.key(1500)))
         self.assertEqual(verdict["checks"]["no_key_reestablishment"], v.FAIL)
+
+    def test_reannounce_during_soak_fails(self):
+        verdict = soak(soak_log([1200, 2100, 2940], lambda log: log.announce(1500)))
+        self.assertEqual(verdict["checks"]["no_association_rejoin_or_leave"], v.FAIL)
 
     def test_single_failed_read_round_is_an_observation(self):
         good, bad = dict(ok=True, values=READS), dict(ok=False)
