@@ -1551,3 +1551,224 @@ A later controlled run should use a corrected observer (single-logger
 counting, VERIFIED = phase 8) and include the recommended soak. A second
 commissioning on this board needs a fresh program/erase epoch with a new lab
 identity. It was not performed, per the stop condition.
+
+### Hardware acceptance verifier correction
+
+The tooling was corrected offline, and only the tooling. The compiler, LLD,
+runtime, firmware, bank layout, Zigbee, security and RF are unchanged, and
+there was no rebuild.
+
+* Verifier: `tools/llvm_hw_acceptance.py`.
+* Tests: `tools/test_llvm_hw_acceptance.py`.
+* Commits: 8c7e251 (initial), then d8a10ba (zigpy/leave semantics, see 6a).
+* Verifier sha256 at d8a10ba:
+  `b2c210db55da42a977e6a97c17f8127bc64410779e1af231da5bdd11e321a596`.
+
+1. Original H1 raw evidence unchanged: **YES**. Both re-verification receipts
+   (`verifier-receipt-8c7e251fc818.json` and
+   `verifier-receipt-d8a10ba7adb6.json`) list identical sha256 values for all
+   32 H1 evidence files. They are new files beside the evidence, and no raw
+   record was edited or removed.
+2. Duplicate-log root cause:
+   * bellows logs every EZSP callback twice:
+     `[bellows.ezsp.protocol] Received command <name>: {...}` and
+     `[bellows.zigbee.application] Received <name> frame with [...]`.
+     Both lines carry the same arguments, 0–1 ms apart.
+   * The original parser counted raw lines, which gave in H1:
+     * 2 trust-center joins;
+     * 2 child joins;
+     * the key codes 6, 6, 52, 52.
+3. Duplicate-log parser fix:
+   * Each callback is parsed into `(kind, normalized arguments)`.
+   * Each application-logger record is paired 1:1 with an identical
+     protocol-logger record within 1 s.
+   * The protocol record is the semantic event.
+   * An unpaired record on either side makes the result **Ambiguous** (fail
+     closed). The rule is never "divide by two".
+   * Two genuine events, even with identical payloads, stay two because each
+     has its own echo.
+   * H1 result: 5 protocol, 5 application and 5 semantic events.
+4. Incorrect key-check root cause:
+   * The rule required `security_keys == {phase: 8, result: 0}` at halt.
+   * `result` is the result of the *last* keys operation. H1 halted
+     88.6 s after the node's last successful exchange.
+   * The last result was 9 (`SECURITY_KEYS_IDENTITY`). That is the by-design
+     rejection of the ~15 s 0xFFFC NWK Link Status broadcasts: an end device
+     is not an FFFC recipient (`security_keys.c` `broadcast()`).
+5. Correct security acceptance rule. The verifier is checkpoint-aware: the
+   commissioning checkpoint is separate from steady-state observations.
+   * **Commissioning:**
+     * exactly one semantic association;
+     * a trust-center join followed by the authenticated key path
+       (`zigbeeKeyEstablishmentHandler` 6 → 52 for this node);
+     * no rejoin or leave before the checkpoint.
+   * **Firmware at the checkpoint:**
+     * security phase VERIFIED (8);
+     * BDB phase READY (13) with result 0;
+     * the gate's ready latch is set.
+   * **Later traffic:**
+     * a last-operation result is informational unless it is fatal (5 STORAGE,
+       6 CRYPTO, 14 EXHAUSTED) or unknown (> 14);
+     * a later rejected frame cannot retroactively invalidate commissioning.
+   * **Steady state:** association, leave, rejoin or announce events after
+     the checkpoint fail the soak.
+6. Third verifier failure: `no_leave_rejoin`.
+   * The original rule was a case-insensitive regex
+     `device_left|leave|REJOIN` over every line mentioning the node, plus
+     `len(tc_join) == 1` and `len(child_join) == 1`.
+   * With the duplicated callbacks, the counts were 2 and 2, so it failed
+     although no leave or rejoin occurred.
+   * The free-text regex was also unsound in both directions: it matched
+     unrelated text and was blind to semantic rejoin codes.
+   * The related check `authenticated_application_exchange`
+     (`len(tc_join) == 1`) failed from the same duplicate count.
+   * 6a. The H2 evidence then exposed a latent H1 overfit in the first
+     corrected verifier:
+     * it required zigpy `Device … joined` count == associations + rejoins
+       + child joins;
+     * zigpy 0.80 `handle_join` runs on a trust-center join and on a
+       Device_annce, not on `childJoinHandler`;
+     * the equality held in H1 only because the node announced.
+7. Third verifier fix:
+   * `membership()` classifies semantic events by trust-center join status
+     code: association, secured or unsecured rejoin, leave.
+   * Each trust-center join is paired in time (≤ 1 s, same NWK address) with
+     its zigpy join; the remaining zigpy joins are counted as announces.
+   * The representations of one physical leave are merged into one semantic
+     leave: DEVICE_LEFT, `childJoinHandler(false)` and zigpy `left`, within
+     2 s, same NWK address, different representation kinds.
+   * Unpairable records yield Ambiguous.
+8. Verifier regression tests: **PASS**, 50/50.
+   * De-duplication:
+     * A+B logger duplicate = 1;
+     * two genuine joins = 2;
+     * join then leave/rejoin is detected;
+     * duplicated key exchange = 1;
+     * one leave seen through three representations = 1;
+     * two separate leaves = 2.
+   * Commissioning:
+     * success followed by a rejected Link Status (result 9) passes;
+     * a genuine key failure fails;
+     * BDB result ≠ 0 fails;
+     * a missing VERIFIED phase fails;
+     * a fatal or unknown last result fails;
+     * an H2-shaped abandon fails;
+     * a trust-center join without its zigpy record is Ambiguous.
+   * Soak: leave/rejoin/re-announce after commissioning fails the soak.
+   * A normal H1-like run passes.
+   * The fixtures are synthetic and secret-free. No timestamp, line number or
+     duplicate count from H1 is an acceptance constant.
+9. H1 re-verification: **PASS**, with both the 8c7e251 and the d8a10ba
+   verifiers.
+   * Membership: 1 association, 0 rejoins, 0 leaves, 1 child join; key path
+     6 → 52.
+   * Firmware: all checks PASS. The last result IDENTITY is non-fatal.
+   * Stack: peak SP 0xE4 (≥ 101 B).
+   * Clock: 419.8 s against 420.4 s wall time.
+   * d8a10ba receipt sha256:
+     `e0b6674c53350614340fcb42c1d57e249f10b27c655943d83696f080aafc3caf`.
+
+### Second commissioning
+
+10. H2 artifact hash: **MATCH**. Both were recomputed before programming:
+    * HEX `1b865401…b8f2afd`;
+    * ELF `69dd18db…d833bc0`.
+11. H2 programming/readback: **PASS**.
+    * Pages 0–126 were programmed. Full 256000-byte readback was identical,
+      boot to the armed checkpoint passed (SP 0x83, FMAP 1), and the image
+      was admitted.
+    * **Board change:** the attached target's factory IEEE differed from the
+      H1 board's. This is a different physical CC2530 board, programmed with
+      explicit user authorization (`board-change.json`).
+    * Host-operator attempts were preserved, not retried silently:
+      * attempt 1: debugger USB re-enumeration, target unresponsive;
+      * attempt 2: identity mismatch, which stopped the run before any write;
+      * a first RF attempt that never resumed the CPU, because `observe()`
+        did not pass the debugger's USB bus and address to its subprocess.
+        This was fixed by a bound operator amendment (`operator-amendment.json`).
+12. H2 authenticated READY: **FAIL**.
+    * The firmware halted itself at 15.6 s in the controlled fault thunk
+      `__mcs51_bankcall_join_smoke_fault` (PC 0x4277, FMAP 1, SP 0x83; return
+      to `main`).
+    * Gate reason 7 (BDB). BDB phase 17 FAILED, result 11
+      `BDB_JOIN_TRANSMIT_FAILED`.
+    * BDB workspace RUNTIME, cleanup error 0, receive result 0. Security phase
+      9 (`SECURITY_KEYS_LEFT`).
+    * Coordinator: one unsecured trust-center association. The network key
+      was delivered: the node then sent a secured ZDO frame.
+    * No Device_annce and no trust-center link-key establishment
+      (`zigbeeKeyEstablishmentHandler` absent).
+    * About 5 s later the node performed an orderly leave: one semantic leave,
+      seen through 3 representations.
+    * This is the `nwk_aps_step()` error branch of the BDB runtime
+      (`fail(TRANSMIT_FAILED)` → abandon → leave). The exact NWK/APS sub-code
+      was overwritten by the leave cleanup and is not recoverable from the
+      terminal snapshot.
+    * Verifier d8a10ba gives **FAIL**, not Ambiguous. Receipt
+      `verifier-receipt-d8a10ba7adb6.json` (in the private LH2 root), sha256
+      `434a37eb…35fc7f0`.
+13. H2 interview: **FAIL** (not reached).
+14. H2 application smoke: **FAIL** (not reached).
+15. H2 peak SP: non-zero watermark 0xE4 (≥ 101 B, identical to H1), within
+    the 106 B static bound and the 128 B limit. Sampled SP at halt: 0x83.
+16. H2 banking anomaly: **NO**. The PC is the intended fault thunk, the return
+    word maps to `main`, and FMAP is 1.
+17. H2 stack anomaly: **NO**.
+18. H2 generic-pointer anomaly: **NO**.
+
+Other H2 checks:
+* Driver fault 0, adapter fault 0, lossy 0, radio errors 0.
+* 98 RX frames, 7 driver gaps, 0 dropped.
+* Clock 15.0 s against 15.6 s wall time; no reset.
+
+**H1 / H2 comparison.**
+
+| | H1 | H2 |
+|---|---|---|
+| board | reference | different board (authorized) |
+| peak SP (watermark) | 0xE4 (≥ 101 B) | 0xE4 (≥ 101 B) |
+| association count | 1 | 1 |
+| security path | TC join → NWK key → TC link key 6 → 52 → VERIFIED | TC join → NWK key → *no* TC link-key exchange → TRANSMIT_FAILED → leave (LEFT) |
+| bank/runtime faults | 0 | 0 (controlled BDB fault halt, not a bank/runtime fault) |
+
+**Attribution: UNDETERMINED.** The physical board changed between H1 and H2,
+and there is no SDCC baseline on the H2 board. A board or RF cause (for
+example, an APS/NWK transmit failure under that board's radio conditions)
+cannot be separated from a compiler-dependent path. The failure is a
+controlled, diagnosed firmware state. It is not a crash, bank fault or stack
+fault, but it is not explained either. H2 was not repeated.
+
+### Soak
+
+19. LLVM soak duration: **NOT RUN**. The stop condition requires H2 to pass.
+20. Continuous READY: **NOT RUN**.
+21. Resets: n/a (soak not run). H2 itself had 0 resets.
+22. Unexpected leave/rejoin: n/a (soak not run). H2 had 1 firmware-initiated
+    leave, after BDB TRANSMIT_FAILED.
+23. Reports observed: n/a.
+24. Maximum observed SP: n/a for the soak. H1 and H2 watermarks: 0xE4.
+25. Driver/adapter faults: n/a for the soak. H2: 0 / 0.
+26. Banking faults: n/a for the soak. H2: 0.
+27. Generic-pointer faults: n/a for the soak. H2: 0.
+28. Post-soak Identify/Query: **NOT RUN**.
+29. Hardware flash path: **NOT RUN**. No approved non-NV scratch procedure
+    exists. Simulator flash proof remains separate evidence.
+
+### Final classification
+
+30. First hardware gate: **PASS**. H1 was re-verified PASS by the corrected
+    verifier against unchanged evidence.
+31. Repeated commissioning: **FAIL**. H2, on a different board, ended in a
+    controlled BDB TRANSMIT_FAILED abandon before trust-center link-key
+    exchange. Attribution is undetermined.
+32. 35-minute soak: **NOT RUN**.
+33. LLVM classification: remains a **HARDWARE-PROVEN RESEARCH PROFILE
+    (single commissioning)**. It is *not* upgraded to "with repeated
+    commissioning and soak".
+34. Ready for production-default consideration: **NO**.
+35. Ready for continued real-hardware development: **YES**.
+    * No banking, stack, generic-pointer, driver or adapter fault was seen on
+      either board.
+    * The next discriminating step needs an operator decision: either repeat
+      H2 on the original H1 board with a fresh identity epoch, or run an SDCC
+      baseline on the H2 board.
