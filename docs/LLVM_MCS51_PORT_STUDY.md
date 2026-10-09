@@ -1989,3 +1989,57 @@ Operator lessons (session-only tooling):
   until coverage is reached.
 - The HA log endpoint can return a transient HTTP 400 or a capture with a hole. Use bounded
   retry, and require two consecutive fetches that merge record-exactly.
+
+## 24. Development baseline and FAST / SMOKE / FULL tiers
+
+This section moves from feasibility studies to development infrastructure. The procedures and
+the evidence rules are in [LLVM_DEVELOPMENT](LLVM_DEVELOPMENT.md), the single source for
+commands. This section records only what was established.
+
+Branches:
+- `faronov/llvm-project:mcs51-dev` is upstream `mcs51` 80b61955e plus the three still-needed
+  PR #7 commits, giving 2feda4a48, plus a CI caller workflow.
+- `cc2530-zigbee:llvm-dev` branches from `llvm-study/hw-candidate-1` 3fd666d.
+- The frozen compiler a3c9a84a4, the firmware commits 7b0eb693 and b27f950, and the HEX files
+  `1b865401…` (LLVM) and `518c8aa4…` (SDCC) are untouched.
+
+The study scripts were moved into `tools/llvm` unchanged and driven by `tools/llvm/tiers.py`:
+
+| Tier | Steps | Measured (local, 24 cores) | Complete case 0 |
+| --- | --- | --- | --- |
+| FAST | 11 (including 187 lit tests) | 20.4–20.8 s, PASS ×2 with identical identity and admission | Never |
+| SMOKE | 17 (FAST + vectors + cases 2/3/4/9 + a 3-step case-0 prefix) | 279–294 s, PASS ×2; results identical to the reference full-case reports | Never; the prefix is not commissioning |
+| FULL | 23 (FAST + vectors + cases 0,10,8,6,1,5,9,4,2,3 + summary) | ≈4.8 h, dominated by case 0 at 17366 s; established earlier on this profile | Mandatory; FULL refuses a profile without it |
+
+The FAST image of the reconciled profile measured:
+- CODE 213132 and common 18711;
+- stack 106/128;
+- 367 thunks, 0 incorrect;
+- 18 generic-pointer sites;
+- ELF `4b6e12ae…`, HEX `a1f47b14…`.
+
+This is a new experimental image identity, not the hardware-tested image.
+
+Verified:
+- Fault injection fails FAST in about 2 s.
+- Evidence reuse is content-addressed. A docs edit reuses evidence, while a source edit or a
+  tampered seal re-runs the tier.
+- FULL suspend/resume is bound to the ELF, vectors, simulator and identity.
+
+Two infrastructure bugs were found and fixed: a missing `sims/` directory, and a snapshot
+directory that the replay never created.
+
+The optional buffered-dump simulator (`prepare_simulator.py --profile fast`) makes SMOKE take
+208 s, with identical results. The reference simulator remains the FULL oracle.
+
+GitHub Actions:
+- push → FAST;
+- PR → FAST + SMOKE;
+- dispatch → any tier;
+- FULL chains up to four suspend/resume segments.
+
+Nightly FULL is blocked, because schedules run only from the default branch (production
+`main`, and TC32 in the fork). FULL was not rerun for this infrastructure change.
+
+H2 is unchanged from §23. The offline RX-path investigation plan is in
+LLVM_DEVELOPMENT.

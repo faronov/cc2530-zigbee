@@ -74,6 +74,14 @@ padding or accepted from a stale build cache.
 `test-fast` compares HEAD with staged/unstaged/untracked source by default.
 It is a development aid, never a substitute for the affected integration gate.
 
+The experimental LLVM image has separate, opt-in tiers:
+- `make test-llvm-fast` (≈21 s) after an edit;
+- `make test-llvm-smoke` (≈5 min) before a PR;
+- `make test-llvm-full` (hours, with complete case 0) before an integration or release
+  candidate.
+
+See [LLVM_DEVELOPMENT](docs/LLVM_DEVELOPMENT.md).
+
 For the active [complete radio-backed join plan](docs/LINK_JOIN_PLAN.md),
 `make BOARD=<board> test-join-smoke-host` runs the ten fresh-process caller
 scenarios with native and nonrecovering-sanitizer builds, comparing
