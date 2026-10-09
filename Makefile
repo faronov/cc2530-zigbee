@@ -2309,6 +2309,42 @@ test-tools:
 test-fast:
 	$(PYTHON) -B tools/ci_plan.py --tier fast
 
+# Experimental LLVM-MCS51 image validation tiers (opt-in; SDCC stays the production
+# reference). FAST and SMOKE never run complete case 0; FULL always does.
+# See docs/LLVM_DEVELOPMENT.md. PYTHON needs pyelftools.
+LLVM_TOOLS ?= $(dir $(LLVM_CLANG))
+LLVM_SRC ?= ../llvm-mcs51
+LLVM_TREE ?=
+LLVM_LIT_EVIDENCE ?=
+LLVM_SIM_ARCHIVE ?= build/sdcc_4.2.0+dfsg.orig.tar.xz
+LLVM_SIM_PROFILE ?= reference
+LLVM_SIM_DIR ?= build/llvm-sim/$(LLVM_SIM_PROFILE)
+LLVM_S51 ?= $(LLVM_SIM_DIR)/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51
+LLVM_TIER_OUT ?= build/llvm-tiers
+LLVM_TIER_ARGS ?=
+LLVM_TIER = $(PYTHON) -B tools/llvm/tiers.py --tools "$(LLVM_TOOLS)" --llvm-src "$(LLVM_SRC)" \
+	--simulator "$(LLVM_S51)" $(if $(LLVM_TREE),--llvm-build "$(LLVM_TREE)") \
+	$(if $(LLVM_LIT_EVIDENCE),--lit-evidence "$(LLVM_LIT_EVIDENCE)") $(LLVM_TIER_ARGS)
+
+.PHONY: llvm-simulator test-llvm-fast test-llvm-smoke test-llvm-full
+llvm-simulator: $(LLVM_S51)
+$(LLVM_S51):
+	$(PYTHON) -B tools/llvm/prepare_simulator.py --archive "$(LLVM_SIM_ARCHIVE)" --output "$(LLVM_SIM_DIR)" \
+		--profile $(LLVM_SIM_PROFILE)
+
+test-llvm-fast:
+	rm -rf "$(LLVM_TIER_OUT)/fast"
+	$(LLVM_TIER) --tier fast --output "$(LLVM_TIER_OUT)/fast"
+
+test-llvm-smoke:
+	rm -rf "$(LLVM_TIER_OUT)/smoke"
+	$(LLVM_TIER) --tier smoke --output "$(LLVM_TIER_OUT)/smoke"
+
+# Hours. Never deletes an earlier FULL output; add LLVM_TIER_ARGS=--resume to
+# continue a SUSPENDED run, or remove $(LLVM_TIER_OUT)/full explicitly.
+test-llvm-full:
+	$(LLVM_TIER) --tier full --output "$(LLVM_TIER_OUT)/full"
+
 test-coverage:
 	$(PYTHON) -B tools/host_coverage.py --board $(BOARD) --output $(BUILD)/coverage
 

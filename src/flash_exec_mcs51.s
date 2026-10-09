@@ -1,4 +1,4 @@
-.section .mcs51.common.flash_exec_template,"ax"
+.section .mcs51.code.rodata.flash_exec_template,"ax"
 .globl flash_exec_template
 flash_exec_template:
   mov dptr, #flash_exec_work
