@@ -1924,3 +1924,68 @@ AI-tool policy:
 - Read again: https://llvm.org/docs/AIToolPolicy.html.
 - The #7 description now carries an AI-use note, and the new-contributor bot request was acknowledged.
 - All GitHub actions were approved by the author first.
+
+## 23. H2 replacement board: SDCC vs frozen-LLVM join comparison
+
+H1 is physically damaged (detached traces) and was retired. Its LH1 hardware PASS remains
+immutable historical evidence. H2 is the only remaining target.
+
+Nothing was rebuilt. Each run used the exact frozen LLVM HEX `1b865401…` or the
+hardware-accepted legacy SDCC HEX `518c8aa4…`.
+
+Every trial used the same safe procedure:
+- erase and program, then full readback;
+- byte-identical admission with the IEEE fields masked;
+- a fresh lab IEEE, and the previous lab node removed;
+- a coordinator-only 254 s permit;
+- a single RF resume.
+
+Conditions: HA 2026.10.0 for every run except LH2 (2026.9.4). The coordinator, channel 15,
+PAN/EPAN and the DEBUG loggers were unchanged.
+
+| Trial | Image | Authenticated join | Notes |
+|---|---|---|---|
+| LH2 | LLVM | FAIL | 15.6 s: network key received, BDB `TRANSMIT_FAILED`; coordinator UNSECURED join, then leave (HA 2026.9.4) |
+| SH2 | SDCC | PASS | Commissioning 11/11 on replay[^sh2] |
+| LH3 | LLVM | PASS | Key path 6→52, firmware 12/12; host abort at 78 s[^lh3] |
+| LH4 | LLVM | FAIL | 15.4 s: `KEY_TIMEOUT` (no network key in 10 s); runtime RX loss (`lossy=1`) |
+| S1 | SDCC | FAIL | 5.1 s: driver fault 9 `MAC_LINK_DRIVER_COVERAGE` (RX loss while associating) |
+| L1 | LLVM | PASS | Key path 6→52; firmware 12/12; terminal `final` |
+| S2 | SDCC | PASS | Key path 6→52; firmware READY; terminal `final` |
+| L2 | LLVM | PASS | Key path 6→52; firmware 12/12; terminal `final` |
+| S3 | SDCC | FAIL | 4.2 s: driver fault 9 `COVERAGE` (RX loss while associating) |
+| L3 | LLVM | PASS | Key path 6→52; firmware 12/12; terminal `final` |
+
+[^sh2]: The live gate verdict was AMBIGUOUS because of an operator defect: the window end was
+    stamped after the final capture, and each 8 MB journal fetch takes about 31 s.
+[^lh3]: The abort came from a transient HTTP 400 on `hassio/core/logs`.
+
+Key path 6→52 means TC_RESPONDED_TO_KEY_REQUEST followed by TC_REQUESTER_VERIFY_KEY_SUCCESS.
+
+The S1…L3 rows are an interleaved series with a join+key gate: the run stops 30 s after
+coordinator key verification, or when the firmware stops.
+
+Totals on H2:
+
+| Image | Authenticated joins | Interleaved series alone |
+|---|---|---|
+| SDCC | 2/4 | 1/3 |
+| LLVM | 4/6 | 3/3 |
+
+None of the 10 runs showed a fault in radio, adapter, bank, stack or flash.
+
+Every failure is an early (4–16 s) join-phase loss, and every failure that recorded the
+adapter's lossy flag shows an RX loss. That covers S1, S3 and LH4. LH2's terminal radio state
+(phase 7 / result 5) matches the S1/S3 SDCC failures.
+
+**Conclusion.** The H2 join failures are a common board / RF-environment RX-loss susceptibility
+that affects both compilers. They are not attributable to the LLVM compiler.
+
+The single LH2 failure was not evidence of compiler causality. With these sample sizes, no
+reliability difference between the images can be claimed in either direction.
+
+Operator lessons (session-only tooling):
+- A coordinator capture reflects the request start. Stamp the window end first, then capture
+  until coverage is reached.
+- The HA log endpoint can return a transient HTTP 400 or a capture with a hole. Use bounded
+  retry, and require two consecutive fetches that merge record-exactly.
