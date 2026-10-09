@@ -1,0 +1,102 @@
+name: LLVM FULL segment
+description: >-
+  Run (segment 1) or resume (later segments) the FULL tier with the toolchain,
+  simulator and lit evidence produced by the toolchain job of the same run.
+  Complete case 0 is suspended at a bound snapshot after case0-budget seconds
+  and resumed by the next segment; tiers.py refuses any resume whose compiler,
+  firmware, simulator, vector or selection identity differs.
+inputs:
+  segment:
+    description: 1-based segment number
+    required: true
+  previous:
+    description: previous segment number (empty for segment 1)
+    required: false
+    default: ''
+  case0-budget:
+    description: seconds of complete case 0 before suspending at the next snapshot
+    required: true
+outputs:
+  status:
+    description: overall FULL status after this segment (PASS, SUSPENDED, FAIL, ...)
+    value: ${{ steps.run.outputs.status }}
+runs:
+  using: composite
+  steps:
+    - name: Install host dependencies
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install --yes --no-install-recommends build-essential python3 python3-pyelftools
+
+    - name: Fetch toolchain, simulator and lit evidence of this run
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: llvm-full-inputs-${{ github.run_id }}
+        path: ${{ runner.temp }}/inputs
+
+    - name: Fetch the suspended output of the previous segment
+      if: inputs.previous != ''
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: llvm-full-state-${{ github.run_id }}-${{ inputs.previous }}
+        path: ${{ runner.temp }}/state
+
+    - name: Unpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        tar -C "$GITHUB_WORKSPACE" -xf "$RUNNER_TEMP/inputs/inputs.tar"
+        if [ -n "${{ inputs.previous }}" ]; then
+          tar -C "$GITHUB_WORKSPACE" -xf "$RUNNER_TEMP/state/state.tar"
+        fi
+
+    - name: FULL segment ${{ inputs.segment }}
+      id: run
+      shell: bash
+      working-directory: fw
+      run: |
+        set -uo pipefail
+        resume=""
+        [ -z "${{ inputs.previous }}" ] || resume=--resume
+        rc=0
+        python3 -B tools/llvm/tiers.py --tier full --jobs 4 \
+          --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
+          --lit-evidence "$GITHUB_WORKSPACE/out/fast/receipt.json" \
+          --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
+          --output "$GITHUB_WORKSPACE/out/full" \
+          --case0-budget "${{ inputs.case0-budget }}" $resume || rc=$?
+        status=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["status"])' \
+          "$GITHUB_WORKSPACE/out/full/receipt.json" 2>/dev/null || echo NONE)
+        echo "status=$status" >> "$GITHUB_OUTPUT"
+        echo "FULL segment ${{ inputs.segment }}: $status (exit $rc)" >> "$GITHUB_STEP_SUMMARY"
+        # 75 = SUSPENDED at a bound case-0 snapshot; the next segment continues it.
+        [ "$rc" = 0 ] || [ "$rc" = 75 ]
+
+    - name: Pack the suspended state for the next segment
+      if: steps.run.outputs.status == 'SUSPENDED'
+      shell: bash
+      run: tar -C "$GITHUB_WORKSPACE" -cf "$RUNNER_TEMP/state.tar" out/full
+
+    - name: Upload suspended state
+      if: steps.run.outputs.status == 'SUSPENDED'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: llvm-full-state-${{ github.run_id }}-${{ inputs.segment }}
+        path: ${{ runner.temp }}/state.tar
+        retention-days: 3
+        compression-level: 1
+        if-no-files-found: error
+
+    - name: Upload segment evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: llvm-full-evidence-${{ github.run_id }}-${{ inputs.segment }}
+        retention-days: 30
+        if-no-files-found: warn
+        path: |
+          out/full/receipt.json
+          out/full/progress.json
+          out/full/logs
+          out/full/sims

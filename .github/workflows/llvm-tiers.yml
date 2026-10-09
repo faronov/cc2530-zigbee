@@ -1,0 +1,291 @@
+name: LLVM tiers
+
+# Experimental LLVM-MCS51 image of the CC2530 firmware (docs/LLVM_DEVELOPMENT.md).
+#   push to llvm-dev           FAST
+#   pull request into llvm-dev FAST + SMOKE
+#   workflow_dispatch / call   fast | smoke | full (FULL = every scenario incl. complete case 0)
+# FULL never runs implicitly. Nightly FULL is not scheduled: GitHub runs schedules only
+# from the default branch (production main here, TC32 in faronov/llvm-project).
+# The SDCC production workflow (ci.yml) is unchanged.
+
+on:
+  push:
+    branches: [llvm-dev]
+    paths-ignore: ['docs/**', '**/*.md', 'LICENSE*']
+  pull_request:
+    branches: [llvm-dev]
+    paths-ignore: ['docs/**', '**/*.md', 'LICENSE*']
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: fast, smoke or full (full includes complete case 0, several hours)
+        type: choice
+        options: [fast, smoke, full]
+        default: fast
+      llvm_repository:
+        description: LLVM-MCS51 repository
+        default: faronov/llvm-project
+      llvm_ref:
+        description: LLVM-MCS51 branch, tag or commit
+        default: mcs51-dev
+  workflow_call:
+    inputs:
+      tier:
+        type: string
+        required: true
+      llvm_repository:
+        type: string
+        default: faronov/llvm-project
+      llvm_ref:
+        type: string
+        required: true
+      firmware_repository:
+        type: string
+        default: faronov/cc2530-zigbee
+      firmware_ref:
+        type: string
+        default: llvm-dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llvm-tiers-${{ github.repository }}-${{ github.ref }}-${{ inputs.tier || github.event_name }}
+  cancel-in-progress: ${{ inputs.tier != 'full' }}
+
+env:
+  # Seconds of complete case 0 per FULL segment before it suspends at the next bound snapshot.
+  CASE0_BUDGET: '17400'
+  SIM_ARCHIVE_URL: https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz
+
+jobs:
+  toolchain:
+    name: Toolchain + ${{ inputs.tier || (github.event_name == 'pull_request' && 'fast + smoke' || 'fast') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    outputs:
+      tier: ${{ steps.select.outputs.tier }}
+      firmware_repository: ${{ steps.select.outputs.firmware_repository }}
+      firmware_sha: ${{ steps.ids.outputs.firmware_sha }}
+      llvm_repository: ${{ steps.select.outputs.llvm_repository }}
+      llvm_sha: ${{ steps.ids.outputs.llvm_sha }}
+    steps:
+      - name: Select tier and sources
+        id: select
+        env:
+          TIER: ${{ inputs.tier || (github.event_name == 'pull_request' && 'smoke' || 'fast') }}
+          LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
+          LLVM_REF: ${{ inputs.llvm_ref || 'mcs51-dev' }}
+          FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
+          FIRMWARE_REF: ${{ inputs.firmware_ref || github.sha }}
+        run: |
+          case "$TIER" in fast|smoke|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
+          {
+            echo "tier=$TIER"
+            echo "llvm_repository=$LLVM_REPOSITORY"
+            echo "llvm_ref=$LLVM_REF"
+            echo "firmware_repository=$FIRMWARE_REPOSITORY"
+            echo "firmware_ref=$FIRMWARE_REF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out firmware
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.select.outputs.firmware_repository }}
+          ref: ${{ steps.select.outputs.firmware_ref }}
+          path: fw
+          persist-credentials: false
+
+      - name: Check out LLVM-MCS51
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.select.outputs.llvm_repository }}
+          ref: ${{ steps.select.outputs.llvm_ref }}
+          path: llvm
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Record exact source identities
+        id: ids
+        run: |
+          echo "firmware_sha=$(git -C fw rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "llvm_sha=$(git -C llvm rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          {
+            echo "tier: ${{ steps.select.outputs.tier }}"
+            echo "firmware: ${{ steps.select.outputs.firmware_repository }}@$(git -C fw rev-parse HEAD)"
+            echo "llvm: ${{ steps.select.outputs.llvm_repository }}@$(git -C llvm rev-parse HEAD)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential cmake ninja-build ccache lld python3 python3-pyelftools \
+            bison flex m4 libboost-dev zlib1g-dev
+
+      - name: Restore compiler cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-mcs51-${{ runner.os }}-${{ steps.ids.outputs.llvm_sha }}
+          restore-keys: ccache-mcs51-${{ runner.os }}-
+
+      - name: Build LLVM-MCS51 (assertions on)
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 3G
+        run: |
+          set -euo pipefail
+          cmake -S llvm/llvm -B llvm-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_PROJECTS='clang;lld' -DLLVM_TARGETS_TO_BUILD=MCS51 \
+            -DLLVM_INCLUDE_TESTS=ON -DCLANG_INCLUDE_TESTS=ON -DLLVM_BUILD_TESTS=OFF \
+            -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_LIBEDIT=OFF \
+            -DLLVM_CCACHE_BUILD=ON -DLLVM_USE_LINKER=lld -DLLVM_PARALLEL_LINK_JOBS=2
+          ninja -C llvm-build clang lld llc llvm-mc llvm-objdump llvm-objcopy llvm-ar llvm-readobj \
+            llvm-config FileCheck not count split-file mcs51-runtime
+          ccache --show-stats
+
+      - name: Reproduce the reference debugger simulator
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 "$SIM_ARCHIVE_URL" --output "$RUNNER_TEMP/sdcc.tar.xz"
+          python3 -B fw/tools/llvm/prepare_simulator.py --archive "$RUNNER_TEMP/sdcc.tar.xz" \
+            --output "$GITHUB_WORKSPACE/sim" --profile reference --jobs 4
+
+      - name: FAST
+        working-directory: fw
+        run: |
+          python3 -B tools/llvm/tiers.py --tier fast --jobs 4 \
+            --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
+            --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
+            --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
+            --output "$GITHUB_WORKSPACE/out/fast"
+
+      - name: SMOKE
+        if: steps.select.outputs.tier == 'smoke'
+        working-directory: fw
+        run: |
+          python3 -B tools/llvm/tiers.py --tier smoke --jobs 4 \
+            --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
+            --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
+            --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
+            --output "$GITHUB_WORKSPACE/out/smoke"
+
+      - name: Pack FULL inputs (exact toolchain, simulator and FAST lit receipt of this run)
+        if: steps.select.outputs.tier == 'full'
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          tar -cf "$RUNNER_TEMP/inputs.tar" \
+            llvm-build/bin/clang llvm-build/bin/clang-[0-9]* llvm-build/bin/lld llvm-build/bin/ld.lld \
+            llvm-build/bin/llvm-ar llvm-build/bin/llvm-objcopy llvm-build/bin/llvm-objdump \
+            llvm-build/lib/clang sim/build.json sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51 \
+            out/fast/receipt.json
+
+      - name: Upload FULL inputs
+        if: steps.select.outputs.tier == 'full'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: llvm-full-inputs-${{ github.run_id }}
+          path: ${{ runner.temp }}/inputs.tar
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload tier evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: llvm-tier-evidence-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            out/*/receipt.json
+            out/*/logs
+            out/*/sims
+            sim/build.json
+
+  # FULL: complete case 0 needs more than one 6-hour hosted job. Each segment suspends it at a
+  # snapshot bound to the exact ELF/simulator/replay/vectors and the next one resumes it.
+  full-1:
+    needs: toolchain
+    if: needs.toolchain.outputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      status: ${{ steps.segment.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
+      - id: segment
+        uses: ./fw/.github/actions/llvm-full-segment
+        with: {segment: '1', case0-budget: '${{ env.CASE0_BUDGET }}'}
+
+  full-2:
+    needs: [toolchain, full-1]
+    if: needs.full-1.outputs.status == 'SUSPENDED'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      status: ${{ steps.segment.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
+      - id: segment
+        uses: ./fw/.github/actions/llvm-full-segment
+        with: {segment: '2', previous: '1', case0-budget: '${{ env.CASE0_BUDGET }}'}
+
+  full-3:
+    needs: [toolchain, full-2]
+    if: needs.full-2.outputs.status == 'SUSPENDED'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      status: ${{ steps.segment.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
+      - id: segment
+        uses: ./fw/.github/actions/llvm-full-segment
+        with: {segment: '3', previous: '2', case0-budget: '${{ env.CASE0_BUDGET }}'}
+
+  full-4:
+    needs: [toolchain, full-3]
+    if: needs.full-3.outputs.status == 'SUSPENDED'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      status: ${{ steps.segment.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
+      - id: segment
+        uses: ./fw/.github/actions/llvm-full-segment
+        with: {segment: '4', previous: '3', case0-budget: '${{ env.CASE0_BUDGET }}'}
+
+  full-verdict:
+    name: FULL verdict (PASS only when complete case 0 reached serving)
+    needs: [toolchain, full-1, full-2, full-3, full-4]
+    if: always() && needs.toolchain.outputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          S1: ${{ needs.full-1.outputs.status }}
+          S2: ${{ needs.full-2.outputs.status }}
+          S3: ${{ needs.full-3.outputs.status }}
+          S4: ${{ needs.full-4.outputs.status }}
+        run: |
+          last=""
+          for s in "$S1" "$S2" "$S3" "$S4"; do [ -z "$s" ] || last=$s; done
+          echo "FULL: ${last:-NOT RUN} (segments: ${S1:--} ${S2:--} ${S3:--} ${S4:--})" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$last" = PASS ]
