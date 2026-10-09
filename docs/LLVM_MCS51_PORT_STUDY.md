@@ -1772,3 +1772,155 @@ fault, but it is not explained either. H2 was not repeated.
     * The next discriminating step needs an operator decision: either repeat
       H2 on the original H1 board with a fresh identity epoch, or run an SDCC
       baseline on the H2 board.
+
+## 22. Upstream reconciliation (`mcs51` 80b61955e)
+
+Scope:
+- Reconcile the frozen compiler's 19 local commits with current upstream.
+- Measure pure upstream on the firmware.
+- Rebuild a minimal downstream stack.
+
+The frozen hardware profile in section 21 is unchanged and stays the hardware
+evidence:
+- compiler a3c9a84a4;
+- STACK_COMMIT 7b0eb693;
+- HEX 1b865401…;
+- ELF 69dd18db….
+
+No hardware was flashed.
+
+### 22.1 References
+
+| item | value |
+|---|---|
+| upstream `mcs51` | 80b61955e4f47a88a6f89b61398d66406332bc10 (force-pushed 2026-10-08T20:54Z over efc84d8b4) |
+| frozen compiler | a3c9a84a4 (19 commits on 8a45bf850; the profile's upstream base is 949d7acb4) |
+| reconciled profile | `llvm-study/upstream-reconcile` 2feda4a48 (80b61955e + 3 commits) |
+| intermediate (superseded) | `llvm-study/reconcile-efc84d8b4` 0ec845d8a (efc84d8b4 + same 3 commits) |
+| pure upstream | `llvm-study/pure-upstream-80b61955e` (and `-efc84d8b4`) |
+| PRs | #1, #4 merged; #2, #3, #5, #6, #8–#15 closed; #7 open (Draft) |
+
+### 22.2 Commit inventory
+
+During this pass, upstream force-pushed `mcs51` from efc84d8b4 to 80b61955e.
+- The MCS-51 series was rebased onto newer LLVM main. For MCS-51 paths, the tree of 576349eb3 (the rebased efc84d8b4) equals efc84d8b4.
+- Two commits are new: 8a550eca8 (test) and 80b61955e, which restores grouped callee-saved helper saves in stack order.
+- Every upstream commit cited below exists on 80b61955e with an identical `git patch-id --stable`. The hash mapping is in `evidence/upstream-rewrite-80b61955e.txt`; the table keeps the efc84d8b4-era hashes.
+- The three #7 commits rebased cleanly; `range-diff` shows them unchanged.
+- All gates below were rerun on 80b61955e.
+
+Method:
+1. `git patch-id --stable` and `git cherry` were used as hints.
+2. Every match and non-match was then confirmed by reading the upstream implementation and its tests.
+
+| class | n | commits (local → upstream) |
+|---|---|---|
+| UPSTREAM_EXACT | 13 | 23b9aa6b6→de8c0fc5e (#5), f5167ea00→3638e20c2 (#6), a104e04a4→ab853c835 (#2), 5285bce98→8b73c7601 (#2), a9e41056f→658226ef0 (#3), a93ae54e0→e6079667f (#4), 3320d605f→52ffed651 (#8), 5c550ec0b→c025a6a36 (#9), faa7ab4b0→b76df350a (#9), b2ec57d6e→94bdc3471 (#11), 2c7d7c325→e4c636add (#12), 405501caa→53965d6db (#14), a3c9a84a4→f8f503e36 (#15) |
+| UPSTREAM_EQUIVALENT | 2 | d0628356d→efed029cf (#10), 453bb7cd0→551852f5e (#13) |
+| SUPERSEDED | 1 | 08cbaaadb→dd5ea65cf (#10, frame indices inside call sequences) |
+| STILL_MISSING | 3 | 99d225ae3 `-mcs51-csr`, 6dc24b1ad `-mcs51-wide-args`, 2c71f5d2d `-mcs51-static-frames` (#7) |
+| CONFLICT_REQUIRES_REDESIGN | 0 | – |
+
+Re-deriving the three #7 commits on efc84d8b4 required two semantic adaptations:
+- **`main` special case dropped.** Upstream 39734661c gives `main` the normal ABI, so the old `main` callee-saved list was removed. Static frames still skip `main`.
+- **ISR regmask fix (new).** `getInterruptSaveAddresses` now reads R0–R7 from call register masks.
+  - Without this, an interrupt handler that calls a reduced-CSR function does not save R2–R7.
+  - The new `csr-modes.ll` `isr_call` test fails with the fix reverted and passes with it.
+
+### 22.3 Pure upstream (no local patches; 80b61955e, efc84d8b4 identical in outcome)
+
+- **lit:**
+  - 184/185 passed (efc84d8b4: 183/184);
+  - the one failure is `lld/test/ELF/mcs51-address-space-overlap.s`, whose input `.ld` is missing from upstream;
+  - 0 assertions.
+- **Semantic checks** (harness adapted to the new XDATA section naming):
+  - generic-pointer semsim 13/13;
+  - upstream runtime verifiers 12/12;
+  - bank call matrix 14/14.
+- **Legacy SDCC artifact:** the compat tree still produces it identically.
+- **Firmware compile:** 45/45 TUs compile.
+- **Firmware link:**
+  - As-is, the link **fails**: 113 errors from the new lld bus check.
+    - 101 are XDATA-typed relocations against absolute linker-script / `--defsym` symbols (`join_smoke_status`, `*_PARM_2`).
+    - 12 are CODE-typed relocations into `.mcs51.common.flash_exec_template`, a section the check does not classify.
+  - The firmware-side link inputs were adapted, with no compiler change:
+    - the fixed XDATA block became a NOBITS `.mcs51.xdata.fixed.m0_status` section placed at 0x1E00, guarded by ASSERT;
+    - the template section was renamed to `.mcs51.code.rodata.flash_exec_template`.
+  - The adapted link passes; proofs check the fixed block.
+- **Audit:** thunks 367, incorrect 0.
+- **Stack bound:** **442/128 FAIL** (both upstream revisions). The worst path has 260 B of callee-saved pushes.
+- **Simulator:** 3/10 (cases 1, 2, 3). The other 7 overflow SP to 0x00 at step 2. Full join **FAIL**.
+  - On efc84d8b4 the overflow surfaces as an early event mismatch.
+  - On 80b61955e the corrupted run continues until the harness s51 timeout (6000 s).
+  - A truncated step-2 replay of case 4 (`evidence/diag_step2_runs.py`) shows the same root cause: ucsim reports `Stack overflow, PC=0x2ba8 LCALL 0xd90b`, max SP 0x100, SP=0x00, then a write to IRAM 0x08 (register bank 1).
+
+Conclusion: current upstream has every correctness fix from the old stack. Without the #7 options it cannot run this firmware within the 128-byte stack.
+
+### 22.4 Reconciled profile (80b61955e + 3 commits)
+
+Firmware flags: `-mcs51-csr=none -mcs51-wide-args -mcs51-static-frames`, with the same link-time frame overlay and the same adapted link inputs as 22.3.
+
+| gate | result |
+|---|---|
+| lit (8051, MC/MCS51, lld mcs51-*, clang/MCS51) | 187/188 (efc84d8b4 base: 186/187), the same pre-existing upstream failure, 0 assertions |
+| generic-pointer semsim | 13/13 default ABI, 13/13 reconciled ABI |
+| upstream runtime verifiers | 12/12 |
+| bank call matrix | 14/14 (pure upstream, reconciled default, reconciled ABI; both bases) |
+| firmware TUs / link | 45/45, PASS |
+| fixed-address / SFR / startup / runtime proofs | PASS |
+| generic-pointer site proof | 18/18 |
+| incorrect bank thunks | 0 / 367 |
+| stack-argument violations | 0 |
+| static stack bound | 106/128 PASS |
+| simulator | 10/10 PASS on both bases (peak 101 B, SP 0xE4) |
+| full join | PASS (1142/1142, serving; 80b61955e run 17366 s) |
+
+Codegen versus the frozen compiler:
+- All 45 object files have byte-identical executable sections.
+- Relocation offsets are identical; only the relocation types differ (upstream typed relocations).
+- In the linked image, every function has the same size. 361 symbols moved because of the two link-input adaptations.
+- The HEX (a1f47b14…) is the same on both upstream bases; the two ELFs differ only in `.comment` (version string).
+- The new ELF/HEX hashes are therefore **not** the hardware candidate. The machine code inside each function is the same as the hardware-proven code.
+
+### 22.5 Resource delta
+
+| metric | frozen HW compiler | pure upstream | reconciled upstream |
+|---|---|---|---|
+| CODE | 213132 | 191939 | 213132 |
+| common/root | 18711 | 17120 | 18711 |
+| XDATA | 5079 | 4876 | 5079 |
+| static stack | 106/128 | 442/128 FAIL | 106/128 |
+| simulator peak | 101 | overflow | 101 |
+| bank thunks | 367 | 367 | 367 |
+| incorrect thunks | 0 | 0 | 0 |
+| minimum bank free | 0 (banks 1,3,4,5) | 0 (banks 1,2) | 0 (banks 1,3,4,5) |
+| full join | PASS | FAIL | PASS (1142/1142, serving) |
+
+How the columns differ:
+- The reconciled numbers equal the frozen ones because the generated code is identical (22.4).
+- Pure upstream (80b61955e) is ~21 KB smaller. It also has 203 B less XDATA: there is no static-frame pool, and the callee-saved pushes stay on the hardware stack.
+
+Zero-margin banks are unchanged. Bank placement was deliberately not touched in this pass.
+
+### 22.6 PR actions
+
+| PR | action |
+|---|---|
+| #1, #4 | NO ACTION (merged) |
+| #2, #3, #5, #6, #8, #9, #11, #12, #14, #15 | KEEP CLOSED (landed exactly under other hashes) |
+| #10, #13 | KEEP CLOSED (landed equivalent / superseded) |
+| #7 | REBASED: `mcs51-static-frame-stack` force-with-lease 0ec845d8a → 2feda4a48 (3 commits, mergeable, clean); description updated; stays Draft |
+
+#7 design (static-frame allocator ownership):
+- Current upstream adds no post-RA whole-program frame infrastructure and no LTO requirement.
+- The recommendation stands: the backend emits post-RA static-frame metadata, and a link-time/prelink allocator assigns frames.
+
+Possible upstream follow-ups, not filed:
+- the missing `mcs51-address-space-overlap.ld`;
+- the bus check rejecting absolute symbols and `.mcs51.common.*` (which `cc2530.ld` places in CODE);
+- the `verify-*.sh` scripts that use `.mcs51.simresult`.
+
+AI-tool policy:
+- Read again: https://llvm.org/docs/AIToolPolicy.html.
+- The #7 description now carries an AI-use note, and the new-contributor bot request was acknowledged.
+- All GitHub actions were approved by the author first.
