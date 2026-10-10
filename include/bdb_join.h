@@ -188,6 +188,8 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NW
     const bdb_join_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_resume(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NWK_APS_TX_T BDB_JOIN_RAM * SDCC_VOLATILE owner,
     const bdb_join_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+/* 1 only when the opened durable keys are VERIFIED or REJOINING membership. */
+uint8_t bdb_join_resumable(void) JOIN_FAR;
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
     const bdb_join_event_t BDB_JOIN_RAM * SDCC_VOLATILE event, bdb_join_action_t BDB_JOIN_RAM * SDCC_VOLATILE action) JOIN_FAR;
 /* FCS-free DATA body; CRC truth is PHY metadata, never authentication.

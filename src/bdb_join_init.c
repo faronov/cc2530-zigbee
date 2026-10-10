@@ -82,6 +82,12 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NW
     return BDB_JOIN_OK;
 }
 
+uint8_t bdb_join_resumable(void)
+{
+    return security_keys_status(&bdb_join_keys) == SECURITY_KEYS_OK &&
+        (bdb_join_keys.phase == SECURITY_KEYS_VERIFIED || bdb_join_keys.phase == SECURITY_KEYS_REJOINING);
+}
+
 /* Persisted membership only reaches RECOVERING; never READY or scan/association.
  * LEFT (even rejoin-allowed), incomplete and pre-membership storage stay
  * RECOVERY_REQUIRED. The persisted identity is installed before any frame. */

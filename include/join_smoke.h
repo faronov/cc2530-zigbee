@@ -61,7 +61,10 @@ extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smo
  * provisioning; identity.channel is only the initial OFF radio channel, not a
  * network selector. It uses floors1/1, ignores install_code and network identity
  * input fields, and requires the same own IEEE in both public input views.
- * Existing NV is refused, never erased/reprovisioned.
+ * Existing VERIFIED/REJOINING durable membership is resumed: provisioning
+ * is skipped and BDB enters RECOVERING (secured same-parent NWK rejoin, ED
+ * Timeout, Device Announce) before READY. Any other existing NV is refused,
+ * never erased/reprovisioned.
  * READY is authenticated BDB readiness, NOT radio OFF or complete HA interview.
  * READY then serves (stage 5) WITHOUT a time or step budget until reset or a
  * fault: ZDO and Basic/Temperature/Humidity requests are answered by the

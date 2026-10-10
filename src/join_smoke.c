@@ -19,7 +19,7 @@ volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
 #endif
 
-static MCU_XDATA uint8_t initialized, gate, i;
+static MCU_XDATA uint8_t initialized, gate, i, resumed;
 /* Admission scratch is dead once started; the start loop and RUNNING/READY
  * reuse its storage. */
 static MCU_XDATA union {
@@ -220,17 +220,22 @@ void join_smoke_poll(void)
     started=timebase_read_awake_ticks24(); previous=started;
     S.stage=1;
     S.security_result=security_keys_open();
-    if(S.security_result!=SECURITY_KEYS_EMPTY) { fault(JS_SECURITY); return; }
+    /* Complete persisted membership resumes through secured rejoin; any other
+     * existing storage is still refused, never erased or reprovisioned. */
+    resumed=S.security_result==SECURITY_KEYS_OK && bdb_join_resumable();
+    if(!resumed) {
+        if(S.security_result!=SECURITY_KEYS_EMPTY) { fault(JS_SECURITY); return; }
 #if defined(CC2530_DEFAULT_TC_KEY)
-    if(IN.nwk_floor!=1 || IN.aps_floor!=1 ||
-       memcmp(IN.join.association.extraction.local,IN.identity.own_ieee,8)) {
-        fault(JS_INPUT); return;
-    }
+        if(IN.nwk_floor!=1 || IN.aps_floor!=1 ||
+           memcmp(IN.join.association.extraction.local,IN.identity.own_ieee,8)) {
+            fault(JS_INPUT); return;
+        }
 #else
-    S.security_result=security_keys_provision(&IN.identity,IN.install_code,
-        IN.nwk_floor,IN.aps_floor,&IN.join.transport.limits,IN.join.transport.nv_polls);
-    if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+        S.security_result=security_keys_provision(&IN.identity,IN.install_code,
+            IN.nwk_floor,IN.aps_floor,&IN.join.transport.limits,IN.join.transport.nv_polls);
+        if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
 #endif
+    }
     for(i=0;i<8;i++) INITIAL.ieee[i]=IN.identity.own_ieee[i];
     INITIAL.pan=INITIAL.short_address=0xffff;
     INITIAL.channel=IN.identity.channel; INITIAL.power=RADIO_AUTOACK_POWER_F5;
@@ -255,7 +260,8 @@ void join_smoke_poll(void)
     if(S.mac_result!=MAC_TX_OK) { fault(JS_MAC); return; }
     S.bdb_result=bdb_join_init(&DEVICE,CLOCK.symbols);
     if(S.bdb_result!=BDB_JOIN_OK) { fault(JS_BDB); return; }
-    S.bdb_result=bdb_join_start(&DEVICE,&TX,&IN.join,CLOCK.symbols);
+    S.bdb_result=resumed?bdb_join_resume(&DEVICE,&TX,&IN.join,CLOCK.symbols):
+        bdb_join_start(&DEVICE,&TX,&IN.join,CLOCK.symbols);
     if(S.bdb_result!=BDB_JOIN_OK) { fault(JS_BDB); return; }
     memset(&join_smoke_phase,0,sizeof(join_smoke_phase));
     S.driver_result=mac_link_driver_init(&DRIVER,&DEVICE,&INITIAL,
