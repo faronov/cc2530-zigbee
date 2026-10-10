@@ -455,6 +455,23 @@ self-consistent:
 - case 9: 1 beacon, `max_service_gap` 116 ticks (≈3.5 ms), `max_rx_off_gap` 83 ticks;
 - no overflow in either.
 
+**FULL `rx-diag`: PASS.** Run 38062355155 qualified firmware `llvm-dev` 6463309 with llvm
+`mcs51-dev` 1a01afb.
+- 2026-10-10 15:07:45Z → 17:21:08Z (2 h 13 min). One segment, 22/22 steps PASS.
+- Receipt `7852560e…`.
+- HEX `59d7bfc1…`, equal to the local build. ELF `ba45110a…`; only `.comment` differs.
+- Every case equals the production FULL:
+  - case 0: serving, 1142/1142 steps, 559709 peripheral stops, 101 B stack;
+  - the other cases match too.
+- 370 thunks, 0 incorrect. Stack demand 106/128. Generic-pointer sites 18/18.
+
+Decoded case 0 block (simulator timing, not hardware):
+- 28 frames, last a data frame with PHR 56;
+- 0 overflows, salvaged, flushes, lost and bad CRC;
+- `max_rx_off_gap` 921 ticks;
+- no first-loss or failure snapshot;
+- every consistency check is OK.
+
 For SDCC, the diagnostic code does not fit the banked join-smoke layout (INFEASIBLE).
 - Bank groups grow by +1532 B. Of that, `JS_RADIO` grows by +914 B, but its bank has only 34 B
   of headroom.

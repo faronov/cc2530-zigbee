@@ -358,7 +358,7 @@ observer.
 | LLVM FAST, production | PASS; HEX `a1f47b14…` unchanged |
 | LLVM FAST, `rx-diag` | PASS; HEX `59d7bfc1…`, CODE +1480, stack 106/128 |
 | LLVM SMOKE, `rx-diag` | PASS 17/17; decoded sim blocks are consistent, with no overflow |
-| LLVM FULL, `rx-diag` | required before hardware; see `docs/LLVM_DEVELOPMENT.md` |
+| LLVM FULL, `rx-diag` | PASS, run 38062355155: 22/22, case 0 serving 1142/1142, stack 106/128 (peak 101), 0 bad thunks |
 
 ## 11. Focused test results
 
