@@ -7,6 +7,9 @@
 #include "flash_exec.h"
 #include "security_counter.h"
 #include <stddef.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 extern uint8_t flash_exec_work[9];
 extern uint8_t aes_used;
@@ -17,7 +20,9 @@ static const uint8_t public_install_code[18] = {
 static const uint8_t arm_packet[8] = {0x4a,0xb5,0x4e,0xb1,0xa9,0x56,1,0xfe};
 static const uint8_t run_packet[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
-enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY };
+enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOVERY=16,
+       CALLER_REJOIN_TIMEOUT };
+#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT)
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
@@ -41,6 +46,79 @@ static void discovery_peer(void)
 }
 #endif
 static jmp_buf caller_flash_stop;
+
+/* CALLER_RECOVERY: a forked child runs the genuine case 0 (join, READY,
+ * serving) and hands over only durable NV and the coordinator's own state.
+ * This process never executed DUT code before its cold boot from that NV. */
+static int caller_dump=-1;
+static uint8_t recovery_nv[4096], recovery_state[LINK_PEER_STATE_MAX];
+static unsigned recovery_length;
+
+static void recovery_read(int fd, void *data, unsigned size)
+{
+    unsigned done=0;
+    while(done<size) {
+        ssize_t got=read(fd,(uint8_t *)data+done,size-done);
+        assert(got>0); done+=(unsigned)got;
+    }
+}
+static void recovery_write(const void *data, unsigned size)
+{
+    unsigned done=0;
+    while(done<size) {
+        ssize_t put=write(caller_dump,(const uint8_t *)data+done,size-done);
+        assert(put>0); done+=(unsigned)put;
+    }
+}
+static unsigned recovery_child(void)
+{
+    int fds[2], status, null;
+    pid_t child;
+    uint8_t extra;
+    fflush(stdout); fflush(stderr);
+    assert(!pipe(fds));
+    child=fork(); assert(child>=0);
+    if(!child) {
+        close(fds[0]); caller_dump=fds[1];
+        null=open("/dev/null",O_WRONLY); assert(null>=0 && dup2(null,1)==1); close(null);
+        return 1;
+    }
+    close(fds[1]);
+    recovery_read(fds[0],recovery_nv,sizeof(recovery_nv));
+    recovery_read(fds[0],&recovery_length,sizeof(recovery_length));
+    assert(recovery_length<=sizeof(recovery_state));
+    recovery_read(fds[0],recovery_state,recovery_length);
+    assert(read(fds[0],&extra,1)==0); close(fds[0]);
+    assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+    return 0;
+}
+/* Power is cut at the end of serving: whatever is durable now survives. */
+static void recovery_dump(void)
+{
+    unsigned length;
+    uint8_t state[LINK_PEER_STATE_MAX];
+    length=link_peer_save(state); assert(length<=sizeof(state));
+    recovery_write(security_joint_nv(),4096);
+    recovery_write(&length,sizeof(length)); recovery_write(state,length);
+    close(caller_dump); _exit(0);
+}
+/* The parent answers only through the air after the genuine Rejoin Request. */
+static void rejoin_peer(void)
+{
+    if(join_smoke_device.phase!=BDB_JOIN_RECOVERING || !link_peer_pending ||
+       !mac_adapter_diagnostic()->normal_rx || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
+       !XR(0x618b) || mode!=2 || ack_active || packets || mac_adapter_diagnostic()->held) return;
+    air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0;
+}
+static void caller_peer(void)
+{
+#if defined(CC2530_DEFAULT_TC_KEY)
+    discovery_peer();
+#else
+    peer_progress_for(&join_smoke_device,&join_smoke_tx);
+#endif
+    if(RECOVERY_CASE(caller_case)) rejoin_peer();
+}
 
 #if defined(JOIN_SMOKE_TRACE)
 #include "join_smoke_trace.h"
@@ -149,11 +227,7 @@ static void serve_ready(unsigned *calls)
           cycles<(uint64_t)SERVE_SECONDS*32000000u) {
         uint32_t step;
         served++;
-#if defined(CC2530_DEFAULT_TC_KEY)
-        discovery_peer();
-#else
-        peer_progress_for(&join_smoke_device,&join_smoke_tx);
-#endif
+        caller_peer();
         if(link_peer_app!=seen) { assert(link_peer_app==seen+1u); seen++; serve_report(&reports,&tsn,counts); confirmed=served; }
         /* Coarse time only while no MAC transmission owns a stop window. */
         step=(join_smoke_status.announce==255 || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
@@ -219,6 +293,13 @@ static void serve_ready(unsigned *calls)
 static void prepare_caller(unsigned selected)
 {
     unsigned i;
+    if(RECOVERY_CASE(selected)) {
+        /* Modeled cold boot: only the flash written by the DUT survives. */
+        security_joint_reset(1);
+        memcpy(security_joint_nv(),recovery_nv,sizeof(recovery_nv));
+        link_peer_recover(&join_config,recovery_state,recovery_length);
+        link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
+    } else {
     /* Construct the external synthetic peer, then start a genuinely fresh
      * modeled DUT. No provisioned DUT state is injected into the caller. */
     security_joint_reset(1);
@@ -230,6 +311,7 @@ static void prepare_caller(unsigned selected)
         assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
     }
     security_joint_reset(selected!=4);
+    }
     crypto_read=host_mmio_read_hook; crypto_write=host_mmio_write_hook;
     crypto_xread=host_mmio_xread_hook; crypto_xwrite=host_mmio_xwrite_hook;
     crypto_address=host_mmio_xaddress_hook; crypto_cycles=host_mmio_cycles_hook;
@@ -297,11 +379,12 @@ int main(int argc, char **argv)
     assert(argc==2);
     selected=(unsigned)strtoul(argv[1],NULL,10);
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert(selected<=CALLER_WRONG_TC && selected!=7);
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected));
 #else
-    assert(selected<=CALLER_FLASH_BUSY);
+    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected));
     if(selected==7) return reference_e2e_main();
 #endif
+    if(RECOVERY_CASE(selected) && recovery_child()) selected=0;
     caller_case=selected;
     prepare_caller(selected);
 #if defined(JOIN_SMOKE_TRACE)
@@ -326,6 +409,12 @@ int main(int argc, char **argv)
             assert(join_smoke_status.phase==JS_ADMITTED);
             assert(join_smoke_status.security_result==255 && !tx_started);
             caller_poll();
+            if(RECOVERY_CASE(selected)) {
+                /* Persisted membership is resumed, never reprovisioned or READY. */
+                assert(join_smoke_status.phase==JS_RUNNING && join_smoke_status.security_result==SECURITY_KEYS_OK);
+                assert(join_smoke_device.phase==BDB_JOIN_INSTALLING && join_smoke_device.recovery==1 &&
+                    !join_smoke_device.member && !join_smoke_status.saw_ready);
+            }
             if(selected==4) {
                 assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_SECURITY);
                 assert(join_smoke_status.security_result==SECURITY_KEYS_OK && !tx_started);
@@ -343,19 +432,17 @@ int main(int argc, char **argv)
                 while(join_smoke_status.phase==JS_RUNNING && !caller_stopped && calls++<JOIN_SMOKE_STEPS) {
                     uint8_t saved_aes_used=aes_used, saved_enccs=SOC_ENCCS;
                     unsigned saved_aes_blocks=security_aes_blocks();
-#if defined(CC2530_DEFAULT_TC_KEY)
-                    discovery_peer();
-#else
-                    peer_progress_for(&join_smoke_device,&join_smoke_tx);
-#endif
+                    caller_peer();
                     assert(aes_used==saved_aes_used && SOC_ENCCS==saved_enccs &&
                         security_aes_blocks()==saved_aes_blocks);
-                    advance_clocks(((selected==CALLER_MISSING_KEY
+                    advance_clocks((((selected==CALLER_MISSING_KEY
 #if defined(CC2530_DEFAULT_TC_KEY)
                         || selected==CALLER_WRONG_TC
 #endif
                         ) &&
-                        join_smoke_device.phase==BDB_JOIN_WAIT_KEY?50000u:4u)*512u);
+                        join_smoke_device.phase==BDB_JOIN_WAIT_KEY) ||
+                        (selected==CALLER_REJOIN_TIMEOUT && join_smoke_device.phase==BDB_JOIN_RECOVERING &&
+                         join_smoke_device.issued==2 && join_smoke_tx.engine.phase==MAC_TX_IDLE)?50000u:4u)*512u);
                     handoff_tick();
                     if(selected==CALLER_RADIO_FAULT && !caller_radio_fault &&
                        mac_adapter_diagnostic()->phase==MAC_ADAPTER_CLOSING) {
@@ -367,6 +454,13 @@ int main(int argc, char **argv)
                     if(handoff_started) handoff_configured=0;
                     caller_poll();
                     handoff_started=0;
+                    if(RECOVERY_CASE(selected)) {
+                        assert(join_smoke_device.phase!=BDB_JOIN_SCANNING &&
+                            join_smoke_device.phase!=BDB_JOIN_ASSOCIATING && !response_sent);
+                        if(join_smoke_status.phase!=JS_READY)
+                            assert(!join_smoke_status.saw_ready && !link_peer_app &&
+                                join_smoke_device.recovery && join_smoke_device.recovery<3);
+                    }
                 }
                 if(selected==CALLER_FLASH_BUSY) {
                     assert(caller_stopped && security_joint_flash_commands()==1);
@@ -391,6 +485,16 @@ int main(int argc, char **argv)
                     assert(response_sent && transport_sent && !join_smoke_device.member);
                     assert(join_smoke_device.result==BDB_JOIN_KEY_TIMEOUT);
 #endif
+                } else if(selected==CALLER_REJOIN_TIMEOUT) {
+                    /* Bounded: three genuine requests, then NO_PARENT. The durable
+                     * membership is kept for a later attempt: no Leave, no erase. */
+                    security_keys_status_t keys;
+                    assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
+                    assert(join_smoke_device.result==BDB_JOIN_NO_PARENT && link_peer_rejoins==3);
+                    assert(!join_smoke_status.saw_ready && !link_peer_app && !link_peer_parent);
+                    assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
+                        (keys.phase==SECURITY_KEYS_VERIFIED || keys.phase==SECURITY_KEYS_REJOINING) &&
+                        keys.config.address==0x5678 && bdb_join_resumable());
                 } else if(selected==CALLER_MISSING_KEY) {
                     assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
                     assert(join_smoke_device.phase==BDB_JOIN_FAILED &&
@@ -416,6 +520,13 @@ int main(int argc, char **argv)
                     assert(join_smoke_status.stage==5 && join_smoke_status.announce==255);
                     serve_ready(&calls);
                     link_peer_verify();
+                    if(caller_dump>=0) recovery_dump();
+                    if(selected==CALLER_RECOVERY) {
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==1 && !response_sent);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
+                            keys.phase==SECURITY_KEYS_VERIFIED && keys.config.address==0x5678);
+                    }
 #if defined(CC2530_DEFAULT_TC_KEY)
                     security_keys_status_t keys;
                     assert(security_keys_status(&keys)==SECURITY_KEYS_OK);

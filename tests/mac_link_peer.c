@@ -27,6 +27,10 @@ static uint8_t link_a[16], link_b[16], network[16], effective[16], expected[16];
 static uint8_t npdu[116], work[116], other[116], npdu_length, aps_counter, nwk_sequence;
 static uint8_t announced, described, requested, verified, permit, associated, extracted;
 static uint32_t peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device_aps;
+/* Recovery after a modeled DUT power cycle: the coordinator keeps its state. */
+static uint8_t recovering, rejoined, reannounced;
+unsigned link_peer_rejoins;
+uint8_t link_peer_mute_rejoin;
 uint8_t link_beacon[48], link_response[27], link_peer_body[125];
 uint8_t link_beacon_length, link_response_length, link_peer_length, link_peer_pending;
 unsigned link_peer_tx, link_peer_checks, link_peer_app, link_peer_parent;
@@ -131,6 +135,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
     link_peer_tx++;
     if (mh.header.type == MAC_FRAME_COMMAND) {
         CHECK(mac_command_decode(body+mh.payload_offset, mh.payload_length, &command) == MAC_CODEC_OK);
+        CHECK(!recovering);
         if (command.identifier == MAC_COMMAND_ASSOCIATION_REQUEST) {
             CHECK(command.capability == 0x88 && !memcmp(mh.header.source, identity.own_ieee, 8));
             associated = 1;
@@ -144,9 +149,28 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
     CHECK(!mh.header.destination[0] && !mh.header.destination[1]);
     CHECK(!!(mh.header.flags & MAC_FLAG_ACK_REQUEST) == (peer_in.nwk.destination < 0xfffbu));
     if (peer_in.nwk.type) {
-        if (peer_in.payload[0] == 4) return; /* Genuine commissioning Leave. */
+        if (peer_in.payload[0] == 4) { CHECK(!recovering); return; } /* Genuine commissioning Leave. */
+        if (peer_in.payload[0] == 6) {
+            /* R22 3.4.6: secured, MAC-acknowledged, both IEEE, radius 1, to the parent. */
+            CHECK(recovering && !rejoined && peer_in.length == 2 && peer_in.payload[1] == 0x88);
+            CHECK(!peer_in.nwk.destination && peer_in.nwk.radius == 1 && !peer_in.nwk.discover_route &&
+                (peer_in.nwk.flags & (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE)) ==
+                (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE));
+            CHECK(!memcmp(peer_in.nwk.source_ieee, identity.own_ieee, 8) &&
+                !memcmp(peer_in.nwk.destination_ieee, identity.tc_ieee, 8));
+            link_peer_rejoins++;
+            if (link_peer_mute_rejoin) return; /* Parent absent: request is lost. */
+            base_peer(1, 0, 0);
+            peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+            memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+            memcpy(peer_out.nwk.destination_ieee, identity.own_ieee, 8);
+            peer_out.length = 4; peer_out.payload[0] = 7; peer_out.payload[1] = 0x78;
+            peer_out.payload[2] = 0x56; peer_out.payload[3] = 0;
+            seal_peer(0, 0, NULL, 1); rejoined = 1;
+            return;
+        }
         CHECK(peer_in.length == 3 && peer_in.payload[0] == 0x0b && peer_in.payload[1] == 1 &&
-              !peer_in.payload[2] && verified);
+              !peer_in.payload[2] && verified && (!recovering || reannounced));
         link_peer_parent++;
         base_peer(1, 0, 0);
         peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
@@ -156,6 +180,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         seal_peer(0, 0, NULL, 1);
     } else if (peer_in.aps.type == ED_APS_ACK) return;
     else if (peer_in.aps.type == ED_APS_COMMAND) {
+        CHECK(!recovering);
         if (peer_in.payload[0] == 8) {
             CHECK(announced && described && aps_secured && peer_in.length == 2 && peer_in.payload[1] == 4);
             requested = 1;
@@ -178,12 +203,13 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
             seal_peer(1, 0, link_b, 1);
         }
     } else if (!peer_in.aps.profile_id && peer_in.aps.cluster_id == 0x0013u) {
-        CHECK(extracted && !requested && peer_in.nwk.destination == 0xfffdu);
+        if (recovering) { CHECK(rejoined && !reannounced && peer_in.nwk.destination == 0xfffdu); reannounced = 1; }
+        else CHECK(extracted && !requested && peer_in.nwk.destination == 0xfffdu);
         CHECK(peer_in.length == 12 && peer_in.payload[1] == 0x78 && peer_in.payload[2] == 0x56);
         CHECK(!memcmp(peer_in.payload+3, identity.own_ieee, 8) && peer_in.payload[11] == 0x88);
         announced = 1;
     } else if (!peer_in.aps.profile_id && peer_in.aps.cluster_id == 2) {
-        CHECK(announced && !requested && peer_in.length == 3 && !peer_in.payload[1] && !peer_in.payload[2]);
+        CHECK(!recovering && announced && !requested && peer_in.length == 3 && !peer_in.payload[1] && !peer_in.payload[2]);
         memset(&descriptor, 0, sizeof(descriptor)); descriptor.sequence = peer_in.payload[0];
         descriptor.descriptor.frequency_band = 8; descriptor.descriptor.mac_capability = 0x8e;
         descriptor.descriptor.max_buffer = 127; descriptor.descriptor.max_incoming = 64;
@@ -193,10 +219,11 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         CHECK(zdo_node_rsp_encode(&descriptor, peer_out.payload, sizeof(peer_out.payload), &peer_out.length) == ZDO_NODE_OK);
         seal_peer(0, 0, NULL, 1); described = 1;
     } else if (!peer_in.aps.profile_id && peer_in.aps.cluster_id == 0x0036u) {
-        CHECK(verified && link_peer_parent && peer_in.nwk.destination == 0xfffcu && peer_in.length == 3);
+        CHECK(!recovering && verified && link_peer_parent && peer_in.nwk.destination == 0xfffcu && peer_in.length == 3);
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1); permit = 1;
     } else {
         CHECK(permit && peer_in.aps.profile_id == 0x0104 && (peer_in.aps.flags & APS_FLAG_ACK_REQUEST));
+        CHECK(!recovering || (reannounced && link_peer_parent));
         link_peer_app++; link_peer_report_cluster = peer_in.aps.cluster_id; link_peer_report_counter = peer_in.aps.counter;
         link_peer_report_length = peer_in.length; memcpy(link_peer_report, peer_in.payload, peer_in.length);
         base_peer(0, ED_APS_ACK, peer_in.aps.cluster_id);
@@ -232,7 +259,7 @@ void link_peer_application(ed_packet_t *packet)
 
 void link_peer_receive_application(void)
 {
-    CHECK(verified && permit);
+    CHECK(verified && permit && (!recovering || link_peer_parent));
     base_peer(0, 0, 6);
     peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
     peer_out.aps.source_endpoint = peer_out.aps.destination_endpoint = 1;
@@ -246,16 +273,42 @@ void link_peer_verify(void)
     security_keys_status_t status;
     CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_VERIFIED);
     CHECK(announced && described && requested && verified && permit && link_peer_parent);
+    CHECK(!recovering || (rejoined && reannounced && link_peer_rejoins == 1));
+}
+
+/* Coordinator state survives the DUT power cycle; in-flight frames do not. */
+#define PEER_STATE(X) X(link_a) X(link_b) X(network) X(aps_counter) X(nwk_sequence) \
+    X(announced) X(described) X(requested) X(verified) X(permit) X(associated) X(extracted) \
+    X(peer_nwk_counter) X(peer_aps_counter) X(last_device_nwk) X(last_device_aps)
+#define PEER_SAVE(v) memcpy(out+n, &v, sizeof(v)); n += sizeof(v);
+#define PEER_LOAD(v) memcpy(&v, in+n, sizeof(v)); n += sizeof(v);
+unsigned link_peer_save(uint8_t *out)
+{
+    unsigned n = 0;
+    CHECK(!recovering && verified && permit);
+    PEER_STATE(PEER_SAVE)
+    return n;
+}
+
+void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned length)
+{
+    unsigned n = 0;
+    PEER_STATE(PEER_LOAD)
+    CHECK(n == length && verified && permit);
+    recovering = 1; rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = 0;
+    link_peer_pending = 0; link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
+    security_joint_physical_flash(1);
+    link_peer_config(config);
 }
 
 void link_peer_setup(bdb_join_config_t *config)
 {
-    mac_header_t mh;
-    uint8_t payload[19], i;
+    uint8_t i;
 #if !defined(CC2530_DEFAULT_TC_KEY)
     zigbee_mmo_info_t info;
 #endif
     announced = described = requested = verified = permit = associated = extracted = 0;
+    recovering = rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = 0;
     aps_counter = nwk_sequence = link_peer_pending = 0;
     link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
     last_device_nwk = last_device_aps = 0;
@@ -273,6 +326,13 @@ void link_peer_setup(bdb_join_config_t *config)
 #else
     CHECK(security_keys_provision(&identity, install_code, 1, 1, &limits, FLASH_EXEC_POLL_MAX) == SECURITY_KEYS_OK);
 #endif
+    link_peer_config(config);
+}
+
+void link_peer_config(bdb_join_config_t *config)
+{
+    mac_header_t mh;
+    uint8_t payload[19];
     memset(config, 0, sizeof(*config));
     config->scan.channels = 1UL << 15; config->scan.lifetime = 100000; config->scan.work = 512;
     config->scan.saved.pan = 0xffff; config->scan.saved.channel = 11;

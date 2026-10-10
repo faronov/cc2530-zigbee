@@ -11,6 +11,14 @@ extern unsigned link_peer_tx, link_peer_checks, link_peer_app, link_peer_parent;
 extern uint16_t link_peer_report_cluster;
 extern uint8_t link_peer_report[], link_peer_report_length, link_peer_report_counter;
 void link_peer_setup(bdb_join_config_t *config);
+/* Config, beacon and Association Response only; no DUT state is touched. */
+void link_peer_config(bdb_join_config_t *config);
+/* Coordinator state across a modeled DUT power cycle (secured rejoin). */
+#define LINK_PEER_STATE_MAX 96
+extern unsigned link_peer_rejoins;
+extern uint8_t link_peer_mute_rejoin;
+unsigned link_peer_save(uint8_t *out);
+void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned length);
 void link_peer_transmitted(const uint8_t *body, uint8_t length);
 void link_peer_transport(uint8_t request_ack);
 void link_peer_application(ed_packet_t *packet);
