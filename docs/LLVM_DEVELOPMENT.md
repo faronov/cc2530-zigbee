@@ -389,37 +389,30 @@ Policies:
   not required.
 - The accepted SDCC image (`518c8aa4…`) can still be rebuilt from `7b0eb693`.
 
-## H2 receive-path investigation plan (offline only)
+## H2 receive-path investigation (offline, complete)
 
-The classification is unchanged from study §23. The H2 failures (SDCC 2/4, LLVM 4/6) are a
-common early incoming-frame loss, and **no compiler causality has been established**. No
-codegen change is made in response to them.
+The full report is [`H2_RX_INVESTIGATION.md`](H2_RX_INVESTIGATION.md). Summary:
 
-Preserved evidence (read-only):
-- `~/.local/state/cc2530-h2-series-*`: S1–S3 and L1–L3, with `environment.json`,
-  `run.jsonl`, `result.json`, coordinator captures and identity/readback;
-- `cc2530-sdcc-h2-*` and `cc2530-llvm-hw2…4-*`: SH2 and LH2–LH4.
+- **Signature A** (S1, S3 SDCC; LH4 LLVM): a hardware RX FIFO overflow (`RXOVERF`) after
+  association, before the network key was used.
+  - In the association workspace, the link driver fails closed with `COVERAGE` (fault 9).
+  - In the runtime workspace, the loss is tolerated. LH4 then reached `KEY_TIMEOUT`, while L3
+    passed despite the same loss.
+- **Signature B** (LH2): the network key was received, then the key-request uplink failed
+  with `TRANSMIT_FAILED`. There is no overflow evidence.
+- The receive driver is **polled; there is no RX ISR**. No source defect is proven, and no
+  compiler causality exists.
+- Coordinator EZSP counters are global and do not discriminate passes from failures.
+- The first cause cannot be determined from the evidence:
+  - service latency;
+  - parent burst/retries;
+  - channel traffic.
+  The missing fields, and a ≤48-byte flag-gated diagnostic ABI to capture them, are specified
+  in the report.
+- No functional code change is justified. No hardware trial is justified until the diagnostic
+  image passes FAST, SMOKE and FULL and is separately authorized. Do not use H1.
 
-Offline questions:
-1. **RX FIFO overflow.** `MAC_RADIO_RX_LOST` comes only from the overflow branch in
-   `src/radio_autoack.c`: an incomplete overflow tail, then an RFST flush and an RFERRF clear.
-   For each failure, correlate the time of the lossy observation with the frame type being
-   received. A lossy observation outside scan or runtime raises `MAC_LINK_DRIVER_COVERAGE`
-   (driver fault 9). Check whether it is always the association response or transport-key
-   window.
-2. **RX ISR and polling latency.** From the run journals, bound the gap between frame arrival
-   and FIFO service in both images. Overflow with only one in-flight frame would point to
-   service latency. Overflow behind a burst would point to the coordinator or RF environment.
-3. **Coordinator and RF state.** Check channel 15 occupancy, coordinator retries and
-   MAC-level duplicates in the HA/EZSP captures around each failure, and compare
-   `environment.json` across runs.
-4. **Terminal states.** LH2 (phase 7 / result 5) and S1/S3 (driver fault 9) share the radio
-   state. Tabulate phase, step and elapsed time for all failures against the successes.
-5. **Board factors.** Check supply, the 32 MHz crystal, the H2 hardware revision and antenna
-   matching against H1. These are documentation and measurement questions, with no new runs.
-6. **Host observation.** Separate operator and capture artifacts (§23 footnotes) from firmware
-   outcomes.
-
-Any controlled diagnostic run needs its own admitted image, for example one with RX overflow
-counters. It also needs explicit operator authorization. Do not use H1. Do not raise random
-budgets or suppress driver faults.
+Known pre-existing gap: the SDCC raw-CDB digest pins used by the SDCC boot checks of
+radio_autoack, mac_radio and mac_adapter predate the `llvm-dev` compatibility commits. Those
+checks, and the link-direct/join-smoke host builds that depend on them, fail on "raw CDB
+identity changed" on this branch. The LLVM tiers are the gate on `llvm-dev`.

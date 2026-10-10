@@ -1975,11 +1975,20 @@ Totals on H2:
 None of the 10 runs showed a fault in radio, adapter, bank, stack or flash.
 
 Every failure is an early (4–16 s) join-phase loss, and every failure that recorded the
-adapter's lossy flag shows an RX loss. That covers S1, S3 and LH4. LH2's terminal radio state
-(phase 7 / result 5) matches the S1/S3 SDCC failures.
+adapter's lossy flag shows an RX loss. That covers S1, S3 and LH4.
 
-**Conclusion.** The H2 join failures are a common board / RF-environment RX-loss susceptibility
-that affects both compilers. They are not attributable to the LLVM compiler.
+*Correction (offline investigation, `docs/H2_RX_INVESTIGATION.md` on `llvm-dev`).* Radio
+phase 7 / result 5 is the benign STOPPED state, so it is not a loss signature. LH2 is a
+different failure: it received the network key (coordinator CHILDJOIN at +10.3 s and a secured
+device frame), was not lossy, and ended with `TRANSMIT_FAILED` during the key-request uplink.
+S1, S3 and LH4 share one mechanism: a hardware RX FIFO overflow after association, before the
+network key was used.
+
+**Conclusion.** The H2 join failures are not attributable to the LLVM compiler. The same
+post-association RX overflow mechanism occurs on identical receive source in both images.
+Whether its first cause is foreground service latency, a parent burst or channel traffic is
+**not determinable** from the preserved evidence. "Board / RF environment" is one unproven
+hypothesis among these.
 
 The single LH2 failure was not evidence of compiler causality. With these sample sizes, no
 reliability difference between the images can be claimed in either direction.
