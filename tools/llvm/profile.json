@@ -33,9 +33,10 @@
   },
   "simulator": {
     "terminals": {"0": "serving", "1": "fault", "2": "fault", "3": "fault", "4": "fault", "5": "fault",
-                  "6": "fault", "8": "fault", "9": "fault", "10": "flash-ram-stop"},
+                  "6": "fault", "8": "fault", "9": "fault", "10": "flash-ram-stop",
+                  "16": "serving", "17": "fault"},
     "smoke_cases": [2, 3, 4, 9],
     "smoke_prefix": {"case": 0, "limit": 3},
-    "full_cases": [0, 10, 8, 6, 1, 5, 9, 4, 2, 3]
+    "full_cases": [0, 16, 10, 8, 6, 1, 5, 9, 4, 2, 3, 17]
   }
 }

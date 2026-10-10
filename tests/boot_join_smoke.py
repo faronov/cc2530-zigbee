@@ -38,8 +38,10 @@ PERIPHERAL_SFR = frozenset((
     0xb4, 0xbc, 0xbd, 0xd9, 0xe1, 0xe9, 0x91, 0xbf, 0x94, 0xc3, 0xa2, 0xa3,
     0xa4, 0xa5, 0xa6, 0xa1, 0xa7, 0x9c,
 ))
-CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10)
+CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17)
 FLASH_BUSY_CASE = 10
+# READY keeps serving: initial join, and secured rejoin from persisted NV.
+SERVING_CASES = (0, 16)
 
 
 def active_phase(phase):
@@ -494,7 +496,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
                 completed += 1
             print(f"join step{index} events {last}/{len(events)} SP{peak:02x}", flush=True)
     finished = completed == len(vector["steps"])
-    terminal_kind = "serving" if vector["case"] == 0 else (
+    terminal_kind = "serving" if vector["case"] in SERVING_CASES else (
         "flash-ram-stop" if vector["case"] == FLASH_BUSY_CASE else "fault")
     if finished and vector["case"] == FLASH_BUSY_CASE:
         discovery = "_security_keys_provision_default" in symbols
@@ -508,7 +510,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
         parts = sections(simulate_binary_dumps(simulator, commands))
         check_flash_retention(state, captured_sections(parts, 60000, ram_stop))
         check_flash_retention(state, captured_sections(parts, 60010, ram_stop), idle=True)
-    elif finished and vector["case"] == 0:
+    elif finished and vector["case"] in SERVING_CASES:
         # READY has no terminal loop: the last traced poll returned to main.
         require(state[0][0x1e06] == 5 and pc == after, "READY did not keep serving")
     elif finished:

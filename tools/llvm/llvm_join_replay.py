@@ -639,7 +639,7 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
         J.check_flash_retention(state, captured_sections(parts, 60000, ram_stop))
         J.check_flash_retention(state, captured_sections(parts, 60010, ram_stop), idle=True)
         result["terminal"] = "flash-ram-stop"
-    elif finished and vector["case"] == 0:
+    elif finished and vector["case"] in J.SERVING_CASES:
         require(state[0][0x1e06] == 5 and pc == after, "READY did not keep serving")
         result["terminal"] = "serving"
     elif finished:
