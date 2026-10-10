@@ -449,6 +449,16 @@ Local FAST/SMOKE evidence (compiler source 2feda4a, which is `mcs51-dev` 1a01afb
 | production (unchanged) | `a1f47b14…` | 213132 | 4841 / 35 | 106/128 |
 | rx-diag | `59d7bfc1…` | 214612 (+1480) | 4841 / 35, plus the fixed block at 0x1E40 | 106/128 |
 
-For SDCC, the diagnostic code does not fit the banked join-smoke layout: it needs about +1.5 KB
-against 999 B of free CODE, and the `JS_RADIO` group grows by 884 B. SDCC trials therefore run
-the production image with the sniffer only. No SDCC diagnostic image exists.
+Both FAST runs pass. SMOKE `rx-diag` passes 17/17 in 275 s. Its decoded blocks are
+self-consistent:
+- case 0 prefix: 0 frames;
+- case 9: 1 beacon, `max_service_gap` 116 ticks (≈3.5 ms), `max_rx_off_gap` 83 ticks;
+- no overflow in either.
+
+For SDCC, the diagnostic code does not fit the banked join-smoke layout (INFEASIBLE).
+- Bank groups grow by +1532 B. Of that, `JS_RADIO` grows by +914 B, but its bank has only 34 B
+  of headroom.
+- The SDCC feature-OFF proof reproduces `518c8aa4…` with all resource deltas 0.
+
+SDCC trials therefore run the production image with the sniffer only. No SDCC diagnostic image
+exists.

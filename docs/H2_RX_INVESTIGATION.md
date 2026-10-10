@@ -307,13 +307,25 @@ The block is a NOBITS section `.mcs51_rx_diag` at a fixed XDATA address, outside
 
 ### Compiler coverage
 
-**LLVM only.** The SDCC image cannot hold the diagnostic code; `tools/rx_diag_sdcc_build.py`
-measures this.
-- Total growth is about 1.5 KB against 999 B of free CODE.
-- The `JS_RADIO` bank group would grow by 884 B, but its bank has only about 25 B of margin.
+**LLVM only.** The SDCC image cannot hold the diagnostic code. This was measured at 389b301
+with `tools/rx_diag_sdcc_build.py` and the real banked CODE packer; the verdict is INFEASIBLE.
+- Bank-group growth is +1532 B:
+  - `JS_RADIO` +914;
+  - `JS_NWK` +295;
+  - `JS_BDB` +162;
+  - `JS_mac_link_driver` +161.
+- Total bank space still has room: 2501 B free shrinks to 969 B.
+- The problem is `JS_RADIO`. It must stay in one bank, and that bank has only 34 B of headroom,
+  so no packing fits.
+
+The SDCC feature-OFF proof at the same commit is clean:
+- The physical HEX `518c8aa4…` and the final IHX `df86611e…` equal the admitted image.
+- All resource deltas are 0. Static stack is 45 and bank depth is 8.
+- Only the debug and listing identities differ (line records; the catalog predates the
+  `llvm-dev` compat commits).
 
 SDCC trials therefore use the production SDCC image, with the sniffer as the only extra
-observer. The SDCC feature-OFF image is unchanged.
+observer.
 
 ### Offline analysis of HWLab sniffer captures
 
@@ -341,9 +353,12 @@ observer. The SDCC feature-OFF image is unchanged.
 | Mutation checks (counting, `first_site`, RX-on accounting, `off_stamp`, attempt hook) | all caught |
 | Flag-off vs flag-on MMIO trace digest (`tests/rx_diag_trace_identity.py`) | identical: 194 radio and 33 attempt vectors; digests 9b879f71, 5a709085, feedbcf7 |
 | SDCC host test images (radio, attempt), flag-off vs a212547 | IHX byte-identical |
+| SDCC production feature-OFF (`rx_diag_sdcc_build.py`) | physical HEX `518c8aa4…` reproduced; resource deltas 0 |
 | Decoder and capture tests (`make test-rx-diag`) | 22 PASS |
 | LLVM FAST, production | PASS; HEX `a1f47b14…` unchanged |
-| LLVM FAST / SMOKE / FULL, `rx-diag` | see `docs/LLVM_DEVELOPMENT.md` |
+| LLVM FAST, `rx-diag` | PASS; HEX `59d7bfc1…`, CODE +1480, stack 106/128 |
+| LLVM SMOKE, `rx-diag` | PASS 17/17; decoded sim blocks are consistent, with no overflow |
+| LLVM FULL, `rx-diag` | required before hardware; see `docs/LLVM_DEVELOPMENT.md` |
 
 ## 11. Focused test results
 
