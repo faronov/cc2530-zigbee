@@ -55,7 +55,7 @@ static void fail(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint
     }
 #endif
     ctx->abandon = result == BDB_JOIN_ADDRESS_CONFLICT ||
-        (result != BDB_JOIN_WORK_LIMIT && ctx->phase < BDB_JOIN_READY &&
+        (result != BDB_JOIN_WORK_LIMIT && ctx->phase < BDB_JOIN_READY && !ctx->recovery &&
          !(ctx->phase == BDB_JOIN_INSTALLING && ctx->member));
     ctx->result = result; ctx->member = ctx->work.runtime.transport.ready = 0;
     ctx->phase = BDB_JOIN_ABORTING;
@@ -170,7 +170,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         else ctx->phase = BDB_JOIN_ANNOUNCING;
     } else if (ctx->phase == BDB_JOIN_ANNOUNCING && finished(ctx, &result)) {
         if (result) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
-        else { ctx->phase = BDB_JOIN_NODE; ctx->attempts = 0; }
+        else { ctx->phase = ctx->recovery ? BDB_JOIN_PARENT : BDB_JOIN_NODE; ctx->attempts = 0; }
     } else if (ctx->phase == BDB_JOIN_NODE) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (!result && which == ZDO_RUNTIME_NODE && !ctx->work.runtime.zdo.tc.logical_type &&
@@ -206,7 +206,14 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (!result && which == ZDO_RUNTIME_PARENT && ctx->work.runtime.zdo.parent_known &&
                 (ctx->work.runtime.zdo.parent_information & 2u)) {
-                if (zdo_runtime_broadcast(&ctx->work.runtime.zdo, &ctx->work.runtime.transport,
+                if (ctx->recovery) {
+                    if (!ctx->work.runtime.transport.announced) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
+                    else {
+                        ctx->phase = BDB_JOIN_READY; ctx->work.runtime.transport.ready = 1;
+                        ctx->attempts = 0; ctx->recovery = 3;
+                        ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE;
+                    }
+                } else if (zdo_runtime_broadcast(&ctx->work.runtime.zdo, &ctx->work.runtime.transport,
                     ZDO_RUNTIME_BROADCAST_PERMIT, ctx->last) != ZDO_RUNTIME_OK)
                     fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
                 else ctx->phase = BDB_JOIN_PERMIT;
@@ -223,6 +230,27 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         else {
             ctx->phase = BDB_JOIN_READY; ctx->attempts = 0;
             ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE;
+        }
+    } else if (ctx->phase == BDB_JOIN_RECOVERING) {
+        /* State-driven: success needs the REJOINED event, VERIFIED durable
+         * keys and no outstanding request, so late responses are safe. */
+        if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_REJOINED) ctx->recovery = 2;
+        if (ctx->issued == 1 && finished(ctx, &result)) {
+            ctx->issued = 2; ctx->until = ctx->last+BDB_JOIN_REJOIN_WAIT;
+        }
+        if (ctx->issued != 1) {
+            if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) fail(ctx, BDB_JOIN_SECURITY);
+            else if (ctx->recovery == 2 && bdb_join_keys.phase == SECURITY_KEYS_VERIFIED) {
+                ctx->member = 1; install(ctx);
+            } else if (!ctx->issued || expired(ctx->last, ctx->until)) {
+                if (ctx->attempts == BDB_JOIN_ATTEMPTS) fail(ctx, BDB_JOIN_NO_PARENT);
+                else {
+                    nwk_aps_result_t queued = nwk_aps_rejoin(&ctx->work.runtime.transport,
+                        ctx->config.association.capability, ctx->last);
+                    if (queued == NWK_APS_OK) { ctx->issued = 1; ctx->attempts++; }
+                    else if (queued != NWK_APS_FULL) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
+                }
+            }
         }
     } else if (ctx->phase == BDB_JOIN_READY) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
@@ -267,7 +295,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
     if (ctx->workspace != (ctx->phase == BDB_JOIN_SCANNING ? BDB_JOIN_WORK_SCAN :
         ctx->phase == BDB_JOIN_ASSOCIATING ? BDB_JOIN_WORK_ASSOCIATION : BDB_JOIN_WORK_RUNTIME))
         return BDB_JOIN_STATE;
-    if (ctx->phase >= BDB_JOIN_INSTALLING && ctx->phase < BDB_JOIN_ABORTING) {
+    if (ctx->phase >= BDB_JOIN_INSTALLING && BDB_JOIN_LIVE(ctx->phase)) {
         if (now != ctx->work_at) { ctx->work_at = now; ctx->steps = 0; }
         if (ctx->steps == BDB_JOIN_STALL_STEPS) {
             if (ctx->phase == BDB_JOIN_INSTALLING && ctx->issued) {
@@ -391,9 +419,20 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             }
             if (pending == 2) {
                 fail(ctx, BDB_JOIN_SECURITY);
+            } else if (ctx->recovery == 1) {
+                /* The persisted identity is installed; nothing is admitted yet. */
+                if (bdb_join_keys.phase != SECURITY_KEYS_VERIFIED && bdb_join_keys.phase != SECURITY_KEYS_REJOINING)
+                    fail(ctx, BDB_JOIN_SECURITY);
+                else { ctx->phase = BDB_JOIN_RECOVERING; ctx->issued = ctx->attempts = 0; }
+            } else if (ctx->recovery == 2) {
+                if (bdb_join_keys.phase != SECURITY_KEYS_VERIFIED || !ctx->member ||
+                    zdo_runtime_broadcast(&ctx->work.runtime.zdo, &ctx->work.runtime.transport,
+                        ZDO_RUNTIME_BROADCAST_ANNOUNCE, now) != ZDO_RUNTIME_OK)
+                    fail(ctx, BDB_JOIN_SECURITY);
+                else ctx->phase = BDB_JOIN_ANNOUNCING;
             } else if (ctx->member) {
                 if (bdb_join_keys.phase != SECURITY_KEYS_VERIFIED || !ctx->work.runtime.transport.announced ||
-                    !ctx->work.runtime.transport.permit_sent)
+                    (!ctx->work.runtime.transport.permit_sent && ctx->recovery != 3))
                     fail(ctx, BDB_JOIN_SECURITY);
                 else {
                     ctx->phase = BDB_JOIN_READY; ctx->work.runtime.transport.ready = 1; ctx->attempts = 0;
@@ -411,11 +450,11 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
         }
         return BDB_JOIN_OK;
     }
-    if (ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase < BDB_JOIN_READY &&
+    if (((ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase < BDB_JOIN_READY) || ctx->phase == BDB_JOIN_RECOVERING) &&
         expired(now, ctx->commission_until))
-        fail(ctx, BDB_JOIN_KEY_TIMEOUT);
+        fail(ctx, ctx->recovery ? BDB_JOIN_NO_PARENT : BDB_JOIN_KEY_TIMEOUT);
     if (event && event->kind != BDB_JOIN_EVENT_TX) { event = NULL; ignored = 1; }
-    if (ctx->phase < BDB_JOIN_ABORTING && ctx->work.runtime.transport.receive_ready) {
+    if (BDB_JOIN_LIVE(ctx->phase) && ctx->work.runtime.transport.receive_ready) {
         runtime(ctx); handled = 1;
     }
     transported = nwk_aps_step(&ctx->work.runtime.transport, now, event ? &event->data.tx : NULL, &action->data.tx);
@@ -430,10 +469,10 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             ctx->cleanup_error = (uint8_t)transported; ctx->phase = BDB_JOIN_FAILED;
             return BDB_JOIN_OK;
         }
-        if (ctx->phase < BDB_JOIN_ABORTING) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
+        if (BDB_JOIN_LIVE(ctx->phase)) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
         else ctx->cleanup_error = (uint8_t)transported;
     }
-    if (ctx->phase < BDB_JOIN_ABORTING && !handled) runtime(ctx);
+    if (BDB_JOIN_LIVE(ctx->phase) && !handled) runtime(ctx);
     if (ctx->phase == BDB_JOIN_UPDATING && ctx->work.runtime.zdo.query && ctx->work.runtime.zdo.tx_done &&
         zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &outcome) != ZDO_RUNTIME_OK)
         fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
@@ -467,9 +506,14 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
     if (result) return result;
     if (!body || crc_valid > 1) return BDB_JOIN_ARGUMENT;
     if (!crc_valid) return BDB_JOIN_MALFORMED;
-    if (ctx->phase < BDB_JOIN_WAIT_KEY || ctx->phase >= BDB_JOIN_UPDATING ||
-        ctx->workspace != BDB_JOIN_WORK_RUNTIME) return BDB_JOIN_STATE;
+    if ((ctx->phase < BDB_JOIN_WAIT_KEY || ctx->phase >= BDB_JOIN_UPDATING) && ctx->phase != BDB_JOIN_RECOVERING)
+        return BDB_JOIN_STATE;
+    if (ctx->workspace != BDB_JOIN_WORK_RUNTIME) return BDB_JOIN_STATE;
     if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
+    /* Before the first sealed Rejoin Request, restored floors may still admit
+     * one replay of a pre-reset frame; RECOVERING consumes nothing until then. */
+    if (ctx->phase == BDB_JOIN_RECOVERING && bdb_join_keys.phase != SECURITY_KEYS_REJOINING)
+        return BDB_JOIN_IGNORED;
     if (mac_frame_decode(body, length, &work.receive.mac) != MAC_CODEC_OK || work.receive.mac.header.type != MAC_FRAME_DATA ||
         work.receive.mac.header.destination_mode != MAC_ADDRESS_SHORT || work.receive.mac.header.destination_pan != bdb_join_keys.config.pan ||
         work.receive.mac.header.source_pan != bdb_join_keys.config.pan ||
@@ -530,7 +574,7 @@ bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
     if (ctx->workspace != BDB_JOIN_WORK_RUNTIME || ctx->phase < BDB_JOIN_WAIT_KEY ||
-        ctx->phase >= BDB_JOIN_FAILED) return BDB_JOIN_STATE;
+        ctx->phase == BDB_JOIN_FAILED || ctx->phase == BDB_JOIN_FAULT) return BDB_JOIN_STATE;
     return nwk_aps_armed(&ctx->work.runtime.transport, generation, retry, nb) == NWK_APS_OK ?
         BDB_JOIN_OK : BDB_JOIN_STATE;
 }
@@ -539,7 +583,7 @@ bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
 {
     if (!ctx || ctx->version != BDB_JOIN_VERSION) return BDB_JOIN_ARGUMENT;
     if (ctx->workspace != BDB_JOIN_WORK_RUNTIME || ctx->phase < BDB_JOIN_WAIT_KEY ||
-        ctx->phase >= BDB_JOIN_FAILED) return BDB_JOIN_STATE;
+        ctx->phase == BDB_JOIN_FAILED || ctx->phase == BDB_JOIN_FAULT) return BDB_JOIN_STATE;
     return nwk_aps_disarmed(&ctx->work.runtime.transport, generation, retry, nb) == NWK_APS_OK ?
         BDB_JOIN_OK : BDB_JOIN_STATE;
 }

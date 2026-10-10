@@ -22,6 +22,10 @@
 #define BDB_JOIN_KEEPALIVE_ATTEMPTS 6u
 #define BDB_JOIN_ATTEMPTS 3u
 #define BDB_JOIN_STALL_STEPS 4096u
+/* R22 3.6.1.4.2: a secured Rejoin Request is failed when no Rejoin Response
+ * arrives within aResponseWaitTime (32*aBaseSuperframeDuration symbols). */
+#define BDB_JOIN_REJOIN_WAIT 30720UL
+#define BDB_JOIN_RECOVERY_WAIT 6250000UL
 
 typedef enum {
     BDB_JOIN_OK = 0, BDB_JOIN_ARGUMENT, BDB_JOIN_STATE, BDB_JOIN_CLOCK,
@@ -37,8 +41,13 @@ typedef enum {
     BDB_JOIN_WAIT_KEY, BDB_JOIN_ANNOUNCING, BDB_JOIN_NODE, BDB_JOIN_REQUESTING,
     BDB_JOIN_WAIT_TC, BDB_JOIN_VERIFYING, BDB_JOIN_WAIT_CONFIRM, BDB_JOIN_PARENT,
     BDB_JOIN_PERMIT, BDB_JOIN_READY, BDB_JOIN_UPDATING, BDB_JOIN_ABORTING,
-    BDB_JOIN_LEAVING, BDB_JOIN_FAILED, BDB_JOIN_FAULT
+    BDB_JOIN_LEAVING, BDB_JOIN_FAILED, BDB_JOIN_FAULT,
+    /* Appended: existing numeric phase values are external diagnostics ABI. */
+    BDB_JOIN_RECOVERING
 } bdb_join_phase_t;
+
+/* Ordered phase tests predate RECOVERING; it is live like phases < ABORTING. */
+#define BDB_JOIN_LIVE(phase) ((phase) < BDB_JOIN_ABORTING || (phase) == BDB_JOIN_RECOVERING)
 
 #define BDB_JOIN_ACTION_SCAN 1u
 #define BDB_JOIN_ACTION_ASSOCIATION 2u
@@ -136,6 +145,8 @@ typedef struct {
     uint8_t got_tc, got_confirm, application_pending, application_done, application_result;
     uint8_t receive_result, abandon, timely;
     uint8_t workspace;
+    /* 0 commissioning; 1 resumed, 2 Rejoin Response accepted, 3 recovered READY. */
+    uint8_t recovery;
 } bdb_join_t;
 
 /* Bounded R22/BDB3.0.1 centralized, awake direct-TC ED.
@@ -146,7 +157,13 @@ typedef struct {
  * supplies the TC IEEE for explicit default-key provisioning. A short-selected
  * source remains UNBOUND metadata, not authenticated identity or membership.
  * Actual Transport Key authentication and the updated TC exchange still follow.
- * Existing verified storage returns RECOVERY_REQUIRED; it is not resumed join.
+ * Existing verified storage returns RECOVERY_REQUIRED from start; it is never
+ * initial commissioning. bdb_join_resume instead admits complete VERIFIED or
+ * REJOINING storage: INSTALL the persisted identity, RECOVERING sends at most
+ * ATTEMPTS genuine secured Rejoin Requests to the TC parent, then a matching
+ * Rejoin Response reinstalls the (possibly new) address, Device Announce and
+ * ED Timeout follow, and only then READY. Persisted membership alone is never
+ * READY. Recovery failures keep durable credentials and never send Leave.
  * scan/association actions preserve the real lower-controller grant contracts.
  * Event/action data is a real tagged union: construct/read only the member
  * selected by kind. epoch/token/kind are outside that union. Finish consuming
@@ -168,6 +185,8 @@ typedef struct {
  */
 bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NWK_APS_TX_T BDB_JOIN_RAM * SDCC_VOLATILE owner,
+    const bdb_join_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+bdb_join_result_t bdb_join_resume(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NWK_APS_TX_T BDB_JOIN_RAM * SDCC_VOLATILE owner,
     const bdb_join_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
     const bdb_join_event_t BDB_JOIN_RAM * SDCC_VOLATILE event, bdb_join_action_t BDB_JOIN_RAM * SDCC_VOLATILE action) JOIN_FAR;
