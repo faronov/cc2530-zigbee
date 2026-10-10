@@ -2041,5 +2041,15 @@ GitHub Actions:
 Nightly FULL is blocked, because schedules run only from the default branch (production
 `main`, and TC32 in the fork). FULL was not rerun for this infrastructure change.
 
+FULL qualification:
+- GitHub run 37996810558 qualified `mcs51-dev` 1a01afb + `llvm-dev` 3b84bbc.
+- It took one segment, 2 h 15 min; 22/22 steps PASS; receipt `4f5622a1…`.
+- Complete case 0 reached serving: 1142 steps, 559709 stops, stack 101.
+- All ten case results equal the earlier reference run.
+- The HEX `a1f47b14…` is identical to the local build.
+
+This candidate is the LLVM development integration baseline. Hardware use still needs separate
+authorization.
+
 H2 is unchanged from §23. The offline RX-path investigation plan is in
 LLVM_DEVELOPMENT.

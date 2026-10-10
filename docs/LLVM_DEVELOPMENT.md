@@ -247,6 +247,29 @@ Measured speedups:
 The **reference** simulator stays the FULL acceptance oracle. The fast simulator is a
 development option, and its hash is recorded in every receipt that uses it.
 
+### Simulator optimization roadmap (proposal, not implemented)
+
+Case 0 runs 4194 chunks: ≈4.1 s each locally and ≈1.9 s each on a GitHub runner. Almost all of
+that is per-chunk fixed cost, not MCU execution. In priority order:
+
+1. **Persistent s51 across chunk boundaries.** This removes process start, ELF load and full
+   state restore from every chunk, which is the largest share of the ≈80% s51 time. Equivalence
+   must be proven against the per-chunk restore, because the restore is what makes resume exact.
+2. **Install breakpoints once.** The ≈1100 conditional breakpoints (≈0.7 s per chunk) are
+   identical for the whole case.
+3. **Buffered memory dumps.** Already done as `--profile fast`, saving 25–35%.
+4. **Batched peripheral events, less Python IPC.** Process the stops between captures in one
+   exchange, and parse dumps in bulk (`memory_dump` parsing is ≈8%).
+5. **Do not reserialize immutable state.** Flash rarely changes, so captures and the ≈300 KB
+   snapshots taken every 10 steps can carry a hash plus deltas instead of the full image.
+
+Any accelerated simulator is admitted only after a differential proof against the reference:
+- chunk-by-chunk identical dumps;
+- identical per-case steps, stops and stack;
+- identical negative cases.
+
+Until that proof exists, the reference stays the release oracle.
+
 ## GitHub Actions
 
 | Event | Repository | Tier |
@@ -264,15 +287,71 @@ Job layout:
   and FAST/SMOKE.
 - FULL packs those exact binaries and the FAST lit receipt as inputs.
 - The jobs `full-1`…`full-4` run FULL segments chained by SUSPENDED/`--resume` within the 6 h
-  job limit. Case 0 needs about one segment's worth of time at the 17400 s budget.
+  job limit. On a GitHub runner the whole FULL fits in `full-1` (≈2.2 h); later segments are a
+  safety margin.
 - `full-verdict` passes only if the last segment's receipt is PASS.
 
 A FULL result is bound to the exact compiler commit and binaries it was built from.
+
+### First FULL qualification
+
+FULL run 37996810558 qualified llvm `mcs51-dev` 1a01afb + firmware `llvm-dev` 3b84bbc on
+2026-10-09/10:
+- `workflow_dispatch`, 22:00:41Z → 00:15:31Z, 2 h 15 min wall;
+- one segment, no resume needed; 22/22 steps PASS;
+- receipt `4f5622a1…`, identity `c3d57d04…`, selection `9817490c…`;
+- lit imported from the same run's FAST receipt `e4d50459…` (187 passed, one known exclusion).
+
+| Case | Terminal | Steps | Peripheral stops | Stack B | GH s |
+| --- | --- | --- | --- | --- | --- |
+| 0 | serving | 1142/1142 | 559709 | 101 | 7800 |
+| 10 | flash-ram-stop | 396 | 114986 | 91 | 2666 |
+| 8 | fault | 406 | 79017 | 92 | 2095 |
+| 6 | fault | 405 | 63872 | 73 | 1297 |
+| 1 | fault | 256 | 0 | 12 | 669 |
+| 5 | fault | 130 | 23086 | 73 | 464 |
+| 9 | fault | 25 | 5926 | 73 | 177 |
+| 4 | fault | 3 | 387 | 52 | 43 |
+| 2 / 3 | fault | 1 | 0 | 12 | 8 |
+
+Every case result equals the earlier local reference run, apart from path and duration.
+
+Admission and proofs:
+- 367 thunks, 0 bad; stack demand 106/128;
+- generic-pointer sites 18/18;
+- fixed-address/memory proof and runtime verifiers PASS.
+
+Image hashes:
+- The HEX `a1f47b14…` is byte-identical to the local build.
+- The ELF (`b697ccd9…`) differs only in the non-loaded `.comment`, which embeds the compiler
+  commit.
+
+### Excluded lit test
+
+`lld/test/ELF/mcs51-address-space-overlap.s` comes from upstream 576349eb3a6d, which added the
+test without its `mcs51-address-space-overlap.ld`, so it fails with "cannot find linker script":
+- This is a test-fixture omission, not a defect in codegen, ABI, banking or stack.
+- A reconstructed script passes every `OVERLAP` check, so the lld behavior itself works.
+- There is no upstream issue; it is noted in PR #7.
+- The firmware link and the memory proofs cover this property for the admitted image.
+
+### Scheduling
+
+Policy:
+- push → FAST;
+- PR → FAST + SMOKE;
+- significant ABI/backend integration → FULL before acceptance;
+- release or hardware candidate → FULL mandatory.
+
+A weekly FULL is optional, and nightly FULL is not needed.
 
 Nightly FULL is **BLOCKED**:
 - GitHub runs `schedule` only from a repository's default branch.
 - That is production `main` here, and `tc32-as-thumb-extension` in faronov/llvm-project.
 - Neither will be changed for this.
+- A weekly schedule has the same restriction. A non-intrusive option is a separate scheduler
+  repository whose default branch only dispatches `llvm-tiers.yml` with pinned SHAs. That
+  needs a token secret and explicit approval, so it is not set up.
 
 Run FULL manually with
 `gh workflow run llvm-tiers.yml --ref llvm-dev -f tier=full` (or from the fork's
