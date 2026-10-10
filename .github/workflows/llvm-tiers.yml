@@ -22,6 +22,11 @@ on:
         type: choice
         options: [fast, smoke, full]
         default: fast
+      variant:
+        description: firmware variant (rx-diag = opt-in CC2530_RX_DIAG diagnostic image, never production)
+        type: choice
+        options: [production, rx-diag]
+        default: production
       llvm_repository:
         description: LLVM-MCS51 repository
         default: faronov/llvm-project
@@ -33,6 +38,9 @@ on:
       tier:
         type: string
         required: true
+      variant:
+        type: string
+        default: production
       llvm_repository:
         type: string
         default: faronov/llvm-project
@@ -50,7 +58,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: llvm-tiers-${{ github.repository }}-${{ github.ref }}-${{ inputs.tier || github.event_name }}
+  group: llvm-tiers-${{ github.repository }}-${{ github.ref }}-${{ inputs.tier || github.event_name }}-${{ inputs.variant || 'production' }}
   cancel-in-progress: ${{ inputs.tier != 'full' }}
 
 env:
@@ -65,6 +73,7 @@ jobs:
     timeout-minutes: 300
     outputs:
       tier: ${{ steps.select.outputs.tier }}
+      variant: ${{ steps.select.outputs.variant }}
       firmware_repository: ${{ steps.select.outputs.firmware_repository }}
       firmware_sha: ${{ steps.ids.outputs.firmware_sha }}
       llvm_repository: ${{ steps.select.outputs.llvm_repository }}
@@ -74,14 +83,17 @@ jobs:
         id: select
         env:
           TIER: ${{ inputs.tier || (github.event_name == 'pull_request' && 'smoke' || 'fast') }}
+          VARIANT: ${{ inputs.variant || 'production' }}
           LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
           LLVM_REF: ${{ inputs.llvm_ref || 'mcs51-dev' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.sha }}
         run: |
           case "$TIER" in fast|smoke|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
+          case "$VARIANT" in production|rx-diag) ;; *) echo "unknown variant '$VARIANT'"; exit 1;; esac
           {
             echo "tier=$TIER"
+            echo "variant=$VARIANT"
             echo "llvm_repository=$LLVM_REPOSITORY"
             echo "llvm_ref=$LLVM_REF"
             echo "firmware_repository=$FIRMWARE_REPOSITORY"
@@ -112,6 +124,7 @@ jobs:
           echo "llvm_sha=$(git -C llvm rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           {
             echo "tier: ${{ steps.select.outputs.tier }}"
+            echo "variant: ${{ steps.select.outputs.variant }}"
             echo "firmware: ${{ steps.select.outputs.firmware_repository }}@$(git -C fw rev-parse HEAD)"
             echo "llvm: ${{ steps.select.outputs.llvm_repository }}@$(git -C llvm rev-parse HEAD)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -161,7 +174,7 @@ jobs:
             --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
             --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
             --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
-            --output "$GITHUB_WORKSPACE/out/fast"
+            --variant "${{ steps.select.outputs.variant }}" --output "$GITHUB_WORKSPACE/out/fast"
 
       - name: SMOKE
         if: steps.select.outputs.tier == 'smoke'
@@ -171,7 +184,7 @@ jobs:
             --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
             --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
             --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
-            --output "$GITHUB_WORKSPACE/out/smoke"
+            --variant "${{ steps.select.outputs.variant }}" --output "$GITHUB_WORKSPACE/out/smoke"
 
       - name: Pack FULL inputs (exact toolchain, simulator and FAST lit receipt of this run)
         if: steps.select.outputs.tier == 'full'
@@ -222,7 +235,7 @@ jobs:
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
         uses: ./fw/.github/actions/llvm-full-segment
-        with: {segment: '1', case0-budget: '${{ env.CASE0_BUDGET }}'}
+        with: {segment: '1', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-2:
     needs: [toolchain, full-1]
@@ -238,7 +251,7 @@ jobs:
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
         uses: ./fw/.github/actions/llvm-full-segment
-        with: {segment: '2', previous: '1', case0-budget: '${{ env.CASE0_BUDGET }}'}
+        with: {segment: '2', previous: '1', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-3:
     needs: [toolchain, full-2]
@@ -254,7 +267,7 @@ jobs:
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
         uses: ./fw/.github/actions/llvm-full-segment
-        with: {segment: '3', previous: '2', case0-budget: '${{ env.CASE0_BUDGET }}'}
+        with: {segment: '3', previous: '2', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-4:
     needs: [toolchain, full-3]
@@ -270,7 +283,7 @@ jobs:
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
         uses: ./fw/.github/actions/llvm-full-segment
-        with: {segment: '4', previous: '3', case0-budget: '${{ env.CASE0_BUDGET }}'}
+        with: {segment: '4', previous: '3', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-verdict:
     name: FULL verdict (PASS only when complete case 0 reached serving)
@@ -287,5 +300,5 @@ jobs:
         run: |
           last=""
           for s in "$S1" "$S2" "$S3" "$S4"; do [ -z "$s" ] || last=$s; done
-          echo "FULL: ${last:-NOT RUN} (segments: ${S1:--} ${S2:--} ${S3:--} ${S4:--})" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "FULL (${{ needs.toolchain.outputs.variant }}): ${last:-NOT RUN} (segments: ${S1:--} ${S2:--} ${S3:--} ${S4:--})" | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$last" = PASS ]

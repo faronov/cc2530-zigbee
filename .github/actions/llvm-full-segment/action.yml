@@ -13,6 +13,9 @@ inputs:
     description: previous segment number (empty for segment 1)
     required: false
     default: ''
+  variant:
+    description: firmware variant (production or rx-diag); part of the FULL identity
+    required: true
   case0-budget:
     description: seconds of complete case 0 before suspending at the next snapshot
     required: true
@@ -64,7 +67,7 @@ runs:
           --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
           --lit-evidence "$GITHUB_WORKSPACE/out/fast/receipt.json" \
           --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
-          --output "$GITHUB_WORKSPACE/out/full" \
+          --variant "${{ inputs.variant }}" --output "$GITHUB_WORKSPACE/out/full" \
           --case0-budget "${{ inputs.case0-budget }}" $resume || rc=$?
         status=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["status"])' \
           "$GITHUB_WORKSPACE/out/full/receipt.json" 2>/dev/null || echo NONE)

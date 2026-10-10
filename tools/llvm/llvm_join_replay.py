@@ -400,6 +400,10 @@ class Suspended(Exception):
         self.path, self.index, self.completed, self.count = path, index, completed, count
 
 
+RX_DIAG = (0x1e40, 0x1e90)
+RX_DIAG_RESET = b"RXDG\x01\x50" + bytes(74)
+
+
 class Mismatch(Exception):
     def __init__(self, j, message):
         super().__init__(message)
@@ -462,6 +466,11 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     require(sp_main <= 0x81, f"SP at main {sp_main:#x}")
     state = captured_sections(parts, 60000, wait)
     reset_status = state[0][0x1e00:0x1e08]
+    # Opt-in CC2530_RX_DIAG image: the only owner of 0x1e40..0x1e8f (80 bytes).
+    rx_diag = symbols.get("_cc2530_rx_diag")
+    require(rx_diag in (None, RX_DIAG[0]), f"cc2530_rx_diag at {rx_diag!r}, not {RX_DIAG[0]:#x}")
+    if rx_diag is not None:
+        require(state[0][RX_DIAG[0]:RX_DIAG[1]] == RX_DIAG_RESET, "RX_DIAG block not reset to RXDG v1")
     require(reset_status == b"JSN1\x02\x30\x01\0"
             and state[0][symbols["_join_smoke_mailbox"]:symbols["_join_smoke_mailbox"]+8] == bytes(8),
             f"Genuine reset did not produce DISARMED: {reset_status.hex()}")
@@ -586,8 +595,13 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
             unowned = bytearray(state[0][bss_end:0x1e00])
             if os.environ.get("DIAG_LOGBP"):
                 unowned[0x1d00 - bss_end:] = b"\xa5" * (0x1e00 - 0x1d00)
+            high = state[0][0x1e30:0x1f00]
+            if rx_diag is not None:
+                diag_block = high[RX_DIAG[0] - 0x1e30:RX_DIAG[1] - 0x1e30]
+                require(diag_block[:6] == RX_DIAG_RESET[:6], "RX_DIAG header changed")
+                high = high[:RX_DIAG[0] - 0x1e30] + high[RX_DIAG[1] - 0x1e30:]
             require(unowned == b"\xa5" * (0x1e00 - bss_end)
-                    and state[0][0x1e30:] == b"\xa5" * (0x1f00 - 0x1e30), "Unowned XDATA changed")
+                    and high == b"\xa5" * len(high), "Unowned XDATA changed")
             require(state[4][:0x3e800] == physical[:0x3e800] and state[4][0x3f800:] == physical[0x3f800:],
                     "Firmware/lock flash changed")
             if last == len(events):
@@ -612,6 +626,8 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     result = {"complete": finished and limit is None, "steps": completed, "of_steps": len(vector["steps"]),
               "peripheral_stops": count, "peak_sp": peak, "reset_peak_sp": reset_peak, "sampled_sp": sampled,
               "stack_bytes": peak - 0x7f, "phase": state[0][0x1e06], "adjacency_retries": retries}
+    if rx_diag is not None:
+        result["rx_diag"] = state[0][RX_DIAG[0]:RX_DIAG[1]].hex()
     if finished and vector["case"] == J.FLASH_BUSY_CASE:
         require(state[0][symbols["_flash_write_status"]] == 10
                 and state[0][symbols["_nv_record_diagnostic"]+4] == 13

@@ -5,6 +5,9 @@
 #include "sdcc_volatile.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
 #if defined(__clang__)
 #define MCS51_PARAM_VOLATILE
 #else
@@ -38,6 +41,19 @@ bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, 
 
 static void fail(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t result)
 {
+#if defined(CC2530_RX_DIAG)
+    if (!RX_DIAG.fail_valid) {
+        RX_DIAG.fail_valid = 1;
+        RX_DIAG.fail_bdb_phase = ctx->phase;
+        RX_DIAG.fail_result = result;
+        RX_DIAG.fail_workspace = ctx->workspace;
+        if (ctx->workspace == BDB_JOIN_WORK_RUNTIME) {
+            RX_DIAG.fail_aps_result = ctx->work.runtime.transport.result;
+            RX_DIAG.fail_aps_retries = ctx->work.runtime.transport.retries;
+            RX_DIAG.fail_aps_error = ctx->work.runtime.transport.error;
+        }
+    }
+#endif
     ctx->abandon = result == BDB_JOIN_ADDRESS_CONFLICT ||
         (result != BDB_JOIN_WORK_LIMIT && ctx->phase < BDB_JOIN_READY &&
          !(ctx->phase == BDB_JOIN_INSTALLING && ctx->member));

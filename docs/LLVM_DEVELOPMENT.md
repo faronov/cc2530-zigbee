@@ -38,10 +38,16 @@ The direct CI entry point is the same script:
 python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
     --tools BIN --llvm-src SRC --simulator S51 \
     [--llvm-build TREE | --lit-evidence RECEIPT] [--evidence STORE] \
-    [--case0-budget SEC] [--resume] [--plan-only]
+    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag}]
 ```
 
 `--plan-only` prints the exact selection without running anything.
+
+`--variant` (Make: `LLVM_VARIANT=rx-diag`) selects the firmware image. The default
+`production` image is the admitted profile. `rx-diag` adds `-DCC2530_RX_DIAG` and links the
+fixed diagnostic block; see
+[RX_DIAG diagnostic variant](#rx_diag-diagnostic-variant-llvm-only). The variant is part of
+the receipt identity, so evidence never crosses variants.
 
 Exit codes:
 
@@ -407,8 +413,9 @@ The full report is [`H2_RX_INVESTIGATION.md`](H2_RX_INVESTIGATION.md). Summary:
   - service latency;
   - parent burst/retries;
   - channel traffic.
-  The missing fields, and a ≤48-byte flag-gated diagnostic ABI to capture them, are specified
-  in the report.
+  The report lists the missing fields. The flag-gated diagnostic ABI that captures them is now
+  implemented for LLVM only (80 bytes, version 1; see
+  [RX_DIAG diagnostic variant](#rx_diag-diagnostic-variant-llvm-only)).
 - No functional code change is justified. No hardware trial is justified until the diagnostic
   image passes FAST, SMOKE and FULL and is separately authorized. Do not use H1.
 
@@ -416,3 +423,32 @@ Known pre-existing gap: the SDCC raw-CDB digest pins used by the SDCC boot check
 radio_autoack, mac_radio and mac_adapter predate the `llvm-dev` compatibility commits. Those
 checks, and the link-direct/join-smoke host builds that depend on them, fail on "raw CDB
 identity changed" on this branch. The LLVM tiers are the gate on `llvm-dev`.
+
+## RX_DIAG diagnostic variant (LLVM only)
+
+`CC2530_RX_DIAG` is an opt-in, versioned, 80-byte XDATA block. It records RX FIFO overflow
+first-loss state, service gaps, the last good MAC header and the first upper-layer failure.
+The layout, placement, HWLab read procedure and analysis tools are in
+[H2_RX_INVESTIGATION §10](H2_RX_INVESTIGATION.md#10-diagnostic-abi-cc2530_rx_diag-implemented-llvm-image-only).
+
+The variant is a **separate image identity, never production**.
+
+| Command | Purpose |
+| --- | --- |
+| `make test-rx-diag PYTHON=.venv/bin/python [TSHARK=…/tshark]` | Host diagnostic tests, flag-off/on MMIO trace identity, decoder and capture tests |
+| `make test-llvm-fast LLVM_VARIANT=rx-diag LLVM_TIER_OUT=…` | FAST on the diagnostic image |
+| `make test-llvm-smoke LLVM_VARIANT=rx-diag LLVM_TIER_OUT=…` | SMOKE; each sim records the final block (`rx_diag` hex in `sims/*.json`) |
+| `gh workflow run llvm-tiers.yml --ref llvm-dev -f tier=full -f variant=rx-diag` | FULL on the diagnostic image (required before hardware) |
+| `python3 tools/rx_diag_sdcc_build.py --variant production --output DIR` | SDCC feature-OFF identity proof |
+| `python3 tools/rx_diag_sdcc_build.py --variant rx-diag --baseline DIR --output DIR2` | SDCC fit check; records INFEASIBLE |
+
+Local FAST/SMOKE evidence (compiler source 2feda4a, which is `mcs51-dev` 1a01afb minus its CI-workflow-only commit):
+
+| Image | HEX SHA-256 | CODE | XDATA bss/data | Stack |
+| --- | --- | --- | --- | --- |
+| production (unchanged) | `a1f47b14…` | 213132 | 4841 / 35 | 106/128 |
+| rx-diag | `59d7bfc1…` | 214612 (+1480) | 4841 / 35, plus the fixed block at 0x1E40 | 106/128 |
+
+For SDCC, the diagnostic code does not fit the banked join-smoke layout: it needs about +1.5 KB
+against 999 B of free CODE, and the `JS_RADIO` group grows by 884 B. SDCC trials therefore run
+the production image with the sniffer only. No SDCC diagnostic image exists.

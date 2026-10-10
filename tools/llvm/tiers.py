@@ -36,6 +36,9 @@ REPO = HERE.parents[1]
 PROFILE_PATH = HERE / "profile.json"
 SCHEMA = "cc2530-llvm-tier-receipt/1"
 TIERS = ("fast", "smoke", "full")
+# Firmware build variants (build.sh FIRMWARE_VARIANT). rx-diag is the opt-in
+# CC2530_RX_DIAG diagnostic image: a distinct identity, never production.
+VARIANTS = ("production", "rx-diag")
 # Content that can never change generated code or acceptance: excluded from the
 # firmware identity so documentation edits do not invalidate evidence.
 NON_EVIDENCE = re.compile(r"(^docs/|\.md$|^\.github/|^LICENSES?/|^\.gitignore$)")
@@ -128,6 +131,7 @@ def host_identity(python):
 def identity(args, profile):
     ident = {"profile": digest(profile),
              "flags": {"abi": profile["abi_flags"], "sf": profile["sf_flags"]},
+             **({"variant": args.variant} if args.variant != "production" else {}),
              "compiler": compiler_identity(args.tools, args.llvm_src, profile),
              "firmware": firmware_identity(REPO),
              "simulator": simulator_identity(args.simulator),
@@ -245,6 +249,7 @@ def plan(tier, args, profile):
     env = {"TOOLS": str(args.tools), "LLVM_SRC": str(args.llvm_src), "S51": str(args.simulator),
            "MCS51_SIM": str(args.simulator), "PYTHON": py, "JOBS": str(args.jobs),
            "ABI_FLAGS": profile["abi_flags"], "SF_FLAGS": profile["sf_flags"],
+           "FIRMWARE_VARIANT": args.variant,
            "MCS51_CLANG": str(Path(args.tools) / "clang"), "MCS51_LLD": str(Path(args.tools) / "ld.lld"),
            "MCS51_OBJCOPY": str(Path(args.tools) / "llvm-objcopy")}
     flags = f"{profile['abi_flags']} {profile['sf_flags']}"
@@ -624,6 +629,8 @@ def main(argv=None):
     p.add_argument("--lit-evidence", type=Path, help="sealed receipt whose lit PASS is bound to the same compiler")
     p.add_argument("--simulator", type=Path, required=True, help="s51 from tools/llvm/prepare_simulator.py")
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--variant", choices=VARIANTS, default="production",
+                   help="firmware variant; rx-diag = opt-in CC2530_RX_DIAG diagnostic image")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--jobs", type=int, default=min(os.cpu_count() or 4, 16))
     p.add_argument("--keep-going", action="store_true", help="do not cancel remaining steps after a failure")

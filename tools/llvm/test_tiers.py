@@ -18,7 +18,7 @@ PROFILE = json.loads(tiers.PROFILE_PATH.read_text())
 def args(tier, **extra):
     base = dict(tools=Path("/x/bin"), llvm_src=Path("/x/src"), llvm_build=None, lit_evidence=None,
                 simulator=Path("/x/s51"), output=Path("/x/out"), python="python3", jobs=2, sim_timeout=10,
-                case_timeout=10, case0_budget=None)
+                case_timeout=10, case0_budget=None, variant="production")
     if tier == "full":
         base["lit_evidence"] = Path("/x/lit.json")
     base.update(extra)
@@ -69,6 +69,12 @@ class Selection(unittest.TestCase):
             mutate(weakened)
             with self.assertRaises(SystemExit):
                 tiers.plan("full", args("full"), weakened)
+
+    def test_variant_reaches_build_and_audit(self):
+        for variant in tiers.VARIANTS:
+            steps, _ = names("smoke", variant=variant)
+            for name in ("firmware-build", "firmware-audit", "sim-case2"):
+                self.assertEqual(steps[name].env["FIRMWARE_VARIANT"], variant)
 
     def test_tier_sets_are_nested(self):
         fast, _ = names("fast")
@@ -179,6 +185,20 @@ class Identity(unittest.TestCase):
             self.assertEqual(base, tiers.digest(tiers.tree_identity(repo)))
             (repo / "src/x.c").write_text("int y;")
             self.assertNotEqual(base, tiers.digest(tiers.tree_identity(repo)))
+
+    def test_variant_is_a_distinct_identity(self):
+        saved = (tiers.compiler_identity, tiers.firmware_identity, tiers.simulator_identity, tiers.host_identity)
+        tiers.compiler_identity = lambda *a: {"c": 1}
+        tiers.firmware_identity = lambda *a: {"tree": "t"}
+        tiers.simulator_identity = tiers.host_identity = lambda *a: {}
+        try:
+            prod = tiers.identity(args("smoke"), PROFILE)
+            diag = tiers.identity(args("smoke", variant="rx-diag"), PROFILE)
+        finally:
+            (tiers.compiler_identity, tiers.firmware_identity, tiers.simulator_identity, tiers.host_identity) = saved
+        self.assertNotIn("variant", prod)
+        self.assertEqual(diag["variant"], "rx-diag")
+        self.assertNotEqual(prod["digest"], diag["digest"])
 
     def test_simulator_identity_tracks_binary(self):
         with tempfile.TemporaryDirectory() as d:

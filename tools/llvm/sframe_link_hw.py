@@ -24,6 +24,8 @@ HERE = OUT + '/link'; LO = OUT + '/link'
 MDIR, TAG = sys.argv[1], sys.argv[2]; EXTRA = sys.argv[3:]
 BASE_LD = open(H + '/inputs/cc2530-sdcc-order-pack.ld').read()
 PROJ_LD = open(H + '/inputs/project-ordered-pack.ld').read()
+if os.environ.get('FIRMWARE_VARIANT', 'production') == 'rx-diag':
+    PROJ_LD += open(H + '/inputs/rx_diag.ld').read()
 PDATA_BSS = '    *(.mcs51.pdata.bss)\n'
 assert BASE_LD.count(PDATA_BSS) == 1
 assert PROJ_LD.count(BASE_KEY) == 1

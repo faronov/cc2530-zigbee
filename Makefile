@@ -1523,6 +1523,37 @@ test-mac-attempt: $(BUILD)/host-mac-attempt-tests $(BUILD)/host-mac-attempt-test
 	$(BUILD)/host-mac-attempt-tests-sanitize
 	$(PYTHON) -B tests/boot_mac_attempt.py --output $(BUILD) --simulator "$(S51)"
 
+# CC2530_RX_DIAG (opt-in, LLVM-only diagnostic image; docs/H2_RX_INVESTIGATION.md 10):
+# block semantics on the same synthetic model, and flag-off/flag-on MMIO identity.
+RX_DIAG_HOST_FLAGS = $(HOST_FLAGS) -DCC2530_RX_DIAG -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie
+RADIO_AUTOACK_HOST_SRC := tests/test_radio_autoack.c src/timebase.c src/radio_autoack.c tests/host_mmio.c
+$(BUILD)/host-radio-autoack-rx-diag-tests: $(RADIO_AUTOACK_HOST_SRC) tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(RX_DIAG_HOST_FLAGS) $(RADIO_AUTOACK_HOST_SRC) -o $@
+
+$(BUILD)/host-radio-autoack-rx-diag-loss-tests: $(RADIO_AUTOACK_HOST_SRC) tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(RX_DIAG_HOST_FLAGS) -DCC2530_MAC_ADAPTER $(RADIO_AUTOACK_HOST_SRC) -o $@
+
+$(BUILD)/host-radio-autoack-rx-diag-link-loss-tests: $(RADIO_AUTOACK_HOST_SRC) tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(RX_DIAG_HOST_FLAGS) -DCC2530_MAC_ADAPTER -DCC2530_MAC_LINK $(RADIO_AUTOACK_HOST_SRC) -o $@
+
+$(BUILD)/host-mac-attempt-rx-diag-tests: tests/test_mac_attempt.c tests/test_radio_autoack.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c tests/host_mmio.h $(HEADERS) Makefile | $(BUILD)
+	$(HOST_CC) $(RX_DIAG_HOST_FLAGS) $(MAC_ATTEMPT_DEFINES) tests/test_mac_attempt.c $(MAC_ATTEMPT_SRC) tests/host_mmio.c -o $@
+
+RX_DIAG_HOST_PAIRS := host-radio-autoack-tests:host-radio-autoack-rx-diag-tests \
+	host-radio-autoack-loss-tests:host-radio-autoack-rx-diag-loss-tests \
+	host-radio-autoack-link-loss-tests:host-radio-autoack-rx-diag-link-loss-tests
+.PHONY: test-rx-diag
+test-rx-diag: $(foreach p,$(RX_DIAG_HOST_PAIRS),$(addprefix $(BUILD)/,$(subst :, ,$(p)))) \
+		$(BUILD)/host-mac-attempt-tests $(BUILD)/host-mac-attempt-rx-diag-tests
+	$(BUILD)/host-radio-autoack-rx-diag-tests
+	$(BUILD)/host-radio-autoack-rx-diag-loss-tests
+	$(BUILD)/host-radio-autoack-rx-diag-link-loss-tests
+	$(BUILD)/host-mac-attempt-rx-diag-tests
+	$(PYTHON) -B tests/rx_diag_trace_identity.py \
+		$(foreach p,$(RX_DIAG_HOST_PAIRS),--radio $(addprefix $(BUILD)/,$(subst :, ,$(p)))) \
+		--attempt $(BUILD)/host-mac-attempt-tests $(BUILD)/host-mac-attempt-rx-diag-tests
+	$(if $(TSHARK),TSHARK="$(TSHARK)") $(PYTHON) -B -m unittest discover -s tools -p 'test_rx_diag*.py' -v
+
 MAC_HANDOFF_MODULES := $(MAC_ATTEMPT_MODULES) test_mac_handoff
 MAC_HANDOFF_OBJECTS := $(addprefix $(BUILD)/mh_,$(addsuffix .rel,$(MAC_HANDOFF_MODULES)))
 MAC_HANDOFF_DEFINES := $(MAC_ATTEMPT_DEFINES) -DCC2530_MAC_HANDOFF
@@ -2322,7 +2353,10 @@ LLVM_SIM_DIR ?= build/llvm-sim/$(LLVM_SIM_PROFILE)
 LLVM_S51 ?= $(LLVM_SIM_DIR)/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51
 LLVM_TIER_OUT ?= build/llvm-tiers
 LLVM_TIER_ARGS ?=
+# production | rx-diag (opt-in CC2530_RX_DIAG diagnostic image, docs/H2_RX_INVESTIGATION.md)
+LLVM_VARIANT ?= production
 LLVM_TIER = $(PYTHON) -B tools/llvm/tiers.py --tools "$(LLVM_TOOLS)" --llvm-src "$(LLVM_SRC)" \
+	--variant "$(LLVM_VARIANT)" \
 	--simulator "$(LLVM_S51)" $(if $(LLVM_TREE),--llvm-build "$(LLVM_TREE)") \
 	$(if $(LLVM_LIT_EVIDENCE),--lit-evidence "$(LLVM_LIT_EVIDENCE)") $(LLVM_TIER_ARGS)
 

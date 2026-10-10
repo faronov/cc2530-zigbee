@@ -103,6 +103,20 @@ need(all(r[1] <= st0 or r[0] >= st1 for r in ordinary), 'join_smoke_status overl
 need(st1 <= 0x1F00, 'join_smoke_status reaches the IRAM alias')
 need(all(r[1] <= 0x1E00 for r in ordinary), 'XDATA allocation reaches 0x1E00')
 need(pool_end <= (xd['.mcs51_pdata_bss'] or (0, 0))[1], 'static-frame pool outside reserved PDATA')
+# Opt-in CC2530_RX_DIAG image (build.sh FIRMWARE_VARIANT=rx-diag): an 80-byte NOBITS
+# block pinned at 0x1E40; absent, by symbol and section, from every other image.
+defines_path = f'{OUT}/defines.txt'
+rx_diag = os.path.isfile(defines_path) and '-DCC2530_RX_DIAG' in open(defines_path).read().split()
+rxs = secs.get('.mcs51_rx_diag'); rx_range = None
+if rx_diag:
+    if need(rxs is not None and rxs['sh_type'] == 'SHT_NOBITS' and rxs['sh_addr'] == 0x1E40 and rxs['sh_size'] == 80,
+            '.mcs51_rx_diag not an 80-byte NOBITS section at 0x1E40') and need('cc2530_rx_diag' in sym, 'cc2530_rx_diag symbol missing'):
+        rx_ndx = [i for i, s in enumerate(e.iter_sections()) if s.name == '.mcs51_rx_diag'][0]
+        rd = sym['cc2530_rx_diag']; rx_range = [rd['st_value'], rd['st_value'] + rd['st_size']]
+        need(rd['st_shndx'] == rx_ndx and rx_range == [0x1E40, 0x1E90], 'cc2530_rx_diag not 0x1E40..0x1E90 in .mcs51_rx_diag')
+        need(all(r[1] <= 0x1E40 or r[0] >= 0x1E90 for r in ordinary) and st1 <= 0x1E40, 'cc2530_rx_diag overlaps allocated XDATA/status')
+else:
+    need(rxs is None and 'cc2530_rx_diag' not in sym, 'RX_DIAG block present in a non-diagnostic image')
 abs_all = sorted(s.name for s in secs['.symtab'].iter_symbols() if s['st_shndx'] == 'SHN_ABS' and s.name and s['st_info']['type'] != 'STT_FILE')
 abs_x = [n for n in abs_all if not n.startswith(('__cc2530_', '__mcs51_'))]
 # SDCC runtime parameter-home names referenced by firmware overlap guards only as
@@ -116,7 +130,7 @@ memory = dict(
     xdata_pdata_page=dict(sframe_pool=[0, pool_end], pdata_init=xd['.mcs51_pdata'], pdata_bss=xd['.mcs51_pdata_bss'], static_frames=len(sframes)),
     xdata_data=xd['.data'], xdata_bss=xd['.bss'],
     raw_xdata=sum(r[1] - r[0] for r in ordinary),
-    fixed_xdata=dict(join_smoke_status=[st0, st1], iram_alias=[0x1F00, 0x2000], xreg=[0x6000, 0x6400], sfr_xdata=[0x7080, 0x7100]),
+    fixed_xdata=dict(join_smoke_status=[st0, st1], **({'cc2530_rx_diag': rx_range} if rx_diag else {}), iram_alias=[0x1F00, 0x2000], xreg=[0x6000, 0x6400], sfr_xdata=[0x7080, 0x7100]),
     absolute_non_linker_symbols=abs_x,
     internal_globals=internal,
     pseudo_registers='IM0..IM7 pseudo-register pairs + R0-R7 (bank 0 registers)',

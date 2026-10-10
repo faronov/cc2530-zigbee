@@ -5,6 +5,9 @@
 #include "sdcc_volatile.h"
 #include "timebase.h"
 #include <string.h>
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
 
 static uint8_t reached(uint32_t now, uint32_t at)
 {
@@ -98,6 +101,16 @@ static uint8_t observe(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
     memset(&d->source, 0, sizeof(d->source));
     if (d->adapter_result != MAC_ADAPTER_EVENT) return 1;
     o = mac_adapter_observation();
+#if defined(CC2530_RX_DIAG)
+    /* First reported receive loss; same callee and depth as the clock read. */
+    if (o->lossy && !RX_DIAG.ctx_valid) {
+        RX_DIAG.ctx_valid = 1;
+        RX_DIAG.ctx_bdb_phase = d->join->phase;
+        RX_DIAG.ctx_workspace = d->join->workspace;
+        RX_DIAG.ctx_adapter_phase = mac_adapter_diagnostic()->phase;
+        RX_DIAG.ctx_adapter_goal = mac_adapter_diagnostic()->goal;
+    }
+#endif
     /* Receive loss is an accepted, reported outcome of a scan window, and of
      * runtime RX, where only never-ACKed frames can be lost. */
     if (o->lossy && d->join->phase != BDB_JOIN_SCANNING &&

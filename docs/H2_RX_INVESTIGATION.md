@@ -219,55 +219,131 @@ The following are missing:
    HANDOFF race).
 9. Inter-host clock skew between the operator and HA.
 
-## 10. Proposed minimal diagnostic ABI (design only, not implemented)
+## 10. Diagnostic ABI `CC2530_RX_DIAG` (implemented, LLVM image only)
 
-This is one shared source for SDCC and LLVM, behind a build flag (`CC2530_RX_DIAG`) so that
-the admitted images are unchanged.
-- It uses a fixed 48-byte XDATA block, zeroed at reset, and read by the operator from the halt
-  dump.
-- It has no printf and no payload bytes, and stores no addresses, keys or IEEEs.
+The ABI is implemented behind the build flag `CC2530_RX_DIAG`.
+- The authoritative layout is [`include/cc2530_rx_diag.h`](../include/cc2530_rx_diag.h). Every
+  offset is pinned by a static assert, and `tools/test_rx_diag_decode.py` checks the decoder
+  against the header.
+- With the flag off, the admitted images are unchanged (proof below).
+- The block holds no payload bytes, keys, IEEE addresses or short addresses.
+- It is passive: no control decision reads it, and it performs **no extra MMIO**. The values
+  it records are the ones the driver already reads.
+- There is no printf.
 
-```c
-typedef struct {                 /* 48 bytes, little-endian, version 1 */
-    uint8_t  version;            /* 1 */
-    uint8_t  overflows;          /* saturating: overflow latch 0->1 */
-    uint8_t  salvaged;           /* saturating: heads delivered while latched */
-    uint8_t  flushes;            /* saturating: ISFLUSHRX from the overflow branch */
-    uint16_t max_service_gap;    /* saturating ticks between FIFO services with RX on */
-    uint16_t max_rx_gap;         /* saturating ticks, RX stop/OFF -> resume READY */
-    /* first-loss sticky snapshot (written once, first_valid 0->1) */
-    uint8_t  first_valid, site;  /* site: 1 observe(), 2 consume() */
-    uint8_t  radio_state, radio_phase;
-    uint8_t  count, first, last, phr, signals, rferrf;
-    uint32_t stamp;              /* 24-bit timebase at detection */
-    uint16_t gap_at_loss;        /* ticks since previous FIFO service */
-    uint16_t frames_at_loss;     /* adapter frame serial, low 16 bits */
-    uint8_t  last_fcf0, last_fcf1, last_dsn, last_len;   /* last good frame header */
-    uint8_t  bdb_phase, workspace, adapter_phase, adapter_goal; /* filled by link driver */
-    /* first-failure sticky uplink snapshot (signature B) */
-    uint8_t  fail_valid, fail_bdb_phase, fail_result, fail_mac_outcome;
-    uint8_t  fail_retries, fail_cca_busy;
-    uint8_t  reserved[6];
-} cc2530_rx_diag_t;
-```
+### Layout, version 1 (80 bytes, little-endian, naturally aligned)
 
-Rules:
-- The radio layer writes only counters and the radio-level snapshot.
-- `mac_link_driver` writes the upper context once, at the first lossy observation.
-- `bdb_join` `fail()` writes the uplink snapshot once.
-- No control decision may read the block.
+| Off | Field | Meaning |
+|---|---|---|
+| 0 | `sig[4]` | `"RXDG"` |
+| 4 | `version` | 1 |
+| 5 | `size` | 80 |
+| 6–9 | `overflows`, `salvaged`, `flushes`, `rx_lost` | u8, saturating at 255 |
+| 10 | `frames` u16 | good frames delivered (adapter and attempt paths), saturating |
+| 12 | `bad_crc` u8 | bad-CRC frames dropped |
+| 13 | `first_valid` | 1 once the first-overflow snapshot is latched (first wins) |
+| 14 | `max_service_gap` u16 | largest gap between FIFO services with RX on |
+| 16 | `max_rx_off_gap` u16 | largest RX stop → RX-on interval |
+| 18 | `first_site` | 1 = observe(), 2 = consume() |
+| 19–20 | `first_radio_state`, `first_radio_phase` | driver state at the first overflow |
+| 21 | `first_rferrf` | RFERRF as read by the driver |
+| 22–23 | `first_fsmstat0`, `first_fsmstat1` | FSMSTAT0/1 as read by the driver |
+| 24–26 | `first_rxfifocnt`, `first_rxfirst`, `first_rxlast` | FIFO status at the first overflow |
+| 27 | `flags` | bit 0 = service stamp valid, bit 1 = off stamp valid |
+| 28 | `first_stamp` u32 | sleep-timer tick at the first overflow |
+| 32 | `first_gap` u16 | service gap at the first overflow |
+| 34 | `first_frames` u16 | `frames` at the first overflow |
+| 36 | `last_header[4]` | last good frame: FCF0, FCF1, DSN, PHR |
+| 40 | `first_header[4]` | `last_header` at the first overflow |
+| 44, 48 | `service_stamp`, `off_stamp` u32 | internal bookkeeping |
+| 52–56 | `ctx_valid`, `ctx_bdb_phase`, `ctx_workspace`, `ctx_adapter_phase`, `ctx_adapter_goal` | link-driver context at the first lossy observation |
+| 57–63 | `fail_valid`, `fail_bdb_phase`, `fail_result`, `fail_workspace`, `fail_aps_result`, `fail_aps_retries`, `fail_aps_error` | first `bdb_join` failure |
+| 64–68 | `tx_valid`, `tx_outcome`, `tx_retries`, `tx_nb`, `tx_special` | MAC outcome of the first failed uplink (0x80 = APS ACK) |
+| 69 | pad | 0 |
+| 70 | `last_service_gap` u16 | gap at the most recent service |
+| 72 | `reserved[8]` | 0 |
 
-Offline tests required before any hardware use:
-1. Host `test_radio_autoack` loss variants: inject overflow at observe/consume, in RX, RX_NOACK
-   and DRAIN, and assert the counters and the sticky snapshot (first wins, saturation, no
-   payload).
-2. Host `test_mac_adapter` / link join: assert the context capture once per first loss, and
-   that the flag-off build is bit-identical to the current admitted image.
-3. `bdb_join` host test: uplink-failure snapshot for each `TRANSMIT_FAILED` site.
-4. Layout proofs: the block lies outside the radio-private range (`PRIVATE_END`) and the
-   whole-program stack stays ≤128.
-5. LLVM FAST + SMOKE, and a matching SDCC build from the same source.
-6. **FULL** on the diagnostic LLVM image before it becomes a hardware candidate.
+### Time values and saturation
+
+- Ticks are 24-bit Sleep Timer counts, nominally 32768 Hz, in the CC2530 clock domain only.
+- Gaps saturate at 0xFFFE; 0xFFFF means unknown.
+- A gap is measured from the start of the service operation, so it includes polling latency.
+
+### Known limits
+
+- An overflow inside the MAC attempt path, while a request is waiting for its ACK or reply, is
+  already a hard `FIFO_ERROR` fault there. The block does not latch it; only `frames`,
+  `bad_crc` and `last_header` are recorded on that path.
+- The block has no RF loss counter.
+
+### Placement and reading
+
+The block is a NOBITS section `.mcs51_rx_diag` at a fixed XDATA address, outside `.bss`.
+- `tools/llvm/inputs/rx_diag_mcs51.s` and `rx_diag.ld` place it.
+- `join_smoke_initialize` writes every byte at reset.
+- Linker asserts require:
+  - exactly 80 bytes at 0x1E40;
+  - the block is above the fixed M0 status block;
+  - the block is below the IRAM alias at 0x1F00.
+- The decoder takes the address from the linked ELF symbol `cc2530_rx_diag` and never
+  hard-codes it.
+- Halt-state read through the existing HWLab XDATA API. It needs an existing debug session
+  with the CPU **already halted**: no halt, reset or resume, and no RF-register access by
+  HWLab.
+
+  ```
+  hwlab target memory read --plugin ccdebugger --yes --config backend=native \
+    --config access=existing-debug-session --config allow_memory_access=true \
+    --space xdata --address 0x1E40 --length 80 --path rx_diag.bin
+  ```
+
+- Decode the dump with
+  `tools/rx_diag_decode.py --elf DIAG_HW1_ELF --dump rx_diag.bin [--output report.json]`.
+  The decoder checks the signature, version and size, and flags inconsistent blocks instead of
+  hiding them. `--print-read-command` prints the HWLab command with the address taken from the
+  ELF.
+- Correlate with a capture:
+  `tools/rx_diag_capture.py nrf802154-ch15.pcapng --rx-diag report.json [--output capture.json]`.
+
+### Compiler coverage
+
+**LLVM only.** The SDCC image cannot hold the diagnostic code; `tools/rx_diag_sdcc_build.py`
+measures this.
+- Total growth is about 1.5 KB against 999 B of free CODE.
+- The `JS_RADIO` bank group would grow by 884 B, but its bank has only about 25 B of margin.
+
+SDCC trials therefore use the production SDCC image, with the sniffer as the only extra
+observer. The SDCC feature-OFF image is unchanged.
+
+### Offline analysis of HWLab sniffer captures
+
+`tools/rx_diag_capture.py` analyses HWLab nRF52840 captures: pcapng with link type 283
+(IEEE 802.15.4 TAP), using tshark for dissection.
+- It reports frames, MAC ACK pairing and retry candidates. Each conclusion is classed
+  PROVEN, INFERRED or UNKNOWN.
+- It matches CC2530 `last_header` / `first_header` by content only (FCF, DSN, PHR). It never
+  aligns by clock, because the sniffer timestamps are HWLab session time and are a different
+  clock domain from the CC2530 sleep timer.
+- Limits of the capture:
+  - No FCS is delivered, so FCS validity is UNKNOWN. tshark's `fcs_ok` is not evidence.
+  - There is no sniffer-side RF loss counter; `isb_ifdrop` counts only host event-sink drops.
+  - A missing ACK in the capture is "not observed", not "not sent".
+  - The same DSN can be ambiguous.
+- 64-bit addresses are reported only as salted hashes.
+- Raw captures and private identities stay outside the repository.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Host radio tests: reset, gaps, saturation, headers, observe/consume latch, first-wins, salvage/flush/loss, FSMSTAT1/RFERRF race, stop/resume | PASS (plain, adapter and link builds) |
+| Host attempt path: frames and headers from attempt replies | PASS (12 replies) |
+| Mutation checks (counting, `first_site`, RX-on accounting, `off_stamp`, attempt hook) | all caught |
+| Flag-off vs flag-on MMIO trace digest (`tests/rx_diag_trace_identity.py`) | identical: 194 radio and 33 attempt vectors; digests 9b879f71, 5a709085, feedbcf7 |
+| SDCC host test images (radio, attempt), flag-off vs a212547 | IHX byte-identical |
+| Decoder and capture tests (`make test-rx-diag`) | 22 PASS |
+| LLVM FAST, production | PASS; HEX `a1f47b14…` unchanged |
+| LLVM FAST / SMOKE / FULL, `rx-diag` | see `docs/LLVM_DEVELOPMENT.md` |
 
 ## 11. Focused test results
 
@@ -276,25 +352,28 @@ See §8.
 ## 12. Is a code change justified?
 
 **No functional change.** No source defect is proven. Changing the `COVERAGE` policy or
-`RxOnWhenIdle` would be a protocol decision without demonstrated cause. A **diagnostic-only**
-build (§10) is justified as the next step.
+`RxOnWhenIdle` would be a protocol decision without demonstrated cause. The **diagnostic-only**
+build in §10 is now implemented. It is opt-in and LLVM only.
 
 ## 13. Is another hardware trial justified?
 
 **Not with the current images.** Repeating them adds pass/fail counts but no first-cause
-evidence. A trial is justified only with the diagnostic image after it has passed §10
-tests 1–6, and it needs separate operator authorization.
+evidence. A trial is justified only with the LLVM diagnostic image after it has passed FAST,
+SMOKE and FULL, and it needs separate operator authorization.
 
 ## 14. Next bounded experiment
 
-1. Implement §10 behind `CC2530_RX_DIAG` and run its offline tests (FAST, SMOKE, then FULL for
-   the LLVM diagnostic image). Build the SDCC counterpart from the same source.
-2. After authorization, run on H2 only (no H1): one bounded interleaved pair, SDCC then LLVM.
+1. Done: §10 is implemented behind `CC2530_RX_DIAG` for the LLVM image, with offline tests.
+   FULL on the `rx-diag` variant is the remaining gate. The SDCC counterpart does not fit (§10).
+2. After authorization, run on H2 only (no H1): one bounded interleaved pair.
+   - SDCC production image: sniffer only.
+   - LLVM `rx-diag` image: sniffer plus the halted RX_DIAG read.
    Use the existing single RF resume, the coordinator-only permit and the join+key gate, with
    no added retries.
-3. Optionally, add an independent 802.15.4 sniffer on channel 15 for per-frame
-   transport-key/ACK truth.
+3. Run the existing HWLab nRF52840 passive capture on channel 15 across each trial. Arm it
+   before commissioning and stop it after the terminal READY or failure. Read RX_DIAG only
+   when the CPU is already halted at the terminal checkpoint, never during reception.
 4. Decide from the first-loss snapshot:
-   - a large `gap_at_loss` / `max_service_gap` points to (a);
+   - a large `first_gap` / `max_service_gap` points to (a);
    - several parent-addressed retransmissions in the FIFO point to (b);
    - foreign frames in an `RX_NOACK` interval point to (c).

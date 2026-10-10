@@ -77,6 +77,9 @@ static unsigned busy_stops, armed_autoack;
 #if defined(CC2530_MAC_LINK)
 static unsigned beacon_filters;
 #endif
+#if defined(CC2530_RX_DIAG)
+static unsigned diag_seen;
+#endif
 static uint16_t shared_address = 0x500, radio_end = 0x700, owner_end = 0xb00;
 static uint16_t raw_address = 0x510, config_staging = 0x530, attempt_raw_address = 0x710;
 static uint16_t epoch_address = 0x900, receipt_address = 0xc00, normal_receipt = 0xc00;
@@ -359,6 +362,10 @@ static void attempt_call(unsigned op, unsigned expected)
     mac_attempt_record_t saved = receipt;
     mac_radio_diagnostics_t diagnostic = *mac_attempt_diagnostic();
     radio_autoack_frame_t old_frame = frame.value;
+#if defined(CC2530_RX_DIAG)
+    uint16_t diag_frames = RX_DIAG.frames;
+    uint8_t diag_bad = RX_DIAG.bad_crc;
+#endif
     if (printing_vector) {
         printf("%s{\"operation\":%u,\"input\":%u,\"output\":%u,\"timeout\":%lu,"
             "\"limit\":%u,\"window\":%lu,\"length\":%u,\"configuration\":\"",
@@ -397,6 +404,22 @@ static void attempt_call(unsigned op, unsigned expected)
         assert(accesses == before);
         assert(!memcmp(&diagnostic, mac_attempt_diagnostic(), sizeof(diagnostic)));
     }
+#if defined(CC2530_RX_DIAG)
+    /* A reply received inside the attempt is counted like a normal receive. */
+    if ((op == 3 && result < 8 && receipt_address && receipt.received) || (op == 4 && (result == 1 || result == 2))) {
+        const radio_autoack_frame_t *f = op == 3 ? &receipt.frame : &frame.value;
+        if (f->crc_correlation & 128u) {
+            assert(RX_DIAG.frames == diag_frames+1u && RX_DIAG.bad_crc == diag_bad);
+            assert(RX_DIAG.last_header[0] == f->body[0] && RX_DIAG.last_header[1] == f->body[1] &&
+                   RX_DIAG.last_header[2] == f->body[2] && RX_DIAG.last_header[3] == f->length+2u);
+        } else {
+            assert(RX_DIAG.frames == diag_frames && RX_DIAG.bad_crc == (uint8_t)(diag_bad+1u));
+        }
+        diag_seen += op == 3;
+    } else if (op != 4 && !(op == 3 && !receipt_address)) {
+        assert(RX_DIAG.frames == diag_frames && RX_DIAG.bad_crc == diag_bad);
+    }
+#endif
     if (op == 3 && result < 8 && receipt.transmitted) {
         uint64_t lower = (uint64_t)receipt.tx_lower.symbols*512+receipt.tx_lower.fine;
         uint64_t upper = (uint64_t)receipt.tx_upper.symbols*512+receipt.tx_upper.fine;
@@ -675,6 +698,10 @@ int MAC_ATTEMPT_MAIN(int argc, char **argv)
     }
     printf("MAC attempt: %u sequences/%u real-service calls PASS; synthetic hardware only.\n",
            ATTEMPT_CASES, calls);
+#if defined(CC2530_RX_DIAG)
+    assert(diag_seen);
+    printf("RX_DIAG: %u attempt-path replies counted with frame header PASS.\n", diag_seen);
+#endif
 #if defined(CC2530_MAC_INTERVAL)
     for (n = 0; n < 7; n++) interval_radio_case(n);
     puts("Interval MAC: seven real-service/MMIO receipt consumers PASS; no continuous POLL lease.");

@@ -5,6 +5,9 @@
 #include "sdcc_volatile.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
 #if defined(__clang__)
 #define MCS51_PARAM_VOLATILE
 #else
@@ -277,6 +280,16 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
         }
 #endif
         outcome = NWK_APS_ENGINE(ctx->owner)->outcome;
+#if defined(CC2530_RX_DIAG)
+        if (outcome != MAC_TX_ACKED && outcome != MAC_TX_UNACKNOWLEDGED &&
+            !ctx->cancel && !ctx->stopping && !RX_DIAG.tx_valid) {
+            RX_DIAG.tx_valid = 1;
+            RX_DIAG.tx_outcome = outcome;
+            RX_DIAG.tx_retries = NWK_APS_ENGINE(ctx->owner)->retries;
+            RX_DIAG.tx_nb = NWK_APS_ENGINE(ctx->owner)->nb;
+            RX_DIAG.tx_special = ctx->active_ack ? 0x80u : ctx->special;
+        }
+#endif
         if (NWK_APS_RELEASE(ctx->owner) != MAC_TX_OK) return NWK_APS_RADIO;
         ctx->active = 0;
 #if defined(CC2530_MAC_LINK)
