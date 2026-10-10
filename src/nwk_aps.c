@@ -124,6 +124,26 @@ nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATI
     return NWK_APS_OK;
 }
 
+nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t capability, SDCC_VOLATILE uint32_t now)
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+#endif
+    ed_packet_t * SDCC_VOLATILE p = &ctx->outgoing;
+    nwk_aps_result_t result = reserve(ctx, now, 0);
+    if (result) return result;
+    if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
+    memset(p, 0, sizeof(*p));
+    p->nwk.type = ED_NWK_COMMAND; p->nwk.version = 2; p->nwk.radius = 1;
+    p->nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(p->nwk.source_ieee, nwk_aps_keys.config.own_ieee, 8);
+    memcpy(p->nwk.destination_ieee, nwk_aps_keys.config.tc_ieee, 8);
+    p->payload[0] = 6; p->payload[1] = capability; p->length = 2;
+    ctx->secure = ctx->special = 0;
+    allocated(ctx, now, 0);
+    return NWK_APS_OK;
+}
+
 void nwk_aps_complete(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t result)
 {
     ed_packet_t * SDCC_VOLATILE p = &ctx->outgoing;
