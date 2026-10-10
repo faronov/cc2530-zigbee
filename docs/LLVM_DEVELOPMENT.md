@@ -101,9 +101,20 @@ The case-0 prefix is a regression check only. Its report says `complete: false`,
 claims READY or commissioning. The AES/flash write path is first reached at case-0 step 395 and
 in case 10, so it is FULL-only. The receipt lists it under `unselected`.
 
-**FULL: 23 steps.** FULL is the FAST steps plus `vectors`, every admitted scenario (0, 10, 8, 6,
-1, 5, 9, 4, 2, 3) run to its expected terminal, and `sim-summary`, which checks every terminal
-and that stack ≤ 128.
+**FULL: 25 steps.** FULL is the FAST steps plus `vectors`, every admitted scenario (0, 16, 10,
+8, 6, 1, 5, 9, 4, 2, 3, 17) run to its expected terminal, and `sim-summary`, which checks every
+terminal and that stack ≤ 128.
+
+Cases 16 and 17 are the M5 secure-recovery scenarios. Each MCU replay starts from the
+`nv_initial` flash image, and the actual journal is compared after every step.
+- **Case 16.** `nv_initial` is byte-identical to the final NV of complete case 0. The device
+  resumes it through a secured same-parent NWK rejoin, ED Timeout and Device Announce to READY,
+  and keeps `serving`.
+- **Case 17.** The parent never answers. After exactly three durable Rejoin Requests, the device
+  stops with `fault` (`JS_BDB`, `NO_PARENT`).
+
+Both reach the flash write path (REJOINING is saved before each request), so they are FULL-only,
+like case 10. The receipt records their measured times.
 
 FULL refuses to start in two cases:
 - Lit is unavailable. FULL requires `--llvm-build` or `--lit-evidence`.
@@ -139,7 +150,7 @@ On these figures FAST is about 830× cheaper than FULL, and SMOKE about 60× che
 | Generic-pointer and ABI semantic simulation | `tools/llvm/semsim` | 5 s | FAST |
 | Bank-call matrix | `tools/llvm/bankmatrix` | 1 s | FAST |
 | Thunk, stack-argument, stack, static-frame, fixed-address and gp proofs | `tools/llvm/audit.sh` (`thunk_audit`, `stackarg_entry_audit`, `stack_proof`, `gp_proof`, `hexbanks`) | 15 s | FAST |
-| Firmware simulator cases 0–10 (not 7) | `tools/llvm/llvm_join_replay.py` | See the table above | SMOKE subset; FULL all |
+| Firmware simulator cases 0–10 (not 7), 16, 17 | `tools/llvm/llvm_join_replay.py` | See the table above | SMOKE subset; FULL all |
 | Bounded case-0 prefix | `llvm_join_replay.py --limit 3` | 135–151 s | SMOKE |
 | SDCC host/sanitizer/image/overlay gates | `tools/ci_plan.py`, `ci.yml` | SDCC overlay full join ≈1 h 38 min on GitHub | Unchanged, separate |
 

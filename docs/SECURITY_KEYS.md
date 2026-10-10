@@ -200,9 +200,11 @@ failed-join `leave()` always clears it. Fixed-parent secured rejoin from LEFT
 requires that option and a previously verified TC key. No automatic
 reprovisioning/factory reset follows Leave. Rejoin/leave timing, retries and
 radio cleanup remain upper-layer responsibilities.
-The parent's initial BDB integration rejects persisted resume as
-recovery-required; this local-abandonment API does not implement or authorize
-#27 recovery. An abandoned pending exchange also blocks the existing narrow
+BDB `bdb_join_start` still rejects persisted state as recovery-required.
+Only complete VERIFIED/REJOINING membership resumes through the separate
+`bdb_join_resume` secure same-parent rejoin
+([ED_JOIN](ED_JOIN.md#secure-same-parent-recovery-m5)). This local-abandonment
+API neither implements nor authorizes that path. An abandoned pending exchange also blocks the existing narrow
 rejoin path pending that separate review.
 
 Repeated keyed `leave()` calls reconstruct fresh secured frames; no delivery

@@ -37,7 +37,8 @@ the public `ZigBeeAlliance09` key. The Network Key must arrive in a genuinely
 authenticated/decrypted Transport Key, followed by the existing durable
 counters, Device_annce, updated TC key/Verify/Confirm and parent negotiation.
 No host or debugger supplies a Network Key or successful security state.
-Existing persisted state is refused; secure restart/rejoin is still separate.
+Existing persisted state is refused unless it is complete VERIFIED/REJOINING
+membership, which resumes through [secure same-parent recovery](#secure-same-parent-recovery-m5).
 
 The LG native/sanitizer and shallow/deep caller runs pass the original ten
 scenarios plus all16-channel discovery, two open networks, closed admission,
@@ -400,8 +401,51 @@ The initial parent must advertise End Device Timeout Request keepalive
 (parent-information bit1). Timeout enumeration1 requests two minutes;
 the awake owner repeats the genuine secured request after30 seconds.
 A MAC-poll-only parent is an explicit unsupported/failing configuration.
-Persisted restart returns `BDB_JOIN_RECOVERY_REQUIRED`, not READY. Complete
-secure-rejoin/recovery orchestration belongs to #27.
+`bdb_join_start` still returns `BDB_JOIN_RECOVERY_REQUIRED` for persisted
+state. Persisted membership uses `bdb_join_resume` instead (below).
+
+## Secure same-parent recovery (M5)
+
+The first #27 slice covers a receiver-on, centralized-security ED with complete
+durable VERIFIED or REJOINING keys and its original TC/parent.
+- `bdb_join_resumable()` accepts only that state. LEFT, incomplete or
+  pre-membership storage stays `RECOVERY_REQUIRED`; nothing is erased or
+  reprovisioned.
+- `bdb_join_resume` installs the persisted identity, then enters RECOVERING. It
+  never scans or associates, and never sets READY from persisted membership.
+
+RECOVERING follows these rules:
+- It sends the genuine secured NWK Rejoin Request (R22 3.4.6) to the stored
+  parent. Sealing durably moves the keys to REJOINING before the frame leaves.
+- Only an authenticated Rejoin Response from the bound TC, with status 0,
+  persists the new short address and returns REJOINED.
+- Other frames are ignored, and no application or ZDO traffic is admitted.
+- After REJOINED and VERIFIED, the runtime is reinstalled. Device Announce is
+  sent, the ED Timeout Request is renegotiated, and the parent information
+  must advertise ED Timeout keepalive.
+- Only then is READY set, with keepalive scheduling. No permit-join broadcast is
+  sent on rejoin.
+
+Failures are bounded:
+- Each attempt waits `BDB_JOIN_REJOIN_WAIT`. After `BDB_JOIN_ATTEMPTS` (3)
+  requests, or when the overall recovery window expires, recovery ends in
+  `NO_PARENT`. Credentials are kept and remain resumable.
+- TX failure, security errors and storage faults fail closed.
+- Outgoing NWK/APS counters come from durable reserved ranges and never roll
+  back across the reset.
+
+Test coverage:
+- `test-bdb-join` covers recovery, failures, storage cuts and counter exhaustion.
+- Join-smoke case 16 cold-boots from the exact NV left by complete case 0 in a
+  separate process. The device then recovers to READY and serves application
+  traffic.
+- Case 17 covers a silent parent.
+- Both cases also run on the MCU simulator in LLVM FULL.
+
+Not implemented: parent-loss scan or new-parent selection, distinguishing a
+refusal from a timeout, unsecured/TC rejoin, sleepy operation and resume from
+LEFT. The 491 ms per-attempt response wait is a project assumption, not a
+specification value.
 
 ## First physical join gate
 
