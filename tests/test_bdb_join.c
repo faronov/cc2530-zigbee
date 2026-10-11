@@ -186,13 +186,16 @@ static void observe_transmission(void)
         if (peer_in.payload[0] == 6) {
             /* R22 3.4.6: secured, MAC-acknowledged, both IEEE, radius 1, to the parent. */
             CHECK(recovering && device.phase == BDB_JOIN_RECOVERING && !runtime.transport.ready);
-            CHECK(peer_in.length == 2 && peer_in.payload[1] == 0x88 && !peer_in.nwk.destination &&
+            CHECK(peer_in.length == 2 && peer_in.payload[1] == 0x08 && !peer_in.nwk.destination &&
                 peer_in.nwk.radius == 1 && !peer_in.nwk.discover_route &&
                 (peer_in.nwk.flags & (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE)) ==
                 (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE));
             CHECK(!memcmp(peer_in.nwk.source_ieee, identity.own_ieee, 8));
             CHECK(!memcmp(peer_in.nwk.destination_ieee, identity.tc_ieee, 8));
+            CHECK(!(peer_in.nwk.flags & NWK_FLAG_END_DEVICE_INITIATOR));
             CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_REJOINING);
+            CHECK(!status.parent_information && !status.timeout_pending);
+            parent_set = 0;
             rejoin_requests++;
             if (rejoin_mute) { muted++; return; }
             base_peer(1, 0, 0);
@@ -206,6 +209,7 @@ static void observe_transmission(void)
                 memcpy(peer_out.nwk.destination_ieee, identity.own_ieee, 8);
                 peer_out.payload[0] = 7; peer_out.payload[1] = (uint8_t)rejoin_address;
                 peer_out.payload[2] = (uint8_t)(rejoin_address >> 8); peer_out.payload[3] = rejoin_status;
+                if (rejoin_status) peer_out.payload[1] = peer_out.payload[2] = 255;
                 peer_out.length = rejoin_length;
                 if (rejoin_mutate == 1) peer_out.nwk.source_ieee[7] ^= 1;
                 if (rejoin_mutate == 2) peer_out.nwk.destination_ieee[7] ^= 1;
@@ -605,7 +609,7 @@ static void retained(uint8_t phase)
     rejoin.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
     memcpy(rejoin.nwk.source_ieee, identity.own_ieee, 8);
     memcpy(rejoin.nwk.destination_ieee, identity.tc_ieee, 8);
-    rejoin.length = 2; rejoin.payload[0] = 6; rejoin.payload[1] = 0x88;
+    rejoin.length = 2; rejoin.payload[0] = 6; rejoin.payload[1] = 0x08;
     memset(output, 0xa5, sizeof(output)); before = security_joint_flash_commands();
     if (phase == SECURITY_KEYS_VERIFIED) {
         CHECK(security_keys_send(&rejoin, 0, output, sizeof(output), &written, &limits, 2000) == SECURITY_KEYS_OK);
@@ -1585,13 +1589,14 @@ static void recovery_deliver(void)
     }
     rejoin_receive = bdb_join_receive(&device, mac_body, mac_length, 1, now);
     if (rejoin_mutate) CHECK(rejoin_receive != BDB_JOIN_OK);
-    if (!rejoin_receive && rejoin) device_address = rejoin_address;
+    if (!rejoin_receive && rejoin && !rejoin_status) device_address = rejoin_address;
     if (!rejoin_receive && timeout) parent_set = 1;
     pending = 0;
     CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
     /* Duplicate copies and replays of an accepted frame are never consumed. */
     if (!rejoin_receive) CHECK(bdb_join_receive(&device, saved, mac_length, 1, now) != BDB_JOIN_OK);
-    if (!rejoin_receive && rejoin) CHECK(device.recovery == 2 && device.phase == BDB_JOIN_INSTALLING);
+    if (!rejoin_receive && rejoin && !rejoin_status)
+        CHECK(device.recovery == 2 && device.phase == BDB_JOIN_INSTALLING);
 }
 
 static void recover(void)
@@ -1607,7 +1612,10 @@ static void recover(void)
         application.aps.destination_endpoint = 1; application.length = 1;
         CHECK(bdb_join_send(&device, &application, 1, now) == BDB_JOIN_STATE);
         if (!pending && !runtime.transport.active && !runtime.transport.queued) {
-            if (device.phase == BDB_JOIN_RECOVERING && device.issued == 2) now = device.until;
+            if (device.phase == BDB_JOIN_RECOVERING && device.issued == 2) {
+                CHECK(!phy_lose && !phy_busy); /* failed MAC confirmation must not start this timer */
+                now = device.until;
+            }
             else if (runtime.zdo.query && runtime.zdo.tx_done && mute_timeout) now = runtime.zdo.deadline;
         }
         drive();
@@ -1702,29 +1710,45 @@ static void secure_rejoin(void)
     retained(SECURITY_KEYS_VERIFIED);
 }
 
+static void recovery_delayed_response(void)
+{
+    ready(); power_cycle(); resume();
+    for (iterations = 0; iterations < 64 &&
+        !(pending && !runtime.transport.active && device.issued == 2); iterations++) drive();
+    CHECK(iterations < 64 && rejoin_requests == 1 && !device.member);
+    /* R22 admits a protected response from the most recently requested
+     * parent even after the first response timer expired. */
+    now = device.until+37u;
+    recovery_deliver();
+    CHECK(device.recovery == 2);
+    recover(); recovered(); CHECK(rejoin_requests == 1);
+    retained(SECURITY_KEYS_VERIFIED);
+}
+
 static void recovery_link_failures(void)
 {
     uint8_t mode;
     uint32_t started;
-    for (mode = 0; mode < 7; mode++) {
+    for (mode = 0; mode < 8; mode++) {
         ready(); power_cycle(); resume(); started = now;
         if (mode == 0) phy_lose = 1;         /* MAC NO_ACK on every attempt */
         if (mode == 1) phy_busy = 1;         /* CCA busy: channel access failure */
         if (mode == 2) rejoin_mute = 1;      /* parent missing: no Rejoin Response */
-        if (mode == 3) rejoin_status = 1;    /* refused: not admitted, bounded retry */
+        if (mode == 3) rejoin_status = 1;    /* authenticated refusal: no retry to this parent */
         if (mode == 4) rejoin_length = 3;    /* malformed response */
         if (mode == 5) rejoin_address = 0xfff8u; /* invalid assigned address */
         if (mode == 6) rejoin_address = 0;   /* invalid assigned address */
+        if (mode == 7) rejoin_status = 2;    /* PAN access denied */
         recover();
-        failed_without_credentials_loss(BDB_JOIN_NO_PARENT);
+        failed_without_credentials_loss((mode == 3 || mode == 7) ? BDB_JOIN_REJOIN_REFUSED : BDB_JOIN_NO_PARENT);
         CHECK(status.phase == SECURITY_KEYS_REJOINING || mode == 1);
-        CHECK(device.attempts == BDB_JOIN_ATTEMPTS && !announced);
+        CHECK(device.attempts == ((mode == 3 || mode == 7) ? 1 : BDB_JOIN_ATTEMPTS) && !announced);
         if (mode == 0) CHECK(lost_frames == 4u*BDB_JOIN_ATTEMPTS && !rejoin_requests);
         if (mode == 1) CHECK(busy_events >= BDB_JOIN_ATTEMPTS && !rejoin_requests);
-        if (mode >= 2) CHECK(rejoin_requests == BDB_JOIN_ATTEMPTS);
+        if (mode >= 2) CHECK(rejoin_requests == ((mode == 3 || mode == 7) ? 1 : BDB_JOIN_ATTEMPTS));
         if (mode == 2) CHECK(muted == BDB_JOIN_ATTEMPTS && (uint32_t)(now-started) >= 2u*BDB_JOIN_REJOIN_WAIT);
-        if (mode == 3) CHECK(rejoin_receive == BDB_JOIN_SECURITY && runtime.transport.error == SECURITY_KEYS_CONTEXT);
-        if (mode >= 4) CHECK(rejoin_receive == BDB_JOIN_SECURITY);
+        if (mode == 3 || mode == 7) CHECK(rejoin_receive == BDB_JOIN_OK);
+        if (mode >= 4 && mode <= 6) CHECK(rejoin_receive == BDB_JOIN_SECURITY);
         CHECK(!memcmp(&status.config.own_ieee, identity.own_ieee, 8) && status.config.address == 0x5678u);
         rejoin_address = 0x5678u;
         /* Transient parent loss keeps the credentials; a later reset recovers. */
@@ -2127,7 +2151,8 @@ int main(void)
     work_and_deadlines(); stopped_transport(); keepalive_storage(); terminal_control();
     phase_storage(); rejected_start_storage(); transport_configuration();
     slot_lifetimes(); basic_cluster(); transmit_extent(); transport_endpoints();
-    secure_rejoin(); recovery_link_failures(); recovery_wrong_network(); recovery_control();
+    secure_rejoin(); recovery_delayed_response();
+    recovery_link_failures(); recovery_wrong_network(); recovery_control();
     recovery_storage(); recovery_counters();
     printf("BDB join: %u checks PASS; real commissioning, operational loss, bounded work, backpressure, phase/slot ownership and durable recovery boundary.\n", checks);
     return 0;

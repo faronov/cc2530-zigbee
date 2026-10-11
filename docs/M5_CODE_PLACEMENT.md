@@ -88,7 +88,8 @@ summary script.
 ## Protocol review before alternate parents
 
 Primary evidence: Core R22 `05-3474-22`, printed pp.341-344
-(3.6.1.4.2), and BDB v3.0.1 `16-02828-012`, pp.39-40 (7.1).
+(3.6.1.4.2), pp.306-308 (3.4.6-7), and BDB v3.0.1 `16-02828-012`,
+pp.39-40 (7.1).
 Downloaded documents are evidence only and are not committed.
 
 - A secure rejoin can use a router parent without migrating the Trust Center.
@@ -119,6 +120,53 @@ snapshot. A versioned, counter-preserving durable extension for one router
 parent was explicitly approved for this follow-up. It must preserve both
 TC NWK key-slot floors, APS history and retired credentials; it must not
 overwrite `tc_ieee` with a discovered router or share/reset replay floors.
+
+The same-parent follow-up implements the capability/parent-information,
+MAC-success response-wait and authenticated-refusal corrections above.
+Statuses1/2 with assigned addressFFFF produce a durably replay-protected
+REFUSED event, not CONTEXT/silence. The controller stops and reports the
+appended `BDB_JOIN_REJOIN_REFUSED` result without another request to that
+parent. Existing numeric diagnostic values and silent-parent case17 are
+preserved. Focused native/sanitized BDB tests cover both refusals, malformed
+status/address, late response, reset, counter exhaustion and all456 flash
+cut positions. The key-owner tests also prove refusal replays are rejected
+across another reset.
+
+There is a specification/identity-resolution issue to resolve before the
+unknown-router slice: R22 3.4.6.2 p307 qualifies the destination IEEE by
+"if known", whereas 3.6.1.4.2 p342 requires both IEEE fields and validation
+against the most recently selected parent's IEEE. The ordinary15-byte
+NWK beacon carries Extended PAN, depth/capacity/update, **not router IEEE**;
+a short-source MAC beacon therefore does not supply both addresses.
+The current candidate table stores one MAC source mode/address, and its
+ZDO address client is fixed to TC0. Extended PAN is never a substitute for
+parent IEEE. A known, independently bound router roster and unknown-parent
+address-resolution/admission are different scopes, not interchangeable
+synthetic beacon fixtures. No unknown identity or replay floor is invented
+by this follow-up.
+
+Corrected same-parent candidate: FAST 11/11, SMOKE 17/17; native and
+sanitized BDB 127356 checks, ordinary key owner 7388 checks, optional storage
+8334 checks. Fresh host transcripts retain case0's1142 steps and cold-reset
+cases16/17; generating those transcripts is not MCU recovery acceptance.
+No new FULL has been claimed. Compared with the relocation commit:
+
+| Resource | Corrected candidate | Delta |
+| --- | ---: | ---: |
+| Populated/common CODE | 215815/18766 | +84/+11 |
+| Bank 6 used/free | 22819/9949 | +48/-48 |
+| Bank 7 used/free | 10391/16233 | +23/-23 |
+| XDATA bss/data | 4843/35 | 0/0 |
+| Static-frame pool | 203 | 0 |
+| Static stack | 106/128 | 0 |
+
+The candidate HEX SHA256 is
+`6c8a0e79cce373cd8cb78b65315a8474aed69a61978729023dc384990b9acc45`
+in both FAST and SMOKE. All linked bank/relocation/fixed/SFR/NV, frame
+ownership and stack proofs remain strict. The SDCC production composition
+was already infeasible at the earlier baseline (+725 bytes in its selected
+layout); the Clang-only relocation and LLVM acceptance do not qualify SDCC.
+There is no hardware authorization, frozen-artifact change or HWLab change.
 
 ## Durable-storage prerequisite evidence
 

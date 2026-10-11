@@ -238,11 +238,16 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
             ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE;
         }
     } else if (ctx->phase == BDB_JOIN_RECOVERING) {
+        if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_REJOIN_REFUSED) {
+            fail(ctx, BDB_JOIN_REJOIN_REFUSED); return;
+        }
         /* State-driven: success needs the REJOINED event, VERIFIED durable
          * keys and no outstanding request, so late responses are safe. */
         if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_REJOINED) ctx->recovery = 2;
         if (ctx->issued == 1 && finished(ctx, &result)) {
-            ctx->issued = 2; ctx->until = ctx->last+BDB_JOIN_REJOIN_WAIT;
+            if (!result) {
+                ctx->issued = 2; ctx->until = ctx->last+BDB_JOIN_REJOIN_WAIT;
+            } else ctx->issued = 0;
         }
         if (ctx->issued != 1) {
             if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) fail(ctx, BDB_JOIN_SECURITY);

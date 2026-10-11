@@ -138,7 +138,8 @@ nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
     p->nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
     memcpy(p->nwk.source_ieee, nwk_aps_keys.config.own_ieee, 8);
     memcpy(p->nwk.destination_ieee, nwk_aps_keys.config.tc_ieee, 8);
-    p->payload[0] = 6; p->payload[1] = capability; p->length = 2;
+    /* PRO stochastic allocation retains the validated saved short address. */
+    p->payload[0] = 6; p->payload[1] = capability & 0x7fu; p->length = 2;
     ctx->secure = ctx->special = 0;
     allocated(ctx, now, 0);
     return NWK_APS_OK;

@@ -143,6 +143,8 @@ static void set_phase(uint8_t value)
     if (value <= SECURITY_KEYS_ASSOCIATED) w.record[PHASE] = value;
     else {
         w.record[PHASE] = (w.record[PHASE] & (uint8_t)~PHASE_MASK) | value;
+        if (value == SECURITY_KEYS_REJOINING)
+            w.record[PHASE] &= (uint8_t)~PARENT_MASK;
         if (value == SECURITY_KEYS_LEFT || value == SECURITY_KEYS_REJOINING)
             w.record[PHASE] &= (uint8_t)~TIMEOUT_PENDING;
     }
@@ -604,9 +606,14 @@ static security_keys_result_t nwk_command(void)
         if (phase() != SECURITY_KEYS_REJOINING) return SECURITY_KEYS_CONTEXT;
         if (w.packet.length != 4 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE ||
             w.packet.nwk.destination != u16(w.record+ADDR)) return SECURITY_KEYS_FORMAT;
-        /* Failed responses cannot change the binding or end the outstanding
-         * phase; caller owns bounded timeouts/retries and cancellation. */
-        if (w.packet.payload[3] != 0) return SECURITY_KEYS_CONTEXT;
+        /* R22 3.4.7/3.6.1.4.2: refusal is authenticated input, not silence.
+         * Retain REJOINING/binding but save its floor before reporting it. */
+        if (w.packet.payload[3] > 2) return SECURITY_KEYS_FORMAT;
+        if (w.packet.payload[3]) {
+            if (u16(w.packet.payload+1) != 0xffffu) return SECURITY_KEYS_FORMAT;
+            w.event = SECURITY_KEYS_EVENT_REJOIN_REFUSED;
+            return SECURITY_KEYS_OK;
+        }
         if (!u16(w.packet.payload+1) || u16(w.packet.payload+1) >= 0xfff8u)
             return SECURITY_KEYS_IDENTITY;
         memcpy(w.record+ADDR, w.packet.payload+1, 2);
@@ -917,7 +924,7 @@ security_keys_result_t security_keys_send(
         if (aps_secure || w.packet.nwk.radius != 1) return finish(SECURITY_KEYS_UNSUPPORTED);
         if (w.packet.payload[0] == 6) {
             if (!verified() || w.packet.length != 2 ||
-                (w.packet.payload[1] != 0x88 && w.packet.payload[1] != 0x8c) ||
+                (w.packet.payload[1] != 0x08 && w.packet.payload[1] != 0x0c) ||
                 w.packet.nwk.destination != 0 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE)
                 return finish(SECURITY_KEYS_UNSUPPORTED);
             if (!(w.record[FLAGS] & RETIRED) && !all(w.record+PK, 16, 0))
@@ -947,6 +954,8 @@ security_keys_result_t security_keys_send(
     }
     if ((phase() == SECURITY_KEYS_LEFT || phase() == SECURITY_KEYS_REJOINING) &&
         !transition) return finish(SECURITY_KEYS_STATE);
+    if (transition == SECURITY_KEYS_REJOINING)
+        w.record[PHASE] &= (uint8_t)~(PARENT_MASK | TIMEOUT_PENDING);
     r = seal(aps_secure);
     /* Preflight capacity before any durable lifecycle transition. Allocation
      * and unsuccessful crypto can still burn outgoing counters, as promised. */

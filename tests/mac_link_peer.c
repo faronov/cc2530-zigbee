@@ -152,7 +152,8 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         if (peer_in.payload[0] == 4) { CHECK(!recovering); return; } /* Genuine commissioning Leave. */
         if (peer_in.payload[0] == 6) {
             /* R22 3.4.6: secured, MAC-acknowledged, both IEEE, radius 1, to the parent. */
-            CHECK(recovering && !rejoined && peer_in.length == 2 && peer_in.payload[1] == 0x88);
+            CHECK(recovering && !rejoined && peer_in.length == 2 && peer_in.payload[1] == 0x08);
+            CHECK(!(peer_in.nwk.flags & NWK_FLAG_END_DEVICE_INITIATOR));
             CHECK(!peer_in.nwk.destination && peer_in.nwk.radius == 1 && !peer_in.nwk.discover_route &&
                 (peer_in.nwk.flags & (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE)) ==
                 (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE));

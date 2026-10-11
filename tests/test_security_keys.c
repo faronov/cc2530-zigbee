@@ -722,6 +722,8 @@ static void secured_rejoin(void)
     memcpy(packet.nwk.source_ieee,config.own_ieee,8);
     memcpy(packet.nwk.destination_ieee,config.tc_ieee,8);
     packet.length = 2; packet.payload[0] = 6; packet.payload[1] = 0x88;
+    CHECK(security_keys_send(&packet,0,raw,44,&written,&limits,3) == SECURITY_KEYS_UNSUPPORTED);
+    packet.payload[1] = 0x08;
     CHECK(security_keys_send(&packet,0,raw,43,&written,&limits,3) == SECURITY_KEYS_SPACE);
     state(SECURITY_KEYS_VERIFIED);
     CHECK(security_keys_send(&packet,0,raw,44,&written,&limits,3) == SECURITY_KEYS_OK);
@@ -735,11 +737,22 @@ static void secured_rejoin(void)
     memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
     memcpy(packet.nwk.destination_ieee,config.own_ieee,8);
     packet.length = 4; packet.payload[0] = 7;
-    packet.payload[1] = 0x45; packet.payload[2] = 0x23;
+    packet.payload[1] = packet.payload[2] = 255;
     packet.payload[3] = 1;
-    seal_packet(NULL,0,0,nwk_key,255,3); reject(SECURITY_KEYS_CONTEXT);
+    seal_packet(NULL,0,0,nwk_key,255,3); accept(SECURITY_KEYS_EVENT_REJOIN_REFUSED);
+    reboot(NULL,SECURITY_KEYS_REJOINING);
+    reject(SECURITY_KEYS_REPLAY);
+    packet.payload[3] = 2;
+    seal_packet(NULL,0,0,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_REJOIN_REFUSED);
+    reboot(NULL,SECURITY_KEYS_REJOINING);
+    reject(SECURITY_KEYS_REPLAY);
+    packet.payload[3] = 3;
+    seal_packet(NULL,0,0,nwk_key,255,5); reject(SECURITY_KEYS_FORMAT);
+    packet.payload[3] = 1; packet.payload[1] = 0x45; packet.payload[2] = 0x23;
+    seal_packet(NULL,0,0,nwk_key,255,5); reject(SECURITY_KEYS_FORMAT);
+    packet.payload[1] = 0x45; packet.payload[2] = 0x23;
     packet.payload[3] = 0;
-    seal_packet(NULL,0,0,nwk_key,255,3); accept(SECURITY_KEYS_EVENT_REJOINED);
+    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_REJOINED);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.config.address == 0x2345);
     reboot(NULL,SECURITY_KEYS_VERIFIED); CHECK(status.config.address == 0x2345);
     data(4,nwk_key,255); reject(SECURITY_KEYS_IDENTITY); /* old short no longer admitted */
@@ -1294,7 +1307,7 @@ static void parent_schema_upgrade(void)
     packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
     memcpy(packet.nwk.source_ieee, config.own_ieee, 8);
     memcpy(packet.nwk.destination_ieee, config.tc_ieee, 8);
-    packet.length = 2; packet.payload[0] = 6; packet.payload[1] = 0x88;
+    packet.length = 2; packet.payload[0] = 6; packet.payload[1] = 0x08;
     CHECK(security_keys_send(&packet, 0, raw, sizeof(raw), &written, &limits, 3) == SECURITY_KEYS_OK);
     reboot(NULL, SECURITY_KEYS_REJOINING);
     CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);

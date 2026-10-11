@@ -417,8 +417,16 @@ durable VERIFIED or REJOINING keys and its original TC/parent.
 RECOVERING follows these rules:
 - It sends the genuine secured NWK Rejoin Request (R22 3.4.6) to the stored
   parent. Sealing durably moves the keys to REJOINING before the frame leaves.
+  The retained stochastic short address clears Allocate Address (08/0C on
+  rejoin, not association's 88/8C). Parent information/EDI and the outstanding
+  Timeout Request are cleared before sealing and in the durable intent.
 - Only an authenticated Rejoin Response from the bound TC, with status 0,
   persists the new short address and returns REJOINED.
+- A correctly addressed, protected refusal (PAN at capacity/access denied,
+  status1/2 with network addressFFFF) durably advances the replay floor but
+  retains REJOINING and credentials. BDB reports `REJOIN_REFUSED`, retires the
+  actual MAC owner and does not send another request to the refusing parent.
+  Unknown status values or inconsistent refusal addresses are malformed.
 - Other frames are ignored, and no application or ZDO traffic is admitted.
 - After REJOINED and VERIFIED, the runtime is reinstalled. Device Announce is
   sent, the ED Timeout Request is renegotiated, and the parent information
@@ -427,7 +435,11 @@ RECOVERING follows these rules:
   sent on rejoin.
 
 Failures are bounded:
-- Each attempt waits `BDB_JOIN_REJOIN_WAIT`. After `BDB_JOIN_ATTEMPTS` (3)
+- Each successfully MAC-confirmed attempt waits `BDB_JOIN_REJOIN_WAIT`.
+  NO_ACK/busy CCA consume an attempt without starting a response timer.
+  A delayed protected response from the most recently requested parent can
+  still complete recovery after one response deadline; security floors and
+  the overall recovery budget still apply. After `BDB_JOIN_ATTEMPTS` (3)
   requests, or when the overall recovery window expires, recovery ends in
   `NO_PARENT`. Credentials are kept and remain resumable.
 - TX failure, security errors and storage faults fail closed.
@@ -442,10 +454,12 @@ Test coverage:
 - Case 17 covers a silent parent.
 - Both cases also run on the MCU simulator in LLVM FULL.
 
-Not implemented: parent-loss scan or new-parent selection, distinguishing a
-refusal from a timeout, unsecured/TC rejoin, sleepy operation and resume from
-LEFT. The 491 ms per-attempt response wait is a project assumption, not a
-specification value.
+Not implemented: parent-loss scan or new-parent selection, unsecured/TC
+rejoin, sleepy operation and resume from LEFT. The unchanged response wait is
+30720 symbols (491.52 ms at the selected 16-us symbol duration), derived from
+the IEEE2006 `aResponseWaitTime=32*aBaseSuperframeDuration` used by the
+project's MAC profile. R22 cites IEEE2015; full revision/timing reconciliation
+remains open, rather than silently changing this constant.
 
 ## First physical join gate
 
