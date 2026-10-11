@@ -119,3 +119,31 @@ snapshot. A versioned, counter-preserving durable extension for one router
 parent was explicitly approved for this follow-up. It must preserve both
 TC NWK key-slot floors, APS history and retired credentials; it must not
 overwrite `tc_ieee` with a discovered router or share/reset replay floors.
+
+## Durable-storage prerequisite evidence
+
+The explicit `parent-recovery` build variant prepares a 144-byte K3 payload
+inside the existing journal, without implementing alternate-parent admission.
+The ordinary image remains byte-identical to the relocation image:
+HEX SHA256 `3423626d1591da04467202ce5b962aa8df91e7b10090a9a64f8a2459436cd82e`.
+
+| Resource | Relocation/ordinary | Extended storage | Delta |
+| --- | ---: | ---: | ---: |
+| Populated CODE | 215731 | 215848 | +117 |
+| Common CODE | 18755 | 18755 | 0 |
+| XDATA bss/data | 4843/35 | 4907/35 | +64/0 |
+| Bank 6 used/free | 22771/9997 | 22886/9882 | +115/-115 |
+| Bank 7 used/free | 10368/16256 | 10368/16256 | 0 |
+| Static-frame pool | 203 | 203 | 0 |
+| Static stack | 106/128 | 106/128 | 0 |
+
+Extended-storage FAST passed 11/11 and SMOKE passed 17/17. The refreshed
+FAST and SMOKE firmware HEX hashes both equal
+`c84542b0d78dbe20e1359b030af7e135a1fd662c14e30c73758cdb6ad658482a`;
+the receipts bind different source snapshots, not a reusable FULL result.
+Migration itself is covered natively/sanitized: 8304 checks, including 138
+flash-command cuts (134 explicit fail-closed journal outcomes), VERIFIED
+and REJOINING resets, no LEFT revival and retained snapshot length on later
+crypto saves. Its target function is linked and image-checked but is not
+yet called by the board recovery lifecycle or proved by a new MCU scenario.
+There is no fresh FULL or hardware authorization at this prerequisite.

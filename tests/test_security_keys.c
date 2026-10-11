@@ -1208,6 +1208,106 @@ static void failures(void)
         CHECK(!memcmp(&output,&saved_output,sizeof(output)) && event == 0xa5);
     }
 }
+#if defined(CC2530_PARENT_RECOVERY)
+static void parent_schema_upgrade(void)
+{
+    static uint8_t before[112], after[144], length, kind;
+    static uint32_t until[2];
+    static unsigned command, commands, cuts, failures;
+    security_keys_result_t result;
+    unsigned i;
+
+    reboot(waiting, SECURITY_KEYS_WAIT_CONFIRM);
+    commands = security_joint_flash_commands();
+    CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_CONTEXT);
+    CHECK(security_joint_flash_commands() == commands);
+
+    reboot(snapshot, SECURITY_KEYS_VERIFIED);
+    CHECK(security_counter_read(before, sizeof(before), &length) == SECURITY_COUNTER_OK && length == 112);
+    until[0] = security_counter_status()->until[0];
+    until[1] = security_counter_status()->until[1];
+    CHECK(security_keys_upgrade_parent(0) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
+    CHECK(security_counter_read(after, sizeof(after), &length) == SECURITY_COUNTER_OK && length == 144);
+    CHECK(after[111] == 3 && !memcmp(before, after, 111));
+    for (i = 112; i < sizeof(after); i++) CHECK(after[i] == 0);
+    for (i = 0; i < 2; i++) {
+        CHECK(security_counter_status()->until[i] == until[i]);
+        CHECK(security_counter_status()->next[i] == until[i]);
+    }
+    commands = security_joint_flash_commands();
+    CHECK(commands > 0 && security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
+    CHECK(security_joint_flash_commands() == commands);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK && !security_joint_flash_commands());
+    /* Crypto uses size as wire scratch: later saves must retain the schema
+     * length, not accidentally persist an NPDU-length key snapshot. */
+    request_timeout(0x61);
+    CHECK(security_counter_read(after, sizeof(after), &length) == SECURITY_COUNTER_OK && length == 144);
+    CHECK(after[111] == 3 && !memcmp(before, after, 80));
+    CHECK(security_counter_status()->until[0] > until[0]);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(security_counter_status()->next[0] == security_counter_status()->until[0]);
+
+    cuts = failures = 0;
+    for (command = 1; command <= commands; command++) for (kind = 1; kind <= 3; kind++) {
+        reboot(snapshot, SECURITY_KEYS_VERIFIED);
+        security_joint_cut(&power_cut, command, kind, 13);
+        if (!setjmp(power_cut)) {
+            (void)security_keys_upgrade_parent(3);
+            CHECK(0);
+        }
+        cuts++;
+        security_joint_reset(0);
+        result = security_keys_open();
+        if (result == SECURITY_KEYS_OK) {
+            state(SECURITY_KEYS_VERIFIED);
+            CHECK(security_counter_read(after, sizeof(after), &length) == SECURITY_COUNTER_OK);
+            CHECK(length == 112 || length == 144);
+            CHECK(!memcmp(before, after, 111));
+            CHECK(after[111] == (length == 112 ? 2 : 3));
+            for (i = 0; i < 2; i++) CHECK(security_counter_status()->next[i] >= until[i]);
+        } else {
+            failures++;
+            CHECK(result == SECURITY_KEYS_STORAGE);
+            CHECK(!security_joint_flash_commands());
+            CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_STORAGE);
+        }
+    }
+    CHECK(cuts == 3u*commands && failures > 0);
+
+    /* Unknown version and nonzero reserved extension fields fail closed even
+     * with a valid journal CRC and intact outgoing ceilings. */
+    for (kind = 0; kind < 2; kind++) {
+        reboot(snapshot, SECURITY_KEYS_VERIFIED);
+        CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
+        CHECK(security_counter_read(after, sizeof(after), &length) == SECURITY_COUNTER_OK);
+        after[kind ? 143 : 111] = kind ? 1 : 4;
+        CHECK(security_counter_save(after, sizeof(after), 3) == SECURITY_COUNTER_OK);
+        security_joint_reset(0);
+        CHECK(security_keys_open() == SECURITY_KEYS_FORMAT);
+        CHECK(!security_joint_flash_commands());
+    }
+    reboot(snapshot, SECURITY_KEYS_VERIFIED);
+    base(0); packet.nwk.type = ED_NWK_COMMAND;
+    packet.nwk.source = 0x1234; packet.nwk.destination = 0;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee, config.own_ieee, 8);
+    memcpy(packet.nwk.destination_ieee, config.tc_ieee, 8);
+    packet.length = 2; packet.payload[0] = 6; packet.payload[1] = 0x88;
+    CHECK(security_keys_send(&packet, 0, raw, sizeof(raw), &written, &limits, 3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_REJOINING);
+    CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_REJOINING);
+    CHECK(security_keys_leave(0x62, raw, sizeof(raw), &written, &limits, 3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_LEFT);
+    commands = security_joint_flash_commands();
+    CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_CONTEXT);
+    CHECK(security_joint_flash_commands() == commands);
+    printf("parent schema: %u cut points, %u explicit storage failures PASS\n", cuts, failures);
+}
+#endif
+
 int main(void)
 {
     setup(); handshake(); replay_and_rotation(); framing_and_identity();
@@ -1217,6 +1317,9 @@ int main(void)
     schema_and_arguments(); local_leave(); interrupted_leave();
     parent_information_edi(); outbound_router_broadcast();
     parent_information_volatile(); interrupted(); failures();
+#if defined(CC2530_PARENT_RECOVERY)
+    parent_schema_upgrade();
+#endif
     printf("security keys: %u checks PASS; real AES/CCM/HMAC/counter/journal/flash host composition only\n",checks);
     return 0;
 }

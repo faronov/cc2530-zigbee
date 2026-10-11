@@ -7,6 +7,12 @@
 #include "ed_wire.h"
 #include "sdcc_volatile.h"
 
+#if defined(CC2530_PARENT_RECOVERY)
+#define SECURITY_KEYS_RECORD_MAX 144u
+#else
+#define SECURITY_KEYS_RECORD_MAX 112u
+#endif
+
 typedef struct {
     uint8_t own_ieee[8], tc_ieee[8], extended_pan[8];
     uint16_t pan, address;
@@ -115,5 +121,12 @@ security_keys_result_t security_keys_leave(
  * BDB completion, radio readiness or application-traffic permission from BDB.
  */
 security_keys_result_t security_keys_status(security_keys_status_t * SDCC_VOLATILE output) SECURITY_FAR;
+
+#if defined(CC2530_PARENT_RECOVERY)
+/* Explicit v2 -> v3 snapshot migration. Preserves all identity/key/replay
+ * bytes and the outgoing ceilings; never provisions or admits membership.
+ * Only complete VERIFIED/REJOINING records are eligible. */
+security_keys_result_t security_keys_upgrade_parent(uint16_t nv_polls) SECURITY_FAR;
+#endif
 
 #endif

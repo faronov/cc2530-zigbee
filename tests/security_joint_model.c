@@ -33,9 +33,9 @@ extern uint8_t nv_record_chunk[32], nv_record_word[4];
 #endif
 extern nv_record_status_t nv_record_diagnostic;
 extern security_counter_status_t security_counter_diagnostic;
-extern uint8_t security_counter_blob[128], security_counter_reserved_end;
+extern uint8_t security_counter_blob[NV_RECORD_MAX], security_counter_reserved_end;
 #if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
-extern uint8_t security_counter_check[128];
+extern uint8_t security_counter_check[NV_RECORD_MAX];
 #endif
 extern void security_keys_host_power_cycle(void);
 extern volatile uint8_t aes_dma0[8], aes_dma1[32], aes_key[16], aes_iv[16], aes_input[16], aes_output[16];
@@ -220,9 +220,9 @@ void security_joint_reset(uint8_t erase)
     memset(flash_write_used, 0, sizeof(flash_write_used));
     nv_record_fault = 0; memset(&nv_record_diagnostic, 0, sizeof(nv_record_diagnostic));
     memset(&security_counter_diagnostic, 0, sizeof(security_counter_diagnostic));
-    memset(security_counter_blob, 0, 128);
+    memset(security_counter_blob, 0, sizeof(security_counter_blob));
 #if !defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
-    memset(security_counter_check, 0, 128);
+    memset(security_counter_check, 0, sizeof(security_counter_check));
 #endif
     /* CHILD work/poison is reset by the existing complete key-owner power
      * cycle below. No public counter/key re-init becomes a reset boundary. */

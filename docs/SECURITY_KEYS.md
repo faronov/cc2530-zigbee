@@ -40,6 +40,42 @@ and one operational APS replay record to fit the existing 112-byte opaque
 counter payload. More neighbors cannot be added without a reviewed schema
 and durable owner change.
 
+## Parent-storage prerequisite
+
+The optional `CC2530_PARENT_RECOVERY` profile increases the maximum journal
+snapshot from 128 to 160 bytes and the key payload from 112 to 144 bytes.
+The two reserved 2048-byte flash pages, journal version/header/commit-last
+protocol, outgoing lifetime domains and counter reservation policy are
+unchanged. The source-owned UPPER and CHILD arenas use these exact capacities;
+their loans still admit only their precise record address and supported length.
+The ordinary and RX_DIAG profiles retain the original capacities.
+
+`security_keys_upgrade_parent(nv_polls)` is an explicit K2-to-K3 migration for
+complete VERIFIED or REJOINING state. It uses the existing
+`security_counter_save`, never provisioning, erase or an alternate NV writer.
+Bytes 0..110 retain their existing layout and values, byte 111 becomes 3,
+and bytes 112..143 are reserved and **must all be zero** in this prerequisite.
+It retains both network-key slots and their TC replay floors, APS history,
+pending/retired material, saved network parameters and both outgoing ceilings.
+Saving discards any remaining reserved outgoing values, rather than reusing
+them. An already valid K3 record is a no-write idempotent success.
+
+Opening accepts exact K2/112 and K3/144 pairs only, with all original validity
+conditions and the reserved-field checks. There is no implicit migration or
+new admission: persisted verification and migration never imply BDB READY.
+Incomplete exchange, deliberately LEFT credentials, invalid versions,
+nonzero reserved bytes and uncertain journal commits fail explicitly.
+Old firmware cannot read a migrated 160-byte snapshot and fails closed;
+**downgrading is not a rollback/migration mechanism**.
+
+This is storage preparation, **not yet router identity/replay ownership,
+router forwarding or alternate-parent recovery**. Those require separately
+reviewed field semantics and real protocol/simulator integration. Native and
+sanitized tests retain the existing 112-byte golden corpus, verify every
+legacy field and counter ceiling across migration/reset, exercise all flash
+command cut positions, and check later saves retain the 144-byte schema even
+when the wire decoder reuses its length scratch.
+
 ## Public contract and state
 
 `include/security_keys.h` is the API; `ccm_star_limits_t` supplies real

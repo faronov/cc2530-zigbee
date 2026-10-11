@@ -1187,15 +1187,16 @@ $(BUILD)/ed-join/bdb_join_layout.rel: tests/bdb_join_layout.c $(HEADERS) Makefil
 
 define ED_HOST_TEST
 $(BUILD)/host-$(1)-tests: $(2) $(HEADERS) tests/security_joint_model.h tests/security_aes_model.h Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) $(2) -o $$@
+	$(HOST_CC) $(HOST_FLAGS) $(4) $(2) -o $$@
 $(BUILD)/host-$(1)-tests-sanitize: $(2) $(HEADERS) tests/security_joint_model.h tests/security_aes_model.h Makefile | $(BUILD)
-	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(2) -o $$@
+	$(HOST_CC) $(HOST_FLAGS) $(4) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(2) -o $$@
 test-$(1): $(BUILD)/host-$(1)-tests $(BUILD)/host-$(1)-tests-sanitize $(addprefix $(BUILD)/ed-join/,$(3))
 	$(BUILD)/host-$(1)-tests
 	$(BUILD)/host-$(1)-tests-sanitize
 endef
 $(eval $(call ED_HOST_TEST,ed-wire,$(ED_WIRE_SRC),ed_wire.rel))
 $(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),security_keys.rel))
+$(eval $(call ED_HOST_TEST,parent-storage,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY))
 $(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel nwk_aps_transmit.rel zdo_runtime.rel bdb_join.rel bdb_join_init.rel bdb_join_layout.rel))
 test-ed-integration: test-ed-wire test-security-keys test-bdb-join
 
@@ -2353,7 +2354,7 @@ LLVM_SIM_DIR ?= build/llvm-sim/$(LLVM_SIM_PROFILE)
 LLVM_S51 ?= $(LLVM_SIM_DIR)/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51
 LLVM_TIER_OUT ?= build/llvm-tiers
 LLVM_TIER_ARGS ?=
-# production | rx-diag (opt-in CC2530_RX_DIAG diagnostic image, docs/H2_RX_INVESTIGATION.md)
+# production | rx-diag | parent-recovery (opt-in extended durable storage)
 LLVM_VARIANT ?= production
 LLVM_TIER = $(PYTHON) -B tools/llvm/tiers.py --tools "$(LLVM_TOOLS)" --llvm-src "$(LLVM_SRC)" \
 	--variant "$(LLVM_VARIANT)" \

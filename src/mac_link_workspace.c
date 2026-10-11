@@ -318,9 +318,9 @@ uint8_t link_work_counter_request(uint8_t operation, const void *data, uint16_t 
         (!length || link_work_external(length, 1))) return 1;
     if (TOP != LW_KEYS || GRANT != operation) return 0;
     if (operation == LW_COUNTER_READ)
-        return data == A.keys.record && size == 112 && length == &A.keys.size;
+        return data == A.keys.record && size == sizeof(A.keys.record) && length == &A.keys.size;
     if (operation == LW_COUNTER_CREATE || operation == LW_COUNTER_SAVE)
-        return data == A.keys.record && size == 112 && !length;
+        return data == A.keys.record && (size == 112 || size == sizeof(A.keys.record)) && !length;
     return operation == LW_COUNTER_TAKE && data == &A.keys.counter && size == 4 && !length;
 }
 uint8_t link_work_counter_object(const void *p, uint8_t size)
@@ -329,7 +329,7 @@ uint8_t link_work_counter_object(const void *p, uint8_t size)
     if (TOP != LW_KEYS) return 0;
     if (GRANT == LW_COUNTER_READ && p == &A.keys.size && size == 1) return 1;
     if ((GRANT == LW_COUNTER_READ || GRANT == LW_COUNTER_CREATE || GRANT == LW_COUNTER_SAVE) &&
-        p == A.keys.record && size == 112) return 1;
+        p == A.keys.record && (size == 112 || size == sizeof(A.keys.record))) return 1;
     return GRANT == LW_COUNTER_TAKE && p == &A.keys.counter && size == 4;
 }
 uint8_t link_work_clean(void)

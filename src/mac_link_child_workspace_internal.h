@@ -59,9 +59,9 @@ typedef union {
     } wire;
     struct { child_key_hash_t key; child_mmo_t mmo; } hash;
     struct {
-        uint8_t counter_check[128];
+        uint8_t counter_check[NV_RECORD_MAX];
         struct {
-            uint8_t stage[128], chunk[32], word[4], header[12], footer[8], lengths[2];
+            uint8_t stage[NV_RECORD_MAX], chunk[32], word[4], header[12], footer[8], lengths[2];
             uint32_t generations[2], crc;
         } record;
         struct { uint8_t word[4], check[32]; } writer;

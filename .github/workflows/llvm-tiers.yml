@@ -23,9 +23,9 @@ on:
         options: [fast, smoke, full]
         default: fast
       variant:
-        description: firmware variant (rx-diag = opt-in CC2530_RX_DIAG diagnostic image, never production)
+        description: firmware variant (rx-diag = diagnostics; parent-recovery = extended durable storage)
         type: choice
-        options: [production, rx-diag]
+        options: [production, rx-diag, parent-recovery]
         default: production
       llvm_repository:
         description: LLVM-MCS51 repository
@@ -90,7 +90,7 @@ jobs:
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.sha }}
         run: |
           case "$TIER" in fast|smoke|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
-          case "$VARIANT" in production|rx-diag) ;; *) echo "unknown variant '$VARIANT'"; exit 1;; esac
+          case "$VARIANT" in production|rx-diag|parent-recovery) ;; *) echo "unknown variant '$VARIANT'"; exit 1;; esac
           {
             echo "tier=$TIER"
             echo "variant=$VARIANT"

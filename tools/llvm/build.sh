@@ -4,8 +4,8 @@
 # worktree's tracked files (including uncommitted edits); runtime and startup are
 # built from the compiler source tree $LLVM_SRC with the same ABI flags.
 # usage: TOOLS=bin LLVM_SRC=src ABI_FLAGS=.. SF_FLAGS=.. [FIRMWARE_VARIANT=..] build.sh OUTDIR
-# (OUTDIR must not exist). FIRMWARE_VARIANT: production (default) or rx-diag, the
-# opt-in CC2530_RX_DIAG diagnostic image (include/cc2530_rx_diag.h); never production.
+# (OUTDIR must not exist). FIRMWARE_VARIANT: production (default), rx-diag or
+# parent-recovery (explicit extended durable-storage profile).
 set -euo pipefail
 H=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$H/../.." && pwd)
@@ -15,6 +15,7 @@ VARIANT=${FIRMWARE_VARIANT:-production}
 case $VARIANT in
   production) VDEFS="" ;;
   rx-diag) VDEFS="-DCC2530_RX_DIAG" ;;
+  parent-recovery) VDEFS="-DCC2530_PARENT_RECOVERY" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac
 LLVM_SRC=${LLVM_SRC:?LLVM_SRC required}

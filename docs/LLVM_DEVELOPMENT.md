@@ -38,7 +38,7 @@ The direct CI entry point is the same script:
 python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
     --tools BIN --llvm-src SRC --simulator S51 \
     [--llvm-build TREE | --lit-evidence RECEIPT] [--evidence STORE] \
-    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag}]
+    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag,parent-recovery}]
 ```
 
 `--plan-only` prints the exact selection without running anything.
@@ -48,6 +48,13 @@ python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
 fixed diagnostic block; see
 [RX_DIAG diagnostic variant](#rx_diag-diagnostic-variant-llvm-only). The variant is part of
 the receipt identity, so evidence never crosses variants.
+
+`parent-recovery` adds `-DCC2530_PARENT_RECOVERY` for the explicitly versioned
+durable-storage extension described in [SECURITY_KEYS.md](SECURITY_KEYS.md#parent-storage-prerequisite).
+It does not enable RX_DIAG, change production defaults or by itself perform
+alternate-parent discovery. `make test-parent-storage` runs the existing real
+key/counter/journal/flash host corpus plus migration/reset/power-cut coverage
+with this flag, both natively and under sanitizers.
 
 Exit codes:
 

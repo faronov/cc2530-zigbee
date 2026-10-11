@@ -38,7 +38,7 @@ SCHEMA = "cc2530-llvm-tier-receipt/1"
 TIERS = ("fast", "smoke", "full")
 # Firmware build variants (build.sh FIRMWARE_VARIANT). rx-diag is the opt-in
 # CC2530_RX_DIAG diagnostic image: a distinct identity, never production.
-VARIANTS = ("production", "rx-diag")
+VARIANTS = ("production", "rx-diag", "parent-recovery")
 # Content that can never change generated code or acceptance: excluded from the
 # firmware identity so documentation edits do not invalidate evidence.
 NON_EVIDENCE = re.compile(r"(^docs/|\.md$|^\.github/|^LICENSES?/|^\.gitignore$)")
@@ -630,7 +630,7 @@ def main(argv=None):
     p.add_argument("--simulator", type=Path, required=True, help="s51 from tools/llvm/prepare_simulator.py")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--variant", choices=VARIANTS, default="production",
-                   help="firmware variant; rx-diag = opt-in CC2530_RX_DIAG diagnostic image")
+                   help="firmware variant; rx-diag = diagnostics; parent-recovery = extended durable storage")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--jobs", type=int, default=min(os.cpu_count() or 4, 16))
     p.add_argument("--keep-going", action="store_true", help="do not cancel remaining steps after a failure")

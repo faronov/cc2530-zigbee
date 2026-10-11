@@ -7,7 +7,11 @@
 #include "flash_write.h"
 #include "sdcc_volatile.h"
 
+#if defined(CC2530_PARENT_RECOVERY)
+#define NV_RECORD_MAX 160u
+#else
 #define NV_RECORD_MAX 128u
+#endif
 #define NV_RECORD_ERASE_LIMIT 32u
 
 typedef enum {

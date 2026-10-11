@@ -73,7 +73,7 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
  * The counter/journal still retain their real persistent/cached payloads. */
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
 static MCU_XDATA struct {
-    uint8_t record[112], a[116], b[116], hash_key[16];
+    uint8_t record[SECURITY_KEYS_RECORD_MAX], a[116], b[116], hash_key[16];
     ed_packet_t packet;
     nwk_frame_info_t nwk;
     zigbee_security_key_t key;
@@ -89,7 +89,7 @@ static MCU_XDATA struct {
 typedef char phase_fits_packed_byte[(SECURITY_KEYS_REJOINING <= PHASE_MASK) ? 1 : -1];
 typedef char phase_ranges[(SECURITY_KEYS_REQUESTED == SECURITY_KEYS_RECEIVED+1 &&
     SECURITY_KEYS_WAIT_CONFIRM == SECURITY_KEYS_PROVISIONAL+1) ? 1 : -1];
-typedef char payload_stays_112[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
+typedef char payload_fits_snapshot[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
 static MCU_XDATA uint8_t security_keys_phase, security_keys_result;
 /* Lazy volatile state: NF floors and the PHASE byte's keepalive bits
  * (TIMEOUT_PENDING, parent information). Accepted DATA/MANAGEMENT frames
@@ -200,7 +200,14 @@ static uint8_t valid_config(void)
 static uint8_t valid_record(void)
 {
     uint8_t f = w.record[FLAGS], p = phase(), i;
-    if (w.size != 112 || w.record[MAGIC] != 'K' || w.record[MAGIC+1] != 2 ||
+    if (
+#if defined(CC2530_PARENT_RECOVERY)
+          !((w.size == 112 && w.record[MAGIC+1] == 2)
+          || (w.size == 144 && w.record[MAGIC+1] == 3 && all(w.record+112, 32, 0))
+          ) || w.record[MAGIC] != 'K' ||
+#else
+          w.size != 112 || w.record[MAGIC] != 'K' || w.record[MAGIC+1] != 2 ||
+#endif
         !valid_config() || (f & 0x80) || p < SECURITY_KEYS_PROVISIONED ||
         p > SECURITY_KEYS_REJOINING || all(w.record+LK, 16, 0))
         return 0;
@@ -251,7 +258,7 @@ static security_keys_result_t load(void)
         return (security_keys_result_t)security_keys_result;
     if (security_keys_phase < SECURITY_KEYS_PROVISIONED)
         return SECURITY_KEYS_STATE;
-    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, sizeof(w.record), &w.size)) != SECURITY_COUNTER_OK)
         return fault(SECURITY_KEYS_STORAGE);
     if (!valid_record() || phase() != security_keys_phase)
         return fault(SECURITY_KEYS_FORMAT);
@@ -268,7 +275,12 @@ static void keep_volatile(void)
 }
 static security_keys_result_t save(void)
 {
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t length = w.record[MAGIC+1] == 3 ? 144 : 112;
+    if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, length, w.polls)) != SECURITY_COUNTER_OK)
+#else
     if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
+#endif
         return fault(SECURITY_KEYS_STORAGE);
     security_keys_phase = phase();
     keep_volatile();
@@ -330,12 +342,32 @@ security_keys_result_t security_keys_open(void) SECURITY_FAR
     }
     if (r != SECURITY_COUNTER_OK) return finish(fault(SECURITY_KEYS_STORAGE));
     result = SECURITY_KEYS_OK;
-    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, sizeof(w.record), &w.size)) != SECURITY_COUNTER_OK)
         result = fault(SECURITY_KEYS_STORAGE);
     else if (!valid_record()) result = fault(SECURITY_KEYS_FORMAT);
     else { security_keys_phase = phase(); keep_volatile(); }
     return finish(result);
 }
+
+#if defined(CC2530_PARENT_RECOVERY)
+security_keys_result_t security_keys_upgrade_parent(uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t result = load();
+    if (result != SECURITY_KEYS_OK) return finish(result);
+    if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_CONTEXT);
+    if (w.size == 144) return finish(SECURITY_KEYS_OK);
+    memset(w.record+112, 0, 32);
+    w.record[MAGIC+1] = 3;
+    w.size = 144;
+    w.polls = nv_polls;
+    return finish(save());
+}
+#endif
 
 #if defined(CC2530_DEFAULT_TC_KEY)
 security_keys_result_t security_keys_provision_default(

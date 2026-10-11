@@ -14,7 +14,7 @@ inputs:
     required: false
     default: ''
   variant:
-    description: firmware variant (production or rx-diag); part of the FULL identity
+    description: firmware variant (production, rx-diag or parent-recovery); part of the FULL identity
     required: true
   case0-budget:
     description: seconds of complete case 0 before suspending at the next snapshot
