@@ -1222,6 +1222,189 @@ static void failures(void)
     }
 }
 #if defined(CC2530_PARENT_RECOVERY)
+static const uint8_t router_ieee[8] = {0x44,2,3,4,5,6,7,8};
+
+static void router_seal_using(uint32_t count, uint8_t aps, const uint8_t *network, uint8_t sequence)
+{
+    uint8_t n;
+    sealed_aps_secured = aps;
+    CHECK(ed_wire_encode(&packet, frame, sizeof(frame), &n) == ZIGBEE_SECURITY_OK);
+    CHECK(ed_wire_nwk(frame, n, &nwk) == ZIGBEE_SECURITY_OK);
+    if (aps) {
+        material(new_tc, aps==2?2:0, aps==2?21:20, 0, 0);
+        CHECK(ed_wire_crypt(0, 1, &effective, frame+nwk.payload_offset, nwk.payload_length,
+            inner, sizeof(inner), &info) == ZIGBEE_SECURITY_OK);
+        memcpy(frame+nwk.payload_offset, inner, info.length);
+        n = nwk.payload_offset+info.length;
+    }
+    material(network, 1, count, sequence, 0);
+    memcpy(effective.source, router_ieee, 8);
+    CHECK(ed_wire_crypt(0, 0, &effective, frame, n, raw, sizeof(raw), &info) == ZIGBEE_SECURITY_OK);
+    wire_length = info.length;
+}
+
+static void router_seal(uint32_t count, uint8_t aps)
+{
+    router_seal_using(count,aps,nwk_key,255);
+}
+
+static void remembered_parent(void)
+{
+    security_keys_parent_t parent;
+    uint8_t legacy[112], record[144], length;
+    uint32_t until[2];
+    memset(&parent, 0, sizeof(parent));
+    memcpy(parent.ieee, router_ieee, 8); parent.address = 0x4567;
+    parent.nwk_floor[0] = 100; parent.sequence[0] = 255;
+    reboot(snapshot, SECURITY_KEYS_VERIFIED);
+    CHECK(security_keys_remember_parent(&parent, 3) == SECURITY_KEYS_CONTEXT);
+    CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
+    CHECK(security_counter_read(legacy, sizeof(legacy), &length) == SECURITY_COUNTER_SPACE);
+    CHECK(security_counter_read(record, sizeof(record), &length) == SECURITY_COUNTER_OK);
+    memcpy(legacy, record, sizeof(legacy));
+    until[0] = security_counter_status()->until[0]; until[1] = security_counter_status()->until[1];
+    CHECK(security_keys_select_parent(1, config.update_id, 3) == SECURITY_KEYS_IDENTITY);
+    CHECK(security_keys_remember_parent(&parent, 3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_known && !status.router_active && !status.router_selected);
+    CHECK(!memcmp(status.config.tc_ieee, config.tc_ieee, 8));
+    CHECK(security_counter_status()->until[0] == until[0] && security_counter_status()->until[1] == until[1]);
+    parent.nwk_floor[0]--;
+    CHECK(security_keys_remember_parent(&parent, 3) == SECURITY_KEYS_REPLAY);
+    parent.nwk_floor[0]++;
+    parent.ieee[0]++;
+    CHECK(security_keys_remember_parent(&parent, 3) == SECURITY_KEYS_UNSUPPORTED);
+    parent.ieee[0]--;
+    CHECK(security_keys_select_parent(1, config.update_id, 3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_selected && !status.router_active);
+    base(0); packet.nwk.type = ED_NWK_COMMAND; packet.nwk.source = 0x1234;
+    packet.nwk.destination = parent.address;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee, config.own_ieee, 8);
+    memcpy(packet.nwk.destination_ieee, router_ieee, 8);
+    packet.length = 2; packet.payload[0] = 6; packet.payload[1] = 8;
+    CHECK(security_keys_send(&packet, 0, raw, sizeof(raw), &written, &limits, 3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_REJOINING);
+    CHECK(status.router_selected && !status.router_active);
+    base(0); packet.nwk.type = ED_NWK_COMMAND; packet.nwk.source = parent.address;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee, router_ieee, 8);
+    memcpy(packet.nwk.destination_ieee, config.own_ieee, 8);
+    packet.length = 4; packet.payload[0] = 7; packet.payload[1] = 0x34; packet.payload[2] = 0x12;
+    router_seal(99, 0); reject(SECURITY_KEYS_REPLAY);
+    router_seal(100, 0);
+    raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH); raw[wire_length-1] ^= 1;
+    accept(SECURITY_KEYS_EVENT_REJOINED);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_active && status.router_address == parent.address);
+    reject(SECURITY_KEYS_REPLAY);
+    CHECK(security_counter_read(record, sizeof(record), &length) == SECURITY_COUNTER_OK);
+    CHECK(!memcmp(record, legacy, 111)); /* TC identities/keys/replay untouched */
+    CHECK(record[122] == 101 && record[130] == 7);
+
+    /* Routed APS retains TC logical source/APS nonce, but router NWK nonce
+     * and its independent floor. Durable router floors survive reset. */
+    base(0); packet.aps.profile_id = 0x0104; packet.aps.cluster_id = 6;
+    packet.aps.source_endpoint = packet.aps.destination_endpoint = 1;
+    packet.length = 1; packet.payload[0] = 0x69;
+    router_seal(101, 1); accept(SECURITY_KEYS_EVENT_DATA);
+    reboot(NULL, SECURITY_KEYS_VERIFIED); reject(SECURITY_KEYS_REPLAY);
+    CHECK(security_counter_read(record, sizeof(record), &length) == SECURITY_COUNTER_OK);
+    CHECK(!memcmp(record+80, legacy+80, 8)); /* TC NWK floors are not router floors */
+    CHECK(record[122] == 102);
+    /* A genuinely new network-key slot gets its own router floor. Neither
+     * accepting the same key nor changing active slot clears old history. */
+    transport(1,alt_key,0); router_seal(102,2);
+    accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
+    CHECK(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK);
+    CHECK(record[122]==103 && !record[126]);
+    base(0); packet.aps.profile_id=0x0104;
+    packet.aps.source_endpoint=packet.aps.destination_endpoint=1;
+    packet.length=1;
+    router_seal_using(0,0,alt_key,0); accept(SECURITY_KEYS_EVENT_DATA);
+    reboot(NULL,SECURITY_KEYS_VERIFIED); reject(SECURITY_KEYS_REPLAY);
+    CHECK(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK);
+    CHECK(record[122]==103 && record[126]==1 && status.active_sequence==0);
+    CHECK(security_keys_select_parent(0, status.config.update_id, 3) == SECURITY_KEYS_OK);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_active && !status.router_selected); /* candidate != admitted parent */
+}
+
+static security_keys_result_t router_transition(uint8_t stage)
+{
+    security_keys_parent_t parent;
+    if(!stage) {
+        memset(&parent,0,sizeof(parent));
+        memcpy(parent.ieee,router_ieee,8); parent.address=0x4567;
+        parent.nwk_floor[0]=100; parent.sequence[0]=255;
+        return security_keys_remember_parent(&parent,3);
+    }
+    if(stage==1) return security_keys_select_parent(1,config.update_id,3);
+    base(0); packet.nwk.type=ED_NWK_COMMAND;
+    packet.nwk.flags=NWK_FLAG_SOURCE_IEEE|NWK_FLAG_DESTINATION_IEEE;
+    if(stage==2) {
+        packet.nwk.source=0x1234; packet.nwk.destination=0x4567;
+        memcpy(packet.nwk.source_ieee,config.own_ieee,8);
+        memcpy(packet.nwk.destination_ieee,router_ieee,8);
+        packet.length=2; packet.payload[0]=6; packet.payload[1]=8;
+        return security_keys_send(&packet,0,raw,sizeof(raw),&written,&limits,3);
+    }
+    packet.nwk.source=0x4567;
+    memcpy(packet.nwk.source_ieee,router_ieee,8);
+    memcpy(packet.nwk.destination_ieee,config.own_ieee,8);
+    packet.length=4; packet.payload[0]=7;
+    packet.payload[1]=0x34; packet.payload[2]=0x12;
+    router_seal(100,0);
+    return security_keys_receive(raw,wire_length,&output,&event,&limits,3);
+}
+
+static void interrupted_router(void)
+{
+    static const uint8_t old_flags[4]={0,1,5,5}, new_flags[4]={1,5,5,7};
+    static uint8_t before[4096], record[144], length, stage, kind;
+    static uint32_t until[2];
+    static unsigned commands, command, cuts, failures;
+    unsigned i;
+    security_keys_result_t result;
+    cuts=failures=0;
+    for(stage=0;stage<4;stage++) {
+        reboot(snapshot,SECURITY_KEYS_VERIFIED);
+        CHECK(security_keys_upgrade_parent(3)==SECURITY_KEYS_OK);
+        for(i=0;i<stage;i++) CHECK(router_transition((uint8_t)i)==SECURITY_KEYS_OK);
+        memcpy(before,security_joint_nv(),sizeof(before));
+        reboot(before,stage==3?SECURITY_KEYS_REJOINING:SECURITY_KEYS_VERIFIED);
+        until[0]=security_counter_status()->until[0]; until[1]=security_counter_status()->until[1];
+        CHECK(router_transition(stage)==SECURITY_KEYS_OK);
+        commands=security_joint_flash_commands(); CHECK(commands>0);
+        for(command=1;command<=commands;command++) for(kind=1;kind<=3;kind++) {
+            reboot(before,stage==3?SECURITY_KEYS_REJOINING:SECURITY_KEYS_VERIFIED);
+            security_joint_cut(&power_cut,command,kind,13);
+            if(!setjmp(power_cut)) { (void)router_transition(stage); CHECK(0); }
+            cuts++;
+            security_joint_reset(0);
+            result=security_keys_open();
+            if(result==SECURITY_KEYS_OK) {
+                CHECK(security_keys_status(&status)==SECURITY_KEYS_OK);
+                CHECK(status.phase==SECURITY_KEYS_VERIFIED || status.phase==SECURITY_KEYS_REJOINING);
+                CHECK(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK && length==144);
+                CHECK(!memcmp(record,config.own_ieee,8) && !memcmp(record+8,config.tc_ieee,8));
+                CHECK(!memcmp(record+16,nwk_key,16) && !memcmp(record+48,new_tc,16));
+                CHECK(record[130]==old_flags[stage] || record[130]==new_flags[stage]);
+                CHECK(record[122]==100 || (stage==0 && !record[122]) ||
+                    (stage==3 && record[122]==101));
+                for(i=0;i<2;i++) CHECK(security_counter_status()->next[i]>=until[i]);
+                CHECK(!status.router_active || status.phase==SECURITY_KEYS_VERIFIED);
+            } else {
+                failures++; CHECK(result==SECURITY_KEYS_STORAGE);
+                CHECK(!security_joint_flash_commands());
+            }
+        }
+    }
+    CHECK(cuts>0 && failures>0);
+    printf("router history/select/request/admission: %u cut points, %u explicit storage failures PASS\n",cuts,failures);
+}
+
 static void parent_schema_upgrade(void)
 {
     static uint8_t before[112], after[144], length, kind;
@@ -1332,6 +1515,8 @@ int main(void)
     parent_information_volatile(); interrupted(); failures();
 #if defined(CC2530_PARENT_RECOVERY)
     parent_schema_upgrade();
+    remembered_parent();
+    interrupted_router();
 #endif
     printf("security keys: %u checks PASS; real AES/CCM/HMAC/counter/journal/flash host composition only\n",checks);
     return 0;

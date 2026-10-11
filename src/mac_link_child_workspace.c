@@ -315,8 +315,8 @@ typedef char syntax78[sizeof(A.wire.engine.parse.syntax)==78?1:-1];
 typedef char buffers236[sizeof(A.wire.buffers)==236?1:-1];
 typedef char crypto40[sizeof(A.wire.crypto)==40?1:-1];
 typedef char hash149[sizeof(A.hash)==149?1:-1];
-typedef char record198[sizeof(A.nv.record)==198?1:-1];
-typedef char nv394[sizeof(A.nv)==394?1:-1];
+typedef char record198[sizeof(A.nv.record)==198+NV_RECORD_MAX-128?1:-1];
+typedef char nv394[sizeof(A.nv)==394+2*(NV_RECORD_MAX-128)?1:-1];
 typedef char payload543[sizeof(A)==543?1:-1];
 #endif
 MCU_XDATA uint8_t child_work_reserved_end;

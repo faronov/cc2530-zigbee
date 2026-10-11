@@ -349,9 +349,9 @@ void link_work_host_reset(void)
 }
 #endif
 #if defined(__SDCC)
-typedef char keys_size[sizeof(link_work_keys_t) == 617 ? 1 : -1];
+typedef char keys_size[sizeof(link_work_keys_t) == 617+SECURITY_KEYS_RECORD_MAX-112 ? 1 : -1];
 typedef char join_size[sizeof(link_work_join_t) == 218 ? 1 : -1];
 typedef char poll_size[sizeof(link_work_poll_t) == 109 ? 1 : -1];
 typedef char tx_size[sizeof(link_work_tx_t) == 135 ? 1 : -1];
-typedef char arena_size[sizeof(link_work_arena_t) == 617 ? 1 : -1];
+typedef char arena_size[sizeof(link_work_arena_t) == 617+SECURITY_KEYS_RECORD_MAX-112 ? 1 : -1];
 #endif

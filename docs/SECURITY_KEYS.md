@@ -40,7 +40,7 @@ and one operational APS replay record to fit the existing 112-byte opaque
 counter payload. More neighbors cannot be added without a reviewed schema
 and durable owner change.
 
-## Parent-storage prerequisite
+## Optional known-router durable ownership
 
 The optional `CC2530_PARENT_RECOVERY` profile increases the maximum journal
 snapshot from 128 to 160 bytes and the key payload from 112 to 144 bytes.
@@ -54,7 +54,8 @@ The ordinary and RX_DIAG profiles retain the original capacities.
 complete VERIFIED or REJOINING state. It uses the existing
 `security_counter_save`, never provisioning, erase or an alternate NV writer.
 Bytes 0..110 retain their existing layout and values, byte 111 becomes 3,
-and bytes 112..143 are reserved and **must all be zero** in this prerequisite.
+and initializes bytes112..143 to zero. The accepted migration prerequisite
+was separate from the following opt-in router field semantics.
 It retains both network-key slots and their TC replay floors, APS history,
 pending/retired material, saved network parameters and both outgoing ceilings.
 Saving discards any remaining reserved outgoing values, rather than reusing
@@ -68,13 +69,51 @@ nonzero reserved bytes and uncertain journal commits fail explicitly.
 Old firmware cannot read a migrated 160-byte snapshot and fails closed;
 **downgrading is not a rollback/migration mechanism**.
 
-This is storage preparation, **not yet router identity/replay ownership,
-router forwarding or alternate-parent recovery**. Those require separately
-reviewed field semantics and real protocol/simulator integration. Native and
-sanitized tests retain the existing 112-byte golden corpus, verify every
+K3's exact 144-byte layout extends K2 without changing bytes0..110:
+
+| Offset | Bytes | Ownership |
+| --- | ---: | --- |
+| 112 | 8 | One independently trusted same-network router IEEE |
+| 120 | 2 | Bound router short address, little-endian |
+| 122 | 8 | Two independent exclusive router NWK replay floors, little-endian |
+| 130 | 1 | KNOWN bit0, admitted ACTIVE bit1, selected ATTEMPT bit2 |
+| 131 | 1 | Staged selected-parent update ID, zero without ATTEMPT |
+| 132 | 12 | Reserved zero |
+
+`security_keys_remember_parent` accepts explicit previously learned, trusted
+history only while VERIFIED and after migration. It binds one lifetime
+identity/address: no eviction, replacement, counter-floor rollback or invented
+floor. Present key slots require matching sequences and nonzero exclusive
+floors; absent slots require zero history. This API is not an authentication
+assertion or an unknown-neighbor enrollment mechanism.
+`security_keys_select_parent` persists a selected target and non-stale,
+half-range-unambiguous update ID without changing the admitted parent.
+A reset restores this selection but not READY. Only a genuine protected
+response from that selected router atomically commits ACTIVE, the accepted
+own address, update ID and its consumed replay floor.
+
+NWK hop protection uses the router IEEE/nonce and independent NWK floors;
+APS logical TC source, link key, APS nonce and replay ownership remain TC's.
+Actual MAC unicast/broadcast next hop changes to the admitted router, while
+TC application destinations remain NWK0000. Parent commands use the selected
+or admitted router identity as appropriate. A genuinely new network-key slot
+gets a new router floor; old slot history is not reset by switching slots.
+Every admitted router-protected frame saves its floor before publication.
+
+**Bounded-service limitation:** those saves consume the unchanged journal
+erase allowance (32 attempts per page per boot). The real-peripheral harness
+reaches that fail-closed guard during the longer alternate-parent serving
+exercise. The new replay case proves recovery and ten seconds of foreground
+service with a confirmed report and protected application input, not sustained
+operation. A durable, replay-safe wear/traffic policy is still required;
+neither raising the guard nor silently reverting to volatile floors is accepted.
+
+Native and sanitized tests retain the existing 112-byte golden corpus, verify every
 legacy field and counter ceiling across migration/reset, exercise all flash
 command cut positions, and check later saves retain the 144-byte schema even
-when the wire decoder reuses its length scratch.
+when the wire decoder reuses its length scratch. Router registration, selection,
+request sealing and admission add690 flash-command cuts, including670 explicit
+fail-closed storage outcomes. Key rotation preserves independent old-slot history.
 
 ## Public contract and state
 
@@ -215,14 +254,15 @@ leaving the caller's APS transaction counter unchanged (Core2.2.8.4.4 p59).
 Do not replay an old secured NPDU as a fresh APS retry.
 
 The owner permits a fixed-parent **secured** NWK Rejoin Request through
-`send`: command `06`, awake ED capability `88` or `8C`, both IEEE addresses,
+`send`: command `06`, awake ED capability `08` or `0C`, both IEEE addresses,
 destination 0, radius 1 and the existing own short address. It persists
 REJOINING before returning the encrypted request. Only a genuine secured
 Rejoin Response `07 || newShortLE2 || status00` from the bound TC, to the old
 short and both correct IEEE addresses, can persist the new short address and
 return REJOINED. Failed/stale/unsolicited responses cannot change the binding.
-Ordinary traffic is blocked in REJOINING. This does not implement parent
-search, unsecured TC rejoin, key recovery or random address allocation.
+Ordinary traffic is blocked in REJOINING. The optional known-router profile
+extends the bound target as described above; it does not implement unknown
+parent enrollment, unsecured TC rejoin, key recovery or random address allocation.
 
 The owner also handles authenticated NWK Leave and locally generated
 secured Leave indications. Source IEEE and radius 1 are required. A request
