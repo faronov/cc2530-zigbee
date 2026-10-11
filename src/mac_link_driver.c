@@ -347,6 +347,7 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
         } else if (kind == BDB_JOIN_ACTION_ASSOCIATION) {
             join_event(d, restored ? MAC_JOIN_RESTORED : MAC_JOIN_PREPARED);
         } else {
+            d->saved_short = d->config.short_address;
             memset(&d->event, 0, sizeof(d->event));
             d->event.kind = BDB_JOIN_EVENT_INSTALLED;
             d->event.epoch = d->action.epoch;

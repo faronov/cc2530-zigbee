@@ -148,6 +148,9 @@ typedef struct {
     uint8_t workspace;
     /* 0 commissioning; 1 resumed, 2 Rejoin Response accepted, 3 recovered READY. */
     uint8_t recovery;
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t parent_search;
+#endif
 } bdb_join_t;
 
 /* Bounded R22/BDB3.0.1 centralized, awake direct-TC ED.

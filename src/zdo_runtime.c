@@ -102,7 +102,8 @@ zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_
         p->nwk.type = ED_NWK_COMMAND; p->nwk.radius = 1;
         p->nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
         memcpy(p->nwk.source_ieee, keys.config.own_ieee, 8);
-        memcpy(p->nwk.destination_ieee, keys.config.tc_ieee, 8);
+        memcpy(p->nwk.destination_ieee, SECURITY_PARENT_IEEE(keys), 8);
+        p->nwk.destination = SECURITY_PARENT_ADDRESS(keys);
         p->payload[0] = 0x0b; p->payload[1] = 1;
     }
     queued = nwk_aps_queue(transport, p, 0, now);
@@ -189,10 +190,11 @@ static zdo_runtime_result_t parent_response(zdo_runtime_t * SDCC_VOLATILE contex
         (!ctx->tx_done && !transport->sent) || expired(ctx->last, ctx->deadline))
         return ZDO_RUNTIME_IGNORED;
     if (p->length < 3 || p->payload[0] != 0x0c || p->payload[1] > 1 ||
-        p->nwk.source || p->nwk.destination != keys.config.address || p->nwk.radius != 1 ||
+        p->nwk.source != SECURITY_PARENT_ADDRESS(keys) ||
+        p->nwk.destination != keys.config.address || p->nwk.radius != 1 ||
         (p->nwk.flags & (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE)) !=
             (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE) ||
-        memcmp(p->nwk.source_ieee, keys.config.tc_ieee, 8) ||
+        memcmp(p->nwk.source_ieee, SECURITY_PARENT_IEEE(keys), 8) ||
         memcmp(p->nwk.destination_ieee, keys.config.own_ieee, 8)) return ZDO_RUNTIME_FORMAT;
     ctx->result = p->payload[1] ? ZDO_RUNTIME_REMOTE : ZDO_RUNTIME_OK;
     if (!ctx->result) {

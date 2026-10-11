@@ -137,7 +137,8 @@ nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
     p->nwk.type = ED_NWK_COMMAND; p->nwk.version = 2; p->nwk.radius = 1;
     p->nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
     memcpy(p->nwk.source_ieee, nwk_aps_keys.config.own_ieee, 8);
-    memcpy(p->nwk.destination_ieee, nwk_aps_keys.config.tc_ieee, 8);
+    memcpy(p->nwk.destination_ieee, SECURITY_REJOIN_IEEE(nwk_aps_keys), 8);
+    p->nwk.destination = SECURITY_REJOIN_ADDRESS(nwk_aps_keys);
     /* PRO stochastic allocation retains the validated saved short address. */
     p->payload[0] = 6; p->payload[1] = capability & 0x7fu; p->length = 2;
     ctx->secure = ctx->special = 0;
@@ -456,7 +457,11 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uin
         }
     }
     if ((event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_LEAVE ||
-        (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_UPDATE) {
+        (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_UPDATE ||
+        (((event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_REJOINED ||
+          (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_REJOIN_REFUSED) &&
+         ctx->queued && !ctx->special && ctx->outgoing.nwk.type &&
+         ctx->outgoing.length == 2 && ctx->outgoing.payload[0] == 6)) {
         ctx->ready = 0;
         if (ctx->queued) { ctx->cancel = 1; ctx->cancel_result = NWK_APS_CANCELLED; }
     }

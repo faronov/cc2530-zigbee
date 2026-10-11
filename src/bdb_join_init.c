@@ -111,6 +111,9 @@ bdb_join_result_t bdb_join_resume(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, N
         return BDB_JOIN_ARGUMENT;
     ctx->config = *config; ctx->owner = owner; ctx->epoch = config->association.extraction.epoch;
     ctx->member = 0; ctx->recovery = 1; ctx->commission_until = now+BDB_JOIN_RECOVERY_WAIT;
+#if defined(CC2530_PARENT_RECOVERY)
+    ctx->parent_search = bdb_join_keys.router_selected ? 2 : 0;
+#endif
     ctx->token++; ctx->issued = 0; ctx->phase = BDB_JOIN_INSTALLING;
     ctx->until = now+BDB_JOIN_EXCHANGE_WAIT;
     return BDB_JOIN_OK;

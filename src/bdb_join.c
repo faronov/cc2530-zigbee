@@ -88,6 +88,31 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     uint8_t i;
     memset(&work.policy, 0, sizeof(work.policy));
+#if defined(CC2530_PARENT_RECOVERY)
+    if (ctx->recovery) {
+        if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
+        if (expired(ctx->last, ctx->commission_until) ||
+            ctx->work.scan.overflow || ctx->work.scan.unscanned || !bdb_join_keys.router_known)
+            return BDB_JOIN_NO_PARENT;
+        memcpy(work.policy.extended_pan_id, bdb_join_keys.config.extended_pan, 8);
+        work.policy.minimum_known = 1; work.policy.minimum_update_id = bdb_join_keys.config.update_id;
+        for (i = 0; i < ctx->work.scan.candidates.count; i++) {
+            const nwk_candidate_t *c = &ctx->work.scan.candidates.entries[i];
+            work.policy.link_cost[i] = ctx->config.link_cost;
+            if (c->pan_id != bdb_join_keys.config.pan || c->channel != bdb_join_keys.config.channel)
+                continue; /* bounded same-PAN/channel known-router slice */
+            if ((c->address_mode == MAC_ADDRESS_SHORT &&
+                 c->coordinator[0] == (uint8_t)bdb_join_keys.router_address &&
+                 c->coordinator[1] == (uint8_t)(bdb_join_keys.router_address >> 8)) ||
+                (c->address_mode == MAC_ADDRESS_EXTENDED &&
+                 !memcmp(c->coordinator, bdb_join_keys.router_ieee, 8)))
+                work.policy.potential_mask |= (uint8_t)(1u << i);
+        }
+        return ctx->work.scan.reason == MAC_SCAN_FINISHED &&
+            nwk_parent_select(&ctx->work.scan.candidates, &work.policy, &ctx->parent) == NWK_PARENT_OK ?
+            BDB_JOIN_OK : BDB_JOIN_NO_PARENT;
+    }
+#endif
 #if !defined(CC2530_DEFAULT_TC_KEY)
     if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
     memcpy(work.policy.extended_pan_id, bdb_join_keys.config.extended_pan, 8);
@@ -337,7 +362,11 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             /* A complete, loss-free scan without any eligible coordinator is
              * usually one lost beacon: rescan the same channels. Ambiguous,
              * closed, overflowed or unscanned results still fail at once. */
-            if (result == BDB_JOIN_NO_PARENT && ctx->scan_result.reason == MAC_SCAN_FINISHED &&
+            if (result == BDB_JOIN_NO_PARENT &&
+#if defined(CC2530_PARENT_RECOVERY)
+                !ctx->recovery &&
+#endif
+                ctx->scan_result.reason == MAC_SCAN_FINISHED &&
                 !ctx->scan_result.overflow && !ctx->scan_result.unscanned &&
                 !work.policy.potential_mask && ++ctx->attempts < BDB_JOIN_ATTEMPTS) {
                 ctx->workspace = BDB_JOIN_WORK_NONE;
@@ -349,6 +378,19 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             }
             if (result) { ctx->phase = BDB_JOIN_FAILED; ctx->result = (uint8_t)result; }
             else {
+#if defined(CC2530_PARENT_RECOVERY)
+                if (ctx->recovery) {
+                    if (security_keys_select_parent(1, ctx->parent.candidate.network.update_id,
+                        ctx->config.transport.nv_polls) != SECURITY_KEYS_OK ||
+                        bdb_join_runtime_init(ctx, ctx->owner, &ctx->config, now) != BDB_JOIN_OK) {
+                        ctx->phase = BDB_JOIN_FAILED; ctx->result = BDB_JOIN_SECURITY;
+                    } else {
+                        ctx->parent_search = 2; ctx->phase = BDB_JOIN_RECOVERING;
+                        ctx->attempts = ctx->issued = 0;
+                    }
+                    return BDB_JOIN_OK;
+                }
+#endif
                 /* No scan lease remains. No runtime or association was live
                  * in this storage; initialize association once, not per retry. */
                 ctx->workspace = BDB_JOIN_WORK_NONE;
@@ -438,7 +480,35 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                 /* The persisted identity is installed; nothing is admitted yet. */
                 if (bdb_join_keys.phase != SECURITY_KEYS_VERIFIED && bdb_join_keys.phase != SECURITY_KEYS_REJOINING)
                     fail(ctx, BDB_JOIN_SECURITY);
-                else { ctx->phase = BDB_JOIN_RECOVERING; ctx->issued = ctx->attempts = 0; }
+                else {
+#if defined(CC2530_PARENT_RECOVERY)
+                    if (ctx->parent_search == 1) {
+                        if (expired(now, ctx->commission_until)) {
+                            ctx->phase = BDB_JOIN_FAILED; ctx->result = BDB_JOIN_NO_PARENT;
+                            return BDB_JOIN_OK;
+                        }
+                        /* INSTALL has just confirmed this complete saved RX
+                         * state; only now is it a truthful scan snapshot. */
+                        ctx->config.scan.saved.pan = bdb_join_keys.config.pan;
+                        ctx->config.scan.saved.channel = bdb_join_keys.config.channel;
+                        ctx->config.scan.saved.filter = MAC_SCAN_FILTER_NORMAL;
+                        ctx->config.scan.saved.rx_on = 1;
+                        ctx->config.scan.channels = 1UL << bdb_join_keys.config.channel;
+                        if (ctx->config.scan.lifetime > ctx->commission_until-now)
+                            ctx->config.scan.lifetime = ctx->commission_until-now;
+                        ctx->workspace = BDB_JOIN_WORK_NONE;
+                        if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK ||
+                            mac_scan_start(&ctx->work.scan, ctx->owner, &ctx->config.scan, now) != MAC_SCAN_OK ||
+                            nwk_candidates_rejoin(&ctx->work.scan.candidates) != NWK_CANDIDATES_OK) {
+                            ctx->phase = BDB_JOIN_FAULT; ctx->result = BDB_JOIN_SCAN_FAILED;
+                        } else {
+                            ctx->workspace = BDB_JOIN_WORK_SCAN; ctx->phase = BDB_JOIN_SCANNING;
+                        }
+                        return BDB_JOIN_OK;
+                    }
+#endif
+                    ctx->phase = BDB_JOIN_RECOVERING; ctx->issued = ctx->attempts = 0;
+                }
             } else if (ctx->recovery == 2) {
                 if (bdb_join_keys.phase != SECURITY_KEYS_VERIFIED || !ctx->member ||
                     zdo_runtime_broadcast(&ctx->work.runtime.zdo, &ctx->work.runtime.transport,
@@ -502,6 +572,16 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                 ctx->application_result = outcome; ctx->application_pending = 0; ctx->application_done = 1;
             }
         }
+#if defined(CC2530_PARENT_RECOVERY)
+        if (ctx->recovery && !ctx->parent_search &&
+            (ctx->result == BDB_JOIN_NO_PARENT || ctx->result == BDB_JOIN_REJOIN_REFUSED) &&
+            !expired(now, ctx->commission_until) &&
+            security_keys_status(&bdb_join_keys) == SECURITY_KEYS_OK && bdb_join_keys.router_known) {
+            ctx->parent_search = 1; ctx->result = BDB_JOIN_OK;
+            ctx->work.runtime.transport.ready = 0; install(ctx);
+            return BDB_JOIN_OK;
+        }
+#endif
         if (!ctx->abandon || security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK || bdb_join_keys.phase == SECURITY_KEYS_LEFT)
             ctx->phase = BDB_JOIN_FAILED;
         else if (nwk_aps_key_exchange(&ctx->work.runtime.transport, 3, now) != NWK_APS_OK) {
@@ -518,6 +598,10 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
 {
     bdb_join_result_t result = bdb_join_advance(ctx, now);
     nwk_aps_result_t received;
+#if defined(CC2530_PARENT_RECOVERY)
+    uint16_t parent_address;
+    const uint8_t *parent_ieee;
+#endif
     if (result) return result;
     if (!body || crc_valid > 1) return BDB_JOIN_ARGUMENT;
     if (!crc_valid) return BDB_JOIN_MALFORMED;
@@ -525,6 +609,12 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
         return BDB_JOIN_STATE;
     if (ctx->workspace != BDB_JOIN_WORK_RUNTIME) return BDB_JOIN_STATE;
     if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
+#if defined(CC2530_PARENT_RECOVERY)
+    parent_address = ctx->phase == BDB_JOIN_RECOVERING ?
+        SECURITY_REJOIN_ADDRESS(bdb_join_keys) : SECURITY_PARENT_ADDRESS(bdb_join_keys);
+    parent_ieee = ctx->phase == BDB_JOIN_RECOVERING ?
+        SECURITY_REJOIN_IEEE(bdb_join_keys) : SECURITY_PARENT_IEEE(bdb_join_keys);
+#endif
     /* Before the first sealed Rejoin Request, restored floors may still admit
      * one replay of a pre-reset frame; RECOVERING consumes nothing until then. */
     if (ctx->phase == BDB_JOIN_RECOVERING && bdb_join_keys.phase != SECURITY_KEYS_REJOINING)
@@ -532,8 +622,21 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
     if (mac_frame_decode(body, length, &work.receive.mac) != MAC_CODEC_OK || work.receive.mac.header.type != MAC_FRAME_DATA ||
         work.receive.mac.header.destination_mode != MAC_ADDRESS_SHORT || work.receive.mac.header.destination_pan != bdb_join_keys.config.pan ||
         work.receive.mac.header.source_pan != bdb_join_keys.config.pan ||
-        !((work.receive.mac.header.source_mode == MAC_ADDRESS_SHORT && !work.receive.mac.header.source[0] && !work.receive.mac.header.source[1]) ||
-          (work.receive.mac.header.source_mode == MAC_ADDRESS_EXTENDED && !memcmp(work.receive.mac.header.source, bdb_join_keys.config.tc_ieee, 8))) ||
+        !((work.receive.mac.header.source_mode == MAC_ADDRESS_SHORT &&
+#if defined(CC2530_PARENT_RECOVERY)
+           work.receive.mac.header.source[0] == (uint8_t)parent_address &&
+           work.receive.mac.header.source[1] == (uint8_t)(parent_address >> 8)
+#else
+           !work.receive.mac.header.source[0] && !work.receive.mac.header.source[1]
+#endif
+           ) ||
+          (work.receive.mac.header.source_mode == MAC_ADDRESS_EXTENDED && !memcmp(work.receive.mac.header.source,
+#if defined(CC2530_PARENT_RECOVERY)
+           parent_ieee,
+#else
+           bdb_join_keys.config.tc_ieee,
+#endif
+           8))) ||
         !((work.receive.mac.header.destination[0] == (uint8_t)bdb_join_keys.config.address &&
            work.receive.mac.header.destination[1] == (uint8_t)(bdb_join_keys.config.address >> 8)) ||
           (work.receive.mac.header.destination[0] == 255 && work.receive.mac.header.destination[1] == 255)))
