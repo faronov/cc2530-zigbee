@@ -13,6 +13,11 @@
 #else
 #define MCS51_PARAM_VOLATILE volatile
 #endif
+#if defined(CC2530_CLANG)
+#define BDB_RECOVERY_CODE __attribute__((section(".bank7.text.bdb")))
+#else
+#define BDB_RECOVERY_CODE
+#endif
 
 
 BDB_JOIN_KEYS_STORAGE security_keys_status_t bdb_join_keys;
@@ -133,6 +138,7 @@ static uint8_t finished(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t * S
     return nwk_aps_confirm(&ctx->work.runtime.transport, result) == NWK_APS_OK;
 }
 
+static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx) BDB_RECOVERY_CODE;
 static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
 {
     MCU_ESCAPED_LOCAL uint8_t which, result;
@@ -278,6 +284,10 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         else { ctx->phase = ctx->phase == BDB_JOIN_WAIT_TC ? BDB_JOIN_REQUESTING : BDB_JOIN_VERIFYING; ctx->issued = 0; }
     }
 }
+
+bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
+    const bdb_join_event_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE event,
+    bdb_join_action_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE action) BDB_RECOVERY_CODE;
 
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
     const bdb_join_event_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE event, bdb_join_action_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE action)
