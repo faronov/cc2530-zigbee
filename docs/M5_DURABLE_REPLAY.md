@@ -11,10 +11,34 @@ is part of this work.
 
 The supplied Actions ID `3814096302` returns 404. The actual candidate run is
 [38140096302](https://github.com/faronov/cc2530-zigbee/actions/runs/38140096302).
-At the audit checkpoint it is **in progress**: the toolchain and exact-pin FAST
-job passed, while `full-1` is still executing. There is no accepted FULL receipt
-yet. Before production storage edits, preserve its final receipt/results or
-classify its failure. Test-only experiments do not replace that gate.
+It completed **PASS** on 2026-10-11 at 17:50 UTC: the sealed FULL receipt has
+27/27 passing steps and all 15 current `parent-recovery` scenarios pass their
+separate terminal and measured-stack checks. Firmware is clean
+`e4c41c8e8a89bfe0ef517bf04dc3747b904783d1`, source tree digest
+`0282ad7a7a8dd8631913d09446a8f00400d2743e724df9c8c1fc19a484496908`,
+with the exact requested compiler below. This is the accepted **bounded
+known-router baseline**, not acceptance of the new storage experiment.
+
+| Qualification identity / measurement | Value |
+| --- | --- |
+| FULL identity digest | `982909fce2fbb5309b3e6cd245dd7b1961c3a8259a83826d2261b5c92bb27b15` |
+| FULL receipt seal | `ddaa7399eb66763d395aecb910f32e3c37d7a8a2bf3251a29cc9d159458abc11` |
+| CI ELF SHA256 | `3861ffd04465b6ef72f5c7596f2946ee484be93ae7afeee720078be9a760b3ea` |
+| CI HEX SHA256 | `c3e356c86d2a14822c1ab21a8d822d409358a0c683def0901e57a64526b7f7e5` |
+| Maximum observed stack / static bound | 101 / 106 bytes, capacity 128 |
+| Incorrect bank thunks | 0 |
+
+The original receipt, all scenario files, summary, progress, proof logs,
+completed workflow metadata and exact toolchain/simulator input archive were
+preserved independently of development output. Receipt seals, archived
+tool/simulator binary hashes, profile coverage and scenario terminal/stack
+values were rechecked. The summary was regenerated into a **separate** file
+and matched the original; downloaded evidence was not rewritten.
+
+CI does not export raw ELF/HEX in these artifacts. Both original image hashes
+are preserved; a locally reproduced HEX was also preserved after verifying its
+SHA256 is identical to CI FAST and FULL. It is not labelled as a downloaded
+CI ELF. The source branch and candidate worktree remain unchanged.
 
 The compiler requested for final acceptance remains
 `1a01afb49d99ec754e62ab0f65f182de87b4cee3`. A local build with another source
@@ -281,7 +305,8 @@ different local compiler identity `2feda4a4872c85594311a87d52178954d9dab5b4`.
 The physical HEX SHA256 remains
 `c3e356c86d2a14822c1ab21a8d822d409358a0c683def0901e57a64526b7f7e5`,
 identical to the original candidate's CI FAST image: production semantics and
-resource deltas are zero. This does not convert pending original FULL into PASS.
+resource deltas are zero. This local FAST does not qualify the new storage
+format; the original exact-pin FULL above independently qualifies its baseline.
 An initial FAST invocation failed because an explicitly supplied relative
 Python path was resolved from the tier-test subdirectory; its failed receipt
 is retained separately. Retrying with the launcher's absolute interpreter
@@ -301,7 +326,8 @@ changed storage or acceptance semantics.
 Current starting resources remain CODE 222717, common 18944, populated HEX
 222906, raw XDATA 5212, static stack 106/128, and zero incorrect thunks.
 Banks 6/7 have 5337/14122 bytes free; banks 1..5 remain full.
-There are **no production resource deltas or measured new stack peaks yet**.
+The baseline's newly confirmed measured stack peak is 101 bytes.
+There are **no production storage resource deltas or new-format stack peaks yet**.
 The SDCC optional candidate still exceeds its selected switchable layout by
 7883 bytes, including a 4799-byte JS_BDB bank overflow; there is no admitted SDCC
 image. Storage work does not remove that separate compatibility limitation.

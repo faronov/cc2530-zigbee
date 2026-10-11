@@ -295,16 +295,32 @@ authenticated join; cases18/19 cold boot only that durable flash. No host
 READY, selected parent or final recovery state is injected. The separate
 20-byte optional input leaves admission150/status48 layouts unchanged.
 FULL now requires every original scenario plus20/18/19 and independent
-terminal and measured-stack checks, for28 steps.
+terminal and measured-stack checks. The completed CI receipt contains27
+passing steps; the count is taken from the actual receipt, not inferred.
 
 The final optional source/acceptance snapshot passed local FAST11/11 in21.2s
 and SMOKE17/17 in290.2s, both identity `1b77782e871b1fe7` and the same HEX
 above. Receipts are `build/m5-final-admission/{fast,smoke}/receipt.json`.
 Ordinary FAST11/11 also passed; its12 current FULL vectors match native/
-sanitizer executions. Final exact-pin MCU/FULL and current measured
-stack peak are still pending; the previous101-byte peak belongs only to the
-previous qualified image. Native transcripts and SMOKE's case0 prefix
-are not new recovery MCU qualification.
+sanitizer executions. Final exact-pin
+[FULL38140096302](https://github.com/faronov/cc2530-zigbee/actions/runs/38140096302)
+passed on clean `e4c41c8e8a89bfe0ef517bf04dc3747b904783d1` with compiler
+`1a01afb49d99ec754e62ab0f65f182de87b4cee3`: 27/27 steps and all15 current
+scenarios, including original commissioning, same-parent recovery, silent
+parent, trusted registration, alternate recovery and discovery exhaustion.
+The newly measured maximum stack is101 bytes, below the106-byte static bound
+and128-byte capacity; incorrect thunks remain zero. Native transcripts and
+SMOKE's case0 prefix are not the basis of that MCU qualification.
+
+The FULL receipt seal is
+`ddaa7399eb66763d395aecb910f32e3c37d7a8a2bf3251a29cc9d159458abc11`;
+CI ELF SHA256 is
+`3861ffd04465b6ef72f5c7596f2946ee484be93ae7afeee720078be9a760b3ea`,
+and HEX matches the known-router hash above. Final receipts, every scenario,
+resource proofs, logs and exact compiler/simulator inputs were preserved
+without changing the candidate or original evidence. See
+[durable replay qualification](M5_DURABLE_REPLAY.md#qualification-gate)
+for preservation details and the still-unqualified storage follow-up.
 
 SDCC compiles the optional and ordinary workspace/key/controller/caller
 objects with exact source-owned size assertions. The fresh optional complete
