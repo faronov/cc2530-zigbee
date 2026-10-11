@@ -1197,6 +1197,8 @@ endef
 $(eval $(call ED_HOST_TEST,ed-wire,$(ED_WIRE_SRC),ed_wire.rel))
 $(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),security_keys.rel))
 $(eval $(call ED_HOST_TEST,parent-storage,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY))
+$(eval $(call ED_HOST_TEST,parent-storage-audit,tests/test_parent_storage_audit.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY -Xlinker --wrap=flash_nv_read -Xlinker --wrap=flash_nv_erase -Xlinker --wrap=flash_nv_program))
+$(BUILD)/host-parent-storage-audit-tests $(BUILD)/host-parent-storage-audit-tests-sanitize: tests/test_security_keys.c
 $(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel nwk_aps_transmit.rel zdo_runtime.rel bdb_join.rel bdb_join_init.rel bdb_join_layout.rel))
 $(eval $(call ED_HOST_TEST,parent-recovery,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),,-DCC2530_PARENT_RECOVERY))
 $(eval $(call ED_HOST_TEST,parent-candidates,tests/test_nwk_parent.c src/nwk_parent.c src/nwk_candidates.c src/nwk_beacon.c src/mac_frame.c,,-DCC2530_PARENT_RECOVERY))
