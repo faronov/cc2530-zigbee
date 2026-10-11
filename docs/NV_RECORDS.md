@@ -140,6 +140,10 @@ erase counter. An application needing lifetime-wear limits needs additional
 provisioning/accounting and physical evidence; it must not treat resetting
 these counters as proof of renewed endurance.
 
+For the optional 160-byte K3 router profile's measured write amplification and
+the separate, not-yet-integrated append-log experiment, see
+[M5 durable replay](M5_DURABLE_REPLAY.md). This journal remains version 1.
+
 ## Allocation and offline evidence
 
 Link executor, reader, writer, journal, then caller. The three existing flash
