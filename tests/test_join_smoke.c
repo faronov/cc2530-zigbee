@@ -22,7 +22,16 @@ static const uint8_t run_packet[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
 enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOVERY=16,
        CALLER_REJOIN_TIMEOUT };
-#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT)
+#if defined(CC2530_PARENT_RECOVERY)
+enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
+#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED)
+#define HISTORY_CASE(c) ((c)==CALLER_KNOWN_HISTORY)
+static unsigned recovery_selected;
+#else
+#define ALTERNATE_CASE(c) 0
+#define HISTORY_CASE(c) 0
+#endif
+#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
@@ -224,7 +233,7 @@ static void serve_ready(unsigned *calls)
     uint8_t tsn=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
     while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
-          cycles<(uint64_t)SERVE_SECONDS*32000000u) {
+          cycles<(uint64_t)(ALTERNATE_CASE(caller_case)?10u:SERVE_SECONDS)*32000000u) {
         uint32_t step;
         served++;
         caller_peer();
@@ -239,7 +248,8 @@ static void serve_ready(unsigned *calls)
         ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
         credited=cycles*32768u/32000000u;
         handoff_tick();
-        if(served>=200 && !application_sent && !link_peer_pending && !sent_wait &&
+        if(served>=(ALTERNATE_CASE(caller_case)?20u:200u) &&
+           !application_sent && !link_peer_pending && !sent_wait &&
            !packets && !ack_active && XR(0x618b) && mode==2 &&
            !mac_adapter_diagnostic()->held && mac_adapter_diagnostic()->normal_rx &&
            join_smoke_tx.engine.phase==MAC_TX_IDLE &&
@@ -265,23 +275,33 @@ static void serve_ready(unsigned *calls)
             assert(join_smoke_status.discarded==1);
         (*calls)++;
     }
-    if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=5)
-        fprintf(stderr,"serve phase=%u reason=%u stage=%u BDB=%u/%u driver=%u announce=%u served=%u\n",
+    if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=5) {
+        security_keys_status_t keys;
+        unsigned key_result=security_keys_status(&keys);
+        fprintf(stderr,"serve phase=%u reason=%u stage=%u BDB=%u/%u driver=%u announce=%u served=%u keys=%u transport=%u\n",
             join_smoke_status.phase,join_smoke_status.reason,join_smoke_status.stage,
             join_smoke_device.phase,join_smoke_device.result,join_smoke_status.driver_result,
-            join_smoke_status.announce,served);
+            join_smoke_status.announce,served,key_result,
+            join_smoke_device.work.runtime.transport.error);
+        fprintf(stderr,"owner phase=%u result=%u flash=%u nv=%u counter=%u commands=%u\n",
+            keys.phase,keys.result,flash_exec_work[7],nv_record_status()->result,
+            security_counter_status()->result,security_joint_flash_commands());
+    }
     assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && join_smoke_status.saw_ready);
     assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce);
-    assert(application_sent && join_smoke_status.discarded==1 && !join_smoke_status.dropped && served>200);
+    assert(application_sent && join_smoke_status.discarded==1 && !join_smoke_status.dropped &&
+        served>(ALTERNATE_CASE(caller_case)?20u:200u));
     /* Temperature and humidity change on every 2^22-symbol sample boundary
      * (one past the 30 s minimum each). In each 41-sample phase cycle,
      * BatteryPercentageRemaining (change 2, 0.5 % steps) reports on every
      * second of its 40 single steps plus the +40 wrap (21/41), and the
      * voltage on its three steps (3/41). */
-    assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
-    assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
-    assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
-    assert((int64_t)counts[2]+2>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+    if(!ALTERNATE_CASE(caller_case)) {
+        assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
+        assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
+        assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
+        assert((int64_t)counts[2]+2>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+    }
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
     /* The status snapshot follows the last report confirmation. */
@@ -299,6 +319,9 @@ static void prepare_caller(unsigned selected)
         memcpy(security_joint_nv(),recovery_nv,sizeof(recovery_nv));
         link_peer_recover(&join_config,recovery_state,recovery_length);
         link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
+#if defined(CC2530_PARENT_RECOVERY)
+        if(ALTERNATE_CASE(selected)) link_peer_alternate(selected==CALLER_DISCOVERY_EXHAUSTED);
+#endif
     } else {
     /* Construct the external synthetic peer, then start a genuinely fresh
      * modeled DUT. No provisioned DUT state is injected into the caller. */
@@ -326,6 +349,18 @@ static void prepare_caller(unsigned selected)
     scenario=selected==6?1:selected==CALLER_MISSING_KEY?3:0;
     if(selected==CALLER_FLASH_BUSY) security_joint_stall_flash(1);
     join_smoke_initialize();
+#if defined(CC2530_PARENT_RECOVERY)
+    memset(join_smoke_parent_history,0,sizeof(join_smoke_parent_history));
+    if(selected==CALLER_KNOWN_HISTORY) {
+        security_keys_parent_t parent;
+        link_peer_known_parent(&parent);
+        memcpy(join_smoke_parent_history,parent.ieee,8);
+        join_smoke_parent_history[8]=(uint8_t)parent.address;
+        join_smoke_parent_history[9]=(uint8_t)(parent.address>>8);
+        for(i=0;i<8;i++) join_smoke_parent_history[10+i]=(uint8_t)(parent.nwk_floor[i/4]>>(8u*(i%4)));
+        memcpy(join_smoke_parent_history+18,parent.sequence,2);
+    }
+#endif
     join_smoke_phase.admission.join=join_config;
     join_smoke_phase.admission.join.scan.saved.channel=15;
     join_smoke_phase.admission.join.association.saved.channel=15;
@@ -378,13 +413,22 @@ int main(int argc, char **argv)
     unsigned selected, calls=0;
     assert(argc==2);
     selected=(unsigned)strtoul(argv[1],NULL,10);
+#if defined(CC2530_PARENT_RECOVERY)
+    recovery_selected=selected;
+#endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected));
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected) || HISTORY_CASE(selected));
 #else
-    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected));
+    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected) || HISTORY_CASE(selected));
     if(selected==7) return reference_e2e_main();
 #endif
-    if(RECOVERY_CASE(selected) && recovery_child()) selected=0;
+    if(RECOVERY_CASE(selected) && recovery_child()) {
+#if defined(CC2530_PARENT_RECOVERY)
+        selected=ALTERNATE_CASE(recovery_selected)?CALLER_KNOWN_HISTORY:0;
+#else
+        selected=0;
+#endif
+    }
     caller_case=selected;
     prepare_caller(selected);
 #if defined(JOIN_SMOKE_TRACE)
@@ -441,8 +485,10 @@ int main(int argc, char **argv)
 #endif
                         ) &&
                         join_smoke_device.phase==BDB_JOIN_WAIT_KEY) ||
-                        (selected==CALLER_REJOIN_TIMEOUT && join_smoke_device.phase==BDB_JOIN_RECOVERING &&
-                         join_smoke_device.issued==2 && join_smoke_tx.engine.phase==MAC_TX_IDLE)?50000u:4u)*512u);
+                        ((selected==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(selected)) &&
+                         join_smoke_device.phase==BDB_JOIN_RECOVERING &&
+                         join_smoke_device.issued==2 && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+                         !packets && !ack_active && !link_peer_pending)?50000u:4u)*512u);
                     handoff_tick();
                     if(selected==CALLER_RADIO_FAULT && !caller_radio_fault &&
                        mac_adapter_diagnostic()->phase==MAC_ADAPTER_CLOSING) {
@@ -455,7 +501,7 @@ int main(int argc, char **argv)
                     caller_poll();
                     handoff_started=0;
                     if(RECOVERY_CASE(selected)) {
-                        assert(join_smoke_device.phase!=BDB_JOIN_SCANNING &&
+                        assert((ALTERNATE_CASE(selected) || join_smoke_device.phase!=BDB_JOIN_SCANNING) &&
                             join_smoke_device.phase!=BDB_JOIN_ASSOCIATING && !response_sent);
                         if(join_smoke_status.phase!=JS_READY)
                             assert(!join_smoke_status.saw_ready && !link_peer_app &&
@@ -485,7 +531,11 @@ int main(int argc, char **argv)
                     assert(response_sent && transport_sent && !join_smoke_device.member);
                     assert(join_smoke_device.result==BDB_JOIN_KEY_TIMEOUT);
 #endif
-                } else if(selected==CALLER_REJOIN_TIMEOUT) {
+                } else if(selected==CALLER_REJOIN_TIMEOUT
+#if defined(CC2530_PARENT_RECOVERY)
+                    || selected==CALLER_DISCOVERY_EXHAUSTED
+#endif
+                    ) {
                     /* Bounded: three genuine requests, then NO_PARENT. The durable
                      * membership is kept for a later attempt: no Leave, no erase. */
                     security_keys_status_t keys;
@@ -527,6 +577,14 @@ int main(int argc, char **argv)
                         assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
                             keys.phase==SECURITY_KEYS_VERIFIED && keys.config.address==0x5678);
                     }
+#if defined(CC2530_PARENT_RECOVERY)
+                    if(selected==CALLER_ALTERNATE) {
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==BDB_JOIN_ATTEMPTS+1u);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.router_active &&
+                            keys.router_known && keys.phase==SECURITY_KEYS_VERIFIED);
+                    }
+#endif
 #if defined(CC2530_DEFAULT_TC_KEY)
                     security_keys_status_t keys;
                     assert(security_keys_status(&keys)==SECURITY_KEYS_OK);

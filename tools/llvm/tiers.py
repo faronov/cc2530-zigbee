@@ -298,14 +298,14 @@ def plan(tier, args, profile):
     sim = profile["simulator"]
     if tier == "full" and (0 not in sim["full_cases"] or sim["terminals"].get("0") != "serving"):
         raise SystemExit("FULL must contain complete case 0 through 'serving'; refusing a weakened profile")
-    cases = sorted(set(sim["full_cases"] if tier == "full" else sim["smoke_cases"] + [sim["smoke_prefix"]["case"]]))
+    order = sim["full_cases"] + sim.get("variant_cases", {}).get(args.variant, []) if tier == "full" else sim["smoke_cases"]
+    cases = sorted(set(order if tier == "full" else order + [sim["smoke_prefix"]["case"]]))
     steps.append(Step("vectors", "deterministic host reference transcripts for the selected scenarios",
                       cmd=[py, "-B", HERE / "tiers.py", "vectors", "--output", out / "vectors",
-                           "--cases", ",".join(map(str, cases))], timeout=900))
+                           "--cases", ",".join(map(str, cases)), "--variant", args.variant], timeout=900))
     elf = out / "fw/link/hw1.elf"
     replay_env = env | {"SIM_TIMEOUT": str(args.sim_timeout), "PYTHONUNBUFFERED": "1",
                         "LLVM_SIM_DIAG": str(out / "diag")}
-    order = sim["full_cases"] if tier == "full" else sim["smoke_cases"]
     for case in order:
         term = sim["terminals"][str(case)]
         cmd = [py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
@@ -332,7 +332,7 @@ def plan(tier, args, profile):
         unselected["AES/flash security path"] = "first reached at case-0 step 395 and in case 10; FULL only"
     else:
         steps.append(Step("sim-summary", "all admitted scenarios complete with expected terminal and stack <= 128",
-                          cmd=[py, "-B", HERE / "sim_summary.py", out / "sims", out / "sims/summary.json"],
+                          cmd=[py, "-B", HERE / "sim_summary.py", out / "sims", out / "sims/summary.json", args.variant],
                           deps=[f"sim-case{c}" for c in order], timeout=60))
     return steps, unselected
 
@@ -577,13 +577,14 @@ def resume_state(out, ident, selection, steps):
 
 
 # ---------------------------------------------------------------- vectors
-def vectors(output, cases):
+def vectors(output, cases, variant="production"):
     """Build the host reference model with the Makefile's own join-smoke recipe."""
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     scratch = output / "build"
     target = scratch / "host-join-smoke-vectors"
     text = subprocess.run(["make", "-s", "-n", "-B", "BOARD=lg_esl29_rev03", "JOIN_SMOKE_KEY_MODE=default-tc",
+                           f"JOIN_SMOKE_PARENT_RECOVERY={int(variant == 'parent-recovery')}",
                            f"BUILD={scratch}", str(target)], cwd=REPO, capture_output=True, text=True, check=True).stdout
     lines = text.replace("\\\n", " ").splitlines()
     recipe = [line for line in lines if line.rstrip().endswith(f"-o {target}")]
@@ -598,7 +599,7 @@ def vectors(output, cases):
     (output / "command.txt").write_text(shlex.join(cmd) + "\n")
     subprocess.run(cmd, cwd=REPO, check=True)
     report = {"layout_header_sha256": sha_file(LAYOUT), "recipe_sha256": sha_bytes(shlex.join(cmd).encode()),
-              "vectors": {}}
+              "variant": variant, "vectors": {}}
     for case in cases:
         raw = subprocess.run([str(target), str(case)], capture_output=True, check=True, timeout=120).stdout
         vector = json.loads(raw)
@@ -606,6 +607,13 @@ def vectors(output, cases):
             raise SystemExit(f"host model produced the wrong scenario for case {case}")
         (output / f"v{case}.json").write_bytes(raw)
         report["vectors"][case] = sha_bytes(raw)
+    # Bind modeled cold boots to flash written by the actual initial caller.
+    for initial, recovery in ((0, 16), (0, 17), (20, 18), (20, 19)):
+        if initial in cases and recovery in cases:
+            first = json.loads((output/f"v{initial}.json").read_bytes())
+            second = json.loads((output/f"v{recovery}.json").read_bytes())
+            if first["steps"][-1]["nv"] != second["nv_initial"]:
+                raise SystemExit(f"case {recovery} cold NV differs from case {initial} durable result")
     (output / "vectors.json").write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps(report, indent=1))
 
@@ -618,8 +626,9 @@ def main(argv=None):
         p = argparse.ArgumentParser(prog="tiers.py vectors")
         p.add_argument("--output", required=True)
         p.add_argument("--cases", required=True)
+        p.add_argument("--variant", choices=VARIANTS, default="production")
         a = p.parse_args(argv[1:])
-        vectors(a.output, [int(c) for c in a.cases.split(",")])
+        vectors(a.output, [int(c) for c in a.cases.split(",")], a.variant)
         return 0
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tier", choices=TIERS, required=True)

@@ -1198,6 +1198,8 @@ $(eval $(call ED_HOST_TEST,ed-wire,$(ED_WIRE_SRC),ed_wire.rel))
 $(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),security_keys.rel))
 $(eval $(call ED_HOST_TEST,parent-storage,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY))
 $(eval $(call ED_HOST_TEST,bdb-join,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),nwk_aps.rel nwk_aps_transmit.rel zdo_runtime.rel bdb_join.rel bdb_join_init.rel bdb_join_layout.rel))
+$(eval $(call ED_HOST_TEST,parent-recovery,tests/test_bdb_join.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),,-DCC2530_PARENT_RECOVERY))
+$(eval $(call ED_HOST_TEST,parent-candidates,tests/test_nwk_parent.c src/nwk_parent.c src/nwk_candidates.c src/nwk_beacon.c src/mac_frame.c,,-DCC2530_PARENT_RECOVERY))
 test-ed-integration: test-ed-wire test-security-keys test-bdb-join
 
 BANKED_DIR := $(BUILD)/banked
@@ -1988,12 +1990,16 @@ JOIN_SMOKE_KEY_MODE ?= install-code
 ifneq ($(filter $(JOIN_SMOKE_KEY_MODE),install-code default-tc),$(JOIN_SMOKE_KEY_MODE))
 $(error JOIN_SMOKE_KEY_MODE must be install-code or default-tc)
 endif
-JOIN_SMOKE_DEFINES := $(MAC_LINK_DIRECT_DEFINES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)
+JOIN_SMOKE_PARENT_RECOVERY ?= 0
+ifneq ($(filter $(JOIN_SMOKE_PARENT_RECOVERY),0 1),$(JOIN_SMOKE_PARENT_RECOVERY))
+$(error JOIN_SMOKE_PARENT_RECOVERY must be 0 or 1)
+endif
+JOIN_SMOKE_DEFINES := $(MAC_LINK_DIRECT_DEFINES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),-DCC2530_PARENT_RECOVERY)
 JOIN_SMOKE_FLAGS := $(BANKED_JOIN_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_BANKED_LINK
 JOIN_SMOKE_PROFILE := $(BUILD)/join-smoke-profile
 .PHONY: force-join-smoke-profile
 $(JOIN_SMOKE_PROFILE): force-join-smoke-profile | $(BUILD)
-	printf '%s\n' '$(BOARD) $(JOIN_SMOKE_KEY_MODE)' > $@.tmp
+	printf '%s\n' '$(BOARD) $(JOIN_SMOKE_KEY_MODE) $(JOIN_SMOKE_PARENT_RECOVERY)' > $@.tmp
 	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
 JOIN_SMOKE_COMMON := banked mac_link_workspace mac_link_child_workspace timebase clock flash_exec flash flash_write nv_record security_counter ccm_star zigbee_mmo zigbee_key_hash mac_epoch startup join_smoke
 JOIN_SMOKE_RADIO := mac_time radio_autoack mac_radio mac_attempt
@@ -2041,7 +2047,7 @@ $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h: $(JOIN_SMOKE_OBJECTS) $(JOIN_SMOKE
 	+$(MAKE) --no-print-directory prepare-join-smoke-stack
 	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --header $@
 
-JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10 16 17
+JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20)
 JOIN_SMOKE_HOST_CASES := $(JOIN_SMOKE_CASES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15)
 .PHONY: prepare-join-smoke-image test-join-smoke-mcu
 prepare-join-smoke-image: $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h

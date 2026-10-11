@@ -45,6 +45,15 @@ It serves until reset, but is not a real sensor, nor a sleepy, rejoining or
 production device. Router-parent joining is not
 implemented.
 
+The separate [LLVM development profile](docs/LLVM_DEVELOPMENT.md) has
+FULL-qualified secure same-parent restart/rejoin. Its opt-in
+[`parent-recovery` follow-up](docs/M5_CODE_PLACEMENT.md#integrated-known-router-candidate)
+adds bounded recovery through one independently trusted router, with local
+FAST/SMOKE and real-service host evidence; fresh complete MCU/FULL acceptance
+is pending. This is not new hardware evidence or general router-parent
+commissioning. Sustained router service is still limited by the unchanged
+durable-journal erase budget.
+
 [Русский обзор](README.ru.md)
 
 ## Start here

@@ -50,10 +50,12 @@ fixed diagnostic block; see
 the receipt identity, so evidence never crosses variants.
 
 `parent-recovery` adds `-DCC2530_PARENT_RECOVERY` for the explicitly versioned
-durable-storage extension described in [SECURITY_KEYS.md](SECURITY_KEYS.md#parent-storage-prerequisite).
-It does not enable RX_DIAG, change production defaults or by itself perform
-alternate-parent discovery. `make test-parent-storage` runs the existing real
-key/counter/journal/flash host corpus plus migration/reset/power-cut coverage
+known-router recovery extension described in
+[SECURITY_KEYS.md](SECURITY_KEYS.md#optional-known-router-durable-ownership).
+It does not enable RX_DIAG or change production defaults. Alternate recovery
+requires valid durable previously trusted router history; unknown identities
+are unsupported. `make test-parent-storage`, `test-parent-recovery` and
+`test-parent-candidates` run the real owner/controller/collector corpus
 with this flag, both natively and under sanitizers.
 
 Exit codes:
@@ -122,6 +124,23 @@ Cases 16 and 17 are the M5 secure-recovery scenarios. Each MCU replay starts fro
 
 Both reach the flash write path (REJOINING is saved before each request), so they are FULL-only,
 like case 10. The receipt records their measured times.
+
+The `parent-recovery` variant adds three FULL-only cases, for28 steps total:
+**20** initially joins and stores explicit public trusted-router history through
+the actual target key/NV C services; **18** cold-boots from its exact final NV,
+discovers that eligible router after the old parent disappears, securely rejoins,
+negotiates ED Timeout, announces, reaches READY and confirms a report plus
+protected application input during ten seconds of foreground serving;
+**19** cold-boots from the same NV and terminates boundedly when discovery has
+only a wrong-Extended-PAN candidate. The foreground interval is not a calibrated
+wall-clock or sustained-service qualification. Every case retains separate
+terminal and measured-stack checks. The current profile drives both FULL
+selection and its summary; no new case is added to production or RX_DIAG.
+Vector generation forwards the build variant and verifies both cold-NV chains.
+The optional public20-byte `join_smoke_parent_history` input is IEEE8, short2 LE,
+two exclusive NWK floors4 LE and key sequences2, loaded before ARM. It supplies
+synthetic independently trusted history, not keys or successful membership.
+All-zero is absent. Target C stores it only after initial authenticated admission.
 
 FULL refuses to start in two cases:
 - Lit is unavailable. FULL requires `--llvm-build` or `--lit-evidence`.

@@ -75,6 +75,19 @@ class Selection(unittest.TestCase):
             steps, _ = names("smoke", variant=variant)
             for name in ("firmware-build", "firmware-audit", "sim-case2"):
                 self.assertEqual(steps[name].env["FIRMWARE_VARIANT"], variant)
+            command = [str(c) for c in steps["vectors"].cmd]
+            self.assertEqual(command[command.index("--variant")+1], variant)
+
+    def test_parent_profile_adds_every_new_case_without_removing_old_cases(self):
+        parent, _ = names("full", variant="parent-recovery")
+        ordinary, _ = names("full")
+        for case in PROFILE["simulator"]["full_cases"]:
+            self.assertIn(f"sim-case{case}", parent["sim-summary"].deps)
+        for case in (18, 19, 20):
+            self.assertIn(f"sim-case{case}", parent)
+            self.assertIn(f"sim-case{case}", parent["sim-summary"].deps)
+            self.assertNotIn(f"sim-case{case}", ordinary)
+        self.assertEqual(parent["sim-summary"].cmd[-1], "parent-recovery")
 
     def test_tier_sets_are_nested(self):
         fast, _ = names("fast")
@@ -169,6 +182,23 @@ class Evidence(unittest.TestCase):
 
 
 class Identity(unittest.TestCase):
+    def test_make_parent_variant_invalidates_shared_objects(self):
+        with tempfile.TemporaryDirectory() as d:
+            profile = Path(d) / "join-smoke-profile"
+            command = ["make", "-s", f"BUILD={d}", "JOIN_SMOKE_KEY_MODE=default-tc", str(profile)]
+            for variant in ("0", "1", "0"):
+                subprocess.run(command + [f"JOIN_SMOKE_PARENT_RECOVERY={variant}"],
+                               cwd=tiers.REPO, check=True, capture_output=True)
+                self.assertTrue(profile.read_text().strip().endswith(f"default-tc {variant}"))
+                before = profile.stat().st_mtime_ns
+                subprocess.run(command + [f"JOIN_SMOKE_PARENT_RECOVERY={variant}"],
+                               cwd=tiers.REPO, check=True, capture_output=True)
+                self.assertEqual(profile.stat().st_mtime_ns, before)
+            result = subprocess.run(command + ["JOIN_SMOKE_PARENT_RECOVERY=invalid"],
+                                    cwd=tiers.REPO, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("JOIN_SMOKE_PARENT_RECOVERY must be 0 or 1", result.stderr)
+
     def test_docs_do_not_invalidate_but_code_does(self):
         with tempfile.TemporaryDirectory() as d:
             repo = Path(d)
@@ -207,6 +237,40 @@ class Identity(unittest.TestCase):
             first = tiers.simulator_identity(s51)
             s51.write_bytes(b"b")
             self.assertNotEqual(first, tiers.simulator_identity(s51))
+
+
+class Summary(unittest.TestCase):
+    def summary(self, variant, mutate=None):
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d)
+            cases = PROFILE["simulator"]["full_cases"] + PROFILE["simulator"]["variant_cases"].get(variant, [])
+            for case in cases:
+                row = dict(complete=True, steps=11, of_steps=11, stack_bytes=106, peak_sp=0xe9,
+                           terminal=PROFILE["simulator"]["terminals"][str(case)])
+                if mutate:
+                    row = mutate(case, row)
+                if row is not None:
+                    (folder/f"case{case}.json").write_text(json.dumps(row))
+            result = subprocess.run([sys.executable, tiers.HERE/"sim_summary.py", folder,
+                                     folder/"summary.json", variant], capture_output=True, text=True)
+            return result.returncode, json.loads((folder/"summary.json").read_text())
+
+    def test_all_current_variant_cases_required(self):
+        for variant in tiers.VARIANTS:
+            code, summary = self.summary(variant)
+            self.assertEqual(code, 0)
+            self.assertEqual(summary["passed"], summary["total"])
+        for case in (0, 16, 17, 18, 19, 20):
+            code, summary = self.summary("parent-recovery", lambda c, r: None if c == case else r)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(summary["verdict"], "FAIL")
+
+    def test_new_case_terminal_completion_and_stack_are_independent(self):
+        for change in (dict(terminal="fault"), dict(complete=False), dict(steps=10),
+                       dict(stack_bytes=129), dict(stack_bytes=True), dict(stack_bytes=-1)):
+            code, summary = self.summary("parent-recovery", lambda c, r: r | change if c == 18 else r)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(summary["verdict"], "FAIL")
 
 
 if __name__ == "__main__":

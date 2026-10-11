@@ -15,6 +15,9 @@ MCU_XDATA radio_autoack_config_t join_smoke_initial;
 MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
+#if defined(CC2530_PARENT_RECOVERY)
+MCU_XDATA uint8_t join_smoke_parent_history[20];
+#endif
 #if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
 #endif
@@ -25,6 +28,9 @@ static MCU_XDATA uint8_t initialized, gate, i, resumed;
 static MCU_XDATA union {
     struct { uint8_t packet[8], any, opcode; } admit;
     struct { uint8_t backoff, draw, result; } serve;
+#if defined(CC2530_PARENT_RECOVERY)
+    security_keys_parent_t parent;
+#endif
 } scratch;
 #define BACKOFF scratch.serve.backoff
 #define DRAW scratch.serve.draw
@@ -183,6 +189,26 @@ void join_smoke_poll(void)
                !DEVICE.work.runtime.transport.ready || S.radio_errors) {
                 fault(JS_TERMINAL); return;
             }
+#if defined(CC2530_PARENT_RECOVERY)
+            if(memcmp(join_smoke_parent_history, "\0\0\0\0\0\0\0\0", 8)) {
+                if(resumed) { fault(JS_INPUT); return; }
+                memset(&scratch.parent,0,sizeof(scratch.parent));
+                memcpy(scratch.parent.ieee,join_smoke_parent_history,8);
+                scratch.parent.address=(uint16_t)join_smoke_parent_history[8] |
+                    (uint16_t)join_smoke_parent_history[9]<<8;
+                for(i=0;i<8;i++)
+                    scratch.parent.nwk_floor[i/4]|=(uint32_t)join_smoke_parent_history[10+i]<<(8u*(i%4));
+                scratch.parent.sequence[0]=join_smoke_parent_history[18];
+                scratch.parent.sequence[1]=join_smoke_parent_history[19];
+                S.security_result=security_keys_upgrade_parent(FLASH_EXEC_POLL_MAX);
+                if(S.security_result==SECURITY_KEYS_OK)
+                    S.security_result=security_keys_remember_parent(&scratch.parent,FLASH_EXEC_POLL_MAX);
+                if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+                memset(join_smoke_parent_history,0,sizeof(join_smoke_parent_history));
+            } else {
+                for(i=8;i<20;i++) if(join_smoke_parent_history[i]) { fault(JS_INPUT); return; }
+            }
+#endif
             if(S.draws==S.draw_limit) { fault(JS_RANDOM); return; }
             BACKOFF=join_smoke_draws[S.draws]; join_smoke_draws[S.draws++]=0;
             if(!BACKOFF) { fault(JS_RANDOM); return; }

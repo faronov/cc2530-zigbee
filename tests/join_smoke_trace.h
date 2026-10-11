@@ -81,6 +81,9 @@ static void join_trace_start(unsigned selected)
     printf("{\"case\":%u,\"admission\":\"",selected); join_hex(admission,sizeof(admission));
     printf("\",\"draws\":\""); join_hex(join_smoke_draws,JOIN_SMOKE_DRAWS);
     printf("\",\"nv_initial\":\""); join_hex(security_joint_nv(),4096);
+#if defined(CC2530_PARENT_RECOVERY)
+    printf("\",\"parent_history\":\""); join_hex(join_smoke_parent_history,20);
+#endif
     printf("\",\"initial\":{");
 #define REG(name,address) printf("\"%u\":%u,",address,name);
     CC2530_REGISTER_LIST(REG)

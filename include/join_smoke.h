@@ -50,6 +50,13 @@ extern MCU_XDATA radio_autoack_config_t join_smoke_initial;
 extern MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 extern MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 extern volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
+#if defined(CC2530_PARENT_RECOVERY)
+/* Optional independently trusted router history, loaded before ARM:
+ * IEEE8, short2 LE, two exclusive NWK floors4 LE, key sequences2.
+ * All-zero means absent. Stored through the real key/NV owner only after
+ * initial authenticated admission, never used to manufacture membership. */
+extern MCU_XDATA uint8_t join_smoke_parent_history[20];
+#endif
 extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
 
 /* Draft, not a flashable/accepted image. Whole-reset, single-use caller.

@@ -454,12 +454,54 @@ Test coverage:
 - Case 17 covers a silent parent.
 - Both cases also run on the MCU simulator in LLVM FULL.
 
-Not implemented: parent-loss scan or new-parent selection, unsecured/TC
-rejoin, sleepy operation and resume from LEFT. The unchanged response wait is
+Outside the ordinary same-parent profile: parent-loss scan/new-parent selection.
+The optional bounded extension is below. Unsecured/TC rejoin, sleepy operation
+and resume from LEFT remain unsupported. The unchanged response wait is
 30720 symbols (491.52 ms at the selected 16-us symbol duration), derived from
 the IEEE2006 `aResponseWaitTime=32*aBaseSuperframeDuration` used by the
 project's MAC profile. R22 cites IEEE2015; full revision/timing reconciliation
 remains open, rather than silently changing this constant.
+
+## Optional known-router parent-loss recovery
+
+`CC2530_PARENT_RECOVERY` implements the approved **known-router-first** slice,
+not general discovery/admission of unknown parents. Valid credentials and one
+independently trusted router history must already exist in K3. No history is
+inferred from an Extended PAN or an ordinary short-source beacon.
+
+The original parent is tried first. After silence/MAC failure exhausts its
+three attempts, or after authenticated refusal, the controller drains the
+actual transport and INSTALL confirms the saved RX state. Only then can its
+runtime union be replaced by the existing MAC scan owner. Discovery is bounded
+by the remaining overall budget and uses only the saved channel, PAN and
+Extended PAN. Closed networks are eligible for secure rejoin; ED capacity,
+profile, newest non-stale update, link cost and rejoin-specific minimum depth
+still apply. Partial/overflowed discovery and unknown identities fail.
+
+The scan lease is released before the selected router/update is persisted and
+the runtime is reinitialized. No MAC association or key reprovisioning occurs.
+The genuine secure rejoin validates the selected router's MAC, NWK IEEE/short
+identity, network-key MIC and independent replay floor. ACTIVE parent binding
+is committed only on authenticated success. ED Timeout, Device Announce,
+keepalive and READY restoration follow the same admission gates as before.
+Late success/refusal retires any queued Rejoin Request before it can reseal
+or overwrite the durable response. A reset during selected-parent recovery
+retains ATTEMPT, counters and replay history but starts non-READY.
+
+`make test-parent-recovery`, `test-parent-storage` and `test-parent-candidates`
+cover eligible/absent/silent/unknown parents, wrong Extended PAN/key/IEEE,
+stale update, NO_ACK/CCA, refusal, delayed/duplicate responses, selected-parent
+reset, missing ED Timeout, Leave, the original queue/exhaustion regressions,
+and real journal power cuts. LLVM FULL adds cases20 (initial join plus
+trusted-history registration through target C),18 (alternate-parent recovery,
+report and protected application input),19 (discovery exhaustion). Case18's
+foreground serving exercise is ten seconds; the existing case0/16 long serving
+and case17 failure gates are unchanged. Fresh MCU acceptance is still required.
+
+Remaining scope: unknown-router IEEE learning, multiple-router eviction/replay
+policy, changing PAN/channel, fallback after loss of the newly admitted router,
+TC migration and sleepy operation. The unchanged journal erase guard limits
+longer router service; see [durable-owner limitation](SECURITY_KEYS.md#optional-known-router-durable-ownership).
 
 ## First physical join gate
 

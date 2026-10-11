@@ -540,6 +540,9 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                     if index == 0:
                         prologue += store("xram", symbols["_join_smoke_phase"], bytes.fromhex(vector["admission"]))
                         prologue += store("xram", symbols["_join_smoke_draws"], bytes.fromhex(vector["draws"]))
+                        if "parent_history" in vector:
+                            prologue += store("xram", symbols["_join_smoke_parent_history"],
+                                              bytes.fromhex(vector["parent_history"]))
                     require(pc in (wait, after), "Input outside public foreground boundary")
                     packet = bytes.fromhex(step["packet"])
                     require(not J.active_phase(state[0][0x1e06]) or packet == bytes(8), "Invalid mailbox handoff")

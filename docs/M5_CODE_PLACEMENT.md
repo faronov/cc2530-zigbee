@@ -170,9 +170,9 @@ There is no hardware authorization, frozen-artifact change or HWLab change.
 
 ## Durable-storage prerequisite evidence
 
-The explicit `parent-recovery` build variant prepares a 144-byte K3 payload
-inside the existing journal, without implementing alternate-parent admission.
-The ordinary image remains byte-identical to the relocation image:
+At prerequisite commit `d05e938`, the explicit `parent-recovery` build variant
+prepared a 144-byte K3 payload inside the existing journal, without alternate-parent
+admission. That commit's ordinary image remained byte-identical to the relocation image:
 HEX SHA256 `3423626d1591da04467202ce5b962aa8df91e7b10090a9a64f8a2459436cd82e`.
 
 | Resource | Relocation/ordinary | Extended storage | Delta |
@@ -195,3 +195,141 @@ and REJOINING resets, no LEFT revival and retained snapshot length on later
 crypto saves. Its target function is linked and image-checked but is not
 yet called by the board recovery lifecycle or proved by a new MCU scenario.
 There is no fresh FULL or hardware authorization at this prerequisite.
+
+## Integrated known-router candidate
+
+The following evidence supersedes the prerequisite-only scope above. The
+optional profile implements the explicitly selected **known-router-first**
+slice. One independently trusted router IEEE/short/key-slot replay history
+is registered through the real key/NV owner, without changing TC identity
+or admitting network membership. The ordinary profile keeps K2 and its
+existing public admission/status layout.
+
+Actual controller progression is saved-parent RECOVERING, drained failure
+or authenticated refusal, confirmed INSTALL, bounded same-network active
+scan, released scan lease, durable ATTEMPT selection, secure router rejoin,
+atomic ACTIVE admission, INSTALL, Device Announce, ED Timeout and READY.
+The current scan is limited to the saved PAN/channel/Extended PAN and the
+known router identity. Association Permit is not required for rejoin;
+profile/capacity, non-stale update and rejoin-specific minimum depth still
+apply. No unknown IEEE or replay floor is derived from a beacon.
+
+An authenticated late response now retires a queued genuine Rejoin Request
+before that retry can reseal VERIFIED state. This correction also changes
+the ordinary image: previous ordinary HEX/FULL evidence is not reused.
+The radio owner's saved short address changes only after successful INSTALL,
+so subsequent scan restoration uses the actual confirmed address.
+
+### Linked resources
+
+Local FAST/SMOKE image measurements use compiler `2feda4a4`, not the exact
+requested CI pin. Executable CODE below excludes initial XDATA load bytes;
+populated HEX includes them and other image bytes.
+
+| Resource | Follow-up baseline | Current ordinary | Current known-router |
+| --- | ---: | ---: | ---: |
+| Executable CODE | 215742 | 215977 | 222717 |
+| Common CODE | 18766 | 18766 | 18944 |
+| Populated HEX | not recorded here | 216157 | 222906 |
+| XDATA bss/data | 4843/35 | 4843/35 | 4951/44 |
+| Overlaid static-frame pool | 203 | 203 | 217 |
+| Static frames / unoverlaid bytes | not recorded here | 218/1707 | 223/1762 |
+| Raw XDATA, including frames | not recorded here | 5081 | 5212 |
+| Static stack demand | 106/128 | 106/128 | 106/128 |
+
+The optional image adds 6975 executable CODE bytes and 178 common bytes
+against the follow-up baseline. Against the current ordinary image it adds
+6740 CODE bytes, 108 XDATA bss bytes, 9 data bytes and 14 frame-pool bytes.
+No DATA/IDATA globals were added; the existing register/pseudo-register
+and hardware-stack ownership remains unchanged.
+
+| Bank | Current ordinary used/free | Known-router used/free | Largest current input sections |
+| --- | ---: | ---: | --- |
+| 1 | 32768/0 | 32768/0 | `mac_join_step` 8225; `mac_poll` private `step` 7789; `mac_link_driver_step` 6946; `security_keys_receive` 5750 |
+| 2 | 32768/0 | 32768/0 | `mac_tx_interval_step` 4313; `mac_tx_step` 3897; `aes128_encrypt_block` 3820; `nwk_aps_receive` 3417 |
+| 3 | 32768/0 | 32768/0 | driver `observe` 2426; `mac_join_start` 2321; `mac_poll_start` 2279 |
+| 4 | 32766/2 | 32768/0 | `mac_scan_start` 1408; `nwk_parent_select` 1375; `security_keys_remember_parent` 1246 |
+| 5 | 32768/0 | 32768/0 | `child_work_address` 681; `bdb_join_resume` 679; `flash_nv_read` 675 |
+| 6 | 22982/9786 | 27431/5337 | `mac_tx_copy`/`mac_attempt_prepare` 293 each; `header_shape` 292 |
+| 7 | 10391/16233 | 12502/14122 | BDB explicit group: `bdb_join_step` and private `runtime`, 12502 total |
+
+Banks1-5 still pack real section bytes exactly, with no alignment slack.
+Bank7's remaining 14122 bytes are physically usable before unchanged NV,
+not the fictitious full-32-KiB margin. Aggregate switchable slack is 19459;
+the minimum per-bank headroom remains zero. Further automatically banked
+functions can spill into banks6/7, but the largest new indivisible section
+must fit a real available interval.
+
+Common/root sections remain explicit: `mac_scan_step` 5114,
+`zdo_runtime_step` 5457 and flash-RAM command/idle group 1379 bytes, plus
+the existing startup, constants and bank/runtime entries. They were not
+moved without their separate call/static-frame/fixed-address proofs.
+The complete input/output map is generated at `fw/link/hw1.map`; both
+FAST and SMOKE retain bank, relocation, runtime, SFR, frame/alias and stack
+audits. The current image has zero incorrect thunks and no populated bytes
+at or above physical NV `0x3e800`. Status remains `0x1e00..0x1e2f`;
+IRAM alias `0x1f00..0x1fff` is excluded. RX_DIAG remains independent.
+
+Known-router HEX SHA256:
+`c3e356c86d2a14822c1ab21a8d822d409358a0c683def0901e57a64526b7f7e5`.
+Current ordinary HEX SHA256:
+`1bb3925fef33c66eb54130dc7e86f285add0eeda7590e962c84a11da896f236a`.
+These identify linked local candidates, not a new FULL receipt.
+
+### Focused evidence and remaining acceptance
+
+Native and sanitizer results agree: optional key owner12500 checks,
+BDB146810 checks and candidate selection134383 cases. Ordinary key
+owner7388 and BDB127785 checks remain passing. Migration retains138
+flash-command cut positions/134 explicit storage failures; router
+registration/selection/request/admission adds690/670, while the existing
+BDB recovery cuts456/440 remain intact. Wrong network/key/identity, refusal,
+NO_ACK/CCA, delayed/duplicate responses, selected/request reset, exhausted
+or stopped-clock queues, overall discovery expiry, ED Timeout loss, Leave
+and counter exhaustion have bounded fail-closed coverage.
+
+All15 current FULL vectors match byte-for-byte between native and sanitizer
+executions. Cold NV equality is checked for case0 ->16/17 and case20 ->18/19.
+Case20 registers trusted synthetic history through target C after initial
+authenticated join; cases18/19 cold boot only that durable flash. No host
+READY, selected parent or final recovery state is injected. The separate
+20-byte optional input leaves admission150/status48 layouts unchanged.
+FULL now requires every original scenario plus20/18/19 and independent
+terminal and measured-stack checks, for28 steps.
+
+The final optional source/acceptance snapshot passed local FAST11/11 in21.2s
+and SMOKE17/17 in290.2s, both identity `1b77782e871b1fe7` and the same HEX
+above. Receipts are `build/m5-final-admission/{fast,smoke}/receipt.json`.
+Ordinary FAST11/11 also passed; its12 current FULL vectors match native/
+sanitizer executions. Final exact-pin MCU/FULL and current measured
+stack peak are still pending; the previous101-byte peak belongs only to the
+previous qualified image. Native transcripts and SMOKE's case0 prefix
+are not new recovery MCU qualification.
+
+SDCC compiles the optional and ordinary workspace/key/controller/caller
+objects with exact source-owned size assertions. The fresh optional complete
+resource composition fails `prepare-join-smoke-layout` before producing an
+admitted map/image: switchable CODE groups total231115 against223232 usable
+bytes, an7883-byte lower-bound excess. Its indivisible `JS_BDB` group is37567
+bytes, also exceeding one32768-byte window by4799. Common CSEG alone is30934
+before subsequent runtime/link admission. These are current object
+measurements, not the earlier725-byte selected-layout excess. Merely splitting
+the group cannot remove the aggregate excess. No artifact pin or resource
+proof was relaxed; SDCC full-image compatibility remains blocked.
+
+### Real bounded-service gap
+
+Each admitted router-protected frame durably saves that sender's independent
+replay floor before publication. Longer serving reaches the unchanged
+32 erase-attempts/page/boot guard and fails closed with STORAGE. Case18
+therefore proves a deliberately bounded ten-second foreground recovery/report/
+protected-input exercise, not sustainable alternate-router operation.
+The original case0/16 serving corpus is unchanged. Raising the guard or
+silently making router floors volatile is not a solution.
+
+The next prerequisite is a replay-safe durable wear/traffic policy with
+power-cut and reset proofs, followed by sustained router-service acceptance.
+Unknown-router IEEE learning, multiple-router history/eviction, PAN/channel
+change, newly admitted router loss, TC migration, sleepy operation, IEEE2015
+timing reconciliation and BDB errata remain separate gaps. No hardware trial
+is admitted by this work, and HWLab/frozen images remain unchanged.

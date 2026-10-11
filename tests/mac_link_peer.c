@@ -29,6 +29,18 @@ static uint8_t announced, described, requested, verified, permit, associated, ex
 static uint32_t peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device_aps;
 /* Recovery after a modeled DUT power cycle: the coordinator keeps its state. */
 static uint8_t recovering, rejoined, reannounced;
+#if defined(CC2530_PARENT_RECOVERY)
+static const uint8_t router_ieee[8] = {0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48};
+static uint8_t alternate, router_hop;
+static uint32_t router_counter;
+#define PEER_PARENT_ADDRESS (router_hop ? 0x4567u : 0u)
+#define PEER_PARENT_IEEE (router_hop ? router_ieee : identity.tc_ieee)
+#define PEER_REJOIN_COUNT (alternate ? BDB_JOIN_ATTEMPTS+1u : 1u)
+#else
+#define PEER_PARENT_ADDRESS 0u
+#define PEER_PARENT_IEEE identity.tc_ieee
+#define PEER_REJOIN_COUNT 1u
+#endif
 unsigned link_peer_rejoins;
 uint8_t link_peer_mute_rejoin;
 uint8_t link_beacon[48], link_response[27], link_peer_body[125];
@@ -44,6 +56,9 @@ static void base_peer(uint8_t nwk_command, uint8_t aps_type, uint16_t cluster)
     peer_out.nwk.type = nwk_command; peer_out.nwk.version = 2;
     peer_out.nwk.destination = 0x5678; peer_out.nwk.radius = 1;
     peer_out.nwk.sequence = nwk_sequence++;
+#if defined(CC2530_PARENT_RECOVERY)
+    if (nwk_command && router_hop) peer_out.nwk.source = 0x4567;
+#endif
     peer_out.aps.type = aps_type; peer_out.aps.counter = aps_counter++;
     peer_out.aps.cluster_id = cluster;
 }
@@ -53,6 +68,9 @@ static void key_context(zigbee_security_key_t *key, const uint8_t *material,
 {
     memset(key, 0, sizeof(*key)); memcpy(key->key, material, 16);
     memcpy(key->source, outgoing ? identity.tc_ieee : identity.own_ieee, 8);
+#if defined(CC2530_PARENT_RECOVERY)
+    if (outgoing && !layer && router_hop) memcpy(key->source, router_ieee, 8);
+#endif
     key->level = 5; key->extended_nonce = 1; key->key_identifier = layer ? selector : 1;
     key->counter = counter; key->limits = limits;
 }
@@ -74,7 +92,11 @@ static void seal_peer(uint8_t aps_secure, uint8_t selector, const uint8_t *link,
         npdu_length = (uint8_t)(header.payload_offset+info.length);
     }
     if (nwk_secure) {
-        key_context(&key, network, 0, 1, peer_nwk_counter++, 1);
+        key_context(&key, network, 0, 1,
+#if defined(CC2530_PARENT_RECOVERY)
+            router_hop ? router_counter++ :
+#endif
+            peer_nwk_counter++, 1);
         CHECK(ed_wire_crypt(0, 0, &key, npdu, npdu_length, work, sizeof(work), &info) == ZIGBEE_SECURITY_OK);
         memcpy(npdu, work, info.length); npdu_length = info.length;
     }
@@ -82,6 +104,9 @@ static void seal_peer(uint8_t aps_secure, uint8_t selector, const uint8_t *link,
     mh.type = MAC_FRAME_DATA; mh.flags = MAC_FLAG_PAN_COMPRESSION;
     mh.source_mode = mh.destination_mode = MAC_ADDRESS_SHORT;
     mh.source_pan = mh.destination_pan = identity.pan;
+#if defined(CC2530_PARENT_RECOVERY)
+    if (router_hop) { mh.source[0] = 0x67; mh.source[1] = 0x45; }
+#endif
     mh.destination[0] = 0x78; mh.destination[1] = 0x56;
     CHECK(mac_frame_encode(&mh, npdu, npdu_length, link_peer_body, sizeof(link_peer_body),
                            &link_peer_length) == MAC_CODEC_OK);
@@ -135,7 +160,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
     link_peer_tx++;
     if (mh.header.type == MAC_FRAME_COMMAND) {
         CHECK(mac_command_decode(body+mh.payload_offset, mh.payload_length, &command) == MAC_CODEC_OK);
-        CHECK(!recovering);
+        CHECK(!recovering || command.identifier == MAC_COMMAND_BEACON_REQUEST);
         if (command.identifier == MAC_COMMAND_ASSOCIATION_REQUEST) {
             CHECK(command.capability == 0x88 && !memcmp(mh.header.source, identity.own_ieee, 8));
             associated = 1;
@@ -146,6 +171,10 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         return;
     }
     open_device(body, length, &aps_secured);
+#if defined(CC2530_PARENT_RECOVERY)
+    router_hop = alternate && mh.header.destination[0] == 0x67 && mh.header.destination[1] == 0x45;
+    if (!router_hop)
+#endif
     CHECK(!mh.header.destination[0] && !mh.header.destination[1]);
     CHECK(!!(mh.header.flags & MAC_FLAG_ACK_REQUEST) == (peer_in.nwk.destination < 0xfffbu));
     if (peer_in.nwk.type) {
@@ -154,16 +183,24 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
             /* R22 3.4.6: secured, MAC-acknowledged, both IEEE, radius 1, to the parent. */
             CHECK(recovering && !rejoined && peer_in.length == 2 && peer_in.payload[1] == 0x08);
             CHECK(!(peer_in.nwk.flags & NWK_FLAG_END_DEVICE_INITIATOR));
-            CHECK(!peer_in.nwk.destination && peer_in.nwk.radius == 1 && !peer_in.nwk.discover_route &&
+            CHECK(peer_in.nwk.destination == PEER_PARENT_ADDRESS &&
+                peer_in.nwk.radius == 1 && !peer_in.nwk.discover_route &&
                 (peer_in.nwk.flags & (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE)) ==
                 (NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE));
             CHECK(!memcmp(peer_in.nwk.source_ieee, identity.own_ieee, 8) &&
-                !memcmp(peer_in.nwk.destination_ieee, identity.tc_ieee, 8));
+                !memcmp(peer_in.nwk.destination_ieee, PEER_PARENT_IEEE, 8));
             link_peer_rejoins++;
             if (link_peer_mute_rejoin) return; /* Parent absent: request is lost. */
+#if defined(CC2530_PARENT_RECOVERY)
+            if (alternate && !router_hop) return;
+#endif
             base_peer(1, 0, 0);
             peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
-            memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+            memcpy(peer_out.nwk.source_ieee,
+#if defined(CC2530_PARENT_RECOVERY)
+                router_hop ? router_ieee :
+#endif
+                identity.tc_ieee, 8);
             memcpy(peer_out.nwk.destination_ieee, identity.own_ieee, 8);
             peer_out.length = 4; peer_out.payload[0] = 7; peer_out.payload[1] = 0x78;
             peer_out.payload[2] = 0x56; peer_out.payload[3] = 0;
@@ -175,7 +212,11 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         link_peer_parent++;
         base_peer(1, 0, 0);
         peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
-        memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+        memcpy(peer_out.nwk.source_ieee,
+#if defined(CC2530_PARENT_RECOVERY)
+            router_hop ? router_ieee :
+#endif
+            identity.tc_ieee, 8);
         memcpy(peer_out.nwk.destination_ieee, identity.own_ieee, 8);
         peer_out.length = 3; peer_out.payload[0] = 0x0c; peer_out.payload[2] = 2;
         seal_peer(0, 0, NULL, 1);
@@ -274,7 +315,7 @@ void link_peer_verify(void)
     security_keys_status_t status;
     CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_VERIFIED);
     CHECK(announced && described && requested && verified && permit && link_peer_parent);
-    CHECK(!recovering || (rejoined && reannounced && link_peer_rejoins == 1));
+    CHECK(!recovering || (rejoined && reannounced && link_peer_rejoins == PEER_REJOIN_COUNT));
 }
 
 /* Coordinator state survives the DUT power cycle; in-flight frames do not. */
@@ -300,7 +341,38 @@ void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned le
     link_peer_pending = 0; link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
     security_joint_physical_flash(1);
     link_peer_config(config);
+#if defined(CC2530_PARENT_RECOVERY)
+    alternate = router_hop = 0; router_counter = 1000;
+#endif
 }
+
+#if defined(CC2530_PARENT_RECOVERY)
+/* Explicit public synthetic pre-existing router history, not DUT membership. */
+void link_peer_known_parent(security_keys_parent_t *parent)
+{
+    memset(parent, 0, sizeof(*parent));
+    memcpy(parent->ieee, router_ieee, 8); parent->address = 0x4567;
+    parent->nwk_floor[0] = 1000;
+}
+
+void link_peer_alternate(uint8_t exhausted)
+{
+    mac_header_t header;
+    mac_frame_info_t old;
+    uint8_t payload[19];
+    CHECK(recovering && !rejoined);
+    CHECK(mac_frame_decode(link_beacon, link_beacon_length, &old) == MAC_CODEC_OK);
+    memcpy(payload, link_beacon+old.payload_offset, sizeof(payload));
+    memset(&header, 0, sizeof(header)); header.type = MAC_FRAME_BEACON;
+    header.source_mode = MAC_ADDRESS_SHORT; header.source_pan = identity.pan;
+    header.source[0] = 0x67; header.source[1] = 0x45;
+    payload[1] &= 0x7f; payload[6] = 0x94;
+    if (exhausted) payload[7] ^= 1; /* wrong Extended PAN; cannot become a parent */
+    CHECK(mac_frame_encode(&header, payload, sizeof(payload), link_beacon,
+        sizeof(link_beacon), &link_beacon_length) == MAC_CODEC_OK);
+    alternate = 1;
+}
+#endif
 
 void link_peer_setup(bdb_join_config_t *config)
 {
@@ -310,6 +382,9 @@ void link_peer_setup(bdb_join_config_t *config)
 #endif
     announced = described = requested = verified = permit = associated = extracted = 0;
     recovering = rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = 0;
+#if defined(CC2530_PARENT_RECOVERY)
+    alternate = router_hop = 0; router_counter = 1000;
+#endif
     aps_counter = nwk_sequence = link_peer_pending = 0;
     link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
     last_device_nwk = last_device_aps = 0;

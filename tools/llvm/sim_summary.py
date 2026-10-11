@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Summarize every admitted FULL simulator case against the profile terminal of each vector.
-usage: sim_summary.py SIMDIR OUT.json"""
+usage: sim_summary.py SIMDIR OUT.json [VARIANT]"""
 import json, sys
 from pathlib import Path
 _SIM = json.loads((Path(__file__).with_name("profile.json")).read_text())["simulator"]
-EXPECT = {int(c): _SIM["terminals"][str(c)] for c in _SIM["full_cases"]}
+variant = sys.argv[3] if len(sys.argv) == 4 else "production"
+if len(sys.argv) not in (3, 4) or variant not in ("production", "rx-diag", "parent-recovery"):
+    raise SystemExit("usage: sim_summary.py SIMDIR OUT.json [production|rx-diag|parent-recovery]")
+EXPECT = {int(c): _SIM["terminals"][str(c)] for c in
+          _SIM["full_cases"] + _SIM.get("variant_cases", {}).get(variant, [])}
 d, out = sys.argv[1:3]
 rows, ok = [], True
 for c, term in EXPECT.items():
@@ -12,8 +16,9 @@ for c, term in EXPECT.items():
         r = json.load(open(f'{d}/case{c}.json'))
     except FileNotFoundError:
         rows.append(dict(case=c, verdict='MISSING')); ok = False; continue
+    stack = r.get('stack_bytes')
     good = r.get('complete') is True and r.get('steps') == r.get('of_steps') and r.get('terminal') == term \
-        and r.get('stack_bytes', 999) <= 128
+        and type(stack) is int and 0 <= stack <= 128
     ok &= good
     rows.append(dict(case=c, steps=r.get('steps'), of_steps=r.get('of_steps'), terminal=r.get('terminal'),
                      expected_terminal=term, complete=r.get('complete'), peak_sp=hex(r.get('peak_sp', 0)),

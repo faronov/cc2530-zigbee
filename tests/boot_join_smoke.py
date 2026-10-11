@@ -38,10 +38,10 @@ PERIPHERAL_SFR = frozenset((
     0xb4, 0xbc, 0xbd, 0xd9, 0xe1, 0xe9, 0x91, 0xbf, 0x94, 0xc3, 0xa2, 0xa3,
     0xa4, 0xa5, 0xa6, 0xa1, 0xa7, 0x9c,
 ))
-CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17)
+CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17, 18, 19, 20)
 FLASH_BUSY_CASE = 10
 # READY keeps serving: initial join, and secured rejoin from persisted NV.
-SERVING_CASES = (0, 16)
+SERVING_CASES = (0, 16, 18, 20)
 
 
 def active_phase(phase):
@@ -82,8 +82,12 @@ def hex_bytes(value, size):
 
 
 def validate_reference(vector):
-    require(set(vector) == {"case", "admission", "draws", "initial", "nv_initial", "steps",
+    require(set(vector) - {"parent_history"} == {"case", "admission", "draws", "initial", "nv_initial", "steps",
                             "peer_tx", "aes_blocks", "flash_commands"}, "Malformed join reference")
+    if "parent_history" in vector:
+        hex_bytes(vector["parent_history"], 20)
+    require(vector.get("case") not in (18, 19, 20) or "parent_history" in vector,
+            "Parent-recovery case without explicit history input")
     require(type(vector["case"]) is int and vector["case"] in CASES, "Unknown join scenario")
     require(all(type(vector[name]) is int and vector[name] >= 0
                 for name in ("peer_tx", "aes_blocks", "flash_commands")), "Invalid reference counters")
@@ -353,6 +357,9 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
                     commands += ["step 1", "run", marker(59980), "state", marker(59981)]
                 if index == 0:
                     commands += store("xram", symbols["_join_smoke_phase"], bytes.fromhex(vector["admission"]))
+                    if "parent_history" in vector:
+                        commands += store("xram", symbols["_join_smoke_parent_history"],
+                                          bytes.fromhex(vector["parent_history"]))
                     commands += store("xram", symbols["_join_smoke_draws"], bytes.fromhex(vector["draws"]))
                 require(pc in (wait, after), "Input outside public foreground boundary")
                 packet = bytes.fromhex(step["packet"])
