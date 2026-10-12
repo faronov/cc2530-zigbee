@@ -934,7 +934,8 @@ static void keepalive_storage(void)
     /* ED Timeout request/response keepalives are volatile: a READY device
      * can refresh its parent indefinitely without consuming NV erase budget. */
     ready();
-    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 9);
+    /* The rejected old-key Confirm in deliver() also consumes its APS floor. */
+    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 10);
     commands = security_joint_flash_commands();
     for (cycle = 0; cycle < 17 && device.phase == BDB_JOIN_READY; cycle++) {
         uint32_t previous = device.keepalive;
@@ -1312,6 +1313,55 @@ static void application_from_peer(uint8_t value)
     peer_out.aps.destination_endpoint = peer_out.aps.source_endpoint = 1;
     peer_out.aps.profile_id = 0x0104; peer_out.length = 1; peer_out.payload[0] = value;
     seal_peer(1, 0, link_b, 1);
+}
+
+static void receive_completion(void)
+{
+    uint8_t secured, wrong_profile, record[144], length;
+    uint32_t nwk_count, aps_count;
+    unsigned flash;
+    for (secured = 0; secured < 2; secured++) for (wrong_profile = 0; wrong_profile < 2; wrong_profile++) {
+        ready();
+        base_peer(0, 0, 6);
+        peer_out.aps.destination_endpoint = wrong_profile ? 1 : 2;
+        peer_out.aps.source_endpoint = 1;
+        peer_out.aps.profile_id = wrong_profile ? 1 : 0x0104;
+        peer_out.length = 1; peer_out.payload[0] = 0x42;
+        nwk_count = peer_nwk_counter; aps_count = peer_aps_counter;
+        seal_peer(secured, 0, link_b, 1); pending = 0;
+        flash = security_joint_flash_commands();
+        CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_IGNORED);
+        CHECK(!runtime.transport.receive_ready && !runtime.transport.reply && runtime.transport.ready);
+        empty_packet(&runtime.transport.incoming);
+        CHECK(security_counter_read(record, sizeof(record), &length) == SECURITY_COUNTER_OK);
+        CHECK(length == 112 && (record[80] == (uint8_t)(nwk_count+1)) == secured);
+        if (secured) CHECK(record[88] == (uint8_t)(aps_count+1));
+        CHECK(security_joint_flash_commands() == flash+(secured ? 38u : 0u));
+        flash = security_joint_flash_commands();
+        CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_SECURITY);
+        CHECK(runtime.transport.error == SECURITY_KEYS_REPLAY);
+        CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+        CHECK(!runtime.zdo.application_ready && !runtime.transport.receive_ready);
+        empty_packet(&runtime.zdo.application);
+        CHECK(device.phase == BDB_JOIN_READY && security_joint_flash_commands() == flash);
+    }
+    ready();
+    base_peer(0, ED_APS_COMMAND, 0); peer_out.length = 1; peer_out.payload[0] = 0xfe;
+    aps_count = peer_aps_counter; nwk_count = peer_nwk_counter;
+    seal_peer(1, 0, link_b, 1); pending = 0;
+    flash = security_joint_flash_commands();
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_SECURITY);
+    CHECK(runtime.transport.error == SECURITY_KEYS_UNSUPPORTED && !runtime.transport.receive_ready);
+    empty_packet(&runtime.transport.incoming);
+    CHECK(security_counter_read(record, sizeof(record), &length) == SECURITY_COUNTER_OK);
+    CHECK(record[80] == (uint8_t)(nwk_count+1) && record[88] == (uint8_t)(aps_count+1));
+    CHECK(security_joint_flash_commands() == flash+38);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_SECURITY);
+    CHECK(runtime.transport.error == SECURITY_KEYS_REPLAY);
+    CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+    CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.application_ready);
+    printf("Receive completion caller: wrong endpoint/profile and unsupported APS "
+           "consume authenticated floors without transport/ZDO publication\n");
 }
 
 static void slot_lifetimes(void)
@@ -2364,7 +2414,7 @@ int main(void)
     operational_failures(); update_pending_query(); response_backpressure();
     work_and_deadlines(); stopped_transport(); keepalive_storage(); terminal_control();
     phase_storage(); rejected_start_storage(); transport_configuration();
-    slot_lifetimes(); basic_cluster(); transmit_extent(); transport_endpoints();
+    slot_lifetimes(); basic_cluster(); transmit_extent(); transport_endpoints(); receive_completion();
     secure_rejoin(); recovery_delayed_response();
     recovery_link_failures(); recovery_wrong_network(); recovery_control();
 #if defined(CC2530_PARENT_RECOVERY)

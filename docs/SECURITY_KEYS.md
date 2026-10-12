@@ -157,6 +157,17 @@ only: no callbacks, ISR entry, recursion, concurrent observers or nested use.
   floors and keepalive bits; see *Volatile floors and keepalive state*. Initial unsecured NWK is accepted only
   for the APS-protected initial Network Transport-Key. All later traffic
   requires NWK security. No authenticated boolean is accepted from callers.
+  Authentication/replay completion is distinct from upper semantic admission:
+  an unsupported command, malformed APS semantics or addressing rejection
+  never publishes a packet, but cannot roll back authenticated NWK floors,
+  operational current-key APS floors or authorized installed-newer-slot
+  adoption. Ordinary NWK-only completion stays RAM-only under Policy C;
+  current-key APS admission and authorized adoption checkpoint even on semantic
+  error. A failed required save overrides that error with STORAGE and latches
+  FAILED. Pending-key trials do not acquire operational admission.
+  Initial bootstrap APS authentication can consume the existing AF field
+  before a network key is installed; pending key bytes and NWK floors must
+  still be zero in pre-network records. No serialized offset/version changes.
   The output event's low seven bits are the semantic event
   (`SECURITY_KEYS_EVENT_MASK=7F`). Bit `SECURITY_KEYS_EVENT_APS_SECURED=80`
   is set only when the admitted frame actually passed APS authentication,
@@ -226,7 +237,8 @@ All Transport-Key payload bytes are suppressed on successful receive:
 event (including its authenticated APS-security bit) remain for ACK/transaction handling. Other supported APS security
 commands are also suppressed. No secret descriptor or hash is returned to ZDO.
 All failures preserve packet, event, output bytes and `written`; consumed
-outgoing counters remain consumed. Capacity failure can therefore burn counters
+outgoing and authenticated incoming counters remain consumed as described above.
+Capacity failure can therefore burn counters
 but cannot publish a partially encrypted frame or commit a local lifecycle
 transition. Request needs exactly 47 bytes; Verify needs exactly 54.
 With minimum NWK/APS Data headers, the 116-byte NPDU bound permits at most

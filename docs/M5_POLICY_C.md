@@ -18,10 +18,10 @@ and all outgoing NWK/APS reservations/ceilings are unchanged.
 | --- | --- |
 | Ordinary NWK-only DATA / APS ACK | No direct flash: authenticated admitted floor advances in RAM |
 | Network Status / contextual ED Timeout Response | No direct flash; existing volatile management/context policy |
-| Any accepted APS-secured input | Yes: unchanged APS replay protection, with live NWK floors |
+| Operational current-key APS authentication, including upper rejection | Yes: APS replay completion, with live NWK floors; pending B remains a Confirm-only proof |
 | Network/TC Transport-Key, pending-key/Confirm transition | Yes: atomic key identity, history and consumed floors |
 | Switch-Key, including idempotent fresh-counter switch | Yes, even NWK-only: active slot and replay state |
-| Automatic newer-key-slot adoption | Yes: active slot and consumed floor |
+| Automatic newer-key-slot adoption | Yes after valid NWK authentication: active slot and consumed floor, even on unrelated upper rejection |
 | Parent schema upgrade / trusted registration / selection | Existing save points; no new identity or lower live floor permitted |
 | Secure Rejoin Request phase / admitted or refused Response | Yes: phase/parent/admission and consumed history; refusal is not silence |
 | Network Update, including idempotent fresh-counter update | Yes: durable PAN/update state and replay protection |
@@ -29,6 +29,12 @@ and all outgoing NWK/APS reservations/ceilings are unchanged.
 | Outbound key request / verify phase | Existing durable phase before output |
 | Outgoing reservation refill | Unchanged counter-owner save; not an incoming checkpoint cadence |
 | Unsupported security command / factory-new operation | Still unsupported; no permissive reset path added |
+
+Authenticated but rejected ordinary NWK input also completes its RAM floor
+without direct Flash commands. A negative semantic result never publishes a
+packet/event. Required APS/adoption checkpoint failures fail closed; see
+[receive completion](M5_SECURITY_RX_COMPLETION.md). This corrects completion
+ordering, not command support or the cold-reset replay policy.
 
 A genuinely replaced key initializes only its own TC/router slot histories;
 switching existing slots, changing parents or retrying cannot clear histories.

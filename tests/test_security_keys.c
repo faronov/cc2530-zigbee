@@ -117,15 +117,20 @@ static void transport(uint8_t type, const uint8_t *key, uint8_t seq)
     memcpy(packet.payload+offset+8,config.tc_ieee,8);
     packet.length = type == 1 ? 35 : 34;
 }
-static void accept(uint8_t expected)
+static void accept_at(uint8_t expected, int line)
 {
+    security_keys_result_t r;
     memset(&output,0xa5,sizeof(output)); event = 0xa5;
-    CHECK(security_keys_receive(raw,wire_length,&output,&event,&limits,3) == SECURITY_KEYS_OK);
+    r = security_keys_receive(raw,wire_length,&output,&event,&limits,3);
+    if (r != SECURITY_KEYS_OK)
+        fprintf(stderr,"result %u expected OK line %d\n",(unsigned)r,line);
+    CHECK(r == SECURITY_KEYS_OK);
     CHECK((event & SECURITY_KEYS_EVENT_MASK) == expected);
     CHECK((event & SECURITY_KEYS_EVENT_APS_SECURED) ==
           (sealed_aps_secured ? SECURITY_KEYS_EVENT_APS_SECURED : 0));
     CHECK(!(output.aps.flags & APS_FLAG_SECURITY));
 }
+#define accept(e) accept_at(e,__LINE__)
 static void reject_at(security_keys_result_t expected,int line)
 {
     security_keys_result_t r;
@@ -218,8 +223,10 @@ static void setup(void)
 static void handshake(void)
 {
     uint8_t digest[16];
+    static uint8_t requested[4096], provisional[4096];
     reboot(received,SECURITY_KEYS_RECEIVED);
     data(0,nwk_key,255); reject(SECURITY_KEYS_CONTEXT);
+    reboot(received,SECURITY_KEYS_RECEIVED);
     CHECK(security_keys_request(7,8,raw,46,&written,&limits,3) == SECURITY_KEYS_SPACE);
     CHECK(security_keys_request(7,8,raw,47,&written,&limits,3) == SECURITY_KEYS_OK && written == 47);
     golden(raw,written,
@@ -229,17 +236,25 @@ static void handshake(void)
     outgoing_open(bootstrap,8);
     CHECK(output.length == 2 && output.payload[1] == 4);
     reboot(NULL,SECURITY_KEYS_REQUESTED);
+    memcpy(requested,security_joint_nv(),sizeof(requested));
+    /* Independent semantic cases use fresh fixture epochs. Completion and
+     * duplicates within one epoch have their own receive regression corpus. */
     transport(4,bootstrap,0); seal_packet(bootstrap,3,1,nwk_key,255,0);
     reject(SECURITY_KEYS_SELECTOR);
+    reboot(requested,SECURITY_KEYS_REQUESTED);
     transport(4,new_tc,0); packet.payload[26] ^= 1; seal_packet(bootstrap,3,1,nwk_key,255,0);
     reject(SECURITY_KEYS_IDENTITY);
+    reboot(requested,SECURITY_KEYS_REQUESTED);
     transport(4,new_tc,0); seal_packet(bootstrap,2,1,nwk_key,255,0);
     reject(SECURITY_KEYS_SELECTOR);
+    reboot(requested,SECURITY_KEYS_REQUESTED);
     transport(4,new_tc,0); seal_packet(bootstrap,3,1,nwk_key,255,0);
     accept(SECURITY_KEYS_EVENT_TC_KEY);
     state(SECURITY_KEYS_PROVISIONAL);
     reboot(NULL,SECURITY_KEYS_PROVISIONAL);
+    memcpy(provisional,security_joint_nv(),sizeof(provisional));
     confirm(new_tc,0,1); reject(SECURITY_KEYS_REPLAY); /* no outstanding Verify; old floor applies */
+    reboot(provisional,SECURITY_KEYS_PROVISIONAL);
     CHECK(security_keys_verify(9,10,raw,53,&written,&limits,3) == SECURITY_KEYS_SPACE);
     CHECK(security_keys_verify(9,10,raw,54,&written,&limits,3) == SECURITY_KEYS_OK && written == 54);
     golden(raw,written,
@@ -254,13 +269,18 @@ static void handshake(void)
     memcpy(waiting,security_joint_nv(),4096);
     reboot(waiting,SECURITY_KEYS_WAIT_CONFIRM);
     confirm(bootstrap,2,1); reject(SECURITY_KEYS_CONTEXT); /* old A cannot confirm B */
+    reboot(waiting,SECURITY_KEYS_WAIT_CONFIRM);
     confirm(NULL,0,1); reject(SECURITY_KEYS_CONTEXT);
+    reboot(waiting,SECURITY_KEYS_WAIT_CONFIRM);
     confirm(new_tc,0,1); packet.payload[1] = 1;
     seal_packet(new_tc,0,0,nwk_key,255,1); reject(SECURITY_KEYS_FORMAT);
+    reboot(waiting,SECURITY_KEYS_WAIT_CONFIRM);
     confirm(new_tc,0,1); packet.payload[2] = 1;
     seal_packet(new_tc,0,0,nwk_key,255,1); reject(SECURITY_KEYS_FORMAT);
+    reboot(waiting,SECURITY_KEYS_WAIT_CONFIRM);
     confirm(new_tc,0,1); packet.payload[3] ^= 1;
     seal_packet(new_tc,0,0,nwk_key,255,1); reject(SECURITY_KEYS_IDENTITY);
+    reboot(waiting,SECURITY_KEYS_WAIT_CONFIRM);
     /* Old key is still accepted for ordinary protected join management. */
     base(APS_FRAME_DATA); packet.aps.cluster_id = 0x8002;
     packet.length = 2; seal_packet(bootstrap,0,2,nwk_key,255,1);
@@ -273,7 +293,7 @@ static void handshake(void)
     reboot(NULL,SECURITY_KEYS_VERIFIED);
     confirm(new_tc,0,3); reject(SECURITY_KEYS_REPLAY);
     base(APS_FRAME_DATA); packet.length = 1;
-    seal_packet(bootstrap,0,3,nwk_key,255,3); reject(SECURITY_KEYS_AUTH);
+    seal_packet(bootstrap,0,3,nwk_key,255,4); reject(SECURITY_KEYS_AUTH);
 }
 static void replay_and_rotation(void)
 {
@@ -289,18 +309,18 @@ static void replay_and_rotation(void)
     data(4,nwk_key,255); reject(SECURITY_KEYS_REPLAY); /* duplicate didn't reset */
     transport(1,nwk_key,0); seal_packet(new_tc,2,2,nwk_key,255,6);
     reject(SECURITY_KEYS_SELECTOR); /* same bytes, different sequence */
-    transport(1,alt_key,255); seal_packet(new_tc,2,2,nwk_key,255,6);
+    transport(1,alt_key,255); seal_packet(new_tc,2,3,nwk_key,255,7);
     reject(SECURITY_KEYS_SELECTOR); /* conflicting sequence */
-    transport(1,alt_key,1); seal_packet(new_tc,2,2,nwk_key,255,6);
+    transport(1,alt_key,1); seal_packet(new_tc,2,4,nwk_key,255,8);
     reject(SECURITY_KEYS_SELECTOR); /* not next chronology */
-    transport(1,alt_key,0); seal_packet(new_tc,2,2,nwk_key,255,6);
+    transport(1,alt_key,0); seal_packet(new_tc,2,5,nwk_key,255,9);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
     state(SECURITY_KEYS_VERIFIED);
     CHECK(status.slot_valid == 3 && status.newer_pending && status.active_sequence == 255);
     data(0,alt_key,0); accept(SECURITY_KEYS_EVENT_DATA);
     state(SECURITY_KEYS_VERIFIED);
     CHECK(!status.newer_pending && status.active_sequence == 0);
-    data(7,nwk_key,255); accept(SECURITY_KEYS_EVENT_DATA);
+    data(10,nwk_key,255); accept(SECURITY_KEYS_EVENT_DATA);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0);
     base(ED_APS_COMMAND); packet.length = 2; packet.payload[0] = 9; packet.payload[1] = 255;
     packet.nwk.destination = 0xffff; seal_packet(NULL,0,0,alt_key,0,1);
@@ -424,16 +444,16 @@ static void update_policy(void)
     update_packet(config.update_id,0x5678);
     seal_packet(NULL,0,0,nwk_key,255,3); reject(SECURITY_KEYS_CONTEXT);
     update_packet(config.update_id,config.pan);
-    seal_packet(NULL,0,0,nwk_key,255,3); accept(SECURITY_KEYS_EVENT_UPDATE);
     seal_packet(NULL,0,0,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_UPDATE);
+    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_UPDATE);
     CHECK(security_counter_status()->until[0] == outgoing);
     reboot(NULL,SECURITY_KEYS_VERIFIED);
     CHECK(status.config.pan == config.pan && status.config.update_id == config.update_id);
     reject(SECURITY_KEYS_REPLAY); /* idempotence did not reset the NWK floor */
     update_packet(0,0x5678); /* delta2 across wrap */
-    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_UPDATE);
-    update_packet(127,0x4321); /* largest strictly newer delta */
     seal_packet(NULL,0,0,nwk_key,255,6); accept(SECURITY_KEYS_EVENT_UPDATE);
+    update_packet(127,0x4321); /* largest strictly newer delta */
+    seal_packet(NULL,0,0,nwk_key,255,7); accept(SECURITY_KEYS_EVENT_UPDATE);
     state(SECURITY_KEYS_VERIFIED);
     CHECK(status.config.pan == 0x4321 && status.config.update_id == 127);
     /* Command-specific addressing, manager identity and exact one-record form. */
@@ -672,13 +692,13 @@ static void timeout_management(void)
         if (i == 7) packet.nwk.source = 1;
         if (i == 8) packet.nwk.source_ieee[0] ^= 1;
         if (i == 9) packet.nwk.destination_ieee[0] ^= 1;
-        seal_packet(NULL,0,0,nwk_key,255,3);
+        seal_packet(NULL,0,0,nwk_key,255,3u+i);
         commands = security_joint_flash_commands();
         reject(i >= 7 ? SECURITY_KEYS_IDENTITY : SECURITY_KEYS_FORMAT);
         CHECK(security_joint_flash_commands() == commands);
     }
     timeout_packet(1); seal_packet(NULL,0,0,NULL,0,0); reject(SECURITY_KEYS_CONTEXT);
-    seal_packet(NULL,0,0,nwk_key,255,3);
+    seal_packet(NULL,0,0,nwk_key,255,13);
     raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH);
     /* The lazy response neither writes nor reads NV back. */
     raw[wire_length-1] ^= 1; security_joint_fail_read(1);
@@ -732,6 +752,7 @@ static void secured_rejoin(void)
     CHECK(ed_wire_inspect(0,raw,written,&meta) == ZIGBEE_SECURITY_OK && meta.counter >= old_ceiling);
     reboot(NULL,SECURITY_KEYS_REJOINING);
     data(3,nwk_key,255); reject(SECURITY_KEYS_CONTEXT);
+    reboot(NULL,SECURITY_KEYS_REJOINING);
     base(0); packet.nwk.type = ED_NWK_COMMAND;
     packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
     memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
@@ -749,10 +770,10 @@ static void secured_rejoin(void)
     packet.payload[3] = 3;
     seal_packet(NULL,0,0,nwk_key,255,5); reject(SECURITY_KEYS_FORMAT);
     packet.payload[3] = 1; packet.payload[1] = 0x45; packet.payload[2] = 0x23;
-    seal_packet(NULL,0,0,nwk_key,255,5); reject(SECURITY_KEYS_FORMAT);
+    seal_packet(NULL,0,0,nwk_key,255,6); reject(SECURITY_KEYS_FORMAT);
     packet.payload[1] = 0x45; packet.payload[2] = 0x23;
     packet.payload[3] = 0;
-    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_REJOINED);
+    seal_packet(NULL,0,0,nwk_key,255,7); accept(SECURITY_KEYS_EVENT_REJOINED);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.config.address == 0x2345);
     reboot(NULL,SECURITY_KEYS_VERIFIED); CHECK(status.config.address == 0x2345);
     data(4,nwk_key,255); reject(SECURITY_KEYS_IDENTITY); /* old short no longer admitted */
@@ -772,17 +793,17 @@ static void selectors_and_floors(void)
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
     base(APS_FRAME_DATA); packet.length = 1;
     seal_packet(new_tc,0,0,nwk_key,255,3); reject(SECURITY_KEYS_REPLAY);
-    seal_packet(new_tc,0,1,nwk_key,255,3); accept(SECURITY_KEYS_EVENT_DATA);
+    seal_packet(new_tc,0,1,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_DATA);
     /* Endpoint0 cluster0 is not join-critical but is admitted after verification. */
     CHECK((event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_DATA ||
           (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_MANAGEMENT);
-    seal_packet(new_tc,0,1,nwk_key,255,4); reject(SECURITY_KEYS_REPLAY);
-    transport(1,alt_key,0); seal_packet(new_tc,2,2,nwk_key,255,4);
+    seal_packet(new_tc,0,1,nwk_key,255,5); reject(SECURITY_KEYS_REPLAY);
+    transport(1,alt_key,0); seal_packet(new_tc,2,2,nwk_key,255,6);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
     base(ED_APS_COMMAND); packet.length = 2; packet.payload[0] = 9; packet.payload[1] = 0;
-    seal_packet(NULL,0,0,nwk_key,255,5); reject(SECURITY_KEYS_CONTEXT); /* unicast switch prohibited */
+    seal_packet(NULL,0,0,nwk_key,255,7); reject(SECURITY_KEYS_CONTEXT); /* unicast switch prohibited */
     packet.nwk.destination = 0xffff;
-    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_SWITCH);
+    seal_packet(NULL,0,0,nwk_key,255,8); accept(SECURITY_KEYS_EVENT_SWITCH);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0 && !status.newer_pending);
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
     commands = security_joint_flash_commands();
@@ -994,7 +1015,7 @@ static void parent_information_edi(void)
         state(SECURITY_KEYS_VERIFIED);
         CHECK(status.timeout_pending && !status.parent_information);
         timeout_packet(1); packet.payload[2] = information[i];
-        seal_packet(NULL,0,0,nwk_key,255,3); accept(SECURITY_KEYS_EVENT_MANAGEMENT);
+        seal_packet(NULL,0,0,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_MANAGEMENT);
         expected = information[i] & 7u;
         state(SECURITY_KEYS_VERIFIED);
         CHECK(!status.timeout_pending && status.parent_information == expected);
@@ -1003,7 +1024,7 @@ static void parent_information_edi(void)
         CHECK(record[109] == SECURITY_KEYS_VERIFIED && record[111] == 2);
         reject(SECURITY_KEYS_REPLAY);
         timeout_packet(1); packet.payload[2] = expected ^ 7u;
-        seal_packet(NULL,0,0,nwk_key,255,4); reject(SECURITY_KEYS_CONTEXT);
+        seal_packet(NULL,0,0,nwk_key,255,5); reject(SECURITY_KEYS_CONTEXT);
         base(APS_FRAME_DATA); packet.nwk.source = 0x1234; packet.nwk.destination = 0;
         packet.aps.profile_id = 0x104; packet.aps.source_endpoint = packet.aps.destination_endpoint = 1;
         packet.length = 1; packet.payload[0] = 0x69;
@@ -1012,7 +1033,7 @@ static void parent_information_edi(void)
         sent_edi(expected != 0);
         request_timeout(0x40); sent_edi(expected != 0);
         timeout_packet(1); packet.payload[1] = 1; packet.payload[2] = expected ^ 7u;
-        seal_packet(NULL,0,0,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_MANAGEMENT);
+        seal_packet(NULL,0,0,nwk_key,255,6); accept(SECURITY_KEYS_EVENT_MANAGEMENT);
         state(SECURITY_KEYS_VERIFIED);
         CHECK(!status.timeout_pending && status.parent_information == expected);
     }
@@ -1140,6 +1161,10 @@ static void parent_information_volatile(void)
     memcpy(raw,encoded,size); wire_length = size;
     reject(SECURITY_KEYS_CONTEXT);
     request_timeout(2);
+    memcpy(raw,encoded,size); wire_length = size;
+    reject(SECURITY_KEYS_REPLAY); /* the context rejection completed NWK */
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    request_timeout(3);
     memcpy(raw,encoded,size); wire_length = size;
     accept(SECURITY_KEYS_EVENT_MANAGEMENT); /* saved floor predates the lazy one */
     state(SECURITY_KEYS_VERIFIED);

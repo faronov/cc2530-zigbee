@@ -78,6 +78,7 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
 #define PHASE_MASK 0x0fu
 #define PARENT_MASK 0x70u
 #define TIMEOUT_PENDING 0x80u
+#define APS_CURRENT_ADMITTED 2u
 
 /* No operational secrets survive a returning public call in this module.
  * The counter/journal still retain their real persistent/cached payloads. */
@@ -267,7 +268,8 @@ static uint8_t valid_record(void)
         p > SECURITY_KEYS_REJOINING || all(w.record+LK, 16, 0))
         return 0;
     if (p <= SECURITY_KEYS_ASSOCIATED || (p == SECURITY_KEYS_LEFT && !network())) {
-        if (f || !all(w.record+NK, 32, 0) || !all(w.record+PK, 28, 0) ||
+        /* Bootstrap APS can consume a floor before a network key is admitted. */
+        if (f || !all(w.record+NK, 32, 0) || !all(w.record+PK, 24, 0) ||
             w.record[SEQ] || w.record[SEQ+1] ||
             (w.record[PHASE] & (PARENT_MASK | TIMEOUT_PENDING))) return 0;
     } else {
@@ -814,6 +816,7 @@ static security_keys_result_t open_aps(void)
             w.a+offset, length, w.b, 116, &w.info));
         if (r != SECURITY_KEYS_OK) return r;
         put32(w.record+AF, w.meta.counter+1);
+        w.aps_secured = APS_CURRENT_ADMITTED;
     }
     memcpy(w.a+offset, w.b, w.info.length); w.size = offset+w.info.length;
     return SECURITY_KEYS_OK;
@@ -909,30 +912,34 @@ security_keys_result_t security_keys_receive(
         if (network() || length > 116) return finish(SECURITY_KEYS_CONTEXT);
         memcpy(w.a, raw_npdu, length); w.size = (uint8_t)length;
     }
+    w.aps_secured = 0; w.pending = 0;
     r = crypto_result(ed_wire_nwk(w.a, w.size, &w.nwk));
-    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (r != SECURITY_KEYS_OK) goto rejected;
     if (w.nwk.header.type != ED_NWK_COMMAND) {
-        if (!w.nwk.payload_length) return finish(SECURITY_KEYS_FORMAT);
+        if (!w.nwk.payload_length) { r = SECURITY_KEYS_FORMAT; goto rejected; }
         r = open_aps();
-        if (r != SECURITY_KEYS_OK) return finish(r);
+        if (r != SECURITY_KEYS_OK) goto rejected;
     }
     r = crypto_result(ed_wire_decode(w.a, w.size, &w.packet));
-    if (r != SECURITY_KEYS_OK) return finish(r);
-    if (w.packet.nwk.type != ED_NWK_COMMAND && !aps_addressing(0))
-        return finish(SECURITY_KEYS_IDENTITY);
-    if (phase() == SECURITY_KEYS_REJOINING && w.packet.nwk.type != ED_NWK_COMMAND)
-        return finish(SECURITY_KEYS_CONTEXT);
+    if (r != SECURITY_KEYS_OK) goto rejected;
+    if (w.packet.nwk.type != ED_NWK_COMMAND && !aps_addressing(0)) {
+        r = SECURITY_KEYS_IDENTITY; goto rejected;
+    }
+    if (phase() == SECURITY_KEYS_REJOINING && w.packet.nwk.type != ED_NWK_COMMAND) {
+        r = SECURITY_KEYS_CONTEXT; goto rejected;
+    }
     if (!w.secured && (w.packet.nwk.type == ED_NWK_COMMAND ||
         w.packet.aps.type != ED_APS_COMMAND || w.packet.length != 35 ||
-        w.packet.payload[0] != 5 || w.packet.payload[1] != 1))
-        return finish(SECURITY_KEYS_CONTEXT);
+        w.packet.payload[0] != 5 || w.packet.payload[1] != 1)) {
+        r = SECURITY_KEYS_CONTEXT; goto rejected;
+    }
     w.event = SECURITY_KEYS_EVENT_DATA;
     if (w.packet.nwk.type == ED_NWK_COMMAND) r = nwk_command();
     else if (w.packet.aps.type == ED_APS_COMMAND) r = aps_command();
     else if (w.pending || (w.aps_secured && w.key_id != 0)) r = SECURITY_KEYS_SELECTOR;
     else if (join_management()) w.event = SECURITY_KEYS_EVENT_MANAGEMENT;
     else if (!verified()) r = SECURITY_KEYS_CONTEXT;
-    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (r != SECURITY_KEYS_OK) goto rejected;
     /* No transport descriptor, key bytes or hashes escape via packet output. */
     if (w.packet.nwk.type != ED_NWK_COMMAND && w.packet.aps.type == ED_APS_COMMAND) {
         memset(w.packet.payload, 0, sizeof(w.packet.payload)); w.packet.length = 0;
@@ -950,6 +957,20 @@ security_keys_result_t security_keys_receive(
         *event = w.event | (w.aps_secured ? SECURITY_KEYS_EVENT_APS_SECURED : 0);
     }
     return finish(r);
+rejected:
+    /* Validators reject before semantic mutation. Only authenticated floors
+     * and authorized NWK adoption survive this exit; pending-key crypto is
+     * merely a confirmation trial. Preserve the error across the checkpoint. */
+    w.event = (uint8_t)r;
+    if (w.aps_secured == APS_CURRENT_ADMITTED || w.secured == 2
+#if defined(CC2530_PARENT_RECOVERY) && !defined(CC2530_REPLAY_POLICY_C)
+        || sender == ROUTER
+#endif
+        ) {
+        r = save();
+        if (r != SECURITY_KEYS_OK) return finish(r);
+    } else keep_volatile();
+    return finish((security_keys_result_t)w.event);
 }
 
 static inline security_keys_result_t seal(SDCC_VOLATILE uint8_t aps_secure)

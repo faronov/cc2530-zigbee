@@ -116,6 +116,10 @@ security_keys_result_t security_keys_provision(
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 #endif
 security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR;
+/* Authentication/replay completion is independent of upper semantics: an
+ * error can consume authenticated incoming counters but never output/event.
+ * Operational APS admission and authorized newer-slot adoption are durable;
+ * ordinary NWK-only completion uses the profile's existing replay policy. */
 security_keys_result_t security_keys_receive(
     const uint8_t * SDCC_VOLATILE raw_npdu, SDCC_VOLATILE uint16_t length,
     ed_packet_t * SDCC_VOLATILE output, uint8_t * SDCC_VOLATILE event,
