@@ -1199,6 +1199,8 @@ $(eval $(call ED_HOST_TEST,security-keys,tests/test_security_keys.c $(ED_MODEL_S
 $(eval $(call ED_HOST_TEST,parent-storage,tests/test_security_keys.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY))
 $(eval $(call ED_HOST_TEST,replay-policy-c,tests/test_replay_policy_c.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -Xlinker --wrap=flash_nv_read -Xlinker --wrap=flash_nv_erase -Xlinker --wrap=flash_nv_program))
 $(BUILD)/host-replay-policy-c-tests $(BUILD)/host-replay-policy-c-tests-sanitize: tests/test_security_keys.c
+$(eval $(call ED_HOST_TEST,security-receive-completion,tests/test_security_receive_completion.c $(ED_MODEL_SRC) $(ED_JOIN_SRC),,-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C))
+$(BUILD)/host-security-receive-completion-tests $(BUILD)/host-security-receive-completion-tests-sanitize: tests/test_security_keys.c
 $(eval $(call ED_HOST_TEST,parent-storage-audit,tests/test_parent_storage_audit.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY -Xlinker --wrap=flash_nv_read -Xlinker --wrap=flash_nv_erase -Xlinker --wrap=flash_nv_program))
 $(BUILD)/host-parent-storage-audit-tests $(BUILD)/host-parent-storage-audit-tests-sanitize: tests/test_security_keys.c
 $(eval $(call ED_HOST_TEST,replay-log-reference,tests/test_replay_log_reference.c $(ED_MODEL_SRC) $(ED_KEY_SRC),,-DCC2530_PARENT_RECOVERY))
