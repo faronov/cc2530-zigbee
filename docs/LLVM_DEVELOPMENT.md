@@ -38,7 +38,7 @@ The direct CI entry point is the same script:
 python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
     --tools BIN --llvm-src SRC --simulator S51 \
     [--llvm-build TREE | --lit-evidence RECEIPT] [--evidence STORE] \
-    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag,parent-recovery}]
+    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag,parent-recovery,parent-recovery-policy-c}]
 ```
 
 `--plan-only` prints the exact selection without running anything.
@@ -57,6 +57,15 @@ requires valid durable previously trusted router history; unknown identities
 are unsupported. `make test-parent-storage`, `test-parent-recovery` and
 `test-parent-candidates` run the real owner/controller/collector corpus
 with this flag, both natively and under sanitizers.
+
+`parent-recovery-policy-c` additionally defines `CC2530_REPLAY_POLICY_C`.
+It preserves K3 and outgoing reservations, but uses RAM ordinary NWK floors
+with selective durable checkpoints and explicit cold-reset replay exposure.
+See the [checkpoint/threat contract](M5_POLICY_C.md).
+`test-replay-policy-c` and `test-parent-recovery-policy-c` run native and
+nonrecovering-sanitizer tests. Only this opt-in FULL variant adds sustained
+case21 (600 modeled seconds, 120 protected frames and 12 duplicate attempts).
+Strict/production/RX_DIAG selections are unchanged.
 
 Exit codes:
 
@@ -229,8 +238,12 @@ Consequences:
 
 ### FULL suspend and resume
 
-`--case0-budget SEC` lets case 0 snapshot every 10 steps and stop with SUSPENDED after the
-budget. `--resume` continues the run, but only if all of these are unchanged:
+`--case0-budget SEC` retains its CLI spelling but now gives long cases0/21 a
+shared segment wall-clock deadline. They snapshot at caller/peripheral
+boundaries into separate case directories and stop with SUSPENDED, never PASS.
+A late-starting case21 therefore cannot overrun a hosted job by receiving a
+fresh full budget. `--resume` continues every selected suspended scenario,
+but only if all of these are unchanged:
 - the same identity and selection;
 - the same ELF, vectors and simulator as at admission;
 - the same snapshot chain.
@@ -244,7 +257,9 @@ Each change below was refused:
 - another simulator binary;
 - a fresh run into a non-empty output.
 
-The case-0 budget and `--jobs` are deliberately not part of the selection.
+The segment budget and `--jobs` are deliberately not part of the selection.
+The workflow permits six segments, carrying completed cases without reruns.
+If the last segment still suspends, the final verdict fails explicitly.
 
 ### Negative checks
 
