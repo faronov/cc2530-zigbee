@@ -7,6 +7,15 @@ Development is separate, on `m5-durable-replay`. Production storage is still
 unchanged. No compiler, hardware, HWLab, frozen image or flash partition change
 is part of this work.
 
+**Policy review gate:** the subsequent
+[incoming replay persistence decision](M5_REPLAY_PERSISTENCE_DECISION.md)
+distinguishes normative runtime counters from this project's stronger
+per-frame durability. It recommends selective checkpoints with explicit
+cold-reset replay exposure, **pending approval**. The append format and tests
+below remain preserved experiments; their implementation is deferred, not
+accepted or required merely by Zigbee conformance. The architecture letters
+in this historical storage comparison are distinct from the new policy A/B/C.
+
 ## Qualification gate
 
 The supplied Actions ID `3814096302` returns 404. The actual candidate run is
