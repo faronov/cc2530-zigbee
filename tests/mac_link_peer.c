@@ -299,16 +299,21 @@ void link_peer_application(ed_packet_t *packet)
     packet->length = 3; packet->payload[0] = 0x55;
 }
 
-void link_peer_receive_application(void)
+static void receive_application(uint8_t acknowledge)
 {
     CHECK(verified && permit && (!recovering || link_peer_parent));
     base_peer(0, 0, 6);
-    peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
+    peer_out.aps.flags = acknowledge ? APS_FLAG_ACK_REQUEST : 0;
     peer_out.aps.source_endpoint = peer_out.aps.destination_endpoint = 1;
     peer_out.aps.profile_id = 0x0104;
     peer_out.length = 3; peer_out.payload[0] = 0x55;
     seal_peer(0, 0, NULL, 1);
 }
+
+void link_peer_receive_application(void) { receive_application(1); }
+#if defined(CC2530_REPLAY_POLICY_C)
+void link_peer_receive_service(void) { receive_application(0); }
+#endif
 
 void link_peer_verify(void)
 {

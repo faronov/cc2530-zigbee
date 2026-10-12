@@ -487,10 +487,11 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     snap_events = int(os.environ.get("SNAP_EVENTS", "4096"))
     resume = os.environ.get("RESUME")
     # A snapshot is only valid for the exact image, scenario, simulator binary and
-    # replay logic; suspension happens only right after a step-boundary snapshot.
+    # replay logic; suspension happens only after a caller/peripheral snapshot.
     bind = {"elf": sha_file(elf), "case": vector["case"], "simulator": sha_file(shutil.which(simulator) or simulator),
             "replay": sha_file(__file__), "vector": hashlib.sha256(json.dumps(vector, sort_keys=True).encode()).hexdigest()}
     stop_after = float(os.environ.get("STOP_AFTER_SECONDS", "0"))
+    stop_at = float(os.environ.get("STOP_AT_TIME", "0"))
     started = time.time()
     if resume:
         with open(resume, "rb") as fh:
@@ -513,7 +514,8 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                              "pc": pc, "count": count, "peak": peak, "sampled": sampled, "completed": completed,
                              "retries": retries, "learned": learned, "previous_stop": previous_stop,
                              "bind": bind}, fh)
-            if stop_after and time.time() - started > stop_after:
+            if ((stop_after and time.time() - started > stop_after) or
+                    (stop_at and time.time() > stop_at)):
                 raise Suspended(snap_path, index, completed, count)
         events = [relocate_dma_cfg(e, symbols) for e in step["events"]]
         batch = min(chunk, 128) if any(e[:2] == ["w", 0xc7] for e in events) else chunk
@@ -524,11 +526,15 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
         while first < max(1, len(events)):
             last = min(first + batch, len(events))
             if snap_dir and first and first % snap_events < batch and not (resume and first == snap.get("first")):
-                with open(Path(snap_dir) / f"case{vector['case']}-step{index}-ev{first}.pkl", "wb") as fh:
+                snap_path = Path(snap_dir) / f"case{vector['case']}-step{index}-ev{first}.pkl"
+                with open(snap_path, "wb") as fh:
                     pickle.dump({"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
                                  "pc": pc, "count": count, "peak": peak, "sampled": sampled, "completed": completed,
                                  "retries": retries, "learned": learned, "first": first, "adjacency": adjacency,
                                  "previous_stop": previous_stop, "bind": bind}, fh)
+                if ((stop_after and time.time() - started > stop_after) or
+                        (stop_at and time.time() > stop_at)):
+                    raise Suspended(snap_path, index, completed, count)
             for j in range(first, last):
                 adjacency[j] = j > 0 and guess(events[j-1], events[j], learned)
             flipped = set()
@@ -621,6 +627,12 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                 require(state[0][0x1e00:0x1e30] == expected,
                         f"Status step{index}: {state[0][0x1e00:0x1e30].hex()} != {expected.hex()}")
                 require(state[4][0x3e800:0x3f800] == bytes.fromhex(step["nv"]), "Actual journal differs")
+                if "replay_floors" in step:
+                    floors = bytes.fromhex(step["replay_floors"])
+                    for name, expected_floor in (("_floor_cache", floors[:8]),
+                                                  ("_router_floor_cache", floors[8:])):
+                        require(name in symbols and state[0][symbols[name]:symbols[name]+8] == expected_floor,
+                                f"Actual RAM replay floors differ: {name}, step {index}")
                 completed += 1
                 previous_stop = None
             log(f"join step{index} events {last}/{len(events)} SP{peak:02x} retries {retries}")
@@ -645,6 +657,9 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     elif finished and vector["case"] in J.SERVING_CASES:
         require(state[0][0x1e06] == 5 and pc == after, "READY did not keep serving")
         result["terminal"] = "serving"
+        if vector["case"] == 21:
+            J.validate_service(vector["service"])
+            result["service"] = vector["service"]
     elif finished:
         require(state[0][0x1e06] == 6, "Wrong terminal state")
         commands = base + J.resume(state, pc) + stops + ["step 1", "run"] + capture(60000)

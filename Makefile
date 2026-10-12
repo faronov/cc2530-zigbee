@@ -2001,12 +2001,21 @@ JOIN_SMOKE_PARENT_RECOVERY ?= 0
 ifneq ($(filter $(JOIN_SMOKE_PARENT_RECOVERY),0 1),$(JOIN_SMOKE_PARENT_RECOVERY))
 $(error JOIN_SMOKE_PARENT_RECOVERY must be 0 or 1)
 endif
-JOIN_SMOKE_DEFINES := $(MAC_LINK_DIRECT_DEFINES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),-DCC2530_PARENT_RECOVERY)
+JOIN_SMOKE_REPLAY_POLICY_C ?= 0
+ifneq ($(filter $(JOIN_SMOKE_REPLAY_POLICY_C),0 1),$(JOIN_SMOKE_REPLAY_POLICY_C))
+$(error JOIN_SMOKE_REPLAY_POLICY_C must be 0 or 1)
+endif
+ifeq ($(JOIN_SMOKE_REPLAY_POLICY_C),1)
+ifneq ($(JOIN_SMOKE_PARENT_RECOVERY),1)
+$(error JOIN_SMOKE_REPLAY_POLICY_C requires JOIN_SMOKE_PARENT_RECOVERY=1)
+endif
+endif
+JOIN_SMOKE_DEFINES := $(MAC_LINK_DIRECT_DEFINES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),-DCC2530_PARENT_RECOVERY) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),-DCC2530_REPLAY_POLICY_C)
 JOIN_SMOKE_FLAGS := $(BANKED_JOIN_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_BANKED_LINK
 JOIN_SMOKE_PROFILE := $(BUILD)/join-smoke-profile
 .PHONY: force-join-smoke-profile
 $(JOIN_SMOKE_PROFILE): force-join-smoke-profile | $(BUILD)
-	printf '%s\n' '$(BOARD) $(JOIN_SMOKE_KEY_MODE) $(JOIN_SMOKE_PARENT_RECOVERY)' > $@.tmp
+	printf '%s\n' '$(BOARD) $(JOIN_SMOKE_KEY_MODE) $(JOIN_SMOKE_PARENT_RECOVERY) $(JOIN_SMOKE_REPLAY_POLICY_C)' > $@.tmp
 	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
 JOIN_SMOKE_COMMON := banked mac_link_workspace mac_link_child_workspace timebase clock flash_exec flash flash_write nv_record security_counter ccm_star zigbee_mmo zigbee_key_hash mac_epoch startup join_smoke
 JOIN_SMOKE_RADIO := mac_time radio_autoack mac_radio mac_attempt
@@ -2054,7 +2063,7 @@ $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h: $(JOIN_SMOKE_OBJECTS) $(JOIN_SMOKE
 	+$(MAKE) --no-print-directory prepare-join-smoke-stack
 	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --header $@
 
-JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20)
+JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21)
 JOIN_SMOKE_HOST_CASES := $(JOIN_SMOKE_CASES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15)
 .PHONY: prepare-join-smoke-image test-join-smoke-mcu
 prepare-join-smoke-image: $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h

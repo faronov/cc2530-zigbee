@@ -23,6 +23,9 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length);
 void link_peer_transport(uint8_t request_ack);
 void link_peer_application(ed_packet_t *packet);
 void link_peer_receive_application(void);
+#if defined(CC2530_REPLAY_POLICY_C)
+void link_peer_receive_service(void);
+#endif
 void link_peer_verify(void);
 #if defined(CC2530_PARENT_RECOVERY)
 void link_peer_known_parent(security_keys_parent_t *parent);

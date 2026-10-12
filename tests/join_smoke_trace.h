@@ -106,10 +106,29 @@ static void join_trace_after(uint8_t returned)
     join_trace_active=0;
     printf("],\"returned\":%s,\"status\":\"",returned?"true":"false");
     join_hex((const volatile uint8_t *)&join_smoke_status,48);
-    printf("\",\"nv\":\""); join_hex(security_joint_nv(),4096); printf("\"}");
+    printf("\",\"nv\":\""); join_hex(security_joint_nv(),4096); printf("\"");
+#if defined(CC2530_REPLAY_POLICY_C)
+    {
+        uint8_t floors[16];
+        extern void security_keys_host_replay_floors(uint8_t *);
+        security_keys_host_replay_floors(floors);
+        printf(",\"replay_floors\":\""); join_hex(floors,sizeof(floors)); printf("\"");
+    }
+#endif
+    printf("}");
 }
 static void join_trace_finish(void)
 {
-    printf("],\"peer_tx\":%u,\"aes_blocks\":%u,\"flash_commands\":%u}\n",
+    printf("],\"peer_tx\":%u,\"aes_blocks\":%u,\"flash_commands\":%u",
         link_peer_tx,security_joint_aes_blocks(),security_joint_flash_commands());
+#if defined(CC2530_REPLAY_POLICY_C)
+    if(SUSTAINED_CASE(caller_case))
+        printf(",\"service\":{\"duration_ms\":%lu,\"protected_frames\":%u,"
+               "\"replay_drops\":%u,\"reports\":%u,\"erases\":%u,\"programs\":%u,"
+               "\"ordinary_rx_commands\":%u,\"security_checkpoints\":%u,"
+               "\"flash_controller_nominal_us\":%u}",(unsigned long)service_ms,service_unique,
+               service_replays,service_reports,service_erases,service_programs,
+               service_rx_commands,service_checkpoints,service_erases*20000u+service_programs*20u);
+#endif
+    printf("}\n");
 }

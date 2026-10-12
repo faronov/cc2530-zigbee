@@ -24,12 +24,25 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
        CALLER_REJOIN_TIMEOUT };
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
-#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED)
+#if defined(CC2530_REPLAY_POLICY_C)
+enum { CALLER_SUSTAINED=21, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
+#define SUSTAINED_CASE(c) ((c)==CALLER_SUSTAINED)
+static unsigned service_unique, service_replays, service_reports, service_erases, service_programs;
+static unsigned service_start_erases, service_start_commands, service_parent_start;
+static unsigned service_start_checkpoints, service_checkpoints, service_rx_commands;
+extern unsigned security_keys_host_checkpoints(void);
+static uint8_t service_saved[125], service_length, service_duplicate_due;
+static uint32_t service_begin, service_ms;
+#else
+#define SUSTAINED_CASE(c) 0
+#endif
+#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c))
 #define HISTORY_CASE(c) ((c)==CALLER_KNOWN_HISTORY)
 static unsigned recovery_selected;
 #else
 #define ALTERNATE_CASE(c) 0
 #define HISTORY_CASE(c) 0
+#define SUSTAINED_CASE(c) 0
 #endif
 #define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
@@ -233,7 +246,7 @@ static void serve_ready(unsigned *calls)
     uint8_t tsn=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
     while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
-          cycles<(uint64_t)(ALTERNATE_CASE(caller_case)?10u:SERVE_SECONDS)*32000000u) {
+          cycles<(uint64_t)(SUSTAINED_CASE(caller_case)?600u:ALTERNATE_CASE(caller_case)?10u:SERVE_SECONDS)*32000000u) {
         uint32_t step;
         served++;
         caller_peer();
@@ -248,7 +261,7 @@ static void serve_ready(unsigned *calls)
         ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
         credited=cycles*32768u/32000000u;
         handoff_tick();
-        if(served>=(ALTERNATE_CASE(caller_case)?20u:200u) &&
+        if(!SUSTAINED_CASE(caller_case) && served>=(ALTERNATE_CASE(caller_case)?20u:200u) &&
            !application_sent && !link_peer_pending && !sent_wait &&
            !packets && !ack_active && XR(0x618b) && mode==2 &&
            !mac_adapter_diagnostic()->held && mac_adapter_diagnostic()->normal_rx &&
@@ -267,8 +280,74 @@ static void serve_ready(unsigned *calls)
             link_peer_pending=0; application_sent=served;
         }
         caller_poll();
-        assert(join_smoke_status.discarded<=1);
-        if(join_smoke_status.discarded) assert(application_sent &&
+#if defined(CC2530_REPLAY_POLICY_C)
+        if(SUSTAINED_CASE(caller_case)) {
+            unsigned old_commands, old_erases;
+            uint8_t discarded, duplicate;
+            uint32_t serial;
+            unsigned draining;
+            if(!service_begin) {
+                service_begin=1;
+                service_start_commands=security_joint_flash_commands();
+                service_start_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1);
+                service_parent_start=link_peer_parent;
+                service_start_checkpoints=security_keys_host_checkpoints();
+            }
+            service_ms=(uint32_t)(cycles/32000u);
+            if(!link_peer_pending && !sent_wait && !packets && !ack_active &&
+               XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+               mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+               !join_smoke_device.work.runtime.transport.active &&
+               !join_smoke_device.work.runtime.transport.queued &&
+               !join_smoke_device.work.runtime.zdo.application_ready &&
+               (service_duplicate_due ||
+                (service_unique<SERVICE_FRAMES && service_ms>=service_unique*5000u))) {
+                discarded=join_smoke_status.discarded;
+                old_commands=security_joint_flash_commands();
+                old_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1);
+                serial=join_smoke_phase.driver.rx_serial;
+                duplicate=service_duplicate_due;
+                if(duplicate) {
+                    air_frame(service_saved,service_length,1);
+                    service_duplicate_due=0;
+                } else {
+                    uint32_t saved_clocks=mmio_clocks;
+                    mmio_clocks=0; security_aes_peer_enter();
+                    link_peer_receive_service(); security_aes_peer_leave(); mmio_clocks=saved_clocks;
+                    memcpy(service_saved,link_peer_body,link_peer_length); service_length=link_peer_length;
+                    air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0;
+                    service_unique++;
+                    if(!(service_unique%10u)) service_duplicate_due=1;
+                }
+                /* Drain the actual radio/adapter/crypto path without advancing
+                 * application time or injecting any DUT result/state. */
+                draining=0;
+                while(join_smoke_phase.driver.rx_serial==serial ||
+                      (!duplicate && join_smoke_status.discarded==discarded)) {
+                    assert(draining++<2000u);
+                    caller_peer(); advance_clocks(4u*512u); handoff_tick();
+                    caller_poll(); (*calls)++; served++;
+                    assert(join_smoke_status.phase==JS_READY && !join_smoke_status.reason);
+                }
+                if(duplicate) {
+                    assert(join_smoke_phase.driver.consumer_result==BDB_JOIN_SECURITY &&
+                        join_smoke_device.work.runtime.transport.error==SECURITY_KEYS_REPLAY &&
+                        join_smoke_status.discarded==discarded);
+                    service_replays++;
+                } else {
+                    assert(join_smoke_status.discarded==service_unique &&
+                        join_smoke_phase.driver.consumer_result==BDB_JOIN_OK);
+                }
+                service_rx_commands+=security_joint_flash_commands()-old_commands;
+                assert(!service_rx_commands &&
+                    security_joint_flash_erases(0)+security_joint_flash_erases(1)==old_erases);
+            }
+            assert(join_smoke_device.phase==BDB_JOIN_READY && join_smoke_device.member &&
+                join_smoke_device.work.runtime.transport.ready && !join_smoke_status.reason);
+        }
+#endif
+        assert(SUSTAINED_CASE(caller_case) || join_smoke_status.discarded<=1);
+        if(!SUSTAINED_CASE(caller_case) && join_smoke_status.discarded) assert(application_sent &&
             !join_smoke_device.work.runtime.zdo.application_ready &&
             !join_smoke_device.work.runtime.zdo.application.length);
         if(application_sent && served-application_sent>=128)
@@ -289,7 +368,7 @@ static void serve_ready(unsigned *calls)
     }
     assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && join_smoke_status.saw_ready);
     assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce);
-    assert(application_sent && join_smoke_status.discarded==1 && !join_smoke_status.dropped &&
+    assert((SUSTAINED_CASE(caller_case) || (application_sent && join_smoke_status.discarded==1)) && !join_smoke_status.dropped &&
         served>(ALTERNATE_CASE(caller_case)?20u:200u));
     /* Temperature and humidity change on every 2^22-symbol sample boundary
      * (one past the 30 s minimum each). In each 41-sample phase cycle,
@@ -304,6 +383,17 @@ static void serve_ready(unsigned *calls)
     }
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
+#if defined(CC2530_REPLAY_POLICY_C)
+    if(SUSTAINED_CASE(caller_case)) {
+        service_reports=reports;
+        service_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1)-service_start_erases;
+        service_programs=security_joint_flash_commands()-service_start_commands-service_erases;
+        service_checkpoints=security_keys_host_checkpoints()-service_start_checkpoints;
+        assert(service_unique==SERVICE_FRAMES && service_replays==12 && !service_duplicate_due);
+        assert(service_ms>=SERVICE_SECONDS*1000u && reports>=16 && link_peer_parent>service_parent_start);
+        assert(service_erases<=8 && service_programs==45u*service_erases);
+    }
+#endif
     /* The status snapshot follows the last report confirmation. */
     steps=(uint32_t)join_smoke_status.steps[0]|(uint32_t)join_smoke_status.steps[1]<<8|
         (uint32_t)join_smoke_status.steps[2]<<16|(uint32_t)join_smoke_status.steps[3]<<24;
