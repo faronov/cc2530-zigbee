@@ -19,6 +19,10 @@ typedef struct {
     uint8_t channel, update_id;
 } security_keys_config_t;
 
+#if defined(CC2530_REPLAY_POLICY_C) && !defined(CC2530_PARENT_RECOVERY)
+#error Policy C requires the experimental known-router profile.
+#endif
+
 #if defined(CC2530_PARENT_RECOVERY)
 typedef struct {
     uint8_t ieee[8];

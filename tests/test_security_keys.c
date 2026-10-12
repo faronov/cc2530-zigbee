@@ -1224,14 +1224,15 @@ static void failures(void)
 #if defined(CC2530_PARENT_RECOVERY)
 static const uint8_t router_ieee[8] = {0x44,2,3,4,5,6,7,8};
 
-static void router_seal_using(uint32_t count, uint8_t aps, const uint8_t *network, uint8_t sequence)
+static void router_seal_counted(uint32_t count, uint8_t aps, const uint8_t *network,
+                                uint8_t sequence, uint32_t aps_count)
 {
     uint8_t n;
     sealed_aps_secured = aps;
     CHECK(ed_wire_encode(&packet, frame, sizeof(frame), &n) == ZIGBEE_SECURITY_OK);
     CHECK(ed_wire_nwk(frame, n, &nwk) == ZIGBEE_SECURITY_OK);
     if (aps) {
-        material(new_tc, aps==2?2:0, aps==2?21:20, 0, 0);
+        material(new_tc, aps==2?2:0, aps_count, 0, 0);
         CHECK(ed_wire_crypt(0, 1, &effective, frame+nwk.payload_offset, nwk.payload_length,
             inner, sizeof(inner), &info) == ZIGBEE_SECURITY_OK);
         memcpy(frame+nwk.payload_offset, inner, info.length);
@@ -1241,6 +1242,11 @@ static void router_seal_using(uint32_t count, uint8_t aps, const uint8_t *networ
     memcpy(effective.source, router_ieee, 8);
     CHECK(ed_wire_crypt(0, 0, &effective, frame, n, raw, sizeof(raw), &info) == ZIGBEE_SECURITY_OK);
     wire_length = info.length;
+}
+
+static void router_seal_using(uint32_t count, uint8_t aps, const uint8_t *network, uint8_t sequence)
+{
+    router_seal_counted(count, aps, network, sequence, aps==2?21:20);
 }
 
 static void router_seal(uint32_t count, uint8_t aps)

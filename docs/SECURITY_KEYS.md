@@ -98,9 +98,20 @@ Actual MAC unicast/broadcast next hop changes to the admitted router, while
 TC application destinations remain NWK0000. Parent commands use the selected
 or admitted router identity as appropriate. A genuinely new network-key slot
 gets a new router floor; old slot history is not reset by switching slots.
-Every admitted router-protected frame saves its floor before publication.
+In the strict `parent-recovery` variant, every admitted router-protected frame
+saves its floor before publication.
 
-**Bounded-service limitation:** those saves consume the unchanged journal
+The separate experimental `parent-recovery-policy-c` variant enables
+`CC2530_REPLAY_POLICY_C`: ordinary NWK-only input advances independent
+TC/router/key-slot RAM floors seeded from the same K3 durable lower bounds.
+Security checkpoints save all live incoming histories consistently; outgoing
+reservation writes remain unchanged and do not checkpoint incoming RAM state.
+The [approved checkpoint matrix and cold-reset threat model](M5_POLICY_C.md)
+are part of this profile's contract. Ordinary recorded suffixes above the last
+checkpoint can replay after reset, with no configured duration/volume bound.
+APS-secured inputs and accepted security transitions remain durable.
+
+**Strict-profile bounded-service limitation:** those saves consume the unchanged journal
 erase allowance (32 attempts per page per boot). The real-peripheral harness
 reaches that fail-closed guard during the longer alternate-parent serving
 exercise. The new replay case proves recovery and ten seconds of foreground

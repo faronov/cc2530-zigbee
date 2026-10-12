@@ -102,13 +102,20 @@ typedef char phase_ranges[(SECURITY_KEYS_REQUESTED == SECURITY_KEYS_RECEIVED+1 &
 typedef char payload_fits_snapshot[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
 static MCU_XDATA uint8_t security_keys_phase, security_keys_result;
 /* Lazy volatile state: NF floors and the PHASE byte's keepalive bits
- * (TIMEOUT_PENDING, parent information). Accepted DATA/MANAGEMENT frames
+ * (TIMEOUT_PENDING, parent information). Policy C adds independent router
+ * floors under the same selective-checkpoint contract. Accepted DATA/MANAGEMENT frames
  * without APS security or key-slot changes, and End Device Timeout requests,
  * update only these caches; everything else saves the whole record.
  * open/save/lazy paths keep them equal to the live state (floors never below
  * NV). Reset loses them: replay protection reverts to saved floors and the
  * keepalive bits to their last saved value. */
 static MCU_XDATA uint8_t floor_cache[8];
+#if defined(CC2530_REPLAY_POLICY_C)
+static MCU_XDATA uint8_t router_floor_cache[8];
+#if defined(CC2530_HOST_TEST)
+static unsigned host_checkpoints;
+#endif
+#endif
 static MCU_XDATA uint8_t phase_cache;
 
 static uint16_t u16(const uint8_t *p)
@@ -199,6 +206,14 @@ static security_keys_result_t finish(security_keys_result_t result)
 #endif
 }
 #if defined(CC2530_HOST_TEST)
+#if defined(CC2530_REPLAY_POLICY_C)
+unsigned security_keys_host_checkpoints(void) { return host_checkpoints; }
+void security_keys_host_replay_floors(uint8_t *out)
+{
+    memcpy(out, floor_cache, 8);
+    memcpy(out+8, router_floor_cache, 8);
+}
+#endif
 /* Host peripheral harness only: emulate CPU static-storage initialization,
  * including an interrupted operation's private staging. Not a target/public
  * recovery API, and never called between live crypto/NV operations. */
@@ -206,6 +221,10 @@ void security_keys_host_power_cycle(void)
 {
     security_keys_phase = SECURITY_KEYS_COLD;
     memset(floor_cache, 0, sizeof(floor_cache));
+#if defined(CC2530_REPLAY_POLICY_C)
+    memset(router_floor_cache, 0, sizeof(router_floor_cache));
+    host_checkpoints = 0;
+#endif
     phase_cache = 0;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     security_keys_result = SECURITY_KEYS_OK;
@@ -299,6 +318,9 @@ static security_keys_result_t load(void)
     if (!valid_record() || phase() != security_keys_phase)
         return fault(SECURITY_KEYS_FORMAT);
     memcpy(w.record+NF, floor_cache, 8);
+#if defined(CC2530_REPLAY_POLICY_C)
+    if (router_record()) memcpy(w.record+ROUTER_NF, router_floor_cache, 8);
+#endif
     /* Zero until the first open/save: staged provision/association records
      * are read back unchanged. */
     if (phase_cache) w.record[PHASE] = phase_cache;
@@ -307,6 +329,9 @@ static security_keys_result_t load(void)
 static void keep_volatile(void)
 {
     memcpy(floor_cache, w.record+NF, sizeof(floor_cache));
+#if defined(CC2530_REPLAY_POLICY_C)
+    if (router_record()) memcpy(router_floor_cache, w.record+ROUTER_NF, 8);
+#endif
     phase_cache = w.record[PHASE];
 }
 static security_keys_result_t save(void)
@@ -318,6 +343,9 @@ static security_keys_result_t save(void)
     if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
 #endif
         return fault(SECURITY_KEYS_STORAGE);
+#if defined(CC2530_HOST_TEST) && defined(CC2530_REPLAY_POLICY_C)
+    host_checkpoints++;
+#endif
     security_keys_phase = phase();
     keep_volatile();
     return SECURITY_KEYS_OK;
@@ -912,7 +940,7 @@ security_keys_result_t security_keys_receive(
     /* Every APS command and durable NWK command reports an event above
      * MANAGEMENT; Network Status and ED Timeout responses stay lazy. */
     if (w.event > SECURITY_KEYS_EVENT_MANAGEMENT || w.aps_secured || w.secured == 2
-#if defined(CC2530_PARENT_RECOVERY)
+#if defined(CC2530_PARENT_RECOVERY) && !defined(CC2530_REPLAY_POLICY_C)
         || sender == ROUTER
 #endif
         ) r = save();

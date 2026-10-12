@@ -427,7 +427,8 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uin
     if (!LW_LEAVE(LW_NWK_HINT)) return NWK_APS_STATE;
 #endif
     /* The slot is unoccupied and all lower operations are synchronous. The
-     * key owner publishes into it only after authentication AND durable save.
+     * key owner publishes only after authentication and replay admission:
+     * the configured RAM-floor update or required durable security save.
      * Transport admission still owns receive_ready; no packet escapes early. */
     accepted = security_keys_receive(npdu, length, &ctx->incoming, &event, &ctx->limits, ctx->nv_polls);
     if (accepted) {
