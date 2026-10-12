@@ -27,6 +27,7 @@ static uint8_t link_a[16], link_b[16], network[16], effective[16], expected[16];
 static uint8_t npdu[116], work[116], other[116], npdu_length, aps_counter, nwk_sequence;
 static uint8_t announced, described, requested, verified, permit, associated, extracted;
 static uint32_t peer_nwk_counter, peer_aps_counter, last_device_nwk, last_device_aps;
+static uint8_t network_sequence;
 /* Recovery after a modeled DUT power cycle: the coordinator keeps its state. */
 static uint8_t recovering, rejoined, reannounced;
 #if defined(CC2530_PARENT_RECOVERY)
@@ -72,6 +73,7 @@ static void key_context(zigbee_security_key_t *key, const uint8_t *material,
     if (outgoing && !layer && router_hop) memcpy(key->source, router_ieee, 8);
 #endif
     key->level = 5; key->extended_nonce = 1; key->key_identifier = layer ? selector : 1;
+    if (!layer) key->key_sequence = network_sequence;
     key->counter = counter; key->limits = limits;
 }
 
@@ -313,6 +315,28 @@ static void receive_application(uint8_t acknowledge)
 void link_peer_receive_application(void) { receive_application(1); }
 #if defined(CC2530_REPLAY_POLICY_C)
 void link_peer_receive_service(void) { receive_application(0); }
+void link_peer_receive_completion(uint8_t step)
+{
+    static const uint8_t next_network[16] = {
+        0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,
+        0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f
+    };
+    zigbee_mmo_info_t hash;
+    CHECK(step < 4 && verified && permit && router_hop);
+    base_peer(step == 0 || step == 3, ED_APS_COMMAND, 0);
+    peer_out.nwk.source = 0; peer_out.length = 1; peer_out.payload[0] = 0xfe;
+    if (step == 2) {
+        peer_out.length = 35; peer_out.payload[0] = 5; peer_out.payload[1] = 1;
+        memcpy(peer_out.payload+2,next_network,16); peer_out.payload[18] = 1;
+        memcpy(peer_out.payload+19,identity.own_ieee,8);
+        memcpy(peer_out.payload+27,identity.tc_ieee,8);
+        CHECK(zigbee_key_hash(link_b,ZIGBEE_HASH_TRANSPORT,effective,1000,1000,&hash)==ZIGBEE_MMO_OK);
+        seal_peer(1,2,effective,1);
+    } else {
+        if (step == 3) { memcpy(network,next_network,16); network_sequence = 1; }
+        seal_peer(step == 1,0,link_b,1);
+    }
+}
 #endif
 
 void link_peer_verify(void)
@@ -324,7 +348,7 @@ void link_peer_verify(void)
 }
 
 /* Coordinator state survives the DUT power cycle; in-flight frames do not. */
-#define PEER_STATE(X) X(link_a) X(link_b) X(network) X(aps_counter) X(nwk_sequence) \
+#define PEER_STATE(X) X(link_a) X(link_b) X(network) X(network_sequence) X(aps_counter) X(nwk_sequence) \
     X(announced) X(described) X(requested) X(verified) X(permit) X(associated) X(extracted) \
     X(peer_nwk_counter) X(peer_aps_counter) X(last_device_nwk) X(last_device_aps)
 #define PEER_SAVE(v) memcpy(out+n, &v, sizeof(v)); n += sizeof(v);
@@ -390,7 +414,7 @@ void link_peer_setup(bdb_join_config_t *config)
 #if defined(CC2530_PARENT_RECOVERY)
     alternate = router_hop = 0; router_counter = 1000;
 #endif
-    aps_counter = nwk_sequence = link_peer_pending = 0;
+    aps_counter = nwk_sequence = network_sequence = link_peer_pending = 0;
     link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
     last_device_nwk = last_device_aps = 0;
     peer_nwk_counter = peer_aps_counter = 1;

@@ -25,8 +25,11 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
 #if defined(CC2530_REPLAY_POLICY_C)
-enum { CALLER_SUSTAINED=21, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
+enum { CALLER_SUSTAINED=21, CALLER_COMPLETION=22, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
 #define SUSTAINED_CASE(c) ((c)==CALLER_SUSTAINED)
+#define COMPLETION_CASE(c) ((c)==CALLER_COMPLETION)
+static unsigned completion_steps, completion_replays;
+#define COMPLETION_INPUT_READY(c) (!COMPLETION_CASE(c) || completion_steps==4)
 static unsigned service_unique, service_replays, service_reports, service_erases, service_programs;
 static unsigned service_start_erases, service_start_commands, service_parent_start;
 static unsigned service_start_checkpoints, service_checkpoints, service_rx_commands;
@@ -35,14 +38,18 @@ static uint8_t service_saved[125], service_length, service_duplicate_due;
 static uint32_t service_begin, service_ms;
 #else
 #define SUSTAINED_CASE(c) 0
+#define COMPLETION_CASE(c) 0
+#define COMPLETION_INPUT_READY(c) 1
 #endif
-#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c))
+#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c))
 #define HISTORY_CASE(c) ((c)==CALLER_KNOWN_HISTORY)
 static unsigned recovery_selected;
 #else
 #define ALTERNATE_CASE(c) 0
 #define HISTORY_CASE(c) 0
 #define SUSTAINED_CASE(c) 0
+#define COMPLETION_CASE(c) 0
+#define COMPLETION_INPUT_READY(c) 1
 #endif
 #define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
@@ -267,7 +274,8 @@ static void serve_ready(unsigned *calls)
            !mac_adapter_diagnostic()->held && mac_adapter_diagnostic()->normal_rx &&
            join_smoke_tx.engine.phase==MAC_TX_IDLE &&
            !join_smoke_device.work.runtime.transport.active &&
-           !join_smoke_device.work.runtime.transport.queued) {
+           !join_smoke_device.work.runtime.transport.queued &&
+           COMPLETION_INPUT_READY(caller_case)) {
             uint32_t saved_clocks=mmio_clocks;
             assert(!join_smoke_device.work.runtime.zdo.application_ready);
             /* Peer input must enter through traced peripherals, not private DUT memory. */
@@ -281,6 +289,53 @@ static void serve_ready(unsigned *calls)
         }
         caller_poll();
 #if defined(CC2530_REPLAY_POLICY_C)
+        if(COMPLETION_CASE(caller_case) && completion_steps<4 &&
+           !link_peer_pending && !sent_wait && !packets && !ack_active &&
+           XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+           mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+           !join_smoke_device.work.runtime.transport.active &&
+           !join_smoke_device.work.runtime.transport.queued &&
+           !join_smoke_device.work.runtime.zdo.application_ready) {
+            uint8_t captured[125], captured_length;
+            unsigned commands=security_joint_flash_commands(), checkpoints=security_keys_host_checkpoints();
+            uint32_t saved_clocks=mmio_clocks, serial=join_smoke_phase.driver.rx_serial;
+            unsigned draining=0;
+            mmio_clocks=0; security_aes_peer_enter();
+            link_peer_receive_completion((uint8_t)completion_steps);
+            security_aes_peer_leave(); mmio_clocks=saved_clocks;
+            captured_length=link_peer_length; memcpy(captured,link_peer_body,captured_length);
+            air_frame(captured,captured_length,1); link_peer_pending=0;
+            while(join_smoke_phase.driver.rx_serial==serial ||
+                  join_smoke_device.work.runtime.transport.receive_ready) {
+                assert(draining++<2000u);
+                caller_peer(); advance_clocks(4u*512u); handoff_tick(); caller_poll();
+                (*calls)++; served++;
+                assert(join_smoke_status.phase==JS_READY && !join_smoke_status.reason);
+            }
+            assert(join_smoke_phase.driver.consumer_result==
+                (completion_steps==2?BDB_JOIN_OK:BDB_JOIN_SECURITY));
+            if(completion_steps!=2)
+                assert(join_smoke_device.work.runtime.transport.error==SECURITY_KEYS_UNSUPPORTED);
+            assert(!join_smoke_device.work.runtime.zdo.application_ready &&
+                   !join_smoke_device.work.runtime.transport.receive_ready);
+            assert(security_joint_flash_commands()-commands==(completion_steps?46u:0u) &&
+                   security_keys_host_checkpoints()-checkpoints==(completion_steps?1u:0u));
+            if(completion_steps!=2) {
+                serial=join_smoke_phase.driver.rx_serial; draining=0;
+                air_frame(captured,captured_length,1);
+                while(join_smoke_phase.driver.rx_serial==serial) {
+                    assert(draining++<2000u);
+                    caller_peer(); advance_clocks(4u*512u); handoff_tick(); caller_poll();
+                    (*calls)++; served++;
+                    assert(join_smoke_status.phase==JS_READY && !join_smoke_status.reason);
+                }
+                assert(join_smoke_phase.driver.consumer_result==BDB_JOIN_SECURITY &&
+                       join_smoke_device.work.runtime.transport.error==SECURITY_KEYS_REPLAY);
+                assert(security_joint_flash_commands()-commands==(completion_steps?46u:0u));
+                completion_replays++;
+            }
+            completion_steps++;
+        }
         if(SUSTAINED_CASE(caller_case)) {
             unsigned old_commands, old_erases;
             uint8_t discarded, duplicate;
@@ -384,6 +439,7 @@ static void serve_ready(unsigned *calls)
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
 #if defined(CC2530_REPLAY_POLICY_C)
+    if(COMPLETION_CASE(caller_case)) assert(completion_steps==4 && completion_replays==3);
     if(SUSTAINED_CASE(caller_case)) {
         service_reports=reports;
         service_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1)-service_start_erases;

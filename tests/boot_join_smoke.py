@@ -39,10 +39,10 @@ PERIPHERAL_SFR = frozenset((
     0xb4, 0xbc, 0xbd, 0xd9, 0xe1, 0xe9, 0x91, 0xbf, 0x94, 0xc3, 0xa2, 0xa3,
     0xa4, 0xa5, 0xa6, 0xa1, 0xa7, 0x9c,
 ))
-CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17, 18, 19, 20, 21)
+CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22)
 FLASH_BUSY_CASE = 10
 # READY keeps serving: initial join, and secured rejoin from persisted NV.
-SERVING_CASES = (0, 16, 18, 20, 21)
+SERVING_CASES = (0, 16, 18, 20, 21, 22)
 
 
 def validate_service(service):
@@ -91,7 +91,7 @@ def validate_reference(vector):
                             "peer_tx", "aes_blocks", "flash_commands"}, "Malformed join reference")
     if "parent_history" in vector:
         hex_bytes(vector["parent_history"], 20)
-    require(vector.get("case") not in (18, 19, 20, 21) or "parent_history" in vector,
+    require(vector.get("case") not in (18, 19, 20, 21, 22) or "parent_history" in vector,
             "Parent-recovery case without explicit history input")
     require(type(vector["case"]) is int and vector["case"] in CASES, "Unknown join scenario")
     require(all(type(vector[name]) is int and vector[name] >= 0
@@ -122,6 +122,9 @@ def validate_reference(vector):
                 "Sustained service accepted application count differs")
     else:
         require("service" not in vector, "Service metrics outside sustained scenario")
+    if vector["case"] == 22:
+        require(all("replay_floors" in s for s in vector["steps"]),
+                "Receive completion requires actual RAM-floor observations")
 
 
 def reference(output, case):

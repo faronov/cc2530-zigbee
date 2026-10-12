@@ -25,6 +25,7 @@ void link_peer_application(ed_packet_t *packet);
 void link_peer_receive_application(void);
 #if defined(CC2530_REPLAY_POLICY_C)
 void link_peer_receive_service(void);
+void link_peer_receive_completion(uint8_t step);
 #endif
 void link_peer_verify(void);
 #if defined(CC2530_PARENT_RECOVERY)
