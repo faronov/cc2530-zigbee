@@ -5,10 +5,12 @@ Date: 2026-10-13. Source baseline:
 Compiler: `1a01afb49d99ec754e62ab0f65f182de87b4cee3`.
 Review branch: `m5-confirm-key-review`.
 
-**BLOCKED for firmware implementation.** The incoming-counter reset is
-normative, but the reviewed alternatives have not demonstrated both that reset
-and the required protection against operational counter advancement by an old
-Confirm. No source-changing candidate or new FULL was created.
+**Decision C: UNRESOLVED. Firmware implementation remains BLOCKED.**
+The incoming-counter reset is normative, but no accessible authoritative
+interpretation establishes D's Confirm-specific rejection before operational
+APS counter completion. The [normative decision gate](#normative-decision-gate)
+records the primary evidence, access limits, clarification question and
+independent next work. No source-changing candidate or new FULL was created.
 
 This supersedes the earlier assumption that a separate confirmation domain
 necessarily needs another persistent counter. The existing durable phase and
@@ -31,8 +33,10 @@ The previous Confirm reproducer and its results also remain available:
 zero-initialization regression failure, and114 nonzero-Confirm power cuts
 (3 exact old,1 exact new,110 fail-closed). These completed tests were not rerun.
 
-New work below only adds observations needed to evaluate phase/key ownership,
-very high counters, reset/rejoin and the next establishment cycle.
+The initial domain review below added observations needed to evaluate
+phase/key ownership, very high counters, reset/rejoin and the next
+establishment cycle. The subsequent normative decision is documentation-only;
+neither those observations nor accepted validation were repeated.
 
 ## Normative interpretation
 
@@ -233,7 +237,126 @@ reintroduced after its history was discarded. Extending that archive would be
 generic key management outside this slice.
 
 **No K2/K3 schema change, new journal, source correction or validation dispatch
-is approved by this review.** The next decision is the normative status of D's
-Confirm-specific pre-accounting boundary, not an allocation of reserved K3
-bytes. Applicable errata/test-plan interpretation and other Core/BDB command
-protection questions remain unresolved and are not silently decided here.
+is approved by this review.** The domain review left D's Confirm-specific
+pre-accounting boundary for the normative decision below, not an allocation
+of reserved K3 bytes. Other Core/BDB command-protection questions remain
+separate review gates.
+
+## Normative decision gate
+
+Decision dated 2026-10-13: **C - UNRESOLVED**.
+
+This concludes the bounded research task, not the firmware implementation
+gate. The pinned base text supplies a concrete ordering obstacle to D; no
+accessible applicable erratum or authoritative conformance interpretation
+resolves it. Missing primary documents are not evidence that an exception
+does not exist. Consequently this review does not assert either permission
+for D or a definitive standards-wide prohibition.
+
+### Exact evidence and receive ordering
+
+The PDF identities above were rechecked and are unchanged. All pages below
+are printed pages; requirements are paraphrased, not replacement spec text.
+
+| Question | Pinned primary evidence | Established result / limit |
+| --- | --- | --- |
+| APS security before semantic admission | Core4.4.1.2 introduction and steps3-8, pp419-420 | Secured APS reception invokes the procedure. Source/key material selection and counter comparison precede MIC checking; successful checking is followed by storage of received+1 in the selected security material. No Confirm transaction-context exception appears in this procedure. |
+| Pending versus operational descriptors | Core4.4.1.2 step3 and Table4-29, p454 | Data-key material comes from the source's key-pair set; the descriptor has key attributes, key material and a32-bit incoming counter. The procedure gives no early-rejection branch based on VERIFIED_KEY or absence of a pending transaction. Project pending/current storage is not itself a normative exception. |
+| Confirm transaction scope | Core4.4.10.8 and Figure4-17, pp452-453 | Confirm acknowledges an updated peer link key; its fields identify status, key type and destination. They do not carry a challenge or independent establishment-epoch identifier. This purpose is not explicit authorization to bypass step8. |
+| Successful Confirm indication | Core4.4.8.2.2-3, pp445-446 | Reception generates the primitive. Its checks precede VERIFIED_KEY and incoming-zero assignments. These are indication effects, not a stated pre-security transaction-freshness test. |
+| B installation and verification | BDB3.0.1 10.2.5 steps9,11-13 and final note, pp78-79 | Incoming zero at B installation is distinct from Core's zero on successful confirmation. A remains usable until the B-protected verification response succeeds. No out-of-transaction Confirm receive-order exception is specified here. |
+| Duplicate handling | Core2.2.8.4.2, pp57-58 | Secured reception still invokes chapter4. The timed source/APS-counter duplicate table suppresses repeated upper delivery; it does not establish reset-persistent Confirm freshness or permission to omit operational security-counter completion. |
+| Cryptographic epoch and counter domain | Core4.5.2.2-3, pp457-458 | The nonce includes source, security counter and control; derived link keys share counters. Pending-to-verified phase is not a fresh nonce domain. Incoming reset does not require a reset of this implementation's outgoing reservations. |
+
+For a first accepted pending-B proof, the base-text sequence is APS security,
+Confirm indication, then incoming-zero initialization of the verified B
+descriptor. For a later captured B proof protected by current B, with
+`c >= AF` and a valid MIC, the general procedure again reaches step8.
+The later semantic refusal is not authority to undo that completion.
+
+D would instead insert a transaction-freshness decision after authenticating
+the command, but before step8 publishes/completes the current descriptor's
+counter. The exact missing authority is permission for that insertion when
+B has no matching pending transaction, including when a different C is pending.
+No plaintext-only drop or general semantic-rejection exemption is proposed.
+Authenticated outer NWK completion remains independent in either case.
+
+No special normative treatment of a previously accepted Confirm was found in
+the reviewed clauses. This statement is limited to the accessible pinned
+texts, not a claim about unavailable errata or test cases.
+
+### Errata and conformance interpretation: access limits
+
+| Source / route | Observed evidence | Review status |
+| --- | --- | --- |
+| BDB3.0.1 sections1.5-6 and2.1, pp15-17 | R6 identifies Test Plan16-02826; R7 identifies Specification Errata21-65431. These are distinct primary documents, not optional implementation examples. | References reviewed; exact applicable revisions and primary contents not obtained. |
+| [CSA specification downloads](https://csa-iot.org/developer-resource/specifications-download-request/) | Actual page HTML lists Core, BDB and other public specifications. Its Zigbee list includes BDB3.0.1 and the known Core download, labelled R22.1 by the website. It does not supply the needed errata/test-plan text or Confirm interpretation. | Public catalogue inspected. Website labels/newer R23/BDB3.1 downloads do not replace the hash-pinned project baseline. |
+| [Official CSA ZUTH page](https://csa-iot.org/certification/tools/zuth/) | Actual page HTML identifies ZUTH as the official certification tool, lists BDB3.0.1 test coverage, and describes licenses for Alliance members at Adopter level or higher. | Public overview reviewed, not its test scripts/verdicts. No licensed test case or Confirm-specific interpretation was accessible in this task. |
+| Official CSA site search, exact document-ID public searches and GitHub code index | CSA search for21-65431 returned no result; exact-ID index searches supplied no primary text. | Search limitations only, not evidence that the documents or an applicable interpretation do not exist. |
+| Retrieval failures | AI-assisted search failed with a service error; direct HTTP retrieval of CSA pages returned403. The web-fetch interface subsequently exposed the relevant catalogue/ZUTH HTML. Google/another search endpoint did not expose usable results. | Failed attempts are not successful review. No membership authentication, document-access bypass or external transmission of project data was attempted. |
+
+**Applicable errata review remains incomplete.** No authoritative published
+R22 correction or accessible16-02826 interpretation answering this exact
+ordering question was obtained. Issues
+[#16](https://github.com/faronov/cc2530-zigbee/issues/16) and
+[#17](https://github.com/faronov/cc2530-zigbee/issues/17) therefore remain open.
+An SDK ordering, successful commissioning trace, extra durable proof field
+or passing local regression would not supply the missing normative authority.
+
+No permitted alternative satisfying both zero initialization and the requested
+pre-accounting freshness rejection has been established. The current
+`Confirm counter+1` protective deviation is retained and explicitly remains
+nonconforming to Core's Confirm zero assignment; it is not relabelled as a
+conforming alternative.
+
+### Clarification question for standards maintainers
+
+Draft for the CSA Zigbee Core/BDB maintainers, routed through the
+[Alliance contact / certification team](https://csa-iot.org/contact-us/)
+if authorized. **Not sent.**
+
+> For Core05-3474-22 with BDB16-02828-012: after a successful B-protected
+> Confirm, Core4.4.8.2.3 step9 sets B's incoming counter to zero. A captured
+> Confirm can still pass B's MIC and counter check inside a fresh admitted
+> NWK envelope, although no corresponding pending-B transaction remains.
+> May an implementation authenticate it, reject it as out-of-transaction
+> before4.4.1.2 step8, and leave operational AF unchanged? Does this also
+> apply after reset or while C is pending? If not, which permitted ordering
+> preserves zero initialization without old-Confirm counter advancement?
+> Please identify the applicable erratum revision/clause and16-02826 test
+> interpretation.
+
+### Return to independent M5/M6 work
+
+Confirm development stops at this gate. The following are proposed bounded
+slices, not implementation authorization in this documentation-only task.
+The live issue roadmap is an index, not evidence that every integration
+item remains unimplemented: the accepted runtime already serves synthetic
+ZCL traffic, limited binding and sustained reports.
+
+| Priority | Independent slice and source evidence | Bounded next evidence / remaining gate |
+| --- | --- | --- |
+| 1 | Runtime Read Reporting Configuration. `src/zcl_sensor.c:277-309` dispatches Read/Write/Configure but returns unsupported for command08; the standalone [Temperature owner](ZCL_TEMPERATURE.md) already handles the generic procedure. | Read the actual four reportable runtime records; test success/error record layouts, types, malformed payloads, destination/direction checks, response bounds and no mutation. Reuse existing wire/value rules where appropriate; do not reimplement the standalone reporting engine. This can proceed as generic bounded correctness without choosing a new advertised device ID. |
+| 2 | Profile/descriptor truthfulness, [#29](https://github.com/faronov/cc2530-zigbee/issues/29), then missing ZDO services in [#30](https://github.com/faronov/cc2530-zigbee/issues/30). `include/zdo_srv.h:29` still declares deviceFFFF; `src/zdo_srv.c:81-122` builds the limited endpoint descriptors and generic fallback. | Pin an applicable primary application/device definition before changing advertisement. Implement individual missing address/power/match services against actual registered endpoints; retain explicit unsupported outcomes and notification/response-loop suppression. Test echoed transactions, queried-address errors and exact descriptor/cluster consistency. A working interview does not close BDB/test-plan gates. |
+| 3 | Persistent application reporting/binding configuration, #30/[#31](https://github.com/faronov/cc2530-zigbee/issues/31). `include/zcl_sensor.h:40-56,78-87`, `src/zcl_sensor.c:314-340` and [runtime documentation](ED_JOIN.md#synthetic-temperature-and-humidity-demo) establish RAM-only configuration and reset-to-default coordinator bindings. | First review an explicit bounded application-storage owner/partition and compatibility policy; do not borrow security K2/K3 fields, reserved bytes or outgoing reservations. Then test old/new-or-fail-closed cut recovery, storage failure, retained unbind/disable/configuration and reset/rejoin restoration before reports resume. No generic security journal is proposed. Capacity/resource cost is not yet measured. |
+| 4 | Source-binding management and report transport completion, #30/#31. Existing bindings are limited to one coordinator endpoint per reportable cluster; actual scheduling already exists. | Add required Mgmt_Bind enumeration/pagination once table ownership is defined; cover full/absent/invalid binding cases. Test report preparation versus queue admission versus actual completion, busy queues, failures, configuration changes and rejoin. Audit full Mgmt_Leave through its genuine existing leave/security owners as its own bounded slice; do not silently relax security-command admission. |
+| 5 | Offline interoperability corpus, then separately authorized [#32](https://github.com/faronov/cc2530-zigbee/issues/32). | Build public/synthetic ZHA and Zigbee2MQTT interview/read/configure/bind/restart sequences with exact unsupported outcomes. These are regression evidence, not live interoperability. Physical coordinator acceptance #28, software/adapter diversity, #18 errata and fresh hardware/network authorization remain independent gates. |
+
+M5 authentication/replay/recovery remains the preserved prerequisite, not work
+to repeat. Core/BDB security-command protection and broadcast NWK key updates
+stay behind separate normative gates. Missing errata/test text prevents
+conformance claims but does not automatically block unrelated pinned-base
+generic ZDO/ZCL work.
+
+All future source slices must measure physical CODE/bank placement, XDATA/DATA
+ownership and the existing128-byte stack limits before qualification. The
+accepted image has several zero-headroom banks; aggregate free CODE is not a
+placement budget. No resource estimate is invented for these unimplemented
+slices.
+
+This normative task changes documentation only: **CODE/XDATA/DATA/stack and
+NV-schema deltas are zero**. No native/sanitizer replay, FAST, SMOKE, FULL,
+compiler/HWLab change, hardware operation or production merge was performed.
+Accepted firmware branches, images, receipts and evidence manifests remain
+unchanged. The old Confirm implementation remains intentionally frozen until
+the missing authoritative interpretation is obtained.
