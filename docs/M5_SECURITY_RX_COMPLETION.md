@@ -214,6 +214,10 @@ remain unresolved. No authentication requirement is relaxed here.
 
 The next small conformance slice should resolve/test Confirm-Key initialization
 from Core4.4.8.2.3 step9 (pp.445-446) and BDB10.2.5 step9 (p.78), separately
-from broadcast support and command-protection expansion. This candidate
+from broadcast support and command-protection expansion. The
+[Confirm-Key freshness review](M5_CONFIRM_KEY_FRESHNESS.md) records the
+implementation gate and why neither a direct zero assignment nor an assumed
+new persistent field resolves it. No Confirm firmware correction is claimed.
+This candidate
 remains an experimental bounded sensor-only ED; simulator acceptance cannot
 establish generic Zigbee conformance, production readiness or hardware safety.
