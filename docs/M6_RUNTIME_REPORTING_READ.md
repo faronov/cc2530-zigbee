@@ -142,8 +142,42 @@ observations and bind the target layout artifact as well as the image/vector/
 simulator/replay identities. Resume cannot silently discard observation history.
 This is host evidence state, not a firmware NV field or schema change.
 
-MCU acceptance, SMOKE and one frozen-candidate FULL remain required;
-host-only success is not MCU acceptance. No additional memory ceiling or
-relaxed proof is permitted.
-Persistent reporting/bindings, Mgmt_Bind, profile selection, extra ZDO services,
-real sensing and live ZHA/Zigbee2MQTT acceptance remain separate milestones.
+## Development qualification and freeze boundary
+
+All18 genuine host scenarios pass with byte-identical nonrecovering ASan/UBSan
+transcripts, including all17 original commissioning/rejoin/security/Policy C
+scenarios and case23. Final integrated FAST passes10/10 selected gates;
+development SMOKE passes16/16, including complete fault cases2/3/4/9 and
+the explicitly limited three-call case0 prefix. SMOKE is not complete
+commissioning or AES/flash-path acceptance. The29 tier unit tests and779-file
+repository/link guard pass.
+
+The unchanged M5/Policy C accepted branch hashes and original accepted-manifest
+hashes were reverified. No compiler diff, hardware operation, HWLab change,
+security implementation change or production merge is part of this slice.
+
+Development image identities (not yet a FULL acceptance claim):
+
+| Artifact | SHA256 |
+| --- | --- |
+| ELF | `33152d75e120cfbcafe07e481f719b49c3254b0cb4ca1079c87b058cd9b5ad62` |
+| HEX | `30e9f9880ee91c3a91dcc39ed2e0f853e2451b880a6af54127f8e0b046cf4a8a` |
+
+377 bank thunks remain correct, with zero incorrect thunks. All fixed-address,
+startup, stack-entry, generic-pointer and reserved-NV/lock-region proofs pass.
+Static stack remains106/128. Final runtime stack and actual MCU case23
+acceptance are still pending; the M5 baseline's101/128 is not substituted
+for a measurement of the new candidate.
+
+The feature is frozen for one new complete LLVM FULL; it must match the
+published candidate commit, pinned compiler and exact image identities, include
+all18 scenarios, and retain sealed evidence. A separate full case23 target
+replay is in progress. No unfinished target run is counted as PASS.
+
+Direction1 receive-side configurations, manufacturer-specific namespaces,
+persistent reporting/bindings, profile selection, real sensing and live
+ZHA/Zigbee2MQTT acceptance remain separate gaps. Recommended next bounded ZDO
+slice: read-only Mgmt_Bind from actual live RAM bindings with correct entry
+count/pagination/status, without adding persistent application storage.
+Confirm-Key and broader security-command/broadcast-key-update work remain
+behind their independent normative gates.
