@@ -256,6 +256,36 @@ static uint8_t configure(void)
     return statuses(0x07);
 }
 
+static uint8_t read_configuration(void)
+{
+    zcl_sensor_reporting_t MCU_XDATA *r;
+    uint8_t n;
+    if (!left()) return 0x80;
+    /* Validate even records beyond the fitting prefix (R8 2.5.10.2-3). */
+    while (left()) {
+        if (left() < 3u || take() > 1u) return 0x80;
+        ST.in += 2;
+    }
+    ST.in = (uint8_t)(ST.header+1u);
+    while (left()) {
+        ST.dir = take(); ST.id = take16();
+        ST.status = 0x86;
+        if (!ST.dir && find() != NONE)
+            ST.status = ST.entry >= ZCL_SENSOR_REPORTS ? 0x8cu :
+                reporting(ST.entry)->max == 0xffffu ? 0x8bu : 0;
+        n = ST.status ? 4u : (uint8_t)(9u+width(ST.type));
+        if (n > (uint8_t)(ED_PAYLOAD_MAX-ST.at)) break;
+        emit(ST.status); emit(ST.dir); emit16(ST.id);
+        if (!ST.status) {
+            r = reporting(ST.entry);
+            emit(ST.type); emit16(r->min); emit16(r->max);
+            if (width(ST.type) == 1u) emit((uint8_t)r->change);
+            else emit16(r->change);
+        }
+    }
+    return BUILT;
+}
+
 /* Identify and Identify Query; an idle device does not answer the query. */
 static uint8_t specific(uint8_t command)
 {
@@ -277,13 +307,13 @@ static uint8_t zcl(void)
     if (RX.aps.profile_id != DEV.config.transport.profile ||
         RX.aps.destination_endpoint != DEV.config.transport.endpoint) return ZCL_SENSOR_DISCARDED;
     ST.length = RX.length;
-    if (!ST.length) return ZCL_SENSOR_DISCARDED;
+    if (!ST.length || ST.length > ED_PAYLOAD_MAX) return ZCL_SENSOR_DISCARDED;
     control = IN[0];
     if ((control & 3u) > 1u) return ZCL_SENSOR_DISCARDED;
     ST.header = control & 4u ? 4u : 2u;
     if (ST.length <= ST.header) return ZCL_SENSOR_DISCARDED;
     command = IN[ST.header];
-    if (!(control & 3u) && command == 0x0bu) return ZCL_SENSOR_DISCARDED;
+    if (!(control & 3u) && (command == 0x0bu || command == 0x09u)) return ZCL_SENSOR_DISCARDED;
     if (!reply(RX.aps.cluster_id)) return ZCL_SENSOR_DISCARDED;
     CTX.response.aps.profile_id = DEV.config.transport.profile;
     CTX.response.aps.source_endpoint = DEV.config.transport.endpoint;
@@ -299,6 +329,7 @@ static uint8_t zcl(void)
     else if (command == 0x00u) ST.status = read();
     else if (command == 0x02u) ST.status = write();
     else if (command == 0x06u) ST.status = configure();
+    else if (command == 0x08u) ST.status = read_configuration();
     else ST.status = 0x81;
     if (ST.status == SILENT || (!ST.status && (control & 0x10u))) return ZCL_SENSOR_HANDLED;
     if (ST.status != BUILT) {

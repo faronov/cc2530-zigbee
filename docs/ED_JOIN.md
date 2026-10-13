@@ -1031,8 +1031,15 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   disables reporting. The defaults are temperature 30/300 s/0.10 °C,
   humidity 30/300 s/0.25 %, voltage 60/3600 s/0.1 V and percentage
   60/3600 s/1 %.
-- **Read Reporting Configuration:** remains UNSUP_GENERAL_COMMAND (`0x81`),
-  never a fabricated success.
+- **Read Reporting Configuration:** returns the effective direction-0
+  configuration from the four live reporting records. Temperature/humidity
+  change fields are two bytes, battery change fields one byte. Unknown,
+  nonreportable and disabled attributes return `86`, `8C` and `8B`;
+  direction-1 reads return `86` for the empty receive-side attribute catalog.
+  Complete response prefixes fit the82-byte runtime application slot, but the
+  entire request is syntax-checked first. Reads do not reconfigure reporting,
+  reset age/baselines, change bindings or access NV. See
+  [the bounded runtime contract](M6_RUNTIME_REPORTING_READ.md).
 - **ZDO Bind/Unbind:** a 64-bit destination is accepted only if it is the
   trust center (coordinator), and only for the three clusters. A bind table
   for any other target returns NOT_SUPPORTED, and unbinding an absent entry

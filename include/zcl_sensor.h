@@ -59,18 +59,21 @@ extern MCU_XDATA bdb_join_t join_smoke_device;
  * report (an uninterviewed device's first frame invites the interview). */
 void zcl_sensor_init(void) JOIN_FAR;
 /* Each READY poll. A frame the runtime published (application_ready) is
- * served first: Read Attributes, Write Attributes (IdentifyTime) and Configure
- * Reporting for Basic, Power Configuration, Identify, Temperature and
+ * served first: Read Attributes, Write Attributes (IdentifyTime), Configure
+ * and Read Reporting Configuration for Basic, Power Configuration, Identify, Temperature and
  * Relative Humidity Measurement on the transport endpoint, Identify/Identify
- * Query, Default Responses (other general commands, including Read Reporting
- * Configuration, are UNSUP_GENERAL_COMMAND), and ZDO Bind/Unbind for the
+ * Query, Default Responses (other general requests are UNSUP_GENERAL_COMMAND),
+ * and ZDO Bind/Unbind for the
  * coordinator. Replies use the runtime server response slot; the
  * published frame is always cleared. Otherwise, with no application TX
  * outstanding, it builds at most one due unsolicited ACK-requested Report
  * Attributes frame in the EMPTY application slot and returns REPORT; the
  * caller queues it and, once accepted, sets ZCL_SENSOR_STATE.sent. The next
  * call commits that report. RAM only: a reset restores the defaults. All
- * reported values are SYNTHETIC demonstration data, never measurements. */
+ * reported values are SYNTHETIC demonstration data, never measurements.
+ * Reporting reads validate the whole request, return only complete records
+ * fitting the 82-byte application slot, and never change reporting/bindings.
+ * Received Read Reporting Configuration Responses are discarded. */
 uint8_t zcl_sensor_serve(void) JOIN_FAR;
 
 #endif
