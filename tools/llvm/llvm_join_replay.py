@@ -413,6 +413,16 @@ class Mismatch(Exception):
 def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=print):
     global flash_template
     image, symbols, code = artifacts(elf)
+    application_regions = None
+    application_checks = 0
+    if vector["case"] == 23:
+        layout = json.loads((Path(elf).resolve().parent.parent / "audit/sensor-layout.json").read_text())
+        require(layout["elf_sha256"] == sha_file(elf), "Application observation layout belongs to another image")
+        application_regions = layout["regions"]
+        require([(r["name"], r["size"]) for r in application_regions] ==
+                [("reports", 40), ("bindings", 3), ("flags", 4)], "Invalid application observation regions")
+        require(all(type(r["offset"]) is int and 0 <= r["offset"] <= layout["device_size"] - r["size"]
+                    for r in application_regions), "Application observation escapes its owner")
     sites = sites_for(image, symbols, code)
     ram_stop, flash_template = flash_stop(image, symbols)
     stops = stops_for(sites, symbols, ram_stop)
@@ -490,6 +500,8 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     # replay logic; suspension happens only after a caller/peripheral snapshot.
     bind = {"elf": sha_file(elf), "case": vector["case"], "simulator": sha_file(shutil.which(simulator) or simulator),
             "replay": sha_file(__file__), "vector": hashlib.sha256(json.dumps(vector, sort_keys=True).encode()).hexdigest()}
+    if application_regions is not None:
+        bind["application_layout"] = sha_file(Path(elf).resolve().parent.parent / "audit/sensor-layout.json")
     stop_after = float(os.environ.get("STOP_AFTER_SECONDS", "0"))
     stop_at = float(os.environ.get("STOP_AT_TIME", "0"))
     started = time.time()
@@ -501,6 +513,10 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
         (state, pc, count, peak, sampled, completed, retries, learned, previous_stop) = (
             snap[k] for k in ("state", "pc", "count", "peak", "sampled", "completed", "retries", "learned",
                               "previous_stop"))
+        application_checks = snap["application_checks"]
+        require(type(application_checks) is int and application_checks ==
+                sum("application_state" in s for s in vector["steps"][:completed]),
+                "Snapshot lost validated application observation history")
         log(f"resumed at step{snap['index']}")
     for index, step in enumerate(J.events_for(vector)):
         if limit is not None and index == limit:
@@ -513,7 +529,7 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                 pickle.dump({"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
                              "pc": pc, "count": count, "peak": peak, "sampled": sampled, "completed": completed,
                              "retries": retries, "learned": learned, "previous_stop": previous_stop,
-                             "bind": bind}, fh)
+                             "bind": bind, "application_checks": application_checks}, fh)
             if ((stop_after and time.time() - started > stop_after) or
                     (stop_at and time.time() > stop_at)):
                 raise Suspended(snap_path, index, completed, count)
@@ -531,7 +547,8 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                     pickle.dump({"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
                                  "pc": pc, "count": count, "peak": peak, "sampled": sampled, "completed": completed,
                                  "retries": retries, "learned": learned, "first": first, "adjacency": adjacency,
-                                 "previous_stop": previous_stop, "bind": bind}, fh)
+                                 "previous_stop": previous_stop, "bind": bind,
+                                 "application_checks": application_checks}, fh)
                 if ((stop_after and time.time() - started > stop_after) or
                         (stop_at and time.time() > stop_at)):
                     raise Suspended(snap_path, index, completed, count)
@@ -627,6 +644,14 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                 require(state[0][0x1e00:0x1e30] == expected,
                         f"Status step{index}: {state[0][0x1e00:0x1e30].hex()} != {expected.hex()}")
                 require(state[4][0x3e800:0x3f800] == bytes.fromhex(step["nv"]), "Actual journal differs")
+                if "application_state" in step:
+                    require(application_regions is not None, "Application observation outside case23")
+                    owner = symbols["_join_smoke_device"]
+                    actual = b"".join(state[0][owner+r["offset"]:owner+r["offset"]+r["size"]]
+                                      for r in application_regions)
+                    require(actual == bytes.fromhex(step["application_state"]),
+                            f"Actual reporting/binding/flag state differs: step {index}")
+                    application_checks += 1
                 if "replay_floors" in step:
                     floors = bytes.fromhex(step["replay_floors"])
                     for name, expected_floor in (("_floor_cache", floors[:8]),
@@ -660,6 +685,10 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
         if vector["case"] == 21:
             J.validate_service(vector["service"])
             result["service"] = vector["service"]
+        if vector["case"] == 23:
+            require(application_checks == vector["reporting"]["state_checks"],
+                    "Actual MCU reporting-state coverage differs")
+            result["reporting"] = vector["reporting"]
     elif finished:
         require(state[0][0x1e06] == 6, "Wrong terminal state")
         commands = base + J.resume(state, pc) + stops + ["step 1", "run"] + capture(60000)

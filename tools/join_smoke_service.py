@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Shared fail-closed acceptance predicate for the sustained router workload."""
+"""Shared fail-closed acceptance predicates for application service workloads."""
 
 
 def service_valid(service):
@@ -21,4 +21,16 @@ def service_valid(service):
         and service["security_checkpoints"] <= service["erases"]
         and service["flash_controller_nominal_us"] ==
             20000 * service["erases"] + 20 * service["programs"]
+    )
+
+
+def reporting_valid(reporting):
+    return (
+        type(reporting) is dict
+        and set(reporting) == {"requests", "responses", "reports", "state_checks", "min", "max", "change"}
+        and all(type(v) is int and v >= 0 for v in reporting.values())
+        and reporting["requests"] == reporting["responses"] == 8
+        and reporting["reports"] >= 6
+        and reporting["state_checks"] >= 8
+        and (reporting["min"], reporting["max"], reporting["change"]) == (7, 20, 50)
     )

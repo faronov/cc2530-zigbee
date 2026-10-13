@@ -24,6 +24,8 @@ void link_peer_transport(uint8_t request_ack);
 void link_peer_application(ed_packet_t *packet);
 void link_peer_receive_application(void);
 #if defined(CC2530_REPLAY_POLICY_C)
+extern unsigned link_peer_reporting;
+void link_peer_receive_reporting(uint8_t step);
 void link_peer_receive_service(void);
 void link_peer_receive_completion(uint8_t step);
 #endif

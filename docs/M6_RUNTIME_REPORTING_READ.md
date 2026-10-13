@@ -102,7 +102,47 @@ space is4426/14122. Existing boundary/terminator/thunk/memory proofs pass
 without a relocation or a relaxed limit. These are development-image
 measurements, not final integrated acceptance.
 
-MCU integration, SMOKE and one frozen-candidate FULL remain required;
+## Integrated application owner
+
+Case23 starts from fresh unprovisioned storage and completes the existing real
+authenticated TC commissioning exchange before READY. The external peer injects
+eight actual NWK-protected ZCL requests via the radio/AES/transport model:
+Temperature configuration7/20/50, reads of all four attributes, mixed
+nonreportable/unknown/direction1 records, malformed input, a repeated read and
+the existing unsupported manufacturer namespace. The peer only checks actual
+DUT TX frames; it does not supply synthetic application responses.
+
+The peer verifies exact command07/09/0B bytes, type widths, TSNs, Disable
+Default Response behavior, profile0104 and reversed endpoints1 ->9.
+Unsolicited reports still use the original endpoint1 binding and APS ACK flow.
+The existing invalid application request/discard and runtime draw/serving
+assertions remain present. Original scenarios and case21/22 assertions are
+unchanged; case23 has its own modified reporting schedule expectations.
+
+Native and nonrecovering ASan/UBSan produce byte-identical case23 transcripts:
+1556 caller steps,8 requests/8 checked replies,7 ordinary reports, and960
+READY-state observations. Each observation contains all40 bytes of reporting
+records (including ages and last values),3 binding bytes and4 scheduling flags.
+The target audit compiles a constant-only layout probe with the exact firmware
+compiler/defines/ABI flags, verifies the linked owner's size and bounds, and
+binds observation regions to the ELF hash. The probe is never linked into the
+image. MCU replay compares actual XDATA with those observations at each caller
+return, as well as the original radio/AES/NV/replay-floor/stack invariants.
+No native struct offset is assumed, and no observed application state is
+injected into DUT memory.
+
+FULL now requires case23's explicit serving terminal, exact complete step count,
+bounded stack and reporting/state metrics. Negative gate tests reject missing
+scenario/metrics/observations, incomplete replies, wrong configuration, absent
+report continuation and invalid count types. All17 prior FULL cases remain
+selected; the final Policy C suite contains18 scenarios.
+Case23 shares the existing segmented FULL deadline with cases0/21. Bound
+simulator snapshots retain the count of already validated application
+observations and bind the target layout artifact as well as the image/vector/
+simulator/replay identities. Resume cannot silently discard observation history.
+This is host evidence state, not a firmware NV field or schema change.
+
+MCU acceptance, SMOKE and one frozen-candidate FULL remain required;
 host-only success is not MCU acceptance. No additional memory ceiling or
 relaxed proof is permitted.
 Persistent reporting/bindings, Mgmt_Bind, profile selection, extra ZDO services,

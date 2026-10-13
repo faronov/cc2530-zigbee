@@ -16,6 +16,7 @@ PROFILE = json.loads(tiers.PROFILE_PATH.read_text())
 SERVICE = dict(duration_ms=600084, protected_frames=120, replay_drops=12, reports=23,
                erases=0, programs=0, ordinary_rx_commands=0, security_checkpoints=0,
                flash_controller_nominal_us=0)
+REPORTING = dict(requests=8, responses=8, reports=7, state_checks=8, min=7, max=20, change=50)
 
 
 def args(tier, **extra):
@@ -110,12 +111,14 @@ class Selection(unittest.TestCase):
 
     def test_long_cases_share_segment_deadline_and_have_separate_snapshots(self):
         steps, _ = names("full", variant="parent-recovery-policy-c", case0_budget=60)
-        for case in (0, 21):
+        for case in (0, 21, 23):
             s = steps[f"sim-case{case}"]
             self.assertTrue(s.suspendable)
             self.assertTrue(s.env["SNAP_DIR"].endswith(f"case{case}-snap"))
         self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
                          steps["sim-case21"].env["STOP_AT_TIME"])
+        self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
+                         steps["sim-case23"].env["STOP_AT_TIME"])
         self.assertFalse(steps["sim-case16"].suspendable)
 
 
@@ -326,6 +329,8 @@ class Summary(unittest.TestCase):
                            terminal=PROFILE["simulator"]["terminals"][str(case)])
                 if case == 21:
                     row["service"] = SERVICE.copy()
+                if case == 23:
+                    row["reporting"] = REPORTING.copy()
                 if mutate:
                     row = mutate(case, row)
                 if row is not None:
@@ -350,6 +355,26 @@ class Summary(unittest.TestCase):
             code, summary = self.summary("parent-recovery", lambda c, r: r | change if c == 18 else r)
             self.assertNotEqual(code, 0)
             self.assertEqual(summary["verdict"], "FAIL")
+
+    def test_runtime_reporting_completion_and_owner_checks_are_required(self):
+        code, _ = self.summary("parent-recovery-policy-c", lambda c, r: None if c == 23 else r)
+        self.assertNotEqual(code, 0)
+        changes = [dict(reporting=None), dict(terminal="fault"), dict(complete=False),
+                   dict(steps=10), dict(stack_bytes=129)]
+        for field, value in (("requests", 7), ("responses", 7), ("reports", 5),
+                             ("state_checks", 7), ("min", 30), ("max", 300),
+                             ("change", 10), ("responses", True), ("state_checks", 8.0)):
+            changes.append(dict(reporting=REPORTING | {field: value}))
+        for change in changes:
+            code, result = self.summary("parent-recovery-policy-c", lambda c, r: r | change if c == 23 else r)
+            self.assertNotEqual(code, 0, change)
+            self.assertEqual(result["verdict"], "FAIL")
+            with tempfile.TemporaryDirectory() as d:
+                report = Path(d) / "case23.json"
+                row = dict(complete=True, steps=11, of_steps=11, stack_bytes=106,
+                           terminal="serving", reporting=REPORTING)
+                report.write_text(json.dumps(row | change))
+                self.assertFalse(tiers.sim_check(report, 23, "serving")()[0], change)
 
     def test_sustained_completion_and_metrics_are_required_by_both_gates(self):
         changes = [dict(service=None), dict(terminal="fault"), dict(complete=False),

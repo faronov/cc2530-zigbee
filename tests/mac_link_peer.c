@@ -51,6 +51,32 @@ uint16_t link_peer_report_cluster;
 uint8_t link_peer_report[ED_PAYLOAD_MAX], link_peer_report_length, link_peer_report_counter;
 #define CHECK(c) do { link_peer_checks++; assert(c); } while (0)
 
+#if defined(CC2530_REPLAY_POLICY_C)
+static const struct {
+    uint16_t cluster;
+    uint8_t request_size, response_size, request[16], response[26];
+} reporting_exchange[] = {
+    {0x0402,13,4,
+     {0x10,0xa0,6,0,0,0,0x29,7,0,20,0,50,0}, {0x18,0xa0,7,0}},
+    {0x0402,6,14, {0x10,0xa1,8,0,0,0},
+     {0x18,0xa1,9,0,0,0,0,0x29,7,0,20,0,50,0}},
+    {1,9,23, {0x10,0xa2,8,0,0x20,0,0,0x21,0},
+     {0x18,0xa2,9,0,0,0x20,0,0x20,60,0,0x10,0x0e,1,
+                   0,0,0x21,0,0x20,60,0,0x10,0x0e,2}},
+    {0x0405,6,14, {0,0xa3,8,0,0,0},
+     {0x18,0xa3,9,0,0,0,0,0x21,30,0,0x2c,1,25,0}},
+    {0x0402,15,26, {0x10,0xa4,8,0,0,0,0,1,0,0,0xef,0xbe,1,0,0},
+     {0x18,0xa4,9,0,0,0,0,0x29,7,0,20,0,50,0,
+                   0x8c,0,1,0,0x86,0,0xef,0xbe,0x86,1,0,0}},
+    {0x0402,7,5, {0x10,0xa5,8,0,0,0,0}, {0x18,0xa5,0x0b,8,0x80}},
+    {0x0402,6,14, {0x10,0xa6,8,0,0,0},
+     {0x18,0xa6,9,0,0,0,0,0x29,7,0,20,0,50,0}},
+    {0x0402,8,7, {4,0x34,0x12,0xa7,8,0,0,0}, {0x1c,0x34,0x12,0xa7,0x0b,8,0x81}}
+};
+static uint8_t reporting_pending;
+unsigned link_peer_reporting;
+#endif
+
 static void base_peer(uint8_t nwk_command, uint8_t aps_type, uint16_t cluster)
 {
     memset(&peer_out, 0, sizeof(peer_out));
@@ -265,7 +291,20 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
     } else if (!peer_in.aps.profile_id && peer_in.aps.cluster_id == 0x0036u) {
         CHECK(!recovering && verified && link_peer_parent && peer_in.nwk.destination == 0xfffcu && peer_in.length == 3);
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1); permit = 1;
-    } else {
+    }
+#if defined(CC2530_REPLAY_POLICY_C)
+    else if (reporting_pending && peer_in.aps.profile_id == 0x0104 &&
+             peer_in.aps.destination_endpoint == 9) {
+        uint8_t step = (uint8_t)(reporting_pending-1u);
+        CHECK(verified && permit && !aps_secured && !peer_in.aps.flags);
+        CHECK(peer_in.nwk.destination == 0 && peer_in.aps.source_endpoint == 1);
+        CHECK(peer_in.aps.cluster_id == reporting_exchange[step].cluster);
+        CHECK(peer_in.length == reporting_exchange[step].response_size &&
+              !memcmp(peer_in.payload,reporting_exchange[step].response,peer_in.length));
+        reporting_pending = 0; link_peer_reporting++;
+    }
+#endif
+    else {
         CHECK(permit && peer_in.aps.profile_id == 0x0104 && (peer_in.aps.flags & APS_FLAG_ACK_REQUEST));
         CHECK(!recovering || (reannounced && link_peer_parent));
         link_peer_app++; link_peer_report_cluster = peer_in.aps.cluster_id; link_peer_report_counter = peer_in.aps.counter;
@@ -314,6 +353,18 @@ static void receive_application(uint8_t acknowledge)
 
 void link_peer_receive_application(void) { receive_application(1); }
 #if defined(CC2530_REPLAY_POLICY_C)
+void link_peer_receive_reporting(uint8_t step)
+{
+    CHECK(step < 8 && verified && permit && !recovering && !reporting_pending);
+    CHECK(link_peer_reporting == step);
+    base_peer(0, 0, reporting_exchange[step].cluster);
+    peer_out.aps.source_endpoint = 9; peer_out.aps.destination_endpoint = 1;
+    peer_out.aps.profile_id = 0x0104;
+    peer_out.length = reporting_exchange[step].request_size;
+    memcpy(peer_out.payload,reporting_exchange[step].request,peer_out.length);
+    seal_peer(0, 0, NULL, 1); reporting_pending = (uint8_t)(step+1u);
+}
+
 void link_peer_receive_service(void) { receive_application(0); }
 void link_peer_receive_completion(uint8_t step)
 {
@@ -368,6 +419,9 @@ void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned le
     CHECK(n == length && verified && permit);
     recovering = 1; rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = 0;
     link_peer_pending = 0; link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
+#if defined(CC2530_REPLAY_POLICY_C)
+    reporting_pending = 0; link_peer_reporting = 0;
+#endif
     security_joint_physical_flash(1);
     link_peer_config(config);
 #if defined(CC2530_PARENT_RECOVERY)
@@ -416,6 +470,9 @@ void link_peer_setup(bdb_join_config_t *config)
 #endif
     aps_counter = nwk_sequence = network_sequence = link_peer_pending = 0;
     link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;
+#if defined(CC2530_REPLAY_POLICY_C)
+    reporting_pending = 0; link_peer_reporting = 0;
+#endif
     last_device_nwk = last_device_aps = 0;
     peer_nwk_counter = peer_aps_counter = 1;
     security_joint_physical_flash(1);

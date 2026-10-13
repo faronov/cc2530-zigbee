@@ -6,6 +6,7 @@ extern volatile uint8_t aes_dma0[8],aes_dma1[32],aes_key[16],aes_iv[16],aes_inpu
 extern uint8_t flash_exec_work[9];
 static unsigned join_trace_steps,join_trace_events,join_trace_active,join_trace_flash;
 static uint8_t join_trace_sfr[256];
+static unsigned join_trace_reporting;
 
 static void join_hex(const volatile uint8_t *p,unsigned n)
 {
@@ -108,6 +109,12 @@ static void join_trace_after(uint8_t returned)
     join_hex((const volatile uint8_t *)&join_smoke_status,48);
     printf("\",\"nv\":\""); join_hex(security_joint_nv(),4096); printf("\"");
 #if defined(CC2530_REPLAY_POLICY_C)
+    if(REPORTING_CASE(caller_case) && join_smoke_status.phase==JS_READY) {
+        printf(",\"application_state\":\"");
+        join_hex((const volatile uint8_t *)ZCL_SENSOR_STATE.report,40);
+        join_hex(ZCL_SENSOR_STATE.bound,3); join_hex(&ZCL_SENSOR_STATE.basic,4);
+        printf("\""); join_trace_reporting++;
+    }
     {
         uint8_t floors[16];
         extern void security_keys_host_replay_floors(uint8_t *);
@@ -122,6 +129,10 @@ static void join_trace_finish(void)
     printf("],\"peer_tx\":%u,\"aes_blocks\":%u,\"flash_commands\":%u",
         link_peer_tx,security_joint_aes_blocks(),security_joint_flash_commands());
 #if defined(CC2530_REPLAY_POLICY_C)
+    if(REPORTING_CASE(caller_case))
+        printf(",\"reporting\":{\"requests\":%u,\"responses\":%u,\"reports\":%u,"
+               "\"state_checks\":%u,\"min\":7,\"max\":20,\"change\":50}",
+               reporting_requests,link_peer_reporting,reporting_reports,join_trace_reporting);
     if(SUSTAINED_CASE(caller_case))
         printf(",\"service\":{\"duration_ms\":%lu,\"protected_frames\":%u,"
                "\"replay_drops\":%u,\"reports\":%u,\"erases\":%u,\"programs\":%u,"

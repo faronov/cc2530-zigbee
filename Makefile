@@ -2065,7 +2065,7 @@ $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h: $(JOIN_SMOKE_OBJECTS) $(JOIN_SMOKE
 	+$(MAKE) --no-print-directory prepare-join-smoke-stack
 	$(PYTHON) -B tools/join_smoke_image.py --output $(JOIN_SMOKE_LAYOUT_DIR) --board $(BOARD) --key-mode $(JOIN_SMOKE_KEY_MODE) --header $@
 
-JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21)
+JOIN_SMOKE_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21 22 23)
 JOIN_SMOKE_HOST_CASES := $(JOIN_SMOKE_CASES) $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15)
 .PHONY: prepare-join-smoke-image test-join-smoke-mcu
 prepare-join-smoke-image: $(JOIN_SMOKE_LAYOUT_DIR)/join_smoke_layout.h

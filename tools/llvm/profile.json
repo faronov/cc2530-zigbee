@@ -34,10 +34,10 @@
   "simulator": {
     "terminals": {"0": "serving", "1": "fault", "2": "fault", "3": "fault", "4": "fault", "5": "fault",
                   "6": "fault", "8": "fault", "9": "fault", "10": "flash-ram-stop",
-                  "16": "serving", "17": "fault", "18": "serving", "19": "fault", "20": "serving", "21": "serving", "22": "serving"},
+                  "16": "serving", "17": "fault", "18": "serving", "19": "fault", "20": "serving", "21": "serving", "22": "serving", "23": "serving"},
     "smoke_cases": [2, 3, 4, 9],
     "smoke_prefix": {"case": 0, "limit": 3},
     "full_cases": [0, 16, 10, 8, 6, 1, 5, 9, 4, 2, 3, 17],
-    "variant_cases": {"parent-recovery": [20, 18, 19], "parent-recovery-policy-c": [20, 18, 19, 21, 22]}
+    "variant_cases": {"parent-recovery": [20, 18, 19], "parent-recovery-policy-c": [20, 18, 19, 21, 22, 23]}
   }
 }
