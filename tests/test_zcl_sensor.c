@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "zcl_sensor.h"
+#include "zcl_temperature.h"
 
 /* The application ZCL/Bind server against its real device overlay. The
  * runtime publication and the caller's queueing are covered by
@@ -64,6 +65,9 @@ static uint8_t zdo(uint16_t cluster, const void *payload, uint8_t length)
 
 static void reply(uint16_t cluster, const void *expected, uint8_t length)
 {
+    if (CTX.response_pending && CTX.response.length != length)
+        fprintf(stderr, "response length %u instead of %u, command %02x, status %02x\n",
+                CTX.response.length, length, CTX.response.payload[2], CTX.response.payload[4]);
     CHECK(CTX.response_pending && CTX.response.length == length);
     CHECK(!memcmp(CTX.response.payload, expected, length));
     CHECK(CTX.response.aps.cluster_id == cluster && !CTX.response.nwk.destination);
@@ -80,6 +84,173 @@ static void zcl(uint16_t cluster, const void *request, uint8_t length, const voi
     CHECK(receive(cluster, request, length) == ZCL_SENSOR_HANDLED);
     if (reply_length) reply(cluster, expected, reply_length);
     else CHECK(!CTX.response_pending);
+}
+
+static void discarded(uint16_t cluster, const void *request, uint8_t length);
+
+static void observational(uint16_t cluster, const void *request, uint8_t length,
+                          const void *expected, uint8_t reply_length)
+{
+    zcl_sensor_state_t before = ST;
+    uint8_t i;
+    zcl(cluster, request, length, expected, reply_length);
+    CHECK(!memcmp(ST.report, before.report, sizeof(ST.report)));
+    CHECK(!memcmp(ST.bound, before.bound, sizeof(ST.bound)));
+    CHECK(!memcmp(ST.tc_ieee, before.tc_ieee, sizeof(ST.tc_ieee)));
+    CHECK(ST.second == before.second && ST.identify == before.identify && ST.value == before.value);
+    CHECK(ST.basic == before.basic && ST.pending == before.pending && ST.sent == before.sent && ST.tsn == before.tsn);
+    CHECK(!join_smoke_device.application_pending && !join_smoke_device.application_done);
+    for (i = reply_length; i < ED_PAYLOAD_MAX; i++) CHECK(!CTX.response.payload[i]);
+}
+
+static void standalone_read(const uint8_t *request, uint8_t length)
+{
+    zcl_temp_t temperature, before;
+    zcl_temp_cfg_t defaults = {30, 300, 10};
+    zcl_dispatch_info_t info;
+    uint8_t output[ED_PAYLOAD_MAX];
+    CHECK(zcl_temp_init(&temperature, 0, 2100, 2500, &defaults) == ZCL_CODEC_OK);
+    temperature.reporting.minimum = ST.report[0].min;
+    temperature.reporting.maximum = ST.report[0].max;
+    temperature.reporting.change = (int16_t)ST.report[0].change;
+    temperature.configured = ST.report[0].max != 0xffffu;
+    before = temperature;
+    CHECK(zcl_temp_rx(&temperature, 0, request, length, output, sizeof(output), &info) == ZCL_CODEC_OK);
+    CHECK(!memcmp(&temperature, &before, sizeof(before)));
+    observational(0x0402, request, length, output, info.length);
+}
+
+static void read_reporting(void)
+{
+    static const uint16_t clusters[] = {0x0402, 0x0405, 0x0001, 0x0001};
+    static const uint16_t ids[] = {0, 0, 0x20, 0x21};
+    static const uint8_t types[] = {0x29, 0x21, 0x20, 0x20};
+    static const uint8_t gold[][14] = {
+        {0x18,0x80,0x09,0,0,0,0,0x29,30,0,0x2c,1,10,0},
+        {0x18,0x80,0x09,0,0,0,0,0x21,30,0,0x2c,1,25,0},
+        {0x18,0x80,0x09,0,0,0x20,0,0x20,60,0,0x10,0x0e,1},
+        {0x18,0x80,0x09,0,0,0x21,0,0x20,60,0,0x10,0x0e,2}
+    };
+    uint8_t request[ED_PAYLOAD_MAX], expected[ED_PAYLOAD_MAX], i, n, at, count, length;
+    ed_packet_t occupied;
+    reset(0);
+    for (i = 0; i < 4; i++) {
+        memcpy(request, "\x00\x80\x08\x00\x00\x00", 6);
+        request[4] = (uint8_t)ids[i];
+        observational(clusters[i], request, 6, gold[i], i < 2 ? 14 : 13);
+        request[0] = 0x10;
+        observational(clusters[i], request, 6, gold[i], i < 2 ? 14 : 13);
+        if (!i) standalone_read(request, 6);
+        request[0] = 0; request[1] = 0x81; request[2] = 6;
+        request[6] = types[i]; request[7] = 7; request[8] = 0;
+        request[9] = 90; request[10] = 0; request[11] = 0x34; request[12] = 0x12;
+        zcl(clusters[i], request, i < 2 ? 13 : 12, "\x18\x81\x07\x00", 4);
+        CHECK(ST.report[i].min == 7 && ST.report[i].max == 90 &&
+              ST.report[i].change == (i < 2 ? 0x1234 : 0x34));
+        memcpy(expected, gold[i], sizeof(gold[i]));
+        expected[1] = 0x82; expected[8] = 7; expected[10] = 90; expected[11] = 0;
+        expected[12] = 0x34; expected[13] = 0x12;
+        request[1] = 0x82; request[2] = 8;
+        observational(clusters[i], request, 6, expected, i < 2 ? 14 : 13);
+        if (!i) standalone_read(request, 6);
+        request[1] = 0x83; request[2] = 6;
+        request[9] = request[10] = 0xff;
+        zcl(clusters[i], request, i < 2 ? 13 : 12, "\x18\x83\x07\x00", 4);
+        request[1] = 0x84; request[2] = 8;
+        memcpy(expected, "\x18\x84\x09\x8b\x00\x00\x00", 7); expected[5] = (uint8_t)ids[i];
+        observational(clusters[i], request, 6, expected, 7);
+        if (!i) standalone_read(request, 6);
+        request[1] = 0x85; request[2] = 6;
+        request[7] = request[8] = 0xff; request[9] = request[10] = 0;
+        zcl(clusters[i], request, i < 2 ? 13 : 12, "\x18\x85\x07\x00", 4);
+        request[1] = 0x80; request[2] = 8;
+        observational(clusters[i], request, 6, gold[i], i < 2 ? 14 : 13);
+    }
+    reset(0);
+    memcpy(request, "\x00\x86\x08\x00\x00\x00\x00\x01\x00\x00\x09\x00\x01\x00\x00", 15);
+    memcpy(expected, gold[0], 14); expected[1] = 0x86;
+    memcpy(expected+14, "\x8c\x00\x01\x00\x86\x00\x09\x00\x86\x01\x00\x00", 12);
+    observational(0x0402, request, 15, expected, 26);
+    standalone_read(request, 15);
+    observational(0x0000, "\x00\x87\x08\x00\x05\x00", 6, "\x18\x87\x09\x8c\x00\x05\x00", 7);
+    observational(0x0001, "\x00\x88\x08\x00\x20\x00\x00\x21\x00", 9,
+        "\x18\x88\x09\x00\x00\x20\x00\x20\x3c\x00\x10\x0e\x01"
+        "\x00\x00\x21\x00\x20\x3c\x00\x10\x0e\x02", 23);
+    observational(0x0402, "\x00\x89\x08\x01\x00\x00\x01\x01\x00\x01\xff\xff", 12,
+        "\x18\x89\x09\x86\x01\x00\x00\x86\x01\x01\x00\x86\x01\xff\xff", 15);
+    /* Full request validation precedes even a fitting response prefix. */
+    for (length = 3; length <= ED_PAYLOAD_MAX; length++) {
+        memset(request, 0, sizeof(request)); request[1] = 0x8a; request[2] = 8;
+        if (length > 3 && !((length-3u)%3u)) {
+            at = 3;
+            while ((uint8_t)(at+11u) <= ED_PAYLOAD_MAX) {
+                memcpy(expected+at, gold[0]+3, 11); at += 11;
+                if ((uint8_t)((at-3u)/11u) == (length-3u)/3u) break;
+            }
+            memcpy(expected, "\x18\x8a\x09", 3);
+            observational(0x0402, request, length, expected, at);
+            standalone_read(request, length);
+        } else {
+            observational(0x0402, request, length, "\x18\x8a\x0b\x08\x80", 5);
+        }
+    }
+    /* Exactly82 output bytes: a complete success, then17 error records. */
+    memcpy(request, "\x00\x8b\x08", 3); memcpy(expected, "\x18\x8b\x09", 3);
+    n = 1; while ((ED_PAYLOAD_MAX-3u-11u*n)%4u) n++;
+    count = (uint8_t)(n+(ED_PAYLOAD_MAX-3u-11u*n)/4u); at = 3;
+    for (i = 0; i < count; i++) {
+        request[3u+3u*i] = 0; request[4u+3u*i] = i < n ? 0 : 9; request[5u+3u*i] = 0;
+        if (i < n) { memcpy(expected+at, gold[0]+3, 11); at += 11; }
+        else { memcpy(expected+at, "\x86\x00\x09\x00", 4); at += 4; }
+    }
+    CHECK(at == ED_PAYLOAD_MAX);
+    length = (uint8_t)(3u+3u*count);
+    observational(0x0402, request, length, expected, at);
+    standalone_read(request, length);
+    memset(request+length, 0, 3);
+    observational(0x0402, request, (uint8_t)(length+3u), expected, at);
+    standalone_read(request, (uint8_t)(length+3u));
+    request[length] = 2;
+    observational(0x0402, request, (uint8_t)(length+3u), "\x18\x8b\x0b\x08\x80", 5);
+    request[length] = 0;
+    observational(0x0402, request, (uint8_t)(length+1u), "\x18\x8b\x0b\x08\x80", 5);
+    for (i = 2; i != 0; i++) {
+        request[0] = 0; request[1] = 0x8c; request[2] = 8; request[3] = i;
+        request[4] = request[5] = 0;
+        observational(0x0402, request, 6, "\x18\x8c\x0b\x08\x80", 5);
+    }
+    /* Manufacturer namespace remains unsupported; header/code/TSN echo. */
+    observational(0x0402, "\x14\x34\x12\x8d\x08\x00\x00\x00", 8,
+        "\x1c\x34\x12\x8d\x0b\x08\x81", 7);
+    observational(0x0402, "\x08\x8e\x08\x00\x00\x00", 6, "\x18\x8e\x0b\x08\xc3", 5);
+    for (i = 0; i < 4; i++) {
+        memcpy(request, "\x00\x8f\x08\x00\x00\x00", 6);
+        request[0] = (uint8_t)(i*0x10u | 0x60u);
+        memcpy(expected, gold[0], 14); expected[1] = 0x8f;
+        observational(0x0402, request, 6, expected, 14);
+    }
+    discarded(0x0402, "\x18\x90\x09\x00\x00\x00\x00", 7);
+    discarded(0x0402, "\x00\x90\x09\x00", 4);
+    for (i = 0; i < 3; i++) {
+        memset(&CTX.application, 0, sizeof(CTX.application));
+        CTX.application.aps.profile_id = i == 0 ? 0x0105 : 0x0104;
+        CTX.application.aps.cluster_id = 0x0402;
+        CTX.application.aps.source_endpoint = 9;
+        CTX.application.aps.destination_endpoint = i == 1 ? 2 : 1;
+        memcpy(CTX.application.payload, "\x00\x91\x08\x00\x00\x00", 6);
+        CTX.application.length = i == 2 ? ED_PAYLOAD_MAX+1u : 6;
+        CTX.application_ready = 1;
+        CHECK(zcl_sensor_serve() == ZCL_SENSOR_DISCARDED && !CTX.response_pending);
+        CTX.application_ready = 0;
+    }
+    memset(&CTX.response, 0xa5, sizeof(CTX.response)); occupied = CTX.response;
+    CTX.response_pending = 1;
+    CHECK(receive(0x0402, "\x00\x92\x08\x00\x00\x00", 6) == ZCL_SENSOR_DISCARDED);
+    CHECK(CTX.response_result == NWK_APS_FULL && !memcmp(&CTX.response, &occupied, sizeof(occupied)));
+    CTX.response_pending = 0;
+    reset(0);
+    for (i = 0; i < 20; i++)
+        observational(0x0402, "\x00\x80\x08\x00\x00\x00", 6, gold[0], 14);
 }
 
 static void discarded(uint16_t cluster, const void *request, uint8_t length)
@@ -183,13 +354,12 @@ static void defaults_and_discards(void)
     /* Unsupported cluster, server-to-client direction, general commands. */
     zcl(0x0006, "\x00\x40\x00\x00\x00", 5, "\x18\x40\x0b\x00\xc3", 5);
     zcl(0x0402, "\x08\x41\x00\x00\x00", 5, "\x18\x41\x0b\x00\xc3", 5);
-    zcl(0x0402, "\x00\x42\x08\x00\x00\x00", 6, "\x18\x42\x0b\x08\x81", 5);
     zcl(0x0402, "\x00\x43\x0c\x00\x00\x05", 6, "\x18\x43\x0b\x0c\x81", 5);
     zcl(0x0402, "\x01\x44\x00", 3, "\x18\x44\x0b\x00\x81", 5);
     zcl(0x0003, "\x01\x45\x40\x00\x00", 5, "\x18\x45\x0b\x40\x81", 5);
     zcl(0x0003, "\x01\x46\x00\x05", 4, "\x18\x46\x0b\x00\x80", 5);
     /* Errors are sent even with the disable-default-response bit. */
-    zcl(0x0402, "\x10\x47\x08\x00\x00\x00", 6, "\x18\x47\x0b\x08\x81", 5);
+    zcl(0x0402, "\x10\x47\x0c\x00\x00\x00", 6, "\x18\x47\x0b\x0c\x81", 5);
     /* Silent: wrong profile/endpoint, empty, reserved type, short header, a
      * received Default Response, broadcast and group delivery. */
     CHECK(receive(0x0402, "\x02\x48\x00", 3) == ZCL_SENSOR_DISCARDED);
@@ -412,8 +582,8 @@ static void reports(void)
 
 int main(void)
 {
-    values(); reads(); defaults_and_discards(); identify(); configure(); bind(); reports();
-    printf("ZCL sensor: %lu checks PASS; SYNTHETIC values, Read/Write/Configure Reporting, "
+    read_reporting(); values(); reads(); defaults_and_discards(); identify(); configure(); bind(); reports();
+    printf("ZCL sensor: %lu checks PASS; SYNTHETIC values, Read/Write/Configure/Read Reporting, "
            "Identify, Bind/Unbind and report scheduling (host only).\n", checks);
     return 0;
 }

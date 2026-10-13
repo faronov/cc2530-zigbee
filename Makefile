@@ -2117,7 +2117,7 @@ $(BUILD)/host-join-smoke-deep: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) 
 $(BUILD)/host-join-smoke-deep-sanitize: $(JOIN_SMOKE_HOST_SRC) $(MAC_LINK_DIRECT_INPUTS) $(JOIN_SMOKE_PROFILE) | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -DCC2530_MAC_LINK_DEEP_REFERENCE \
 		-I. -Isrc -I$(MAC_ADAPTER_BANK_DIR) $(MAC_LINK_SHALLOW_SANITIZERS) $(JOIN_SMOKE_HOST_SRC) -o $@
-ZCL_SENSOR_HOST_SRC := tests/test_zcl_sensor.c src/zcl_sensor.c
+ZCL_SENSOR_HOST_SRC := tests/test_zcl_sensor.c src/zcl_sensor.c $(ZCL_TEMPERATURE_SRC)
 $(BUILD)/host-zcl-sensor: $(ZCL_SENSOR_HOST_SRC) $(HEADERS) Makefile | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_DEFINES) -I. -Isrc $(ZCL_SENSOR_HOST_SRC) -o $@
 $(BUILD)/host-zcl-sensor-sanitize: $(ZCL_SENSOR_HOST_SRC) $(HEADERS) Makefile | $(BUILD)
