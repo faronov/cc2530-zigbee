@@ -165,10 +165,44 @@ remains106/128. All377 bank thunks are correct. Bank free bytes1..7:
 `1,0,0,0,0,5233,14122` (aggregate19356); several banks remain full.
 No LTO or compiler change.
 
-At this development commit, integrated frozen-SHA FAST/SMOKE, case22 terminal
-acceptance, new FULL verdict/runtime stack/image hashes remain outstanding.
-Development FAST is not FULL qualification or hardware evidence. Preserve
-accepted `4e4e941` and its137-file receipt/evidence manifest independently.
+## Frozen-candidate acceptance
+
+Firmware `d0d5355196f667f89261666ac3dbd52260f5b69e` passed
+[FULL run38293766529](https://github.com/faronov/cc2530-zigbee/actions/runs/38293766529)
+on 2026-10-13: **29/29 gates and17/17 complete MCU scenarios**, including
+case22. The shorter run ID `3829376529` is a transcription error, not this
+candidate's acceptance run. No repeat FULL was needed for this documentation
+update.
+
+The final sealed receipt, all17 scenario reports, compiler inputs, linked
+images and physical-memory/banking proofs are preserved independently of the
+accepted Policy C137-file manifest. The existing evidence was rehashed before
+this update; both frozen firmware references remain unchanged.
+
+| Evidence | Accepted result |
+| --- | --- |
+| Compiler | Exact clean `1a01afb49d99ec754e62ab0f65f182de87b4cee3`; five binary hashes match prior accepted Policy C |
+| Final FULL receipt seal | `c95c20b3dc538fea9c25983c6676c0ac6dbd498b877b104ec33ad6d77685b445` |
+| ELF SHA256 | `9f2ceb04c088b476576bf4752ea8c305b0ce6bfee0d6b9d01c29185e06200fe1` |
+| HEX SHA256 | `fce71af77d75e3f4d46271492ca75bf219e7d67e0986fbf965e07dcfdab9bd30` |
+| Separate accepted68-file manifest SHA256 | `8f812366991fbd8be31eb6462c0bd519dbe23b9a3a5352aeaa43cf769b00c88e` |
+| Runtime/static stack | 101/128 bytes measured;106/128 static |
+| Bank thunks | 377 correct;0 incorrect |
+| Case22 | 471/471 steps, terminal serving |
+| Case21 | 600084ms,120 protected frames,12 replay drops,23 reports;0 erases/programs/ordinary-RX commands/checkpoints |
+
+Frozen local FAST passed10/10 and SMOKE16/16. CI toolchain FAST passed11/11:
+it adds `compiler-tree` freshness/provenance and executes lit; local FAST
+imports sealed lit evidence bound to the identical compiler. The differing
+counts are not interchangeable proof contracts or a dropped firmware gate.
+The original commissioning, same-parent, silent-parent and known-router
+scenarios all completed with their required serving/fault terminals.
+
+This is **FULL-qualified experimental Policy C security receive completion**,
+not generic Zigbee conformance, production readiness or hardware validation.
+The Confirm-Key counter+1 behavior described above is unchanged and remains
+a separate correctness decision. Preserve accepted `4e4e941` and its137-file
+receipt/evidence manifest independently.
 
 ## Remaining interpretation and next slice
 
