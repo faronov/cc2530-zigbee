@@ -251,7 +251,8 @@ static zdo_runtime_result_t received(zdo_runtime_t * SDCC_VOLATILE context, nwk_
         return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_OK);
     }
     if (p->aps.type || !p->length) return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_FORMAT);
-    if (p->aps.cluster_id == ZDO_SRV_BIND_REQUEST || p->aps.cluster_id == ZDO_SRV_UNBIND_REQUEST) {
+    if (p->aps.cluster_id == ZDO_SRV_BIND_REQUEST || p->aps.cluster_id == ZDO_SRV_UNBIND_REQUEST ||
+        p->aps.cluster_id == ZDO_SRV_MGMT_BIND_REQUEST) {
         ctx->application_ready = 1;
         return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_OK);
     }

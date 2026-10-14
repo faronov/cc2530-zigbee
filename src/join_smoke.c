@@ -3,6 +3,7 @@
 #include "flash_exec.h"
 #include "timebase.h"
 #include "zcl_sensor.h"
+#include "bdb_join_internal.h"
 #include <string.h>
 #if defined(CC2530_RX_DIAG)
 #include "cc2530_rx_diag.h"
@@ -214,7 +215,9 @@ void join_smoke_poll(void)
             if(!BACKOFF) { fault(JS_RANDOM); return; }
             S.saw_ready=1; S.stage=5; gate=JS_READY; S.phase=gate;
             started=previous=now; steps=0;
-            zcl_sensor_init();
+            S.security_result=security_keys_status(&bdb_join_keys);
+            if(S.security_result!=SECURITY_KEYS_OK || bdb_join_keys.phase!=SECURITY_KEYS_VERIFIED ||
+               !zcl_sensor_init(&bdb_join_keys.config)) { fault(JS_SECURITY); return; }
         }
         return;
     }
