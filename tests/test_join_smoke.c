@@ -749,6 +749,14 @@ int main(int argc, char **argv)
                     assert(join_smoke_status.phase==JS_READY && join_smoke_status.saw_ready);
                     assert(join_smoke_device.phase==BDB_JOIN_READY && join_smoke_device.member);
                     assert(join_smoke_status.stage==5 && join_smoke_status.announce==255);
+                    {
+                        security_keys_status_t identity;
+                        assert(security_keys_status(&identity)==SECURITY_KEYS_OK &&
+                            identity.phase==SECURITY_KEYS_VERIFIED);
+                        assert(!memcmp(ZCL_SENSOR_STATE.tc_ieee,identity.config.tc_ieee,8));
+                        assert(!memcmp(join_smoke_device.config.association.extraction.local,
+                            identity.config.own_ieee,8));
+                    }
                     serve_ready(&calls);
                     link_peer_verify();
                     if(caller_dump>=0) recovery_dump();

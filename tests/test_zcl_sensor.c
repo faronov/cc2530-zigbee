@@ -580,8 +580,24 @@ static void reports(void)
     CHECK(ST.report[0].age == 0xffff);
 }
 
-int main(void)
+static void management_bind(void)
 {
+    static const uint8_t request[] = {0x91, 0};
+    reset(0);
+    CHECK(zdo(0x0033, request, sizeof(request)) == ZCL_SENSOR_HANDLED);
+    CHECK(CTX.response_pending && CTX.response.length == 68);
+    CHECK(!memcmp(CTX.response.payload, "\x91\x00\x03\x00\x03", 5));
+    CHECK(!memcmp(CTX.response.payload+5, own, 8));
+    CHECK(!memcmp(CTX.response.payload+18, tc, 8));
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 2 && !strcmp(argv[1], "mgmt-bind")) {
+        management_bind();
+        printf("Mgmt Bind initial live table: %lu checks PASS.\n", checks);
+        return 0;
+    }
     read_reporting(); values(); reads(); defaults_and_discards(); identify(); configure(); bind(); reports();
     printf("ZCL sensor: %lu checks PASS; SYNTHETIC values, Read/Write/Configure/Read Reporting, "
            "Identify, Bind/Unbind and report scheduling (host only).\n", checks);
