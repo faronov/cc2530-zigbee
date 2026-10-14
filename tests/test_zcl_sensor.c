@@ -648,6 +648,12 @@ static void management_bind(void)
     CHECK(!memcmp(CTX.response.payload+5, own, 8));
     CHECK(!memcmp(CTX.response.payload+17, tc, 8));
     CTX.response_pending = 0;
+    /* A read is not a report completion or an application timer poll. */
+    ST.sent = 1; ST.pending = 0; ST.value = 2340; ST.report[0].age = 17;
+    CTX.last += 3*ZCL_SENSOR_SECOND;
+    management_query(0, 0x92, 2);
+    CHECK(ST.sent == 1 && ST.report[0].age == 17 && ST.report[0].last == 2100);
+    reset(0);
     for (mask = 0; mask < 8; mask++) {
         reset(0);
         for (i = 0; i < 3; i++) if (!(mask & (1u << i))) {
