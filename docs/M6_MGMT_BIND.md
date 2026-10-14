@@ -86,18 +86,30 @@ Mgmt_Bind request in native/nonrecovering ASan/UBSan. Genuine cold-rejoin
 case16 independently failed cached-TC equality against the real security/NV
 owners in both builds, before firmware correction.
 
-The bounded handler and initializer passed 77,785 focused checks in native
+The bounded handler and initializer passed 77,800 focused checks in native
 and nonrecovering ASan/UBSan, covering all live masks, real Bind/Unbind,
 repetitions, wrong identities/endpoints/modes/clusters, pages, exact and short
 capacities, busy slot, wrong context, malformed/trailing input and read-only
-state. Genuine native same-parent/alternate-parent cases16/18 pass identity
+state, including a pending report and elapsed timer. That edge case independently
+fails on the preceding implementation in both builds, then passes after moving
+enumeration before bookkeeping. A nonzero ZDO source endpoint similarly fails
+the new rejection regression before its correction.
+Genuine native same-parent/alternate-parent cases16/18 pass identity
 checks against VERIFIED durable TC and device identity.
 
-Initial LLVM FAST: 10/10 PASS; integrated LLVM SMOKE: 16/16 PASS using the
-unchanged reference simulator. Thirty tier/admission tests pass, including
+Initial LLVM FAST: 10/10 PASS. Final integrated LLVM SMOKE: 16/16 PASS
+(including all ten FAST gates), 272.9 seconds, on clean implementation
+`d5bed19a47a4d75dc25d67462ab00456a05f2fb3` using the unchanged reference
+simulator. Receipt seal:
+`3b055e254687d83c713edcbfa3c778fc68f58fbe43c1fedab9998b45a9fa8641`.
+Evidence source-tree digest:
+`8fc14054acbee179707eb70d2ef24949f936045ca812ed8a920d90d0f7aa394e`.
+Thirty tier/admission tests pass, including
 negative completion/count/type/identity/owner-metric cases.
 All 19 genuine native/nonrecovering-sanitizer scenario transcripts are byte
-identical; the full reference schemas and cold-NV lineage are checked.
+identical before the final endpoint-only tightening; affected case24 was then
+regenerated and rechecked byte-identically with standard endpoint0 framing.
+The full reference schemas and cold-NV lineage are checked.
 
 Case24 adds 18 actual protected management transactions. Its native reference
 has 1709 calls, 1113 application/identity observations, 414 pure-owner
@@ -111,20 +123,32 @@ target compiler and bound to the ELF, including cold-recovery cases16/18/20.
 The constant-only layout probe is never linked or used to write MCU state.
 These are native reference results until genuine MCU replay completes.
 
-Resources: CODE224627 (+999 vs accepted M6), common19001
+Resources: executable CODE224728 (+1100 vs accepted M6), common19001
 (+57), raw XDATA5220 unchanged, physical static-frame pool217 unchanged.
 Ordinary XDATA BSS4959 and initialized DATA44 remain unchanged. Static stack
 demand106/128; 379 correct thunks, zero incorrect; generic-pointer sites18.
 Logical static-frame sum1777 (+16), 224 symbols (+1), with no physical-pool growth.
-Bank free bytes1..7: 0/0/0/0/2/3482/14122; every placement/stack/ABI/
-fixed-address admission remains enabled. Common physical occupancy is19045,
-including44-byte initialized data load, leaving13723 of32768.
+Bank used bytes1..7: 32768/32767/32768/32768/32768/29386/12502.
+Bank free bytes1..7: 0/1/0/0/0/3382/14122; every placement/stack/ABI/
+fixed-address admission remains enabled. Common physical HEX occupancy is19190:
+19001 executable bytes,145 alignment/padding bytes and44 initialized data-load
+bytes, leaving13578 of32768. The symbolic CODE+data sum19045 excludes padding.
 Minimum local bank headroom remains zero; aggregate slack is not placement proof.
 Development ELF SHA256:
-`cfa5be76c2e70b1cc0e51925c9a8d4ecbcb54697ed7cef6ad8dc260785c1869d`.
+`738fa2d980aed91efbc67399a0e7ebb1253ce92466a8bd96104835809d4d2c7a`.
 HEX SHA256:
-`65ee3bcdcea10ca7b657d252a9fced5ad1ee7628b0e62b610c21f5dd2193df22`.
+`798975f4171454fcfe54d56584ba4287806dbb4e9993f1fcb7c5c566fa173e25`.
 Whole-MCU/final FULL evidence is pending; host success is not a whole-MCU claim.
+The final selection has31 gates and all19 complete MCU scenarios, preserving
+the previous18 and adding case24. Final runtime peak is not inferred from the
+accepted predecessor's101/128 or from SMOKE prefixes.
+
+Remaining limits are RAM-only fixed-TC destinations, no externally-configured
+origin tracking, groups, multi-destination table or unknown-router discovery;
+synthetic sensors/device ID and physical interoperability remain unchanged.
+The recommended next bounded milestone is reporting TX completion/failure
+and response-slot backpressure accounting, separate from persistence, security
+commands and broadcast key updates.
 
 Confirm-Key remains C -- UNRESOLVED. No compiler/HWLab/hardware, LTO, NV schema,
 production defaults or main merge changes are authorized by this slice.
