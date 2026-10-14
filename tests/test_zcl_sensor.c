@@ -612,7 +612,7 @@ static void management_query(uint8_t start, uint8_t sequence, uint8_t length)
     size = binding_golden(expected, sequence, start, ED_PAYLOAD_MAX);
     memset(&CTX.application, 0, sizeof(CTX.application));
     CTX.application.nwk.source = 0x1234; CTX.application.nwk.destination = 0x4321;
-    CTX.application.aps.source_endpoint = 7; CTX.application.aps.cluster_id = 0x0033;
+    CTX.application.aps.cluster_id = 0x0033;
     CTX.application.aps.flags = APS_FLAG_ACK_REQUEST;
     memcpy(CTX.application.payload, request, length); CTX.application.length = length;
     CTX.application_ready = 1;
@@ -620,7 +620,7 @@ static void management_query(uint8_t start, uint8_t sequence, uint8_t length)
     CHECK(CTX.response_pending && CTX.response.length == size);
     CHECK(!memcmp(CTX.response.payload, expected, size));
     CHECK(CTX.response.aps.cluster_id == 0x8033 && !CTX.response.aps.profile_id &&
-          !CTX.response.aps.source_endpoint && CTX.response.aps.destination_endpoint == 7);
+          !CTX.response.aps.source_endpoint && !CTX.response.aps.destination_endpoint);
     CHECK(CTX.response.nwk.destination == 0x1234 && CTX.response.nwk.version == 2 &&
           CTX.response.nwk.radius == 30 && CTX.response.nwk.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
     CHECK(!memcmp(ST.bound, before.bound, sizeof(ST.bound)));
@@ -708,7 +708,7 @@ static void management_bind(void)
     }
     for (i = 0; i < 20; i++) management_query(1, (uint8_t)(0xb0+i), 2);
     /* Busy queue and inadmissible contexts never alter live state. */
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 11; i++) {
         memset(&CTX.application, 0, sizeof(CTX.application));
         CTX.application.nwk.destination = 0x4321; CTX.application.aps.cluster_id = 0x0033;
         memcpy(CTX.application.payload, "\xe0\x00", 2); CTX.application.length = 2;
@@ -718,10 +718,11 @@ static void management_bind(void)
         if (i == 3) CTX.application.aps.delivery_mode = APS_DELIVERY_BROADCAST;
         if (i == 4) CTX.application.aps.profile_id = 0x0104;
         if (i == 5) CTX.application.aps.destination_endpoint = 1;
-        if (i == 6) CTX.application.aps.source_endpoint = 0xff;
+        if (i == 6) CTX.application.aps.source_endpoint = 7;
         if (i == 7) CTX.application.aps.type = ED_APS_ACK;
         if (i == 8) CTX.application.aps.cluster_id = 0x8033;
         if (i == 9) CTX.application.length = ED_PAYLOAD_MAX+1u;
+        if (i == 10) CTX.application.aps.source_endpoint = 0xff;
         before = ST; CTX.application_ready = 1;
         CHECK(zcl_sensor_serve() == ZCL_SENSOR_DISCARDED && !CTX.response_pending);
         CHECK(!memcmp(ST.bound, before.bound, sizeof(ST.bound)) &&

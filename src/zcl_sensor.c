@@ -415,7 +415,7 @@ uint8_t zcl_sensor_binding_page(uint8_t sequence, uint8_t start,
 
 static uint8_t management_bind(void)
 {
-    if (RX.nwk.type || RX.aps.type || RX.aps.source_endpoint == 0xffu ||
+    if (RX.nwk.type || RX.aps.type || RX.aps.source_endpoint ||
         (RX.aps.flags & (uint8_t)~APS_FLAG_ACK_REQUEST) ||
         RX.length < 2u || RX.length > ED_PAYLOAD_MAX)
         return ZCL_SENSOR_DISCARDED;

@@ -48,6 +48,9 @@ Primary evidence: pinned Core R22, `05-3474-22`, SHA256
 `991dd02b7e5764ac349c47d5c4cf0fbe01529ff6594df03e8dad3d3d4df9e274`,
 section 2.4.3.3.4/Table 2-83, printed p.125, and section 2.4.4.4.4/
 Tables 2-133/134, pp.186-188. Only functional facts are reproduced here.
+Section 2.5.3, printed p.205, requires endpoint0 for both ends of ZDP
+requests/responses and forbids ZDO fragmentation. The MCU peer uses endpoint0;
+nonzero source endpoints are rejected, not treated as a valid ZDO client.
 
 Request: TSN, one-byte StartIndex. Missing fields are discarded; trailing
 bytes are ignored, matching the existing mandatory-prefix ZDO server policy.
@@ -69,7 +72,7 @@ status for this successfully obtained table; no such error is invented.
 Unknown/invalid source or destination identity fails closed, never emitting a
 fabricated record.
 
-Unicast plain APS Data/profile0/destination endpoint0 is required. Replies
+Unicast plain APS Data/profile0/source and destination endpoint0 is required. Replies
 reverse NWK destination and APS destination endpoint, retain local endpoint0,
 and echo TSN. Broadcast/group traffic, malformed context, received response
 clusters and a busy response slot produce no management reply. The occupied

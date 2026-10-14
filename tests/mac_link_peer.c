@@ -100,7 +100,7 @@ static void check_binding_response(uint8_t step)
         if (step == 14) binding_endpoints[1] = 7;
         return;
     }
-    CHECK(peer_in.aps.destination_endpoint == 7);
+    CHECK(!peer_in.aps.destination_endpoint);
     if (step == 6) start = 1;
     if (step == 7) start = 3;
     if (step == 8 || step == 13) start = 255;
@@ -419,7 +419,6 @@ void link_peer_receive_binding(uint8_t step)
     base_peer(0,0,binding_commands[step]);
     peer_out.payload[0] = (uint8_t)(0xc0u+step);
     if (binding_commands[step] == 0x33) {
-        peer_out.aps.source_endpoint = 7;
         peer_out.length = 2; peer_out.payload[1] = 0;
         if (step == 6) peer_out.payload[1] = 1;
         if (step == 7) peer_out.payload[1] = 3;
