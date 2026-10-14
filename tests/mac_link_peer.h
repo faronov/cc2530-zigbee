@@ -26,6 +26,8 @@ void link_peer_receive_application(void);
 #if defined(CC2530_REPLAY_POLICY_C)
 extern unsigned link_peer_reporting;
 void link_peer_receive_reporting(uint8_t step);
+extern unsigned link_peer_bindings, link_peer_binding_reports;
+void link_peer_receive_binding(uint8_t step);
 void link_peer_receive_service(void);
 void link_peer_receive_completion(uint8_t step);
 #endif

@@ -75,6 +75,51 @@ static const struct {
 };
 static uint8_t reporting_pending;
 unsigned link_peer_reporting;
+static const uint16_t binding_commands[18] = {
+    0x33,0x22,0x33,0x21,0x33,0x21,0x33,0x33,0x33,
+    0x22,0x33,0x22,0x22,0x33,0x21,0x33,0x33,0x33
+};
+static uint8_t binding_pending, binding_endpoints[3];
+unsigned link_peer_bindings, link_peer_binding_reports;
+
+/* Peer expectation only: never emitted or installed as a DUT response/state. */
+static void check_binding_response(uint8_t step)
+{
+    static const uint16_t clusters[3] = {0x0402,0x0405,1};
+    uint8_t i, index = 0, count = 0, at = 5, total = 0, start = 0;
+    CHECK(peer_in.nwk.destination == 0 && !peer_in.aps.profile_id &&
+          !peer_in.aps.source_endpoint && !peer_in.aps.flags);
+    CHECK(peer_in.aps.cluster_id == (binding_commands[step] | 0x8000u));
+    CHECK(peer_in.payload[0] == (uint8_t)(0xc0u+step) && !peer_in.payload[1]);
+    if (binding_commands[step] != 0x33) {
+        CHECK(peer_in.length == 2 && !peer_in.aps.destination_endpoint);
+        if (step == 1 || step == 9) binding_endpoints[0] = 0;
+        if (step == 3 || step == 5) binding_endpoints[0] = 9;
+        if (step == 11) binding_endpoints[1] = 0;
+        if (step == 12) binding_endpoints[2] = 0;
+        if (step == 14) binding_endpoints[1] = 7;
+        return;
+    }
+    CHECK(peer_in.aps.destination_endpoint == 7);
+    if (step == 6) start = 1;
+    if (step == 7) start = 3;
+    if (step == 8 || step == 13) start = 255;
+    if (step == 16) start = 2;
+    for (i = 0; i < 3; i++) if (binding_endpoints[i]) total++;
+    CHECK(peer_in.payload[2] == total && peer_in.payload[3] == (total ? start : 0));
+    for (i = 0; i < 3; i++) {
+        if (!binding_endpoints[i]) continue;
+        if (index++ < start) continue;
+        CHECK(peer_in.length >= at+21u);
+        CHECK(!memcmp(peer_in.payload+at,identity.own_ieee,8) && peer_in.payload[at+8u] == 1);
+        CHECK(peer_in.payload[at+9u] == (uint8_t)clusters[i] &&
+              peer_in.payload[at+10u] == (uint8_t)(clusters[i] >> 8) && peer_in.payload[at+11u] == 3);
+        CHECK(!memcmp(peer_in.payload+at+12u,identity.tc_ieee,8) &&
+              peer_in.payload[at+20u] == binding_endpoints[i]);
+        count++; at += 21;
+    }
+    CHECK(peer_in.length == at && peer_in.payload[4] == count);
+}
 #endif
 
 static void base_peer(uint8_t nwk_command, uint8_t aps_type, uint16_t cluster)
@@ -293,6 +338,11 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         CHECK(peer_in.payload[1] == 180 && peer_in.payload[2] == 1); permit = 1;
     }
 #if defined(CC2530_REPLAY_POLICY_C)
+    else if (binding_pending && !peer_in.aps.profile_id) {
+        CHECK(verified && permit && !aps_secured);
+        check_binding_response((uint8_t)(binding_pending-1u));
+        binding_pending = 0; link_peer_bindings++;
+    }
     else if (reporting_pending && peer_in.aps.profile_id == 0x0104 &&
              peer_in.aps.destination_endpoint == 9) {
         uint8_t step = (uint8_t)(reporting_pending-1u);
@@ -307,6 +357,13 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
     else {
         CHECK(permit && peer_in.aps.profile_id == 0x0104 && (peer_in.aps.flags & APS_FLAG_ACK_REQUEST));
         CHECK(!recovering || (reannounced && link_peer_parent));
+#if defined(CC2530_REPLAY_POLICY_C)
+        if (link_peer_bindings == 18 && peer_in.aps.cluster_id == 0x0405) {
+            CHECK(peer_in.aps.source_endpoint == 1 && peer_in.aps.destination_endpoint == 7 &&
+                  !peer_in.nwk.destination);
+            link_peer_binding_reports++;
+        }
+#endif
         link_peer_app++; link_peer_report_cluster = peer_in.aps.cluster_id; link_peer_report_counter = peer_in.aps.counter;
         link_peer_report_length = peer_in.length; memcpy(link_peer_report, peer_in.payload, peer_in.length);
         base_peer(0, ED_APS_ACK, peer_in.aps.cluster_id);
@@ -353,6 +410,31 @@ static void receive_application(uint8_t acknowledge)
 
 void link_peer_receive_application(void) { receive_application(1); }
 #if defined(CC2530_REPLAY_POLICY_C)
+void link_peer_receive_binding(uint8_t step)
+{
+    uint16_t cluster = step == 11 || step == 14 ? 0x0405u : step == 12 ? 1u : 0x0402u;
+    CHECK(step < 18 && verified && permit && !recovering && !binding_pending);
+    CHECK(link_peer_bindings == step);
+    if (!step) binding_endpoints[0] = binding_endpoints[1] = binding_endpoints[2] = 1;
+    base_peer(0,0,binding_commands[step]);
+    peer_out.payload[0] = (uint8_t)(0xc0u+step);
+    if (binding_commands[step] == 0x33) {
+        peer_out.aps.source_endpoint = 7;
+        peer_out.length = 2; peer_out.payload[1] = 0;
+        if (step == 6) peer_out.payload[1] = 1;
+        if (step == 7) peer_out.payload[1] = 3;
+        if (step == 8 || step == 13) peer_out.payload[1] = 255;
+        if (step == 16) peer_out.payload[1] = 2;
+    } else {
+        peer_out.length = 22; memcpy(peer_out.payload+1,identity.own_ieee,8);
+        peer_out.payload[9] = 1; peer_out.payload[10] = (uint8_t)cluster;
+        peer_out.payload[11] = (uint8_t)(cluster >> 8); peer_out.payload[12] = 3;
+        memcpy(peer_out.payload+13,identity.tc_ieee,8);
+        peer_out.payload[21] = step == 3 || step == 5 || step == 9 ? 9 : step == 14 ? 7 : 1;
+    }
+    seal_peer(0,0,NULL,1); binding_pending = (uint8_t)(step+1u);
+}
+
 void link_peer_receive_reporting(uint8_t step)
 {
     CHECK(step < 8 && verified && permit && !recovering && !reporting_pending);

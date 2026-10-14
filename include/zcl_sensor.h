@@ -65,6 +65,7 @@ uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_F
 /* Bounded read-only view of the three live cluster destinations. Source is
  * the admitted device, destination is the cached verified TC, mode is 03.
  * Returns whole-page length (5+21*n) or 0, leaving output untouched on error.
+ * Output is disjoint ordinary XDATA, excluding owner/alias/MMIO storage.
  * capacity is at most ED_PAYLOAD_MAX. Empty table has zero count/start/list;
  * a nonempty table past its end returns SUCCESS, requested start, zero list.
  * No retained pointers, binding copy, scheduler mutation or I/O. */

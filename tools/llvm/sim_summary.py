@@ -4,7 +4,7 @@ usage: sim_summary.py SIMDIR OUT.json [VARIANT]"""
 import json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from join_smoke_service import service_valid, reporting_valid
+from join_smoke_service import service_valid, reporting_valid, bindings_valid
 _SIM = json.loads((Path(__file__).with_name("profile.json")).read_text())["simulator"]
 variant = sys.argv[3] if len(sys.argv) == 4 else "production"
 if len(sys.argv) not in (3, 4) or variant not in ("production", "rx-diag", "parent-recovery", "parent-recovery-policy-c"):
@@ -25,6 +25,10 @@ for c, term in EXPECT.items():
         good = good and service_valid(r.get("service"))
     if c == 23:
         good = good and reporting_valid(r.get("reporting"))
+    if c == 24:
+        good = good and bindings_valid(r.get("bindings"))
+    if c in (16, 18, 20):
+        good = good and type(r.get("binding_identity_checks")) is int and r["binding_identity_checks"] > 0
     ok &= good
     rows.append(dict(case=c, steps=r.get('steps'), of_steps=r.get('of_steps'), terminal=r.get('terminal'),
                      expected_terminal=term, complete=r.get('complete'), peak_sp=hex(r.get('peak_sp', 0)),

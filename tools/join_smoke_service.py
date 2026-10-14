@@ -34,3 +34,19 @@ def reporting_valid(reporting):
         and reporting["state_checks"] >= 8
         and (reporting["min"], reporting["max"], reporting["change"]) == (7, 20, 50)
     )
+
+
+def bindings_valid(bindings):
+    return (
+        type(bindings) is dict
+        and set(bindings) == {"requests", "responses", "reports", "state_checks",
+                             "readonly_checks", "final_entries", "temperature_endpoint",
+                             "humidity_endpoint", "power_endpoint"}
+        and all(type(v) is int and v >= 0 for v in bindings.values())
+        and bindings["requests"] == bindings["responses"] == 18
+        and bindings["reports"] >= 1
+        and bindings["state_checks"] >= 18
+        and bindings["readonly_checks"] >= 1
+        and (bindings["final_entries"], bindings["temperature_endpoint"],
+             bindings["humidity_endpoint"], bindings["power_endpoint"]) == (1, 0, 7, 0)
+    )

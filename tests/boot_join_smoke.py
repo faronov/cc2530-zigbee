@@ -39,10 +39,10 @@ PERIPHERAL_SFR = frozenset((
     0xb4, 0xbc, 0xbd, 0xd9, 0xe1, 0xe9, 0x91, 0xbf, 0x94, 0xc3, 0xa2, 0xa3,
     0xa4, 0xa5, 0xa6, 0xa1, 0xa7, 0x9c,
 ))
-CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22, 23)
+CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22, 23, 24)
 FLASH_BUSY_CASE = 10
 # READY keeps serving: initial join, and secured rejoin from persisted NV.
-SERVING_CASES = (0, 16, 18, 20, 21, 22, 23)
+SERVING_CASES = (0, 16, 18, 20, 21, 22, 23, 24)
 
 
 def validate_service(service):
@@ -87,7 +87,7 @@ def hex_bytes(value, size):
 
 
 def validate_reference(vector):
-    require(set(vector) - {"parent_history", "service", "reporting"} == {"case", "admission", "draws", "initial", "nv_initial", "steps",
+    require(set(vector) - {"parent_history", "service", "reporting", "bindings"} == {"case", "admission", "draws", "initial", "nv_initial", "steps",
                             "peer_tx", "aes_blocks", "flash_commands"}, "Malformed join reference")
     if "parent_history" in vector:
         hex_bytes(vector["parent_history"], 20)
@@ -114,10 +114,10 @@ def validate_reference(vector):
         hex_bytes(step["nv"], 4096)
         if "replay_floors" in step:
             hex_bytes(step["replay_floors"], 16)
-        ready_reporting = vector["case"] == 23 and bytes.fromhex(step["status"])[6] == 5
+        ready_reporting = vector["case"] in (16, 18, 20, 23, 24) and bytes.fromhex(step["status"])[6] == 5
         require(("application_state" in step) == ready_reporting, "Missing or out-of-context application observation")
         if ready_reporting:
-            hex_bytes(step["application_state"], 47)
+            hex_bytes(step["application_state"], 47 if vector["case"] == 23 else 63)
     if vector["case"] == 21:
         validate_service(vector.get("service"))
         require(all("replay_floors" in s for s in vector["steps"]),
@@ -136,6 +136,13 @@ def validate_reference(vector):
                 sum("application_state" in s for s in vector["steps"]), "Application state-check count differs")
     else:
         require("reporting" not in vector, "Reporting metrics outside runtime reporting scenario")
+    if vector["case"] == 24:
+        from join_smoke_service import bindings_valid
+        require(bindings_valid(vector.get("bindings")), "Missing live Mgmt Bind validation")
+        require(vector["bindings"]["state_checks"] ==
+                sum("application_state" in s for s in vector["steps"]), "Binding state-check count differs")
+    else:
+        require("bindings" not in vector, "Binding metrics outside management scenario")
 
 
 def reference(output, case):

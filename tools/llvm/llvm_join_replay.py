@@ -415,12 +415,15 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     image, symbols, code = artifacts(elf)
     application_regions = None
     application_checks = 0
-    if vector["case"] == 23:
+    if vector["case"] in (16, 18, 20, 23, 24):
         layout = json.loads((Path(elf).resolve().parent.parent / "audit/sensor-layout.json").read_text())
         require(layout["elf_sha256"] == sha_file(elf), "Application observation layout belongs to another image")
-        application_regions = layout["regions"]
+        application_regions = layout["regions" if vector["case"] == 23 else "binding_regions"]
+        expected_regions = [("reports", 40), ("bindings", 3), ("flags", 4)]
+        if vector["case"] != 23:
+            expected_regions += [("tc_ieee", 8), ("own_ieee", 8)]
         require([(r["name"], r["size"]) for r in application_regions] ==
-                [("reports", 40), ("bindings", 3), ("flags", 4)], "Invalid application observation regions")
+                expected_regions, "Invalid application observation regions")
         require(all(type(r["offset"]) is int and 0 <= r["offset"] <= layout["device_size"] - r["size"]
                     for r in application_regions), "Application observation escapes its owner")
     sites = sites_for(image, symbols, code)
@@ -645,7 +648,7 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                         f"Status step{index}: {state[0][0x1e00:0x1e30].hex()} != {expected.hex()}")
                 require(state[4][0x3e800:0x3f800] == bytes.fromhex(step["nv"]), "Actual journal differs")
                 if "application_state" in step:
-                    require(application_regions is not None, "Application observation outside case23")
+                    require(application_regions is not None, "Application observation outside admitted scenario")
                     owner = symbols["_join_smoke_device"]
                     actual = b"".join(state[0][owner+r["offset"]:owner+r["offset"]+r["size"]]
                                       for r in application_regions)
@@ -689,6 +692,13 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
             require(application_checks == vector["reporting"]["state_checks"],
                     "Actual MCU reporting-state coverage differs")
             result["reporting"] = vector["reporting"]
+        if vector["case"] == 24:
+            require(application_checks == vector["bindings"]["state_checks"],
+                    "Actual MCU binding/identity-state coverage differs")
+            result["bindings"] = vector["bindings"]
+        if vector["case"] in (16, 18, 20):
+            require(application_checks > 0, "Missing actual recovered binding-identity checks")
+            result["binding_identity_checks"] = application_checks
     elif finished:
         require(state[0][0x1e06] == 6, "Wrong terminal state")
         commands = base + J.resume(state, pc) + stops + ["step 1", "run"] + capture(60000)

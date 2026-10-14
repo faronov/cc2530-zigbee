@@ -1012,7 +1012,7 @@ board has no temperature, humidity or battery sensor. Endpoint 1 (device ID
 still `FFFF`) advertises the input clusters Basic `0000`, Power Configuration
 `0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
 Measurement `0405`. `zdo_runtime` publishes endpoint frames and ZDO
-Bind/Unbind requests, and the banked application server `zcl_sensor` answers
+Bind/Unbind and Mgmt_Bind requests, and the banked application server `zcl_sensor` answers
 them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
 
 - **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
@@ -1046,6 +1046,12 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   returns NO_ENTRY.
 - **Persistence:** bindings and reporting configuration are RAM-only. A reset
   restores the defaults: all three clusters bound to coordinator endpoint 1.
+- **ZDO Mgmt_Bind:** enumerates those actual live cluster destinations, including
+  locally installed demonstration defaults, with complete extended-address
+  records and start-index pagination. The TC IEEE cache comes from VERIFIED
+  security-owner identity, never an association record or alternate MAC parent.
+  No mutable duplicate table or NV field is added. See [the bounded contract
+  and qualification status](M6_MGMT_BIND.md).
 
 READY has no serving budget: the join-smoke caller serves until reset or a
 fault. It first sends the Basic ModelIdentifier report. Then, whenever no

@@ -17,6 +17,8 @@ SERVICE = dict(duration_ms=600084, protected_frames=120, replay_drops=12, report
                erases=0, programs=0, ordinary_rx_commands=0, security_checkpoints=0,
                flash_controller_nominal_us=0)
 REPORTING = dict(requests=8, responses=8, reports=7, state_checks=8, min=7, max=20, change=50)
+BINDINGS = dict(requests=18, responses=18, reports=1, state_checks=18, readonly_checks=1,
+                final_entries=1, temperature_endpoint=0, humidity_endpoint=7, power_endpoint=0)
 
 
 def args(tier, **extra):
@@ -111,7 +113,7 @@ class Selection(unittest.TestCase):
 
     def test_long_cases_share_segment_deadline_and_have_separate_snapshots(self):
         steps, _ = names("full", variant="parent-recovery-policy-c", case0_budget=60)
-        for case in (0, 21, 23):
+        for case in (0, 21, 23, 24):
             s = steps[f"sim-case{case}"]
             self.assertTrue(s.suspendable)
             self.assertTrue(s.env["SNAP_DIR"].endswith(f"case{case}-snap"))
@@ -119,6 +121,8 @@ class Selection(unittest.TestCase):
                          steps["sim-case21"].env["STOP_AT_TIME"])
         self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
                          steps["sim-case23"].env["STOP_AT_TIME"])
+        self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
+                         steps["sim-case24"].env["STOP_AT_TIME"])
         self.assertFalse(steps["sim-case16"].suspendable)
 
 
@@ -331,6 +335,10 @@ class Summary(unittest.TestCase):
                     row["service"] = SERVICE.copy()
                 if case == 23:
                     row["reporting"] = REPORTING.copy()
+                if case == 24:
+                    row["bindings"] = BINDINGS.copy()
+                if case in (16, 18, 20):
+                    row["binding_identity_checks"] = 1
                 if mutate:
                     row = mutate(case, row)
                 if row is not None:
@@ -375,6 +383,31 @@ class Summary(unittest.TestCase):
                            terminal="serving", reporting=REPORTING)
                 report.write_text(json.dumps(row | change))
                 self.assertFalse(tiers.sim_check(report, 23, "serving")()[0], change)
+
+    def test_bindings_require_complete_owner_and_identity_evidence(self):
+        code, _ = self.summary("parent-recovery-policy-c", lambda c, r: None if c == 24 else r)
+        self.assertNotEqual(code, 0)
+        changes = [dict(bindings=None), dict(terminal="fault"), dict(complete=False),
+                   dict(steps=10), dict(stack_bytes=129)]
+        for field, value in (("requests", 17), ("responses", 17), ("reports", 0),
+                             ("state_checks", 17), ("readonly_checks", 0), ("final_entries", 3),
+                             ("humidity_endpoint", 1), ("temperature_endpoint", 1),
+                             ("power_endpoint", 1), ("responses", True), ("state_checks", 18.0)):
+            changes.append(dict(bindings=BINDINGS | {field: value}))
+        for change in changes:
+            code, result = self.summary("parent-recovery-policy-c", lambda c, r: r | change if c == 24 else r)
+            self.assertNotEqual(code, 0, change)
+            self.assertEqual(result["verdict"], "FAIL")
+            with tempfile.TemporaryDirectory() as d:
+                report = Path(d)/"case24.json"
+                report.write_text(json.dumps(dict(complete=True, steps=11, of_steps=11, stack_bytes=106,
+                                                 terminal="serving", bindings=BINDINGS) | change))
+                self.assertFalse(tiers.sim_check(report, 24, "serving")()[0], change)
+        for case in (16, 18, 20):
+            for bad in (None, 0, True, 1.0):
+                code, _ = self.summary("parent-recovery-policy-c",
+                                       lambda c, r: r | {"binding_identity_checks": bad} if c == case else r)
+                self.assertNotEqual(code, 0)
 
     def test_sustained_completion_and_metrics_are_required_by_both_gates(self):
         changes = [dict(service=None), dict(terminal="fault"), dict(complete=False),

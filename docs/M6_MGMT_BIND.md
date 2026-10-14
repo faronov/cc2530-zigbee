@@ -35,6 +35,9 @@ Unbind first. Zero means absent. There is no origin bit, multi-destination
 database, group binding or persistent application table.
 
 `zcl_sensor_binding_page()` is an explicit bounded read-only owner view.
+Mgmt_Bind dispatch precedes normal report-completion/timer bookkeeping:
+it cannot consume `sent`, reset last/age, or advance an application timer.
+The next ordinary poll still performs the existing bookkeeping and catch-up.
 ZDO receives `0x0033` through the same admitted application route as Bind/
 Unbind; `zdo_srv_handle()` is not given a mutable duplicate table. Its generic
 status-only fallback remains appropriate when no application owner is installed.
@@ -87,11 +90,38 @@ capacities, busy slot, wrong context, malformed/trailing input and read-only
 state. Genuine native same-parent/alternate-parent cases16/18 pass identity
 checks against VERIFIED durable TC and device identity.
 
-Initial LLVM FAST: 10/10 PASS, CODE224627 (+999 vs accepted M6), common19001
+Initial LLVM FAST: 10/10 PASS; integrated LLVM SMOKE: 16/16 PASS using the
+unchanged reference simulator. Thirty tier/admission tests pass, including
+negative completion/count/type/identity/owner-metric cases.
+All 19 genuine native/nonrecovering-sanitizer scenario transcripts are byte
+identical; the full reference schemas and cold-NV lineage are checked.
+
+Case24 adds 18 actual protected management transactions. Its native reference
+has 1709 calls, 1113 application/identity observations, 414 pure-owner
+no-mutation/no-flash checks, and one subsequent Humidity report to endpoint7.
+It checks initial defaults, Unbind, live two-entry table, Bind to endpoint9,
+idempotent Bind, compressed pages, boundary/beyond-end, removal, empty table,
+and reinstallation of the sole remaining Humidity binding.
+The peer inspects genuine TXFIFO/crypto output, never generates DUT responses.
+Actual MCU identity/reporting/binding observations are derived from the exact
+target compiler and bound to the ELF, including cold-recovery cases16/18/20.
+The constant-only layout probe is never linked or used to write MCU state.
+These are native reference results until genuine MCU replay completes.
+
+Resources: CODE224627 (+999 vs accepted M6), common19001
 (+57), raw XDATA5220 unchanged, physical static-frame pool217 unchanged.
+Ordinary XDATA BSS4959 and initialized DATA44 remain unchanged. Static stack
+demand106/128; 379 correct thunks, zero incorrect; generic-pointer sites18.
+Logical static-frame sum1777 (+16), 224 symbols (+1), with no physical-pool growth.
 Bank free bytes1..7: 0/0/0/0/2/3482/14122; every placement/stack/ABI/
-fixed-address admission remains enabled. MCU/SMOKE/final FULL evidence is
-pending; host success is not a whole-MCU claim.
+fixed-address admission remains enabled. Common physical occupancy is19045,
+including44-byte initialized data load, leaving13723 of32768.
+Minimum local bank headroom remains zero; aggregate slack is not placement proof.
+Development ELF SHA256:
+`cfa5be76c2e70b1cc0e51925c9a8d4ecbcb54697ed7cef6ad8dc260785c1869d`.
+HEX SHA256:
+`65ee3bcdcea10ca7b657d252a9fced5ad1ee7628b0e62b610c21f5dd2193df22`.
+Whole-MCU/final FULL evidence is pending; host success is not a whole-MCU claim.
 
 Confirm-Key remains C -- UNRESOLVED. No compiler/HWLab/hardware, LTO, NV schema,
 production defaults or main merge changes are authorized by this slice.

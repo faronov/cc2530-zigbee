@@ -62,7 +62,7 @@ concurrency:
   cancel-in-progress: ${{ inputs.tier != 'full' }}
 
 env:
-  # Shared wall-clock budget for resumable cases0/21/23 per FULL segment.
+  # Shared wall-clock budget for resumable cases0/21/23/24 per FULL segment.
   CASE0_BUDGET: '17400'
   SIM_ARCHIVE_URL: https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz
 

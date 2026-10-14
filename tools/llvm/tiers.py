@@ -33,7 +33,7 @@ import time
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from join_smoke_service import service_valid, reporting_valid
+from join_smoke_service import service_valid, reporting_valid, bindings_valid
 REPO = HERE.parents[1]
 PROFILE_PATH = HERE / "profile.json"
 SCHEMA = "cc2530-llvm-tier-receipt/1"
@@ -238,12 +238,16 @@ def sim_check(report, case, terminal, limit=None):
                 ok = ok and service_valid(r.get("service"))
             if case == 23:
                 ok = ok and reporting_valid(r.get("reporting"))
+            if case == 24:
+                ok = ok and bindings_valid(r.get("bindings"))
+            if case in (16, 18, 20):
+                ok = ok and type(r.get("binding_identity_checks")) is int and r["binding_identity_checks"] > 0
             kind = "complete scenario"
         else:
             ok = r.get("complete") is False and r.get("steps") == limit and r.get("stack_bytes", 999) <= cap
             kind = f"bounded prefix ({limit} of {r.get('of_steps')} steps); NOT a commissioning proof"
         keep = ("complete", "steps", "of_steps", "peripheral_stops", "terminal", "stack_bytes", "peak_sp", "seconds",
-                "service", "reporting")
+                "service", "reporting", "bindings", "binding_identity_checks")
         return ok, {"case": case, "kind": kind, "expected_terminal": terminal if limit is None else None,
                     **{k: r.get(k) for k in keep}}
     return check
@@ -319,7 +323,7 @@ def plan(tier, args, profile):
         cmd = [py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
                "--simulator", args.simulator, "--case", str(case), "--report", out / f"sims/case{case}.json"]
         e, suspend = dict(replay_env), False
-        if tier == "full" and case in (0, 21, 23) and args.case0_budget:
+        if tier == "full" and case in (0, 21, 23, 24) and args.case0_budget:
             snap = out / f"case{case}-snap"
             e |= {"SNAP_DIR": str(snap), "SNAP_EVERY": "10",
                   "STOP_AFTER_SECONDS": str(args.case0_budget), "STOP_AT_TIME": str(deadline)}
@@ -662,7 +666,7 @@ def main(argv=None):
     p.add_argument("--keep-going", action="store_true", help="do not cancel remaining steps after a failure")
     p.add_argument("--sim-timeout", type=int, default=6000, help="per s51 process (seconds)")
     p.add_argument("--case-timeout", type=int, default=12 * 3600, help="per complete scenario (seconds)")
-    p.add_argument("--case0-budget", type=int, help="FULL: shared segment budget for complete cases 0/21/23 "
+    p.add_argument("--case0-budget", type=int, help="FULL: shared segment budget for complete cases 0/21/23/24 "
                    "at a bound snapshot (exit 75); rerun with --resume on the same --output to continue")
     p.add_argument("--resume", action="store_true", help="FULL: continue a SUSPENDED run in --output "
                    "(same identity and selection only; carried PASS steps are re-verified)")

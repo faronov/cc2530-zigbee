@@ -26,10 +26,12 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
 #if defined(CC2530_REPLAY_POLICY_C)
-enum { CALLER_SUSTAINED=21, CALLER_COMPLETION=22, CALLER_REPORTING=23, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
+enum { CALLER_SUSTAINED=21, CALLER_COMPLETION=22, CALLER_REPORTING=23, CALLER_BINDING=24, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
 #define SUSTAINED_CASE(c) ((c)==CALLER_SUSTAINED)
 #define COMPLETION_CASE(c) ((c)==CALLER_COMPLETION)
 #define REPORTING_CASE(c) ((c)==CALLER_REPORTING)
+#define BINDING_CASE(c) ((c)==CALLER_BINDING)
+static unsigned binding_requests, binding_readonly_checks;
 static unsigned reporting_requests, reporting_reports;
 static unsigned completion_steps, completion_replays;
 #define COMPLETION_INPUT_READY(c) (!COMPLETION_CASE(c) || completion_steps==4)
@@ -43,6 +45,7 @@ static uint32_t service_begin, service_ms;
 #define SUSTAINED_CASE(c) 0
 #define COMPLETION_CASE(c) 0
 #define REPORTING_CASE(c) 0
+#define BINDING_CASE(c) 0
 #define COMPLETION_INPUT_READY(c) 1
 #endif
 #define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c))
@@ -54,6 +57,7 @@ static unsigned recovery_selected;
 #define SUSTAINED_CASE(c) 0
 #define COMPLETION_CASE(c) 0
 #define REPORTING_CASE(c) 0
+#define BINDING_CASE(c) 0
 #define COMPLETION_INPUT_READY(c) 1
 #endif
 #define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(c))
@@ -258,7 +262,7 @@ static void serve_ready(unsigned *calls)
     uint8_t tsn=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
     while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
-          cycles<(uint64_t)(SUSTAINED_CASE(caller_case)?600u:REPORTING_CASE(caller_case)?110u:
+          cycles<(uint64_t)(SUSTAINED_CASE(caller_case)?600u:REPORTING_CASE(caller_case)||BINDING_CASE(caller_case)?110u:
                            ALTERNATE_CASE(caller_case)?10u:SERVE_SECONDS)*32000000u) {
         uint32_t step;
         served++;
@@ -295,6 +299,35 @@ static void serve_ready(unsigned *calls)
         }
         caller_poll();
 #if defined(CC2530_REPLAY_POLICY_C)
+        if(BINDING_CASE(caller_case)) {
+            if(binding_requests<18 && link_peer_bindings==binding_requests &&
+               !link_peer_pending && !sent_wait && !packets && !ack_active &&
+               XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+               mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+               !join_smoke_device.work.runtime.transport.active &&
+               !join_smoke_device.work.runtime.transport.queued &&
+               !join_smoke_device.work.runtime.zdo.application_ready &&
+               !join_smoke_device.work.runtime.zdo.response_pending) {
+                uint32_t saved_clocks=mmio_clocks;
+                mmio_clocks=0; security_aes_peer_enter();
+                link_peer_receive_binding((uint8_t)binding_requests);
+                security_aes_peer_leave(); mmio_clocks=saved_clocks;
+                air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0; binding_requests++;
+            }
+            if(link_peer_bindings==18) {
+                uint8_t out[ED_PAYLOAD_MAX], nv[4096];
+                bdb_join_t before=join_smoke_device;
+                unsigned commands=security_joint_flash_commands();
+                memcpy(nv,security_joint_nv(),sizeof(nv));
+                assert(zcl_sensor_binding_page(0xf0,0,out,sizeof(out))==26);
+                assert(!memcmp(&before,&join_smoke_device,sizeof(before)) &&
+                       !memcmp(nv,security_joint_nv(),sizeof(nv)) &&
+                       commands==security_joint_flash_commands());
+                assert(!ZCL_SENSOR_STATE.bound[0] && ZCL_SENSOR_STATE.bound[1]==7 &&
+                       !ZCL_SENSOR_STATE.bound[2]);
+                binding_readonly_checks++;
+            }
+        }
         if(REPORTING_CASE(caller_case)) {
             if(reporting_requests<8 && link_peer_reporting==reporting_requests &&
                !link_peer_pending && !sent_wait && !packets && !ack_active &&
@@ -460,7 +493,7 @@ static void serve_ready(unsigned *calls)
      * BatteryPercentageRemaining (change 2, 0.5 % steps) reports on every
      * second of its 40 single steps plus the +40 wrap (21/41), and the
      * voltage on its three steps (3/41). */
-    if(!ALTERNATE_CASE(caller_case) && !REPORTING_CASE(caller_case)) {
+    if(!ALTERNATE_CASE(caller_case) && !REPORTING_CASE(caller_case) && !BINDING_CASE(caller_case)) {
         assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
         assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
         assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
@@ -469,6 +502,10 @@ static void serve_ready(unsigned *calls)
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
 #if defined(CC2530_REPLAY_POLICY_C)
+    if(BINDING_CASE(caller_case)) {
+        assert(binding_requests==18 && link_peer_bindings==18 &&
+               link_peer_binding_reports>=1 && binding_readonly_checks);
+    }
     if(REPORTING_CASE(caller_case)) {
         assert(reporting_requests==8 && link_peer_reporting==8);
         assert(counts[0]>=4 && counts[1]>=1 && reports>=6);
@@ -598,9 +635,9 @@ int main(int argc, char **argv)
     recovery_selected=selected;
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected));
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
 #else
-    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected));
+    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
     if(selected==7) return reference_e2e_main();
 #endif
     if(RECOVERY_CASE(selected) && recovery_child()) {
