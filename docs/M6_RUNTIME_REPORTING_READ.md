@@ -4,7 +4,21 @@ Feature branch: `m6-read-reporting-config`, based on exact accepted firmware
 `d0d5355196f667f89261666ac3dbd52260f5b69e`. Compiler remains
 `1a01afb49d99ec754e62ab0f65f182de87b4cee3`.
 The M5 baseline's FULL38293766529 and frozen images/evidence are unchanged.
-This is an experimental development candidate; new FULL acceptance is pending.
+Accepted firmware: `28bbafb352cd511e54e369296a02be897c448637`.
+[FULL38460876079](https://github.com/faronov/cc2530-zigbee/actions/runs/38460876079)
+passes30/30 gates and18/18 complete MCU scenarios in two bound segments.
+This is experimental simulator qualification, not hardware validation,
+whole-stack certification or production release.
+
+The firmware branch remains at the exact accepted hash. Post-acceptance report
+updates are documentation-only on `m6-read-reporting-config-acceptance`.
+
+| Commit | Independent scope |
+| --- | --- |
+| `ce04f448ebafe37a688c2fbd0682116ba0bd237b` | Reproduce unsupported08 on unchanged accepted runtime, including nonrecovering sanitizers |
+| `d61fd04b60258100fc6aea061e1c814a3141f90f` | Minimal live-record runtime handler and primary-backed wire contract |
+| `9286c9a391823c6392687f9fe15906ef63fee0f0` | Genuine case23, target layout/state observations and fail-closed FULL/resume gates |
+| `28bbafb352cd511e54e369296a02be897c448637` | Documentation-only qualification freeze; exact firmware identity of FULL |
 
 The separate [Confirm-Key normative decision](https://github.com/faronov/cc2530-zigbee/blob/c31e99bb3a7a0f967de30aff5b6ccaf59e0640c3/docs/M5_CONFIRM_KEY_FRESHNESS.md#normative-decision-gate)
 remains C - UNRESOLVED. This slice does not change security/key/recovery owners,
@@ -99,8 +113,8 @@ BSS4959, DATA44, physical static-frame pool217 and static stack106/128
 are unchanged. Banks1..5 are exactly32768 bytes each, bank6 is28342/32768,
 bank7 is12502/26624. Minimum local headroom is still zero; bank6/7 free
 space is4426/14122. Existing boundary/terminator/thunk/memory proofs pass
-without a relocation or a relaxed limit. These are development-image
-measurements, not final integrated acceptance.
+without a relocation or a relaxed limit. Final FULL independently reproduces
+these measurements and the exact development ELF/HEX identities.
 
 ## Integrated application owner
 
@@ -151,12 +165,17 @@ development SMOKE passes16/16, including complete fault cases2/3/4/9 and
 the explicitly limited three-call case0 prefix. SMOKE is not complete
 commissioning or AES/flash-path acceptance. The29 tier unit tests and779-file
 repository/link guard pass.
+CI FAST passes11/11. The actual selection difference is the additional
+`compiler-tree` gate for the configured CI compiler build: no development FAST
+gate is missing, and its10 selected gates all pass. Counts are not treated
+as interchangeable evidence.
 
 The unchanged M5/Policy C accepted branch hashes and original accepted-manifest
 hashes were reverified. No compiler diff, hardware operation, HWLab change,
 security implementation change or production merge is part of this slice.
 
-Development image identities (not yet a FULL acceptance claim):
+Accepted image identities, independently matched to the admitted machine image
+preserved from FULL segment1 and the final sealed receipt:
 
 | Artifact | SHA256 |
 | --- | --- |
@@ -165,14 +184,66 @@ Development image identities (not yet a FULL acceptance claim):
 
 377 bank thunks remain correct, with zero incorrect thunks. All fixed-address,
 startup, stack-entry, generic-pointer and reserved-NV/lock-region proofs pass.
-Static stack remains106/128. Final runtime stack and actual MCU case23
-acceptance are still pending; the M5 baseline's101/128 is not substituted
-for a measurement of the new candidate.
+Static stack remains106/128. The actual maximum across all18 complete MCU
+scenarios is101/128, SP0xE4, independently matching the baseline measurement.
 
-The feature is frozen for one new complete LLVM FULL; it must match the
-published candidate commit, pinned compiler and exact image identities, include
-all18 scenarios, and retain sealed evidence. A separate full case23 target
-replay is in progress. No unfinished target run is counted as PASS.
+## Final acceptance evidence
+
+Exactly one new FULL was dispatched, for source28bbafb and compiler1a01afb;
+both identities are exact and clean in the verified sealed receipt. Every
+selected gate is PASS. Segment1 suspended only long cases21/23; segment2
+resumed their source/image/simulator/vector/layout-bound states and reached
+PASS. No partial prefix or SUSPENDED result was accepted as a complete case.
+
+| Evidence | Verified outcome |
+| --- | --- |
+| All18 MCU cases | Complete steps equal expected steps, explicit profile terminal and bounded actual stack;18/18 PASS |
+| Case23 reporting runtime |1556/1556 steps,705133 peripheral stops,8/8 exact replies,7 regular reports,960 actual XDATA state observations; READY/serving;101/128 stack |
+| Case21 sustained Policy C |4070/4070 steps;600084 ms;120 protected frames,12 replay drops,23 reports;0 flash commands/erases/programs/checkpoints;101/128 stack |
+| Case22 security completion |471/471 steps; READY/serving;101/128 stack |
+| Independent standalone MCUcase23 | Complete1556/1556 replay of the identical frozen ELF/HEX, with the same replies/reports/state observations/stack |
+| Compiler binding | Full LLVM commit1a01afb49d99ec754e62ab0f65f182de87b4cee3; no compiler diff; all tool hashes equal the pinned development and CI FAST inputs |
+| Sealed final FULL receipt | `8fafc49b8191cbc0cd6a36115045a211c2912c8f0d157adebd9ca8aa57eb1fde` |
+| Preserved103-file accepted evidence manifest | `92792d1cb9ca0751d6112a6b2e10e85e22e9f5fd3b542b0d9c28710da9ae744b` |
+
+The separate accepted evidence set includes final receipts/reports/logs,
+original segment1 state archive, exact compiler/simulator/lit input archive,
+admitted ELF/HEX, final-machine-code audits and all18 reference vectors.
+CI reference vectors byte-match the native/nonrecovering sanitizer vectors.
+Original M5/Policy C accepted manifests and firmware/review branch references
+were reverified unchanged; they are not overwritten or relabeled as M6 evidence.
+
+| Resource | Accepted M5 baseline | Accepted M6 | Delta |
+| --- | ---: | ---: | ---: |
+| Executable CODE |222820|223628|+808|
+| Common CODE |18944|18944|0|
+| XDATA BSS / initialized DATA |4959 /44|4959 /44|0|
+| Physical static-frame pool |217|217|0|
+| Raw XDATA including pool |5220|5220|0|
+| Static-frame symbols / logical summed bytes |223 /1761|223 /1761|0|
+| Static stack demand / capacity |106 /128|106 /128|0|
+| Actual MCU runtime peak / capacity |101 /128|101 /128|0|
+| Correct / incorrect bank thunks |377 /0|377 /0|0|
+
+| Physical bank | M6 used / capacity | M6 free | M5 free |
+| --- | --- | ---: | ---: |
+| Common0 |18988 /32768, including44-byte DATA load image|13780|13780|
+|1|32768 /32768|0|1|
+|2|32768 /32768|0|0|
+|3|32768 /32768|0|0|
+|4|32768 /32768|0|0|
+|5|32768 /32768|0|0|
+|6|28342 /32768|4426|5233|
+|7|12502 /26624|14122|14122|
+
+Minimum physical bank headroom remains zero; all zero-margin boundary/
+terminator proofs remain mandatory and pass. Aggregate bank slack is18548,
+down808; it is not permission to overfill any particular bank. The original
+linker packing/profile,45-object limit, IRAM/XDATA alias ownership, fixed
+addresses and reserved NV/lock region are unchanged. No LTO, dynamic allocation,
+memory-ceiling expansion, special relocation, new application state table or
+new firmware NV field was introduced. K2/K3 storage/migration and normal
+incoming/outgoing security reservations retain their accepted owners.
 
 Direction1 receive-side configurations, manufacturer-specific namespaces,
 persistent reporting/bindings, profile selection, real sensing and live
