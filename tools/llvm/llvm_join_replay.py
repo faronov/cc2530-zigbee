@@ -8,6 +8,7 @@ then validated against the actual stop PCs (with retry) instead of SDCC
 codegen patterns.
 """
 import argparse
+from contextlib import contextmanager, nullcontext
 import hashlib
 import json
 import os
@@ -15,9 +16,11 @@ import pickle
 import shutil
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 from elftools.elf.elffile import ELFFile
@@ -29,6 +32,65 @@ from boot_banked_security import capture, captured_sections, store
 from boot_image import check_alias, check_pc, marker, memory_dump, simulate_binary_dumps
 import boot_image
 
+STOP_REQUEST = threading.Event()
+
+
+@contextmanager
+def checkpoint_signals():
+    global STOP_REQUEST
+    previous, STOP_REQUEST = STOP_REQUEST, threading.Event()
+    handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGUSR1)}
+    for sig in handlers:
+        signal.signal(sig, lambda *_: STOP_REQUEST.set())
+    try:
+        yield STOP_REQUEST
+    finally:
+        for sig, handler in handlers.items():
+            signal.signal(sig, handler)
+        STOP_REQUEST = previous
+
+
+def performance(kind, started, **fields):
+    path = os.environ.get("REPLAY_PERFORMANCE")
+    if path:
+        with open(path, "a") as handle:
+            handle.write(json.dumps({"kind": kind, "seconds": time.perf_counter()-started,
+                                     **fields})+"\n")
+
+
+def write_checkpoint(path, record):
+    started = time.perf_counter()
+    path = Path(path)
+    raw = pickle.dumps(record, protocol=pickle.HIGHEST_PROTOCOL)
+    raw = b"CC2530-REPLAY/1\n"+hashlib.sha256(raw).hexdigest().encode()+b"\n"+raw
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name+".", delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    performance("snapshot", started, bytes=len(raw))
+    return hashlib.sha256(raw).hexdigest()
+
+
+def load_checkpoint(path, bind, expected_sha=None):
+    raw = Path(path).read_bytes()
+    if expected_sha is not None and hashlib.sha256(raw).hexdigest() != expected_sha:
+        raise ValueError("Snapshot differs from its sealed segment receipt")
+    magic, _, rest = raw.partition(b"\n")
+    checksum, _, payload = rest.partition(b"\n")
+    if magic != b"CC2530-REPLAY/1" or checksum != hashlib.sha256(payload).hexdigest().encode():
+        raise ValueError("Corrupted or incomplete replay checkpoint")
+    record = pickle.loads(payload)
+    if not isinstance(record, dict) or record.get("bind") != bind:
+        raise ValueError("Snapshot is bound to another simulator/replay/vector identity")
+    return record
+
 
 def simulate(simulator, commands, image=None):
     # Same as boot_image.simulate, but with an adjustable timeout (SIM_TIMEOUT, default 15 s).
@@ -38,6 +100,7 @@ def simulate(simulator, commands, image=None):
         script.write_text("\n".join(commands + ["quit", ""]), encoding="ascii")
         if os.environ.get("SAVE_SIM_COMMANDS"): Path(os.environ["SAVE_SIM_COMMANDS"]).write_text("\n".join(commands) + "\n")
         argv = [simulator, "-t", "C52", "-q", "-c", "-"] + ([str(image)] if image is not None else [])
+        started = time.perf_counter()
         try:
             result = subprocess.run(argv, input=f'exec "{script}"\n', capture_output=True, text=True,
                                     timeout=float(os.environ.get("SIM_TIMEOUT", "15")), check=True)
@@ -62,6 +125,7 @@ def simulate(simulator, commands, image=None):
                 out = "DIAG TIMEOUT\n" + str(e.stdout or "")[-20000:]
             (DIAG / "timeout-diag.txt").write_text(out[-40000:])
             raise
+    performance("simulator", started, commands=len(commands))
     folded = result.stdout.lower()
     boot_image.require(not any(e in folded for e in ("unknown command", "no such command", "syntax error", "error:")),
                        "Simulator rejected a command")
@@ -395,9 +459,11 @@ def sha_file(path):
 
 class Suspended(Exception):
     """Time budget reached right after a bound step snapshot; the run is NOT complete."""
-    def __init__(self, path, index, completed, count):
+    def __init__(self, path, index, completed, count, bind):
         super().__init__(f"suspended at step{index}")
         self.path, self.index, self.completed, self.count = path, index, completed, count
+        self.sha256 = sha_file(path)
+        self.bind = bind
 
 
 RX_DIAG = (0x1e40, 0x1e90)
@@ -502,21 +568,42 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
     # A snapshot is only valid for the exact image, scenario, simulator binary and
     # replay logic; suspension happens only after a caller/peripheral snapshot.
     bind = {"elf": sha_file(elf), "case": vector["case"], "simulator": sha_file(shutil.which(simulator) or simulator),
-            "replay": sha_file(__file__), "vector": hashlib.sha256(json.dumps(vector, sort_keys=True).encode()).hexdigest()}
+            "replay": sha_file(__file__), "vector": hashlib.sha256(json.dumps(vector, sort_keys=True).encode()).hexdigest(),
+            "run_identity": os.environ.get("REPLAY_IDENTITY"),
+            "support": {name: sha_file(module.__file__) for name, module in sorted(sys.modules.items())
+                        if getattr(module, "__file__", None) and
+                        (name.startswith("boot_") or name in ("llvm_image", "verify_firmware"))}}
     if application_regions is not None:
         bind["application_layout"] = sha_file(Path(elf).resolve().parent.parent / "audit/sensor-layout.json")
     stop_after = float(os.environ.get("STOP_AFTER_SECONDS", "0"))
     stop_at = float(os.environ.get("STOP_AT_TIME", "0"))
     started = time.time()
     if resume:
-        with open(resume, "rb") as fh:
-            snap = pickle.load(fh)
+        snap = load_checkpoint(resume, bind, os.environ.get("RESUME_SHA256"))
         require(snap["elf_sha"] == sha_file(elf) and snap["case"] == vector["case"], "Snapshot is for another image/case")
         require(snap.get("bind") == bind, "Snapshot is bound to another simulator/replay/vector identity")
         (state, pc, count, peak, sampled, completed, retries, learned, previous_stop) = (
             snap[k] for k in ("state", "pc", "count", "peak", "sampled", "completed", "retries", "learned",
                               "previous_stop"))
         application_checks = snap["application_checks"]
+        require(all(type(snap[k]) is int and snap[k] >= 0 for k in
+                    ("index", "count", "completed", "peak", "sampled", "application_checks")) and
+                snap["index"] == completed <= len(vector["steps"]) and
+                len(state) == 5 and all(type(a) is bytes and len(a) == len(b)
+                                       for a, b in zip(state, captured_sections(parts, 60000, wait))),
+                "Invalid checkpoint state or caller boundary")
+        first = snap.get("first", 0)
+        history = iter(J.events_for(vector))
+        earlier = sum(len(next(history)["events"]) for _ in range(completed))
+        current = next(history, None)
+        require(current is not None and type(first) is int and 0 <= first < max(1, len(current["events"])) and
+                count == earlier+first,
+                "Snapshot lost validated peripheral-event history")
+        if first:
+            require(isinstance(snap.get("adjacency"), list) and
+                    len(snap["adjacency"]) == len(current["events"]) and
+                    all(type(a) is bool for a in snap["adjacency"]),
+                    "Invalid intra-step adjacency history")
         require(type(application_checks) is int and application_checks ==
                 sum("application_state" in s for s in vector["steps"][:completed]),
                 "Snapshot lost validated application observation history")
@@ -526,16 +613,17 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
             break
         if resume and index < snap["index"]:
             continue
-        if snap_dir and index % snap_every == 0 and not (resume and index == snap["index"]):
+        expired = lambda: (STOP_REQUEST.is_set() or
+                           (stop_after and time.time()-started >= stop_after) or
+                           (stop_at and time.time() >= stop_at))
+        if snap_dir and (index % snap_every == 0 or expired()) and not (resume and index == snap["index"]):
             snap_path = Path(snap_dir) / f"case{vector['case']}-step{index}.pkl"
-            with open(snap_path, "wb") as fh:
-                pickle.dump({"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
+            write_checkpoint(snap_path, {"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
                              "pc": pc, "count": count, "peak": peak, "sampled": sampled, "completed": completed,
                              "retries": retries, "learned": learned, "previous_stop": previous_stop,
-                             "bind": bind, "application_checks": application_checks}, fh)
-            if ((stop_after and time.time() - started > stop_after) or
-                    (stop_at and time.time() > stop_at)):
-                raise Suspended(snap_path, index, completed, count)
+                             "bind": bind, "application_checks": application_checks})
+            if expired():
+                raise Suspended(snap_path, index, completed, count, bind)
         events = [relocate_dma_cfg(e, symbols) for e in step["events"]]
         batch = min(chunk, 128) if any(e[:2] == ["w", 0xc7] for e in events) else chunk
         adjacency = [False] * len(events)
@@ -544,17 +632,16 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
             first, adjacency, previous_stop = snap["first"], snap["adjacency"], snap["previous_stop"]
         while first < max(1, len(events)):
             last = min(first + batch, len(events))
-            if snap_dir and first and first % snap_events < batch and not (resume and first == snap.get("first")):
+            if snap_dir and first and (first % snap_events < batch or expired()) and not (
+                    resume and index == snap["index"] and first == snap.get("first")):
                 snap_path = Path(snap_dir) / f"case{vector['case']}-step{index}-ev{first}.pkl"
-                with open(snap_path, "wb") as fh:
-                    pickle.dump({"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
+                write_checkpoint(snap_path, {"index": index, "case": vector["case"], "elf_sha": sha_file(elf), "state": state,
                                  "pc": pc, "count": count, "peak": peak, "sampled": sampled, "completed": completed,
                                  "retries": retries, "learned": learned, "first": first, "adjacency": adjacency,
                                  "previous_stop": previous_stop, "bind": bind,
-                                 "application_checks": application_checks}, fh)
-                if ((stop_after and time.time() - started > stop_after) or
-                        (stop_at and time.time() > stop_at)):
-                    raise Suspended(snap_path, index, completed, count)
+                                 "application_checks": application_checks})
+                if expired():
+                    raise Suspended(snap_path, index, completed, count, bind)
             for j in range(first, last):
                 adjacency[j] = j > 0 and guess(events[j-1], events[j], learned)
             flipped = set()
@@ -578,6 +665,7 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                 if os.environ.get("SAVE_CHUNK_COMMANDS"):
                     Path(os.environ["SAVE_CHUNK_COMMANDS"]).write_text("\n".join(commands) + "\n")
                 try:
+                    chunk_started = time.perf_counter()
                     text = simulate_binary_dumps(simulator, commands)
                     if os.environ.get("SAVE_CHUNK_OUTPUT"):
                         Path(os.environ["SAVE_CHUNK_OUTPUT"]).write_text(text)
@@ -664,11 +752,15 @@ def replay(simulator, elf, vector, directory, *, limit=None, chunk=256, log=prin
                 completed += 1
                 previous_stop = None
             log(f"join step{index} events {last}/{len(events)} SP{peak:02x} retries {retries}")
+            performance("chunk", chunk_started, step=index, events=last-first)
             first = last if events else 1
     finished = completed == len(vector["steps"])
     result = {"complete": finished and limit is None, "steps": completed, "of_steps": len(vector["steps"]),
               "peripheral_stops": count, "peak_sp": peak, "reset_peak_sp": reset_peak, "sampled_sp": sampled,
               "stack_bytes": peak - 0x7f, "phase": state[0][0x1e06], "adjacency_retries": retries}
+    result["continuation_sha256"] = hashlib.sha256(pickle.dumps(
+        (state, pc, completed, count, peak, sampled, retries, sorted(learned.items()),
+         previous_stop, application_checks), protocol=4)).hexdigest()
     if rx_diag is not None:
         result["rx_diag"] = state[0][RX_DIAG[0]:RX_DIAG[1]].hex()
     if finished and vector["case"] == J.FLASH_BUSY_CASE:
@@ -818,12 +910,15 @@ def main():
         except subprocess.CalledProcessError as error:
             print(f"check_debugger: simulator died ({error.returncode})", file=sys.stderr)
     start = time.time()
-    with (tempfile.TemporaryDirectory(prefix="llvm-join-") if not os.environ.get("KEEP_SIM_DIR") else __import__("contextlib").nullcontext(tempfile.mkdtemp(prefix="llvm-join-keep-"))) as directory:
+    with (checkpoint_signals() if os.environ.get("SNAP_DIR") else nullcontext()), (
+            tempfile.TemporaryDirectory(prefix="llvm-join-") if not os.environ.get("KEEP_SIM_DIR")
+            else nullcontext(tempfile.mkdtemp(prefix="llvm-join-keep-"))) as directory:
         try:
             result = replay(args.simulator, args.elf, vector, Path(directory), limit=args.limit, chunk=args.chunk)
         except Suspended as pause:
             result = {"complete": False, "suspended": True, "resume": str(pause.path), "next_step": pause.index,
-                      "steps": pause.completed, "of_steps": len(vector["steps"]), "peripheral_stops": pause.count}
+                      "steps": pause.completed, "of_steps": len(vector["steps"]), "peripheral_stops": pause.count,
+                      "snapshot_sha256": pause.sha256, "snapshot_binding": pause.bind}
     result |= {"case": args.case, "elf": str(args.elf), "seconds": round(time.time() - start, 1)}
     text = json.dumps(result, indent=1)
     print(text)

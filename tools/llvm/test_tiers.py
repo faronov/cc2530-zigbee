@@ -7,7 +7,9 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tiers  # noqa: E402
@@ -113,7 +115,7 @@ class Selection(unittest.TestCase):
 
     def test_long_cases_share_segment_deadline_and_have_separate_snapshots(self):
         steps, _ = names("full", variant="parent-recovery-policy-c", case0_budget=60)
-        for case in (0, 21, 23, 24):
+        for case in PROFILE["simulator"]["full_cases"] + PROFILE["simulator"]["variant_cases"]["parent-recovery-policy-c"]:
             s = steps[f"sim-case{case}"]
             self.assertTrue(s.suspendable)
             self.assertTrue(s.env["SNAP_DIR"].endswith(f"case{case}-snap"))
@@ -123,7 +125,7 @@ class Selection(unittest.TestCase):
                          steps["sim-case23"].env["STOP_AT_TIME"])
         self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
                          steps["sim-case24"].env["STOP_AT_TIME"])
-        self.assertFalse(steps["sim-case16"].suspendable)
+        self.assertTrue(steps["sim-case22"].suspendable)
 
 
 def step(name, cmd, **kw):
@@ -157,7 +159,8 @@ class Runner(unittest.TestCase):
         self.assertEqual(tiers.EXIT["CANCELLED"], 130)
 
     def test_suspended_case0_is_not_pass(self):
-        results, status = self.run_steps([step("c0", ["sh", "-c", "exit 75"], suspendable=True),
+        results, status = self.run_steps([step("c0", ["sh", "-c", "exit 75"], suspendable=True,
+                                                pause_check=lambda: (True, {})),
                                           step("summary", ["true"], deps=["c0"])])
         self.assertEqual((results["c0"]["status"], results["summary"]["status"], status),
                          ("SUSPENDED", "PENDING", "SUSPENDED"))
@@ -169,6 +172,56 @@ class Runner(unittest.TestCase):
         self.assertEqual(status, "FAIL")
         results, status = self.run_steps([step("p", ["true"], check=lambda: 1 / 0)])
         self.assertEqual(status, "FAIL")
+
+    def test_expired_budget_leaves_unstarted_work_pending(self):
+        with tempfile.TemporaryDirectory() as out:
+            results = tiers.Runner([step("not-started", ["false"], suspendable=True)],
+                                   out, 1, False, deadline=time.time()-1).run(progress=lambda _: None)
+            self.assertEqual(results["not-started"]["status"], "PENDING")
+            self.assertEqual(tiers.overall(results, []), "SUSPENDED")
+
+    def test_active_non_suspendable_work_times_out_at_segment_deadline(self):
+        with tempfile.TemporaryDirectory() as out:
+            results = tiers.Runner([step("slow", ["sleep", "20"])], out, 1, False,
+                                   deadline=time.time()+0.1).run(progress=lambda _: None)
+            self.assertEqual(results["slow"]["status"], "TIMEOUT")
+
+    def test_suspension_requires_a_real_checkpoint_proof(self):
+        for proof in (None, lambda: (False, {"reason": "missing snapshot"})):
+            results, status = self.run_steps([step("case22", ["sh", "-c", "exit 75"],
+                                                  suspendable=True, pause_check=proof)])
+            self.assertEqual((results["case22"]["status"], status), ("FAIL", "FAIL"))
+
+    def test_broken_suspendable_worker_cannot_overrun_checkpoint_grace(self):
+        with tempfile.TemporaryDirectory() as out:
+            results = tiers.Runner([step("case22", ["sleep", "20"], suspendable=True)],
+                                   out, 1, False, deadline=time.time()+0.1,
+                                   checkpoint_grace=0.1).run(progress=lambda _: None)
+            self.assertEqual(results["case22"]["status"], "TIMEOUT")
+            self.assertLess(results["case22"]["seconds"], 2)
+
+    def test_queued_cases_do_not_start_after_an_active_case_reaches_deadline(self):
+        with tempfile.TemporaryDirectory() as out:
+            steps = [step("active", ["sh", "-c", "sleep 0.2; exit 75"], suspendable=True,
+                          pause_check=lambda: (True, {})),
+                     step("never-started", ["false"], suspendable=True)]
+            results = tiers.Runner(steps, out, 1, False, deadline=time.time()+0.05,
+                                   checkpoint_grace=1).run(progress=lambda _: None)
+            self.assertEqual((results["active"]["status"], results["never-started"]["status"]),
+                             ("SUSPENDED", "PENDING"))
+            self.assertEqual(tiers.overall(results, []), "SUSPENDED")
+
+    def test_cancellation_between_spawn_and_registration_is_not_lost(self):
+        with tempfile.TemporaryDirectory() as out:
+            runner = tiers.Runner([step("slow", ["sleep", "20"], timeout=0.5)], out, 1, False)
+            real_start = tiers.subprocess.Popen
+            def start(*args, **kwargs):
+                proc = real_start(*args, **kwargs)
+                runner.cancel("injected cancellation before process registration")
+                return proc
+            with patch.object(tiers.subprocess, "Popen", side_effect=start):
+                results = runner.run(progress=lambda _: None)
+            self.assertEqual(results["slow"]["status"], "CANCELLED")
 
 
 def receipt(**over):
@@ -210,7 +263,7 @@ class Evidence(unittest.TestCase):
                 tiers.load_receipt(path)
 
     def test_resume_all_paused_cases_and_reject_wrong_snapshot_or_identity(self):
-        for paused in ((0,), (21,), (0, 21)):
+        for paused in ((0,), (21,), (22,), (0, 21, 22)):
             with self.subTest(paused=paused), tempfile.TemporaryDirectory() as d:
                 out = Path(d)
                 (out/"fw/link").mkdir(parents=True)
@@ -222,20 +275,25 @@ class Evidence(unittest.TestCase):
                     "vectors": {"21": tiers.sha_file(out/"vectors/v21.json")}}))
                 statuses = {"admission": {"status": "PASS", "details": {
                     "measured": {"elf_sha256": tiers.sha_file(out/"fw/link/hw1.elf")}}}}
-                steps = []
-                for case in (0, 21):
+                steps = [step("admission", ["false"])]
+                for case in (0, 21, 22):
                     name = f"sim-case{case}"
                     statuses[name] = dict(status="SUSPENDED" if case in paused else "PASS")
                     snap = out/f"case{case}-snap"/"bound.pkl"
                     snap.parent.mkdir()
                     snap.write_bytes(b"fixture; replay validates snapshot content")
-                    (out/f"sims/case{case}.json").write_text(json.dumps({"resume": str(snap)}))
+                    (out/f"sims/case{case}.json").write_text(json.dumps({
+                        "resume": str(snap), "snapshot_sha256": tiers.sha_file(snap)}))
                     steps.append(step(name, ["true"], env={}, suspendable=True))
-                prior = dict(identity={"digest": "identity"}, selection_digest="selection",
-                             segment=1, steps=statuses)
-                (out/"progress.json").write_text(json.dumps(prior))
+                prior = tiers.seal(dict(schema=tiers.SCHEMA, status="SUSPENDED",
+                             identity={"digest": "identity"}, selection_digest="selection",
+                             segment=1, steps=statuses,
+                             artifacts={str(p.relative_to(out)): tiers.sha_file(p)
+                                        for p in out.rglob("*") if p.is_file()}))
+                (out/"receipt.json").write_text(json.dumps(prior))
                 carried = tiers.resume_state(out, prior["identity"], "selection", steps)
-                for s in steps:
+                self.assertIn("admission", carried)
+                for s in steps[1:]:
                     case = int(s.name.removeprefix("sim-case"))
                     self.assertEqual("RESUME" in s.env, case in paused)
                     self.assertEqual(s.name in carried, case not in paused)
@@ -243,6 +301,19 @@ class Evidence(unittest.TestCase):
                                            (prior["identity"], "different")):
                     with self.assertRaises(SystemExit):
                         tiers.resume_state(out, changed, selection, steps)
+                for file in (out/"receipt.json", out/"fw/link/hw1.elf",
+                             out/"vectors/v21.json", out/f"case{paused[0]}-snap/bound.pkl"):
+                    original = file.read_bytes()
+                    file.write_bytes(original+b"corruption")
+                    with self.subTest(file=file), self.assertRaises((SystemExit, ValueError)):
+                        tiers.resume_state(out, prior["identity"], "selection", steps)
+                    file.write_bytes(original)
+                snapshot = out/f"case{paused[0]}-snap/bound.pkl"
+                original = snapshot.read_bytes()
+                snapshot.unlink()
+                with self.assertRaises(SystemExit):
+                    tiers.resume_state(out, prior["identity"], "selection", steps)
+                snapshot.write_bytes(original)
                 case = paused[0]
                 (out/f"sims/case{case}.json").write_text(json.dumps({
                     "resume": str(out/f"case{21 if case == 0 else 0}-snap/bound.pkl")}))

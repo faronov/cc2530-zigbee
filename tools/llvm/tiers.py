@@ -34,7 +34,7 @@ import time
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from join_smoke_service import service_valid, reporting_valid, bindings_valid
-REPO = HERE.parents[1]
+REPO = Path(os.environ.get("LLVM_FIRMWARE_ROOT", HERE.parents[1])).resolve()
 PROFILE_PATH = HERE / "profile.json"
 SCHEMA = "cc2530-llvm-tier-receipt/1"
 TIERS = ("fast", "smoke", "full")
@@ -84,10 +84,6 @@ def tree_identity(repo):
         path = repo / name
         files[name] = ("link:" + os.readlink(path)) if path.is_symlink() else (
             sha_file(path) if path.is_file() else "missing")
-    # The tier/proof logic itself, tracked or not yet committed.
-    for path in sorted(HERE.rglob("*")):
-        if path.is_file() and "__pycache__" not in path.parts:
-            files["tools/llvm/" + str(path.relative_to(HERE))] = sha_file(path)
     return files
 
 
@@ -131,25 +127,32 @@ def host_identity(python):
 
 
 def identity(args, profile):
+    tooling = tree_identity(HERE.parents[1])
+    for name in (".github/workflows/llvm-tiers.yml", ".github/actions/llvm-full-segment/action.yml"):
+        tooling[name] = sha_file(HERE.parents[1]/name)
     ident = {"profile": digest(profile),
              "flags": {"abi": profile["abi_flags"], "sf": profile["sf_flags"]},
              **({"variant": args.variant} if args.variant != "production" else {}),
              "compiler": compiler_identity(args.tools, args.llvm_src, profile),
              "firmware": firmware_identity(REPO),
+             "tooling": {"commit": git(HERE, "rev-parse", "HEAD").strip(),
+                         "dirty": bool(git(HERE, "status", "--porcelain", "--untracked-files=no").strip()),
+                         "tree": digest(tooling)},
              "simulator": simulator_identity(args.simulator),
              "host": host_identity(args.python)}
-    ident["digest"] = digest({k: v for k, v in ident.items() if k != "firmware"} |
-                             {"firmware": ident["firmware"]["tree"]})
+    ident["digest"] = digest({k: v for k, v in ident.items() if k not in ("firmware", "tooling")} |
+                             {"firmware": ident["firmware"]["tree"], "tooling": ident["tooling"]["tree"]})
     return ident
 
 
 # ---------------------------------------------------------------- steps
 class Step:
     def __init__(self, name, proves, cmd=None, func=None, deps=(), timeout=900, env=None, cwd=None,
-                 check=None, suspendable=False):
+                 check=None, suspendable=False, pause_check=None):
         self.name, self.proves, self.cmd, self.func = name, proves, cmd, func
         self.deps, self.timeout, self.env, self.cwd = tuple(deps), timeout, env, cwd
         self.check, self.suspendable = check, suspendable
+        self.pause_check = pause_check
 
     def describe(self):
         return {"name": self.name, "proves": self.proves, "deps": list(self.deps), "timeout": self.timeout,
@@ -253,6 +256,25 @@ def sim_check(report, case, terminal, limit=None):
     return check
 
 
+def suspension_check(report, case, snapshot_dir, env):
+    def check():
+        import llvm_join_replay as replay
+        r = json.loads(Path(report).read_text())
+        path = Path(r["resume"]).resolve()
+        if (path.parent != Path(snapshot_dir).resolve() or r.get("suspended") is not True
+                or r.get("complete") is not False or r.get("case") != case):
+            return False, {"reason": "invalid suspension report"}
+        binding = r["snapshot_binding"]
+        if binding["run_identity"] != env["REPLAY_IDENTITY"]:
+            return False, {"reason": "checkpoint belongs to another tier identity"}
+        snap = replay.load_checkpoint(path, binding, r["snapshot_sha256"])
+        ok = (snap["index"] == r["next_step"] == snap["completed"] == r["steps"] and
+              snap["count"] == r["peripheral_stops"] and snap["case"] == case)
+        return ok, {"snapshot_sha256": r["snapshot_sha256"], "next_step": r["next_step"],
+                    "peripheral_stops": r["peripheral_stops"]}
+    return check
+
+
 def plan(tier, args, profile):
     """Return (steps, unselected) for a tier. FULL always contains complete case 0."""
     out = Path(args.output)
@@ -262,11 +284,13 @@ def plan(tier, args, profile):
            "ABI_FLAGS": profile["abi_flags"], "SF_FLAGS": profile["sf_flags"],
            "FIRMWARE_VARIANT": args.variant,
            "MCS51_CLANG": str(Path(args.tools) / "clang"), "MCS51_LLD": str(Path(args.tools) / "ld.lld"),
-           "MCS51_OBJCOPY": str(Path(args.tools) / "llvm-objcopy")}
+           "MCS51_OBJCOPY": str(Path(args.tools) / "llvm-objcopy"),
+           "LLVM_FIRMWARE_ROOT": str(REPO)}
     flags = f"{profile['abi_flags']} {profile['sf_flags']}"
     steps, unselected = [], {}
     steps.append(Step("tier-unit-tests", "tier selection, identity and stale-evidence rules",
-                      cmd=[py, "-B", "-m", "unittest", "-q", "test_tiers"], cwd=HERE, timeout=300))
+                      cmd=[py, "-B", "-m", "unittest", "-q", "test_tiers", "test_checkpoint", "test_ci_result"],
+                      cwd=HERE, timeout=300))
     if args.llvm_build:
         steps.append(Step("compiler-tree", "lit build tree is up to date and built from --llvm-src",
                           func=compiler_tree(args), timeout=600))
@@ -323,15 +347,20 @@ def plan(tier, args, profile):
         cmd = [py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
                "--simulator", args.simulator, "--case", str(case), "--report", out / f"sims/case{case}.json"]
         e, suspend = dict(replay_env), False
-        if tier == "full" and case in (0, 21, 23, 24) and args.case0_budget:
+        if tier == "full" and args.case0_budget:
             snap = out / f"case{case}-snap"
             e |= {"SNAP_DIR": str(snap), "SNAP_EVERY": "10",
                   "STOP_AFTER_SECONDS": str(args.case0_budget), "STOP_AT_TIME": str(deadline)}
             suspend = True
+        e["REPLAY_PERFORMANCE"] = str(out / f"performance/case{case}.jsonl")
         steps.append(Step(f"sim-case{case}", f"complete MCU replay of scenario {case} to '{term}'"
                           + (" (authenticated READY/serving)" if case == 0 else ""),
                           cmd=cmd, env=e, deps=["admission", "vectors"], timeout=args.case_timeout,
-                          check=sim_check(out / f"sims/case{case}.json", case, term), suspendable=suspend))
+                          check=sim_check(out / f"sims/case{case}.json", case, term),
+                          suspendable=suspend,
+                          pause_check=suspension_check(out / f"sims/case{case}.json", case,
+                                                       out / f"case{case}-snap", e)
+                          if suspend else None))
     if tier == "smoke":
         p = sim["smoke_prefix"]
         steps.append(Step(f"sim-case{p['case']}-prefix", f"bounded case-{p['case']} prefix ({p['limit']} steps): "
@@ -398,12 +427,14 @@ def lit_evidence(args, profile):
 
 # ---------------------------------------------------------------- runner
 class Runner:
-    def __init__(self, steps, out, jobs, keep_going, carried=None):
+    def __init__(self, steps, out, jobs, keep_going, carried=None, deadline=None, checkpoint_grace=1200):
         self.steps = {s.name: s for s in steps}
         self.out, self.jobs, self.keep_going = Path(out), jobs, keep_going
         self.results = dict(carried or {})
         self.procs, self.lock, self.stop = {}, threading.Lock(), threading.Event()
         self.cancel_reason = None
+        self.deadline = deadline
+        self.checkpoint_grace = checkpoint_grace
 
     def cancel(self, reason):
         with self.lock:
@@ -435,12 +466,24 @@ class Runner:
                                         stderr=subprocess.STDOUT, start_new_session=True)
                 with self.lock:
                     self.procs[step.name] = proc
+                    if self.stop.is_set():
+                        try:
+                            os.killpg(proc.pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
                 try:
-                    rc = proc.wait(timeout=step.timeout)
+                    timeout = step.timeout
+                    if self.deadline:
+                        end = self.deadline + (self.checkpoint_grace if step.suspendable else 0)
+                        timeout = min(timeout, max(0, end-time.time()))
+                    rc = proc.wait(timeout=timeout)
                 except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid, signal.SIGKILL)
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     proc.wait()
-                    result["status"], result["reason"] = "TIMEOUT", f"exceeded {step.timeout}s"
+                    result["status"], result["reason"] = "TIMEOUT", f"exceeded effective timeout {timeout:.1f}s"
                     return result
                 finally:
                     with self.lock:
@@ -449,7 +492,11 @@ class Runner:
             if rc != 0 and self.stop.is_set():
                 result["status"], result["reason"] = "CANCELLED", self.cancel_reason
             elif rc == EXIT["SUSPENDED"] and step.suspendable:
-                result["status"] = "SUSPENDED"
+                if step.pause_check is None:
+                    result["status"], result["reason"] = "FAIL", "unverified suspension: no checkpoint proof"
+                else:
+                    ok, details = step.pause_check()
+                    result["status"], result["details"] = ("SUSPENDED" if ok else "FAIL"), details
             elif rc != 0:
                 result["status"] = "FAIL"
                 result["tail"] = log.read_text(errors="replace")[-1500:]
@@ -468,7 +515,7 @@ class Runner:
             result["seconds"] = round(time.time() - start, 1)
 
     def run(self, progress=print):
-        for sub in ("logs", "sims"):
+        for sub in ("logs", "sims", "performance"):
             (self.out / sub).mkdir(parents=True, exist_ok=True)
         pending = [n for n in self.steps if n not in self.results]
         running = {}
@@ -476,6 +523,8 @@ class Runner:
             while pending or running:
                 scheduled = False
                 for name in list(pending):
+                    if len(running) >= self.jobs:
+                        break
                     deps = [self.results.get(d, {}).get("status") for d in self.steps[name].deps]
                     if any(d not in self.steps for d in self.steps[name].deps):
                         self.results[name] = {"status": "FAIL", "reason": "unknown dependency"}
@@ -487,7 +536,9 @@ class Runner:
                         self.results[name] = {"status": "NOT-RUN", "reason": "dependency did not pass"}
                         pending.remove(name)
                     elif all(s == "PASS" for s in deps):
-                        if self.stop.is_set():
+                        if self.deadline and time.time() >= self.deadline:
+                            self.results[name] = {"status": "PENDING", "reason": "segment deadline; never started"}
+                        elif self.stop.is_set():
                             self.results[name] = {"status": "CANCELLED", "reason": self.cancel_reason}
                         else:
                             running[pool.submit(self.execute, self.steps[name])] = name
@@ -516,7 +567,8 @@ def overall(results, interrupted):
         return "FAIL"
     if "TIMEOUT" in statuses:
         return "TIMEOUT"
-    if "SUSPENDED" in statuses and all(s in ("PASS", "SUSPENDED", "PENDING") for s in statuses):
+    if any(s in ("SUSPENDED", "PENDING") for s in statuses) and all(
+            s in ("PASS", "SUSPENDED", "PENDING") for s in statuses):
         return "SUSPENDED"
     if all(s == "PASS" for s in statuses):
         return "PASS"
@@ -560,26 +612,39 @@ def selection_digest(steps, unselected, args):
     def norm(value):
         return str(value).replace(str(Path(args.output)), "$OUT").replace(str(HERE), "$TOOLS_LLVM")
     return digest({"steps": [{"name": s.name, "deps": s.deps, "command": [norm(c) for c in s.cmd] if s.cmd else
-                              s.func.__name__, "env": {k: norm(v) for k, v in (s.env or {}).items()
-                                                       if k in ("SEM_EXTRA", "MATRIX_FLAGS", "ABI_FLAGS", "SF_FLAGS")}}
+                              s.func.__name__, "suspendable": s.suspendable, "timeout": s.timeout,
+                             "env": {k: norm(v) for k, v in (s.env or {}).items()
+                                     if k in ("SEM_EXTRA", "MATRIX_FLAGS", "ABI_FLAGS", "SF_FLAGS",
+                                              "SIM_TIMEOUT", "SNAP_EVERY", "SNAP_EVENTS")}}
                              for s in steps], "unselected": unselected})
 
 
 def resume_state(out, ident, selection, steps):
     """Carry PASS steps of a SUSPENDED FULL run with the same identity; re-verify its artifacts."""
-    prior = json.loads((out / "progress.json").read_text())
+    prior = load_receipt(out / "receipt.json")
+    if prior["status"] != "SUSPENDED":
+        raise SystemExit("--resume: requires a sealed SUSPENDED receipt")
     if prior["identity"]["digest"] != ident["digest"] or prior["selection_digest"] != selection:
         raise SystemExit("--resume: output belongs to another identity or selection")
+    if set(prior["steps"]) != {s.name for s in steps} or any(
+            v["status"] not in ("PASS", "SUSPENDED", "PENDING") for v in prior["steps"].values()):
+        raise SystemExit("--resume: incomplete or invalid step inventory")
     paused = {k for k, v in prior["steps"].items() if v["status"] == "SUSPENDED"}
     resumable = {s.name for s in steps if s.suspendable}
-    if not paused or not paused <= resumable:
+    if (not paused and not any(v["status"] == "PENDING" for v in prior["steps"].values())) or not paused <= resumable:
         raise SystemExit("--resume: no selected resumable scenario was suspended")
-    admitted = prior["steps"]["admission"]["details"]["measured"]["elf_sha256"]
-    if sha_file(out / "fw/link/hw1.elf") != admitted:
-        raise SystemExit("--resume: firmware ELF changed since admission")
-    for case, want in json.loads((out / "vectors/vectors.json").read_text())["vectors"].items():
-        if sha_file(out / f"vectors/v{case}.json") != want:
-            raise SystemExit(f"--resume: vector v{case}.json changed")
+    for name, want in prior["artifacts"].items():
+        path = out / name
+        if not path.resolve().is_relative_to(out.resolve()) or not path.is_file() or sha_file(path) != want:
+            raise SystemExit(f"--resume: missing or altered artifact {name}")
+    if prior["steps"].get("admission", {}).get("status") == "PASS":
+        admitted = prior["steps"]["admission"]["details"]["measured"]["elf_sha256"]
+        if sha_file(out / "fw/link/hw1.elf") != admitted:
+            raise SystemExit("--resume: firmware ELF changed since admission")
+    if prior["steps"].get("vectors", {}).get("status") == "PASS":
+        for case, want in json.loads((out / "vectors/vectors.json").read_text())["vectors"].items():
+            if sha_file(out / f"vectors/v{case}.json") != want:
+                raise SystemExit(f"--resume: vector v{case}.json changed")
     carried = {k: v | {"carried_from_segment": v.get("carried_from_segment", prior["segment"])}
                for k, v in prior["steps"].items() if v["status"] == "PASS"}
     for s in steps:
@@ -588,7 +653,10 @@ def resume_state(out, ident, selection, steps):
             snap = Path(json.loads((out / f"sims/{case}.json").read_text())["resume"])
             if snap.parent != out / f"{case}-snap" or not snap.is_file():
                 raise SystemExit(f"--resume: missing or wrong {case} snapshot")
-            s.env = s.env | {"RESUME": str(snap)}
+            report = json.loads((out / f"sims/{case}.json").read_text())
+            if sha_file(snap) != report["snapshot_sha256"]:
+                raise SystemExit(f"--resume: corrupted {case} snapshot")
+            s.env = s.env | {"RESUME": str(snap), "RESUME_SHA256": report["snapshot_sha256"]}
     return carried
 
 
@@ -666,7 +734,7 @@ def main(argv=None):
     p.add_argument("--keep-going", action="store_true", help="do not cancel remaining steps after a failure")
     p.add_argument("--sim-timeout", type=int, default=6000, help="per s51 process (seconds)")
     p.add_argument("--case-timeout", type=int, default=12 * 3600, help="per complete scenario (seconds)")
-    p.add_argument("--case0-budget", type=int, help="FULL: shared segment budget for complete cases 0/21/23/24 "
+    p.add_argument("--case0-budget", type=int, help="FULL: shared segment budget for every selected MCU case "
                    "at a bound snapshot (exit 75); rerun with --resume on the same --output to continue")
     p.add_argument("--resume", action="store_true", help="FULL: continue a SUSPENDED run in --output "
                    "(same identity and selection only; carried PASS steps are re-verified)")
@@ -686,6 +754,9 @@ def main(argv=None):
     steps, unselected = plan(a.tier, a, profile)
     selection = selection_digest(steps, unselected, a)
     ident = identity(a, profile)
+    for s in steps:
+        if s.suspendable:
+            s.env["REPLAY_IDENTITY"] = ident["digest"]
     header = {"schema": SCHEMA, "tier": a.tier, "identity": ident, "selection_digest": selection,
               "selection": [s.describe() for s in steps], "unselected": unselected, "profile": profile}
     if a.plan_only:
@@ -709,13 +780,17 @@ def main(argv=None):
             print(f"evidence {path.name}: not reusable ({why})")
     if a.resume:
         carried = resume_state(a.output, ident, selection, steps)
-    if a.output.exists() and any(a.output.iterdir()) and not carried:
+    segment = load_receipt(a.output / "receipt.json")["segment"]+1 if a.resume else 1
+    if a.output.exists() and any(a.output.iterdir()) and not a.resume:
         raise SystemExit(f"refusing to reuse non-empty output {a.output}")
     a.output.mkdir(parents=True, exist_ok=True)
     print(f"{a.tier.upper()}: {len(steps)} steps, identity {ident['digest'][:16]}, selection {selection[:16]}")
     for name, why in unselected.items():
         print(f"  not selected: {name} -- {why}")
-    runner = Runner(steps, a.output, a.jobs, a.keep_going, carried)
+    deadlines = [float(s.env["STOP_AT_TIME"]) for s in steps
+                 if s.suspendable and s.env and "STOP_AT_TIME" in s.env]
+    runner = Runner(steps, a.output, a.jobs, a.keep_going, carried,
+                    deadline=min(deadlines) if deadlines else None)
     interrupted = []
 
     def on_signal(signum, _frame):
@@ -726,13 +801,16 @@ def main(argv=None):
     start = time.time()
     results = runner.run()
     status = overall(results, interrupted)
-    segment = 1 + max((r.get("carried_from_segment", 0) for r in carried.values()), default=0)
     if a.tier == "full":
         (a.output / "progress.json").write_text(json.dumps({"identity": ident, "selection_digest": selection, "segment": segment,
                                      "steps": results}, indent=1, default=str) + "\n")
     receipt = seal(header | {"status": status, "segment": segment, "seconds": round(time.time() - start, 1),
                              "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                             "steps": results, "counts": {k: sum(r["status"] == k for r in results.values())
+                             "steps": results,
+                             "artifacts": {str(p.relative_to(a.output)): sha_file(p) for p in a.output.rglob("*")
+                                           if p.is_file() and p not in (a.output/"receipt.json",
+                                                                       a.output/"progress.json")},
+                             "counts": {k: sum(r["status"] == k for r in results.values())
                                                           for k in sorted({r["status"] for r in results.values()})}})
     (a.output / "receipt.json").write_text(json.dumps(receipt, indent=1, default=str) + "\n")
     if a.evidence and status == "PASS":

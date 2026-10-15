@@ -238,28 +238,92 @@ Consequences:
 
 ### FULL suspend and resume
 
-`--case0-budget SEC` retains its CLI spelling but now gives long cases0/21 a
-shared segment wall-clock deadline. They snapshot at caller/peripheral
-boundaries into separate case directories and stop with SUSPENDED, never PASS.
-A late-starting case21 therefore cannot overrun a hosted job by receiving a
-fresh full budget. `--resume` continues every selected suspended scenario,
-but only if all of these are unchanged:
-- the same identity and selection;
-- the same ELF, vectors and simulator as at admission;
-- the same snapshot chain.
+`--case0-budget SEC` retains its CLI spelling but applies one shared deadline
+to **every selected FULL MCU case**, including 0/21/22/23/24. The scheduler
+submits at most `--jobs` tasks and does not start new work after that deadline.
+Never-started tasks remain PENDING; they are not silently dropped or passed.
+Active replay checks the deadline after each validated chunk, including inside
+a long caller step, rather than waiting for the periodic 4096-event snapshot.
 
-Completed steps carry over.
+Snapshots retain the complete alias-aware MCU/media state, caller index,
+intra-step event offset/adjacency, validated event count, learned adjacency,
+security/application observations and measured stack peak. They are written
+through a flushed/fsynced temporary file and atomic replacement, with a payload
+checksum and a separate whole-file SHA-256 in the suspension report. SIGTERM
+requests suspension only at a validated boundary. An exit code of 75 without a
+verified checkpoint is FAIL, not SUSPENDED.
 
-Each change below was refused:
-- a flipped ELF byte;
-- a modified vector file;
-- a source change (another identity);
-- another simulator binary;
-- a fresh run into a non-empty output.
+`--resume` requires a sealed SUSPENDED receipt, not editable `progress.json`.
+It rehashes the output inventory, including PASS evidence, ELF/HEX, vectors,
+layouts and snapshots, before carrying any completed work. Snapshot loading
+also checks the exact image, simulator, replay/support code, vectors, layout
+and tier input identity (compiler/runtime/firmware/tooling). Missing, corrupt,
+incompatible or incomplete state is rejected. Previously validated event
+counts are checked against the production `events_for()` transformation, not
+against raw stimulus counts.
 
-The segment budget and `--jobs` are deliberately not part of the selection.
-The workflow permits six segments, carrying completed cases without reruns.
-If the last segment still suspends, the final verdict fails explicitly.
+Firmware and qualification tooling have separate checkouts and identities.
+`LLVM_FIRMWARE_ROOT` selects the frozen source for build/vector generation;
+it does not change flags, runtime, linker rules or observation semantics.
+Workflow dispatch accepts `firmware_ref` independently of the tooling revision.
+Reusable callers may set `tooling_ref`; its default preserves the previous
+firmware-ref-based tooling selection for existing callers.
+Historical receipts from the old runner are not compatible continuation state.
+
+Hosted FULL currently uses two workers, a 14400-second execution budget and a
+hard 1200-second checkpoint grace. A worker that cannot reach a valid checkpoint
+within that grace is TIMEOUT, never successful suspension. Active non-suspendable
+subprocesses cannot exceed the segment deadline. The 355-minute job therefore
+reserves 95 minutes for checkout/setup, sealing, packing and uploads; network
+failure remains an explicit CI failure, not an accepted continuation.
+
+The budget and worker count are deliberately not part of the selection.
+Timeouts, suspendability and replay observation settings are part of it.
+The workflow permits six segments and preserves PASS work without reruns.
+Final acceptance checks every preceding job and artifact upload, the receipt
+seal, all selected gates and all complete scenario reports. Policy C requires
+31 gates and 19 complete cases. A final SUSPENDED, FAIL, TIMEOUT, cancellation,
+missing receipt or upload failure cannot be promoted to FULL PASS.
+Segment evidence also retains the actual ELF/HEX and audit JSON/text reports;
+final acceptance rehashes the published images against admission and the seal.
+
+Run `tools/llvm/check_case22_resume.py --help` for the genuine reference-s51
+bounded checkpoint experiment. It compares complete MCU state/history hashes,
+counters and stack for an uninterrupted three-caller-step case22 prefix versus
+caller-boundary plus intra-step resume, and measures 1/2/4-worker contention.
+This experiment is **not** whole-case security-completion or FULL acceptance.
+
+Measured against frozen firmware `1dd413b` and compiler `1a01afb`, using the
+reference simulator with affinity restricted to two CPUs:
+
+| Concurrent case22 prefixes | Batch wall seconds | Validated peripheral stops/second |
+| --- | ---: | ---: |
+| 1 | 196.48 | 10.70 |
+| 2 | 214.63 | 19.59 |
+| 4 | 422.60 | 19.90 |
+
+Four workers gained only about 1.6% aggregate throughput over two while almost
+doubling batch latency. This supports the conservative two-worker setting;
+it does not claim the same throughput on a four-core hosted runner. Empty
+simulator startup median was 18.5 ms, the intra-step atomic snapshot took
+16.0 ms, and the largest validated chunk in the uninterrupted prefix took
+21.43 seconds. Caller-step and subprocess/chunk measurements remain in each
+case's `performance/*.jsonl`.
+
+The unchanged normalized workloads for 21/22/23/24 contain respectively
+1514316/640015/705133/783078 peripheral stops. Historical four-worker wall
+cost was 22.63 ms per stop across the 15 finished scenarios. Applying that
+cost gives approximate active-case times of 9.52/4.02/4.43/4.92 hours and
+about 20.21 hours overall with two workers, excluding setup/checkpoint/upload
+overhead. These are estimates, not completed-case measurements. Six four-hour
+segments provide 24 hours of execution; actual segment receipts determine
+completion, and exhausting the chain is an explicit failure.
+
+The cancelled run `38594192887` is incomplete: 15/19 MCU scenarios finished,
+21/23/24 suspended, and 22 was interrupted inside a caller step. Its runner
+allowed only 0/21/23/24 to suspend and waited for case22 before sealing the
+segment; no usable continuation receipt/state was uploaded. It must not be
+resumed or described as firmware failure or FULL qualification.
 
 ### Negative checks
 
@@ -344,10 +408,11 @@ Job layout:
 - The `toolchain` job builds clang/lld (Release, assertions, ccache), the reference simulator
   and FAST/SMOKE.
 - FULL packs those exact binaries and the FAST lit receipt as inputs.
-- The jobs `full-1`…`full-4` run FULL segments chained by SUSPENDED/`--resume` within the 6 h
-  job limit. On a GitHub runner the whole FULL fits in `full-1` (≈2.2 h); later segments are a
-  safety margin.
-- `full-verdict` passes only if the last segment's receipt is PASS.
+- The jobs `full-1` through `full-6` chain validated SUSPENDED/`--resume` state
+  within individual 355-minute job limits. Early FULL timings below are historical;
+  they do not estimate the larger current 19-scenario selection.
+- `full-verdict` rechecks the sealed PASS receipt and complete MCU reports,
+  and refuses any failed/cancelled segment or artifact upload.
 
 A FULL result is bound to the exact compiler commit and binaries it was built from.
 

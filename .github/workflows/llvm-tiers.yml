@@ -33,6 +33,9 @@ on:
       llvm_ref:
         description: LLVM-MCS51 branch, tag or commit
         default: mcs51-dev
+      firmware_ref:
+        description: Exact firmware revision (empty uses this workflow revision)
+        default: ''
   workflow_call:
     inputs:
       tier:
@@ -53,6 +56,9 @@ on:
       firmware_ref:
         type: string
         default: llvm-dev
+      tooling_ref:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -62,8 +68,9 @@ concurrency:
   cancel-in-progress: ${{ inputs.tier != 'full' }}
 
 env:
-  # Shared wall-clock budget for resumable cases0/21/23/24 per FULL segment.
-  CASE0_BUDGET: '17400'
+  # Four hours of execution + at most 20 minutes to checkpoint or fail TIMEOUT.
+  # The remaining 95 minutes cover job setup, receipt sealing, packing and upload.
+  CASE0_BUDGET: '14400'
   SIM_ARCHIVE_URL: https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz
 
 jobs:
@@ -78,6 +85,8 @@ jobs:
       firmware_sha: ${{ steps.ids.outputs.firmware_sha }}
       llvm_repository: ${{ steps.select.outputs.llvm_repository }}
       llvm_sha: ${{ steps.ids.outputs.llvm_sha }}
+      tooling_repository: ${{ steps.select.outputs.tooling_repository }}
+      tooling_sha: ${{ steps.ids.outputs.tooling_sha }}
     steps:
       - name: Select tier and sources
         id: select
@@ -88,6 +97,8 @@ jobs:
           LLVM_REF: ${{ inputs.llvm_ref || 'mcs51-dev' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.sha }}
+          TOOLING_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
+          TOOLING_REF: ${{ inputs.tooling_ref || (inputs.firmware_repository && inputs.firmware_ref) || github.sha }}
         run: |
           case "$TIER" in fast|smoke|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
           case "$VARIANT" in production|rx-diag|parent-recovery|parent-recovery-policy-c) ;; *) echo "unknown variant '$VARIANT'"; exit 1;; esac
@@ -98,7 +109,17 @@ jobs:
             echo "llvm_ref=$LLVM_REF"
             echo "firmware_repository=$FIRMWARE_REPOSITORY"
             echo "firmware_ref=$FIRMWARE_REF"
+            echo "tooling_repository=$TOOLING_REPOSITORY"
+            echo "tooling_ref=$TOOLING_REF"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Check out qualification tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.select.outputs.tooling_repository }}
+          ref: ${{ steps.select.outputs.tooling_ref }}
+          path: ci
+          persist-credentials: false
 
       - name: Check out firmware
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -122,11 +143,13 @@ jobs:
         run: |
           echo "firmware_sha=$(git -C fw rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "llvm_sha=$(git -C llvm rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tooling_sha=$(git -C ci rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           {
             echo "tier: ${{ steps.select.outputs.tier }}"
             echo "variant: ${{ steps.select.outputs.variant }}"
             echo "firmware: ${{ steps.select.outputs.firmware_repository }}@$(git -C fw rev-parse HEAD)"
             echo "llvm: ${{ steps.select.outputs.llvm_repository }}@$(git -C llvm rev-parse HEAD)"
+            echo "tooling: ${{ steps.select.outputs.tooling_repository }}@$(git -C ci rev-parse HEAD)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Install build dependencies
@@ -164,13 +187,15 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 "$SIM_ARCHIVE_URL" --output "$RUNNER_TEMP/sdcc.tar.xz"
-          python3 -B fw/tools/llvm/prepare_simulator.py --archive "$RUNNER_TEMP/sdcc.tar.xz" \
+          python3 -B ci/tools/llvm/prepare_simulator.py --archive "$RUNNER_TEMP/sdcc.tar.xz" \
             --output "$GITHUB_WORKSPACE/sim" --profile reference --jobs 4
 
       - name: FAST
         working-directory: fw
+        env:
+          LLVM_FIRMWARE_ROOT: ${{ github.workspace }}/fw
         run: |
-          python3 -B tools/llvm/tiers.py --tier fast --jobs 4 \
+          python3 -B "$GITHUB_WORKSPACE/ci/tools/llvm/tiers.py" --tier fast --jobs 4 \
             --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
             --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
             --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
@@ -179,8 +204,10 @@ jobs:
       - name: SMOKE
         if: steps.select.outputs.tier == 'smoke'
         working-directory: fw
+        env:
+          LLVM_FIRMWARE_ROOT: ${{ github.workspace }}/fw
         run: |
-          python3 -B tools/llvm/tiers.py --tier smoke --jobs 4 \
+          python3 -B "$GITHUB_WORKSPACE/ci/tools/llvm/tiers.py" --tier smoke --jobs 4 \
             --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
             --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
             --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
@@ -219,7 +246,7 @@ jobs:
             out/*/sims
             sim/build.json
 
-  # FULL: long cases 0/21/23 share a segment deadline and retain exact bound snapshots.
+  # Every selected FULL scenario shares the deadline and retains bound snapshots.
   full-1:
     needs: toolchain
     if: needs.toolchain.outputs.tier == 'full'
@@ -229,11 +256,13 @@ jobs:
       status: ${{ steps.segment.outputs.status }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.tooling_repository }}', ref: '${{ needs.toolchain.outputs.tooling_sha }}', path: ci, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
-        uses: ./fw/.github/actions/llvm-full-segment
+        uses: ./ci/.github/actions/llvm-full-segment
         with: {segment: '1', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-2:
@@ -245,11 +274,13 @@ jobs:
       status: ${{ steps.segment.outputs.status }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.tooling_repository }}', ref: '${{ needs.toolchain.outputs.tooling_sha }}', path: ci, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
-        uses: ./fw/.github/actions/llvm-full-segment
+        uses: ./ci/.github/actions/llvm-full-segment
         with: {segment: '2', previous: '1', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-3:
@@ -261,11 +292,13 @@ jobs:
       status: ${{ steps.segment.outputs.status }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.tooling_repository }}', ref: '${{ needs.toolchain.outputs.tooling_sha }}', path: ci, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
-        uses: ./fw/.github/actions/llvm-full-segment
+        uses: ./ci/.github/actions/llvm-full-segment
         with: {segment: '3', previous: '2', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-4:
@@ -277,11 +310,13 @@ jobs:
       status: ${{ steps.segment.outputs.status }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.tooling_repository }}', ref: '${{ needs.toolchain.outputs.tooling_sha }}', path: ci, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
-        uses: ./fw/.github/actions/llvm-full-segment
+        uses: ./ci/.github/actions/llvm-full-segment
         with: {segment: '4', previous: '3', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-5:
@@ -293,11 +328,13 @@ jobs:
       status: ${{ steps.segment.outputs.status }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.tooling_repository }}', ref: '${{ needs.toolchain.outputs.tooling_sha }}', path: ci, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
-        uses: ./fw/.github/actions/llvm-full-segment
+        uses: ./ci/.github/actions/llvm-full-segment
         with: {segment: '5', previous: '4', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-6:
@@ -309,11 +346,13 @@ jobs:
       status: ${{ steps.segment.outputs.status }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: '${{ needs.toolchain.outputs.tooling_repository }}', ref: '${{ needs.toolchain.outputs.tooling_sha }}', path: ci, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.firmware_repository }}', ref: '${{ needs.toolchain.outputs.firmware_sha }}', path: fw, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {repository: '${{ needs.toolchain.outputs.llvm_repository }}', ref: '${{ needs.toolchain.outputs.llvm_sha }}', path: llvm, fetch-depth: 1, persist-credentials: false}
       - id: segment
-        uses: ./fw/.github/actions/llvm-full-segment
+        uses: ./ci/.github/actions/llvm-full-segment
         with: {segment: '6', previous: '5', variant: '${{ needs.toolchain.outputs.variant }}', case0-budget: '${{ env.CASE0_BUDGET }}'}
 
   full-verdict:
@@ -323,15 +362,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - env:
-          S1: ${{ needs.full-1.outputs.status }}
-          S2: ${{ needs.full-2.outputs.status }}
-          S3: ${{ needs.full-3.outputs.status }}
-          S4: ${{ needs.full-4.outputs.status }}
-          S5: ${{ needs.full-5.outputs.status }}
-          S6: ${{ needs.full-6.outputs.status }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ needs.toolchain.outputs.tooling_repository || github.repository }}
+          ref: ${{ needs.toolchain.outputs.tooling_sha || github.workflow_sha }}
+          path: ci
+          persist-credentials: false
+      - name: Verify every segment and artifact upload succeeded
+        id: chain
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          last=""
-          for s in "$S1" "$S2" "$S3" "$S4" "$S5" "$S6"; do [ -z "$s" ] || last=$s; done
-          echo "FULL (${{ needs.toolchain.outputs.variant }}): ${last:-NOT RUN} (segments: ${S1:--} ${S2:--} ${S3:--} ${S4:--} ${S5:--} ${S6:--})" | tee -a "$GITHUB_STEP_SUMMARY"
-          [ "$last" = PASS ]
+          python3 -B ci/tools/llvm/ci_result.py chain "$NEEDS_JSON" >> "$GITHUB_OUTPUT"
+      - name: Download final sealed evidence
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: llvm-full-evidence-${{ github.run_id }}-${{ steps.chain.outputs.segment }}
+          path: evidence
+      - name: Verify final receipt and every complete scenario
+        run: |
+          set -euo pipefail
+          python3 -B ci/tools/llvm/ci_result.py accept evidence \
+            "${{ needs.toolchain.outputs.firmware_sha }}" "${{ needs.toolchain.outputs.llvm_sha }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

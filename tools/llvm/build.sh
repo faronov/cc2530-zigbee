@@ -1,14 +1,14 @@
 #!/bin/bash
 # Clean experimental LLVM-MCS51 firmware build (study production profile).
-# Uses ONLY the compiler in $TOOLS. The firmware source is a snapshot of this
-# worktree's tracked files (including uncommitted edits); runtime and startup are
+# Uses ONLY the compiler in $TOOLS. Firmware comes from $LLVM_FIRMWARE_ROOT
+# (default: this worktree), using tracked files; runtime and startup are
 # built from the compiler source tree $LLVM_SRC with the same ABI flags.
 # usage: TOOLS=bin LLVM_SRC=src ABI_FLAGS=.. SF_FLAGS=.. [FIRMWARE_VARIANT=..] build.sh OUTDIR
 # (OUTDIR must not exist). FIRMWARE_VARIANT: production (default), rx-diag or
 # parent-recovery (strict) or parent-recovery-policy-c (experimental RAM floors).
 set -euo pipefail
 H=$(cd "$(dirname "$0")" && pwd)
-REPO=$(cd "$H/../.." && pwd)
+REPO=${LLVM_FIRMWARE_ROOT:-$(cd "$H/../.." && pwd)}
 PY=${PYTHON:-python3}
 T=${TOOLS:?TOOLS required}
 VARIANT=${FIRMWARE_VARIANT:-production}

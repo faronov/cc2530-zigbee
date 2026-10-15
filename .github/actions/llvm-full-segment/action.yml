@@ -2,7 +2,7 @@ name: LLVM FULL segment
 description: >-
   Run (segment 1) or resume (later segments) the FULL tier with the toolchain,
   simulator and lit evidence produced by the toolchain job of the same run.
-  Complete cases 0, 21, 23 and 24 are suspended at bound snapshots at the segment budget
+  Every selected complete case is suspended at bound snapshots at the segment budget
   and resumed by the next segment; tiers.py refuses any resume whose compiler,
   firmware, simulator, vector or selection identity differs.
 inputs:
@@ -17,7 +17,7 @@ inputs:
     description: firmware variant (production, rx-diag, parent-recovery or parent-recovery-policy-c); part of the FULL identity
     required: true
   case0-budget:
-    description: segment budget in seconds for resumable complete cases 0, 21, 23 and 24
+    description: shared segment budget in seconds for every selected complete case
     required: true
 outputs:
   status:
@@ -58,19 +58,21 @@ runs:
       id: run
       shell: bash
       working-directory: fw
+      env:
+        LLVM_FIRMWARE_ROOT: ${{ github.workspace }}/fw
       run: |
         set -uo pipefail
         resume=""
         [ -z "${{ inputs.previous }}" ] || resume=--resume
         rc=0
-        python3 -B tools/llvm/tiers.py --tier full --jobs 4 \
+        python3 -B "$GITHUB_WORKSPACE/ci/tools/llvm/tiers.py" --tier full --jobs 2 \
           --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
           --lit-evidence "$GITHUB_WORKSPACE/out/fast/receipt.json" \
           --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
           --variant "${{ inputs.variant }}" --output "$GITHUB_WORKSPACE/out/full" \
           --case0-budget "${{ inputs.case0-budget }}" $resume || rc=$?
-        status=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["status"])' \
-          "$GITHUB_WORKSPACE/out/full/receipt.json" 2>/dev/null || echo NONE)
+        status=$(python3 -B "$GITHUB_WORKSPACE/ci/tools/llvm/ci_result.py" segment \
+          "$GITHUB_WORKSPACE/out/full/receipt.json" "$rc" "${{ inputs.segment }}") || rc=1
         echo "status=$status" >> "$GITHUB_OUTPUT"
         echo "FULL segment ${{ inputs.segment }}: $status (exit $rc)" >> "$GITHUB_STEP_SUMMARY"
         # 75 = SUSPENDED at a bound scenario snapshot; the next segment continues it.
@@ -103,3 +105,8 @@ runs:
           out/full/progress.json
           out/full/logs
           out/full/sims
+          out/full/performance
+          out/full/fw/link/hw1.elf
+          out/full/fw/audit/hw1.hex
+          out/full/fw/audit/*.json
+          out/full/fw/audit/*.txt
