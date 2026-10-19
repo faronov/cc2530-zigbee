@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zigbee_security.h"
 #include "aps_frame.h"
 #include "nwk_frame.h"
@@ -37,7 +38,7 @@ static void security_flag(uint8_t layer, uint8_t enabled)
 }
 
 static zigbee_security_result_t header(uint8_t layer, uint8_t secured, uint8_t level,
-                                       const uint8_t * volatile frame, uint16_t length)
+                                       const uint8_t * SDCC_VOLATILE frame, uint16_t length)
 {
     uint8_t present;
     if (layer > ZIGBEE_SECURITY_APS)
@@ -100,9 +101,9 @@ static uint32_t read_counter(const uint8_t *data)
 }
 
 static zigbee_security_result_t inspect(uint8_t layer, uint8_t level,
-                                        const uint8_t * volatile frame, volatile uint16_t length)
+                                        const uint8_t * SDCC_VOLATILE frame, SDCC_VOLATILE uint16_t length)
 {
-    volatile uint8_t h, control;
+    SDCC_VOLATILE uint8_t h, control;
     zigbee_security_result_t result = header(layer, 1, level, frame, length);
     if (result != ZIGBEE_SECURITY_OK)
         return result;
@@ -132,8 +133,8 @@ static zigbee_security_result_t inspect(uint8_t layer, uint8_t level,
 }
 
 zigbee_security_result_t zigbee_security_inspect(
-    uint8_t layer, uint8_t level, const uint8_t * volatile frame, uint16_t length,
-    zigbee_security_meta_t * volatile meta)
+    uint8_t layer, uint8_t level, const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+    zigbee_security_meta_t * SDCC_VOLATILE meta)
 {
     zigbee_security_result_t result;
     if (frame == NULL || meta == NULL)
@@ -147,16 +148,16 @@ zigbee_security_result_t zigbee_security_inspect(
 }
 
 zigbee_security_result_t zigbee_security_crypt(
-    volatile uint8_t open, volatile uint8_t layer, const zigbee_security_key_t * volatile key,
-    const uint8_t * volatile frame, uint16_t length,
-    uint8_t * volatile output, uint16_t capacity,
-    zigbee_security_info_t * volatile info)
+    SDCC_VOLATILE uint8_t open, SDCC_VOLATILE uint8_t layer, const zigbee_security_key_t * SDCC_VOLATILE key,
+    const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+    uint8_t * SDCC_VOLATILE output, uint16_t capacity,
+    zigbee_security_info_t * SDCC_VOLATILE info)
 {
     zigbee_security_result_t result;
     ccm_star_result_t crypto;
-    volatile uint8_t h, a, p, i, total;
-    volatile uint16_t auth_length, cipher_length;
-    const uint8_t * volatile cipher_input;
+    SDCC_VOLATILE uint8_t h, a, p, i, total;
+    SDCC_VOLATILE uint16_t auth_length, cipher_length;
+    const uint8_t * SDCC_VOLATILE cipher_input;
     if (open > 1 || key == NULL || frame == NULL || output == NULL || info == NULL)
         return ZIGBEE_SECURITY_ARGUMENT;
     memset(&state, 0, sizeof(state));

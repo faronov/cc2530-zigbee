@@ -4,6 +4,7 @@
 #ifndef ZDO_RUNTIME_H
 #define ZDO_RUNTIME_H
 #include "nwk_aps.h"
+#include "sdcc_volatile.h"
 #include "zdo_srv.h"
 
 #define ZDO_RUNTIME_VERSION 2u
@@ -58,26 +59,26 @@ typedef struct {
  * through the free server response slot (see zcl_sensor.h). An application
  * that discards a published Bind/Unbind request leaves it unanswered.
  */
-zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
-    const zdo_node_descriptor_t * volatile local, volatile uint32_t now) JOIN_FAR;
-zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint8_t which, volatile uint32_t now) JOIN_FAR;
-zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint32_t now) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * SDCC_VOLATILE ctx,
+    const zdo_node_descriptor_t * SDCC_VOLATILE local, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint32_t now) JOIN_FAR;
 /* Cancel client/server work without discarding physical TX ownership.
  * A client CANCELLED result is available only after its TX is quiescent.
  * Dropped server replies return DROPPED with the NWK_APS cause in
  * response_result. APS wrap exhaustion discards the response, not membership;
  * a deferred response never blocks reception of a client/control response.
  */
-zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint32_t now) JOIN_FAR;
-zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile ctx,
-    uint8_t * volatile which, uint8_t * volatile result) JOIN_FAR;
-zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile ctx, ed_packet_t * volatile packet) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint32_t now) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * SDCC_VOLATILE ctx,
+    uint8_t * SDCC_VOLATILE which, uint8_t * SDCC_VOLATILE result) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * SDCC_VOLATILE ctx, ed_packet_t * SDCC_VOLATILE packet) JOIN_FAR;
 /* An application without endpoint clusters of its own releases a published
  * frame unread; it is cleared exactly as a take would clear it. */
-zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * volatile ctx) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * SDCC_VOLATILE ctx) JOIN_FAR;
 
 /* BDB commissioning messages, not a successful-join input: construct either
  * the local Device_annce or final 180-second permit broadcast in an EMPTY
@@ -86,7 +87,7 @@ zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * volatile ct
  * The BDB caller owns the transport confirmation; this does not acquire a
  * ZDO client/server transaction, send RF, authenticate or publish readiness.
  */
-zdo_runtime_result_t zdo_runtime_broadcast(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint8_t which, volatile uint32_t now) JOIN_FAR;
+zdo_runtime_result_t zdo_runtime_broadcast(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 
 #endif

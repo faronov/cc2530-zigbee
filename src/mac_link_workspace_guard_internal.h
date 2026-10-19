@@ -4,6 +4,7 @@
 #ifndef MAC_LINK_WORKSPACE_GUARD_INTERNAL_H
 #define MAC_LINK_WORKSPACE_GUARD_INTERNAL_H
 #include "mac_link_ram.h"
+#include "sdcc_volatile.h"
 /* DIRECT-only shallow guard/decode code generation (J3). Every other profile
  * keeps its pinned objects: owning files select alternate bodies only on
  * source lines that emit no code or debug records. The deep reference is a
@@ -17,11 +18,13 @@
 #error DIRECT shallow reads require static large-model XDATA local homes
 #endif
 #define LINK_WORK_SHALLOW 1
-/* Keep these locals in their compiler homes rather than PUSHed registers. */
-#define LW_SHALLOW_HOME volatile
+/* Keep these locals in their compiler homes rather than PUSHed registers.
+ * This is an SDCC static-local code-generation hint; other compilers keep
+ * the plain local (SDCC_VOLATILE), which has the same C semantics. */
+#define LW_SHALLOW_HOME SDCC_VOLATILE
 /* Read a named local/parameter through its own address: an address-taken
  * home is reloaded after each call instead of held in a PUSHed register. */
-#define LW_SHALLOW_READ(type, x) (*(type volatile MCU_XDATA *)&(x))
+#define LW_SHALLOW_READ(type, x) (*(type SDCC_VOLATILE MCU_XDATA *)&(x))
 /* DIRECT selects the second name: the shared codec body's internal name, or
  * the plain address type where no home is needed (link_work_external). */
 #define LW_SHALLOW_NAME(original, shallow) shallow
@@ -62,12 +65,12 @@ uint8_t link_work_leave(uint8_t frame);
 /* Preserve both original uint8_t conversions and evaluate each argument once.
  * The volatile word home avoids register-save PUSHes across leave in SDCC4.2
  * model-large. All WORKSPACE callers must use this same internal ABI. */
-uint8_t link_work_return_word(uint16_t volatile pair);
+uint8_t link_work_return_word(uint16_t SDCC_VOLATILE pair);
 #define link_work_return(frame,result) link_work_return_word( \
     (uint16_t)(((uint16_t)(uint8_t)(frame) << 8) | (uint8_t)(result)))
 uint8_t link_work_finish_group(uint8_t first, uint8_t last, uint8_t result);
-uint8_t link_work_io(uint8_t operation, const void * volatile p, uint16_t volatile size, uint8_t writing);
-uint8_t link_work_external(const void * volatile p, uint16_t volatile size);
+uint8_t link_work_io(uint8_t operation, const void * SDCC_VOLATILE p, uint16_t SDCC_VOLATILE size, uint8_t writing);
+uint8_t link_work_external(const void * SDCC_VOLATILE p, uint16_t SDCC_VOLATILE size);
 uint8_t link_work_grant(uint8_t grant);
 uint8_t link_work_call_result(uint8_t result);
 uint8_t link_work_counter_request(uint8_t operation, const void *data,

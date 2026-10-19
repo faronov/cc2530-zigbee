@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zcl_temperature.h"
 
 #include <stddef.h>
@@ -35,7 +36,7 @@ static uint8_t valid_cfg(const zcl_temp_cfg_t *c)
             && c->change != ZCL_TEMP_UNKNOWN);
 }
 
-static zcl_codec_result_t advance(zcl_temp_t * volatile ctx, uint32_t now)
+static zcl_codec_result_t advance(zcl_temp_t * SDCC_VOLATILE ctx, uint32_t now)
 {
     uint32_t elapsed = now - ctx->stamp;
     if (ctx->fault)
@@ -50,7 +51,7 @@ static zcl_codec_result_t advance(zcl_temp_t * volatile ctx, uint32_t now)
     return ZCL_CODEC_OK;
 }
 
-static void configure(zcl_temp_t * volatile ctx, const zcl_temp_cfg_t * volatile cfg)
+static void configure(zcl_temp_t * SDCC_VOLATILE ctx, const zcl_temp_cfg_t * SDCC_VOLATILE cfg)
 {
     ctx->reporting = *cfg;
     ctx->configured = cfg->maximum != 0xffffu;
@@ -60,9 +61,9 @@ static void configure(zcl_temp_t * volatile ctx, const zcl_temp_cfg_t * volatile
     ctx->baseline = ctx->value;
 }
 
-zcl_codec_result_t zcl_temp_init(zcl_temp_t * volatile ctx, uint32_t now,
+zcl_codec_result_t zcl_temp_init(zcl_temp_t * SDCC_VOLATILE ctx, uint32_t now,
                                 int16_t minimum, int16_t maximum,
-                                const zcl_temp_cfg_t * volatile defaults)
+                                const zcl_temp_cfg_t * SDCC_VOLATILE defaults)
 {
     if (ctx == NULL || defaults == NULL)
         return ZCL_CODEC_INVALID_ARGUMENT;
@@ -84,7 +85,7 @@ zcl_codec_result_t zcl_temp_init(zcl_temp_t * volatile ctx, uint32_t now,
     return ZCL_CODEC_OK;
 }
 
-zcl_codec_result_t zcl_temp_sample(zcl_temp_t * volatile ctx, volatile uint32_t now, int16_t value)
+zcl_codec_result_t zcl_temp_sample(zcl_temp_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now, int16_t value)
 {
     zcl_codec_result_t rc;
     if (ctx == NULL)
@@ -125,11 +126,11 @@ static uint8_t known(uint16_t id)
     return id <= 2u || id == 0xfffdu;
 }
 
-static zcl_codec_result_t reporting(zcl_temp_t * volatile next,
-                                    const zcl_frame_info_t * volatile frame,
-                                    const uint8_t * volatile p,
-                                    uint8_t * volatile response, uint16_t capacity,
-                                    zcl_dispatch_info_t * volatile info)
+static zcl_codec_result_t reporting(zcl_temp_t * SDCC_VOLATILE next,
+                                    const zcl_frame_info_t * SDCC_VOLATILE frame,
+                                    const uint8_t * SDCC_VOLATILE p,
+                                    uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                                    zcl_dispatch_info_t * SDCC_VOLATILE info)
 {
     uint8_t body[ZCL_FRAME_MAX_BODY - ZCL_FRAME_MIN_HEADER];
     zcl_temp_cfg_t cfg, accepted;
@@ -264,16 +265,16 @@ static zcl_codec_result_t reporting(zcl_temp_t * volatile next,
     return ZCL_CODEC_OK;
 }
 
-zcl_codec_result_t zcl_temp_rx(zcl_temp_t * volatile ctx, uint32_t now,
-                              const uint8_t * volatile request, uint16_t length,
-                              uint8_t * volatile response, uint16_t capacity,
-                              zcl_dispatch_info_t * volatile info)
+zcl_codec_result_t zcl_temp_rx(zcl_temp_t * SDCC_VOLATILE ctx, uint32_t now,
+                              const uint8_t * SDCC_VOLATILE request, uint16_t length,
+                              uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                              zcl_dispatch_info_t * SDCC_VOLATILE info)
 {
     zcl_frame_info_t frame;
     zcl_dispatch_info_t candidate;
     zcl_attribute_set_t set;
     zcl_attribute_t attributes[4];
-    zcl_attribute_t * volatile attr = attributes;
+    zcl_attribute_t * SDCC_VOLATILE attr = attributes;
     uint8_t values[8], i;
     zcl_codec_result_t rc;
     if (ctx == NULL || request == NULL || response == NULL || info == NULL)
@@ -336,10 +337,10 @@ static uint8_t due(const zcl_temp_t *ctx)
     return delta >= threshold;
 }
 
-zcl_codec_result_t zcl_temp_prepare(zcl_temp_t * volatile ctx, uint32_t now,
+zcl_codec_result_t zcl_temp_prepare(zcl_temp_t * SDCC_VOLATILE ctx, uint32_t now,
                                    uint8_t sequence, uint8_t routes,
-                                   uint8_t * volatile response, uint16_t capacity,
-                                   zcl_temp_report_t * volatile report)
+                                   uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                                   zcl_temp_report_t * SDCC_VOLATILE report)
 {
     zcl_temp_report_t candidate;
     zcl_header_t header;
@@ -391,8 +392,8 @@ zcl_codec_result_t zcl_temp_prepare(zcl_temp_t * volatile ctx, uint32_t now,
     return ZCL_CODEC_OK;
 }
 
-zcl_codec_result_t zcl_temp_finish(zcl_temp_t * volatile ctx, volatile uint32_t now,
-                                  uint16_t token, uint8_t sent, volatile uint32_t issued_at)
+zcl_codec_result_t zcl_temp_finish(zcl_temp_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
+                                  uint16_t token, uint8_t sent, SDCC_VOLATILE uint32_t issued_at)
 {
     zcl_codec_result_t rc;
     if (ctx == NULL)

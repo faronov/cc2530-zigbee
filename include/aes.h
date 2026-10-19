@@ -65,7 +65,8 @@ typedef struct {
  * polls counts post-entry observation attempts, including a shortened failure.
  * Completion/drain may be observed on failure; only published means success.
  */
-aes_result_t aes128_encrypt_block(const uint8_t *key, const uint8_t *input,
+aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
+                                  const MCU_GENERIC uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,
                                   uint16_t limit, aes_diagnostics_t MCU_XDATA *diagnostics) LINK_FAR;
 

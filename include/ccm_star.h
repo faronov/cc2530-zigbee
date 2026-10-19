@@ -5,6 +5,7 @@
 #define CCM_STAR_H
 
 #include "aes.h"
+#include "sdcc_volatile.h"
 
 #define CCM_STAR_MAX_AAD 132u
 #define CCM_STAR_MAX_MESSAGE 116u
@@ -46,10 +47,10 @@ typedef struct {
  * Serialized, nonreentrant; never an ISR or a successful security stub.
  */
 ccm_star_result_t ccm_star_crypt(
-    uint8_t open, const uint8_t * volatile key, const uint8_t * volatile nonce,
-    const uint8_t * volatile aad, uint16_t aad_length,
-    const uint8_t * volatile input, uint16_t length, uint8_t tag_length,
-    uint8_t * volatile output, uint16_t capacity, uint8_t * volatile written,
-    const ccm_star_limits_t * volatile limits, ccm_star_info_t * volatile info);
+    uint8_t open, const uint8_t * SDCC_VOLATILE key, const uint8_t * SDCC_VOLATILE nonce,
+    const uint8_t * SDCC_VOLATILE aad, uint16_t aad_length,
+    const uint8_t * SDCC_VOLATILE input, uint16_t length, uint8_t tag_length,
+    uint8_t * SDCC_VOLATILE output, uint16_t capacity, uint8_t * SDCC_VOLATILE written,
+    const ccm_star_limits_t * SDCC_VOLATILE limits, ccm_star_info_t * SDCC_VOLATILE info);
 
 #endif

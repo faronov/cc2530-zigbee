@@ -1,23 +1,24 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zcl_write.h"
 
 #include <stddef.h>
 
-zcl_codec_result_t zcl_wr_handle(const zcl_attribute_set_t * volatile set,
-                                const zcl_frame_info_t * volatile frame,
-                                const uint8_t * volatile payload,
-                                uint8_t * volatile response, uint16_t capacity,
-                                zcl_dispatch_info_t * volatile info,
-                                zcl_wr_t * volatile edit)
+zcl_codec_result_t zcl_wr_handle(const zcl_attribute_set_t * SDCC_VOLATILE set,
+                                const zcl_frame_info_t * SDCC_VOLATILE frame,
+                                const uint8_t * SDCC_VOLATILE payload,
+                                uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                                zcl_dispatch_info_t * SDCC_VOLATILE info,
+                                zcl_wr_t * SDCC_VOLATILE edit)
 {
     zcl_header_t reply;
     zcl_value_info_t value;
     uint8_t body[ZCL_FRAME_MAX_BODY - ZCL_FRAME_MIN_HEADER];
-    const zcl_attribute_t * volatile attr;
-    volatile uint16_t id;
-    volatile uint8_t type;
+    const zcl_attribute_t * SDCC_VOLATILE attr;
+    SDCC_VOLATILE uint16_t id;
+    SDCC_VOLATILE uint8_t type;
     uint16_t last = 0;
     uint8_t used = 0, i, error, wrote = 0, count = 0, errors = 0, encoded;
     uint8_t size = frame->payload_length, command = frame->header.command_id;

@@ -90,7 +90,7 @@ static radio_fifo_result_t wait_for(uint8_t goal, uint8_t expected,
             return result;
         if (command != w->command)
             return RADIO_FIFO_STATE_CHANGED;
-        d->timebase_status = timebase_expired(now, w->deadline, &expired);
+        d->timebase_status = timebase_expired(now, w->deadline, TIMEBASE_POINTER_CAST(bool, &expired));
         if (d->timebase_status != TIMEBASE_OK)
             return RADIO_FIFO_TIMEBASE_ERROR;
         if (d->elapsed_ticks >= TIMEBASE_HALF_RANGE ||
@@ -149,7 +149,7 @@ static radio_fifo_result_t operate(const uint8_t *body, uint8_t length, uint32_t
     w.limit = limit;
     w.start = timebase_read_awake_ticks24();
     w.previous = w.start;
-    d->timebase_status = timebase_deadline_after(w.start, timeout, &w.deadline);
+    d->timebase_status = timebase_deadline_after(w.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &w.deadline));
     if (d->timebase_status != TIMEBASE_OK)
         return RADIO_FIFO_TIMEBASE_ERROR;
     if (body == NULL) {

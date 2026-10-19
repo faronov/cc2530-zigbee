@@ -5,6 +5,7 @@
 #define CC2530_RADIO_AUTOACK_H
 
 #include "cc2530_mmio.h"
+#include "sdcc_volatile.h"
 #include "banked_link.h"
 
 #if defined(CC2530_MAC_HANDOFF)
@@ -215,8 +216,8 @@ typedef struct {
  * No FIFO read/flush, strobe, receiver-mask write or recovery occurs.
  */
 uint8_t radio_autoack_handoff_eligible(void);
-radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile uint16_t limit,
-                                            radio_autoack_handoff_clock_t MCU_XDATA * volatile clock);
+radio_autoack_result_t radio_autoack_handoff(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit,
+                                            radio_autoack_handoff_clock_t MCU_XDATA * SDCC_VOLATILE clock);
 #endif
 #if defined(CC2530_MAC_RECONFIG)
 #if !defined(CC2530_MAC_HANDOFF)

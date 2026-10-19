@@ -71,7 +71,7 @@ void timebase_fixture_begin(void)
     start_ticks = timebase_read_awake_ticks24();
     previous_ticks = start_ticks;
     put24(timebase_fixture_state.start, start_ticks);
-    status = timebase_deadline_after(start_ticks, TIMEBASE_FIXTURE_DELAY, &deadline_ticks);
+    status = timebase_deadline_after(start_ticks, TIMEBASE_FIXTURE_DELAY, TIMEBASE_POINTER_CAST(uint32_t, &deadline_ticks));
     timebase_fixture_state.helper_status = (uint8_t)status;
     if (status != TIMEBASE_OK) {
         fault(TIMEBASE_FIXTURE_DEADLINE_ERROR);
@@ -98,7 +98,7 @@ void timebase_fixture_poll(void)
     put24(timebase_fixture_state.end, now);
     elapsed = (now - start_ticks) & TIMEBASE_TICKS_MASK;
     put24(timebase_fixture_state.elapsed, elapsed);
-    status = timebase_expired(now, deadline_ticks, &expired);
+    status = timebase_expired(now, deadline_ticks, TIMEBASE_POINTER_CAST(bool, &expired));
     timebase_fixture_state.helper_status = (uint8_t)status;
     if (status != TIMEBASE_OK) {
         fault(TIMEBASE_FIXTURE_EXPIRY_ERROR);

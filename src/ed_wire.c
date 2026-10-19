@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "ed_wire.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
@@ -11,6 +12,7 @@
 #endif
 #include <stddef.h>
 #include <string.h>
+
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_guard_internal.h"
 #define WIRE_IO(op,p,n,wr) LW_IO(op,p,n,wr)
@@ -87,7 +89,7 @@ static void wipe(void)
 }
 
 #endif
-static zigbee_security_result_t finish(volatile zigbee_security_result_t result)
+static zigbee_security_result_t finish(SDCC_VOLATILE zigbee_security_result_t result)
 {
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     return CW_RETURN(child_work_phase(),result);
@@ -97,8 +99,8 @@ static zigbee_security_result_t finish(volatile zigbee_security_result_t result)
 #endif
 }
 
-static zigbee_security_result_t read_nwk(const uint8_t * volatile frame, uint16_t length,
-                                        nwk_frame_info_t * volatile info)
+static zigbee_security_result_t read_nwk(const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                        nwk_frame_info_t * SDCC_VOLATILE info)
 {
     uint8_t type, h;
     if (!frame || !info) return ZIGBEE_SECURITY_ARGUMENT;
@@ -121,8 +123,8 @@ static zigbee_security_result_t read_nwk(const uint8_t * volatile frame, uint16_
     return ZIGBEE_SECURITY_OK;
 }
 
-static zigbee_security_result_t read_aps(const uint8_t * volatile frame, uint16_t length,
-                                        aps_frame_info_t * volatile info)
+static zigbee_security_result_t read_aps(const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                        aps_frame_info_t * SDCC_VOLATILE info)
 {
     uint8_t type, delivery, flags, short_header;
     if (!frame || !info) return ZIGBEE_SECURITY_ARGUMENT;
@@ -155,8 +157,8 @@ static zigbee_security_result_t read_aps(const uint8_t * volatile frame, uint16_
  * public operations wipe the complete work areas, on error as well as success.
  * Their outputs must be disjoint caller objects, never addresses into work.
  */
-zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t length,
-                                     nwk_frame_info_t * volatile info) SECURITY_FAR
+zigbee_security_result_t ed_wire_nwk(const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                     nwk_frame_info_t * SDCC_VOLATILE info) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_NWK, frame, length, 0) ||
@@ -170,8 +172,8 @@ zigbee_security_result_t ed_wire_nwk(const uint8_t * volatile frame, uint16_t le
     return finish(read_nwk(frame, length, info));
 }
 
-zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t length,
-                                     aps_frame_info_t * volatile info) WIRE_FAR
+zigbee_security_result_t ed_wire_aps(const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                     aps_frame_info_t * SDCC_VOLATILE info) WIRE_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_APS, frame, length, 0) ||
@@ -185,8 +187,8 @@ zigbee_security_result_t ed_wire_aps(const uint8_t * volatile frame, uint16_t le
     return finish(read_aps(frame, length, info));
 }
 
-zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t length,
-                                        ed_packet_t * volatile packet) WIRE_FAR
+zigbee_security_result_t ed_wire_decode(const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                        ed_packet_t * SDCC_VOLATILE packet) WIRE_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_DECODE, frame, length, 0) ||
@@ -222,8 +224,8 @@ zigbee_security_result_t ed_wire_decode(const uint8_t * volatile frame, uint16_t
     return finish(ZIGBEE_SECURITY_OK);
 }
 
-zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uint8_t * volatile frame,
-                                        uint16_t capacity, uint8_t * volatile length) WIRE_FAR
+zigbee_security_result_t ed_wire_encode(const ed_packet_t * SDCC_VOLATILE packet, uint8_t * SDCC_VOLATILE frame,
+                                        uint16_t capacity, uint8_t * SDCC_VOLATILE length) WIRE_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_ENCODE, packet, sizeof(*packet), 0) ||
@@ -236,8 +238,8 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uin
 #else
 
 #endif
-    volatile uint8_t n, control;
-    uint8_t total, encoded_length;
+    SDCC_VOLATILE uint8_t n, control;
+    MCU_ESCAPED_LOCAL uint8_t total, encoded_length;
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     total=encoded_length=0;
 #endif
@@ -284,8 +286,8 @@ zigbee_security_result_t ed_wire_encode(const ed_packet_t * volatile packet, uin
     return finish(ZIGBEE_SECURITY_OK);
 }
 
-static zigbee_security_result_t header(uint8_t layer, const uint8_t * volatile frame, uint16_t length,
-                                       uint8_t * volatile size)
+static zigbee_security_result_t header(uint8_t layer, const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                       uint8_t * SDCC_VOLATILE size)
 {
     zigbee_security_result_t result;
     if (layer > ZIGBEE_SECURITY_APS) return ZIGBEE_SECURITY_ARGUMENT;
@@ -299,11 +301,11 @@ static zigbee_security_result_t header(uint8_t layer, const uint8_t * volatile f
     return result;
 }
 
-static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * volatile frame, volatile uint16_t length)
+static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * SDCC_VOLATILE frame, SDCC_VOLATILE uint16_t length)
 {
     zigbee_security_result_t result;
-    uint8_t h;
-    volatile uint8_t c, a;
+    MCU_ESCAPED_LOCAL uint8_t h;
+    SDCC_VOLATILE uint8_t c, a;
     result = header(layer, frame, length, &h);
     if (result) return result;
     if (!(frame[layer ? 0 : 1] & (layer ? APS_FLAG_SECURITY : 2)))
@@ -328,8 +330,8 @@ static zigbee_security_result_t inspect(uint8_t layer, const uint8_t * volatile 
     return ZIGBEE_SECURITY_OK;
 }
 
-zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile frame, uint16_t length,
-                                        zigbee_security_meta_t * volatile meta) WIRE_FAR
+zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+                                        zigbee_security_meta_t * SDCC_VOLATILE meta) WIRE_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_INSPECT, frame, length, 0) ||
@@ -349,9 +351,9 @@ zigbee_security_result_t ed_wire_inspect(uint8_t layer, const uint8_t * volatile
     return finish(result);
 }
 
-zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t layer,
-    const zigbee_security_key_t * volatile key, const uint8_t * volatile frame, volatile uint16_t length,
-    uint8_t * volatile output, uint16_t capacity, zigbee_security_info_t * volatile info) WIRE_FAR
+zigbee_security_result_t ed_wire_crypt(SDCC_VOLATILE uint8_t open, SDCC_VOLATILE uint8_t layer,
+    const zigbee_security_key_t * SDCC_VOLATILE key, const uint8_t * SDCC_VOLATILE frame, SDCC_VOLATILE uint16_t length,
+    uint8_t * SDCC_VOLATILE output, uint16_t capacity, zigbee_security_info_t * SDCC_VOLATILE info) WIRE_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!WIRE_IO(LW_CHILD_WIRE_CRYPT, key, sizeof(*key), 0) ||
@@ -369,7 +371,7 @@ zigbee_security_result_t ed_wire_crypt(volatile uint8_t open, volatile uint8_t l
 #endif
     zigbee_security_result_t result;
     ccm_star_result_t encrypted;
-    volatile uint8_t h, a, p, total;
+    SDCC_VOLATILE uint8_t h, a, p, total;
     uint8_t i;
     if (!key || !frame || !output || !info || open > 1 || layer > 1)
         return finish(ZIGBEE_SECURITY_ARGUMENT);

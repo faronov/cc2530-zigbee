@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "mac_association.h"
 
 #include <stddef.h>
@@ -74,7 +75,7 @@ mac_association_result_t mac_association_start(mac_association_t MAC_ASSOCIATION
 mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATION_RAM *ctx,
                     uint32_t now,
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
-                    uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t volatile profile)
+                    uint8_t MAC_ASSOCIATION_RAM *observation, uint8_t SDCC_VOLATILE profile)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_ASSOCIATION, MAC_ASSOCIATION_INVALID);
@@ -88,7 +89,7 @@ mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATI
 #else
     mac_frame_info_t frame;
 #endif
-    mac_command_t command;
+    MCU_ESCAPED_LOCAL mac_command_t command;
     uint8_t decision = MAC_ASSOCIATION_WAITING;
 
     if (!valid(ctx) || observation == NULL || profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
@@ -173,7 +174,7 @@ mac_association_result_t mac_association_step_rx(mac_association_t MAC_ASSOCIATI
 }
 #undef frame
 
-mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * volatile ctx,
+mac_association_result_t mac_association_step(mac_association_t MAC_ASSOCIATION_RAM * SDCC_VOLATILE ctx,
                     uint32_t now,
                     const mac_association_event_t MAC_ASSOCIATION_RAM *event,
                     uint8_t MAC_ASSOCIATION_RAM *observation)

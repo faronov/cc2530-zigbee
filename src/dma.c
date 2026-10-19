@@ -50,6 +50,12 @@ static void arm0(void) __naked
         ret
     __endasm;
 }
+#elif defined(CC2530_CLANG)
+static void arm0(void)
+{
+    MMIO_WRITE(SOC_DMAARM, 1);
+    __asm__ volatile("nop\nnop\nnop\nnop\nnop\nnop\nnop\nnop\nnop");
+}
 #else
 static void arm0(void)
 {
@@ -111,7 +117,7 @@ static dma_result_t poll(dma_wait_t MCU_XDATA *w, dma_diagnostics_t MCU_XDATA *d
             return DMA_STATE_CHANGED;
     } else if (d->arm == 0 && d->request == 0 && d->irq == 1)
         d->complete = 1;
-    d->timebase_status = timebase_expired(now, w->deadline, &expired);
+    d->timebase_status = timebase_expired(now, w->deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (d->timebase_status != TIMEBASE_OK)
         return DMA_TIMEBASE_ERROR;
     if (d->elapsed_ticks >= TIMEBASE_HALF_RANGE ||
@@ -173,7 +179,7 @@ dma_result_t dma_copy_init(uint16_t source, uint16_t destination, uint8_t length
     w.limit = limit;
     w.start = timebase_read_awake_ticks24();
     w.previous = w.start;
-    d->timebase_status = timebase_deadline_after(w.start, timeout, &w.deadline);
+    d->timebase_status = timebase_deadline_after(w.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &w.deadline));
     if (d->timebase_status != TIMEBASE_OK) {
         result = DMA_TIMEBASE_ERROR;
         goto fault;

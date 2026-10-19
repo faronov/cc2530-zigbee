@@ -5,6 +5,7 @@
 #define NWK_PARENT_H
 
 #include "nwk_candidates.h"
+#include "sdcc_volatile.h"
 
 typedef enum {
     NWK_PARENT_OK = 0,
@@ -54,8 +55,8 @@ typedef struct {
  * Foreground/non-reentrant under SDCC, serialized with collector/codecs.
  * No allocation, retained pointer, time, radio, NIB mutation or implicit retry.
  */
-nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * volatile table,
-                                      const nwk_parent_policy_t * volatile policy,
-                                      nwk_parent_choice_t * volatile output);
+nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * SDCC_VOLATILE table,
+                                      const nwk_parent_policy_t * SDCC_VOLATILE policy,
+                                      nwk_parent_choice_t * SDCC_VOLATILE output);
 
 #endif

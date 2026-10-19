@@ -4,6 +4,7 @@
 #ifndef BDB_JOIN_H
 #define BDB_JOIN_H
 #include "mac_scan.h"
+#include "sdcc_volatile.h"
 #include "mac_join.h"
 #include "nwk_parent.h"
 #include "security_keys.h"
@@ -165,27 +166,27 @@ typedef struct {
  * application readiness but preserve durable keys for explicit recovery;
  * commissioning abandonment/address conflict still requests genuine Leave.
  */
-bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now) JOIN_FAR;
-bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * volatile ctx, NWK_APS_TX_T BDB_JOIN_RAM * volatile owner,
-    const bdb_join_config_t * volatile config, volatile uint32_t now) JOIN_FAR;
-bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now,
-    const bdb_join_event_t BDB_JOIN_RAM * volatile event, bdb_join_action_t BDB_JOIN_RAM * volatile action) JOIN_FAR;
+bdb_join_result_t bdb_join_init(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NWK_APS_TX_T BDB_JOIN_RAM * SDCC_VOLATILE owner,
+    const bdb_join_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
+    const bdb_join_event_t BDB_JOIN_RAM * SDCC_VOLATILE event, bdb_join_action_t BDB_JOIN_RAM * SDCC_VOLATILE action) JOIN_FAR;
 /* FCS-free DATA body; CRC truth is PHY metadata, never authentication.
  * Authentication, replay checks and all key decisions execute real C services.
  */
-bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    const uint8_t * volatile body, volatile uint16_t length, volatile uint8_t crc_valid, volatile uint32_t now) JOIN_FAR;
-bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    const ed_packet_t * volatile packet, volatile uint8_t aps_secure, volatile uint32_t now) JOIN_FAR;
-bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * volatile ctx, uint8_t * volatile result) JOIN_FAR;
+bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
+    const uint8_t * SDCC_VOLATILE body, SDCC_VOLATILE uint16_t length, SDCC_VOLATILE uint8_t crc_valid, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+bdb_join_result_t bdb_join_send(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
+    const ed_packet_t * SDCC_VOLATILE packet, SDCC_VOLATILE uint8_t aps_secure, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+bdb_join_result_t bdb_join_confirm(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t * SDCC_VOLATILE result) JOIN_FAR;
 #if defined(CC2530_MAC_LINK)
 /* ACTION_TX/NWK_APS_ACTION_ARM is a one-shot adapter preparation request.
  * Confirm the unchanged slot identity after physical prepare, before RANDOM.
  * No RX coverage is implied; OFF gaps around ordinary TX remain explicit.
  */
-bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+bdb_join_result_t bdb_join_armed(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
     uint32_t generation, uint8_t retry, uint8_t nb) JOIN_FAR;
-bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * volatile ctx,
+bdb_join_result_t bdb_join_disarmed(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
     uint32_t generation, uint8_t retry, uint8_t nb) JOIN_FAR;
 #endif
 

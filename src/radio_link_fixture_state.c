@@ -153,7 +153,7 @@ void radio_link_fixture_poll(void)
     else {
         state.stage = 5;
         started = timebase_read_awake_ticks24(); previous = started; polls = 0;
-        if (timebase_deadline_after(started, LNK_RX_TICKS, &deadline) != TIMEBASE_OK) {
+        if (timebase_deadline_after(started, LNK_RX_TICKS, TIMEBASE_POINTER_CAST(uint32_t, &deadline)) != TIMEBASE_OK) {
             fault(LNK_TIME); return;
         }
         for (;;) {
@@ -162,7 +162,7 @@ void radio_link_fixture_poll(void)
             for (i = 0; i < 4; i++) state.elapsed[i] = (uint8_t)(elapsed >> (8u * i));
             if (elapsed >= TIMEBASE_HALF_RANGE ||
                 ((now - previous) & TIMEBASE_TICKS_MASK) >= TIMEBASE_HALF_RANGE ||
-                timebase_expired(now, deadline, &expired) != TIMEBASE_OK) {
+                timebase_expired(now, deadline, TIMEBASE_POINTER_CAST(bool, &expired)) != TIMEBASE_OK) {
                 fault(LNK_TIME); return;
             }
             previous = now;

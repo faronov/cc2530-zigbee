@@ -46,6 +46,7 @@ def main():
         successes.append(name)
 
     sidecar = next(directory.rglob(selected[0]["module"]+".xdata.json"))
+    sidecar_error = f"Compiler sidecar {sidecar.relative_to(directory)}: expected "
     original_metadata = json.loads(sidecar.read_bytes())
     index = next(i for i, r in enumerate(original_metadata["objects"]) if r["cdb_key"] == selected[0]["key"])
     read = Path.read_bytes
@@ -60,10 +61,10 @@ def main():
         data = copy.deepcopy(original_metadata)
         change(data)
         with patch.object(Path, "read_bytes", lambda p: json.dumps(data).encode() if p == sidecar else read(p)):
-            reject(name, lambda: bind_inputs(baseline, directory, binding), "falsified compiler sidecar")
+            reject(name, lambda: bind_inputs(baseline, directory, binding), sidecar_error)
     rglob = Path.rglob
     with patch.object(Path, "rglob", lambda p, pattern: (q for q in rglob(p, pattern) if q != sidecar)):
-        reject("missing sidecar", lambda: bind_inputs(baseline, directory, binding), "falsified compiler sidecar")
+        reject("missing sidecar", lambda: bind_inputs(baseline, directory, binding), sidecar_error)
     study = copy.deepcopy(ctx["study"])
     study["groups"][0]["owner"] = "unknown.owner"
     reject("owner/callgraph mismatch", lambda: population(study, ctx["model"], ctx["graph"],

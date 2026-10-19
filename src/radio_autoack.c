@@ -1,12 +1,19 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "radio_autoack.h"
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
 #if defined(CC2530_MAC_ATTEMPT)
 #include "mac_epoch.h"
+#endif
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#if !defined(CC2530_CLANG)
+volatile MCU_XDATA MCU_AT(CC2530_RX_DIAG_ADDRESS) cc2530_rx_diag_t cc2530_rx_diag;
+#endif
 #endif
 
 MCU_XDATA uint8_t radio_autoack_state, radio_autoack_fault;
@@ -48,6 +55,75 @@ static MCU_XDATA struct {
 #endif
 #else
 #define OVERFLOWED 0
+#endif
+#if defined(CC2530_RX_DIAG)
+/* Write-only evidence (cc2530_rx_diag.h): copies of values already sampled and
+ * of work.start; never an extra MMIO or timebase access, never read back. */
+static uint16_t diag_ticks(uint32_t since)
+{
+    since = (work.start - since) & TIMEBASE_TICKS_MASK;
+    return since >= 0xffffUL ? 0xfffeu : (uint16_t)since;
+}
+
+#if defined(CC2530_MAC_ADAPTER)
+static void diag_latch(uint8_t site, uint8_t rferrf, uint8_t fsmstat1)
+{
+    uint8_t i;
+    RX_DIAG_COUNT(overflows);
+    if (RX_DIAG.first_valid) return;
+    RX_DIAG.first_valid = 1;
+    RX_DIAG.first_site = site;
+    RX_DIAG.first_radio_state = radio_autoack_state;
+    RX_DIAG.first_radio_phase = status.phase;
+    RX_DIAG.first_rferrf = rferrf;
+    RX_DIAG.first_fsmstat0 = status.calibration;
+    RX_DIAG.first_fsmstat1 = fsmstat1;
+    RX_DIAG.first_rxfifocnt = status.count;
+    RX_DIAG.first_rxfirst = status.first;
+    RX_DIAG.first_rxlast = status.last;
+    RX_DIAG.first_stamp = work.start;
+    if (status.phase == 4) RX_DIAG.first_gap = RX_DIAG.last_service_gap;
+    else if (RX_DIAG.flags & RX_DIAG_SERVICE_VALID) RX_DIAG.first_gap = diag_ticks(RX_DIAG.service_stamp);
+    else RX_DIAG.first_gap = 0xffffu;
+    RX_DIAG.first_frames = RX_DIAG.frames;
+    for (i = 0; i < 4; i++) RX_DIAG.first_header[i] = RX_DIAG.last_header[i];
+}
+#endif
+
+/* Start of a receive operation: interval since the previous one. */
+static void diag_service(void)
+{
+    uint16_t gap = 0xffffu;
+    if (RX_DIAG.flags & RX_DIAG_SERVICE_VALID) {
+        gap = diag_ticks(RX_DIAG.service_stamp);
+        if (gap > RX_DIAG.max_service_gap) RX_DIAG.max_service_gap = gap;
+    }
+    RX_DIAG.last_service_gap = gap;
+    RX_DIAG.service_stamp = work.start;
+    RX_DIAG.flags |= RX_DIAG_SERVICE_VALID;
+}
+
+/* Acquire, resume, send or attempt left the receiver on: close a stop interval
+ * (stop start to this operation's start) and restart the service interval. */
+static void diag_rx_on(void)
+{
+    uint16_t gap;
+    if (RX_DIAG.flags & RX_DIAG_OFF_VALID) {
+        gap = diag_ticks(RX_DIAG.off_stamp);
+        if (gap > RX_DIAG.max_rx_off_gap) RX_DIAG.max_rx_off_gap = gap;
+    }
+    RX_DIAG.service_stamp = work.start;
+    RX_DIAG.flags = RX_DIAG_SERVICE_VALID;
+}
+
+static void diag_frame(void)
+{
+    if (RX_DIAG.frames != 0xffffu) RX_DIAG.frames++;
+    RX_DIAG.last_header[0] = staged.body[0];
+    RX_DIAG.last_header[1] = staged.body[1];
+    RX_DIAG.last_header[2] = staged.body[2];
+    RX_DIAG.last_header[3] = staged.length + 2u;
+}
 #endif
 /* SWRU191F pp.214,256-264; SWRS081B Table2 p.24. Address RAM first,
  * then the complete profile, all while idle. Only FSCAL1 has R/W0 high bits.
@@ -183,6 +259,9 @@ sample:
     }
     if (0) {
 latched:
+#if defined(CC2530_RX_DIAG)
+        if (!work.overflow) diag_latch(RX_DIAG_SITE_OBSERVE, status.errors, status.signals);
+#endif
         work.overflow = 1;
         if (status.count > 128) return RADIO_AUTOACK_FIFO_ERROR;
         return RADIO_AUTOACK_READY;
@@ -232,7 +311,7 @@ static radio_autoack_result_t progress(void)
     now = timebase_read_awake_ticks24();
     status.polls++;
     status.elapsed_ticks = (now - work.start) & TIMEBASE_TICKS_MASK;
-    status.timebase_status = timebase_expired(now, work.deadline, &expired);
+    status.timebase_status = timebase_expired(now, work.deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (status.timebase_status != TIMEBASE_OK || status.elapsed_ticks >= TIMEBASE_HALF_RANGE ||
         ((now - work.previous) & TIMEBASE_TICKS_MASK) >= TIMEBASE_HALF_RANGE)
         return RADIO_AUTOACK_TIME_ERROR;
@@ -263,14 +342,28 @@ static radio_autoack_result_t consume(void)
 {
     radio_autoack_result_t result = progress();
     uint8_t count;
+#if defined(CC2530_RX_DIAG) && defined(CC2530_MAC_ADAPTER)
+    uint8_t signals;
+#endif
     if (result != RADIO_AUTOACK_READY) return result;
     if (status.polls == work.limit) return RADIO_AUTOACK_WORK_LIMIT;
 #if defined(CC2530_MAC_ADAPTER)
     count = MMIO_READ(SOC_RFERRF);
     /* Same first-detection rule as observe(): the head stays readable (p233). */
+#if defined(CC2530_RX_DIAG)
+    /* Identical access order; the FSMSTAT1 value is kept for the snapshot. */
+    if (count == 4u && !work.overflow && LOSS_RX(radio_autoack_state)) {
+        signals = MMIO_XREAD(0x6193);
+        if ((signals & 0xc0u) == 0x40u) {
+            diag_latch(RX_DIAG_SITE_CONSUME, count, signals);
+            work.overflow = 1;
+        }
+    }
+#else
     if (count == 4u && !work.overflow && LOSS_RX(radio_autoack_state) &&
         (MMIO_XREAD(0x6193) & 0xc0u) == 0x40u)
         work.overflow = 1;
+#endif
     if (count != (work.overflow == 1u ? 4u : 0u))
 #else
     if (MMIO_READ(SOC_RFERRF))
@@ -350,7 +443,7 @@ static radio_autoack_result_t operate(uint8_t operation,
     memset(&status, 0, sizeof(status));
     work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     if (operation == 0 || operation == 3) {
         if (operation == 0) {
@@ -412,16 +505,29 @@ static radio_autoack_result_t operate(uint8_t operation,
         while ((status.calibration & 0x40u) || (status.signals & 7u) != 5u ||
                !status.rssi_valid);
         radio_autoack_state = RADIO_AUTOACK_RX;
+#if defined(CC2530_RX_DIAG)
+        diag_rx_on();
+#endif
         status.phase = operation == 0 ? 3 : 10; result = RADIO_AUTOACK_READY;
     } else if (operation == 1) {
         status.phase = 4;
+#if defined(CC2530_RX_DIAG)
+        diag_service();
+#endif
         CHECK(poll());
 #if defined(CC2530_MAC_ADAPTER)
         if (work.overflow) {
+#if defined(CC2530_RX_DIAG)
+            if (complete_head()) { RX_DIAG_COUNT(salvaged); goto head; }
+#else
             if (complete_head()) goto head;
+#endif
             /* Incomplete overflow tail: flush and report the loss (p232). */
             ROOM();
             MMIO_WRITE(SOC_RFST, 0xed); status.writes++;
+#if defined(CC2530_RX_DIAG)
+            RX_DIAG_COUNT(flushes);
+#endif
             ROOM();
             MMIO_WRITE(SOC_RFERRF, 0xfb); work.overflow = 2; status.writes++;
             if (LOSS_RX(radio_autoack_state)) {
@@ -432,6 +538,9 @@ static radio_autoack_result_t operate(uint8_t operation,
                 REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
             }
             work.overflow = 0;
+#if defined(CC2530_RX_DIAG)
+            RX_DIAG_COUNT(rx_lost);
+#endif
             result = RADIO_AUTOACK_RX_LOST;
             goto finished;
         }
@@ -477,6 +586,10 @@ head:
         output->rssi_raw = staged.rssi_raw;
         output->crc_correlation = staged.crc_correlation;
         result = (staged.crc_correlation & 128u) ? RADIO_AUTOACK_FRAME : RADIO_AUTOACK_BAD_CRC;
+#if defined(CC2530_RX_DIAG)
+        if (result == RADIO_AUTOACK_FRAME) diag_frame();
+        else RX_DIAG_COUNT(bad_crc);
+#endif
     } else {
         status.phase = 5;
         CHECK(poll());
@@ -519,6 +632,9 @@ overflowed:
 #endif
             radio_autoack_state = work.profile ? RADIO_AUTOACK_OFF_NOACK : RADIO_AUTOACK_OFF;
             status.phase = 7;
+#if defined(CC2530_RX_DIAG)
+            RX_DIAG.off_stamp = work.start; RX_DIAG.flags = RX_DIAG_OFF_VALID;
+#endif
             result = RADIO_AUTOACK_STOPPED;
         }
     }
@@ -561,6 +677,8 @@ static void cca_settle(void) __naked
         ret
     __endasm;
 }
+#elif defined(CC2530_CLANG)
+static void cca_settle(void) { __asm__ volatile("nop\nnop\nnop\nnop"); }
 #else
 static void cca_settle(void) { host_mmio_system_cycles(4); }
 #endif
@@ -594,7 +712,7 @@ radio_autoack_result_t radio_autoack_send(
     memset(&status, 0, sizeof(status));
     work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 11;
     CHECK(poll()); CHECK(tx_idle());
@@ -655,6 +773,9 @@ radio_autoack_result_t radio_autoack_send(
         result = RADIO_AUTOACK_TX_DONE;
     }
     radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
+#if defined(CC2530_RX_DIAG)
+    diag_rx_on();
+#endif
     status.phase = 16; status.result = result;
     return result;
 failed:
@@ -668,7 +789,7 @@ static MCU_XDATA mac_epoch_t attempt_epoch;
 static MCU_XDATA mac_epoch_stamp_t attempt_delta;
 static radio_autoack_attempt_t MCU_XDATA * MCU_XDATA attempt_output;
 /* Keep long-lived arithmetic in XDATA, not SDCC's scarce DATA spill cache. */
-static volatile MCU_XDATA struct {
+static SDCC_VOLATILE MCU_XDATA struct {
     uint32_t ticks, duration, until;
     uint8_t head, phr;
 } attempt;
@@ -685,7 +806,7 @@ static radio_autoack_result_t attempt_elapsed(
 }
 
 #if defined(CC2530_MAC_HANDOFF)
-static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volatile output);
+static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * SDCC_VOLATILE output);
 /* Reuse the one-latch reader inside this owner's bounded begin/end scope.
  * Per-sample deadline setup/polling needlessly widens the ACK upper bound.
  */
@@ -712,7 +833,7 @@ radio_autoack_result_t radio_autoack_prepare(
     if (result != RADIO_AUTOACK_READY) return result;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 17;
     CHECK(poll()); CHECK(tx_idle());
@@ -779,7 +900,7 @@ radio_autoack_result_t radio_autoack_attempt(
     attempt_output = output;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     CHECK(poll()); CHECK(tx_idle());
     REQUIRE(work.search_disabled && work.cca == 4 && !(status.flags1 & 2u) &&
@@ -924,6 +1045,10 @@ radio_autoack_result_t radio_autoack_attempt(
             CHECK(receive_head());
             attempt_output->frame = staged;
             received = (staged.crc_correlation & 128u) ? RADIO_AUTOACK_FRAME : RADIO_AUTOACK_BAD_CRC;
+#if defined(CC2530_RX_DIAG)
+            if (received == RADIO_AUTOACK_FRAME) diag_frame();
+            else RX_DIAG_COUNT(bad_crc);
+#endif
             attempt_output->received = 1;
             break;
         }
@@ -944,6 +1069,9 @@ complete:
     radio_autoack_state = work.profile ? RADIO_AUTOACK_RX_NOACK : RADIO_AUTOACK_RX;
 #else
     radio_autoack_state = RADIO_AUTOACK_RX_NOACK;
+#endif
+#if defined(CC2530_RX_DIAG)
+    diag_rx_on();
 #endif
     status.phase = 21; status.result = received;
     return received;
@@ -1003,7 +1131,7 @@ static radio_autoack_result_t handoff_empty(void)
         RADIO_AUTOACK_READY : RADIO_AUTOACK_HANDOFF_RACE;
 }
 
-static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volatile output)
+static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * SDCC_VOLATILE output)
 {
     const mac_time_stamp_t MCU_XDATA *raw;
     mac_time_result_t sampled;
@@ -1022,10 +1150,11 @@ static radio_autoack_result_t handoff_sample(mac_time_stamp_t MCU_XDATA * volati
     return RADIO_AUTOACK_WORK_LIMIT;
 }
 
-radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile uint16_t limit,
-                                            radio_autoack_handoff_clock_t MCU_XDATA * volatile clock)
+radio_autoack_result_t radio_autoack_handoff(SDCC_VOLATILE uint32_t timeout,
+                                            SDCC_VOLATILE uint16_t limit,
+                                            radio_autoack_handoff_clock_t MCU_XDATA * SDCC_VOLATILE clock)
 {
-    volatile MCU_XDATA radio_autoack_result_t result;
+    SDCC_VOLATILE MCU_XDATA radio_autoack_result_t result;
     if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
     if (!clock || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
         return RADIO_AUTOACK_INVALID_ARGUMENT;
@@ -1034,7 +1163,7 @@ radio_autoack_result_t radio_autoack_handoff(volatile uint32_t timeout, volatile
     if (result != RADIO_AUTOACK_READY) return result;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 22;
     CHECK(poll()); CHECK(handoff_empty());
@@ -1109,7 +1238,7 @@ radio_autoack_result_t radio_autoack_configure(
         if (configuration->ieee[i] != owned.ieee[i]) return RADIO_AUTOACK_INVALID_ARGUMENT;
     memset(&status, 0, sizeof(status)); work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, RADIO_AUTOACK_TIME_ERROR);
     status.phase = 24;
     CHECK(poll()); CHECK(stopped());

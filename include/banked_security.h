@@ -4,9 +4,15 @@
 #ifndef BANKED_SECURITY_H
 #define BANKED_SECURITY_H
 
+#include "cc2530_mmio.h"
+
 #if defined(CC2530_BANKED_SECURITY) || defined(CC2530_BANKED_JOIN)
+#if defined(CC2530_CLANG)
+#define SECURITY_FAR
+#else
 #include "banked.h"
 #define SECURITY_FAR __banked
+#endif
 #else
 #define SECURITY_FAR
 #endif

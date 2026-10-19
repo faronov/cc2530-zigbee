@@ -3,7 +3,7 @@
  */
 #include "bringup.h"
 
-unsigned char _sdcc_external_startup(void)
+unsigned char CC2530_EXTERNAL_STARTUP(void)
 {
     MMIO_WRITE(SOC_IEN0, 0);
     MMIO_WRITE(SOC_IEN1, 0);

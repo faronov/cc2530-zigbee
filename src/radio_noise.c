@@ -106,7 +106,7 @@ static radio_noise_result_t poll(void)
     out->polls++;
     out->elapsed_ticks = (now - work.start) & TIMEBASE_TICKS_MASK;
     if (result != RADIO_NOISE_OK) return result;
-    out->timebase_status = timebase_expired(now, work.deadline, &expired);
+    out->timebase_status = timebase_expired(now, work.deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (out->timebase_status != TIMEBASE_OK || out->elapsed_ticks >= TIMEBASE_HALF_RANGE ||
         ((now - work.previous) & TIMEBASE_TICKS_MASK) >= TIMEBASE_HALF_RANGE)
         return RADIO_NOISE_TIME_ERROR;
@@ -150,7 +150,7 @@ radio_noise_result_t radio_noise_collect(const radio_noise_request_t MCU_XDATA *
     REQUIRE(idle(), RADIO_NOISE_BUSY);
     work.start = timebase_read_awake_ticks24();
     work.previous = work.start;
-    out->timebase_status = timebase_deadline_after(work.start, owned.timeout, &work.deadline);
+    out->timebase_status = timebase_deadline_after(work.start, owned.timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(out->timebase_status == TIMEBASE_OK, RADIO_NOISE_TIME_ERROR);
     out->phase = 1;
     for (i = 0; i < sizeof(values); i++) {

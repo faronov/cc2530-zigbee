@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zdo_runtime.h"
+#include "sdcc_volatile.h"
 #include "security_keys.h"
 #include "board.h"
 #include <stddef.h>
@@ -39,7 +40,7 @@ static uint8_t expired(uint32_t now, uint32_t until)
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-static zdo_runtime_result_t advance(zdo_runtime_t * volatile context, volatile uint32_t now)
+static zdo_runtime_result_t advance(zdo_runtime_t * SDCC_VOLATILE context, SDCC_VOLATILE uint32_t now)
 {
     zdo_runtime_t *ctx = context;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -51,7 +52,7 @@ static zdo_runtime_result_t advance(zdo_runtime_t * volatile context, volatile u
     return ZDO_RUNTIME_OK;
 }
 
-static void base(ed_packet_t * volatile p, volatile uint16_t destination, volatile uint16_t cluster)
+static void base(ed_packet_t * SDCC_VOLATILE p, SDCC_VOLATILE uint16_t destination, SDCC_VOLATILE uint16_t cluster)
 {
     memset(p, 0, sizeof(*p));
     p->nwk.version = 2; p->nwk.radius = 30; p->nwk.destination = destination;
@@ -59,15 +60,15 @@ static void base(ed_packet_t * volatile p, volatile uint16_t destination, volati
     p->aps.cluster_id = cluster;
 }
 
-zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
-    const zdo_node_descriptor_t * volatile descriptor, volatile uint32_t now)
+zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * SDCC_VOLATILE ctx,
+    const zdo_node_descriptor_t * SDCC_VOLATILE descriptor, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_ZDO_INIT, ZDO_RUNTIME_ARGUMENT);
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, descriptor, sizeof(*descriptor), 0))
         return LW_RETURN(LW_ZDO_INIT, ZDO_RUNTIME_ARGUMENT);
 #endif
-    uint8_t length;
+    MCU_ESCAPED_LOCAL uint8_t length;
     if (!ctx || !descriptor || descriptor->logical_type != 2) return LW_RETURN(LW_ZDO_INIT, ZDO_RUNTIME_ARGUMENT);
     memset(&work.descriptor.node, 0, sizeof(work.descriptor.node)); work.descriptor.node.descriptor = *descriptor; work.descriptor.node.address = 1;
     if (zdo_node_rsp_encode(&work.descriptor.node, work.descriptor.descriptor_bytes, sizeof(work.descriptor.descriptor_bytes), &length) != ZDO_NODE_OK)
@@ -78,8 +79,8 @@ zdo_runtime_result_t zdo_runtime_init(zdo_runtime_t * volatile ctx,
     return LW_RETURN(LW_ZDO_INIT, ZDO_RUNTIME_OK);
 }
 
-zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint8_t which, volatile uint32_t now)
+zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(ZDO_RUNTIME_STATE);
@@ -111,7 +112,7 @@ zdo_runtime_result_t zdo_runtime_request(zdo_runtime_t * volatile ctx, nwk_aps_t
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t address_request(zdo_runtime_t * volatile context, const ed_packet_t * volatile packet)
+static zdo_runtime_result_t address_request(zdo_runtime_t * SDCC_VOLATILE context, const ed_packet_t * SDCC_VOLATILE packet)
 {
     zdo_runtime_t *ctx = context;
     const ed_packet_t *p = packet;
@@ -142,8 +143,8 @@ static zdo_runtime_result_t address_request(zdo_runtime_t * volatile context, co
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t announce(zdo_runtime_t * volatile context, nwk_aps_t * volatile link,
-    const ed_packet_t * volatile packet)
+static zdo_runtime_result_t announce(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link,
+    const ed_packet_t * SDCC_VOLATILE packet)
 {
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;
@@ -179,7 +180,7 @@ static zdo_runtime_result_t announce(zdo_runtime_t * volatile context, nwk_aps_t
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t parent_response(zdo_runtime_t * volatile context, nwk_aps_t * volatile link)
+static zdo_runtime_result_t parent_response(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link)
 {
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;
@@ -201,7 +202,7 @@ static zdo_runtime_result_t parent_response(zdo_runtime_t * volatile context, nw
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t zdo_response(zdo_runtime_t * volatile context, nwk_aps_t * volatile link)
+static zdo_runtime_result_t zdo_response(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link)
 {
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;
@@ -227,12 +228,12 @@ static zdo_runtime_result_t zdo_response(zdo_runtime_t * volatile context, nwk_a
     return ZDO_RUNTIME_OK;
 }
 
-static zdo_runtime_result_t received(zdo_runtime_t * volatile context, nwk_aps_t * volatile link)
+static zdo_runtime_result_t received(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link)
 {
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;
     const ed_packet_t *p = &ctx->application;
-    uint8_t event;
+    MCU_ESCAPED_LOCAL uint8_t event;
     if (nwk_aps_take(transport, &ctx->application, &event) != NWK_APS_OK) return ZDO_RUNTIME_STATE;
     if (security_keys_status(&keys) != SECURITY_KEYS_OK) return ZDO_RUNTIME_SECURITY;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -277,14 +278,14 @@ static zdo_runtime_result_t received(zdo_runtime_t * volatile context, nwk_aps_t
     return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_OK);
 }
 
-zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint32_t now)
+zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(ZDO_RUNTIME_STATE);
     if (!LW_IO(LW_NONE, transport, sizeof(*transport), 1)) return ZDO_RUNTIME_ARGUMENT;
 #endif
-    uint8_t result;
+    MCU_ESCAPED_LOCAL uint8_t result;
     zdo_runtime_result_t rc = advance(ctx, now);
     nwk_aps_result_t queued;
     if (rc) return rc;
@@ -321,8 +322,8 @@ zdo_runtime_result_t zdo_runtime_step(zdo_runtime_t * volatile ctx, nwk_aps_t * 
     return rc;
 }
 
-zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t * volatile transport,
-    volatile uint32_t now)
+zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_aps_t * SDCC_VOLATILE transport,
+    SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(ZDO_RUNTIME_STATE);
@@ -340,8 +341,8 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * volatile ctx, nwk_aps_t 
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile context,
-    uint8_t * volatile which, uint8_t * volatile result)
+zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * SDCC_VOLATILE context,
+    uint8_t * SDCC_VOLATILE which, uint8_t * SDCC_VOLATILE result)
 {
     zdo_runtime_t *ctx = context;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -354,7 +355,7 @@ zdo_runtime_result_t zdo_runtime_take_result(zdo_runtime_t * volatile context,
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile context, ed_packet_t * volatile packet)
+zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * SDCC_VOLATILE context, ed_packet_t * SDCC_VOLATILE packet)
 {
     zdo_runtime_t *ctx = context;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -368,7 +369,7 @@ zdo_runtime_result_t zdo_runtime_take_application(zdo_runtime_t * volatile conte
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * volatile context)
+zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * SDCC_VOLATILE context)
 {
     zdo_runtime_t *ctx = context;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -380,8 +381,8 @@ zdo_runtime_result_t zdo_runtime_discard_application(zdo_runtime_t * volatile co
     return ZDO_RUNTIME_OK;
 }
 
-zdo_runtime_result_t zdo_runtime_broadcast(zdo_runtime_t * volatile context, nwk_aps_t * volatile link,
-    volatile uint8_t which, volatile uint32_t now)
+zdo_runtime_result_t zdo_runtime_broadcast(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link,
+    SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now)
 {
     zdo_runtime_t *ctx = context;
     nwk_aps_t *transport = link;

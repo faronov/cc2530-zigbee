@@ -5,6 +5,7 @@
 #define MAC_TX_H
 
 #include <stdint.h>
+#include "sdcc_volatile.h"
 #include "mac_frame.h"
 #include "banked_join.h"
 
@@ -116,7 +117,7 @@ typedef struct {
 /* Memory initialization only, never radio recovery. NULL returns INVALID
  * without mutation; valid fresh-epoch storage is initialized and returns OK.
  */
-mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now) JOIN_FAR;
+mac_tx_result_t mac_tx_init(mac_tx_t * SDCC_VOLATILE tx, uint8_t random_dsn, uint32_t now) JOIN_FAR;
 /* Direct DATA or canonical unsecured Beacon/Association/Data Request only.
  * Data Request requires both short/extended addresses, a non-FFFF compressed
  * PAN, ACK request and no Pending. Caller chooses its valid allocated short
@@ -130,15 +131,15 @@ mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t
  * or capability discovery is done here. Request ACK means MAC receipt only:
  * no Association Response acceptance, polling, association or membership.
  */
-mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
-                              const uint8_t * volatile body, uint16_t length,
+mac_tx_result_t mac_tx_submit(mac_tx_t * SDCC_VOLATILE tx,
+                              const uint8_t * SDCC_VOLATILE body, uint16_t length,
                               uint32_t now, uint32_t lifetime, uint16_t work_limit) JOIN_FAR;
-mac_tx_result_t mac_tx_copy(const mac_tx_t * volatile tx,
-                            uint8_t * volatile body, uint16_t capacity,
-                            uint8_t * volatile length) JOIN_FAR;
-mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
-                            const mac_tx_event_t * volatile event,
-                            mac_tx_action_t * volatile action) JOIN_FAR;
+mac_tx_result_t mac_tx_copy(const mac_tx_t * SDCC_VOLATILE tx,
+                            uint8_t * SDCC_VOLATILE body, uint16_t capacity,
+                            uint8_t * SDCC_VOLATILE length) JOIN_FAR;
+mac_tx_result_t mac_tx_step(mac_tx_t * SDCC_VOLATILE tx, uint32_t now,
+                            const mac_tx_event_t * SDCC_VOLATILE event,
+                            mac_tx_action_t * SDCC_VOLATILE action) JOIN_FAR;
 mac_tx_result_t mac_tx_release(mac_tx_t *tx) JOIN_FAR;
 
 /* NULL event polls. Invalid arguments and admission/copy/release errors leave

@@ -2,8 +2,12 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "mac_link_driver.h"
+#include "sdcc_volatile.h"
 #include "timebase.h"
 #include <string.h>
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
 
 static uint8_t reached(uint32_t now, uint32_t at)
 {
@@ -17,7 +21,7 @@ static uint8_t overlaps(const void MCU_XDATA *a, uint16_t n,
     return x <= y ? y-x < n : x-y < m;
 }
 
-static mac_link_driver_result_t fault(mac_link_driver_t MCU_XDATA * volatile d, uint8_t why)
+static mac_link_driver_result_t fault(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d, uint8_t why)
 {
     d->fault = why;
     return (mac_link_driver_result_t)why;
@@ -29,7 +33,7 @@ static mac_link_driver_result_t fault(mac_link_driver_t MCU_XDATA * volatile d, 
  * the step itself issues adapter steps, prepare/configure/unprepare and
  * frame/receive consumers at most one helper level below it.
  */
-static uint8_t sample(mac_link_driver_t MCU_XDATA * volatile d)
+static uint8_t sample(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
 {
     uint8_t result = mac_adapter_now(d->timeout, d->limit, &d->clock);
     d->adapter_result = result;
@@ -39,14 +43,14 @@ static uint8_t sample(mac_link_driver_t MCU_XDATA * volatile d)
     return 1;
 }
 
-static uint8_t consume(mac_link_driver_t MCU_XDATA * volatile d)
+static uint8_t consume(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
 {
     d->adapter_result = mac_adapter_consume(mac_adapter_observation()->token);
     if (d->adapter_result != MAC_ADAPTER_OK) { fault(d, MAC_LINK_DRIVER_RADIO); return 0; }
     return 1;
 }
 
-static uint8_t consumer(mac_link_driver_t MCU_XDATA * volatile d, uint8_t event)
+static uint8_t consumer(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d, uint8_t event)
 {
     uint8_t result = bdb_join_step(d->join, d->now, event ? &d->event : NULL, &d->action);
     d->consumer_result = result;
@@ -57,7 +61,7 @@ static uint8_t consumer(mac_link_driver_t MCU_XDATA * volatile d, uint8_t event)
     return 1;
 }
 
-static void scan_event(mac_link_driver_t MCU_XDATA * volatile d, uint8_t kind)
+static void scan_event(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d, uint8_t kind)
 {
     memset(&d->event, 0, sizeof(d->event));
     d->event.kind = BDB_JOIN_EVENT_SCAN;
@@ -68,7 +72,7 @@ static void scan_event(mac_link_driver_t MCU_XDATA * volatile d, uint8_t kind)
     d->event.data.scan.state = d->action.data.scan.state;
 }
 
-static void join_event(mac_link_driver_t MCU_XDATA * volatile d, uint8_t kind)
+static void join_event(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d, uint8_t kind)
 {
     memset(&d->event, 0, sizeof(d->event));
     d->event.kind = BDB_JOIN_EVENT_ASSOCIATION;
@@ -84,10 +88,10 @@ static void join_event(mac_link_driver_t MCU_XDATA * volatile d, uint8_t kind)
  * granted/internal consumer has used it. A received frame is handed to the
  * consumer here, in rx_serial order, before source/through are copied.
  */
-static uint8_t observe(mac_link_driver_t MCU_XDATA * volatile d)
+static uint8_t observe(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
 {
-    const mac_adapter_observation_t MCU_XDATA * volatile o;
-    volatile MCU_XDATA uint8_t type, crc, stage;
+    const mac_adapter_observation_t MCU_XDATA * SDCC_VOLATILE o;
+    SDCC_VOLATILE MCU_XDATA uint8_t type, crc, stage;
     uint8_t result;
     if (d->adapter_result != MAC_ADAPTER_WAIT && d->adapter_result != MAC_ADAPTER_EVENT &&
         d->adapter_result != MAC_ADAPTER_EXPIRED) { fault(d, MAC_LINK_DRIVER_RADIO); return 0; }
@@ -97,6 +101,16 @@ static uint8_t observe(mac_link_driver_t MCU_XDATA * volatile d)
     memset(&d->source, 0, sizeof(d->source));
     if (d->adapter_result != MAC_ADAPTER_EVENT) return 1;
     o = mac_adapter_observation();
+#if defined(CC2530_RX_DIAG)
+    /* First reported receive loss; same callee and depth as the clock read. */
+    if (o->lossy && !RX_DIAG.ctx_valid) {
+        RX_DIAG.ctx_valid = 1;
+        RX_DIAG.ctx_bdb_phase = d->join->phase;
+        RX_DIAG.ctx_workspace = d->join->workspace;
+        RX_DIAG.ctx_adapter_phase = mac_adapter_diagnostic()->phase;
+        RX_DIAG.ctx_adapter_goal = mac_adapter_diagnostic()->goal;
+    }
+#endif
     /* Receive loss is an accepted, reported outcome of a scan window, and of
      * runtime RX, where only never-ACKed frames can be lost. */
     if (o->lossy && d->join->phase != BDB_JOIN_SCANNING &&
@@ -182,9 +196,9 @@ serial:
 
 /* 0: stop this step; 1: radio off and settled; 2: the step must first
  * observe/consume the current adapter delivery (returned, not nested). */
-static uint8_t close_off(mac_link_driver_t MCU_XDATA * volatile d)
+static uint8_t close_off(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
 {
-    volatile MCU_XDATA uint8_t phase = mac_adapter_diagnostic()->phase;
+    SDCC_VOLATILE MCU_XDATA uint8_t phase = mac_adapter_diagnostic()->phase;
     if (phase == MAC_ADAPTER_OFF && !mac_adapter_diagnostic()->ready &&
         !mac_adapter_diagnostic()->goal) {
         if (!reached(d->now, d->rx_ready_at)) {
@@ -202,8 +216,8 @@ static uint8_t close_off(mac_link_driver_t MCU_XDATA * volatile d)
     return 2;
 }
 
-mac_link_driver_result_t mac_link_driver_init(mac_link_driver_t MCU_XDATA * volatile d,
-    bdb_join_t MCU_XDATA * volatile join, const radio_autoack_config_t MCU_XDATA * volatile initial,
+mac_link_driver_result_t mac_link_driver_init(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d,
+    bdb_join_t MCU_XDATA * SDCC_VOLATILE join, const radio_autoack_config_t MCU_XDATA * SDCC_VOLATILE initial,
     uint32_t timeout, uint16_t limit)
 {
     if (!d || !join || !initial || !timeout || timeout >= TIMEBASE_HALF_RANGE || !limit)
@@ -240,7 +254,7 @@ mac_link_driver_result_t mac_link_driver_init(mac_link_driver_t MCU_XDATA * vola
     return MAC_LINK_DRIVER_OK;
 }
 
-mac_link_driver_result_t mac_link_driver_random(mac_link_driver_t MCU_XDATA * volatile d,
+mac_link_driver_result_t mac_link_driver_random(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d,
     uint32_t generation, uint8_t retry, uint8_t nb, uint8_t byte)
 {
     if (!d || d->version != 1) return MAC_LINK_DRIVER_ARGUMENT;
@@ -252,9 +266,9 @@ mac_link_driver_result_t mac_link_driver_random(mac_link_driver_t MCU_XDATA * vo
     return MAC_LINK_DRIVER_OK;
 }
 
-mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * volatile d)
+mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
 {
-    volatile MCU_XDATA uint8_t kind, child, ready, rx, restored, phase, tx_result, tx_cancel;
+    SDCC_VOLATILE MCU_XDATA uint8_t kind, child, ready, rx, restored, phase, tx_result, tx_cancel;
     uint8_t result;
     if (!d || d->version != 1) return MAC_LINK_DRIVER_ARGUMENT;
     if (d->fault) return (mac_link_driver_result_t)d->fault;

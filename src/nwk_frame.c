@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "nwk_frame.h"
+#include "sdcc_volatile.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
 #else
@@ -73,7 +74,8 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
 #endif
     nwk_codec_result_t status;
     uint16_t control;
-    uint8_t size, position;
+    MCU_ESCAPED_LOCAL uint8_t size;
+    uint8_t position;
 #define length LW_SHALLOW_READ(uint16_t, length)
     if (body == NULL || result == NULL)
         return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_INVALID_ARGUMENT);
@@ -152,7 +154,7 @@ nwk_codec_result_t nwk_frame_encode(const nwk_header_t *header,
 #endif
 
     nwk_codec_result_t status;
-    uint8_t size;
+    MCU_ESCAPED_LOCAL uint8_t size;
 
     if (header == NULL || body == NULL || length == NULL
             || (payload == NULL && payload_length != 0u))

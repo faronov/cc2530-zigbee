@@ -5,6 +5,7 @@
 #define ZIGBEE_MMO_H
 
 #include "aes.h"
+#include "sdcc_volatile.h"
 
 #define ZIGBEE_MMO_MAX 32u
 #define INSTALL_CODE_SIZE 18u
@@ -34,8 +35,8 @@ typedef struct {
  * AES/hardware/compiler copies. This is not full secure erasure or entropy.
  */
 zigbee_mmo_result_t zigbee_mmo_hash(
-    const uint8_t * volatile input, uint16_t length, uint8_t * volatile output,
-    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info);
+    const uint8_t * SDCC_VOLATILE input, uint16_t length, uint8_t * SDCC_VOLATILE output,
+    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info);
 
 /* BDB3.0.1 10.1.1-2: exactly16 install-code octets plus two LE CRC octets.
  * CRC16: poly1021 reflected, init/xorFFFF. Hash ALL18 octets after CRC passes.
@@ -44,7 +45,7 @@ zigbee_mmo_result_t zigbee_mmo_hash(
  * Error precedence for simultaneously invalid arguments is unspecified.
  */
 zigbee_mmo_result_t install_code_derive(
-    const uint8_t * volatile code, uint16_t length, uint8_t * volatile output,
-    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info);
+    const uint8_t * SDCC_VOLATILE code, uint16_t length, uint8_t * SDCC_VOLATILE output,
+    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info);
 
 #endif

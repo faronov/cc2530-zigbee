@@ -5,6 +5,7 @@
 #define NWK_CANDIDATES_H
 
 #include <stdint.h>
+#include "sdcc_volatile.h"
 #include "nwk_beacon.h"
 
 #define NWK_CANDIDATES_CAPACITY 4u
@@ -62,7 +63,7 @@ typedef struct {
 /* Init/re-init clears only this table. Mask is a nonempty subset of bits 11..26
  * (bit number = channel number), not a tune/scan request or a scan completion.
  */
-nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * volatile table,
+nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * SDCC_VOLATILE table,
                                             uint32_t channel_mask);
 
 /* body is the entire FCS-free legacy MAC body, without PHR/radio metadata.
@@ -77,9 +78,9 @@ nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * volatile table,
  * New eligible identity at capacity returns FULL without eviction. Filtered/malformed
  * or CRC-failed input cannot erase other identities. See docs/NWK_CANDIDATES.md.
  */
-nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile table,
+nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE table,
                                                 uint8_t channel, uint8_t crc_valid,
-                                                const uint8_t * volatile body,
+                                                const uint8_t * SDCC_VOLATILE body,
                                                 uint16_t length);
 
 /* Copies exactly one entry, no borrowed spans or pool pointers.
@@ -91,8 +92,8 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile tabl
  * Foreground only, serialized with all three non-reentrant codecs under SDCC.
  * No allocation, timer, radio adapter, scan, association or membership state.
  */
-nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * volatile table,
+nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * SDCC_VOLATILE table,
                                            uint8_t index,
-                                           nwk_candidate_t * volatile result);
+                                           nwk_candidate_t * SDCC_VOLATILE result);
 
 #endif

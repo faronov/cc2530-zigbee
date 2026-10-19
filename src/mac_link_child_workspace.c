@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "mac_link_child_workspace_internal.h"
+#include "sdcc_volatile.h"
 #include "mac_link_workspace_guard_internal.h"
 #include <stddef.h>
 #include <string.h>
@@ -78,7 +79,7 @@ uint8_t child_work_end(uint8_t frame, uint8_t result)
     PENDING=0;
     return result;
 }
-uint8_t child_work_return(uint16_t volatile pair)
+uint8_t child_work_return(uint16_t SDCC_VOLATILE pair)
 {
     uint8_t frame=(uint8_t)(pair>>8), parent;
     uint16_t i,n;
@@ -228,8 +229,8 @@ uint8_t child_work_disjoint(const void *a,uint16_t an,const void *b,uint16_t bn)
     (child_address_t)(b)-(child_address_t)(a)<(uint16_t)(n) : \
     (child_address_t)(a)-(child_address_t)(b)<(uint16_t)(m))
 #define BASE ((child_address_t)&A)
-uint8_t child_work_address(uint8_t op, child_address_t volatile address,
-                          uint16_t volatile size, uint8_t writing)
+uint8_t child_work_address(uint8_t op, child_address_t SDCC_VOLATILE address,
+                          uint16_t SDCC_VOLATILE size, uint8_t writing)
 {
     uint16_t offset;
     const MCU_CODE child_loan_t *loan;

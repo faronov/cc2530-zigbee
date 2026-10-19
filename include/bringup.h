@@ -68,6 +68,14 @@ extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) m0_status_t m0_status;
 /* Foreground only. No interrupt handler or networking caller exists at M0. */
 void bringup_initialize(void);
 void bringup_tick(void);
-unsigned char _sdcc_external_startup(void);
+#if defined(__SDCC) && defined(__SDCC_VERSION_MAJOR) && \
+    ((__SDCC_VERSION_MAJOR > 4) || \
+     (__SDCC_VERSION_MAJOR == 4 && __SDCC_VERSION_MINOR > 2) || \
+     (__SDCC_VERSION_MAJOR == 4 && __SDCC_VERSION_MINOR == 2 && __SDCC_VERSION_PATCH >= 10))
+#define CC2530_EXTERNAL_STARTUP __sdcc_external_startup
+#else
+#define CC2530_EXTERNAL_STARTUP _sdcc_external_startup
+#endif
+unsigned char CC2530_EXTERNAL_STARTUP(void);
 
 #endif

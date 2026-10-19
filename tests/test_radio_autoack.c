@@ -59,6 +59,9 @@ void main(void)
 }
 #else
 #include "host_mmio.h"
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -369,6 +372,35 @@ static void xstore(uint16_t address, uint8_t value)
     }
 }
 
+/* FNV-1a over every MMIO/XREG access: equal digests prove that a build flag
+ * (CC2530_RX_DIAG) leaves the hardware access sequence unchanged. */
+static uint32_t mmio_digest = 2166136261u;
+static void digest(uint8_t kind, uint16_t address, uint8_t a, uint8_t b)
+{
+    uint8_t bytes[5]; unsigned i;
+    bytes[0] = kind; bytes[1] = (uint8_t)address; bytes[2] = (uint8_t)(address >> 8);
+    bytes[3] = a; bytes[4] = b;
+    for (i = 0; i < 5; i++) { mmio_digest ^= bytes[i]; mmio_digest *= 16777619u; }
+}
+static uint8_t digest_load(uint8_t address, uint8_t value)
+{
+    uint8_t result = load(address, value);
+    digest(1, address, value, result); return result;
+}
+static void digest_store(uint8_t address, uint8_t before, uint8_t value)
+{
+    digest(2, address, before, value); store(address, before, value);
+}
+static uint8_t digest_xload(uint16_t address)
+{
+    uint8_t result = xload(address);
+    digest(3, address, result, 0); return result;
+}
+static void digest_xstore(uint16_t address, uint8_t value)
+{
+    digest(4, address, value, 0); xstore(address, value);
+}
+
 static uint16_t xaddress(const volatile void *object)
 {
     if (object == &config.value) return config_address;
@@ -384,6 +416,9 @@ static void reset(void)
     pointer_reserved = 0;
     unsigned i;
     host_mmio_reset(); radio_autoack_fault = radio_autoack_state = 0;
+#if defined(CC2530_RX_DIAG)
+    RX_DIAG_RESET(i);
+#endif
     /* Synthetic full-reset RAM initialization only, never between API calls. */
     memset((void *)radio_autoack_diagnostic(), 0, sizeof(radio_autoack_diagnostics_t));
     memset(xregs, 0, sizeof(xregs)); memset(fifo, 0, sizeof(fifo)); memset(lengths, 0, sizeof(lengths));
@@ -412,8 +447,8 @@ static void reset(void)
     XR(0x624a) = 0xa5; XR(0x6189) = 0x40; XR(0x618a) = 1;
     XR(0x61a8) = 0x85; XR(0x61a9) = 0x14; XR(0x61b8) = 0x75; XR(0x61b9) = 8;
     XR(0x618e) = 0x0f; XR(0x61ae) = 0x2b;
-    host_mmio_read_hook = load; host_mmio_write_hook = store;
-    host_mmio_xread_hook = xload; host_mmio_xwrite_hook = xstore; host_mmio_xaddress_hook = xaddress;
+    host_mmio_read_hook = digest_load; host_mmio_write_hook = digest_store;
+    host_mmio_xread_hook = digest_xload; host_mmio_xwrite_hook = digest_xstore; host_mmio_xaddress_hook = xaddress;
     host_mmio_cycles_hook = cycles;
 }
 
@@ -1103,6 +1138,147 @@ static void overflow_cases(void)
 }
 #endif
 
+#if defined(CC2530_RX_DIAG)
+/* CC2530_RX_DIAG: write-only evidence; ticks advance once per ST0 read and an
+ * operation's stamp is its first ST0 read, so every gap is exact here. */
+static uint32_t started(unsigned operation, radio_autoack_result_t expected)
+{
+    uint32_t start = ticks;
+    CALL(operation, expected);
+    return start;
+}
+
+static uint16_t diag_gap(uint32_t from, uint32_t to)
+{
+    uint32_t d = (to - from) & TIMEBASE_TICKS_MASK;
+    return d >= 0xffffu ? 0xfffeu : (uint16_t)d;
+}
+
+static void next_header(uint8_t *h)
+{
+    h[0] = fifo[(head + 1) & 127]; h[1] = fifo[(head + 2) & 127];
+    h[2] = fifo[(head + 3) & 127]; h[3] = fifo[head] & 127u;
+}
+
+static void rx_diag_cases(void)
+{
+    const uint8_t *raw = (const uint8_t *)&RX_DIAG;
+    uint8_t h[4], first[26];
+    uint16_t max;
+    uint32_t a, b, c, s;
+    unsigned i;
+    (void)first;
+    assert(sizeof(cc2530_rx_diag_t) == CC2530_RX_DIAG_SIZE);
+    reset();
+    assert(!memcmp(raw, "RXDG\x01\x50", 6));
+    for (i = 6; i < CC2530_RX_DIAG_SIZE; i++) assert(!raw[i]);
+    tick_step = 7;
+    a = started(0, RADIO_AUTOACK_READY);
+    assert(RX_DIAG.flags == RX_DIAG_SERVICE_VALID && RX_DIAG.service_stamp == a);
+    b = started(1, RADIO_AUTOACK_EMPTY);
+    assert(RX_DIAG.last_service_gap == diag_gap(a, b) && RX_DIAG.max_service_gap == diag_gap(a, b));
+    enqueue(28, 128, 0x41); next_header(h); ticks += 300;
+    c = started(1, RADIO_AUTOACK_FRAME);
+    max = diag_gap(b, c);
+    assert(max > diag_gap(a, b) && RX_DIAG.max_service_gap == max && RX_DIAG.service_stamp == c);
+    assert(RX_DIAG.frames == 1 && !memcmp(raw + 36, h, 4) && h[3] == 28);
+    enqueue(20, 0x69, 0x42);
+    started(1, RADIO_AUTOACK_BAD_CRC);
+    assert(RX_DIAG.bad_crc == 1 && RX_DIAG.frames == 1 && !memcmp(raw + 36, h, 4));
+    /* Stop starts an RX-off interval; no service gap spans it. */
+    s = started(2, RADIO_AUTOACK_STOPPED);
+    assert(RX_DIAG.flags == RX_DIAG_OFF_VALID && RX_DIAG.off_stamp == s);
+    ticks += 1000;
+    a = started(3, RADIO_AUTOACK_READY);
+    assert(RX_DIAG.max_rx_off_gap == diag_gap(s, a) && RX_DIAG.flags == RX_DIAG_SERVICE_VALID);
+    b = started(1, RADIO_AUTOACK_EMPTY);
+    assert(RX_DIAG.last_service_gap == diag_gap(a, b) && RX_DIAG.max_service_gap == max);
+    /* Gaps saturate at 0xfffe; frames saturate at 0xffff. */
+    ticks = (ticks + 0x20000u) & TIMEBASE_TICKS_MASK;
+    started(1, RADIO_AUTOACK_EMPTY);
+    assert(RX_DIAG.last_service_gap == 0xfffeu && RX_DIAG.max_service_gap == 0xfffeu);
+    RX_DIAG.frames = 0xffffu; enqueue(28, 128, 0x43);
+    started(1, RADIO_AUTOACK_FRAME);
+    assert(RX_DIAG.frames == 0xffffu);
+    /* A send leaves the receiver on: it closes the off interval. */
+    s = started(2, RADIO_AUTOACK_STOPPED);
+    ticks += 5000;
+    a = started(4, RADIO_AUTOACK_TX_DONE);
+    assert(RX_DIAG.max_rx_off_gap == diag_gap(s, a) && RX_DIAG.flags == RX_DIAG_SERVICE_VALID &&
+           RX_DIAG.service_stamp == a);
+    b = started(1, RADIO_AUTOACK_EMPTY);
+    assert(RX_DIAG.last_service_gap == diag_gap(a, b));
+    assert(!RX_DIAG.overflows && !RX_DIAG.first_valid && !RX_DIAG.flushes && !RX_DIAG.rx_lost);
+    assert(!RX_DIAG.ctx_valid && !RX_DIAG.fail_valid && !RX_DIAG.tx_valid && !RX_DIAG.pad);
+#if defined(CC2530_MAC_ADAPTER) && !defined(CC2530_MAC_ATTEMPT)
+    /* Overflow seen by observe() at the start of a receive: three complete heads
+     * are salvaged, then one flush reports the loss. */
+    raw_rx(); tick_step = 3;
+    enqueue(28, 128, 0x11); next_header(h); enqueue(28, 128, 0x22); enqueue(28, 0x69, 0x33);
+    inject_overflow(127);
+    a = RX_DIAG.service_stamp;
+    b = started(1, RADIO_AUTOACK_FRAME);
+    assert(RX_DIAG.overflows == 1 && RX_DIAG.first_valid == 1 && RX_DIAG.first_site == RX_DIAG_SITE_OBSERVE);
+    assert(RX_DIAG.first_radio_state == RADIO_AUTOACK_RX_NOACK && RX_DIAG.first_radio_phase == 4);
+    assert(RX_DIAG.first_rferrf == 4 && (RX_DIAG.first_fsmstat1 & 0xc0u) == 0x40u);
+    assert(RX_DIAG.first_rxfifocnt == 128);
+    assert(RX_DIAG.first_stamp == b && RX_DIAG.first_gap == diag_gap(a, b) && RX_DIAG.first_frames == 0);
+    assert(!memcmp(raw + 40, "\0\0\0\0", 4) && RX_DIAG.salvaged == 1 && RX_DIAG.frames == 1);
+    assert(!memcmp(raw + 36, h, 4));
+    started(1, RADIO_AUTOACK_FRAME); started(1, RADIO_AUTOACK_BAD_CRC);
+    assert(RX_DIAG.salvaged == 3 && RX_DIAG.frames == 2 && RX_DIAG.bad_crc == 1 && !RX_DIAG.flushes);
+    started(1, RADIO_AUTOACK_RX_LOST);
+    assert(RX_DIAG.flushes == 1 && RX_DIAG.rx_lost == 1 && RX_DIAG.overflows == 1);
+    started(1, RADIO_AUTOACK_EMPTY);
+    assert(RX_DIAG.flushes == 1 && RX_DIAG.overflows == 1 && RX_DIAG.salvaged == 3);
+    /* A later episode counts but never replaces the first snapshot. */
+    memcpy(first, raw + 18, 18); memcpy(first + 18, raw + 36 + 4, 4); memcpy(first + 22, raw + 28, 4);
+    enqueue(28, 128, 0x44); inject_overflow(127);
+    started(1, RADIO_AUTOACK_FRAME); started(1, RADIO_AUTOACK_RX_LOST);
+    assert(RX_DIAG.overflows == 2 && RX_DIAG.flushes == 2 && RX_DIAG.rx_lost == 2 && RX_DIAG.salvaged == 4);
+    assert(!memcmp(first, raw + 18, 18) && !memcmp(first + 18, raw + 40, 4) && !memcmp(first + 22, raw + 28, 4));
+    RX_DIAG.overflows = 255; RX_DIAG.salvaged = 255;
+    enqueue(28, 128, 0x45); inject_overflow(127);
+    started(1, RADIO_AUTOACK_FRAME); started(1, RADIO_AUTOACK_RX_LOST);
+    assert(RX_DIAG.overflows == 255 && RX_DIAG.salvaged == 255 && RX_DIAG.flushes == 3);
+    /* Overflow while a head is read: first seen by consume(). */
+    raw_rx();
+    enqueue(28, 128, 0x5b); enqueue(28, 128, 0x5c); overflow_after_reads = 9;
+    b = started(1, RADIO_AUTOACK_FRAME);
+    assert(RX_DIAG.overflows == 1 && RX_DIAG.first_site == RX_DIAG_SITE_CONSUME && RX_DIAG.first_stamp == b);
+    assert(RX_DIAG.first_rferrf == 4 && (RX_DIAG.first_fsmstat1 & 0xc0u) == 0x40u && !RX_DIAG.salvaged);
+    assert(RX_DIAG.frames == 1 && RX_DIAG.first_frames == 0);
+    started(1, RADIO_AUTOACK_FRAME); started(1, RADIO_AUTOACK_RX_LOST);
+    assert(RX_DIAG.salvaged == 1 && RX_DIAG.flushes == 1 && RX_DIAG.rx_lost == 1 && RX_DIAG.frames == 2);
+    /* Overflow latched between observe's FSMSTAT1 and RFERRF reads. */
+    raw_rx(); enqueue(28, 128, 0x5a); overflow_at_errors = 1;
+    started(1, RADIO_AUTOACK_FRAME);
+    assert(RX_DIAG.overflows == 1 && RX_DIAG.first_rferrf == 4 && RX_DIAG.first_valid);
+    started(1, RADIO_AUTOACK_RX_LOST);
+    assert(RX_DIAG.flushes == 1 && RX_DIAG.rx_lost == 1);
+    /* Overflow already latched at stop: the stop does not count it twice. */
+    raw_rx(); enqueue(28, 128, 0x44); inject_overflow(127);
+    started(2, RADIO_AUTOACK_DRAIN);
+    assert(RX_DIAG.overflows == 1 && RX_DIAG.first_radio_phase != 4 && !RX_DIAG.flushes);
+    started(2, RADIO_AUTOACK_DRAIN); started(1, RADIO_AUTOACK_FRAME); started(1, RADIO_AUTOACK_RX_LOST);
+    assert(RX_DIAG.overflows == 1 && RX_DIAG.flushes == 1 && RX_DIAG.rx_lost == 1);
+    /* A fatal loss records the latch but no flush or delivered loss. */
+    raw_rx(); enqueue(28, 128, 0x78); enqueue(28, 128, 0x79); inject_overflow(127);
+    started(1, RADIO_AUTOACK_FRAME); SOC_RFERRF = 0;
+    started(1, RADIO_AUTOACK_CONTROLLER_ERROR);
+    assert(RX_DIAG.overflows == 1 && !RX_DIAG.flushes && !RX_DIAG.rx_lost);
+#endif
+    tick_step = 1;
+    printf("RX_DIAG: v1 block reset, service/off gaps, saturation, frame header%s PASS (synthetic only).\n",
+#if defined(CC2530_MAC_ADAPTER) && !defined(CC2530_MAC_ATTEMPT)
+           ", observe/consume first latch, salvage/flush/loss, first-wins"
+#else
+           ""
+#endif
+           );
+}
+#endif
+
 int main(int argc, char **argv)
 {
     unsigned n, length, value, i;
@@ -1225,6 +1401,10 @@ int main(int argc, char **argv)
     fifop_cases();
 #if defined(CC2530_MAC_ADAPTER) && !defined(CC2530_MAC_ATTEMPT)
     overflow_cases();
+#endif
+    printf("MMIO digest before RX_DIAG-only cases: %08lx\n", (unsigned long)mmio_digest);
+#if defined(CC2530_RX_DIAG)
+    rx_diag_cases();
 #endif
     printf("AUTOACK: %u linked scenarios / %u native API calls; all lengths/CRC bytes, "
            "address/profile bits, FIFO/stop/rearm/CCA/TX/failure/atomic guards PASS (synthetic only).\n", cases, calls);

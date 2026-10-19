@@ -111,7 +111,7 @@ static mac_time_result_t poll(void)
     now = timebase_read_awake_ticks24(); status.polls++;
     status.elapsed_ticks = (now-work.start) & TIMEBASE_TICKS_MASK;
     if (result != MAC_TIME_OK) return result;
-    status.timebase_status = timebase_expired(now, work.deadline, &expired);
+    status.timebase_status = timebase_expired(now, work.deadline, TIMEBASE_POINTER_CAST(bool, &expired));
     if (status.timebase_status != TIMEBASE_OK) return MAC_TIME_TIMEBASE_ERROR;
     if (status.elapsed_ticks >= TIMEBASE_HALF_RANGE ||
         ((now-work.previous) & TIMEBASE_TICKS_MASK) >= TIMEBASE_HALF_RANGE)
@@ -172,7 +172,7 @@ static mac_time_result_t operate(uint8_t initialize, uint32_t timeout, uint16_t 
         REQUIRE(!(low | high | a | b | c), MAC_TIME_STATE_CHANGED);
     } else REQUIRE(status.control == 13, MAC_TIME_STATE_CHANGED);
     work.limit = limit; work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     REQUIRE(status.timebase_status == TIMEBASE_OK, MAC_TIME_TIMEBASE_ERROR);
     POLL();
     if (INITIALIZING) {
@@ -256,7 +256,7 @@ static mac_time_result_t attempt_clock(uint32_t timeout, uint16_t limit)
 {
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
     work.limit = limit; status.polls = status.discarded = 0;
-    status.timebase_status = timebase_deadline_after(work.start, timeout, &work.deadline);
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     return status.timebase_status == TIMEBASE_OK ? MAC_TIME_OK : MAC_TIME_TIMEBASE_ERROR;
 }
 

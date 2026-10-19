@@ -4,6 +4,7 @@
 #ifndef MAC_JOIN_H
 #define MAC_JOIN_H
 #include "banked_join.h"
+#include "sdcc_volatile.h"
 #include "mac_poll.h"
 #include "mac_association.h"
 #define MAC_JOIN_RAM MAC_POLL_RAM
@@ -150,9 +151,9 @@ typedef struct {
  * extraction.lifetime/work are LOCAL whole-attempt abort limits, not an
  * Association NO_DATA deadline; also bound the real extraction component.
  */
-mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile uint32_t now) JOIN_FAR;
-mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx,
-    MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx, const mac_join_request_t MAC_JOIN_RAM * volatile request, volatile uint32_t now) JOIN_FAR;
+mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx,
+    MAC_POLL_OWNER_T MAC_JOIN_RAM * SDCC_VOLATILE tx, const mac_join_request_t MAC_JOIN_RAM * SDCC_VOLATILE request, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 #if defined(CC2530_MAC_LINK)
 /* RADIO is an observed Request action; TX grants one POLL observed step.
  * Only interval submit/copy/release and observed stepping may use this owner.
@@ -180,8 +181,8 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx,
  * NULL polls; ignored input still consumes work. See MAC_JOIN.md.
  */
 #endif
-mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
-    uint32_t now, const mac_join_event_t MAC_JOIN_RAM * volatile event, mac_join_action_t MAC_JOIN_RAM * volatile action) JOIN_FAR;
+mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * SDCC_VOLATILE tx,
+    uint32_t now, const mac_join_event_t MAC_JOIN_RAM * SDCC_VOLATILE event, mac_join_action_t MAC_JOIN_RAM * SDCC_VOLATILE action) JOIN_FAR;
 mac_join_result_t mac_join_take(mac_join_t MAC_JOIN_RAM *ctx, mac_join_record_t MAC_JOIN_RAM *record) JOIN_FAR;
 mac_join_result_t mac_join_release(mac_join_t MAC_JOIN_RAM *ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM *tx) JOIN_FAR;
 

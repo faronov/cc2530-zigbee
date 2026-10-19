@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "security_keys.h"
+#include "sdcc_volatile.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
 #else
@@ -13,6 +14,12 @@
 #include "timebase.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(__clang__)
+#define MCS51_PARAM_VOLATILE
+#else
+#define MCS51_PARAM_VOLATILE volatile
+#endif
+
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
 #define w link_work_arena.keys
@@ -282,9 +289,9 @@ static security_keys_result_t crypto_result(zigbee_security_result_t r)
     if (r == ZIGBEE_SECURITY_AES || r == ZIGBEE_SECURITY_CCM) return SECURITY_KEYS_CRYPTO;
     return SECURITY_KEYS_FORMAT;
 }
-static security_keys_result_t key(volatile uint8_t offset, volatile uint8_t identifier, uint8_t sending)
+static security_keys_result_t key(SDCC_VOLATILE uint8_t offset, SDCC_VOLATILE uint8_t identifier, uint8_t sending)
 {
-    volatile uint8_t purpose;
+    SDCC_VOLATILE uint8_t purpose;
     memset(&w.key, 0, sizeof(w.key));
     w.key.limits = w.limits;
     w.key.level = 5; w.key.extended_nonce = 1; w.key.key_identifier = identifier;
@@ -332,12 +339,12 @@ security_keys_result_t security_keys_open(void) SECURITY_FAR
 
 #if defined(CC2530_DEFAULT_TC_KEY)
 security_keys_result_t security_keys_provision_default(
-    const security_keys_config_t * volatile config,
+    const security_keys_config_t * SDCC_VOLATILE config,
 #else
 security_keys_result_t security_keys_provision(
     const security_keys_config_t * volatile config, const uint8_t * volatile install_code18,
 #endif
-    volatile uint32_t nwk_floor, volatile uint32_t aps_floor,
+    SDCC_VOLATILE uint32_t nwk_floor, SDCC_VOLATILE uint32_t aps_floor,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -596,7 +603,7 @@ static security_keys_result_t nwk_command(void)
 static security_keys_result_t open_aps(void)
 {
     security_keys_result_t r;
-    volatile uint8_t length = w.nwk.payload_length, offset = w.nwk.payload_offset;
+    SDCC_VOLATILE uint8_t length = w.nwk.payload_length, offset = w.nwk.payload_offset;
     w.aps_secured = (w.a[offset] & APS_FLAG_SECURITY) != 0;
     if (!w.aps_secured) return SECURITY_KEYS_OK;
     r = crypto_result(ed_wire_inspect(ZIGBEE_SECURITY_APS, w.a+offset, length, &w.meta));
@@ -631,8 +638,8 @@ static security_keys_result_t open_aps(void)
 }
 
 security_keys_result_t security_keys_receive(
-    const uint8_t * volatile raw_npdu, volatile uint16_t length,
-    ed_packet_t * volatile output, uint8_t * volatile event,
+    const uint8_t * MCS51_PARAM_VOLATILE raw_npdu, MCS51_PARAM_VOLATILE uint16_t length,
+    ed_packet_t * MCS51_PARAM_VOLATILE output, uint8_t * MCS51_PARAM_VOLATILE event,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -642,7 +649,7 @@ security_keys_result_t security_keys_receive(
         return finish(SECURITY_KEYS_ARGUMENT);
 #endif
     security_keys_result_t r = load();
-    volatile uint8_t i;
+    SDCC_VOLATILE uint8_t i;
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!raw_npdu || !output || !event || !limits_ok(limits, nv_polls))
         return finish(SECURITY_KEYS_ARGUMENT);
@@ -720,10 +727,10 @@ security_keys_result_t security_keys_receive(
     return finish(r);
 }
 
-static inline security_keys_result_t seal(volatile uint8_t aps_secure)
+static inline security_keys_result_t seal(SDCC_VOLATILE uint8_t aps_secure)
 {
     security_keys_result_t r;
-    volatile uint8_t offset, slot;
+    SDCC_VOLATILE uint8_t offset, slot;
     uint8_t total;
     slot = active_slot();
     /* R22 3.3.1.1.9: this owner is an ED; callers cannot assert EDI.
@@ -770,8 +777,8 @@ static void command_packet(uint8_t nwk_seq, uint8_t aps_counter)
     w.packet.aps.counter = aps_counter;
 }
 security_keys_result_t security_keys_request(
-    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
-    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
+    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * SDCC_VOLATILE out, SDCC_VOLATILE uint16_t capacity,
+    uint8_t * SDCC_VOLATILE written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     KEY_ENTER();
@@ -794,8 +801,8 @@ security_keys_result_t security_keys_request(
     return finish(r);
 }
 security_keys_result_t security_keys_verify(
-    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * volatile out, volatile uint16_t capacity,
-    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
+    uint8_t nwk_seq, uint8_t aps_counter, uint8_t * SDCC_VOLATILE out, SDCC_VOLATILE uint16_t capacity,
+    uint8_t * SDCC_VOLATILE written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     KEY_ENTER();
@@ -819,7 +826,7 @@ security_keys_result_t security_keys_verify(
     return finish(r);
 }
 security_keys_result_t security_keys_leave(
-    uint8_t nwk_seq, uint8_t * volatile out, volatile uint16_t capacity, uint8_t * volatile written,
+    uint8_t nwk_seq, uint8_t * SDCC_VOLATILE out, SDCC_VOLATILE uint16_t capacity, uint8_t * SDCC_VOLATILE written,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -851,8 +858,8 @@ security_keys_result_t security_keys_leave(
     return finish(r);
 }
 security_keys_result_t security_keys_send(
-    const ed_packet_t * volatile packet, uint8_t aps_secure, uint8_t * volatile out, volatile uint16_t capacity,
-    uint8_t * volatile written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
+    const ed_packet_t * SDCC_VOLATILE packet, uint8_t aps_secure, uint8_t * SDCC_VOLATILE out, SDCC_VOLATILE uint16_t capacity,
+    uint8_t * SDCC_VOLATILE written, const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     KEY_ENTER();
@@ -927,7 +934,7 @@ security_keys_result_t security_keys_send(
     if (r == SECURITY_KEYS_OK) r = publish(out, capacity, written);
     return finish(r);
 }
-security_keys_result_t security_keys_status(security_keys_status_t * volatile output) SECURITY_FAR
+security_keys_result_t security_keys_status(security_keys_status_t * SDCC_VOLATILE output) SECURITY_FAR
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     KEY_ENTER();

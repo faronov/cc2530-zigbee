@@ -4,6 +4,7 @@
 #ifndef MAC_TX_OBSERVED_H
 #define MAC_TX_OBSERVED_H
 #include "mac_tx_interval.h"
+#include "sdcc_volatile.h"
 
 #if defined(CC2530_MAC_OBSERVED)
 #if !defined(CC2530_MAC_INTERVAL)
@@ -33,8 +34,8 @@
  * ATTEMPT.at remains the requested schedule; these bounds do not attest exact
  * hardware CCA start, calibration or PHY conformance.
  */
-mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * volatile tx, uint32_t now,
-    const mac_tx_interval_event_t * volatile event,
-    mac_tx_interval_action_t * volatile action) JOIN_FAR;
+mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * SDCC_VOLATILE tx, uint32_t now,
+    const mac_tx_interval_event_t * SDCC_VOLATILE event,
+    mac_tx_interval_action_t * SDCC_VOLATILE action) JOIN_FAR;
 #endif
 #endif

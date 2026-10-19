@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zdo_node.h"
+#include "sdcc_volatile.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -77,7 +78,7 @@ zdo_node_result_t zdo_node_req_decode(const uint8_t *body, uint16_t size,
     if (!LW_IO(LW_NONE, body, size, 0) || !LW_IO(LW_NONE, output, sizeof(*output), 1))
         return ZDO_NODE_INVALID_ARGUMENT;
 #endif
-    zdo_node_request_t candidate;
+    MCU_ESCAPED_LOCAL zdo_node_request_t candidate;
     if (body == NULL || output == NULL)
         return ZDO_NODE_INVALID_ARGUMENT;
     if (size > ZDO_NODE_MAX_BODY)
