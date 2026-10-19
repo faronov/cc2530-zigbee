@@ -374,7 +374,7 @@ behavior. Alias, unallocated RAM, upper-IRAM and stack-unwind checks remain.
 `radio-rx-checkpoints` verifies artifacts and reports linked proof.
 The separate [manual runner](DEBUGGING.md#parent-only-passive-rx-acceptance)
 is never invoked by a build/test/import/CI. The RX addition brought CI to20
-jobs; the [current matrix](../.github/workflows/ci.yml) retains the seven
+jobs; the [current matrix](https://github.com/faronov/cc2530-zigbee/blob/archive/llvm-only-20261019/main-sdcc/.github/workflows/ci.yml) retains the seven
 board-artifact paths and `hardware_tested=false`.
 No host executable, synthetic vector, capture or standalone image is uploaded.
 

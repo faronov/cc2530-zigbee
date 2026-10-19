@@ -1,19 +1,19 @@
 name: LLVM tiers
 
-# Experimental LLVM-MCS51 image of the CC2530 firmware (docs/LLVM_DEVELOPMENT.md).
-#   push to llvm-dev           FAST
-#   pull request into llvm-dev FAST + SMOKE
+# LLVM-only CC2530 firmware (docs/LLVM_DEVELOPMENT.md).
+#   push to main / llvm-dev           FAST
+#   pull request into main / llvm-dev FAST + SMOKE
 #   workflow_dispatch / call   fast | smoke | full (FULL = every scenario incl. complete case 0)
 # FULL never runs implicitly. Nightly FULL is not scheduled: GitHub runs schedules only
 # from the default branch (production main here, TC32 in faronov/llvm-project).
-# The SDCC production workflow (ci.yml) is unchanged.
+# UNIFY-01 is a development/CI-validated candidate, not FULL-qualified.
 
 on:
   push:
-    branches: [llvm-dev]
+    branches: [main, llvm-dev]
     paths-ignore: ['docs/**', '**/*.md', 'LICENSE*']
   pull_request:
-    branches: [llvm-dev]
+    branches: [main, llvm-dev]
     paths-ignore: ['docs/**', '**/*.md', 'LICENSE*']
   workflow_dispatch:
     inputs:
@@ -33,6 +33,12 @@ on:
       llvm_ref:
         description: LLVM-MCS51 branch, tag or commit
         default: 41d87abda2eaec8c30be1c92097002f015499683
+      firmware_repository:
+        description: Firmware source repository
+        default: faronov/cc2530-zigbee
+      firmware_ref:
+        description: Exact firmware commit (empty uses the dispatch commit)
+        default: ''
   workflow_call:
     inputs:
       tier:
@@ -52,7 +58,7 @@ on:
         default: faronov/cc2530-zigbee
       firmware_ref:
         type: string
-        default: llvm-dev
+        default: main
 
 permissions:
   contents: read
@@ -67,6 +73,22 @@ env:
   SIM_ARCHIVE_URL: https://deb.debian.org/debian/pool/main/s/sdcc/sdcc_4.2.0+dfsg.orig.tar.xz
 
 jobs:
+  host:
+    name: Native firmware and repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.firmware_repository || github.repository }}
+          ref: ${{ inputs.firmware_ref || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Host tests without an SDCC compiler
+        run: |
+          python3 -B tools/check_repository.py
+          make test-host
+          python3 -B -m unittest discover -s tools/llvm -p 'test_*.py' -v
+
   toolchain:
     name: Toolchain + ${{ inputs.tier || (github.event_name == 'pull_request' && 'fast + smoke' || 'fast') }}
     runs-on: ubuntu-24.04
@@ -87,7 +109,7 @@ jobs:
           LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
           LLVM_REF: ${{ inputs.llvm_ref || '41d87abda2eaec8c30be1c92097002f015499683' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
-          FIRMWARE_REF: ${{ inputs.firmware_ref || github.sha }}
+          FIRMWARE_REF: ${{ inputs.firmware_ref || github.event.pull_request.head.sha || github.sha }}
         run: |
           case "$TIER" in fast|smoke|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
           case "$VARIANT" in production|rx-diag) ;; *) echo "unknown variant '$VARIANT'"; exit 1;; esac
@@ -176,6 +198,17 @@ jobs:
             --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
             --variant "${{ steps.select.outputs.variant }}" --output "$GITHUB_WORKSPACE/out/fast"
 
+      - name: Standard clean LLVM-only firmware build
+        working-directory: fw
+        run: |
+          make firmware LLVM_TOOLS="$GITHUB_WORKSPACE/llvm-build/bin" \
+            LLVM_SRC="$GITHUB_WORKSPACE/llvm" LLVM_VARIANT="${{ steps.select.outputs.variant }}" \
+            BUILD=build/ci-standard
+          make firmware BOARD=generic IMAGE=bringup \
+            LLVM_TOOLS="$GITHUB_WORKSPACE/llvm-build/bin" LLVM_SRC="$GITHUB_WORKSPACE/llvm"
+          make firmware BOARD=generic IMAGE=timebase_fixture \
+            LLVM_TOOLS="$GITHUB_WORKSPACE/llvm-build/bin" LLVM_SRC="$GITHUB_WORKSPACE/llvm"
+
       - name: SMOKE
         if: steps.select.outputs.tier == 'smoke'
         working-directory: fw
@@ -218,6 +251,9 @@ jobs:
             out/*/logs
             out/*/sims
             sim/build.json
+            fw/build/ci-standard/receipt.json
+            fw/build/ci-standard/firmware.elf
+            fw/build/ci-standard/firmware.hex
 
   # FULL: complete case 0 needs more than one 6-hour hosted job. Each segment suspends it at a
   # snapshot bound to the exact ELF/simulator/replay/vectors and the next one resumes it.

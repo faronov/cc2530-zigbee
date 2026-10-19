@@ -1,0 +1,11 @@
+{
+  "repository": "faronov/llvm-project",
+  "revision": "41d87abda2eaec8c30be1c92097002f015499683",
+  "status": "UNIFY-01 development/CI-validated candidate; FULL NOT RUN",
+  "runtime": "llvm/lib/Target/MCS51/mcs51-runtime.c",
+  "F1a_F1b_F5": "EXCLUDED",
+  "F2": "OPEN",
+  "F3": "OPEN",
+  "Confirm-Key C": "UNRESOLVED",
+  "MachineVerifier blind spots": "OPEN"
+}

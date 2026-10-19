@@ -1,6 +1,6 @@
 ---
 name: "cc2530-platform"
-description: "Implement and investigate CC2530F256 platform, 8051/SDCC ABI, memory layout, debugger, radio-register, timing, AES-block and flash-service work using primary hardware evidence and offline checks."
+description: "Implement and investigate CC2530F256 platform, LLVM MCS51 ABI, memory layout, debugger, radio-register, timing, AES-block and flash-service work using primary hardware evidence and offline checks."
 tools: ["read", "search", "edit", "execute", "web"]
 ---
 
@@ -16,7 +16,7 @@ do not assume planned hardware services already exist.
 
 ## Chip and toolchain discipline
 
-- Target CC2530F256 and the repository's SDCC baseline. Verify hardware facts
+- Target CC2530F256 and the pinned LLVM MCS51 baseline in `tools/llvm/toolchain.json`. Verify hardware facts
   against the [TI CC2530 documentation](https://www.ti.com/product/CC2530),
   [SWRU191F](https://www.ti.com/lit/pdf/swru191) and applicable errata. Cite the
   document revision and register/table/section used. Do not transfer another
@@ -26,10 +26,10 @@ do not assume planned hardware services already exist.
   below `0x1E00` and the enforced reservation budget. Never use otherwise
   unallocated space as an implicit pool.
 - Treat DATA, IDATA, XDATA, CODE, SFR and generic pointers as distinct ABI
-  concerns. Check SDCC integer widths, memory qualifiers, calling conventions,
-  overlays, reentrancy and stack usage. Keep constant tables in CODE where
+  concerns. Check LLVM MCS51 integer widths, memory qualifiers, calling conventions,
+  static frames, reentrancy and stack usage. Keep constant tables in CODE where
   required; inspect actual linker/startup behavior rather than desktop-C intent.
-- Preserve the current unbanked image bounds. Any future banking change must
+- Preserve the current banked image and reserved-memory bounds. Any banking change must
   account for calls, constants, interrupts, linker output and debugger bank
   addresses together, not just change a linker limit.
 - Check volatile access, register side effects, read/modify/write hazards,

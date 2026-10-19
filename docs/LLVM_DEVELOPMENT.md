@@ -1,9 +1,49 @@
 # LLVM-MCS51 development: branches, test tiers and evidence
 
-LLVM is an **experimental, opt-in** toolchain for this firmware. SDCC is still the production
-reference, and nothing here changes production defaults, `ci.yml` or the SDCC tiers in
-[CONTRIBUTING](../CONTRIBUTING.md#development-checks). The study record is
-[LLVM_MCS51_PORT_STUDY](LLVM_MCS51_PORT_STUDY.md); see §24 for this infrastructure.
+LLVM MCS51 is now the only supported firmware compiler in this migration.
+The default is the development/CI-validated UNIFY-01 commit
+`41d87abda2eaec8c30be1c92097002f015499683`, not a floating branch.
+**UNIFY-01 FULL NOT RUN; no production release approval is implied.**
+The merge into `main` requires separate approval.
+
+`make` / `make firmware` uses `tools/llvm/firmware.py`, reusing the existing
+`build.sh`, `audit.sh` and tier admission, with unchanged ABI/static-frame
+flags and linker/memory contracts. Default board/image is LG/join.
+`LLVM_TOOLS` selects the built compiler bin directory; `LLVM_SRC` selects its
+exact clean source revision and runtime. A mismatched source, binary version,
+receipt seal or artifact hash fails explicitly. Builds write `firmware.elf`,
+physical `firmware.hex` and a compiler/source/path-bound `receipt.json` under
+`BUILD` (default `build/<board>/<image>`).
+The generic board retains LLVM `bringup` and `timebase_fixture`; generic join
+is rejected rather than routed through SDCC.
+
+The existing [workflow](../.github/workflows/llvm-tiers.yml) remains the CI
+entrypoint: FAST for main/llvm-dev pushes, SMOKE for PRs, and explicit
+`workflow_dispatch` / `workflow_call` for any tier. FULL is never automatic.
+Manual inputs include `firmware_repository`, `firmware_ref`, `llvm_repository`
+and `llvm_ref`; pass full commit SHA for reproducible evidence. Native host
+checks and the standard clean firmware build run alongside existing tiers.
+Compiler binaries are built using the workflow's exact CMake/Ninja recipe;
+no firmware SDCC package is installed.
+
+SDCC compiler drivers, overlay/allocator build experiments, release machinery
+and their production workflows have been retired. The hash-pinned SDCC 4.2.0
+archive remains solely for s51/uCsim reproduction. MCUEMU/s51 comparisons,
+golden fixtures and decoders, native tests, LLVM compiler/ABI regressions,
+static-stack, banking and memory admission remain. Frozen linker inputs with
+`sdcc` in their names and `include/sdcc_volatile.h` are still LLVM layout and
+compatibility inputs, not an alternate compiler.
+
+Frozen M6 firmware `1dd413b2bc5d69d7ec04b91137bb05c77bd13cca`, LLVM
+`1a01afb49d99ec754e62ab0f65f182de87b4cee3` and accepted run `38785958832`
+(31/31 gates, 19/19 scenarios) remain unchanged. F1a/F1b/F5 remain excluded
+pending independent review; F2/F3 and MachineVerifier blind spots remain OPEN,
+and Confirm-Key C UNRESOLVED.
+
+The study record is [LLVM_MCS51_PORT_STUDY](LLVM_MCS51_PORT_STUDY.md). The
+following tier mechanics/evidence are retained; old SDCC references and
+pre-UNIFY measurements describe historical infrastructure, not an active
+production compiler or fresh migration acceptance.
 
 ## Which command to run
 
@@ -141,7 +181,7 @@ On these figures FAST is about 830× cheaper than FULL, and SMOKE about 60× che
 | Thunk, stack-argument, stack, static-frame, fixed-address and gp proofs | `tools/llvm/audit.sh` (`thunk_audit`, `stackarg_entry_audit`, `stack_proof`, `gp_proof`, `hexbanks`) | 15 s | FAST |
 | Firmware simulator cases 0–10 (not 7) | `tools/llvm/llvm_join_replay.py` | See the table above | SMOKE subset; FULL all |
 | Bounded case-0 prefix | `llvm_join_replay.py --limit 3` | 135–151 s | SMOKE |
-| SDCC host/sanitizer/image/overlay gates | `tools/ci_plan.py`, `ci.yml` | SDCC overlay full join ≈1 h 38 min on GitHub | Unchanged, separate |
+| Historical SDCC host/sanitizer/image/overlay gates | Archived pre-migration infrastructure | SDCC overlay full join ≈1 h 38 min on GitHub | Retired; not an active tier |
 
 The pre-tier LLVM gates were scripts in the study workspace. Their behavior was moved into
 `tools/llvm` unchanged.

@@ -1,6 +1,6 @@
 {
   "name": "llvm-mcs51-cc2530-dev",
-  "status": "experimental; SDCC remains the production reference",
+  "status": "LLVM-only development compiler candidate; UNIFY-01 FULL NOT RUN",
   "abi_flags": "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args",
   "sf_flags": "-mllvm -mcs51-static-frames",
   "compiler_tools": ["clang", "ld.lld", "llvm-objcopy", "llvm-ar", "llvm-objdump"],

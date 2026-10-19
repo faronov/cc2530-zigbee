@@ -1,7 +1,65 @@
 # cc2530-zigbee
 
-[![SDCC CI](https://github.com/faronov/cc2530-zigbee/actions/workflows/ci.yml/badge.svg)](https://github.com/faronov/cc2530-zigbee/actions/workflows/ci.yml)
+[![LLVM CI](https://github.com/faronov/cc2530-zigbee/actions/workflows/llvm-tiers.yml/badge.svg)](https://github.com/faronov/cc2530-zigbee/actions/workflows/llvm-tiers.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+
+## Current build: LLVM MCS51 only
+
+An experimental CC2530 Zigbee end-device project, without proprietary TI stack
+libraries. Firmware uses **Clang MCS51, LLD and the runtime from exactly
+`41d87abda2eaec8c30be1c92097002f015499683`** in
+[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/41d87abda2eaec8c30be1c92097002f015499683).
+The machine-readable pin is [toolchain.json](tools/llvm/toolchain.json).
+SDCC firmware compilation, linker/overlay builds and production CI are retired;
+there is no compiler fallback.
+
+With that clean LLVM source checkout, its built tools, GNU Make, a host C compiler
+and Python with `pyelftools`:
+
+```sh
+make                         # LG admitted join profile; LLVM only
+make firmware LLVM_TOOLS=../llvm-mcs51-build/bin LLVM_SRC=../llvm-project
+make BOARD=generic IMAGE=bringup
+make BOARD=generic IMAGE=timebase_fixture
+make test-host               # native C checks; no SDCC or target compiler
+make test-fast               # compiler/ABI, link, bank, stack and memory admission
+make test-smoke              # FAST plus bounded MCU/reference-simulator cases
+```
+
+Default outputs are `build/lg_esl29_rev03/join/firmware.elf`, `firmware.hex`
+and `receipt.json`. The receipt binds compiler paths/hashes, exact source
+revisions, flags and admission to the generated artifacts. Existing
+content-addressed generations are reused only after identity, seal and artifact
+verification. Use a fresh `BUILD` to retry an interrupted generation.
+`generic` keeps its LLVM bootstrap/timebase builds; a generic full-join image
+is explicitly unsupported rather than silently compiled with another compiler.
+
+FAST/SMOKE additionally need the independently reproduced s51/uCsim reference
+simulator (`make llvm-simulator LLVM_SIM_ARCHIVE=/path/to/sdcc_4.2.0+dfsg.orig.tar.xz`).
+The SDCC source archive builds **the simulator only**, never firmware.
+MCUEMU comparisons, golden oracle inputs, all 154 independent native executable
+recipes, and LLVM ABI/banking/static-stack/memory checks remain.
+See [current contribution checks](CONTRIBUTING.md#development-checks) and
+[LLVM build/CI details](docs/LLVM_DEVELOPMENT.md).
+
+**UNIFY-01 is development/CI-validated, not FULL-qualified or release-approved.**
+FULL is explicit only; no automatic FULL, HIL, flashing or RF operation is added.
+Frozen M6 firmware `1dd413b2bc5d69d7ec04b91137bb05c77bd13cca`, LLVM
+`1a01afb49d99ec754e62ab0f65f182de87b4cee3` and accepted FULL
+[38785958832](https://github.com/faronov/cc2530-zigbee/actions/runs/38785958832)
+(31/31 gates, 19/19 MCU scenarios) are historical, unchanged evidence, not
+qualification of this compiler. F1a/F1b/F5 remain excluded pending review;
+F2 default-ABI exhaustion, F3 IDATA/XDATA contract and MachineVerifier blind
+spots remain OPEN; Confirm-Key C remains UNRESOLVED.
+
+## Historical SDCC-era overview and evidence
+
+The remainder preserves the earlier project/evidence record. **Its SDCC build,
+overlay and fixture commands are retired**, not alternate supported builds.
+Reproduce those historical commands from
+[the immutable pre-migration archive](https://github.com/faronov/cc2530-zigbee/tree/archive/llvm-only-20261019/main-sdcc),
+not from this branch. Hardware observations below do not qualify the new LLVM
+image. Current build instructions are above.
 
 An experimental, open C/SDCC project aiming to implement a small Zigbee end
 device and, subsequently, a sleepy end device on the TI CC2530.
