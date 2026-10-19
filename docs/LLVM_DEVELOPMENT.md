@@ -16,6 +16,10 @@ physical `firmware.hex` and a compiler/source/path-bound `receipt.json` under
 `BUILD` (default `build/<board>/<image>`).
 The generic board retains LLVM `bringup` and `timebase_fixture`; generic join
 is rejected rather than routed through SDCC.
+Bootstrap `m0_status` uses a real typed XDATA object at `0x1e00`, with its
+unchanged 32-byte ABI inside the existing 64-byte reservation, rather than an
+absolute linker symbol. This satisfies the existing LLD bus checks without
+disabling them or changing the compiler/memory model.
 
 The existing [workflow](../.github/workflows/llvm-tiers.yml) remains the CI
 entrypoint: FAST for main/llvm-dev pushes, SMOKE for PRs, and explicit

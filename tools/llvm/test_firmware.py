@@ -17,6 +17,16 @@ class LLVMOnlyBuild(unittest.TestCase):
         self.assertEqual(profile["sf_flags"], "-mllvm -mcs51-static-frames")
         self.assertEqual(profile["abi_flags"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args")
 
+    def test_fixture_status_has_the_existing_typed_xdata_contract(self):
+        header = (firmware.REPO / "include/bringup.h").read_text()
+        asm = (firmware.HERE / "inputs/fixture_status_mcs51.s").read_text()
+        self.assertIn("#define M0_STATUS_ADDRESS 0x1e00UL", header)
+        self.assertIn("#define M0_STATUS_SIZE 32u", header)
+        self.assertIn("#define M0_STATUS_RESERVED 64u", header)
+        self.assertIn('.section .mcs51.xdata.fixed.m0_status,"aw",@nobits', asm)
+        self.assertIn(".size m0_status, 32", asm)
+        self.assertNotIn("--defsym,m0_status", (firmware.HERE / "firmware.py").read_text())
+
     def test_standard_make_is_llvm_only(self):
         out = subprocess.check_output(["make", "-n"], cwd=firmware.REPO, text=True)
         self.assertIn("tools/llvm/firmware.py", out)

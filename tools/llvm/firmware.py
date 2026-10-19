@@ -35,12 +35,17 @@ def fixture(args, out):
     clang = args.tools / "clang"
     for module, source in zip(modules, sources):
         run([clang, *flags, "-c", source, "-o", out / (module + ".o")], cwd=REPO)
+    run([clang, "-target", "mcs51", "-mcpu=cc2530", "-c",
+         HERE / "inputs/fixture_status_mcs51.s", "-o", out / "fixture_status.o"])
     ld = out / "cc2530-zigbee.ld"
     ld.write_text(f'INCLUDE "{args.llvm_src}/llvm/lib/Target/MCS51/cc2530.ld"\n'
+                  'SECTIONS { .mcs51_xdata_fixed 0x1e00 (NOLOAD) : '
+                  '{ KEEP(*(.mcs51.xdata.fixed.m0_status)) } > XRAM }\n'
+                  'ASSERT(SIZEOF(.mcs51_xdata_fixed) == 32, "M0 status object size")\n'
                   'ASSERT(ADDR(.data) + SIZEOF(.data) <= 0x1e00, "data overlaps status")\n'
                   'ASSERT(ADDR(.bss) + SIZEOF(.bss) <= 0x1e00, "bss overlaps status")\n')
     elf, hexfile = out / "firmware.elf", out / "firmware.hex"
-    run([clang, *flags, "-Wl,--no-check-sections", "-Wl,--defsym,m0_status=0x1e00",
+    run([clang, *flags, "-Wl,--no-check-sections", out / "fixture_status.o",
          "-Wl,--gc-sections", "-Wl,-T," + str(ld), *(out / (m + ".o") for m in modules),
          "-o", elf], cwd=REPO)
     run([args.tools / "llvm-objcopy", "--output-target=ihex", elf, hexfile])
