@@ -32,7 +32,7 @@ on:
         default: faronov/llvm-project
       llvm_ref:
         description: LLVM-MCS51 branch, tag or commit
-        default: mcs51-dev
+        default: 41d87abda2eaec8c30be1c92097002f015499683
   workflow_call:
     inputs:
       tier:
@@ -85,7 +85,7 @@ jobs:
           TIER: ${{ inputs.tier || (github.event_name == 'pull_request' && 'smoke' || 'fast') }}
           VARIANT: ${{ inputs.variant || 'production' }}
           LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
-          LLVM_REF: ${{ inputs.llvm_ref || 'mcs51-dev' }}
+          LLVM_REF: ${{ inputs.llvm_ref || '41d87abda2eaec8c30be1c92097002f015499683' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.sha }}
         run: |
