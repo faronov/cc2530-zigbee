@@ -278,6 +278,25 @@ Until that proof exists, the reference stays the release oracle.
 
 ## GitHub Actions
 
+**UNIFY-01 development compiler pin:** the proposed LLVM workflow default is
+`faronov/llvm-project@41d87abda2eaec8c30be1c92097002f015499683`
+([candidate branch](https://github.com/faronov/llvm-project/tree/mcs51-unify-01)).
+The published source tree matches the isolated, reviewed seven-group candidate.
+Explicit compiler overrides remain supported; SDCC production defaults are unchanged.
+
+[Pinned CI run 39267114208](https://github.com/faronov/llvm-project/actions/runs/39267114208)
+used that exact compiler and firmware `1dd413b2bc5d69d7ec04b91137bb05c77bd13cca`:
+FAST **11/11 PASS**, SMOKE **17/17 PASS**, with fresh, verified receipt seals.
+It used the `production` variant, not the accepted M6 `parent-recovery-policy-c` image.
+The existing LLVM caller passes `github.sha` as `llvm_ref` to this repository's
+`llvm-tiers.yml@llvm-dev` reusable workflow and accepts an explicit `firmware_ref`.
+
+This is a development-default proposal, not production promotion or FULL qualification.
+Accepted M6 run [38785958832](https://github.com/faronov/cc2530-zigbee/actions/runs/38785958832)
+remains bound to LLVM `1a01afb49d99ec754e62ab0f65f182de87b4cee3` and its original artifacts.
+No new FULL was run. F1a/F1b/F5 are excluded; F2 default-ABI stack exhaustion and F3 memory
+contracts remain open, as do the documented verifier limitations and Confirm-Key C.
+
 | Event | Repository | Tier |
 | --- | --- | --- |
 | Push to `llvm-dev` | cc2530-zigbee (`llvm-tiers.yml`) | FAST |
