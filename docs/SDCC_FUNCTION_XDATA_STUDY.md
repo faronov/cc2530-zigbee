@@ -38,7 +38,7 @@ The pristine source-import commit is
 No installed compiler was replaced, and no equipment, RF or flashing was used.
 
 The exported series is in
-[`experiments/sdcc-function/patches`](../experiments/sdcc-function/patches).
+[`experiments/sdcc-function/patches`](https://github.com/faronov/cc2530-zigbee/tree/archive/llvm-only-20261019/main-sdcc/experiments/sdcc-function/patches).
 The complete source/build remains under ignored `build/sdcc-function`.
 Machine-readable measurements and all ordinary-object bindings are in
 [`experiments/sdcc-function/evidence`](../experiments/sdcc-function/evidence).
