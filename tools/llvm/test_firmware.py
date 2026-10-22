@@ -80,7 +80,7 @@ class LLVMOnlyBuild(unittest.TestCase):
         self.assertNotIn("llvm-dev", workflow)
 
     def test_reject_floating_compiler_override_before_tool_inspection(self):
-        for revision in ("main", "ac17124", "a" * 39, "A" * 40):
+        for revision in ("", "main", "ac17124", "a" * 39, "A" * 40):
             with self.subTest(revision=revision), patch("sys.stderr"), \
                     patch("sys.argv", ["firmware.py", "--tools", "unused", "--llvm-src", "unused",
                                        "--output", "build/unused", "--board", "lg_esl29_rev03",

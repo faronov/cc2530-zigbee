@@ -66,7 +66,7 @@ def main():
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
     pin = json.loads((HERE / "toolchain.json").read_text())
     profile = json.loads((HERE / "profile.json").read_text())
-    revision = args.llvm_revision or pin["revision"]
+    revision = pin["revision"] if args.llvm_revision is None else args.llvm_revision
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         parser.error("LLVM revision must be a full lowercase 40-character commit SHA")
     compiler = tiers.compiler_identity(args.tools, args.llvm_src, profile)
