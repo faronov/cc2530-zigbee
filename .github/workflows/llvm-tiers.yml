@@ -1,8 +1,8 @@
 name: LLVM tiers
 
 # LLVM-only CC2530 firmware (docs/LLVM_DEVELOPMENT.md).
-#   push to main / llvm-dev           FAST
-#   pull request into main / llvm-dev FAST + SMOKE
+#   push to main                     FAST
+#   pull request into main           FAST + SMOKE
 #   workflow_dispatch / call   fast | smoke | full (FULL = every scenario incl. complete case 0)
 # FULL never runs implicitly. Nightly FULL is not scheduled: GitHub runs schedules only
 # from the default branch (production main here, TC32 in faronov/llvm-project).
@@ -10,10 +10,10 @@ name: LLVM tiers
 
 on:
   push:
-    branches: [main, llvm-dev]
+    branches: [main]
     paths-ignore: ['docs/**', '**/*.md', 'LICENSE*']
   pull_request:
-    branches: [main, llvm-dev]
+    branches: [main]
     paths-ignore: ['docs/**', '**/*.md', 'LICENSE*']
   workflow_dispatch:
     inputs:

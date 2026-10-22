@@ -66,8 +66,8 @@ Use the smallest relevant local check, then the existing
 | `make test-smoke` / `make test-llvm-smoke` | FAST plus bounded reference-simulator scenarios |
 | `make test-full` / `make test-llvm-full` | Explicit, expensive FULL only when separately authorized |
 
-`make test` means native checks plus SMOKE, never FULL. Main/temporary llvm-dev
-pushes select FAST; PRs into either select SMOKE. Manual/reusable invocations
+`make test` means native checks plus SMOKE, never FULL. Main pushes select
+FAST; PRs into main select SMOKE. Manual/reusable invocations
 record exact firmware and LLVM SHA; use explicit commit inputs for evidence.
 The workflow also exercises the standard `make firmware` path. It never flashes
 hardware. Host tests require no SDCC. The reference simulator is reproduced

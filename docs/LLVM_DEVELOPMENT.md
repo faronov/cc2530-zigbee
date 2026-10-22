@@ -35,7 +35,7 @@ absolute linker symbol. This satisfies the existing LLD bus checks without
 disabling them or changing the compiler/memory model.
 
 The existing [workflow](../.github/workflows/llvm-tiers.yml) remains the CI
-entrypoint: FAST for main/llvm-dev pushes, SMOKE for PRs, and explicit
+entrypoint: FAST for main pushes, SMOKE for PRs into main, and explicit
 `workflow_dispatch` / `workflow_call` for any tier. FULL is never automatic.
 Manual inputs include `firmware_repository`, `firmware_ref`, `llvm_repository`
 and `llvm_ref`; pass full commit SHA for reproducible evidence. Native host
@@ -336,7 +336,7 @@ Until that proof exists, the reference stays the release oracle.
 ## GitHub Actions
 
 The current LLVM-only workflow and compiler default are described above:
-main/temporary llvm-dev pushes run FAST, PRs run FAST plus SMOKE, and FULL
+main pushes run FAST, PRs run FAST plus SMOKE, and FULL
 requires an explicit request. The following record predates the main migration;
 its SDCC production-default and pending-proposal statements are historical,
 not the current build or approval status. The updated LLVM caller uses the

@@ -76,6 +76,8 @@ class LLVMOnlyBuild(unittest.TestCase):
         workflow = (firmware.REPO / ".github/workflows/llvm-tiers.yml").read_text()
         self.assertIn("default: " + pin, workflow)
         self.assertIn("inputs.llvm_ref || '" + pin + "'", workflow)
+        self.assertEqual(workflow.count("branches: [main]"), 2)
+        self.assertNotIn("llvm-dev", workflow)
 
     def test_reject_floating_compiler_override_before_tool_inspection(self):
         for revision in ("main", "ac17124", "a" * 39, "A" * 40):
