@@ -5,6 +5,7 @@
 #define NWK_APS_H
 
 #include "ed_wire.h"
+#include "sdcc_volatile.h"
 #include "mac_tx.h"
 #if defined(CC2530_MAC_LINK)
 #include "mac_link.h"
@@ -94,30 +95,30 @@ typedef struct {
  * init copies a complete, disjoint configuration; it retains no pointer to
  * that input. The grouped input avoids an eleven-argument SDCC caller frame.
  */
-nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, NWK_APS_TX_T * volatile owner,
-    const nwk_aps_config_t * volatile config, volatile uint32_t now) JOIN_FAR;
-nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * volatile packet,
-                               volatile uint8_t aps_secure, volatile uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * SDCC_VOLATILE ctx, NWK_APS_TX_T * SDCC_VOLATILE owner,
+    const nwk_aps_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_queue(nwk_aps_t * SDCC_VOLATILE ctx, const ed_packet_t * SDCC_VOLATILE packet,
+                               SDCC_VOLATILE uint8_t aps_secure, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 /* which1=Request-Key, which2=Verify-Key, which3=local Leave. quiet explicitly
  * records keyless abandonment without a PHY transmission.
  * Key selection/phase/counters belong
  * exclusively to the real security owner, never to a caller-supplied boolean.
  */
-nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now) JOIN_FAR;
-nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
-    const NWK_APS_EVENT_T * volatile event, NWK_APS_ACTION_T * volatile action) JOIN_FAR;
-nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
-    volatile uint16_t length, volatile uint32_t now) JOIN_FAR;
-nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event) JOIN_FAR;
-nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile result) JOIN_FAR;
+nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_step(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
+    const NWK_APS_EVENT_T * SDCC_VOLATILE event, NWK_APS_ACTION_T * SDCC_VOLATILE action) JOIN_FAR;
+nwk_aps_result_t nwk_aps_receive(nwk_aps_t * SDCC_VOLATILE ctx, const uint8_t * SDCC_VOLATILE npdu,
+    SDCC_VOLATILE uint16_t length, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_take(nwk_aps_t * SDCC_VOLATILE ctx, ed_packet_t * SDCC_VOLATILE packet, uint8_t * SDCC_VOLATILE event) JOIN_FAR;
+nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * SDCC_VOLATILE ctx, uint8_t * SDCC_VOLATILE result) JOIN_FAR;
 /* Request cancellation; step must still establish physical quiescence. */
-nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 /* Stop ordinary TX and priority ACK without releasing an active MAC lease.
  * step drains cancellation/QUIESCED before clearing stopping. A failed ACK
  * with confirmed MAC release returns ACK_FAILED and records its MAC outcome
  * in reply_result; it is not an uncertain radio fault or membership loss.
  */
-nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now) JOIN_FAR;
+nwk_aps_result_t nwk_aps_stop(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 #if defined(CC2530_MAC_LINK)
 /* Confirm exactly the outstanding ARM after real adapter prepare in DRAW.
  * Generation/retry/NB identify this nonwrapping slot/attempt. Wrong/duplicate
@@ -126,13 +127,13 @@ nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now) J
  * Retries rearm unless stop or ordinary-TX cancellation is pending; cancelling
  * ordinary TX does not cancel its priority ACK. Unattempted slots need unprepare.
  */
-nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
+nwk_aps_result_t nwk_aps_armed(nwk_aps_t * SDCC_VOLATILE ctx, uint32_t generation,
     uint8_t retry, uint8_t nb) JOIN_FAR;
 /* DISARM uses the same generation/retry/NB identity after MAC DONE. Retire
  * any unattempted prepared slot with adapter_unprepare before confirming.
  * An independent RX lease may remain; this is not a coverage assertion.
  */
-nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
+nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * SDCC_VOLATILE ctx, uint32_t generation,
     uint8_t retry, uint8_t nb) JOIN_FAR;
 #endif
 

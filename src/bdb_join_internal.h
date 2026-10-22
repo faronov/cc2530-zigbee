@@ -5,6 +5,7 @@
 #define BDB_JOIN_INTERNAL_H
 
 #include "bdb_join.h"
+#include "sdcc_volatile.h"
 
 #if defined(CC2530_MAC_LINK)
 #define BDB_JOIN_ENGINE(tx) (&(tx)->engine)
@@ -25,13 +26,13 @@ extern MCU_XDATA security_keys_status_t nwk_aps_keys;
 #define BDB_JOIN_KEYS_STORAGE MCU_XDATA
 #endif
 extern MCU_XDATA security_keys_status_t bdb_join_keys;
-bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * volatile ctx, volatile uint32_t now);
-bdb_join_result_t bdb_join_runtime_init(bdb_join_t BDB_JOIN_RAM * volatile ctx,
-    NWK_APS_TX_T BDB_JOIN_RAM * volatile owner, const bdb_join_config_t * volatile config,
-    volatile uint32_t now);
+bdb_join_result_t bdb_join_advance(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now);
+bdb_join_result_t bdb_join_runtime_init(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
+    NWK_APS_TX_T BDB_JOIN_RAM * SDCC_VOLATILE owner, const bdb_join_config_t * SDCC_VOLATILE config,
+    SDCC_VOLATILE uint32_t now);
 #if defined(CC2530_DEFAULT_TC_KEY)
-void bdb_join_discovered_config(bdb_join_t BDB_JOIN_RAM * volatile ctx);
-bdb_join_result_t bdb_join_provision_discovered(bdb_join_t BDB_JOIN_RAM * volatile ctx);
+void bdb_join_discovered_config(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx);
+bdb_join_result_t bdb_join_provision_discovered(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx);
 #endif
 
 #endif

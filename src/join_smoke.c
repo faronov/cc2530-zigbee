@@ -4,6 +4,9 @@
 #include "timebase.h"
 #include "zcl_sensor.h"
 #include <string.h>
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
 
 MCU_XDATA bdb_join_t join_smoke_device;
 MCU_XDATA mac_tx_interval_t join_smoke_tx;
@@ -12,7 +15,9 @@ MCU_XDATA radio_autoack_config_t join_smoke_initial;
 MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
+#if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
+#endif
 
 static MCU_XDATA uint8_t initialized, gate, i;
 /* Admission scratch is dead once started; the start loop and RUNNING/READY
@@ -136,6 +141,9 @@ void join_smoke_initialize(void)
     initialized=1;
     for(i=0;i<sizeof(S);i++) ((volatile uint8_t MCU_XDATA *)&S)[i]=0;
     for(i=0;i<8;i++) join_smoke_mailbox[i]=0;
+#if defined(CC2530_RX_DIAG)
+    RX_DIAG_RESET(i);
+#endif
     S.signature[0]='J'; S.signature[1]='S'; S.signature[2]='N'; S.signature[3]='1';
     S.version=2; S.size=sizeof(S); gate=JS_DISARMED; S.phase=gate;
     S.security_result=S.adapter_result=S.mac_result=S.bdb_result=S.driver_result=255;

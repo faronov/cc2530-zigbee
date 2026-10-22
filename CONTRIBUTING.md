@@ -1,6 +1,6 @@
 # Contributing
 
-This is an experimental bootstrap project. Read the
+This is an experimental LLVM MCS51 end-device project. Read the
 [plan](docs/PLAN.md), [architecture](docs/ARCHITECTURE.md) and
 [source policy](docs/PROVENANCE.md) before adding a subsystem.
 
@@ -24,7 +24,7 @@ are provided; no global installation or fixed model is required.
 | Agent | Intended task |
 | --- | --- |
 | [zigbee-stack](.github/agents/zigbee-stack.agent.md) | Protocol codecs/state machines, specification lookup, end-device conformance and security/commissioning boundaries |
-| [cc2530-platform](.github/agents/cc2530-platform.agent.md) | CC2530/SDCC, memory and linker ABI, debugger transport and isolated chip services |
+| [cc2530-platform](.github/agents/cc2530-platform.agent.md) | CC2530/LLVM MCS51, memory and linker ABI, debugger transport and isolated chip services |
 
 In Copilot CLI opened at this repository, use `/agent` to select a profile,
 or name it in a prompt, for example: "Use zigbee-stack to implement the
@@ -46,6 +46,49 @@ and offline tests do not depend on that repository. Neither profile adds
 working firmware features or changes the project's support claims.
 
 ## Development checks
+
+Firmware has one supported build path: pinned Clang MCS51/LLD and runtime from
+`41d87abda2eaec8c30be1c92097002f015499683`. `make` builds the LG join profile;
+`BOARD=generic IMAGE=bringup` or `IMAGE=timebase_fixture` retains generic
+bootstrap coverage. Use `LLVM_TOOLS` and `LLVM_SRC` to select that exact clean
+toolchain, not a floating branch or SDCC fallback.
+
+Use the smallest relevant local check, then the existing
+[LLVM tiers workflow](.github/workflows/llvm-tiers.yml) for CI acceptance:
+
+| Command | Scope |
+| --- | --- |
+| `make test-host` | Existing native frame/NV/counter checks and directed join callers; no target compiler |
+| `make test-join-smoke-host` | Existing native/sanitized shallow/deep join and ZCL scenarios |
+| `python3 -B -m unittest discover -s tools/llvm -p 'test_*.py'` | Tier, identity and LLVM-only build guardrails |
+| `python3 -B tools/check_repository.py` | Publication, source and documentation constraints |
+| `make test-fast` / `make test-llvm-fast` | Existing compiler/ABI/runtime, clean firmware link and static admission |
+| `make test-smoke` / `make test-llvm-smoke` | FAST plus bounded reference-simulator scenarios |
+| `make test-full` / `make test-llvm-full` | Explicit, expensive FULL only when separately authorized |
+
+`make test` means native checks plus SMOKE, never FULL. Main/temporary llvm-dev
+pushes select FAST; PRs into either select SMOKE. Manual/reusable invocations
+record exact firmware and LLVM SHA; use explicit commit inputs for evidence.
+The workflow also exercises the standard `make firmware` path. It never flashes
+hardware. Host tests require no SDCC. The reference simulator is reproduced
+separately from the hash-pinned SDCC 4.2.0 source archive; its compiler is not
+installed or used. LLVM golden layouts/oracle decoders are not SDCC firmware
+build dependencies.
+
+Do not routinely repeat large historical suites locally and in CI. Do not
+weaken stack (128-byte maximum), bank-thunk, reserved-memory, fixed-address or
+receipt identity checks. FAST/SMOKE do not imply FULL or hardware acceptance.
+The frozen accepted M6 result is not transferable to UNIFY-01; unresolved
+defects retain the statuses in [README](README.md#current-build-llvm-mcs51-only).
+
+## Historical SDCC acceptance procedures (retired)
+
+The following inherited procedures and commands document the old compiler
+infrastructure, removed from the active build/CI. They are **not current
+contribution requirements or available SDCC build targets**. Reproduce them
+from [the immutable archive](https://github.com/faronov/cc2530-zigbee/tree/archive/llvm-only-20261019/main-sdcc).
+Current procedures are the LLVM-only checks above. Recorded historical
+acceptance evidence is not requalified by this migration.
 
 **GitHub Actions is the normal acceptance gate.** Do not routinely run
 the full host/sanitizer/image/simulator matrix locally and then repeat it in
@@ -73,6 +116,14 @@ Make-generated inputs derived from the actual target CDB; they are not guessed f
 padding or accepted from a stale build cache.
 `test-fast` compares HEAD with staged/unstaged/untracked source by default.
 It is a development aid, never a substitute for the affected integration gate.
+
+The experimental LLVM image has separate, opt-in tiers:
+- `make test-llvm-fast` (≈21 s) after an edit;
+- `make test-llvm-smoke` (≈5 min) before a PR;
+- `make test-llvm-full` (hours, with complete case 0) before an integration or release
+  candidate.
+
+See [LLVM_DEVELOPMENT](docs/LLVM_DEVELOPMENT.md).
 
 For the active [complete radio-backed join plan](docs/LINK_JOIN_PLAN.md),
 `make BOARD=<board> test-join-smoke-host` runs the ten fresh-process caller

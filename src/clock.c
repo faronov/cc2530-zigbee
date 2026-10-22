@@ -83,7 +83,7 @@ static clock_result_t request_and_wait(uint8_t command, uint32_t timeout_ticks,
                                        uint16_t poll_limit)
 {
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
-    count.timebase_status = timebase_deadline_after(work.start, timeout_ticks, &work.deadline);
+    count.timebase_status = timebase_deadline_after(work.start, timeout_ticks, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
     publish_status();
     /* Also cancel a pending request when the rollback timebase is unusable. */
     MMIO_WRITE(SOC_CLKCONCMD, command);
@@ -98,7 +98,7 @@ static clock_result_t request_and_wait(uint8_t command, uint32_t timeout_ticks,
         count.elapsed_ticks = (work.now - work.start) & TIMEBASE_TICKS_MASK;
         publish_count();
         if (observed.observed_command != command) return CLOCK_COMMAND_CHANGED;
-        count.timebase_status = timebase_expired(work.now, work.deadline, &work.expired);
+        count.timebase_status = timebase_expired(work.now, work.deadline, TIMEBASE_POINTER_CAST(bool, &work.expired));
         publish_status();
         if (count.timebase_status != TIMEBASE_OK) return CLOCK_TIMEBASE_ERROR;
         if (count.elapsed_ticks >= TIMEBASE_HALF_RANGE ||

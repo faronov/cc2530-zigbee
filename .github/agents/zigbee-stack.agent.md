@@ -62,7 +62,7 @@ copy its agent/skill text or execute its scripts without a provenance review.
 Keep protocol C independent of board GPIO, USB and CC2530 registers. Use
 fixed-width integers, explicit byte operations, bounded static storage and
 clear buffer ownership. Preserve existing API failure contracts, including
-unchanged outputs where promised. Audit integer widths and SDCC pointer,
+unchanged outputs where promised. Audit integer widths and LLVM MCS51 pointer,
 CODE-table, stack and non-reentrancy constraints; a host pass alone is not
 target evidence.
 

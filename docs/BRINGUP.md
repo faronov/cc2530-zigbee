@@ -1,5 +1,15 @@
 # M0 bootstrap contract
 
+Current builds use LLVM MCS51 only: `make BOARD=generic IMAGE=bringup` or
+`make BOARD=lg_esl29_rev03 IMAGE=bringup`, with the exact compiler pin and
+paths in [README](../README.md#current-build-llvm-mcs51-only). Outputs are
+`build/<board>/bringup/firmware.elf`, `firmware.hex` and `receipt.json`.
+The M0 status reservation and both board source configurations are preserved.
+
+**The SDCC commands, artifact names and acceptance descriptions below are
+historical**, reproducible only from the pre-migration archive. They are not
+current build targets or hardware acceptance of a new LLVM image.
+
 This is a non-networking C/SDCC execution fixture. **The standalone `bringup`
 images have not been flashed or tested on hardware.** The earlier external
 display prototype does not validate these images.

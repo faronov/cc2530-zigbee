@@ -17,6 +17,10 @@ test, and an interview is not proof of reliable SED behavior.
 
 ## Local validation performance
 
+The experimental LLVM-MCS51 image has its own FAST/SMOKE/FULL tiers, with content-addressed
+evidence, in [LLVM_DEVELOPMENT](LLVM_DEVELOPMENT.md). They are separate from the SDCC tiers
+below and do not change them.
+
 ### Risk-based selection and host coverage
 
 The #87 policy separates fast native/sanitizer iteration, affected integration

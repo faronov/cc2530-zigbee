@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zigbee_key_hash.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
@@ -25,7 +26,7 @@ static MCU_XDATA struct {
 #endif
 
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
-#define zigbee_mmo_hash(m,n,h,t,p,s) CW_CALL(CW_MMO,zigbee_mmo_hash(m,n,h,*(volatile uint32_t *)&(t),*(volatile uint16_t *)&(p),s))
+#define zigbee_mmo_hash(m,n,h,t,p,s) CW_CALL(CW_MMO,zigbee_mmo_hash(m,n,h,*(SDCC_VOLATILE uint32_t *)&(t),*(SDCC_VOLATILE uint16_t *)&(p),s))
 #endif
 static void account(void)
 {
@@ -43,8 +44,8 @@ static void wipe(void)
 }
 
 zigbee_mmo_result_t zigbee_key_hash(
-    const uint8_t * volatile key, uint8_t purpose, uint8_t * volatile output,
-    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info)
+    const uint8_t * SDCC_VOLATILE key, uint8_t purpose, uint8_t * SDCC_VOLATILE output,
+    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_CHILD_HASH,key,16,0) || !LW_IO(LW_CHILD_HASH,output,16,1) ||

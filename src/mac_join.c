@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "mac_join.h"
 #include <stddef.h>
 #include <string.h>
+
 #include "mac_link_workspace_guard_internal.h"
 #if defined(CC2530_MAC_LINK_WORKSPACE)
 #include "mac_link_workspace_internal.h"
@@ -70,8 +72,8 @@ static mac_join_t MAC_JOIN_RAM staged;
 #endif
 #define j (&staged)
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
-static MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile LJ_OWNER;
-static MAC_POLL_OWNER_T * volatile tx_argument;
+static MAC_POLL_OWNER_T MAC_JOIN_RAM * SDCC_VOLATILE LJ_OWNER;
+static MAC_POLL_OWNER_T * SDCC_VOLATILE tx_argument;
 #endif
 /* Returning foreground work, never retained by a lower service. start and
  * step cannot overlap. Within step, pr is consumed before pe, pe before ar,
@@ -112,15 +114,15 @@ static union {
 #define start_body LJ_WORK.start.body
 #define start_length LJ_WORK.start.length
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
-static volatile uint32_t MAC_JOIN_RAM time;
-static volatile uint32_t MAC_JOIN_RAM remaining;
+static SDCC_VOLATILE uint32_t MAC_JOIN_RAM time;
+static SDCC_VOLATILE uint32_t MAC_JOIN_RAM remaining;
 #if defined(CC2530_MAC_LINK)
-static const mac_tx_interval_event_t * volatile LJ_SOURCE;
+static const mac_tx_interval_event_t * SDCC_VOLATILE LJ_SOURCE;
 #else
-static const mac_tx_event_t * volatile LJ_SOURCE;
+static const mac_tx_event_t * SDCC_VOLATILE LJ_SOURCE;
 #endif
-static const mac_poll_event_t MAC_JOIN_RAM * volatile poll_event;
-static volatile uint16_t MAC_JOIN_RAM admitted;
+static const mac_poll_event_t MAC_JOIN_RAM * SDCC_VOLATILE poll_event;
+static SDCC_VOLATILE uint16_t MAC_JOIN_RAM admitted;
 static uint8_t MAC_JOIN_RAM LJ_OBSERVATION;
 #endif
 #if defined(CC2530_MAC_LINK_RAM)
@@ -271,7 +273,7 @@ static void finish_window(void)
     j->window = 2;
 }
 
-mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile uint32_t now)
+mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_JOIN_INIT, MAC_JOIN_INVALID);
@@ -295,8 +297,8 @@ mac_join_result_t mac_join_init(mac_join_t MAC_JOIN_RAM * volatile ctx, volatile
     return JOIN_RETURN(MAC_JOIN_OK);
 }
 
-mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
-    const mac_join_request_t MAC_JOIN_RAM * volatile request, volatile uint32_t now)
+mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * SDCC_VOLATILE tx,
+    const mac_join_request_t MAC_JOIN_RAM * SDCC_VOLATILE request, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_JOIN_START, MAC_JOIN_INVALID);
@@ -305,7 +307,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POL
         !LW_IO(LW_JOIN_START, request, sizeof(*request), 0)) return LW_RETURN(LW_JOIN_START, MAC_JOIN_INVALID);
 #endif
     uint8_t i;
-    volatile uint32_t generation;
+    SDCC_VOLATILE uint32_t generation;
     if (ctx == NULL || tx == NULL || request == NULL)
         return JOIN_RETURN(MAC_JOIN_INVALID);
 #if defined(CC2530_MAC_LINK_RAM)
@@ -387,8 +389,8 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POL
     return JOIN_RETURN(MAC_JOIN_OK);
 }
 
-mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * volatile tx,
-    uint32_t now, const mac_join_event_t MAC_JOIN_RAM * volatile event, mac_join_action_t MAC_JOIN_RAM * volatile action)
+mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, MAC_POLL_OWNER_T MAC_JOIN_RAM * SDCC_VOLATILE tx,
+    uint32_t now, const mac_join_event_t MAC_JOIN_RAM * SDCC_VOLATILE event, mac_join_action_t MAC_JOIN_RAM * SDCC_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_JOIN_STEP, MAC_JOIN_INVALID);
@@ -397,7 +399,7 @@ mac_join_result_t mac_join_step(mac_join_t MAC_JOIN_RAM * volatile ctx, MAC_POLL
         !LW_IO(LW_JOIN_STEP, action, sizeof(*action), 1) ||
         !LW_IO(LW_JOIN_STEP, event, event ? sizeof(*event) : 0, 0)) return LW_RETURN(LW_JOIN_STEP, MAC_JOIN_INVALID);
 #endif
-    volatile uint8_t kind, matched, before;
+    SDCC_VOLATILE uint8_t kind, matched, before;
     if (ctx == NULL || tx == NULL || action == NULL)
         return JOIN_RETURN(MAC_JOIN_INVALID);
 #if defined(CC2530_MAC_LINK_RAM)

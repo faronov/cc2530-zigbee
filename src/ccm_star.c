@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "ccm_star.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
@@ -41,7 +42,9 @@ static uint8_t encrypt(void)
 {
     state.info.blocks++;
     state.info.aes_status = (uint8_t)aes128_encrypt_block(
-        state.key, state.block, state.cipher, state.limits.block_timeout,
+        (const MCU_GENERIC uint8_t *)state.key,
+        (const MCU_GENERIC uint8_t *)state.block, state.cipher,
+        state.limits.block_timeout,
         state.limits.block_polls, &state.diagnostics);
     account();
     return state.info.aes_status == AES_OK;
@@ -60,9 +63,9 @@ static uint8_t flush(void)
     return 1;
 }
 
-static uint8_t feed(const uint8_t * volatile data, volatile uint8_t count)
+static uint8_t feed(const uint8_t * SDCC_VOLATILE data, SDCC_VOLATILE uint8_t count)
 {
-    volatile uint8_t i;
+    SDCC_VOLATILE uint8_t i;
     for (i = 0; i < count; i++) {
         state.block[state.position++] = data[i];
         if (state.position == 16 && !flush())
@@ -71,8 +74,8 @@ static uint8_t feed(const uint8_t * volatile data, volatile uint8_t count)
     return 1;
 }
 
-static uint8_t authenticate(const uint8_t * volatile aad, volatile uint8_t aad_length,
-                            volatile uint8_t size, uint8_t tag_length)
+static uint8_t authenticate(const uint8_t * SDCC_VOLATILE aad, SDCC_VOLATILE uint8_t aad_length,
+                            SDCC_VOLATILE uint8_t size, uint8_t tag_length)
 {
     memset(state.mac, 0, 16);
     state.block[0] = 1u | (uint8_t)(((tag_length - 2u) / 2u) << 3);
@@ -102,9 +105,9 @@ static uint8_t counter(uint8_t number)
     return encrypt();
 }
 
-static uint8_t transform(volatile uint8_t size)
+static uint8_t transform(SDCC_VOLATILE uint8_t size)
 {
-    volatile uint8_t offset = 0, number = 1;
+    SDCC_VOLATILE uint8_t offset = 0, number = 1;
     uint8_t i;
     while (offset < size) {
         if (!counter(number++))
@@ -124,11 +127,11 @@ static void wipe(void)
 }
 
 ccm_star_result_t ccm_star_crypt(
-    uint8_t open, const uint8_t * volatile key, const uint8_t * volatile nonce,
-    const uint8_t * volatile aad, uint16_t aad_length,
-    const uint8_t * volatile input, uint16_t length, uint8_t tag_length,
-    uint8_t * volatile output, uint16_t capacity, uint8_t * volatile written,
-    const ccm_star_limits_t * volatile limits, ccm_star_info_t * volatile info)
+    uint8_t open, const uint8_t * SDCC_VOLATILE key, const uint8_t * SDCC_VOLATILE nonce,
+    const uint8_t * SDCC_VOLATILE aad, uint16_t aad_length,
+    const uint8_t * SDCC_VOLATILE input, uint16_t length, uint8_t tag_length,
+    uint8_t * SDCC_VOLATILE output, uint16_t capacity, uint8_t * SDCC_VOLATILE written,
+    const ccm_star_limits_t * SDCC_VOLATILE limits, ccm_star_info_t * SDCC_VOLATILE info)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_CHILD_CCM,key,16,0) || !LW_IO(LW_CHILD_CCM,nonce,13,0) ||
@@ -148,7 +151,7 @@ ccm_star_result_t ccm_star_crypt(
     if (!child_work_enter(CW_CCM)) return CCM_STAR_ARGUMENT;
 #endif
 
-    volatile uint8_t size, total;
+    SDCC_VOLATILE uint8_t size, total;
     uint8_t i, different = 0;
     ccm_star_result_t result = CCM_STAR_AES;
     if (open > 1 || key == NULL || nonce == NULL || output == NULL ||

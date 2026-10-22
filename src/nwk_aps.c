@@ -2,8 +2,18 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "nwk_aps_internal.h"
+#include "sdcc_volatile.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_RX_DIAG)
+#include "cc2530_rx_diag.h"
+#endif
+#if defined(__clang__)
+#define MCS51_PARAM_VOLATILE
+#else
+#define MCS51_PARAM_VOLATILE volatile
+#endif
+
 
 MCU_XDATA security_keys_status_t nwk_aps_keys;
 /* The active-MAC step returns before transmit construction. Receive parsing
@@ -17,7 +27,7 @@ static uint8_t reached(uint32_t now, uint32_t until)
     return (uint32_t)(now-until) < MAC_TX_HALF;
 }
 
-static nwk_aps_result_t advance(nwk_aps_t * volatile ctx, volatile uint32_t now)
+static nwk_aps_result_t advance(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
@@ -28,8 +38,8 @@ static nwk_aps_result_t advance(nwk_aps_t * volatile ctx, volatile uint32_t now)
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, NWK_APS_TX_T * volatile owner,
-    const nwk_aps_config_t * volatile config, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_init(nwk_aps_t * SDCC_VOLATILE ctx, NWK_APS_TX_T * SDCC_VOLATILE owner,
+    const nwk_aps_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -53,7 +63,7 @@ nwk_aps_result_t nwk_aps_init(nwk_aps_t * volatile ctx, NWK_APS_TX_T * volatile 
     return NWK_APS_OK;
 }
 
-static nwk_aps_result_t reserve(nwk_aps_t * volatile ctx, volatile uint32_t now, volatile uint8_t aps)
+static nwk_aps_result_t reserve(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now, SDCC_VOLATILE uint8_t aps)
 {
     nwk_aps_result_t result = advance(ctx, now);
     if (result) return result;
@@ -65,7 +75,7 @@ static nwk_aps_result_t reserve(nwk_aps_t * volatile ctx, volatile uint32_t now,
     return NWK_APS_OK;
 }
 
-static void allocated(nwk_aps_t * volatile ctx, volatile uint32_t now, volatile uint8_t aps)
+static void allocated(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now, SDCC_VOLATILE uint8_t aps)
 {
     if (aps) {
         ctx->outgoing.aps.counter = ctx->next_aps++;
@@ -75,8 +85,8 @@ static void allocated(nwk_aps_t * volatile ctx, volatile uint32_t now, volatile 
     ctx->transaction_until = now+ctx->duplicate_time;
 }
 
-nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * volatile packet,
-                               volatile uint8_t aps_secure, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_queue(nwk_aps_t * SDCC_VOLATILE ctx, const ed_packet_t * SDCC_VOLATILE packet,
+                               SDCC_VOLATILE uint8_t aps_secure, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -98,7 +108,7 @@ nwk_aps_result_t nwk_aps_queue(nwk_aps_t * volatile ctx, const ed_packet_t * vol
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t which, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -114,9 +124,9 @@ nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * volatile ctx, volatile uint8_t
     return NWK_APS_OK;
 }
 
-void nwk_aps_complete(nwk_aps_t * volatile ctx, volatile uint8_t result)
+void nwk_aps_complete(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t result)
 {
-    ed_packet_t * volatile p = &ctx->outgoing;
+    ed_packet_t * SDCC_VOLATILE p = &ctx->outgoing;
     ctx->queued = ctx->waiting = 0; ctx->completed = 1; ctx->result = result;
     ctx->cancel = ctx->cancel_sent = 0;
     if (result || ctx->special || p->nwk.type || p->aps.type || p->aps.profile_id ||
@@ -136,23 +146,23 @@ void nwk_aps_complete(nwk_aps_t * volatile ctx, volatile uint8_t result)
     }
 }
 
-nwk_aps_result_t nwk_aps_broadcast_slot(nwk_aps_t * volatile ctx, volatile uint16_t source, volatile uint8_t sequence,
-                                      volatile uint32_t now, uint8_t * volatile slot)
+nwk_aps_result_t nwk_aps_broadcast_slot(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint16_t source, SDCC_VOLATILE uint8_t sequence,
+                                      SDCC_VOLATILE uint32_t now, uint8_t * SDCC_VOLATILE slot)
 {
     uint8_t i;
     *slot = NWK_APS_DUPLICATES;
     for (i = 0; i < NWK_APS_DUPLICATES; i++) {
-        nwk_aps_duplicate_t * volatile entry = &ctx->broadcast[i];
+        nwk_aps_duplicate_t * SDCC_VOLATILE entry = &ctx->broadcast[i];
         if (!entry->used || reached(now, entry->until)) *slot = i;
         else if (entry->source == source && entry->counter == sequence) return NWK_APS_DUPLICATE;
     }
     return *slot == NWK_APS_DUPLICATES ? NWK_APS_FULL : NWK_APS_OK;
 }
 
-void nwk_aps_broadcast_put(nwk_aps_t * volatile ctx, volatile uint8_t slot, volatile uint16_t source,
-    volatile uint8_t sequence, volatile uint32_t now)
+void nwk_aps_broadcast_put(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t slot, SDCC_VOLATILE uint16_t source,
+    SDCC_VOLATILE uint8_t sequence, SDCC_VOLATILE uint32_t now)
 {
-    nwk_aps_duplicate_t * volatile entry = &ctx->broadcast[slot];
+    nwk_aps_duplicate_t * SDCC_VOLATILE entry = &ctx->broadcast[slot];
     entry->used = 1; entry->source = source; entry->counter = sequence;
     entry->until = now+ctx->broadcast_time;
 }
@@ -172,7 +182,7 @@ static void arm(nwk_aps_t *ctx, NWK_APS_ACTION_T *action)
     action->control.until = ctx->owner->engine.deadline;
 }
 
-nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
+nwk_aps_result_t nwk_aps_armed(nwk_aps_t * SDCC_VOLATILE ctx, uint32_t generation,
     uint8_t retry, uint8_t nb)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -189,7 +199,7 @@ nwk_aps_result_t nwk_aps_armed(nwk_aps_t * volatile ctx, uint32_t generation,
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
+nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * SDCC_VOLATILE ctx, uint32_t generation,
     uint8_t retry, uint8_t nb)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -207,8 +217,8 @@ nwk_aps_result_t nwk_aps_disarmed(nwk_aps_t * volatile ctx, uint32_t generation,
 }
 #endif
 
-nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
-    const NWK_APS_EVENT_T * volatile event, NWK_APS_ACTION_T * volatile action)
+nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
+    const NWK_APS_EVENT_T * MCS51_PARAM_VOLATILE event, NWK_APS_ACTION_T * MCS51_PARAM_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -270,6 +280,16 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
         }
 #endif
         outcome = NWK_APS_ENGINE(ctx->owner)->outcome;
+#if defined(CC2530_RX_DIAG)
+        if (outcome != MAC_TX_ACKED && outcome != MAC_TX_UNACKNOWLEDGED &&
+            !ctx->cancel && !ctx->stopping && !RX_DIAG.tx_valid) {
+            RX_DIAG.tx_valid = 1;
+            RX_DIAG.tx_outcome = outcome;
+            RX_DIAG.tx_retries = NWK_APS_ENGINE(ctx->owner)->retries;
+            RX_DIAG.tx_nb = NWK_APS_ENGINE(ctx->owner)->nb;
+            RX_DIAG.tx_special = ctx->active_ack ? 0x80u : ctx->special;
+        }
+#endif
         if (NWK_APS_RELEASE(ctx->owner) != MAC_TX_OK) return NWK_APS_RADIO;
         ctx->active = 0;
 #if defined(CC2530_MAC_LINK)
@@ -319,9 +339,9 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * volatile ctx, volatile uint32_t now,
     return NWK_APS_OK;
 }
 
-static uint8_t acknowledgment_matches(nwk_aps_t * volatile ctx, const ed_packet_t * volatile p)
+static uint8_t acknowledgment_matches(nwk_aps_t * SDCC_VOLATILE ctx, const ed_packet_t * SDCC_VOLATILE p)
 {
-    const ed_packet_t * volatile sent = &ctx->outgoing;
+    const ed_packet_t * SDCC_VOLATILE sent = &ctx->outgoing;
     return ctx->queued && ctx->sent && !ctx->special && !sent->nwk.type &&
         !ctx->cancel && !reached(ctx->last, ctx->transaction_until) &&
         (sent->aps.flags & APS_FLAG_ACK_REQUEST) && p->nwk.source == sent->nwk.destination &&
@@ -333,9 +353,9 @@ static uint8_t acknowledgment_matches(nwk_aps_t * volatile ctx, const ed_packet_
         (!ctx->waiting || !reached(ctx->last, ctx->deadline));
 }
 
-static void acknowledgment(nwk_aps_t * volatile ctx, const ed_packet_t * volatile p, volatile uint8_t secured)
+static void acknowledgment(nwk_aps_t * SDCC_VOLATILE ctx, const ed_packet_t * SDCC_VOLATILE p, SDCC_VOLATILE uint8_t secured)
 {
-    ed_packet_t * volatile a = &ctx->acknowledgment;
+    ed_packet_t * SDCC_VOLATILE a = &ctx->acknowledgment;
     memset(a, 0, sizeof(*a));
     a->nwk.version = 2; a->nwk.destination = p->nwk.source;
     a->nwk.radius = 30; a->nwk.discover_route = NWK_DISCOVER_ROUTE_ENABLE;
@@ -350,8 +370,8 @@ static void acknowledgment(nwk_aps_t * volatile ctx, const ed_packet_t * volatil
     ctx->reply = 1; ctx->reply_secure = secured;
 }
 
-nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volatile npdu,
-    volatile uint16_t length, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uint8_t * MCS51_PARAM_VOLATILE npdu,
+    MCS51_PARAM_VOLATILE uint16_t length, MCS51_PARAM_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -359,8 +379,13 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
 #endif
     nwk_aps_result_t result;
     security_keys_result_t accepted;
-    uint8_t event, i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0, slot = 0, oldest = 0;
-    ed_packet_t * volatile p;
+    MCU_ESCAPED_LOCAL uint8_t event;
+    uint8_t i, free_slot = NWK_APS_DUPLICATES, duplicate = 0, kind, counter, broadcast = 0;
+    MCU_ESCAPED_LOCAL uint8_t slot;
+    uint8_t oldest;
+    slot = 0;
+    oldest = 0;
+    ed_packet_t * MCS51_PARAM_VOLATILE p;
     if (!npdu) return NWK_APS_ARGUMENT;
     result = advance(ctx, now);
     if (result) return result;
@@ -425,7 +450,7 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * volatile ctx, const uint8_t * volat
     kind = p->nwk.type ? 4u : p->aps.type;
     counter = p->nwk.type ? p->nwk.sequence : p->aps.counter;
     for (i = 0; i < NWK_APS_DUPLICATES; i++) {
-        nwk_aps_duplicate_t * volatile entry = &ctx->duplicate[i];
+        nwk_aps_duplicate_t * SDCC_VOLATILE entry = &ctx->duplicate[i];
         if (entry->used && reached(now, entry->until)) entry->used = 0;
         if (!entry->used) free_slot = i;
         else {
@@ -454,7 +479,7 @@ discard:
     return result;
 }
 
-nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile packet, uint8_t * volatile event)
+nwk_aps_result_t nwk_aps_take(nwk_aps_t * SDCC_VOLATILE ctx, ed_packet_t * SDCC_VOLATILE packet, uint8_t * SDCC_VOLATILE event)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, packet, sizeof(*packet), 1) ||
@@ -467,7 +492,7 @@ nwk_aps_result_t nwk_aps_take(nwk_aps_t * volatile ctx, ed_packet_t * volatile p
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile result)
+nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * SDCC_VOLATILE ctx, uint8_t * SDCC_VOLATILE result)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, result, 1, 1)) return NWK_APS_ARGUMENT;
@@ -478,7 +503,7 @@ nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * volatile ctx, uint8_t * volatile re
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -490,7 +515,7 @@ nwk_aps_result_t nwk_aps_cancel(nwk_aps_t * volatile ctx, volatile uint32_t now)
     return NWK_APS_OK;
 }
 
-nwk_aps_result_t nwk_aps_stop(nwk_aps_t * volatile ctx, volatile uint32_t now)
+nwk_aps_result_t nwk_aps_stop(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);

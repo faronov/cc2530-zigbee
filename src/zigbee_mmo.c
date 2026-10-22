@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zigbee_mmo.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #include "mac_link_child_workspace_internal.h"
@@ -40,7 +41,9 @@ static uint8_t compress(void)
     uint8_t i;
     state.info.blocks++;
     state.info.aes_status = (uint8_t)aes128_encrypt_block(
-        state.hash, state.block, state.cipher, state.timeout, state.poll_limit, &state.diagnostics);
+        (const MCU_GENERIC uint8_t *)state.hash,
+        (const MCU_GENERIC uint8_t *)state.block, state.cipher, state.timeout,
+        state.poll_limit, &state.diagnostics);
     account();
     if (state.info.aes_status != AES_OK)
         return 0;
@@ -58,11 +61,11 @@ static void wipe(void)
 }
 
 zigbee_mmo_result_t zigbee_mmo_hash(
-    const uint8_t * volatile input, uint16_t length, uint8_t * volatile output,
-    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info)
+    const uint8_t * SDCC_VOLATILE input, uint16_t length, uint8_t * SDCC_VOLATILE output,
+    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
-    if (!LW_IO(LW_CHILD_MMO,input,*(volatile uint16_t *)&length,0) || !LW_IO(LW_CHILD_MMO,output,16,1) ||
+    if (!LW_IO(LW_CHILD_MMO,input,*(SDCC_VOLATILE uint16_t *)&length,0) || !LW_IO(LW_CHILD_MMO,output,16,1) ||
         !LW_IO(LW_CHILD_MMO,info,sizeof(*info),1)) return ZIGBEE_MMO_ARGUMENT;
 #endif
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
@@ -113,8 +116,8 @@ done:
 #define zigbee_mmo_hash(...) CW_CALL(CW_MMO,zigbee_mmo_hash(__VA_ARGS__))
 #endif
 zigbee_mmo_result_t install_code_derive(
-    const uint8_t * volatile code, uint16_t length, uint8_t * volatile output,
-    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * volatile info)
+    const uint8_t * SDCC_VOLATILE code, uint16_t length, uint8_t * SDCC_VOLATILE output,
+    uint32_t timeout, uint16_t poll_limit, zigbee_mmo_info_t * SDCC_VOLATILE info)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_CHILD_INSTALL,code,length,0) || !LW_IO(LW_CHILD_INSTALL,output,16,1) ||

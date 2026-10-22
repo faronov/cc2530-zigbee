@@ -138,7 +138,14 @@ static void put(void)
 
 static void restore(uint8_t entry)
 {
+#if defined(CC2530_CLANG)
+    /* LLVM: memcpy() takes default-space (XDATA) pointers; read CODE explicitly. */
+    uint8_t i, *out = (uint8_t *)reporting(entry);
+    const MCU_CODE uint8_t *in = (const MCU_CODE uint8_t *)defaults[entry];
+    for (i = 0; i < sizeof(defaults[0]); i++) out[i] = in[i];
+#else
     memcpy(reporting(entry), defaults[entry], sizeof(defaults[0]));
+#endif
 }
 
 /* Server response addressed to the request source. */

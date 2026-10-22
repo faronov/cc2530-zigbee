@@ -4,6 +4,7 @@
 #ifndef MAC_POLL_H
 #define MAC_POLL_H
 #include "mac_link_ram.h"
+#include "sdcc_volatile.h"
 #include "mac_tx.h"
 #if defined(CC2530_MAC_LINK)
 #include "mac_link.h"
@@ -183,26 +184,26 @@ typedef struct {
     mac_poll_record_t record;
 } mac_poll_t;
 
-mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * volatile poll);
-mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * volatile poll,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx,
-    const mac_poll_request_t MAC_POLL_RAM * volatile request, uint32_t volatile now);
-mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * volatile poll,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
-    const mac_poll_event_t MAC_POLL_RAM * volatile event,
-    mac_poll_action_t MAC_POLL_RAM * volatile action);
+mac_poll_result_t mac_poll_init(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll);
+mac_poll_result_t mac_poll_start(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx,
+    const mac_poll_request_t MAC_POLL_RAM * SDCC_VOLATILE request, uint32_t SDCC_VOLATILE now);
+mac_poll_result_t mac_poll_step(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx, uint32_t SDCC_VOLATILE now,
+    const mac_poll_event_t MAC_POLL_RAM * SDCC_VOLATILE event,
+    mac_poll_action_t MAC_POLL_RAM * SDCC_VOLATILE action);
 /* Per-call profile, not stored in the context. Only an R22 Association
  * Response may use broadcast destination PAN, with actual selected source PAN.
  * The legacy step always uses IEEE2006; all lease/timing/ACK duties are intact.
  */
-mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * volatile poll,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx, uint32_t volatile now,
-    const mac_poll_event_t MAC_POLL_RAM * volatile event,
-    mac_poll_action_t MAC_POLL_RAM * volatile action, uint8_t volatile profile);
-mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * volatile poll,
-    mac_poll_record_t MAC_POLL_RAM * volatile record);
-mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * volatile poll,
-    MAC_POLL_OWNER_T MAC_POLL_RAM * volatile tx);
+mac_poll_result_t mac_poll_step_rx(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx, uint32_t SDCC_VOLATILE now,
+    const mac_poll_event_t MAC_POLL_RAM * SDCC_VOLATILE event,
+    mac_poll_action_t MAC_POLL_RAM * SDCC_VOLATILE action, uint8_t SDCC_VOLATILE profile);
+mac_poll_result_t mac_poll_take(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
+    mac_poll_record_t MAC_POLL_RAM * SDCC_VOLATILE record);
+mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
+    MAC_POLL_OWNER_T MAC_POLL_RAM * SDCC_VOLATILE tx);
 
 /* Fresh memory init is never radio recovery. All API errors are atomic. */
 #if defined(CC2530_MAC_LINK)

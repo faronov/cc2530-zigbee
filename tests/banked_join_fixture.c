@@ -9,9 +9,15 @@
 #error This caller requires the complete join placement profile
 #endif
 
+#if defined(__SDCC)
 __sfr __at(0xa8) fixture_ien0;
 __sfr __at(0xb8) fixture_ien1;
 __sfr __at(0x9a) fixture_ien2;
+#else
+#define fixture_ien0 (*(volatile __sfr uint8_t *)0xa8)
+#define fixture_ien1 (*(volatile __sfr uint8_t *)0xb8)
+#define fixture_ien2 (*(volatile __sfr uint8_t *)0x9a)
+#endif
 
 typedef union {
     bdb_join_config_t config;
@@ -51,7 +57,8 @@ MCU_XDATA uint16_t fixture_length;
 MCU_XDATA uint8_t fixture_command, fixture_arg, fixture_written;
 MCU_XDATA MCU_AT(0x1e00) fixture_status_t fixture_status;
 
-typedef char full_context_size[sizeof(bdb_join_t) == 1677 ? 1 : -1];
+#if defined(__SDCC)
+typedef char full_context_size[sizeof(bdb_join_t) == 1676 ? 1 : -1];
 typedef char full_phase_size[sizeof(bdb_join_work_t) == 1290 ? 1 : -1];
 typedef char shadow_binding[
     offsetof(bdb_join_t, work.association.context) == 0 &&
@@ -59,19 +66,29 @@ typedef char shadow_binding[
     sizeof(fixture_device.work.association.staged) == 645 ? 1 : -1];
 typedef char status_extent[sizeof(fixture_status_t) == 64 ? 1 : -1];
 typedef char input_extent[sizeof(fixture_input_t) == 180 ? 1 : -1];
+#elif defined(CC2530_CLANG)
+typedef char clang_staged_offset[
+    offsetof(bdb_join_t, work.association.staged) == 645 ? 1 : -1];
+typedef char clang_staged_size[
+    sizeof(fixture_device.work.association.staged) == 645 ? 1 : -1];
+#endif
 
 void main(void)
 {
+#if defined(__SDCC)
     __asm
         .globl _mac_join_staged
         _mac_join_staged = _fixture_device + 0x285
     __endasm;
+#endif
     fixture_ien0 = fixture_ien1 = fixture_ien2 = 0;
     for (;;) {
+#if defined(__SDCC)
         __asm
             .globl _banked_join_before
             _banked_join_before = .
         __endasm;
+#endif
         if (fixture_command == 0)
             fixture_status.result = security_keys_open();
         else if (fixture_command == 1)
@@ -110,10 +127,12 @@ void main(void)
         else
             fixture_status.result = 255;
         fixture_status.metadata_result = security_keys_status(&fixture_status.metadata);
+#if defined(__SDCC)
         __asm
             .globl _banked_join_after
             _banked_join_after = .
             nop
         __endasm;
+#endif
     }
 }

@@ -5,6 +5,7 @@
 #define ZDO_SRV_H
 
 #include "aps_frame.h"
+#include "sdcc_volatile.h"
 #include "zdo_node.h"
 
 #define ZDO_SRV_DEVICE_ANNCE 0x0013u
@@ -97,10 +98,10 @@ typedef struct {
  * Truthful disjoint CODE/RAM objects; exclude MMIO/status/alias/compiler scratch.
  * Serialized foreground only, nonreentrant; no retained pointers, heap or I/O.
  */
-zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * volatile local,
-                               const zdo_srv_rx_t * volatile rx,
-                               const uint8_t * volatile body, uint16_t length,
-                               uint8_t * volatile response, uint16_t capacity,
-                               zdo_srv_info_t * volatile info) JOIN_FAR;
+zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
+                               const zdo_srv_rx_t * SDCC_VOLATILE rx,
+                               const uint8_t * SDCC_VOLATILE body, uint16_t length,
+                               uint8_t * SDCC_VOLATILE response, uint16_t capacity,
+                               zdo_srv_info_t * SDCC_VOLATILE info) JOIN_FAR;
 
 #endif

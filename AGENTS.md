@@ -1,7 +1,10 @@
 # Project working guide
 
-The current implementation is a non-networking CC2530 bootstrap. The intended
-stack is C/SDCC with one end-device role, awake first and sleepy later.
+The supported firmware compiler is pinned LLVM Clang MCS51 with LLD. The
+project contains a bootstrap and an awake end-device stack; support and
+qualification claims remain bounded by the recorded image/simulator evidence.
+SDCC is not a firmware compiler or fallback. Its source archive is retained
+only for the independent s51/uCsim reference simulator.
 
 Read `docs/PLAN.md`, `docs/ARCHITECTURE.md` and `docs/PROVENANCE.md` before
 changing scope. Keep README support claims consistent with actual code.
@@ -27,7 +30,7 @@ Repository profiles live in `.github/agents`:
 
 - `zigbee-stack`: bounded MAC/NWK/APS/ZDO/ZCL and security/commissioning work,
   with specification-revision and conformance checks.
-- `cc2530-platform`: chip services, SDCC/memory ABI, debugger and hardware
+- `cc2530-platform`: chip services, LLVM MCS51/memory ABI, debugger and hardware
   evidence boundaries.
 
 See [usage and scope](CONTRIBUTING.md#specialist-copilot-agents). Use a specialist

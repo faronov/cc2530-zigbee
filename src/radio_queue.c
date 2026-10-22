@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "radio_queue.h"
 #include "irq.h"
 #include "timebase.h"
@@ -95,7 +96,7 @@ radio_queue_result_t radio_queue_service(uint8_t channel, uint32_t timeout, uint
     return RADIO_QUEUE_OK;
 }
 
-radio_queue_result_t radio_queue_rx_read(radio_rx_frame_t MCU_XDATA * volatile output)
+radio_queue_result_t radio_queue_rx_read(radio_rx_frame_t MCU_XDATA * SDCC_VOLATILE output)
 {
     uint8_t i, slot, length;
     if (output == NULL) return RADIO_QUEUE_INVALID_ARGUMENT;
@@ -113,7 +114,7 @@ radio_queue_result_t radio_queue_rx_read(radio_rx_frame_t MCU_XDATA * volatile o
     return RADIO_QUEUE_OK;
 }
 
-radio_queue_result_t radio_queue_tx_submit(const uint8_t MCU_XDATA * volatile body, uint8_t length)
+radio_queue_result_t radio_queue_tx_submit(const uint8_t MCU_XDATA * SDCC_VOLATILE body, uint8_t length)
 {
     uint8_t i;
     if (radio_queue_fault) return (radio_queue_result_t)radio_queue_fault;
@@ -127,7 +128,7 @@ radio_queue_result_t radio_queue_tx_submit(const uint8_t MCU_XDATA * volatile bo
     return RADIO_QUEUE_OK;
 }
 
-radio_queue_result_t radio_queue_tx_read(radio_queue_tx_frame_t MCU_XDATA * volatile output)
+radio_queue_result_t radio_queue_tx_read(radio_queue_tx_frame_t MCU_XDATA * SDCC_VOLATILE output)
 {
     uint8_t i, length;
     if (output == NULL) return RADIO_QUEUE_INVALID_ARGUMENT;
@@ -165,7 +166,7 @@ radio_queue_result_t radio_queue_cancel_requests(void)
     return result;
 }
 
-radio_queue_result_t radio_queue_snapshot(radio_queue_status_t MCU_XDATA * volatile output)
+radio_queue_result_t radio_queue_snapshot(radio_queue_status_t MCU_XDATA * SDCC_VOLATILE output)
 {
     uint8_t i;
     irq_state_t token;

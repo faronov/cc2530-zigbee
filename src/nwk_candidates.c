@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "nwk_candidates.h"
 #include "mac_frame.h"
 
@@ -16,13 +17,13 @@ static uint8_t valid_mask(uint32_t mask)
     return mask != 0u && (mask & ~NWK_CANDIDATES_CHANNEL_MASK) == 0u;
 }
 
-static uint8_t valid_table(const nwk_candidates_t * volatile table)
+static uint8_t valid_table(const nwk_candidates_t * SDCC_VOLATILE table)
 {
     return table->version == NWK_CANDIDATES_VERSION
         && table->count <= NWK_CANDIDATES_CAPACITY && valid_mask(table->channel_mask);
 }
 
-nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * volatile table,
+nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * SDCC_VOLATILE table,
                                             uint32_t channel_mask)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -36,8 +37,8 @@ nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * volatile table,
     return NWK_CANDIDATES_OK;
 }
 
-static uint8_t same_identity(const nwk_candidate_t * volatile a,
-                             const nwk_candidate_t * volatile b)
+static uint8_t same_identity(const nwk_candidate_t * SDCC_VOLATILE a,
+                             const nwk_candidate_t * SDCC_VOLATILE b)
 {
     return a->channel == b->channel && a->pan_id == b->pan_id
         && a->address_mode == b->address_mode
@@ -45,9 +46,9 @@ static uint8_t same_identity(const nwk_candidate_t * volatile a,
         && memcmp(a->network.extended_pan_id, b->network.extended_pan_id, 8) == 0;
 }
 
-nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile table,
+nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE table,
                                                 uint8_t channel, uint8_t crc_valid,
-                                                const uint8_t * volatile body,
+                                                const uint8_t * SDCC_VOLATILE body,
                                                 uint16_t length)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -65,7 +66,7 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile tabl
     nwk_candidate_t candidate;
 #endif
     uint8_t eligible;
-    volatile uint8_t i;
+    SDCC_VOLATILE uint8_t i;
 
     if (table == NULL || body == NULL || channel < 11u || channel > 26u
             || crc_valid > 1u)
@@ -129,9 +130,9 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * volatile tabl
 #undef beacon
 #undef candidate
 
-nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * volatile table,
+nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * SDCC_VOLATILE table,
                                            uint8_t index,
-                                           nwk_candidate_t * volatile result)
+                                           nwk_candidate_t * SDCC_VOLATILE result)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, table, sizeof(*table), 0) ||

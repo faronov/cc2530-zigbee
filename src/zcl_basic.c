@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "zcl_basic.h"
 
 #include <stddef.h>
@@ -21,8 +22,8 @@ static const BASIC_CODE uint8_t types[ZCL_BASIC_ATTRIBUTE_COUNT] = {
     ZCL_TYPE_ENUM8, ZCL_TYPE_CHARACTER_STRING, ZCL_TYPE_UINT16
 };
 
-zcl_codec_result_t zcl_basic_init(zcl_basic_t * volatile model,
-                                  const zcl_basic_config_t * volatile config)
+zcl_codec_result_t zcl_basic_init(zcl_basic_t * SDCC_VOLATILE model,
+                                  const zcl_basic_config_t * SDCC_VOLATILE config)
 {
     uint8_t i;
     if (model == NULL || config == NULL)

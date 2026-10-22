@@ -1,0 +1,394 @@
+/* DERIVED by derive_up_ld.py from the frozen SDCC-order profile for current upstream section names */
+/* CC2530 root-bank memory map for firmware that fits the common flash area.
+ * CODE and XDATA have independent address buses, so their VMAs overlap. */
+ENTRY(reset)
+
+MEMORY
+{
+  CODE      (rx) : ORIGIN = 0x0000, LENGTH = 0x8000
+  XRAM      (rw) : ORIGIN = 0x0000, LENGTH = 0x2000
+  DATA_RAM  (rw) : ORIGIN = 0x0000, LENGTH = 0x0100
+  BIT_RAM   (rw) : ORIGIN = 0x0000, LENGTH = 0x0080
+  XREG      (rw) : ORIGIN = 0x6000, LENGTH = 0x0400
+  SFR_XDATA (rw) : ORIGIN = 0x7080, LENGTH = 0x0080
+  INFO_PAGE (r)  : ORIGIN = 0x7800, LENGTH = 0x0800
+  XDATA_BANK(r)  : ORIGIN = 0x8000, LENGTH = 0x8000
+}
+
+/* XDATA aliases for registers and the upper 256 bytes of the SRAM. */
+__cc2530_data_alias_start = 0x1f00;
+__cc2530_data_alias_end = 0x2000;
+__cc2530_static_data_start = 0x48;
+__cc2530_static_data_end = 0x80;
+__cc2530_xreg_start = ORIGIN(XREG);
+__cc2530_xreg_end = ORIGIN(XREG) + LENGTH(XREG);
+__cc2530_sfr_xdata_start = ORIGIN(SFR_XDATA);
+__cc2530_sfr_xdata_end = ORIGIN(SFR_XDATA) + LENGTH(SFR_XDATA);
+__cc2530_info_start = ORIGIN(INFO_PAGE);
+__cc2530_info_end = ORIGIN(INFO_PAGE) + LENGTH(INFO_PAGE);
+__cc2530_xbank_start = ORIGIN(XDATA_BANK);
+__cc2530_xbank_end = ORIGIN(XDATA_BANK) + LENGTH(XDATA_BANK);
+
+SECTIONS
+{
+  .vectors 0x0000 : { KEEP(*(.vectors)) } > CODE
+
+  .mcs51_vector_0 0x0003 : { KEEP(*(.mcs51.vector.0)) } > CODE
+  .mcs51_vector_1 0x000b : { KEEP(*(.mcs51.vector.1)) } > CODE
+  .mcs51_vector_2 0x0013 : { KEEP(*(.mcs51.vector.2)) } > CODE
+  .mcs51_vector_3 0x001b : { KEEP(*(.mcs51.vector.3)) } > CODE
+  .mcs51_vector_4 0x0023 : { KEEP(*(.mcs51.vector.4)) } > CODE
+  .mcs51_vector_5 0x002b : { KEEP(*(.mcs51.vector.5)) } > CODE
+  .mcs51_vector_6 0x0033 : { KEEP(*(.mcs51.vector.6)) } > CODE
+  .mcs51_vector_7 0x003b : { KEEP(*(.mcs51.vector.7)) } > CODE
+  .mcs51_vector_8 0x0043 : { KEEP(*(.mcs51.vector.8)) } > CODE
+  .mcs51_vector_9 0x004b : { KEEP(*(.mcs51.vector.9)) } > CODE
+  .mcs51_vector_10 0x0053 : { KEEP(*(.mcs51.vector.10)) } > CODE
+  .mcs51_vector_11 0x005b : { KEEP(*(.mcs51.vector.11)) } > CODE
+  .mcs51_vector_12 0x0063 : { KEEP(*(.mcs51.vector.12)) } > CODE
+  .mcs51_vector_13 0x006b : { KEEP(*(.mcs51.vector.13)) } > CODE
+  .mcs51_vector_14 0x0073 : { KEEP(*(.mcs51.vector.14)) } > CODE
+  .mcs51_vector_15 0x007b : { KEEP(*(.mcs51.vector.15)) } > CODE
+  .mcs51_vector_16 0x0083 : { KEEP(*(.mcs51.vector.16)) } > CODE
+  .mcs51_vector_17 0x008b : { KEEP(*(.mcs51.vector.17)) } > CODE
+
+  /* CC2530 vector slots occupy 0x0003 through 0x008d (18 vectors). */
+  .text 0x0094 :
+  {
+    *(.mcs51.common .mcs51.common.*)
+    *(.text .text.*)
+    *(.rodata .rodata.*)
+    *(.mcs51.code.rodata .mcs51.code.rodata.*)
+  } > CODE
+
+  /* PDATA uses an 8-bit offset in the XDATA page selected by MPAGE. Startup
+     leaves the reset-selected page zero active and initializes this page. */
+  .mcs51_pdata 0 :
+  {
+    __mcs51_pdata_start = .;
+    *(.mcs51.pdata)
+    __mcs51_pdata_end = .;
+  } > XRAM AT> CODE
+  __mcs51_pdata_load = LOADADDR(.mcs51_pdata);
+  .mcs51_pdata_bss (NOLOAD) :
+  {
+    *(.mcs51.pdata.bss)
+    __mcs51_pdata_bss_end = .;
+  } > XRAM
+
+  /*
+   * Banked code executes at the same 0x8000-0xffff CPU address range, but
+   * each output section has a distinct physical flash load address. Put code
+   * in these banks with input sections such as .bank1.text and .bank2.rodata.
+   * Cross-bank direct calls use root-bank trampolines.
+   */
+  .bank1 0x8000 : AT(0x08000)
+  {
+    __cc2530_bank1_start = .; *(.bank1 .bank1.*) __cc2530_bank1_end = .;
+  } > XDATA_BANK
+  .bank2 0x8000 : AT(0x10000)
+  {
+    __cc2530_bank2_start = .; *(.bank2 .bank2.*) __cc2530_bank2_end = .;
+  } > XDATA_BANK
+  .bank3 0x8000 : AT(0x18000)
+  {
+    __cc2530_bank3_start = .; *(.bank3 .bank3.*) __cc2530_bank3_end = .;
+  } > XDATA_BANK
+  .bank4 0x8000 : AT(0x20000)
+  {
+    __cc2530_bank4_start = .; *(.bank4 .bank4.*) __cc2530_bank4_end = .;
+  } > XDATA_BANK
+  .bank5 0x8000 : AT(0x28000)
+  {
+    __cc2530_bank5_start = .; *(.bank5 .bank5.*) __cc2530_bank5_end = .;
+  } > XDATA_BANK
+  .bank6 0x8000 : AT(0x30000)
+  {
+    __cc2530_bank6_start = .; *(.bank6 .bank6.*) __cc2530_bank6_end = .;
+  } > XDATA_BANK
+  .bank7 0x8000 : AT(0x38000)
+  {
+    __cc2530_bank7_start = .; *(.bank7 .bank7.*) __cc2530_bank7_end = .;
+  } > XDATA_BANK
+
+  /* Initial values are stored in flash and copied to XDATA by reset startup. */
+  .data :
+  {
+    __mcs51_data_start = .;
+    *(.data .data.*)
+    *(.mcs51.xdata.init .mcs51.xdata.init.*)
+    __mcs51_data_end = .;
+  } > XRAM AT> CODE
+  __mcs51_data_load = LOADADDR(.data);
+  .bss (NOLOAD) : {
+    */mac_link_workspace.o(.bss.ownership .mcs51.xdata.bss.ownership)
+    */mac_link_workspace.o(.bss.link_work_arena .mcs51.xdata.bss.link_work_arena)
+    */mac_link_child_workspace.o(.bss.owner .mcs51.xdata.bss.owner)
+    */mac_link_child_workspace.o(.bss.child_work_arena .mcs51.xdata.bss.child_work_arena)
+    */mac_link_child_workspace.o(.bss.child_work_reserved_end .mcs51.xdata.bss.child_work_reserved_end)
+    */flash_exec.o(.bss.flash_exec_work .mcs51.xdata.bss.flash_exec_work)
+    */flash_exec.o(.bss.flash_exec_ram .mcs51.xdata.bss.flash_exec_ram)
+    */flash_exec.o(.bss.mapping .mcs51.xdata.bss.mapping)
+    */flash_exec.o(.bss.clock_command .mcs51.xdata.bss.clock_command)
+    */flash_exec.o(.bss.cache_mode .mcs51.xdata.bss.cache_mode)
+    */flash_exec.o(.bss.flash_exec_reserved_end .mcs51.xdata.bss.flash_exec_reserved_end)
+    */clock.o(.bss.output .mcs51.xdata.bss.output)
+    */clock.o(.bss.observed.0 .mcs51.xdata.bss.observed.0)
+    */clock.o(.bss.observed.1 .mcs51.xdata.bss.observed.1)
+    */clock.o(.bss.observed.2 .mcs51.xdata.bss.observed.2)
+    */clock.o(.bss.observed.3 .mcs51.xdata.bss.observed.3)
+    */clock.o(.bss.count.0 .mcs51.xdata.bss.count.0)
+    */clock.o(.bss.count.1 .mcs51.xdata.bss.count.1)
+    */clock.o(.bss.count.2 .mcs51.xdata.bss.count.2)
+    */clock.o(.bss.rollback .mcs51.xdata.bss.rollback)
+    */clock.o(.bss.work .mcs51.xdata.bss.work)
+    */flash.o(.bss.flash_fault .mcs51.xdata.bss.flash_fault)
+    */flash.o(.bss.saved_bank .mcs51.xdata.bss.saved_bank)
+    */flash.o(.bss.saved_clock .mcs51.xdata.bss.saved_clock)
+    */flash.o(.bss.saved_cache .mcs51.xdata.bss.saved_cache)
+    */flash.o(.bss.flash_reserved_end .mcs51.xdata.bss.flash_reserved_end)
+    */flash_write.o(.bss.flash_write_status .mcs51.xdata.bss.flash_write_status)
+    */flash_write.o(.bss.flash_write_known .mcs51.xdata.bss.flash_write_known)
+    */flash_write.o(.bss.flash_write_used .mcs51.xdata.bss.flash_write_used)
+    */flash_write.o(.bss.flash_write_reserved_end .mcs51.xdata.bss.flash_write_reserved_end)
+    */nv_record.o(.bss.nv_record_fault .mcs51.xdata.bss.nv_record_fault)
+    */nv_record.o(.bss.nv_record_diagnostic .mcs51.xdata.bss.nv_record_diagnostic)
+    */nv_record.o(.bss.nv_record_reserved_end .mcs51.xdata.bss.nv_record_reserved_end)
+    */security_counter.o(.bss.security_counter_diagnostic .mcs51.xdata.bss.security_counter_diagnostic)
+    */security_counter.o(.bss.security_counter_blob .mcs51.xdata.bss.security_counter_blob)
+    */security_counter.o(.bss.security_counter_reserved_end .mcs51.xdata.bss.security_counter_reserved_end)
+    */aes.o(.bss.aes_dma0 .mcs51.xdata.bss.aes_dma0)
+    */aes.o(.bss.aes_dma1 .mcs51.xdata.bss.aes_dma1)
+    */aes.o(.bss.aes_key .mcs51.xdata.bss.aes_key)
+    */aes.o(.bss.aes_iv .mcs51.xdata.bss.aes_iv)
+    */aes.o(.bss.aes_input .mcs51.xdata.bss.aes_input)
+    */aes.o(.bss.aes_output .mcs51.xdata.bss.aes_output)
+    */aes.o(.bss.aes_fault .mcs51.xdata.bss.aes_fault)
+    */aes.o(.bss.aes_used .mcs51.xdata.bss.aes_used)
+    */aes.o(.bss.w .mcs51.xdata.bss.w)
+    */aes.o(.bss.aes_reserved_end .mcs51.xdata.bss.aes_reserved_end)
+    */mac_time.o(.bss.mac_time_fault .mcs51.xdata.bss.mac_time_fault)
+    */mac_time.o(.bss.mac_time_ready .mcs51.xdata.bss.mac_time_ready)
+    */mac_time.o(.bss.saved_clock .mcs51.xdata.bss.saved_clock)
+    */mac_time.o(.bss.status .mcs51.xdata.bss.status)
+    */mac_time.o(.bss.staged .mcs51.xdata.bss.staged)
+    */mac_time.o(.bss.fast .mcs51.xdata.bss.fast)
+    */mac_time.o(.bss.work .mcs51.xdata.bss.work)
+    */mac_time.o(.bss.mac_time_attempt_active .mcs51.xdata.bss.mac_time_attempt_active)
+    */mac_time.o(.bss.mac_time_reserved_end .mcs51.xdata.bss.mac_time_reserved_end)
+    */radio_autoack.o(.bss.radio_autoack_state .mcs51.xdata.bss.radio_autoack_state)
+    */radio_autoack.o(.bss.radio_autoack_fault .mcs51.xdata.bss.radio_autoack_fault)
+    */radio_autoack.o(.bss.owned .mcs51.xdata.bss.owned)
+    */radio_autoack.o(.bss.staged .mcs51.xdata.bss.staged)
+    */radio_autoack.o(.bss.status .mcs51.xdata.bss.status)
+    */radio_autoack.o(.bss.work .mcs51.xdata.bss.work)
+    */radio_autoack.o(.bss.attempt_epoch .mcs51.xdata.bss.attempt_epoch)
+    */radio_autoack.o(.bss.attempt_delta .mcs51.xdata.bss.attempt_delta)
+    */radio_autoack.o(.bss.attempt_output .mcs51.xdata.bss.attempt_output)
+    */radio_autoack.o(.bss.attempt.0 .mcs51.xdata.bss.attempt.0)
+    */radio_autoack.o(.bss.attempt.1 .mcs51.xdata.bss.attempt.1)
+    */radio_autoack.o(.bss.attempt.2 .mcs51.xdata.bss.attempt.2)
+    */radio_autoack.o(.bss.attempt.3 .mcs51.xdata.bss.attempt.3)
+    */radio_autoack.o(.bss.attempt.4 .mcs51.xdata.bss.attempt.4)
+    */radio_autoack.o(.bss.radio_autoack_reserved_end .mcs51.xdata.bss.radio_autoack_reserved_end)
+    */mac_radio.o(.bss.mac_radio_shared_end .mcs51.xdata.bss.mac_radio_shared_end)
+    */mac_radio.o(.bss.mac_radio_raw .mcs51.xdata.bss.mac_radio_raw)
+    */mac_radio.o(.bss.mac_radio_epoch .mcs51.xdata.bss.mac_radio_epoch)
+    */mac_radio.o(.bss.mac_radio_live .mcs51.xdata.bss.mac_radio_live)
+    */mac_radio.o(.bss.mac_radio_config .mcs51.xdata.bss.mac_radio_config)
+    */mac_radio.o(.bss.status .mcs51.xdata.bss.status)
+    */mac_radio.o(.bss.clock_status .mcs51.xdata.bss.clock_status)
+    */mac_radio.o(.bss.attempt_output .mcs51.xdata.bss.attempt_output)
+    */mac_radio.o(.bss.attempt_first .mcs51.xdata.bss.attempt_first)
+    */mac_radio.o(.bss.mac_radio_handoff_clock .mcs51.xdata.bss.mac_radio_handoff_clock)
+    */mac_radio.o(.bss.mac_radio_reserved_end .mcs51.xdata.bss.mac_radio_reserved_end)
+    */mac_attempt.o(.bss.mac_attempt_raw .mcs51.xdata.bss.mac_attempt_raw)
+    */mac_attempt.o(.bss.staged .mcs51.xdata.bss.staged)
+    */mac_attempt.o(.bss.mac_attempt_first .mcs51.xdata.bss.mac_attempt_first)
+    */mac_attempt.o(.bss.mac_attempt_slot .mcs51.xdata.bss.mac_attempt_slot)
+    */mac_attempt.o(.bss.mac_attempt_fault .mcs51.xdata.bss.mac_attempt_fault)
+    */mac_attempt.o(.bss.length .mcs51.xdata.bss.length)
+    */mac_attempt.o(.bss.failed_status .mcs51.xdata.bss.failed_status)
+    */mac_attempt.o(.bss.receipt_output .mcs51.xdata.bss.receipt_output)
+    */mac_attempt.o(.bss.last_result .mcs51.xdata.bss.last_result)
+    */mac_attempt.o(.bss.duration .mcs51.xdata.bss.duration)
+    */mac_attempt.o(.bss.mac_attempt_reserved_end .mcs51.xdata.bss.mac_attempt_reserved_end)
+    */mac_frame.o(.bss.command_parse.candidate .mcs51.xdata.bss.command_parse.candidate)
+    */mac_frame.o(.bss.mac_frame_decode_profile.destination_size .mcs51.xdata.bss.mac_frame_decode_profile.destination_size)
+    */mac_frame.o(.bss.mac_frame_decode_profile.source_size .mcs51.xdata.bss.mac_frame_decode_profile.source_size)
+    */mac_frame.o(.bss.mac_frame_decode_profile.header_size .mcs51.xdata.bss.mac_frame_decode_profile.header_size)
+    */mac_frame.o(.bss.mac_frame_encode.destination_size .mcs51.xdata.bss.mac_frame_encode.destination_size)
+    */mac_frame.o(.bss.mac_frame_encode.source_size .mcs51.xdata.bss.mac_frame_encode.source_size)
+    */mac_frame.o(.bss.mac_frame_encode.header_size .mcs51.xdata.bss.mac_frame_encode.header_size)
+    */mac_frame.o(.bss.command_header_policy.command .mcs51.xdata.bss.command_header_policy.command)
+    */mac_tx.o(.bss.mac_tx_step.normalized .mcs51.xdata.bss.mac_tx_step.normalized)
+    */mac_tx.o(.bss.lent.0 .mcs51.xdata.bss.lent.0)
+    */mac_tx.o(.bss.lent.1 .mcs51.xdata.bss.lent.1)
+    */mac_adapter.o(.bss.status .mcs51.xdata.bss.status)
+    */mac_adapter.o(.bss.observation .mcs51.xdata.bss.observation)
+    */mac_adapter.o(.bss.mac_adapter_receipt .mcs51.xdata.bss.mac_adapter_receipt)
+    */mac_adapter.o(.bss.mac_adapter_live .mcs51.xdata.bss.mac_adapter_live)
+    */mac_adapter.o(.bss.began .mcs51.xdata.bss.began)
+    */mac_adapter.o(.bss.through .mcs51.xdata.bss.through)
+    */mac_adapter.o(.bss.retired .mcs51.xdata.bss.retired)
+    */mac_adapter.o(.bss.settled .mcs51.xdata.bss.settled)
+    */mac_adapter.o(.bss.requested .mcs51.xdata.bss.requested)
+    */mac_adapter.o(.bss.owner .mcs51.xdata.bss.owner)
+    */mac_adapter.o(.bss.mac_adapter_reserved_end .mcs51.xdata.bss.mac_adapter_reserved_end)
+    */nwk_frame.o(.bss.nwk_frame_decode.size .mcs51.xdata.bss.nwk_frame_decode.size)
+    */nwk_frame.o(.bss.nwk_frame_encode.size .mcs51.xdata.bss.nwk_frame_encode.size)
+    */ed_wire.o(.bss.ed_wire_encode.total .mcs51.xdata.bss.ed_wire_encode.total)
+    */ed_wire.o(.bss.ed_wire_encode.encoded_length .mcs51.xdata.bss.ed_wire_encode.encoded_length)
+    */ed_wire.o(.bss.inspect.h .mcs51.xdata.bss.inspect.h)
+    */security_keys.o(.bss.security_keys_phase .mcs51.xdata.bss.security_keys_phase)
+    */security_keys.o(.bss.security_keys_result .mcs51.xdata.bss.security_keys_result)
+    */security_keys.o(.bss.floor_cache .mcs51.xdata.bss.floor_cache)
+    */security_keys.o(.bss.phase_cache .mcs51.xdata.bss.phase_cache)
+    */mac_association.o(.bss.mac_association_step_rx.command .mcs51.xdata.bss.mac_association_step_rx.command)
+    */mac_poll.o(.bss.mac_poll_start.command .mcs51.xdata.bss.mac_poll_start.command)
+    */zdo_node.o(.bss.zdo_node_req_decode.candidate .mcs51.xdata.bss.zdo_node_req_decode.candidate)
+    */zdo_srv.o(.bss.zdo_srv_handle.request .mcs51.xdata.bss.zdo_srv_handle.request)
+    */zdo_srv.o(.bss.zdo_srv_handle.size .mcs51.xdata.bss.zdo_srv_handle.size)
+    */nwk_aps.o(.bss.nwk_aps_keys .mcs51.xdata.bss.nwk_aps_keys)
+    */nwk_aps.o(.bss.nwk_aps_receive.event .mcs51.xdata.bss.nwk_aps_receive.event)
+    */nwk_aps.o(.bss.nwk_aps_receive.slot .mcs51.xdata.bss.nwk_aps_receive.slot)
+    */nwk_aps_direct.o(.bss.nwk_aps_transmit.slot .mcs51.xdata.bss.nwk_aps_transmit.slot)
+    */zdo_runtime.o(.bss.zdo_runtime_init.length .mcs51.xdata.bss.zdo_runtime_init.length)
+    */zdo_runtime.o(.bss.received.event .mcs51.xdata.bss.received.event)
+    */zdo_runtime.o(.bss.zdo_runtime_step.result .mcs51.xdata.bss.zdo_runtime_step.result)
+    */bdb_join.o(.bss.work .mcs51.xdata.bss.work)
+    */bdb_join.o(.bss.runtime.which .mcs51.xdata.bss.runtime.which)
+    */bdb_join.o(.bss.runtime.result .mcs51.xdata.bss.runtime.result)
+    */bdb_join.o(.bss.bdb_join_step.outcome .mcs51.xdata.bss.bdb_join_step.outcome)
+    */bdb_join.o(.bss.bdb_join_step.which .mcs51.xdata.bss.bdb_join_step.which)
+    */join_smoke.o(.bss.join_smoke_device .mcs51.xdata.bss.join_smoke_device)
+    */join_smoke.o(.bss.join_smoke_tx .mcs51.xdata.bss.join_smoke_tx)
+    */join_smoke.o(.bss.join_smoke_phase .mcs51.xdata.bss.join_smoke_phase)
+    */join_smoke.o(.bss.join_smoke_initial .mcs51.xdata.bss.join_smoke_initial)
+    */join_smoke.o(.bss.join_smoke_clock .mcs51.xdata.bss.join_smoke_clock)
+    */join_smoke.o(.bss.join_smoke_draws .mcs51.xdata.bss.join_smoke_draws)
+    */join_smoke.o(.bss.join_smoke_mailbox .mcs51.xdata.bss.join_smoke_mailbox)
+    */join_smoke.o(.bss.initialized .mcs51.xdata.bss.initialized)
+    */join_smoke.o(.bss.gate .mcs51.xdata.bss.gate)
+    */join_smoke.o(.bss.scratch .mcs51.xdata.bss.scratch)
+    */join_smoke.o(.bss.admission .mcs51.xdata.bss.admission)
+    */join_smoke.o(.bss.started .mcs51.xdata.bss.started)
+    */join_smoke.o(.bss.previous .mcs51.xdata.bss.previous)
+    */join_smoke.o(.bss.now .mcs51.xdata.bss.now)
+    */join_smoke.o(.bss.elapsed .mcs51.xdata.bss.elapsed)
+    */join_smoke.o(.bss.steps .mcs51.xdata.bss.steps)
+    */join_smoke.o(.bss.diagnostic .mcs51.xdata.bss.diagnostic)
+    */join_smoke.o(.bss.observation .mcs51.xdata.bss.observation)
+    *(.bss .bss.*)
+    *(.mcs51.xdata.bss .mcs51.xdata.bss.*)
+    *(COMMON)
+  } > XRAM
+
+  /* Address-space 1 and 2 globals occupy the CPU DATA alias of XRAM. */
+  .mcs51_data1 __cc2530_static_data_start :
+  {
+    __mcs51_data1_start = .;
+    *(.mcs51.data1)
+    __mcs51_data1_end = .;
+  } > DATA_RAM AT> CODE
+  __mcs51_data1_xdata_start = ADDR(.mcs51_data1) + __cc2530_data_alias_start;
+  __mcs51_data1_xdata_end = ADDR(.mcs51_data1) + SIZEOF(.mcs51_data1) +
+                            __cc2530_data_alias_start;
+  __mcs51_data1_load = LOADADDR(.mcs51_data1);
+  .mcs51_bss1 (NOLOAD) :
+  {
+    *(.mcs51.data1.bss)
+    __mcs51_data1_bss_end = .;
+  } > DATA_RAM
+
+  .mcs51_data2 :
+  {
+    __mcs51_data2_start = .;
+    *(.mcs51.data2)
+    __mcs51_data2_end = .;
+  } > DATA_RAM AT> CODE
+  __mcs51_data2_xdata_start = ADDR(.mcs51_data2) + __cc2530_data_alias_start;
+  __mcs51_data2_xdata_end = ADDR(.mcs51_data2) + SIZEOF(.mcs51_data2) +
+                            __cc2530_data_alias_start;
+  __mcs51_data2_load = LOADADDR(.mcs51_data2);
+  .mcs51_bss2 (NOLOAD) :
+  {
+    *(.mcs51.data2.bss)
+    __mcs51_data2_bss_end = .;
+  } > DATA_RAM
+
+  /* The bit address space uses 8-bit bit addresses, independently of DATA. */
+  .mcs51_bit 0 :
+  {
+    __mcs51_bit_start = .;
+    *(.mcs51.bit)
+    __mcs51_bit_end = .;
+  } > BIT_RAM AT> CODE
+  __mcs51_bit_load = LOADADDR(.mcs51_bit);
+  .mcs51_bit_bss (NOLOAD) :
+  {
+    *(.mcs51.bit.bss)
+    __mcs51_bit_bss_end = .;
+  } > BIT_RAM
+}
+
+/* The upper 256 bytes of SRAM are also the CPU's DATA/IDATA address window. */
+ASSERT(ADDR(.data) + SIZEOF(.data) <= __cc2530_data_alias_start,
+       "CC2530 .data overlaps the DATA-space SRAM alias")
+ASSERT(ADDR(.bss) + SIZEOF(.bss) <= __cc2530_data_alias_start,
+       "CC2530 .bss overlaps the DATA-space SRAM alias")
+ASSERT(__mcs51_pdata_bss_end <= 0x100,
+       "CC2530 PDATA globals exceed the MPAGE zero page")
+ASSERT(__mcs51_data1_bss_end <= __cc2530_static_data_end,
+       "CC2530 DATA globals exceed directly addressable internal RAM")
+ASSERT(__mcs51_data2_bss_end <= __cc2530_static_data_end,
+       "CC2530 DATA/IDATA globals overlap the hardware stack")
+ASSERT(__mcs51_bit_bss_end <= LENGTH(BIT_RAM),
+       "CC2530 bit globals exceed the bit-addressable DATA area")
+ASSERT(ADDR(.text) + SIZEOF(.text) <= 0x8000,
+       "CC2530 common code exceeds the 32-KiB root bank")
+ASSERT(SIZEOF(.mcs51_vector_0) <= 3,
+       "CC2530 interrupt vector 0 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_1) <= 3,
+       "CC2530 interrupt vector 1 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_2) <= 3,
+       "CC2530 interrupt vector 2 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_3) <= 3,
+       "CC2530 interrupt vector 3 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_4) <= 3,
+       "CC2530 interrupt vector 4 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_5) <= 3,
+       "CC2530 interrupt vector 5 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_6) <= 3,
+       "CC2530 interrupt vector 6 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_7) <= 3,
+       "CC2530 interrupt vector 7 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_8) <= 3,
+       "CC2530 interrupt vector 8 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_9) <= 3,
+       "CC2530 interrupt vector 9 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_10) <= 3,
+       "CC2530 interrupt vector 10 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_11) <= 3,
+       "CC2530 interrupt vector 11 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_12) <= 3,
+       "CC2530 interrupt vector 12 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_13) <= 3,
+       "CC2530 interrupt vector 13 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_14) <= 3,
+       "CC2530 interrupt vector 14 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_15) <= 3,
+       "CC2530 interrupt vector 15 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_16) <= 3,
+       "CC2530 interrupt vector 16 has multiple handlers")
+ASSERT(SIZEOF(.mcs51_vector_17) <= 3,
+       "CC2530 interrupt vector 17 has multiple handlers")
+ASSERT(SIZEOF(.bank1) <= LENGTH(XDATA_BANK), "CC2530 bank 1 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank2) <= LENGTH(XDATA_BANK), "CC2530 bank 2 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank3) <= LENGTH(XDATA_BANK), "CC2530 bank 3 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank4) <= LENGTH(XDATA_BANK), "CC2530 bank 4 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank5) <= LENGTH(XDATA_BANK), "CC2530 bank 5 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank6) <= LENGTH(XDATA_BANK), "CC2530 bank 6 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank7) <= LENGTH(XDATA_BANK), "CC2530 bank 7 exceeds 32 KiB")
+ASSERT(SIZEOF(.bank7) == 0 || 0x38000 + SIZEOF(.bank7) <= 0x40000,
+       "CC2530 banked image exceeds 256-KiB flash")

@@ -4,6 +4,7 @@
 #ifndef MAC_LINK_CHILD_WORKSPACE_GUARD_INTERNAL_H
 #define MAC_LINK_CHILD_WORKSPACE_GUARD_INTERNAL_H
 #include "mac_link_ram.h"
+#include "sdcc_volatile.h"
 #include "cc2530_mmio.h"
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
@@ -27,7 +28,7 @@ typedef uintptr_t child_address_t;
  * Admission is checked before entry; a failed nested admission leaves the
  * parent's pending grant for its exact CW_CALL result boundary to consume. */
 uint8_t child_work_enter(uint8_t frame);
-uint8_t child_work_return(uint16_t volatile pair);
+uint8_t child_work_return(uint16_t SDCC_VOLATILE pair);
 uint8_t child_work_grant(uint8_t frame);
 uint8_t child_work_end(uint8_t frame, uint8_t result);
 uint8_t child_work_leaf(uint8_t frame);
@@ -36,8 +37,8 @@ uint8_t child_work_poisoned(void);
 uint8_t child_work_phase(void);
 /* 0 deny, 1 exact CHILD loan, 2 ordinary non-CHILD span. Called only after
  * the UPPER guard classifies the generic pointer's address space/range. */
-uint8_t child_work_address(uint8_t op, child_address_t volatile address,
-                          uint16_t volatile size, uint8_t writing);
+uint8_t child_work_address(uint8_t op, child_address_t SDCC_VOLATILE address,
+                          uint16_t SDCC_VOLATILE size, uint8_t writing);
 uint8_t child_work_inside(const void *p, uint16_t size);
 uint8_t child_work_disjoint(const void *a, uint16_t an, const void *b, uint16_t bn);
 #if defined(CC2530_HOST_TEST)
@@ -51,7 +52,7 @@ uint8_t child_work_clean(void);
  * carries these values across admission calls in extra saved registers;
  * adding volatile to the public definition alone causes error98.
  * Only named parameters, never caller spans or arena fields, belong here. */
-#define CW_READ_HOME(type,home) (*(type volatile *)&(home))
+#define CW_READ_HOME(type,home) (*(type SDCC_VOLATILE *)&(home))
 #else
 #define CW_RETURN(f,r) (r)
 #define CW_CALL(f,e) (e)

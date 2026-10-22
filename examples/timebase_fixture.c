@@ -3,6 +3,22 @@
  */
 #include "timebase_fixture.h"
 
+#if defined(CC2530_CLANG)
+__attribute__((naked)) void timebase_fixture_before_sample(void)
+{
+    __asm__ volatile("nop\nret");
+}
+
+__attribute__((naked)) void timebase_fixture_ready_stop(void)
+{
+    __asm__ volatile("nop\nret");
+}
+
+__attribute__((naked)) void timebase_fixture_fault_stop(void)
+{
+    __asm__ volatile("nop\nsjmp timebase_fixture_fault_stop");
+}
+#else
 void timebase_fixture_before_sample(void) __naked
 {
     __asm
@@ -26,6 +42,7 @@ void timebase_fixture_fault_stop(void) __naked
         sjmp _timebase_fixture_fault_stop
     __endasm;
 }
+#endif
 
 void main(void)
 {

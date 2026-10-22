@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
+#include "sdcc_volatile.h"
 #include "mac_tx.h"
 
 #include <stddef.h>
@@ -60,7 +61,7 @@ typedef char action_control_first[offsetof(mac_tx_interval_action_t, control) ==
 #else
 #define ACTION_CONTROL(p) ((p)->control)
 static TX_RAM control_t control;
-static TX_RAM volatile struct {
+static TX_RAM SDCC_VOLATILE struct {
     uint32_t now, lifetime;
     uint16_t length, limit;
 } input;
@@ -81,7 +82,7 @@ static uint8_t reached(uint32_t now, uint32_t at)
     return (uint32_t)(now - at) < MAC_TX_HALF;
 }
 
-mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t now)
+mac_tx_result_t mac_tx_init(mac_tx_t * SDCC_VOLATILE tx, uint8_t random_dsn, uint32_t now)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, tx, sizeof(*tx), 1)) return MAC_TX_INVALID;
@@ -95,8 +96,8 @@ mac_tx_result_t mac_tx_init(mac_tx_t * volatile tx, uint8_t random_dsn, uint32_t
     return MAC_TX_OK;
 }
 
-mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
-                              const uint8_t * volatile body, uint16_t length,
+mac_tx_result_t mac_tx_submit(mac_tx_t * SDCC_VOLATILE tx,
+                              const uint8_t * SDCC_VOLATILE body, uint16_t length,
                               uint32_t now, uint32_t lifetime, uint16_t work_limit)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
@@ -107,7 +108,7 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     mac_frame_info_t decoded;
 #endif
-    volatile uint8_t command;
+    SDCC_VOLATILE uint8_t command;
 
     input.now = now;
     input.lifetime = lifetime;
@@ -179,16 +180,16 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * volatile tx,
     return LW_RETURN(LW_TX_SUBMIT, MAC_TX_OK);
 }
 
-mac_tx_result_t mac_tx_copy(const mac_tx_t * volatile tx,
-                            uint8_t * volatile body, uint16_t capacity,
-                            uint8_t * volatile length)
+mac_tx_result_t mac_tx_copy(const mac_tx_t * SDCC_VOLATILE tx,
+                            uint8_t * SDCC_VOLATILE body, uint16_t capacity,
+                            uint8_t * SDCC_VOLATILE length)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     if (!LW_IO(LW_NONE, tx, sizeof(*tx), 0) ||
         !LW_IO(LW_NONE, body, capacity, 1) ||
         !LW_IO(LW_NONE, length, 1, 1)) return MAC_TX_INVALID;
 #endif
-    TX_RAM volatile uint8_t size;
+    TX_RAM SDCC_VOLATILE uint8_t size;
 
     if (tx == NULL || body == NULL || length == NULL)
         return MAC_TX_INVALID;
@@ -244,9 +245,9 @@ static uint8_t no_ack(void)
     return stop(MAC_TX_NO_ACK);
 }
 
-mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
-                            const mac_tx_event_t * volatile event,
-                            mac_tx_action_t * volatile action)
+mac_tx_result_t mac_tx_step(mac_tx_t * SDCC_VOLATILE tx, uint32_t now,
+                            const mac_tx_event_t * SDCC_VOLATILE event,
+                            mac_tx_action_t * SDCC_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_TX_STEP, MAC_TX_INVALID);
@@ -257,7 +258,7 @@ mac_tx_result_t mac_tx_step(mac_tx_t * volatile tx, uint32_t now,
     uint8_t emitted = MAC_TX_ACTION_NONE;
     uint8_t kind = 0;
     uint8_t phase;
-    uint8_t normalized[3];
+    MCU_ESCAPED_LOCAL uint8_t normalized[3];
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     mac_frame_info_t decoded;
 #endif
@@ -534,8 +535,8 @@ mac_tx_result_t mac_tx_interval_release(mac_tx_interval_t *tx)
     return tx == NULL ? MAC_TX_INVALID : mac_tx_release(&tx->engine);
 }
 
-mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * volatile tx, uint32_t now,
-    const mac_tx_interval_event_t * volatile event, mac_tx_interval_action_t * volatile action)
+mac_tx_result_t mac_tx_interval_step(mac_tx_interval_t * SDCC_VOLATILE tx, uint32_t now,
+    const mac_tx_interval_event_t * SDCC_VOLATILE event, mac_tx_interval_action_t * SDCC_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_TX_INTERVAL, MAC_TX_INVALID);
@@ -679,13 +680,13 @@ interval_done:
 #else
 static TX_RAM uint32_t observed_previous;
 static TX_RAM uint8_t observed_phase;
-static const mac_epoch_stamp_t * volatile TX_RAM observed_lower;
-static const mac_epoch_stamp_t * volatile TX_RAM observed_upper;
+static const mac_epoch_stamp_t * SDCC_VOLATILE TX_RAM observed_lower;
+static const mac_epoch_stamp_t * SDCC_VOLATILE TX_RAM observed_upper;
 #endif
 
-mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * volatile tx, uint32_t now,
-    const mac_tx_interval_event_t * volatile event,
-    mac_tx_interval_action_t * volatile action)
+mac_tx_result_t mac_tx_observed_step(mac_tx_interval_t * SDCC_VOLATILE tx, uint32_t now,
+    const mac_tx_interval_event_t * SDCC_VOLATILE event,
+    mac_tx_interval_action_t * SDCC_VOLATILE action)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_TX_OBSERVED, MAC_TX_INVALID);

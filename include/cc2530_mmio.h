@@ -5,15 +5,30 @@
 #define CC2530_MMIO_H
 
 #include <stdint.h>
+#include "sdcc_volatile.h"
+
+#if defined(__clang__) && defined(__8051__) && defined(__CC2530__)
+#define CC2530_CLANG 1
+#endif
 
 #if defined(__SDCC)
 #define MCU_XDATA __xdata
 #define MCU_CODE __code
+#define MCU_GENERIC
 #define MCU_AT(address) __at(address)
+#define MCU_COMMON_CODE
+#elif defined(CC2530_CLANG)
+#define MCU_XDATA
+#define MCU_CODE __code
+#define MCU_GENERIC __generic
+#define MCU_AT(address)
+#define MCU_COMMON_CODE __attribute__((section(".mcs51.common.text")))
 #elif defined(CC2530_HOST_TEST)
 #define MCU_XDATA
 #define MCU_CODE
+#define MCU_GENERIC
 #define MCU_AT(address)
+#define MCU_COMMON_CODE
 #else
 #error Select SDCC for firmware or CC2530_HOST_TEST for host tests
 #endif
@@ -81,7 +96,7 @@ enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
 
 #if defined(__SDCC)
 #define DECLARE_SFR(name, address) __sfr __at(address) name;
-/* SDCC's runtime page-register symbol must select MPAGE, not generic 8051 P2. */
+/* The page-register symbol selects MPAGE, not generic 8051 P2. */
 __sfr __at(0x93) _XPAGE;
 #define MMIO_READ(reg) (reg)
 #define MMIO_XREAD(address) (*(const volatile MCU_XDATA uint8_t *)(address))
@@ -90,9 +105,20 @@ __sfr __at(0x93) _XPAGE;
 } while (0)
 #define MMIO_XADDRESS(object) ((uint16_t)(object))
 #define MMIO_WRITE(reg, value) do { (reg) = (uint8_t)(value); } while (0)
-/* Compound SFR operations preserve unrelated port latch bits on the 8051. */
+/* Compound SFR operations preserve unrelated port latch bits. */
 #define MMIO_CLEAR(reg, mask) do { (reg) &= (uint8_t)~(mask); } while (0)
 #define MMIO_SET(reg, mask) do { (reg) |= (uint8_t)(mask); } while (0)
+#elif defined(CC2530_CLANG)
+#define DECLARE_SFR(name, address)
+#define MMIO_READ(reg) (*(volatile __sfr uint8_t *)(reg##_ADDRESS))
+#define MMIO_XREAD(address) (*(const volatile MCU_XDATA uint8_t *)(address))
+#define MMIO_XWRITE(address, value) do { \
+    *(volatile MCU_XDATA uint8_t *)(address) = (uint8_t)(value); \
+} while (0)
+#define MMIO_XADDRESS(object) ((uint16_t)(object))
+#define MMIO_WRITE(reg, value) do { MMIO_READ(reg) = (uint8_t)(value); } while (0)
+#define MMIO_CLEAR(reg, mask) do { MMIO_READ(reg) &= (uint8_t)~(mask); } while (0)
+#define MMIO_SET(reg, mask) do { MMIO_READ(reg) |= (uint8_t)(mask); } while (0)
 #else
 #define DECLARE_SFR(name, address) extern volatile uint8_t name;
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address);

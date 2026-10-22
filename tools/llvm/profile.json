@@ -1,0 +1,41 @@
+{
+  "name": "llvm-mcs51-cc2530-dev",
+  "status": "LLVM-only development compiler candidate; UNIFY-01 FULL NOT RUN",
+  "abi_flags": "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args",
+  "sf_flags": "-mllvm -mcs51-static-frames",
+  "compiler_tools": ["clang", "ld.lld", "llvm-objcopy", "llvm-ar", "llvm-objdump"],
+  "compiler_sources": [
+    "llvm/lib/Target/MCS51/mcs51-runtime.c",
+    "llvm/lib/Target/MCS51/cc2530_startup.s",
+    "llvm/lib/Target/MCS51/cc2530.ld",
+    "llvm/lib/Target/MCS51/test/mcs51-flat-sim.ld",
+    "llvm/lib/Target/MCS51/verify-generic-pointer-runtime.sh",
+    "llvm/lib/Target/MCS51/verify-arith32-runtime.sh",
+    "llvm/lib/Target/MCS51/verify-div64-runtime.sh"
+  ],
+  "lit": {
+    "paths": ["llvm/test/CodeGen/8051", "llvm/test/MC/MCS51", "lld/test/ELF", "clang/test/MCS51"],
+    "filter": "8051|MCS51|mcs51",
+    "known_failures": {
+      "ELF/mcs51-address-space-overlap.s": "pre-existing upstream failure at 80b61955e (pure upstream build fails identically); excluded visibly, never silently"
+    }
+  },
+  "admission": {
+    "stack_capacity": 128,
+    "object_count": 45
+  },
+  "reference": {
+    "note": "frozen hardware-tested profile a3c9a84a4 / reconciled 2feda4a48; informational deltas only, not expectations",
+    "code": 213132,
+    "common": 18711,
+    "stack_demand": 106,
+    "simulator_peak_stack_bytes": 101
+  },
+  "simulator": {
+    "terminals": {"0": "serving", "1": "fault", "2": "fault", "3": "fault", "4": "fault", "5": "fault",
+                  "6": "fault", "8": "fault", "9": "fault", "10": "flash-ram-stop"},
+    "smoke_cases": [2, 3, 4, 9],
+    "smoke_prefix": {"case": 0, "limit": 3},
+    "full_cases": [0, 10, 8, 6, 1, 5, 9, 4, 2, 3]
+  }
+}

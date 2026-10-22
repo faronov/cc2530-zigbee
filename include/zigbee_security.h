@@ -5,6 +5,7 @@
 #define ZIGBEE_SECURITY_H
 
 #include "ccm_star.h"
+#include "sdcc_volatile.h"
 
 #define ZIGBEE_SECURITY_NWK 0u
 #define ZIGBEE_SECURITY_APS 1u
@@ -44,8 +45,8 @@ typedef struct {
  * APS Command header. No command payload processing or ACK engine.
  */
 zigbee_security_result_t zigbee_security_inspect(
-    uint8_t layer, uint8_t level, const uint8_t * volatile frame, uint16_t length,
-    zigbee_security_meta_t * volatile meta);
+    uint8_t layer, uint8_t level, const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+    zigbee_security_meta_t * SDCC_VOLATILE meta);
 
 /* open=0 adds protection to an unsecured NPDU/APDU; open=1 verifies/removes
  * the auxiliary header/MIC and clears the security flag in a normalized copy
@@ -71,9 +72,9 @@ zigbee_security_result_t zigbee_security_inspect(
  * retry, secret diagnostics, key-state/replay mutation, radio or membership.
  */
 zigbee_security_result_t zigbee_security_crypt(
-    volatile uint8_t open, volatile uint8_t layer, const zigbee_security_key_t * volatile key,
-    const uint8_t * volatile frame, uint16_t length,
-    uint8_t * volatile output, uint16_t capacity,
-    zigbee_security_info_t * volatile info);
+    SDCC_VOLATILE uint8_t open, SDCC_VOLATILE uint8_t layer, const zigbee_security_key_t * SDCC_VOLATILE key,
+    const uint8_t * SDCC_VOLATILE frame, uint16_t length,
+    uint8_t * SDCC_VOLATILE output, uint16_t capacity,
+    zigbee_security_info_t * SDCC_VOLATILE info);
 
 #endif
