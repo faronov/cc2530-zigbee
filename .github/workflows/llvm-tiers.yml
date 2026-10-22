@@ -32,7 +32,7 @@ on:
         default: faronov/llvm-project
       llvm_ref:
         description: LLVM-MCS51 branch, tag or commit
-        default: 41d87abda2eaec8c30be1c92097002f015499683
+        default: ac1712447bf906daddba44f79e586173a045aa1f
       firmware_repository:
         description: Firmware source repository
         default: faronov/cc2530-zigbee
@@ -107,7 +107,7 @@ jobs:
           TIER: ${{ inputs.tier || (github.event_name == 'pull_request' && 'smoke' || 'fast') }}
           VARIANT: ${{ inputs.variant || 'production' }}
           LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
-          LLVM_REF: ${{ inputs.llvm_ref || '41d87abda2eaec8c30be1c92097002f015499683' }}
+          LLVM_REF: ${{ inputs.llvm_ref || 'ac1712447bf906daddba44f79e586173a045aa1f' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.event.pull_request.head.sha || github.sha }}
         run: |
@@ -210,11 +210,14 @@ jobs:
         working-directory: fw
         run: |
           make firmware LLVM_TOOLS="$GITHUB_WORKSPACE/llvm-build/bin" \
+            LLVM_REVISION="${{ steps.ids.outputs.llvm_sha }}" \
             LLVM_SRC="$GITHUB_WORKSPACE/llvm" LLVM_VARIANT="${{ steps.select.outputs.variant }}" \
             BUILD=build/ci-standard
           make firmware BOARD=generic IMAGE=bringup \
+            LLVM_REVISION="${{ steps.ids.outputs.llvm_sha }}" \
             LLVM_TOOLS="$GITHUB_WORKSPACE/llvm-build/bin" LLVM_SRC="$GITHUB_WORKSPACE/llvm"
           make firmware BOARD=generic IMAGE=timebase_fixture \
+            LLVM_REVISION="${{ steps.ids.outputs.llvm_sha }}" \
             LLVM_TOOLS="$GITHUB_WORKSPACE/llvm-build/bin" LLVM_SRC="$GITHUB_WORKSPACE/llvm"
 
       - name: SMOKE

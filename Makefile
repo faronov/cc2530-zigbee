@@ -7,6 +7,7 @@ IMAGE ?= join
 BUILD ?= build/$(BOARD)/$(IMAGE)
 LLVM_TOOLS ?= ../llvm-mcs51-build/bin
 LLVM_SRC ?= ../llvm-project
+LLVM_REVISION ?=
 LLVM_TREE ?=
 LLVM_LIT_EVIDENCE ?=
 LLVM_VARIANT ?= production
@@ -39,7 +40,8 @@ LLVM_TIER = $(PYTHON) -B tools/llvm/tiers.py --tools "$(abspath $(LLVM_TOOLS))" 
 all: firmware
 firmware llvm:
 	$(PYTHON) -B tools/llvm/firmware.py --tools "$(abspath $(LLVM_TOOLS))" --llvm-src "$(abspath $(LLVM_SRC))" \
-		--board "$(BOARD)" --image "$(IMAGE)" --variant "$(LLVM_VARIANT)" --output "$(BUILD)"
+		--board "$(BOARD)" --image "$(IMAGE)" --variant "$(LLVM_VARIANT)" --output "$(BUILD)" \
+		$(if $(LLVM_REVISION),--llvm-revision "$(LLVM_REVISION)")
 test: test-host test-smoke
 test-fast test-llvm-fast:
 	$(LLVM_TIER) --tier fast --output "$(LLVM_TIER_OUT)/fast"

@@ -1,8 +1,10 @@
 # LLVM-MCS51 development: branches, test tiers and evidence
 
 LLVM MCS51 is now the only supported firmware compiler on `main`.
-The default is the development/CI-validated UNIFY-01 commit
-`41d87abda2eaec8c30be1c92097002f015499683`, not a floating branch.
+The default is the development candidate
+`ac1712447bf906daddba44f79e586173a045aa1f`, not a floating branch.
+It adds the exact upstream `eeef1bec` bit-toggle fix and regression to UNIFY-01.
+The historical UNIFY-01 commit remains unchanged.
 **UNIFY-01 FULL NOT RUN; no production release approval is implied.**
 The migration was merged into `main` with owner approval in
 [PR #95](https://github.com/faronov/cc2530-zigbee/pull/95), merge commit
@@ -17,6 +19,14 @@ exact clean source revision and runtime. A mismatched source, binary version,
 receipt seal or artifact hash fails explicitly. Builds write `firmware.elf`,
 physical `firmware.hex` and a compiler/source/path-bound `receipt.json` under
 `BUILD` (default `build/<board>/<image>`).
+Compiler CI may explicitly set `LLVM_REVISION=<full-40-character-SHA>` to test
+a different source commit. This is not automatic selection or a fallback:
+the source must be clean at that exact SHA, the executable version must match,
+and the requested revision is recorded in the receipt. Normal builds retain
+the strict `toolchain.json` default. The reusable workflow passes its resolved
+compiler SHA explicitly, allowing the LLVM caller to use the main workflow.
+Lit also writes `logs/lit-results.json` so individual regressions, including
+`CodeGen/8051/bit-toggle.c`, can be verified rather than inferred from a total.
 The generic board retains LLVM `bringup` and `timebase_fixture`; generic join
 is rejected rather than routed through SDCC.
 Bootstrap `m0_status` uses a real typed XDATA object at `0x1e00`, with its
@@ -329,9 +339,8 @@ The current LLVM-only workflow and compiler default are described above:
 main/temporary llvm-dev pushes run FAST, PRs run FAST plus SMOKE, and FULL
 requires an explicit request. The following record predates the main migration;
 its SDCC production-default and pending-proposal statements are historical,
-not the current build or approval status. The external LLVM caller still uses
-`llvm-tiers.yml@llvm-dev`, so that branch remains necessary until the caller
-can be migrated independently.
+not the current build or approval status. The updated LLVM caller uses the
+main workflow and main firmware; the old llvm-dev reference below is historical.
 
 ### Historical pre-migration record
 

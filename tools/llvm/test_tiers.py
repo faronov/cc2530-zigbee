@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tiers  # noqa: E402
@@ -31,6 +32,14 @@ def names(tier, **extra):
 
 
 class Selection(unittest.TestCase):
+    def test_lit_writes_per_test_results_and_selects_bit_toggle(self):
+        with patch.object(tiers, "configured_source", return_value=Path("/x/src")):
+            steps, _ = names("fast", llvm_build=Path("/x/build"))
+        cmd = steps["lit"].cmd
+        self.assertEqual(cmd[cmd.index("--output") + 1], "/x/out/logs/lit-results.json")
+        self.assertRegex("LLVM :: CodeGen/8051/bit-toggle.c", PROFILE["lit"]["filter"])
+        self.assertNotIn("bit-toggle.c", PROFILE["lit"]["known_failures"])
+
     def test_fast_runs_no_firmware_simulation(self):
         steps, unselected = names("fast")
         self.assertFalse([n for n in steps if n.startswith("sim-") or n == "vectors"])

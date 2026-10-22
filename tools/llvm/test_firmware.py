@@ -12,7 +12,7 @@ import firmware
 class LLVMOnlyBuild(unittest.TestCase):
     def test_pin_and_abi(self):
         pin = json.loads((firmware.HERE / "toolchain.json").read_text())
-        self.assertEqual(pin["revision"], "41d87abda2eaec8c30be1c92097002f015499683")
+        self.assertEqual(pin["revision"], "ac1712447bf906daddba44f79e586173a045aa1f")
         profile = json.loads((firmware.HERE / "profile.json").read_text())
         self.assertEqual(profile["sf_flags"], "-mllvm -mcs51-static-frames")
         self.assertEqual(profile["abi_flags"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args")
@@ -71,10 +71,47 @@ class LLVMOnlyBuild(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "executable version"):
                     firmware.main()
 
+    def test_workflow_defaults_match_the_standard_pin(self):
+        pin = json.loads((firmware.HERE / "toolchain.json").read_text())["revision"]
+        workflow = (firmware.REPO / ".github/workflows/llvm-tiers.yml").read_text()
+        self.assertIn("default: " + pin, workflow)
+        self.assertIn("inputs.llvm_ref || '" + pin + "'", workflow)
+
+    def test_reject_floating_compiler_override_before_tool_inspection(self):
+        for revision in ("main", "ac17124", "a" * 39, "A" * 40):
+            with self.subTest(revision=revision), patch("sys.stderr"), \
+                    patch("sys.argv", ["firmware.py", "--tools", "unused", "--llvm-src", "unused",
+                                       "--output", "build/unused", "--board", "lg_esl29_rev03",
+                                       "--llvm-revision", revision]), \
+                    patch.object(firmware.tiers, "compiler_identity") as inspect:
+                with self.assertRaises(SystemExit) as error:
+                    firmware.main()
+                self.assertEqual(error.exception.code, 2)
+                inspect.assert_not_called()
+
+    def test_explicit_override_still_checks_source_and_executable(self):
+        revision = "a" * 40
+        for compiler, message in (
+                ({"llvm_commit": revision, "llvm_diff": "dirty", "version": revision}, "exact clean"),
+                ({"llvm_commit": "b" * 40, "llvm_diff": None, "version": revision}, "exact clean"),
+                ({"llvm_commit": revision, "llvm_diff": None, "version": "wrong"}, "executable version")):
+            with self.subTest(compiler=compiler), \
+                    patch("sys.argv", ["firmware.py", "--tools", "unused", "--llvm-src", "unused",
+                                       "--output", "build/unused", "--board", "lg_esl29_rev03",
+                                       "--llvm-revision", revision]), \
+                    patch.object(firmware.tiers, "compiler_identity", return_value=compiler):
+                with self.assertRaisesRegex(SystemExit, message):
+                    firmware.main()
+
     def test_sealed_generation_rejects_artifact_tampering(self):
         pin = json.loads((firmware.HERE / "toolchain.json").read_text())["revision"]
-        compiler = {"llvm_commit": pin, "llvm_diff": None, "version": pin}
-        with tempfile.TemporaryDirectory() as directory:
+        for override in (None, "a" * 40):
+            with self.subTest(override=override), tempfile.TemporaryDirectory() as directory:
+                self.check_sealed_generation(directory, override or pin, override)
+
+    def check_sealed_generation(self, directory, revision, override):
+        compiler = {"llvm_commit": revision, "llvm_diff": None, "version": revision}
+        with self.subTest(revision=revision):
             output = Path(directory) / "out"
             def build(argv, **kwargs):
                 if str(argv[1]).endswith("build.sh"):
@@ -85,6 +122,8 @@ class LLVMOnlyBuild(unittest.TestCase):
                     (fw / "audit/hw1.hex").write_bytes(b"test HEX")
             argv = ["firmware.py", "--tools", directory, "--llvm-src", directory,
                     "--output", str(output), "--board", "lg_esl29_rev03"]
+            if override:
+                argv += ["--llvm-revision", override]
             with patch("sys.argv", argv), patch.object(firmware, "run", side_effect=build), \
                     patch.object(firmware.tiers, "compiler_identity", return_value=compiler), \
                     patch.object(firmware.tiers, "firmware_identity", return_value={"commit": "test"}), \
@@ -93,6 +132,7 @@ class LLVMOnlyBuild(unittest.TestCase):
                 firmware.main()
                 firmware.main()
                 receipt = json.loads((output / "receipt.json").read_text())
+                self.assertEqual(receipt["identity"]["expected_llvm_revision"], revision)
                 self.assertEqual(receipt["identity"]["abi"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args")
                 Path(receipt["elf"]).write_bytes(b"changed")
                 with self.assertRaisesRegex(SystemExit, "identity/seal/artifact"):
