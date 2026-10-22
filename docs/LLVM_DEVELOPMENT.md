@@ -1,10 +1,13 @@
 # LLVM-MCS51 development: branches, test tiers and evidence
 
-LLVM MCS51 is now the only supported firmware compiler in this migration.
+LLVM MCS51 is now the only supported firmware compiler on `main`.
 The default is the development/CI-validated UNIFY-01 commit
 `41d87abda2eaec8c30be1c92097002f015499683`, not a floating branch.
 **UNIFY-01 FULL NOT RUN; no production release approval is implied.**
-The merge into `main` requires separate approval.
+The migration was merged into `main` with owner approval in
+[PR #95](https://github.com/faronov/cc2530-zigbee/pull/95), merge commit
+`4beb05c74ba3e7a3f8fa28131bff12883058feff`. This does not grant FULL
+qualification or production release approval.
 
 `make` / `make firmware` uses `tools/llvm/firmware.py`, reusing the existing
 `build.sh`, `audit.sh` and tier admission, with unchanged ABI/static-frame
@@ -321,6 +324,16 @@ Any accelerated simulator is admitted only after a differential proof against th
 Until that proof exists, the reference stays the release oracle.
 
 ## GitHub Actions
+
+The current LLVM-only workflow and compiler default are described above:
+main/temporary llvm-dev pushes run FAST, PRs run FAST plus SMOKE, and FULL
+requires an explicit request. The following record predates the main migration;
+its SDCC production-default and pending-proposal statements are historical,
+not the current build or approval status. The external LLVM caller still uses
+`llvm-tiers.yml@llvm-dev`, so that branch remains necessary until the caller
+can be migrated independently.
+
+### Historical pre-migration record
 
 **UNIFY-01 development compiler pin:** the proposed LLVM workflow default is
 `faronov/llvm-project@41d87abda2eaec8c30be1c92097002f015499683`
