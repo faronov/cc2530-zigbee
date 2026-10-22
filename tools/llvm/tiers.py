@@ -261,7 +261,9 @@ def plan(tier, args, profile):
                           func=compiler_tree(args), timeout=600))
         known = profile["lit"]["known_failures"]
         lit_src = configured_source(args.llvm_build)
-        cmd = [str(Path(args.llvm_build) / "bin/llvm-lit"), "-s", "--filter", profile["lit"]["filter"]]
+        cmd = [str(Path(args.llvm_build) / "bin/llvm-lit"), "-s",
+               "--output", str(out / "logs/lit-results.json"),
+               "--filter", profile["lit"]["filter"]]
         if known:
             cmd += ["--filter-out", "|".join(re.escape(k) for k in known)]
         cmd += [str(lit_src / p) for p in profile["lit"]["paths"]]

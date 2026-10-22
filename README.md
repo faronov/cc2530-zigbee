@@ -7,11 +7,13 @@
 
 An experimental CC2530 Zigbee end-device project, without proprietary TI stack
 libraries. Firmware uses **Clang MCS51, LLD and the runtime from exactly
-`41d87abda2eaec8c30be1c92097002f015499683`** in
-[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/41d87abda2eaec8c30be1c92097002f015499683).
+`ac1712447bf906daddba44f79e586173a045aa1f`** in
+[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/ac1712447bf906daddba44f79e586173a045aa1f).
 The machine-readable pin is [toolchain.json](tools/llvm/toolchain.json).
 SDCC firmware compilation, linker/overlay builds and production CI are retired;
 there is no compiler fallback.
+This is UNIFY-01 plus the exact upstream `eeef1bec` bit-toggle correction and
+its `bit-toggle.c` regression; the frozen UNIFY-01 and M6 revisions are unchanged.
 
 With that clean LLVM source checkout, its built tools, GNU Make, a host C compiler
 and Python with `pyelftools`:
@@ -31,6 +33,9 @@ and `receipt.json`. The receipt binds compiler paths/hashes, exact source
 revisions, flags and admission to the generated artifacts. Existing
 content-addressed generations are reused only after identity, seal and artifact
 verification. Use a fresh `BUILD` to retry an interrupted generation.
+Compiler CI can explicitly set `LLVM_REVISION=<full-40-character-SHA>`; source
+cleanliness and executable identity are still enforced and recorded. Omitting
+that override always requires the machine-readable default pin.
 `generic` keeps its LLVM bootstrap/timebase builds; a generic full-join image
 is explicitly unsupported rather than silently compiled with another compiler.
 

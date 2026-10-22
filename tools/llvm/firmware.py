@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tools", type=Path, required=True)
     parser.add_argument("--llvm-src", type=Path, required=True)
+    parser.add_argument("--llvm-revision", help="explicit full LLVM SHA for compiler CI; default: toolchain.json pin")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--board", choices=("generic", "lg_esl29_rev03"), required=True)
     parser.add_argument("--image", choices=("join", "bringup", "timebase_fixture"), default="join")
@@ -64,16 +66,20 @@ def main():
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
     pin = json.loads((HERE / "toolchain.json").read_text())
     profile = json.loads((HERE / "profile.json").read_text())
+    revision = args.llvm_revision or pin["revision"]
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        parser.error("LLVM revision must be a full lowercase 40-character commit SHA")
     compiler = tiers.compiler_identity(args.tools, args.llvm_src, profile)
-    if compiler["llvm_commit"] != pin["revision"] or compiler["llvm_diff"] is not None:
-        raise SystemExit("standard build requires the exact clean pinned LLVM source revision")
-    if pin["revision"] not in compiler["version"]:
-        raise SystemExit("compiler executable version does not identify the pinned source revision")
+    if compiler["llvm_commit"] != revision or compiler["llvm_diff"] is not None:
+        raise SystemExit("standard build requires the exact clean pinned or explicitly requested LLVM source revision")
+    if revision not in compiler["version"]:
+        raise SystemExit("compiler executable version does not identify the requested source revision")
     if args.image == "join" and args.board != "lg_esl29_rev03":
         raise SystemExit("the admitted join profile is LG-only; generic supports bringup/timebase_fixture")
     if args.image != "join" and args.variant != "production":
         raise SystemExit("rx-diag is supported only by the join image")
     identity = {"compiler": compiler, "firmware": tiers.firmware_identity(REPO),
+                "expected_llvm_revision": revision,
                 "paths": {"tools": str(args.tools), "llvm_src": str(args.llvm_src),
                           **{name: str((args.tools / name).resolve()) for name in profile["compiler_tools"]}},
                 "board": args.board, "image": args.image, "variant": args.variant,

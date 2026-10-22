@@ -1,7 +1,8 @@
 # Открытый Zigbee для CC2530
 
 **Текущая сборка — только LLVM MCS51**, закреплённый commit
-`41d87abda2eaec8c30be1c92097002f015499683`. Команды и пути:
+`ac1712447bf906daddba44f79e586173a045aa1f`. Это UNIFY-01 с upstream-фиксом
+`eeef1bec` для инверсии битов и его regression test; FULL не запускался. Команды и пути:
 [README](README.md#current-build-llvm-mcs51-only). SDCC больше не является
 компилятором прошивки или запасным вариантом; его исходный архив нужен только
 для независимого s51/uCsim. UNIFY-01 FULL **не запускался**; смена default
