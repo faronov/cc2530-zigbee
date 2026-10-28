@@ -2,6 +2,8 @@
 # Native recipes extracted unchanged from the archived M6 GNU Make expansion.
 # Compiler-assisted SDCC trace generators are archived; LLVM join vectors remain.
 HOST_PROGRAMS := $(BUILD)/aes-reference \
+	$(BUILD)/host-report-completion \
+	$(BUILD)/host-report-completion-sanitize \
 	$(BUILD)/host-aes-fixture-tests_$(BOARD) \
 	$(BUILD)/host-aes-tests \
 	$(BUILD)/host-aps-frame-tests \
@@ -231,6 +233,31 @@ $(BUILD)/host-irq-fixture-tests_$(BOARD): tests/test_irq_fixture.c src/irq_fixtu
 
 $(BUILD)/host-irq-tests: tests/test_irq.c tests/host_mmio.c src/irq.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_irq.c tests/host_mmio.c src/irq.c -o $(BUILD)/host-irq-tests
+
+REPORT_COMPLETION_SOURCES := tests/test_report_completion.c src/zcl_sensor.c \
+	tests/mac_link_peer.c tests/security_joint_model.c tests/security_aes_model.c \
+	tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c \
+	src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c \
+	src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c \
+	src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c src/mac_frame.c \
+	src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/nwk_parent.c src/mac_scan.c \
+	src/mac_poll.c src/mac_association.c src/mac_join.c src/nwk_aps.c src/nwk_aps_direct.c \
+	src/zdo_node.c src/zdo_srv.c src/zdo_runtime.c src/bdb_join.c src/bdb_join_init.c \
+	src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c \
+	src/mac_attempt.c src/mac_adapter.c src/mac_link_driver.c src/mac_link_workspace.c \
+	src/mac_link_child_workspace.c
+REPORT_COMPLETION_FLAGS := $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO \
+	-DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL \
+	-DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK \
+	-DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE \
+	-DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) \
+	-I. -Isrc -I$(BUILD)/mac-adapter
+
+$(BUILD)/host-report-completion: $(REPORT_COMPLETION_SOURCES) src/join_smoke.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(REPORT_COMPLETION_FLAGS) $(REPORT_COMPLETION_SOURCES) -o $@
+
+$(BUILD)/host-report-completion-sanitize: $(REPORT_COMPLETION_SOURCES) src/join_smoke.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(REPORT_COMPLETION_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(REPORT_COMPLETION_SOURCES) -o $@
 
 $(BUILD)/host-join-smoke: tests/test_join_smoke.c src/join_smoke.c src/zcl_sensor.c tests/mac_link_peer.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/nwk_parent.c src/mac_scan.c src/mac_poll.c src/mac_association.c src/mac_join.c src/nwk_aps.c src/nwk_aps_direct.c src/zdo_node.c src/zdo_srv.c src/zdo_runtime.c src/bdb_join.c src/bdb_join_init.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_adapter.c src/mac_link_driver.c src/mac_link_workspace.c src/mac_link_child_workspace.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -I. -Isrc -I$(BUILD)/mac-adapter tests/test_join_smoke.c src/join_smoke.c src/zcl_sensor.c tests/mac_link_peer.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c src/mac_frame.c src/mac_tx.c src/nwk_beacon.c src/nwk_candidates.c src/nwk_parent.c src/mac_scan.c src/mac_poll.c src/mac_association.c src/mac_join.c src/nwk_aps.c src/nwk_aps_direct.c src/zdo_node.c src/zdo_srv.c src/zdo_runtime.c src/bdb_join.c src/bdb_join_init.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_adapter.c src/mac_link_driver.c src/mac_link_workspace.c src/mac_link_child_workspace.c -o $(BUILD)/host-join-smoke

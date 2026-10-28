@@ -1053,6 +1053,49 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   No mutable duplicate table or NV field is added. See [the bounded contract
   and qualification status](M6_MGMT_BIND.md).
 
+### Report attempt and response ownership
+
+The current LLVM-only caller runs `zcl_sensor_tick()` once per READY poll,
+before `zcl_sensor_serve()`, even when that poll carries Mgmt_Bind. This
+retires the preceding queue-accepted report attempt and advances reporting
+ages/IdentifyTime independently of request traffic. Mgmt_Bind enumeration
+and the request handler remain read-only with respect to reporting state;
+they do not perform this maintenance.
+
+The retained policy is **queue-accepted attempt bookkeeping, not confirmed
+delivery**: only `BDB_JOIN_OK` sets `sent`; the next tick advances TSN and
+updates `last`/`age` (or retires the initial Basic report). The lower transport
+owns MAC retries, APS timeout/retries and late ACKs. Its eventual result is
+consumed exactly once through `bdb_join_confirm()` into `announce`, without
+re-committing or automatically rebuilding a failed accepted attempt. This
+avoids adding an unbounded application retry loop over the bounded transport
+retries. `FULL` and APS wrap quarantine retain the uncommitted report/TSN
+for rebuilding; every other immediate queue rejection records
+`0x80|BDB_result` and enters `JS_FAULT/JS_BDB` without a false commit.
+
+A queued report is a transport-owned packet copy. Configure Reporting or
+Unbind may change future scheduling, not that packet. An occupied response
+slot is preserved: a new application request is dropped without applying
+configuration/binding changes; this bounded best-effort server does not
+silently grow a retained request queue. Reporting/bindings remain RAM-only
+and reset on a new admitted boot. Parent failure follows existing BDB
+cleanup/fault handling; this correction adds no automatic live rejoin or
+persistence guarantee.
+
+`tests/test_report_completion.c` exercises the actual foreground/BDB owner
+with explicit component fixtures, including rejection, FULL, wrap wait,
+failed completion, response backpressure, pending configuration/unbinding
+and timer wrap. It does not manufacture successful radio/security admission.
+The existing real MMIO/crypto/NV case24 additionally checks timer progress
+through protected Mgmt_Bind traffic; its baseline failure was reproduced
+before the correction. Case IDs and replay state observations are retained,
+not replaced by a new testing matrix. Complete case24 MCU replay remains
+part of explicitly requested FULL; native/sanitizer and FAST/SMOKE evidence
+must not be described as that replay or as renewed M6 qualification.
+
+The paragraphs and resource figures below record the earlier serving
+implementation and historical qualification.
+
 READY has no serving budget: the join-smoke caller serves until reset or a
 fault. It first sends the Basic ModelIdentifier report. Then, whenever no
 application TX is outstanding, it queues at most one APS-acknowledged Report

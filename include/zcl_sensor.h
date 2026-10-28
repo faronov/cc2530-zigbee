@@ -71,18 +71,26 @@ uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_F
  * No retained pointers, binding copy, scheduler mutation or I/O. */
 uint8_t zcl_sensor_binding_page(uint8_t sequence, uint8_t start,
     uint8_t MCU_XDATA *output, uint8_t capacity) JOIN_FAR;
-/* Each READY poll. A frame the runtime published (application_ready) is
+/* The owner calls this once each READY poll, before serve, including polls
+ * carrying read-only requests. Retire a queue-accepted report and advance
+ * RAM timers; this is attempt bookkeeping, NOT successful APS delivery.
+ * Transport retry/completion remains owned by BDB/NWK/APS. */
+void zcl_sensor_tick(void) JOIN_FAR;
+/* After tick, a frame the runtime published (application_ready) is
  * served first: Read Attributes, Write Attributes (IdentifyTime), Configure
  * and Read Reporting Configuration for Basic, Power Configuration, Identify, Temperature and
  * Relative Humidity Measurement on the transport endpoint, Identify/Identify
  * Query, Default Responses (other general requests are UNSUP_GENERAL_COMMAND),
  * and read-only ZDO Mgmt_Bind plus Bind/Unbind for the
  * coordinator. Replies use the runtime server response slot; the
- * published frame is always cleared. Otherwise, with no application TX
+ * caller always clears the published frame. Otherwise, with no application TX
  * outstanding, it builds at most one due unsolicited ACK-requested Report
  * Attributes frame in the EMPTY application slot and returns REPORT; the
- * caller queues it and, once accepted, sets ZCL_SENSOR_STATE.sent. The next
- * call commits that report. RAM only: a reset restores the defaults. All
+ * caller queues it and, only on BDB_JOIN_OK, sets ZCL_SENSOR_STATE.sent.
+ * The next tick commits that attempt even if its later MAC/APS completion
+ * fails; that result is independently consumed once through bdb_join_confirm.
+ * FULL/wrap quarantine rebuild unchanged; other rejection is a caller fault,
+ * never a report commit. RAM only: a reset restores the defaults. All
  * reported values are SYNTHETIC demonstration data, never measurements.
  * Reporting reads validate the whole request, return only complete records
  * fitting the 82-byte application slot, and never change reporting/bindings.

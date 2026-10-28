@@ -38,6 +38,12 @@ static void reset(uint32_t now)
     CHECK(!memcmp(ST.tc_ieee, tc, 8) && ST.basic && ST.bound[0] == 1 && ST.bound[1] == 1 && ST.bound[2] == 1);
 }
 
+static uint8_t sensor_poll(void)
+{
+    zcl_sensor_tick();
+    return zcl_sensor_serve();
+}
+
 static uint8_t receive(uint16_t cluster, const void *payload, uint8_t length)
 {
     uint8_t result;
@@ -47,7 +53,7 @@ static uint8_t receive(uint16_t cluster, const void *payload, uint8_t length)
     CTX.application.aps.source_endpoint = 9; CTX.application.aps.destination_endpoint = 1;
     memcpy(CTX.application.payload, payload, length); CTX.application.length = length;
     CTX.application_ready = 1;
-    result = zcl_sensor_serve();
+    result = sensor_poll();
     CTX.application_ready = 0;
     memset(&CTX.application, 0, sizeof(CTX.application));
     return result;
@@ -265,7 +271,7 @@ static void discarded(uint16_t cluster, const void *request, uint8_t length)
 static uint8_t report(uint16_t cluster, uint16_t attribute, uint8_t type, uint16_t value)
 {
     uint8_t width = type == 0x20u ? 1u : 2u;
-    if (zcl_sensor_serve() != ZCL_SENSOR_REPORT) return 0;
+    if (sensor_poll() != ZCL_SENSOR_REPORT) return 0;
     CHECK(CTX.application.aps.cluster_id == cluster && CTX.application.aps.profile_id == 0x0104);
     CHECK(CTX.application.aps.flags == APS_FLAG_ACK_REQUEST && !CTX.application.nwk.destination);
     CHECK(CTX.application.aps.source_endpoint == 1 && CTX.application.aps.destination_endpoint ==
@@ -282,7 +288,7 @@ static uint8_t report(uint16_t cluster, uint16_t attribute, uint8_t type, uint16
 
 static void idle(void)
 {
-    CHECK(zcl_sensor_serve() == ZCL_SENSOR_IDLE && !CTX.application.length);
+    CHECK(sensor_poll() == ZCL_SENSOR_IDLE && !CTX.application.length);
 }
 
 static void values(void)
@@ -511,14 +517,14 @@ static void reports(void)
     uint32_t t;
     reset(0);
     /* Basic ModelIdentifier first, rebuilt until accepted. */
-    CHECK(zcl_sensor_serve() == ZCL_SENSOR_REPORT);
+    CHECK(sensor_poll() == ZCL_SENSOR_REPORT);
     CHECK(CTX.application.aps.cluster_id == 0 && CTX.application.aps.destination_endpoint == 1);
     CHECK(CTX.application.length == 7u+sizeof(model)-1u && CTX.application.payload[1] == 0);
     CHECK(!memcmp(CTX.application.payload+2, "\x0a\x05\x00\x42", 4) &&
           CTX.application.payload[6] == sizeof(model)-1 &&
           !memcmp(CTX.application.payload+7, model, sizeof(model)-1));
     /* A rebuild keeps its sequence number; acceptance advances it. */
-    CHECK(zcl_sensor_serve() == ZCL_SENSOR_REPORT && CTX.application.payload[1] == 0 && ST.basic);
+    CHECK(sensor_poll() == ZCL_SENSOR_REPORT && CTX.application.payload[1] == 0 && ST.basic);
     ST.sent = 1; memset(&CTX.application, 0, sizeof(CTX.application));
     idle(); CHECK(!ST.basic && !ST.sent && ST.tsn == 1);
     /* An outstanding application TX or a pending confirmation blocks. */
@@ -534,7 +540,7 @@ static void reports(void)
     CHECK(ST.report[0].last == 2110 && !ST.report[0].age && ST.report[1].last == 4525);
     /* Not committed until accepted: unaccepted builds repeat. */
     CTX.last = 2ul << 22;
-    CHECK(zcl_sensor_serve() == ZCL_SENSOR_REPORT && CTX.application.aps.cluster_id == 0x0402);
+    CHECK(sensor_poll() == ZCL_SENSOR_REPORT && CTX.application.aps.cluster_id == 0x0402);
     CHECK(CTX.application.payload[1] == 3 && ST.tsn == 3);
     memset(&CTX.application, 0, sizeof(CTX.application));
     CHECK(report(0x0402, 0, 0x29, 2120) && ST.tsn == 3);
@@ -550,7 +556,7 @@ static void reports(void)
     for (t = CTX.last; ST.report[2].age < 3600; ) {
         t += ZCL_SENSOR_SECOND*60; if (ZCL_SENSOR_PHASE(ZCL_SENSOR_SAMPLE(t)) > 13) break;
         CTX.last = t;
-        while (zcl_sensor_serve() == ZCL_SENSOR_REPORT) {
+        while (sensor_poll() == ZCL_SENSOR_REPORT) {
             CHECK(CTX.application.aps.cluster_id == 0x0001 && CTX.application.payload[3] == 0x21);
             memset(&CTX.application, 0, sizeof(CTX.application)); ST.sent = 1;
         }
@@ -579,7 +585,7 @@ static void reports(void)
     /* Ages saturate. */
     idle(); CHECK(!ST.report[0].age);
     ST.report[0].age = 0xfffe; ST.report[0].max = 0xffff;
-    CTX.last += 5*ZCL_SENSOR_SECOND; zcl_sensor_serve();
+    CTX.last += 5*ZCL_SENSOR_SECOND; sensor_poll();
     CHECK(ST.report[0].age == 0xffff);
 }
 
