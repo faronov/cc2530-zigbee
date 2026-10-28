@@ -61,7 +61,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--board", choices=("generic", "lg_esl29_rev03"), required=True)
     parser.add_argument("--image", choices=("join", "bringup", "timebase_fixture"), default="join")
-    parser.add_argument("--variant", choices=("production", "rx-diag"), default="production")
+    parser.add_argument("--variant", choices=tiers.VARIANTS, default="production")
     args = parser.parse_args()
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
     pin = json.loads((HERE / "toolchain.json").read_text())
@@ -77,7 +77,7 @@ def main():
     if args.image == "join" and args.board != "lg_esl29_rev03":
         raise SystemExit("the admitted join profile is LG-only; generic supports bringup/timebase_fixture")
     if args.image != "join" and args.variant != "production":
-        raise SystemExit("rx-diag is supported only by the join image")
+        raise SystemExit("non-production variants are supported only by the join image")
     identity = {"compiler": compiler, "firmware": tiers.firmware_identity(REPO),
                 "expected_llvm_revision": revision,
                 "paths": {"tools": str(args.tools), "llvm_src": str(args.llvm_src),

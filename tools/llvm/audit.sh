@@ -17,6 +17,7 @@ $PY $H/stack_proof.py $ELF $A/stack.json
 $PY $H/mkhex.py $ELF $A/hw1.hex $A/hex.json
 $T/llvm-objcopy -O ihex $ELF $A/objcopy.hex
 $PY $H/proofs.py $OUT hw1 $A/proofs.json
+$PY $H/sensor_layout.py $OUT
 $PY $H/hexbanks.py $A/hexbanks.json llvm=$A/hw1.hex
 # Generic-pointer call-site proof on assembly emitted by the same compiler/flags.
 DEFS=$(cat $DEFS_FILE)

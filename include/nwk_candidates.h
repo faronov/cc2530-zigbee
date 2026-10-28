@@ -57,6 +57,9 @@ typedef struct {
     uint8_t version;
     uint32_t channel_mask;
     uint8_t count;
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t rejoin;
+#endif
     nwk_candidate_t entries[NWK_CANDIDATES_CAPACITY];
 } nwk_candidates_t;
 
@@ -65,6 +68,9 @@ typedef struct {
  */
 nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * SDCC_VOLATILE table,
                                             uint32_t channel_mask);
+#if defined(CC2530_PARENT_RECOVERY)
+nwk_candidates_result_t nwk_candidates_rejoin(nwk_candidates_t * SDCC_VOLATILE table);
+#endif
 
 /* body is the entire FCS-free legacy MAC body, without PHR/radio metadata.
  * crc_valid must be exactly 0 or 1. A truthful 1 is supplied by the caller;

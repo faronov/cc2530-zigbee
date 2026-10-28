@@ -6,6 +6,8 @@ extern volatile uint8_t aes_dma0[8],aes_dma1[32],aes_key[16],aes_iv[16],aes_inpu
 extern uint8_t flash_exec_work[9];
 static unsigned join_trace_steps,join_trace_events,join_trace_active,join_trace_flash;
 static uint8_t join_trace_sfr[256];
+static unsigned join_trace_reporting;
+static unsigned join_trace_binding;
 
 static void join_hex(const volatile uint8_t *p,unsigned n)
 {
@@ -81,6 +83,9 @@ static void join_trace_start(unsigned selected)
     printf("{\"case\":%u,\"admission\":\"",selected); join_hex(admission,sizeof(admission));
     printf("\",\"draws\":\""); join_hex(join_smoke_draws,JOIN_SMOKE_DRAWS);
     printf("\",\"nv_initial\":\""); join_hex(security_joint_nv(),4096);
+#if defined(CC2530_PARENT_RECOVERY)
+    printf("\",\"parent_history\":\""); join_hex(join_smoke_parent_history,20);
+#endif
     printf("\",\"initial\":{");
 #define REG(name,address) printf("\"%u\":%u,",address,name);
     CC2530_REGISTER_LIST(REG)
@@ -103,10 +108,51 @@ static void join_trace_after(uint8_t returned)
     join_trace_active=0;
     printf("],\"returned\":%s,\"status\":\"",returned?"true":"false");
     join_hex((const volatile uint8_t *)&join_smoke_status,48);
-    printf("\",\"nv\":\""); join_hex(security_joint_nv(),4096); printf("\"}");
+    printf("\",\"nv\":\""); join_hex(security_joint_nv(),4096); printf("\"");
+    if((REPORTING_CASE(caller_case) || BINDING_CASE(caller_case) ||
+        caller_case==16 || caller_case==18 || caller_case==20) && join_smoke_status.phase==JS_READY) {
+        printf(",\"application_state\":\"");
+        join_hex((const volatile uint8_t *)ZCL_SENSOR_STATE.report,40);
+        join_hex(ZCL_SENSOR_STATE.bound,3); join_hex(&ZCL_SENSOR_STATE.basic,4);
+        if(!REPORTING_CASE(caller_case)) {
+            join_hex(ZCL_SENSOR_STATE.tc_ieee,8);
+            join_hex(join_smoke_device.config.association.extraction.local,8);
+            join_trace_binding++;
+        } else join_trace_reporting++;
+        printf("\"");
+    }
+#if defined(CC2530_REPLAY_POLICY_C)
+    {
+        uint8_t floors[16];
+        extern void security_keys_host_replay_floors(uint8_t *);
+        security_keys_host_replay_floors(floors);
+        printf(",\"replay_floors\":\""); join_hex(floors,sizeof(floors)); printf("\"");
+    }
+#endif
+    printf("}");
 }
 static void join_trace_finish(void)
 {
-    printf("],\"peer_tx\":%u,\"aes_blocks\":%u,\"flash_commands\":%u}\n",
+    printf("],\"peer_tx\":%u,\"aes_blocks\":%u,\"flash_commands\":%u",
         link_peer_tx,security_joint_aes_blocks(),security_joint_flash_commands());
+#if defined(CC2530_REPLAY_POLICY_C)
+    if(BINDING_CASE(caller_case))
+        printf(",\"bindings\":{\"requests\":%u,\"responses\":%u,\"reports\":%u,"
+               "\"state_checks\":%u,\"readonly_checks\":%u,\"final_entries\":1,"
+               "\"temperature_endpoint\":0,\"humidity_endpoint\":7,\"power_endpoint\":0}",
+               binding_requests,link_peer_bindings,link_peer_binding_reports,
+               join_trace_binding,binding_readonly_checks);
+    if(REPORTING_CASE(caller_case))
+        printf(",\"reporting\":{\"requests\":%u,\"responses\":%u,\"reports\":%u,"
+               "\"state_checks\":%u,\"min\":7,\"max\":20,\"change\":50}",
+               reporting_requests,link_peer_reporting,reporting_reports,join_trace_reporting);
+    if(SUSTAINED_CASE(caller_case))
+        printf(",\"service\":{\"duration_ms\":%lu,\"protected_frames\":%u,"
+               "\"replay_drops\":%u,\"reports\":%u,\"erases\":%u,\"programs\":%u,"
+               "\"ordinary_rx_commands\":%u,\"security_checkpoints\":%u,"
+               "\"flash_controller_nominal_us\":%u}",(unsigned long)service_ms,service_unique,
+               service_replays,service_reports,service_erases,service_programs,
+               service_rx_commands,service_checkpoints,service_erases*20000u+service_programs*20u);
+#endif
+    printf("}\n");
 }

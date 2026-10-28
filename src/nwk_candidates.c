@@ -20,6 +20,9 @@ static uint8_t valid_mask(uint32_t mask)
 static uint8_t valid_table(const nwk_candidates_t * SDCC_VOLATILE table)
 {
     return table->version == NWK_CANDIDATES_VERSION
+#if defined(CC2530_PARENT_RECOVERY)
+        && table->rejoin <= 1
+#endif
         && table->count <= NWK_CANDIDATES_CAPACITY && valid_mask(table->channel_mask);
 }
 
@@ -37,6 +40,17 @@ nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * SDCC_VOLATILE tab
     return NWK_CANDIDATES_OK;
 }
 
+#if defined(CC2530_PARENT_RECOVERY)
+nwk_candidates_result_t nwk_candidates_rejoin(nwk_candidates_t * SDCC_VOLATILE table)
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, table, sizeof(*table), 1)) return NWK_CANDIDATES_INVALID_ARGUMENT;
+#endif
+    if (!table || !valid_table(table) || table->count) return NWK_CANDIDATES_INVALID_TABLE;
+    table->rejoin = 1;
+    return NWK_CANDIDATES_OK;
+}
+#endif
 static uint8_t same_identity(const nwk_candidate_t * SDCC_VOLATILE a,
                              const nwk_candidate_t * SDCC_VOLATILE b)
 {
@@ -103,7 +117,11 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
      */
     eligible = candidate.network.stack_profile == NWK_CANDIDATES_PRO_PROFILE
         && (candidate.superframe & 0x000fu) == 15u
-        && (candidate.superframe & MAC_SUPERFRAME_ASSOCIATION_PERMIT) != 0u
+        && (
+#if defined(CC2530_PARENT_RECOVERY)
+            table->rejoin ||
+#endif
+            (candidate.superframe & MAC_SUPERFRAME_ASSOCIATION_PERMIT) != 0u)
         && candidate.network.end_device_capacity != 0u;
     for (i = 0; i < table->count; i++) {
         if (same_identity(&table->entries[i], &candidate)) {

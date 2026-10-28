@@ -32,13 +32,15 @@ import threading
 import time
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+from join_smoke_service import service_valid, reporting_valid, bindings_valid
 REPO = HERE.parents[1]
 PROFILE_PATH = HERE / "profile.json"
 SCHEMA = "cc2530-llvm-tier-receipt/1"
 TIERS = ("fast", "smoke", "full")
 # Firmware build variants (build.sh FIRMWARE_VARIANT). rx-diag is the opt-in
 # CC2530_RX_DIAG diagnostic image: a distinct identity, never production.
-VARIANTS = ("production", "rx-diag")
+VARIANTS = ("production", "rx-diag", "parent-recovery", "parent-recovery-policy-c")
 # Content that can never change generated code or acceptance: excluded from the
 # firmware identity so documentation edits do not invalidate evidence.
 NON_EVIDENCE = re.compile(r"(^docs/|\.md$|^\.github/|^LICENSES?/|^\.gitignore$)")
@@ -231,12 +233,21 @@ def sim_check(report, case, terminal, limit=None):
         cap = PROFILE["admission"]["stack_capacity"]
         if limit is None:
             ok = (r.get("complete") is True and r.get("steps") == r.get("of_steps") and r.get("terminal") == terminal
-                  and r.get("stack_bytes", 999) <= cap)
+                  and type(r.get("stack_bytes")) is int and 0 <= r["stack_bytes"] <= cap)
+            if case == 21:
+                ok = ok and service_valid(r.get("service"))
+            if case == 23:
+                ok = ok and reporting_valid(r.get("reporting"))
+            if case == 24:
+                ok = ok and bindings_valid(r.get("bindings"))
+            if case in (16, 18, 20):
+                ok = ok and type(r.get("binding_identity_checks")) is int and r["binding_identity_checks"] > 0
             kind = "complete scenario"
         else:
             ok = r.get("complete") is False and r.get("steps") == limit and r.get("stack_bytes", 999) <= cap
             kind = f"bounded prefix ({limit} of {r.get('of_steps')} steps); NOT a commissioning proof"
-        keep = ("complete", "steps", "of_steps", "peripheral_stops", "terminal", "stack_bytes", "peak_sp", "seconds")
+        keep = ("complete", "steps", "of_steps", "peripheral_stops", "terminal", "stack_bytes", "peak_sp", "seconds",
+                "service", "reporting", "bindings", "binding_identity_checks")
         return ok, {"case": case, "kind": kind, "expected_terminal": terminal if limit is None else None,
                     **{k: r.get(k) for k in keep}}
     return check
@@ -300,22 +311,24 @@ def plan(tier, args, profile):
     sim = profile["simulator"]
     if tier == "full" and (0 not in sim["full_cases"] or sim["terminals"].get("0") != "serving"):
         raise SystemExit("FULL must contain complete case 0 through 'serving'; refusing a weakened profile")
-    cases = sorted(set(sim["full_cases"] if tier == "full" else sim["smoke_cases"] + [sim["smoke_prefix"]["case"]]))
+    order = sim["full_cases"] + sim.get("variant_cases", {}).get(args.variant, []) if tier == "full" else sim["smoke_cases"]
+    cases = sorted(set(order if tier == "full" else order + [sim["smoke_prefix"]["case"]]))
     steps.append(Step("vectors", "deterministic host reference transcripts for the selected scenarios",
                       cmd=[py, "-B", HERE / "tiers.py", "vectors", "--output", out / "vectors",
-                           "--cases", ",".join(map(str, cases))], timeout=900))
+                           "--cases", ",".join(map(str, cases)), "--variant", args.variant], timeout=900))
     elf = out / "fw/link/hw1.elf"
     replay_env = env | {"SIM_TIMEOUT": str(args.sim_timeout), "PYTHONUNBUFFERED": "1",
                         "LLVM_SIM_DIAG": str(out / "diag")}
-    order = sim["full_cases"] if tier == "full" else sim["smoke_cases"]
+    deadline = time.time() + args.case0_budget if tier == "full" and args.case0_budget else 0
     for case in order:
         term = sim["terminals"][str(case)]
         cmd = [py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
                "--simulator", args.simulator, "--case", str(case), "--report", out / f"sims/case{case}.json"]
         e, suspend = dict(replay_env), False
-        if tier == "full" and case == 0 and args.case0_budget:
-            snap = out / "case0-snap"
-            e |= {"SNAP_DIR": str(snap), "SNAP_EVERY": "10", "STOP_AFTER_SECONDS": str(args.case0_budget)}
+        if tier == "full" and case in (0, 21, 23, 24) and args.case0_budget:
+            snap = out / f"case{case}-snap"
+            e |= {"SNAP_DIR": str(snap), "SNAP_EVERY": "10",
+                  "STOP_AFTER_SECONDS": str(args.case0_budget), "STOP_AT_TIME": str(deadline)}
             suspend = True
         steps.append(Step(f"sim-case{case}", f"complete MCU replay of scenario {case} to '{term}'"
                           + (" (authenticated READY/serving)" if case == 0 else ""),
@@ -334,7 +347,7 @@ def plan(tier, args, profile):
         unselected["AES/flash security path"] = "first reached at case-0 step 395 and in case 10; FULL only"
     else:
         steps.append(Step("sim-summary", "all admitted scenarios complete with expected terminal and stack <= 128",
-                          cmd=[py, "-B", HERE / "sim_summary.py", out / "sims", out / "sims/summary.json"],
+                          cmd=[py, "-B", HERE / "sim_summary.py", out / "sims", out / "sims/summary.json", args.variant],
                           deps=[f"sim-case{c}" for c in order], timeout=60))
     return steps, unselected
 
@@ -559,8 +572,10 @@ def resume_state(out, ident, selection, steps):
     prior = json.loads((out / "progress.json").read_text())
     if prior["identity"]["digest"] != ident["digest"] or prior["selection_digest"] != selection:
         raise SystemExit("--resume: output belongs to another identity or selection")
-    if prior["steps"].get("sim-case0", {}).get("status") != "SUSPENDED":
-        raise SystemExit("--resume: the previous segment did not suspend complete case 0")
+    paused = {k for k, v in prior["steps"].items() if v["status"] == "SUSPENDED"}
+    resumable = {s.name for s in steps if s.suspendable}
+    if not paused or not paused <= resumable:
+        raise SystemExit("--resume: no selected resumable scenario was suspended")
     admitted = prior["steps"]["admission"]["details"]["measured"]["elf_sha256"]
     if sha_file(out / "fw/link/hw1.elf") != admitted:
         raise SystemExit("--resume: firmware ELF changed since admission")
@@ -569,23 +584,26 @@ def resume_state(out, ident, selection, steps):
             raise SystemExit(f"--resume: vector v{case}.json changed")
     carried = {k: v | {"carried_from_segment": v.get("carried_from_segment", prior["segment"])}
                for k, v in prior["steps"].items() if v["status"] == "PASS"}
-    snap = Path(json.loads((out / "sims/case0.json").read_text())["resume"])
-    if snap.parent != out / "case0-snap" or not snap.is_file():
-        raise SystemExit("--resume: missing case-0 snapshot")
     for s in steps:
-        if s.name == "sim-case0":
+        if s.name in paused:
+            case = s.name.removeprefix("sim-")
+            snap = Path(json.loads((out / f"sims/{case}.json").read_text())["resume"])
+            if snap.parent != out / f"{case}-snap" or not snap.is_file():
+                raise SystemExit(f"--resume: missing or wrong {case} snapshot")
             s.env = s.env | {"RESUME": str(snap)}
     return carried
 
 
 # ---------------------------------------------------------------- vectors
-def vectors(output, cases):
+def vectors(output, cases, variant="production"):
     """Build the host reference model with the Makefile's own join-smoke recipe."""
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     scratch = output / "build"
     target = scratch / "host-join-smoke-vectors"
     text = subprocess.run(["make", "-s", "-n", "-B", "BOARD=lg_esl29_rev03", "JOIN_SMOKE_KEY_MODE=default-tc",
+                           f"JOIN_SMOKE_PARENT_RECOVERY={int(variant in ('parent-recovery', 'parent-recovery-policy-c'))}",
+                           f"JOIN_SMOKE_REPLAY_POLICY_C={int(variant == 'parent-recovery-policy-c')}",
                            f"BUILD={scratch}", str(target)], cwd=REPO, capture_output=True, text=True, check=True).stdout
     lines = text.replace("\\\n", " ").splitlines()
     recipe = [line for line in lines if line.rstrip().endswith(f"-o {target}")]
@@ -600,14 +618,25 @@ def vectors(output, cases):
     (output / "command.txt").write_text(shlex.join(cmd) + "\n")
     subprocess.run(cmd, cwd=REPO, check=True)
     report = {"layout_header_sha256": sha_file(LAYOUT), "recipe_sha256": sha_bytes(shlex.join(cmd).encode()),
-              "vectors": {}}
+              "variant": variant, "vectors": {}}
     for case in cases:
-        raw = subprocess.run([str(target), str(case)], capture_output=True, check=True, timeout=120).stdout
+        try:
+            raw = subprocess.run([str(target), str(case)], capture_output=True, check=True, timeout=120).stdout
+        except subprocess.CalledProcessError as error:
+            raise SystemExit(f"host scenario {case} failed ({error.returncode}): "
+                             f"{error.stderr.decode(errors='replace')}") from error
         vector = json.loads(raw)
         if vector.get("case") != case:
             raise SystemExit(f"host model produced the wrong scenario for case {case}")
         (output / f"v{case}.json").write_bytes(raw)
         report["vectors"][case] = sha_bytes(raw)
+    # Bind modeled cold boots to flash written by the actual initial caller.
+    for initial, recovery in ((0, 16), (0, 17), (20, 18), (20, 19), (20, 21)):
+        if initial in cases and recovery in cases:
+            first = json.loads((output/f"v{initial}.json").read_bytes())
+            second = json.loads((output/f"v{recovery}.json").read_bytes())
+            if first["steps"][-1]["nv"] != second["nv_initial"]:
+                raise SystemExit(f"case {recovery} cold NV differs from case {initial} durable result")
     (output / "vectors.json").write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps(report, indent=1))
 
@@ -620,8 +649,9 @@ def main(argv=None):
         p = argparse.ArgumentParser(prog="tiers.py vectors")
         p.add_argument("--output", required=True)
         p.add_argument("--cases", required=True)
+        p.add_argument("--variant", choices=VARIANTS, default="production")
         a = p.parse_args(argv[1:])
-        vectors(a.output, [int(c) for c in a.cases.split(",")])
+        vectors(a.output, [int(c) for c in a.cases.split(",")], a.variant)
         return 0
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tier", choices=TIERS, required=True)
@@ -632,13 +662,13 @@ def main(argv=None):
     p.add_argument("--simulator", type=Path, required=True, help="s51 from tools/llvm/prepare_simulator.py")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--variant", choices=VARIANTS, default="production",
-                   help="firmware variant; rx-diag = opt-in CC2530_RX_DIAG diagnostic image")
+                   help="firmware variant; parent-recovery is strict; parent-recovery-policy-c uses RAM router floors")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--jobs", type=int, default=min(os.cpu_count() or 4, 16))
     p.add_argument("--keep-going", action="store_true", help="do not cancel remaining steps after a failure")
     p.add_argument("--sim-timeout", type=int, default=6000, help="per s51 process (seconds)")
     p.add_argument("--case-timeout", type=int, default=12 * 3600, help="per complete scenario (seconds)")
-    p.add_argument("--case0-budget", type=int, help="FULL: suspend complete case 0 after this many seconds "
+    p.add_argument("--case0-budget", type=int, help="FULL: shared segment budget for complete cases 0/21/23/24 "
                    "at a bound snapshot (exit 75); rerun with --resume on the same --output to continue")
     p.add_argument("--resume", action="store_true", help="FULL: continue a SUSPENDED run in --output "
                    "(same identity and selection only; carried PASS steps are re-verified)")

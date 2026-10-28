@@ -7,7 +7,11 @@
 #include "flash_write.h"
 #include "sdcc_volatile.h"
 
+#if defined(CC2530_PARENT_RECOVERY)
+#define NV_RECORD_MAX 160u
+#else
 #define NV_RECORD_MAX 128u
+#endif
 #define NV_RECORD_ERASE_LIMIT 32u
 
 typedef enum {
@@ -30,7 +34,7 @@ typedef struct {
     uint8_t pages[2], erase_attempts[2];
 } nv_record_status_t;
 
-/* One opaque snapshot, 1..128 bytes, alternating the two reserved NV pages.
+/* One opaque snapshot, 1..NV_RECORD_MAX bytes, alternating the two reserved NV pages.
  * Foreground/non-reentrant; inherit all flash reader/writer ownership and
  * genuine reset requirements. No other NV writer may run during this epoch.
  * Link executor, reader, writer, this module, then callers. Caller objects

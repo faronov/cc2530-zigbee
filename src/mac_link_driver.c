@@ -161,7 +161,8 @@ static uint8_t observe(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
                 goto frame;
             }
             if (type == MAC_FRAME_DATA && d->join->workspace == BDB_JOIN_WORK_RUNTIME &&
-                d->join->phase >= BDB_JOIN_WAIT_KEY && d->join->phase < BDB_JOIN_UPDATING) {
+                ((d->join->phase >= BDB_JOIN_WAIT_KEY && d->join->phase < BDB_JOIN_UPDATING) ||
+                 d->join->phase == BDB_JOIN_RECOVERING)) {
                 result = bdb_join_receive(d->join, o->frame->body, o->frame->length, crc, d->now);
                 d->consumer_result = result;
                 /* There is no second driver-owned packet slot, and pumping
@@ -234,7 +235,9 @@ mac_link_driver_result_t mac_link_driver_init(mac_link_driver_t MCU_XDATA * SDCC
         return MAC_LINK_DRIVER_ARGUMENT;
 #endif
     if (d->version) return MAC_LINK_DRIVER_STATE;
-    if (join->phase != BDB_JOIN_SCANNING || !join->owner ||
+    /* Fresh scan, or a resumed membership whose first action is INSTALL. */
+    if ((join->phase != BDB_JOIN_SCANNING &&
+         (join->phase != BDB_JOIN_INSTALLING || join->recovery != 1 || join->issued)) || !join->owner ||
         join->owner->engine.phase != MAC_TX_IDLE || join->config.scan.saved.rx_on ||
         join->config.scan.saved.filter || initial->pan != join->config.scan.saved.pan ||
         initial->channel != join->config.scan.saved.channel ||
@@ -344,6 +347,7 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
         } else if (kind == BDB_JOIN_ACTION_ASSOCIATION) {
             join_event(d, restored ? MAC_JOIN_RESTORED : MAC_JOIN_PREPARED);
         } else {
+            d->saved_short = d->config.short_address;
             memset(&d->event, 0, sizeof(d->event));
             d->event.kind = BDB_JOIN_EVENT_INSTALLED;
             d->event.epoch = d->action.epoch;
@@ -433,7 +437,7 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
         (void)consumer(d, 1);
         goto done;
     }
-    if (d->join->phase >= BDB_JOIN_FAILED) return MAC_LINK_DRIVER_FINISHED;
+    if (d->join->phase == BDB_JOIN_FAILED || d->join->phase == BDB_JOIN_FAULT) return MAC_LINK_DRIVER_FINISHED;
     if (d->join->phase == BDB_JOIN_SCANNING && d->join->work.scan.phase == MAC_SCAN_RX &&
         mac_adapter_diagnostic()->phase == MAC_ADAPTER_RX && !mac_adapter_diagnostic()->ready) {
         d->end.symbols = d->join->work.scan.window_end; d->end.fine = 0;

@@ -14,6 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tiers  # noqa: E402
 
 PROFILE = json.loads(tiers.PROFILE_PATH.read_text())
+SERVICE = dict(duration_ms=600084, protected_frames=120, replay_drops=12, reports=23,
+               erases=0, programs=0, ordinary_rx_commands=0, security_checkpoints=0,
+               flash_controller_nominal_us=0)
+REPORTING = dict(requests=8, responses=8, reports=7, state_checks=8, min=7, max=20, change=50)
+BINDINGS = dict(requests=18, responses=18, reports=1, state_checks=18, readonly_checks=1,
+                final_entries=1, temperature_endpoint=0, humidity_endpoint=7, power_endpoint=0)
 
 
 def args(tier, **extra):
@@ -84,6 +90,19 @@ class Selection(unittest.TestCase):
             steps, _ = names("smoke", variant=variant)
             for name in ("firmware-build", "firmware-audit", "sim-case2"):
                 self.assertEqual(steps[name].env["FIRMWARE_VARIANT"], variant)
+            command = [str(c) for c in steps["vectors"].cmd]
+            self.assertEqual(command[command.index("--variant")+1], variant)
+
+    def test_parent_profile_adds_every_new_case_without_removing_old_cases(self):
+        parent, _ = names("full", variant="parent-recovery")
+        ordinary, _ = names("full")
+        for case in PROFILE["simulator"]["full_cases"]:
+            self.assertIn(f"sim-case{case}", parent["sim-summary"].deps)
+        for case in (18, 19, 20):
+            self.assertIn(f"sim-case{case}", parent)
+            self.assertIn(f"sim-case{case}", parent["sim-summary"].deps)
+            self.assertNotIn(f"sim-case{case}", ordinary)
+        self.assertEqual(parent["sim-summary"].cmd[-1], "parent-recovery")
 
     def test_tier_sets_are_nested(self):
         fast, _ = names("fast")
@@ -91,6 +110,29 @@ class Selection(unittest.TestCase):
         full, _ = names("full")
         self.assertTrue(set(fast) - {"lit"} <= set(smoke))
         self.assertTrue(set(fast) - {"lit"} <= set(full))
+
+    def test_policy_c_requires_sustained_case_and_preserves_strict_selection(self):
+        strict, _ = names("full", variant="parent-recovery")
+        policy, _ = names("full", variant="parent-recovery-policy-c")
+        self.assertNotIn("sim-case21", strict)
+        self.assertIn("sim-case21", policy["sim-summary"].deps)
+        for case in PROFILE["simulator"]["full_cases"] + [18, 19, 20]:
+            self.assertIn(f"sim-case{case}", policy["sim-summary"].deps)
+        self.assertEqual(PROFILE["simulator"]["terminals"]["21"], "serving")
+
+    def test_long_cases_share_segment_deadline_and_have_separate_snapshots(self):
+        steps, _ = names("full", variant="parent-recovery-policy-c", case0_budget=60)
+        for case in (0, 21, 23, 24):
+            s = steps[f"sim-case{case}"]
+            self.assertTrue(s.suspendable)
+            self.assertTrue(s.env["SNAP_DIR"].endswith(f"case{case}-snap"))
+        self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
+                         steps["sim-case21"].env["STOP_AT_TIME"])
+        self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
+                         steps["sim-case23"].env["STOP_AT_TIME"])
+        self.assertEqual(steps["sim-case0"].env["STOP_AT_TIME"],
+                         steps["sim-case24"].env["STOP_AT_TIME"])
+        self.assertFalse(steps["sim-case16"].suspendable)
 
 
 def step(name, cmd, **kw):
@@ -176,8 +218,86 @@ class Evidence(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tiers.load_receipt(path)
 
+    def test_resume_all_paused_cases_and_reject_wrong_snapshot_or_identity(self):
+        for paused in ((0,), (21,), (0, 21)):
+            with self.subTest(paused=paused), tempfile.TemporaryDirectory() as d:
+                out = Path(d)
+                (out/"fw/link").mkdir(parents=True)
+                (out/"vectors").mkdir()
+                (out/"sims").mkdir()
+                (out/"fw/link/hw1.elf").write_bytes(b"fixture-elf")
+                (out/"vectors/v21.json").write_bytes(b"fixture-vector")
+                (out/"vectors/vectors.json").write_text(json.dumps({
+                    "vectors": {"21": tiers.sha_file(out/"vectors/v21.json")}}))
+                statuses = {"admission": {"status": "PASS", "details": {
+                    "measured": {"elf_sha256": tiers.sha_file(out/"fw/link/hw1.elf")}}}}
+                steps = []
+                for case in (0, 21):
+                    name = f"sim-case{case}"
+                    statuses[name] = dict(status="SUSPENDED" if case in paused else "PASS")
+                    snap = out/f"case{case}-snap"/"bound.pkl"
+                    snap.parent.mkdir()
+                    snap.write_bytes(b"fixture; replay validates snapshot content")
+                    (out/f"sims/case{case}.json").write_text(json.dumps({"resume": str(snap)}))
+                    steps.append(step(name, ["true"], env={}, suspendable=True))
+                prior = dict(identity={"digest": "identity"}, selection_digest="selection",
+                             segment=1, steps=statuses)
+                (out/"progress.json").write_text(json.dumps(prior))
+                carried = tiers.resume_state(out, prior["identity"], "selection", steps)
+                for s in steps:
+                    case = int(s.name.removeprefix("sim-case"))
+                    self.assertEqual("RESUME" in s.env, case in paused)
+                    self.assertEqual(s.name in carried, case not in paused)
+                for changed, selection in (({"digest": "different"}, "selection"),
+                                           (prior["identity"], "different")):
+                    with self.assertRaises(SystemExit):
+                        tiers.resume_state(out, changed, selection, steps)
+                case = paused[0]
+                (out/f"sims/case{case}.json").write_text(json.dumps({
+                    "resume": str(out/f"case{21 if case == 0 else 0}-snap/bound.pkl")}))
+                with self.assertRaises(SystemExit):
+                    tiers.resume_state(out, prior["identity"], "selection", steps)
+
 
 class Identity(unittest.TestCase):
+    def test_policy_flag_invalidates_profile_and_requires_parent_flag(self):
+        with tempfile.TemporaryDirectory() as d:
+            profile = Path(d) / "host-profile.txt"
+            command = ["make", "-s", f"BUILD={d}", "JOIN_SMOKE_KEY_MODE=default-tc",
+                       "JOIN_SMOKE_PARENT_RECOVERY=1", str(profile)]
+            for policy in ("0", "1", "0"):
+                subprocess.run(command + [f"JOIN_SMOKE_REPLAY_POLICY_C={policy}"],
+                               cwd=tiers.REPO, check=True, capture_output=True)
+                lines = profile.read_text().splitlines()
+                self.assertEqual(lines[1], "default-tc")
+                self.assertIn("-DCC2530_PARENT_RECOVERY", lines[2])
+                self.assertEqual("-DCC2530_REPLAY_POLICY_C" in lines[2], policy == "1")
+            for overrides in (["JOIN_SMOKE_REPLAY_POLICY_C=invalid"],
+                              ["JOIN_SMOKE_REPLAY_POLICY_C=1", "JOIN_SMOKE_PARENT_RECOVERY=0"]):
+                result = subprocess.run(command + overrides, cwd=tiers.REPO,
+                                        capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_make_parent_variant_invalidates_shared_objects(self):
+        with tempfile.TemporaryDirectory() as d:
+            profile = Path(d) / "host-profile.txt"
+            command = ["make", "-s", f"BUILD={d}", "JOIN_SMOKE_KEY_MODE=default-tc", str(profile)]
+            for variant in ("0", "1", "0"):
+                subprocess.run(command + [f"JOIN_SMOKE_PARENT_RECOVERY={variant}"],
+                               cwd=tiers.REPO, check=True, capture_output=True)
+                lines = profile.read_text().splitlines()
+                self.assertEqual(lines[1], "default-tc")
+                self.assertEqual("-DCC2530_PARENT_RECOVERY" in lines[2], variant == "1")
+                self.assertNotIn("-DCC2530_REPLAY_POLICY_C", lines[2])
+                before = profile.stat().st_mtime_ns
+                subprocess.run(command + [f"JOIN_SMOKE_PARENT_RECOVERY={variant}"],
+                               cwd=tiers.REPO, check=True, capture_output=True)
+                self.assertEqual(profile.stat().st_mtime_ns, before)
+            result = subprocess.run(command + ["JOIN_SMOKE_PARENT_RECOVERY=invalid"],
+                                    cwd=tiers.REPO, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("JOIN_SMOKE_PARENT_RECOVERY must be 0 or 1", result.stderr)
+
     def test_docs_do_not_invalidate_but_code_does(self):
         with tempfile.TemporaryDirectory() as d:
             repo = Path(d)
@@ -216,6 +336,122 @@ class Identity(unittest.TestCase):
             first = tiers.simulator_identity(s51)
             s51.write_bytes(b"b")
             self.assertNotEqual(first, tiers.simulator_identity(s51))
+
+
+class Summary(unittest.TestCase):
+    def summary(self, variant, mutate=None):
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d)
+            cases = PROFILE["simulator"]["full_cases"] + PROFILE["simulator"]["variant_cases"].get(variant, [])
+            for case in cases:
+                row = dict(complete=True, steps=11, of_steps=11, stack_bytes=106, peak_sp=0xe9,
+                           terminal=PROFILE["simulator"]["terminals"][str(case)])
+                if case == 21:
+                    row["service"] = SERVICE.copy()
+                if case == 23:
+                    row["reporting"] = REPORTING.copy()
+                if case == 24:
+                    row["bindings"] = BINDINGS.copy()
+                if case in (16, 18, 20):
+                    row["binding_identity_checks"] = 1
+                if mutate:
+                    row = mutate(case, row)
+                if row is not None:
+                    (folder/f"case{case}.json").write_text(json.dumps(row))
+            result = subprocess.run([sys.executable, tiers.HERE/"sim_summary.py", folder,
+                                     folder/"summary.json", variant], capture_output=True, text=True)
+            return result.returncode, json.loads((folder/"summary.json").read_text())
+
+    def test_all_current_variant_cases_required(self):
+        for variant in tiers.VARIANTS:
+            code, summary = self.summary(variant)
+            self.assertEqual(code, 0)
+            self.assertEqual(summary["passed"], summary["total"])
+        for case in (0, 16, 17, 18, 19, 20):
+            code, summary = self.summary("parent-recovery", lambda c, r: None if c == case else r)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(summary["verdict"], "FAIL")
+
+    def test_new_case_terminal_completion_and_stack_are_independent(self):
+        for change in (dict(terminal="fault"), dict(complete=False), dict(steps=10),
+                       dict(stack_bytes=129), dict(stack_bytes=True), dict(stack_bytes=-1)):
+            code, summary = self.summary("parent-recovery", lambda c, r: r | change if c == 18 else r)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(summary["verdict"], "FAIL")
+
+    def test_runtime_reporting_completion_and_owner_checks_are_required(self):
+        code, _ = self.summary("parent-recovery-policy-c", lambda c, r: None if c == 23 else r)
+        self.assertNotEqual(code, 0)
+        changes = [dict(reporting=None), dict(terminal="fault"), dict(complete=False),
+                   dict(steps=10), dict(stack_bytes=129)]
+        for field, value in (("requests", 7), ("responses", 7), ("reports", 5),
+                             ("state_checks", 7), ("min", 30), ("max", 300),
+                             ("change", 10), ("responses", True), ("state_checks", 8.0)):
+            changes.append(dict(reporting=REPORTING | {field: value}))
+        for change in changes:
+            code, result = self.summary("parent-recovery-policy-c", lambda c, r: r | change if c == 23 else r)
+            self.assertNotEqual(code, 0, change)
+            self.assertEqual(result["verdict"], "FAIL")
+            with tempfile.TemporaryDirectory() as d:
+                report = Path(d) / "case23.json"
+                row = dict(complete=True, steps=11, of_steps=11, stack_bytes=106,
+                           terminal="serving", reporting=REPORTING)
+                report.write_text(json.dumps(row | change))
+                self.assertFalse(tiers.sim_check(report, 23, "serving")()[0], change)
+
+    def test_bindings_require_complete_owner_and_identity_evidence(self):
+        code, _ = self.summary("parent-recovery-policy-c", lambda c, r: None if c == 24 else r)
+        self.assertNotEqual(code, 0)
+        changes = [dict(bindings=None), dict(terminal="fault"), dict(complete=False),
+                   dict(steps=10), dict(stack_bytes=129)]
+        for field, value in (("requests", 17), ("responses", 17), ("reports", 0),
+                             ("state_checks", 17), ("readonly_checks", 0), ("final_entries", 3),
+                             ("humidity_endpoint", 1), ("temperature_endpoint", 1),
+                             ("power_endpoint", 1), ("responses", True), ("state_checks", 18.0)):
+            changes.append(dict(bindings=BINDINGS | {field: value}))
+        for change in changes:
+            code, result = self.summary("parent-recovery-policy-c", lambda c, r: r | change if c == 24 else r)
+            self.assertNotEqual(code, 0, change)
+            self.assertEqual(result["verdict"], "FAIL")
+            with tempfile.TemporaryDirectory() as d:
+                report = Path(d)/"case24.json"
+                report.write_text(json.dumps(dict(complete=True, steps=11, of_steps=11, stack_bytes=106,
+                                                 terminal="serving", bindings=BINDINGS) | change))
+                self.assertFalse(tiers.sim_check(report, 24, "serving")()[0], change)
+        for case in (16, 18, 20):
+            for bad in (None, 0, True, 1.0):
+                code, _ = self.summary("parent-recovery-policy-c",
+                                       lambda c, r: r | {"binding_identity_checks": bad} if c == case else r)
+                self.assertNotEqual(code, 0)
+
+    def test_sustained_completion_and_metrics_are_required_by_both_gates(self):
+        changes = [dict(service=None), dict(terminal="fault"), dict(complete=False),
+                   dict(steps=10), dict(stack_bytes=129), dict(stack_bytes=True),
+                   dict(stack_bytes=-1)]
+        for field, value in (("duration_ms", 10000), ("duration_ms", 601000),
+                             ("duration_ms", 600000.0), ("protected_frames", 119),
+                             ("replay_drops", 11), ("reports", 15), ("erases", 9),
+                             ("programs", 1), ("ordinary_rx_commands", 1),
+                             ("security_checkpoints", 1), ("flash_controller_nominal_us", 1),
+                             ("reports", True), ("reports", -1)):
+            changes.append(dict(service=SERVICE | {field: value}))
+        changes.append(dict(service=SERVICE | {"unexpected": 0}))
+        for change in changes:
+            with self.subTest(change=change):
+                code, summary = self.summary("parent-recovery-policy-c",
+                    lambda c, r: r | change if c == 21 else r)
+                self.assertNotEqual(code, 0)
+                self.assertEqual(summary["verdict"], "FAIL")
+                with tempfile.TemporaryDirectory() as d:
+                    report = Path(d) / "case21.json"
+                    row = dict(complete=True, steps=11, of_steps=11, terminal="serving",
+                               stack_bytes=106, service=SERVICE.copy()) | change
+                    report.write_text(json.dumps(row))
+                    self.assertFalse(tiers.sim_check(report, 21, "serving")()[0])
+        code, summary = self.summary("parent-recovery-policy-c",
+                                    lambda c, r: None if c == 21 else r)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(summary["verdict"], "FAIL")
 
 
 if __name__ == "__main__":

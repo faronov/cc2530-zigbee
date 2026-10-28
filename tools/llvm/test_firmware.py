@@ -54,6 +54,46 @@ class LLVMOnlyBuild(unittest.TestCase):
         self.assertEqual(lines[0].count("-Ibuild/native-check/join-smoke-layout"), 1)
         self.assertNotIn("sdcc ", out)
 
+    def test_native_variants_propagate_without_an_sdcc_build(self):
+        target = "build/native-check/host-join-smoke-vectors"
+        for parent, policy in ((0, 0), (1, 0), (1, 1)):
+            with self.subTest(parent=parent, policy=policy):
+                out = subprocess.check_output(
+                    ["make", "-Bn", "BUILD=build/native-check",
+                     f"JOIN_SMOKE_PARENT_RECOVERY={parent}",
+                     f"JOIN_SMOKE_REPLAY_POLICY_C={policy}", target],
+                    cwd=firmware.REPO, text=True)
+                command = next(s for s in out.splitlines() if s.endswith("-o " + target))
+                self.assertEqual("-DCC2530_PARENT_RECOVERY" in command, bool(parent))
+                self.assertEqual("-DCC2530_REPLAY_POLICY_C" in command, bool(policy))
+                self.assertNotIn("sdcc ", out)
+        result = subprocess.run(
+            ["make", "-n", "JOIN_SMOKE_REPLAY_POLICY_C=1"],
+            cwd=firmware.REPO, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires JOIN_SMOKE_PARENT_RECOVERY=1", result.stderr)
+
+    def test_native_reporting_read_links_the_existing_temperature_provider(self):
+        out = subprocess.check_output(
+            ["make", "-Bn", "BUILD=build/native-check", "build/native-check/host-zcl-sensor"],
+            cwd=firmware.REPO, text=True)
+        self.assertIn("src/zcl_temperature.c", out)
+        out = subprocess.check_output(
+            ["make", "-n", "test-m5-m6-host"], cwd=firmware.REPO, text=True)
+        self.assertIn("host-security-receive-completion-tests-sanitize", out)
+        self.assertIn("host-nwk-parent-sanitize", out)
+
+    def test_standard_build_accepts_each_existing_tier_variant(self):
+        for variant in firmware.tiers.VARIANTS:
+            with self.subTest(variant=variant), \
+                    patch("sys.argv", ["firmware.py", "--tools", "unused", "--llvm-src", "unused",
+                                       "--output", "build/unused", "--board", "lg_esl29_rev03",
+                                       "--variant", variant]), \
+                    patch.object(firmware.tiers, "compiler_identity",
+                                 return_value={"llvm_commit": "wrong", "llvm_diff": None}):
+                with self.assertRaisesRegex(SystemExit, "exact clean pinned"):
+                    firmware.main()
+
     def test_reject_changed_compiler_source(self):
         with patch("sys.argv", ["firmware.py", "--tools", "unused", "--llvm-src", "unused",
                                 "--output", "build/unused", "--board", "lg_esl29_rev03"]):

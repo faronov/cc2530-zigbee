@@ -21,7 +21,7 @@ typedef struct {
 } link_work_ownership_t;
 
 typedef struct {
-    uint8_t record[112], a[116], b[116], hash_key[16];
+    uint8_t record[SECURITY_KEYS_RECORD_MAX], a[116], b[116], hash_key[16];
     ed_packet_t packet;
     nwk_frame_info_t nwk;
     zigbee_security_key_t key;

@@ -50,6 +50,13 @@ extern MCU_XDATA radio_autoack_config_t join_smoke_initial;
 extern MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 extern MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 extern volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
+#if defined(CC2530_PARENT_RECOVERY)
+/* Optional independently trusted router history, loaded before ARM:
+ * IEEE8, short2 LE, two exclusive NWK floors4 LE, key sequences2.
+ * All-zero means absent. Stored through the real key/NV owner only after
+ * initial authenticated admission, never used to manufacture membership. */
+extern MCU_XDATA uint8_t join_smoke_parent_history[20];
+#endif
 extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
 
 /* Draft, not a flashable/accepted image. Whole-reset, single-use caller.
@@ -61,7 +68,10 @@ extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smo
  * provisioning; identity.channel is only the initial OFF radio channel, not a
  * network selector. It uses floors1/1, ignores install_code and network identity
  * input fields, and requires the same own IEEE in both public input views.
- * Existing NV is refused, never erased/reprovisioned.
+ * Existing VERIFIED/REJOINING durable membership is resumed: provisioning
+ * is skipped and BDB enters RECOVERING (secured same-parent NWK rejoin, ED
+ * Timeout, Device Announce) before READY. Any other existing NV is refused,
+ * never erased/reprovisioned.
  * READY is authenticated BDB readiness, NOT radio OFF or complete HA interview.
  * READY then serves (stage 5) WITHOUT a time or step budget until reset or a
  * fault: ZDO and Basic/Temperature/Humidity requests are answered by the

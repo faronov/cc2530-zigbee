@@ -95,7 +95,7 @@ The direct CI entry point is the same script:
 python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
     --tools BIN --llvm-src SRC --simulator S51 \
     [--llvm-build TREE | --lit-evidence RECEIPT] [--evidence STORE] \
-    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag}]
+    [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag,parent-recovery,parent-recovery-policy-c}]
 ```
 
 `--plan-only` prints the exact selection without running anything.
@@ -105,6 +105,24 @@ python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
 fixed diagnostic block; see
 [RX_DIAG diagnostic variant](#rx_diag-diagnostic-variant-llvm-only). The variant is part of
 the receipt identity, so evidence never crosses variants.
+
+`parent-recovery` adds `-DCC2530_PARENT_RECOVERY` for the explicitly versioned
+known-router recovery extension described in
+[SECURITY_KEYS.md](SECURITY_KEYS.md#optional-known-router-durable-ownership).
+It does not enable RX_DIAG or change production defaults. Alternate recovery
+requires valid durable previously trusted router history; unknown identities
+are unsupported. `make test-parent-storage`, `test-parent-recovery` and
+`test-parent-candidates` run the real owner/controller/collector corpus
+with this flag, both natively and under sanitizers.
+
+`parent-recovery-policy-c` additionally defines `CC2530_REPLAY_POLICY_C`.
+It preserves K3 and outgoing reservations, but uses RAM ordinary NWK floors
+with selective durable checkpoints and explicit cold-reset replay exposure.
+See the [checkpoint/threat contract](M5_POLICY_C.md).
+`test-replay-policy-c` and `test-parent-recovery-policy-c` run native and
+nonrecovering-sanitizer tests. Only this opt-in FULL variant adds sustained
+case21 (600 modeled seconds, 120 protected frames and 12 duplicate attempts).
+Strict/production/RX_DIAG selections are unchanged.
 
 Exit codes:
 
@@ -158,9 +176,37 @@ The case-0 prefix is a regression check only. Its report says `complete: false`,
 claims READY or commissioning. The AES/flash write path is first reached at case-0 step 395 and
 in case 10, so it is FULL-only. The receipt lists it under `unselected`.
 
-**FULL: 23 steps.** FULL is the FAST steps plus `vectors`, every admitted scenario (0, 10, 8, 6,
-1, 5, 9, 4, 2, 3) run to its expected terminal, and `sim-summary`, which checks every terminal
-and that stack ≤ 128.
+**FULL: 25 steps.** FULL is the FAST steps plus `vectors`, every admitted scenario (0, 16, 10,
+8, 6, 1, 5, 9, 4, 2, 3, 17) run to its expected terminal, and `sim-summary`, which checks every
+terminal and that stack ≤ 128.
+
+Cases 16 and 17 are the M5 secure-recovery scenarios. Each MCU replay starts from the
+`nv_initial` flash image, and the actual journal is compared after every step.
+- **Case 16.** `nv_initial` is byte-identical to the final NV of complete case 0. The device
+  resumes it through a secured same-parent NWK rejoin, ED Timeout and Device Announce to READY,
+  and keeps `serving`.
+- **Case 17.** The parent never answers. After exactly three durable Rejoin Requests, the device
+  stops with `fault` (`JS_BDB`, `NO_PARENT`).
+
+Both reach the flash write path (REJOINING is saved before each request), so they are FULL-only,
+like case 10. The receipt records their measured times.
+
+The `parent-recovery` variant adds three FULL-only cases, for28 steps total:
+**20** initially joins and stores explicit public trusted-router history through
+the actual target key/NV C services; **18** cold-boots from its exact final NV,
+discovers that eligible router after the old parent disappears, securely rejoins,
+negotiates ED Timeout, announces, reaches READY and confirms a report plus
+protected application input during ten seconds of foreground serving;
+**19** cold-boots from the same NV and terminates boundedly when discovery has
+only a wrong-Extended-PAN candidate. The foreground interval is not a calibrated
+wall-clock or sustained-service qualification. Every case retains separate
+terminal and measured-stack checks. The current profile drives both FULL
+selection and its summary; no new case is added to production or RX_DIAG.
+Vector generation forwards the build variant and verifies both cold-NV chains.
+The optional public20-byte `join_smoke_parent_history` input is IEEE8, short2 LE,
+two exclusive NWK floors4 LE and key sequences2, loaded before ARM. It supplies
+synthetic independently trusted history, not keys or successful membership.
+All-zero is absent. Target C stores it only after initial authenticated admission.
 
 FULL refuses to start in two cases:
 - Lit is unavailable. FULL requires `--llvm-build` or `--lit-evidence`.
@@ -196,7 +242,7 @@ On these figures FAST is about 830× cheaper than FULL, and SMOKE about 60× che
 | Generic-pointer and ABI semantic simulation | `tools/llvm/semsim` | 5 s | FAST |
 | Bank-call matrix | `tools/llvm/bankmatrix` | 1 s | FAST |
 | Thunk, stack-argument, stack, static-frame, fixed-address and gp proofs | `tools/llvm/audit.sh` (`thunk_audit`, `stackarg_entry_audit`, `stack_proof`, `gp_proof`, `hexbanks`) | 15 s | FAST |
-| Firmware simulator cases 0–10 (not 7) | `tools/llvm/llvm_join_replay.py` | See the table above | SMOKE subset; FULL all |
+| Firmware simulator cases 0–10 (not 7), 16, 17 | `tools/llvm/llvm_join_replay.py` | See the table above | SMOKE subset; FULL all |
 | Bounded case-0 prefix | `llvm_join_replay.py --limit 3` | 135–151 s | SMOKE |
 | Historical SDCC host/sanitizer/image/overlay gates | Archived pre-migration infrastructure | SDCC overlay full join ≈1 h 38 min on GitHub | Retired; not an active tier |
 
@@ -249,8 +295,12 @@ Consequences:
 
 ### FULL suspend and resume
 
-`--case0-budget SEC` lets case 0 snapshot every 10 steps and stop with SUSPENDED after the
-budget. `--resume` continues the run, but only if all of these are unchanged:
+`--case0-budget SEC` retains its CLI spelling but now gives long cases0/21 a
+shared segment wall-clock deadline. They snapshot at caller/peripheral
+boundaries into separate case directories and stop with SUSPENDED, never PASS.
+A late-starting case21 therefore cannot overrun a hosted job by receiving a
+fresh full budget. `--resume` continues every selected suspended scenario,
+but only if all of these are unchanged:
 - the same identity and selection;
 - the same ELF, vectors and simulator as at admission;
 - the same snapshot chain.
@@ -264,7 +314,9 @@ Each change below was refused:
 - another simulator binary;
 - a fresh run into a non-empty output.
 
-The case-0 budget and `--jobs` are deliberately not part of the selection.
+The segment budget and `--jobs` are deliberately not part of the selection.
+The workflow permits six segments, carrying completed cases without reruns.
+If the last segment still suspends, the final verdict fails explicitly.
 
 ### Negative checks
 

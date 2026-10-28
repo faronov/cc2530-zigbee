@@ -203,6 +203,31 @@ static uint16_t common(void)
 #include <stdio.h>
 #include <stdlib.h>
 
+#if defined(CC2530_PARENT_RECOVERY)
+static uint16_t rejoin_policy(void)
+{
+    CALL(start(0));
+    CHECK(nwk_candidates_rejoin(&table) == NWK_CANDIDATES_OK);
+    memcpy(body, beacon, sizeof(body)); body[8] &= 0x7f;
+    CHECK(nwk_candidates_consider(&table,11,1,body,sizeof(body)) == NWK_CANDIDATES_ADDED);
+    CHECK(nwk_candidates_rejoin(&table) == NWK_CANDIDATES_INVALID_TABLE);
+    policy.potential_mask=1; policy.link_cost[0]=3;
+    CALL(select_case(NWK_PARENT_OK,0)); /* closed network remains eligible */
+    CALL(start(2));
+    table.rejoin=1;
+    CALL(update(0,127,8)); CALL(update(1,127,1));
+    policy.link_cost[0]=1; policy.link_cost[1]=3;
+    CALL(select_case(NWK_PARENT_OK,1)); /* minimum depth precedes link cost */
+    CALL(update(1,127,8));
+    CALL(select_case(NWK_PARENT_OK,0));
+    CALL(update(1,128,15));
+    CALL(select_case(NWK_PARENT_OK,1)); /* newest update precedes depth */
+    table.rejoin=2;
+    CALL(select_case(NWK_PARENT_INVALID_TABLE,0));
+    return 0;
+}
+#endif
+
 static uint8_t linear_oracle(const uint8_t *ids)
 {
     unsigned int origin, index, offset, maximum;
@@ -308,6 +333,9 @@ int main(void)
 {
     uint16_t line = common();
     if (!line) line = exhaustive();
+#if defined(CC2530_PARENT_RECOVERY)
+    if (!line) line = rejoin_policy();
+#endif
     if (line) {
         fprintf(stderr, "NWK parent test failed at line %u\n", (unsigned int)line);
         return EXIT_FAILURE;

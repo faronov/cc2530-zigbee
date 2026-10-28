@@ -30,6 +30,9 @@ nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * SDCC_VOLATILE tab
 #endif
     nwk_candidates_result_t fetched;
     uint8_t updates[NWK_CANDIDATES_CAPACITY];
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t depth[NWK_CANDIDATES_CAPACITY];
+#endif
     SDCC_VOLATILE uint8_t i, j, eligible, best, delta, dominates, any, all;
 
     if (table == NULL || policy == NULL || output == NULL || policy->minimum_known > 1u)
@@ -67,6 +70,9 @@ nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * SDCC_VOLATILE tab
                 continue;
         }
         updates[i] = PARENT_CANDIDATE.network.update_id;
+#if defined(CC2530_PARENT_RECOVERY)
+        depth[i] = PARENT_CANDIDATE.network.device_depth;
+#endif
         eligible |= (uint8_t)(1u << i);
     }
     if (!eligible)
@@ -86,7 +92,16 @@ nwk_parent_result_t nwk_parent_select(const nwk_candidates_t * SDCC_VOLATILE tab
             }
         }
         if (dominates && (best == NWK_CANDIDATES_CAPACITY
+#if defined(CC2530_PARENT_RECOVERY)
+                         || (table->rejoin && depth[i] < depth[best])
+                         || ((!table->rejoin || depth[i] == depth[best]) &&
+                             policy->link_cost[i] < policy->link_cost[best])
+#else
                          || policy->link_cost[i] < policy->link_cost[best]))
+#endif
+#if defined(CC2530_PARENT_RECOVERY)
+                         ))
+#endif
             best = i;
     }
     if (best == NWK_CANDIDATES_CAPACITY)
