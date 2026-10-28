@@ -488,15 +488,9 @@ uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_F
     return 1;
 }
 
-uint8_t zcl_sensor_serve(void) JOIN_FAR
+void zcl_sensor_tick(void) JOIN_FAR
 {
     zcl_sensor_reporting_t MCU_XDATA *r;
-    /* Enumeration must not consume pending report bookkeeping or a timer tick. */
-    if (CTX.application_ready && !RX.aps.profile_id && !RX.aps.destination_endpoint &&
-        RX.aps.cluster_id == ZDO_SRV_MGMT_BIND_REQUEST) {
-        if (RX.nwk.destination >= 0xfffbu || RX.aps.delivery_mode) return ZCL_SENSOR_DISCARDED;
-        return management_bind();
-    }
     if (ST.sent) {
         ST.sent = 0;
         ST.tsn++;
@@ -509,9 +503,14 @@ uint8_t zcl_sensor_serve(void) JOIN_FAR
             if (r->age != 0xffffu) r->age++;
         if (ST.identify) ST.identify--;
     }
+}
+
+uint8_t zcl_sensor_serve(void) JOIN_FAR
+{
     if (CTX.application_ready) {
         if (RX.nwk.destination >= 0xfffbu || RX.aps.delivery_mode) return ZCL_SENSOR_DISCARDED;
         if (!RX.aps.profile_id && !RX.aps.destination_endpoint) {
+            if (RX.aps.cluster_id == ZDO_SRV_MGMT_BIND_REQUEST) return management_bind();
             return RX.aps.cluster_id == ZDO_SRV_BIND_REQUEST || RX.aps.cluster_id == ZDO_SRV_UNBIND_REQUEST ?
                 bind() : ZCL_SENSOR_DISCARDED;
         }

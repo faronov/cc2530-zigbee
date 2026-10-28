@@ -84,6 +84,7 @@ static void fault(uint8_t reason)
 static void serve(void)
 {
     if(DEVICE.phase!=BDB_JOIN_READY) return;
+    zcl_sensor_tick();
     RESULT=zcl_sensor_serve();
     if(DEVICE.work.runtime.zdo.application_ready) {
         if(zdo_runtime_discard_application(&DEVICE.work.runtime.zdo)!=ZDO_RUNTIME_OK) {
@@ -100,8 +101,11 @@ static void serve(void)
     memset(&DEVICE.work.runtime.zdo.application,0,sizeof(ed_packet_t));
     if(RESULT==BDB_JOIN_FULL || (RESULT==BDB_JOIN_TRANSMIT_FAILED &&
        DEVICE.work.runtime.transport.wrap_wait)) return;
+    if(RESULT!=BDB_JOIN_OK) {
+        S.announce=(uint8_t)(0x80u|RESULT);
+        fault(JS_BDB); return;
+    }
     ZCL_SENSOR_STATE.sent=1;
-    if(RESULT!=BDB_JOIN_OK) S.announce=(uint8_t)(0x80u|RESULT);
 }
 
 /* READY CSMA backoff only: maximal 8-bit Galois LFSR (x^8+x^6+x^5+x^4+1)

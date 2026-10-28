@@ -300,6 +300,8 @@ static void serve_ready(unsigned *calls)
         caller_poll();
 #if defined(CC2530_REPLAY_POLICY_C)
         if(BINDING_CASE(caller_case)) {
+            if(join_smoke_device.phase==BDB_JOIN_READY && join_smoke_status.phase==JS_READY)
+                assert((uint32_t)(join_smoke_device.work.runtime.zdo.last-ZCL_SENSOR_STATE.second)<ZCL_SENSOR_SECOND);
             if(binding_requests<18 && link_peer_bindings==binding_requests &&
                !link_peer_pending && !sent_wait && !packets && !ack_active &&
                XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&

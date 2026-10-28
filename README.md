@@ -63,9 +63,13 @@ spots remain OPEN; Confirm-Key C remains UNRESOLVED.
 The history-preserving integration of the archived `1dd413b` source includes
 secure same-parent rejoin, optional known-router recovery, authenticated
 receive completion, runtime Read Reporting Configuration and live Mgmt_Bind.
-Production C sources and headers are identical to that archived firmware;
-the LLVM-only build, exact compiler pin and current bootstrap tooling remain.
-This is source integration, not renewed FULL or hardware acceptance.
+At integration commit `53554f7`, production C sources and headers were
+identical to that archived firmware. The subsequent bounded
+[report lifecycle correction](docs/ED_JOIN.md#report-attempt-and-response-ownership)
+separates READY maintenance from read-only request handling and refuses
+false report commits on queue rejection. The LLVM-only build, exact compiler
+pin, NV schema and Confirm-Key policy remain unchanged. Neither source
+integration nor this correction transfers historical FULL or hardware acceptance.
 
 The default variant remains `production`. Extended parent storage is
 explicitly selected with `LLVM_VARIANT=parent-recovery`; experimental RAM
