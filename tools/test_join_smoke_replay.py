@@ -30,6 +30,8 @@ class ReplayBoundaryTests(unittest.TestCase):
     def test_only_the_final_busy_flash_call_can_fail_to_return(self):
         for case in CASES:
             vector = self.fixture() | {"case": case}
+            if case in (18, 19, 20):
+                vector["parent_history"] = "00" * 20
             vector["steps"].append(vector["steps"][0] | {"returned": case != 10})
             validate_reference(vector)
             for index in range(2):
@@ -43,6 +45,16 @@ class ReplayBoundaryTests(unittest.TestCase):
         for value in (-1, True, "0"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_reference(self.fixture() | {"flash_commands": value})
+
+    def test_parent_history_is_exact_external_input_not_device_state(self):
+        vector = self.fixture() | {"case": 18, "parent_history": "00" * 20}
+        validate_reference(vector)
+        for value in (None, "", "00"*19, "00"*21, "GG"*20):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_reference(vector | {"parent_history": value})
+        del vector["parent_history"]
+        with self.assertRaises(ValueError):
+            validate_reference(vector)
 
     def flash_state(self):
         ram, iram, sfr, extended = (bytearray(n) for n in (0x1f00, 256, 128, 0x6000))

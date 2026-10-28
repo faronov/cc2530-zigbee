@@ -32,8 +32,8 @@ typedef struct {
     uint16_t min, max, change, last, age;
 } zcl_sensor_reporting_t;
 
-/* RAM-only application state. tc_ieee must stay first: init copies it
- * upward from the association record that this state then overlays. */
+/* RAM-only application state. tc_ieee is the verified logical TC identity,
+ * not the selected MAC parent or an Extended PAN ID. */
 typedef struct {
     uint8_t tc_ieee[8];
     zcl_sensor_reporting_t report[ZCL_SENSOR_REPORTS];
@@ -57,20 +57,36 @@ extern MCU_XDATA bdb_join_t join_smoke_device;
  * the three reportable clusters locally to coordinator endpoint 1, loads the
  * default reporting configuration and queues one Basic ModelIdentifier
  * report (an uninterviewed device's first frame invites the interview). */
-void zcl_sensor_init(void) JOIN_FAR;
+/* identity is a disjoint fresh security_keys_status().config snapshot from
+ * VERIFIED membership. The caller owns that admission, never an association
+ * or selected-parent assertion. Returns 0 without mutation if identity or
+ * source endpoint cannot describe the application; otherwise returns 1. */
+uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_FAR;
+/* Bounded read-only view of the three live cluster destinations. Source is
+ * the admitted device, destination is the cached verified TC, mode is 03.
+ * Returns whole-page length (5+21*n) or 0, leaving output untouched on error.
+ * Output is disjoint ordinary XDATA, excluding owner/alias/MMIO storage.
+ * capacity is at most ED_PAYLOAD_MAX. Empty table has zero count/start/list;
+ * a nonempty table past its end returns SUCCESS, requested start, zero list.
+ * No retained pointers, binding copy, scheduler mutation or I/O. */
+uint8_t zcl_sensor_binding_page(uint8_t sequence, uint8_t start,
+    uint8_t MCU_XDATA *output, uint8_t capacity) JOIN_FAR;
 /* Each READY poll. A frame the runtime published (application_ready) is
- * served first: Read Attributes, Write Attributes (IdentifyTime) and Configure
- * Reporting for Basic, Power Configuration, Identify, Temperature and
+ * served first: Read Attributes, Write Attributes (IdentifyTime), Configure
+ * and Read Reporting Configuration for Basic, Power Configuration, Identify, Temperature and
  * Relative Humidity Measurement on the transport endpoint, Identify/Identify
- * Query, Default Responses (other general commands, including Read Reporting
- * Configuration, are UNSUP_GENERAL_COMMAND), and ZDO Bind/Unbind for the
+ * Query, Default Responses (other general requests are UNSUP_GENERAL_COMMAND),
+ * and read-only ZDO Mgmt_Bind plus Bind/Unbind for the
  * coordinator. Replies use the runtime server response slot; the
  * published frame is always cleared. Otherwise, with no application TX
  * outstanding, it builds at most one due unsolicited ACK-requested Report
  * Attributes frame in the EMPTY application slot and returns REPORT; the
  * caller queues it and, once accepted, sets ZCL_SENSOR_STATE.sent. The next
  * call commits that report. RAM only: a reset restores the defaults. All
- * reported values are SYNTHETIC demonstration data, never measurements. */
+ * reported values are SYNTHETIC demonstration data, never measurements.
+ * Reporting reads validate the whole request, return only complete records
+ * fitting the 82-byte application slot, and never change reporting/bindings.
+ * Received Read Reporting Configuration Responses are discarded. */
 uint8_t zcl_sensor_serve(void) JOIN_FAR;
 
 #endif

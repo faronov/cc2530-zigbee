@@ -37,7 +37,8 @@ the public `ZigBeeAlliance09` key. The Network Key must arrive in a genuinely
 authenticated/decrypted Transport Key, followed by the existing durable
 counters, Device_annce, updated TC key/Verify/Confirm and parent negotiation.
 No host or debugger supplies a Network Key or successful security state.
-Existing persisted state is refused; secure restart/rejoin is still separate.
+Existing persisted state is refused unless it is complete VERIFIED/REJOINING
+membership, which resumes through [secure same-parent recovery](#secure-same-parent-recovery-m5).
 
 The LG native/sanitizer and shallow/deep caller runs pass the original ten
 scenarios plus all16-channel discovery, two open networks, closed admission,
@@ -400,8 +401,107 @@ The initial parent must advertise End Device Timeout Request keepalive
 (parent-information bit1). Timeout enumeration1 requests two minutes;
 the awake owner repeats the genuine secured request after30 seconds.
 A MAC-poll-only parent is an explicit unsupported/failing configuration.
-Persisted restart returns `BDB_JOIN_RECOVERY_REQUIRED`, not READY. Complete
-secure-rejoin/recovery orchestration belongs to #27.
+`bdb_join_start` still returns `BDB_JOIN_RECOVERY_REQUIRED` for persisted
+state. Persisted membership uses `bdb_join_resume` instead (below).
+
+## Secure same-parent recovery (M5)
+
+The first #27 slice covers a receiver-on, centralized-security ED with complete
+durable VERIFIED or REJOINING keys and its original TC/parent.
+- `bdb_join_resumable()` accepts only that state. LEFT, incomplete or
+  pre-membership storage stays `RECOVERY_REQUIRED`; nothing is erased or
+  reprovisioned.
+- `bdb_join_resume` installs the persisted identity, then enters RECOVERING. It
+  never scans or associates, and never sets READY from persisted membership.
+
+RECOVERING follows these rules:
+- It sends the genuine secured NWK Rejoin Request (R22 3.4.6) to the stored
+  parent. Sealing durably moves the keys to REJOINING before the frame leaves.
+  The retained stochastic short address clears Allocate Address (08/0C on
+  rejoin, not association's 88/8C). Parent information/EDI and the outstanding
+  Timeout Request are cleared before sealing and in the durable intent.
+- Only an authenticated Rejoin Response from the bound TC, with status 0,
+  persists the new short address and returns REJOINED.
+- A correctly addressed, protected refusal (PAN at capacity/access denied,
+  status1/2 with network addressFFFF) durably advances the replay floor but
+  retains REJOINING and credentials. BDB reports `REJOIN_REFUSED`, retires the
+  actual MAC owner and does not send another request to the refusing parent.
+  Unknown status values or inconsistent refusal addresses are malformed.
+- Other frames are ignored, and no application or ZDO traffic is admitted.
+- After REJOINED and VERIFIED, the runtime is reinstalled. Device Announce is
+  sent, the ED Timeout Request is renegotiated, and the parent information
+  must advertise ED Timeout keepalive.
+- Only then is READY set, with keepalive scheduling. No permit-join broadcast is
+  sent on rejoin.
+
+Failures are bounded:
+- Each successfully MAC-confirmed attempt waits `BDB_JOIN_REJOIN_WAIT`.
+  NO_ACK/busy CCA consume an attempt without starting a response timer.
+  A delayed protected response from the most recently requested parent can
+  still complete recovery after one response deadline; security floors and
+  the overall recovery budget still apply. After `BDB_JOIN_ATTEMPTS` (3)
+  requests, or when the overall recovery window expires, recovery ends in
+  `NO_PARENT`. Credentials are kept and remain resumable.
+- TX failure, security errors and storage faults fail closed.
+- Outgoing NWK/APS counters come from durable reserved ranges and never roll
+  back across the reset.
+
+Test coverage:
+- `test-bdb-join` covers recovery, failures, storage cuts and counter exhaustion.
+- Join-smoke case 16 cold-boots from the exact NV left by complete case 0 in a
+  separate process. The device then recovers to READY and serves application
+  traffic.
+- Case 17 covers a silent parent.
+- Both cases also run on the MCU simulator in LLVM FULL.
+
+Outside the ordinary same-parent profile: parent-loss scan/new-parent selection.
+The optional bounded extension is below. Unsecured/TC rejoin, sleepy operation
+and resume from LEFT remain unsupported. The unchanged response wait is
+30720 symbols (491.52 ms at the selected 16-us symbol duration), derived from
+the IEEE2006 `aResponseWaitTime=32*aBaseSuperframeDuration` used by the
+project's MAC profile. R22 cites IEEE2015; full revision/timing reconciliation
+remains open, rather than silently changing this constant.
+
+## Optional known-router parent-loss recovery
+
+`CC2530_PARENT_RECOVERY` implements the approved **known-router-first** slice,
+not general discovery/admission of unknown parents. Valid credentials and one
+independently trusted router history must already exist in K3. No history is
+inferred from an Extended PAN or an ordinary short-source beacon.
+
+The original parent is tried first. After silence/MAC failure exhausts its
+three attempts, or after authenticated refusal, the controller drains the
+actual transport and INSTALL confirms the saved RX state. Only then can its
+runtime union be replaced by the existing MAC scan owner. Discovery is bounded
+by the remaining overall budget and uses only the saved channel, PAN and
+Extended PAN. Closed networks are eligible for secure rejoin; ED capacity,
+profile, newest non-stale update, link cost and rejoin-specific minimum depth
+still apply. Partial/overflowed discovery and unknown identities fail.
+
+The scan lease is released before the selected router/update is persisted and
+the runtime is reinitialized. No MAC association or key reprovisioning occurs.
+The genuine secure rejoin validates the selected router's MAC, NWK IEEE/short
+identity, network-key MIC and independent replay floor. ACTIVE parent binding
+is committed only on authenticated success. ED Timeout, Device Announce,
+keepalive and READY restoration follow the same admission gates as before.
+Late success/refusal retires any queued Rejoin Request before it can reseal
+or overwrite the durable response. A reset during selected-parent recovery
+retains ATTEMPT, counters and replay history but starts non-READY.
+
+`make test-parent-recovery`, `test-parent-storage` and `test-parent-candidates`
+cover eligible/absent/silent/unknown parents, wrong Extended PAN/key/IEEE,
+stale update, NO_ACK/CCA, refusal, delayed/duplicate responses, selected-parent
+reset, missing ED Timeout, Leave, the original queue/exhaustion regressions,
+and real journal power cuts. LLVM FULL adds cases20 (initial join plus
+trusted-history registration through target C),18 (alternate-parent recovery,
+report and protected application input),19 (discovery exhaustion). Case18's
+foreground serving exercise is ten seconds; the existing case0/16 long serving
+and case17 failure gates are unchanged. Fresh MCU acceptance is still required.
+
+Remaining scope: unknown-router IEEE learning, multiple-router eviction/replay
+policy, changing PAN/channel, fallback after loss of the newly admitted router,
+TC migration and sleepy operation. The unchanged journal erase guard limits
+longer router service; see [durable-owner limitation](SECURITY_KEYS.md#optional-known-router-durable-ownership).
 
 ## First physical join gate
 
@@ -912,7 +1012,7 @@ board has no temperature, humidity or battery sensor. Endpoint 1 (device ID
 still `FFFF`) advertises the input clusters Basic `0000`, Power Configuration
 `0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
 Measurement `0405`. `zdo_runtime` publishes endpoint frames and ZDO
-Bind/Unbind requests, and the banked application server `zcl_sensor` answers
+Bind/Unbind and Mgmt_Bind requests, and the banked application server `zcl_sensor` answers
 them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
 
 - **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
@@ -931,14 +1031,27 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   disables reporting. The defaults are temperature 30/300 s/0.10 °C,
   humidity 30/300 s/0.25 %, voltage 60/3600 s/0.1 V and percentage
   60/3600 s/1 %.
-- **Read Reporting Configuration:** remains UNSUP_GENERAL_COMMAND (`0x81`),
-  never a fabricated success.
+- **Read Reporting Configuration:** returns the effective direction-0
+  configuration from the four live reporting records. Temperature/humidity
+  change fields are two bytes, battery change fields one byte. Unknown,
+  nonreportable and disabled attributes return `86`, `8C` and `8B`;
+  direction-1 reads return `86` for the empty receive-side attribute catalog.
+  Complete response prefixes fit the82-byte runtime application slot, but the
+  entire request is syntax-checked first. Reads do not reconfigure reporting,
+  reset age/baselines, change bindings or access NV. See
+  [the bounded runtime contract](M6_RUNTIME_REPORTING_READ.md).
 - **ZDO Bind/Unbind:** a 64-bit destination is accepted only if it is the
   trust center (coordinator), and only for the three clusters. A bind table
   for any other target returns NOT_SUPPORTED, and unbinding an absent entry
   returns NO_ENTRY.
 - **Persistence:** bindings and reporting configuration are RAM-only. A reset
   restores the defaults: all three clusters bound to coordinator endpoint 1.
+- **ZDO Mgmt_Bind:** enumerates those actual live cluster destinations, including
+  locally installed demonstration defaults, with complete extended-address
+  records and start-index pagination. The TC IEEE cache comes from VERIFIED
+  security-owner identity, never an association record or alternate MAC parent.
+  No mutable duplicate table or NV field is added. See [the bounded contract
+  and qualification status](M6_MGMT_BIND.md).
 
 READY has no serving budget: the join-smoke caller serves until reset or a
 fault. It first sends the Basic ModelIdentifier report. Then, whenever no

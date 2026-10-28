@@ -11,9 +11,29 @@ extern unsigned link_peer_tx, link_peer_checks, link_peer_app, link_peer_parent;
 extern uint16_t link_peer_report_cluster;
 extern uint8_t link_peer_report[], link_peer_report_length, link_peer_report_counter;
 void link_peer_setup(bdb_join_config_t *config);
+/* Config, beacon and Association Response only; no DUT state is touched. */
+void link_peer_config(bdb_join_config_t *config);
+/* Coordinator state across a modeled DUT power cycle (secured rejoin). */
+#define LINK_PEER_STATE_MAX 96
+extern unsigned link_peer_rejoins;
+extern uint8_t link_peer_mute_rejoin;
+unsigned link_peer_save(uint8_t *out);
+void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned length);
 void link_peer_transmitted(const uint8_t *body, uint8_t length);
 void link_peer_transport(uint8_t request_ack);
 void link_peer_application(ed_packet_t *packet);
 void link_peer_receive_application(void);
+#if defined(CC2530_REPLAY_POLICY_C)
+extern unsigned link_peer_reporting;
+void link_peer_receive_reporting(uint8_t step);
+extern unsigned link_peer_bindings, link_peer_binding_reports;
+void link_peer_receive_binding(uint8_t step);
+void link_peer_receive_service(void);
+void link_peer_receive_completion(uint8_t step);
+#endif
 void link_peer_verify(void);
+#if defined(CC2530_PARENT_RECOVERY)
+void link_peer_known_parent(security_keys_parent_t *parent);
+void link_peer_alternate(uint8_t exhausted);
+#endif
 #endif

@@ -48,7 +48,7 @@ working firmware features or changes the project's support claims.
 ## Development checks
 
 Firmware has one supported build path: pinned Clang MCS51/LLD and runtime from
-`41d87abda2eaec8c30be1c92097002f015499683`. `make` builds the LG join profile;
+`ac1712447bf906daddba44f79e586173a045aa1f`. `make` builds the LG join profile;
 `BOARD=generic IMAGE=bringup` or `IMAGE=timebase_fixture` retains generic
 bootstrap coverage. Use `LLVM_TOOLS` and `LLVM_SRC` to select that exact clean
 toolchain, not a floating branch or SDCC fallback.
@@ -59,6 +59,7 @@ Use the smallest relevant local check, then the existing
 | Command | Scope |
 | --- | --- |
 | `make test-host` | Existing native frame/NV/counter checks and directed join callers; no target compiler |
+| `make test-m5-m6-host` | Focused M5/M6 security/rejoin/reporting/binding native and nonrecovering sanitizer checks |
 | `make test-join-smoke-host` | Existing native/sanitized shallow/deep join and ZCL scenarios |
 | `python3 -B -m unittest discover -s tools/llvm -p 'test_*.py'` | Tier, identity and LLVM-only build guardrails |
 | `python3 -B tools/check_repository.py` | Publication, source and documentation constraints |
@@ -80,6 +81,16 @@ weaken stack (128-byte maximum), bank-thunk, reserved-memory, fixed-address or
 receipt identity checks. FAST/SMOKE do not imply FULL or hardware acceptance.
 The frozen accepted M6 result is not transferable to UNIFY-01; unresolved
 defects retain the statuses in [README](README.md#current-build-llvm-mcs51-only).
+
+M5/M6 firmware is integrated from the immutable accepted source `1dd413b`.
+The default `production` image remains strict: extended parent storage and
+Policy C RAM replay floors are opt-in `parent-recovery` and
+`parent-recovery-policy-c` variants, available through the same standard
+build and workflow. Never enable Policy C implicitly. Native join callers
+select these features with `JOIN_SMOKE_PARENT_RECOVERY=1` and, only together,
+`JOIN_SMOKE_REPLAY_POLICY_C=1`; changing either invalidates native build identity.
+New integration FAST/SMOKE evidence does not transfer the frozen M6 FULL
+qualification to the current source/compiler combination.
 
 ## Historical SDCC acceptance procedures (retired)
 

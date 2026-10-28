@@ -105,6 +105,10 @@ nwk_aps_result_t nwk_aps_queue(nwk_aps_t * SDCC_VOLATILE ctx, const ed_packet_t 
  * exclusively to the real security owner, never to a caller-supplied boolean.
  */
 nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t which, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+/* R22 3.4.6 secured NWK Rejoin Request to the TC parent, built in place.
+ * Admission, counters and the durable REJOINING transition belong to
+ * security_keys_send at transmit time. */
+nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t capability, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
     const NWK_APS_EVENT_T * SDCC_VOLATILE event, NWK_APS_ACTION_T * SDCC_VOLATILE action) JOIN_FAR;
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * SDCC_VOLATILE ctx, const uint8_t * SDCC_VOLATILE npdu,

@@ -124,6 +124,28 @@ nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATI
     return NWK_APS_OK;
 }
 
+nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t capability, SDCC_VOLATILE uint32_t now)
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+#endif
+    ed_packet_t * SDCC_VOLATILE p = &ctx->outgoing;
+    nwk_aps_result_t result = reserve(ctx, now, 0);
+    if (result) return result;
+    if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
+    memset(p, 0, sizeof(*p));
+    p->nwk.type = ED_NWK_COMMAND; p->nwk.version = 2; p->nwk.radius = 1;
+    p->nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(p->nwk.source_ieee, nwk_aps_keys.config.own_ieee, 8);
+    memcpy(p->nwk.destination_ieee, SECURITY_REJOIN_IEEE(nwk_aps_keys), 8);
+    p->nwk.destination = SECURITY_REJOIN_ADDRESS(nwk_aps_keys);
+    /* PRO stochastic allocation retains the validated saved short address. */
+    p->payload[0] = 6; p->payload[1] = capability & 0x7fu; p->length = 2;
+    ctx->secure = ctx->special = 0;
+    allocated(ctx, now, 0);
+    return NWK_APS_OK;
+}
+
 void nwk_aps_complete(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t result)
 {
     ed_packet_t * SDCC_VOLATILE p = &ctx->outgoing;
@@ -405,7 +427,8 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uin
     if (!LW_LEAVE(LW_NWK_HINT)) return NWK_APS_STATE;
 #endif
     /* The slot is unoccupied and all lower operations are synchronous. The
-     * key owner publishes into it only after authentication AND durable save.
+     * key owner publishes only after authentication and replay admission:
+     * the configured RAM-floor update or required durable security save.
      * Transport admission still owns receive_ready; no packet escapes early. */
     accepted = security_keys_receive(npdu, length, &ctx->incoming, &event, &ctx->limits, ctx->nv_polls);
     if (accepted) {
@@ -435,7 +458,11 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uin
         }
     }
     if ((event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_LEAVE ||
-        (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_UPDATE) {
+        (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_UPDATE ||
+        (((event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_REJOINED ||
+          (event & SECURITY_KEYS_EVENT_MASK) == SECURITY_KEYS_EVENT_REJOIN_REFUSED) &&
+         ctx->queued && !ctx->special && ctx->outgoing.nwk.type &&
+         ctx->outgoing.length == 2 && ctx->outgoing.payload[0] == 6)) {
         ctx->ready = 0;
         if (ctx->queued) { ctx->cancel = 1; ctx->cancel_result = NWK_APS_CANCELLED; }
     }

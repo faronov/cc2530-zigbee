@@ -19,8 +19,7 @@
 #define MODEL 6u
 #define IDENTIFY 4u
 
-typedef char zcl_sensor_overlay[sizeof(zcl_sensor_state_t) <= sizeof(join_smoke_device.record) &&
-    offsetof(mac_join_record_t, association.source_ieee) >= 8u ? 1 : -1];
+typedef char zcl_sensor_overlay[sizeof(zcl_sensor_state_t) <= sizeof(join_smoke_device.record) ? 1 : -1];
 
 typedef struct {
     uint16_t cluster, id;
@@ -256,6 +255,36 @@ static uint8_t configure(void)
     return statuses(0x07);
 }
 
+static uint8_t read_configuration(void)
+{
+    zcl_sensor_reporting_t MCU_XDATA *r;
+    uint8_t n;
+    if (!left()) return 0x80;
+    /* Validate even records beyond the fitting prefix (R8 2.5.10.2-3). */
+    while (left()) {
+        if (left() < 3u || take() > 1u) return 0x80;
+        ST.in += 2;
+    }
+    ST.in = (uint8_t)(ST.header+1u);
+    while (left()) {
+        ST.dir = take(); ST.id = take16();
+        ST.status = 0x86;
+        if (!ST.dir && find() != NONE)
+            ST.status = ST.entry >= ZCL_SENSOR_REPORTS ? 0x8cu :
+                reporting(ST.entry)->max == 0xffffu ? 0x8bu : 0;
+        n = ST.status ? 4u : (uint8_t)(9u+width(ST.type));
+        if (n > (uint8_t)(ED_PAYLOAD_MAX-ST.at)) break;
+        emit(ST.status); emit(ST.dir); emit16(ST.id);
+        if (!ST.status) {
+            r = reporting(ST.entry);
+            emit(ST.type); emit16(r->min); emit16(r->max);
+            if (width(ST.type) == 1u) emit((uint8_t)r->change);
+            else emit16(r->change);
+        }
+    }
+    return BUILT;
+}
+
 /* Identify and Identify Query; an idle device does not answer the query. */
 static uint8_t specific(uint8_t command)
 {
@@ -277,13 +306,13 @@ static uint8_t zcl(void)
     if (RX.aps.profile_id != DEV.config.transport.profile ||
         RX.aps.destination_endpoint != DEV.config.transport.endpoint) return ZCL_SENSOR_DISCARDED;
     ST.length = RX.length;
-    if (!ST.length) return ZCL_SENSOR_DISCARDED;
+    if (!ST.length || ST.length > ED_PAYLOAD_MAX) return ZCL_SENSOR_DISCARDED;
     control = IN[0];
     if ((control & 3u) > 1u) return ZCL_SENSOR_DISCARDED;
     ST.header = control & 4u ? 4u : 2u;
     if (ST.length <= ST.header) return ZCL_SENSOR_DISCARDED;
     command = IN[ST.header];
-    if (!(control & 3u) && command == 0x0bu) return ZCL_SENSOR_DISCARDED;
+    if (!(control & 3u) && (command == 0x0bu || command == 0x09u)) return ZCL_SENSOR_DISCARDED;
     if (!reply(RX.aps.cluster_id)) return ZCL_SENSOR_DISCARDED;
     CTX.response.aps.profile_id = DEV.config.transport.profile;
     CTX.response.aps.source_endpoint = DEV.config.transport.endpoint;
@@ -299,6 +328,7 @@ static uint8_t zcl(void)
     else if (command == 0x00u) ST.status = read();
     else if (command == 0x02u) ST.status = write();
     else if (command == 0x06u) ST.status = configure();
+    else if (command == 0x08u) ST.status = read_configuration();
     else ST.status = 0x81;
     if (ST.status == SILENT || (!ST.status && (control & 0x10u))) return ZCL_SENSOR_HANDLED;
     if (ST.status != BUILT) {
@@ -338,6 +368,61 @@ static uint8_t bind(void)
     }
     OUT[0] = IN[0]; OUT[1] = ST.status;
     CTX.response.length = 2;
+    CTX.response_pending = 1;
+    return ZCL_SENSOR_HANDLED;
+}
+
+static uint8_t known_ieee(const uint8_t MCU_XDATA *ieee)
+{
+    uint8_t i, any = 0, different = 0;
+    for (i = 0; i < 8u; i++) {
+        any |= ieee[i];
+        different |= (uint8_t)~ieee[i];
+    }
+    return any && different;
+}
+
+uint8_t zcl_sensor_binding_page(uint8_t sequence, uint8_t start,
+    uint8_t MCU_XDATA *output, uint8_t capacity) JOIN_FAR
+{
+    uint8_t i, total = 0, index = 0, at = 5;
+    uint16_t cluster;
+    if (!output || capacity < 5u || capacity > ED_PAYLOAD_MAX ||
+        !known_ieee(DEV.config.association.extraction.local) || !known_ieee(ST.tc_ieee) ||
+        !DEV.config.transport.endpoint || DEV.config.transport.endpoint > 0xf0u)
+        return 0;
+    for (i = 0; i < 3u; i++) {
+        if (ST.bound[i] == 0xffu) return 0;
+        if (ST.bound[i]) total++;
+    }
+    output[0] = sequence; output[1] = 0; output[2] = total;
+    output[3] = total ? start : 0; output[4] = 0;
+    for (i = 0; i < 3u; i++) {
+        if (!ST.bound[i]) continue;
+        if (index++ < start) continue;
+        if ((uint8_t)(capacity-at) < 21u) break;
+        memcpy(output+at, DEV.config.association.extraction.local, 8);
+        output[at+8u] = DEV.config.transport.endpoint;
+        cluster = attributes[i].cluster;
+        output[at+9u] = (uint8_t)cluster; output[at+10u] = (uint8_t)(cluster >> 8);
+        output[at+11u] = 3;
+        memcpy(output+at+12u, ST.tc_ieee, 8);
+        output[at+20u] = ST.bound[i];
+        at += 21; output[4]++;
+    }
+    return at;
+}
+
+static uint8_t management_bind(void)
+{
+    if (RX.nwk.type || RX.aps.type || RX.aps.source_endpoint ||
+        (RX.aps.flags & (uint8_t)~APS_FLAG_ACK_REQUEST) ||
+        RX.length < 2u || RX.length > ED_PAYLOAD_MAX)
+        return ZCL_SENSOR_DISCARDED;
+    if (!reply(ZDO_SRV_MGMT_BIND_REQUEST | 0x8000u)) return ZCL_SENSOR_DISCARDED;
+    CTX.response.length = zcl_sensor_binding_page(IN[0], IN[1], OUT, ED_PAYLOAD_MAX);
+    if (!CTX.response.length) return ZCL_SENSOR_DISCARDED;
+    CTX.response.aps.destination_endpoint = RX.aps.source_endpoint;
     CTX.response_pending = 1;
     return ZCL_SENSOR_HANDLED;
 }
@@ -384,10 +469,14 @@ static uint8_t report(void)
     return ZCL_SENSOR_REPORT;
 }
 
-void zcl_sensor_init(void) JOIN_FAR
+uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_FAR
 {
     uint8_t i;
-    for (i = 0; i < 8u; i++) ST.tc_ieee[i] = DEV.record.association.source_ieee[i];
+    if (!identity || !known_ieee(identity->own_ieee) || !known_ieee(identity->tc_ieee) ||
+        memcmp(identity->own_ieee, DEV.config.association.extraction.local, 8) ||
+        !DEV.config.transport.endpoint || DEV.config.transport.endpoint > 0xf0u)
+        return 0;
+    memcpy(ST.tc_ieee, identity->tc_ieee, 8);
     memset((uint8_t MCU_XDATA *)&ST+8, 0, sizeof(ST)-8u);
     for (i = 0; i < ZCL_SENSOR_REPORTS; i++) {
         restore(i);
@@ -396,11 +485,18 @@ void zcl_sensor_init(void) JOIN_FAR
     ST.bound[0] = ST.bound[1] = ST.bound[2] = 1;
     ST.second = CTX.last;
     ST.basic = 1;
+    return 1;
 }
 
 uint8_t zcl_sensor_serve(void) JOIN_FAR
 {
     zcl_sensor_reporting_t MCU_XDATA *r;
+    /* Enumeration must not consume pending report bookkeeping or a timer tick. */
+    if (CTX.application_ready && !RX.aps.profile_id && !RX.aps.destination_endpoint &&
+        RX.aps.cluster_id == ZDO_SRV_MGMT_BIND_REQUEST) {
+        if (RX.nwk.destination >= 0xfffbu || RX.aps.delivery_mode) return ZCL_SENSOR_DISCARDED;
+        return management_bind();
+    }
     if (ST.sent) {
         ST.sent = 0;
         ST.tsn++;
@@ -415,9 +511,10 @@ uint8_t zcl_sensor_serve(void) JOIN_FAR
     }
     if (CTX.application_ready) {
         if (RX.nwk.destination >= 0xfffbu || RX.aps.delivery_mode) return ZCL_SENSOR_DISCARDED;
-        if (!RX.aps.profile_id && !RX.aps.destination_endpoint)
+        if (!RX.aps.profile_id && !RX.aps.destination_endpoint) {
             return RX.aps.cluster_id == ZDO_SRV_BIND_REQUEST || RX.aps.cluster_id == ZDO_SRV_UNBIND_REQUEST ?
                 bind() : ZCL_SENSOR_DISCARDED;
+        }
         return zcl();
     }
     if (DEV.application_pending || DEV.application_done) return ZCL_SENSOR_IDLE;

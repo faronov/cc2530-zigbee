@@ -7,11 +7,32 @@
 #include "ed_wire.h"
 #include "sdcc_volatile.h"
 
+#if defined(CC2530_PARENT_RECOVERY)
+#define SECURITY_KEYS_RECORD_MAX 144u
+#else
+#define SECURITY_KEYS_RECORD_MAX 112u
+#endif
+
 typedef struct {
     uint8_t own_ieee[8], tc_ieee[8], extended_pan[8];
     uint16_t pan, address;
     uint8_t channel, update_id;
 } security_keys_config_t;
+
+#if defined(CC2530_REPLAY_POLICY_C) && !defined(CC2530_PARENT_RECOVERY)
+#error Policy C requires the experimental known-router profile.
+#endif
+
+#if defined(CC2530_PARENT_RECOVERY)
+typedef struct {
+    uint8_t ieee[8];
+    uint16_t address;
+    /* Trusted exclusive floors for the current two key-slot identities.
+     * Absent slots must be zero. A floor is history, not a receive assertion. */
+    uint32_t nwk_floor[2];
+    uint8_t sequence[2];
+} security_keys_parent_t;
+#endif
 
 typedef enum {
     SECURITY_KEYS_OK = 0, SECURITY_KEYS_EMPTY, SECURITY_KEYS_ARGUMENT,
@@ -34,7 +55,8 @@ typedef enum {
     SECURITY_KEYS_EVENT_DATA = 0, SECURITY_KEYS_EVENT_MANAGEMENT,
     SECURITY_KEYS_EVENT_NETWORK_KEY, SECURITY_KEYS_EVENT_TC_KEY,
     SECURITY_KEYS_EVENT_VERIFIED, SECURITY_KEYS_EVENT_SWITCH,
-    SECURITY_KEYS_EVENT_UPDATE, SECURITY_KEYS_EVENT_LEAVE, SECURITY_KEYS_EVENT_REJOINED
+    SECURITY_KEYS_EVENT_UPDATE, SECURITY_KEYS_EVENT_LEAVE, SECURITY_KEYS_EVENT_REJOINED,
+    SECURITY_KEYS_EVENT_REJOIN_REFUSED
 } security_keys_event_t;
 
 /* Output-only receive metadata: low seven bits are security_keys_event_t.
@@ -52,9 +74,26 @@ typedef struct {
     /* Last authenticated successful Timeout Response, recognized bits0..2;
      * durable outstanding request intent, not delivery/deadline/readiness. */
     uint8_t parent_information, timeout_pending, result;
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t router_known, router_active, router_selected, router_ieee[8];
+    uint16_t router_address;
+#endif
 } security_keys_status_t;
 
-/* One serialized foreground owner, fixed direct coordinator/TC only.
+#if defined(CC2530_PARENT_RECOVERY)
+#define SECURITY_PARENT_IEEE(s) ((s).router_active ? (s).router_ieee : (s).config.tc_ieee)
+#define SECURITY_PARENT_ADDRESS(s) ((s).router_active ? (s).router_address : 0u)
+#define SECURITY_REJOIN_IEEE(s) ((s).router_selected ? (s).router_ieee : (s).config.tc_ieee)
+#define SECURITY_REJOIN_ADDRESS(s) ((s).router_selected ? (s).router_address : 0u)
+#else
+#define SECURITY_PARENT_IEEE(s) ((s).config.tc_ieee)
+#define SECURITY_PARENT_ADDRESS(s) 0u
+#define SECURITY_REJOIN_IEEE(s) ((s).config.tc_ieee)
+#define SECURITY_REJOIN_ADDRESS(s) 0u
+#endif
+
+/* One serialized foreground owner, fixed logical coordinator/TC. The
+ * optional parent-recovery profile also supports one trusted router hop.
  * All objects complete, disjoint and stable; ordinary storage only, excluding
  * private/lower-service/libc/MMIO/status/IRAM alias storage. Link real lower
  * services before this module and callers. No ISR/reentrancy or callbacks.
@@ -77,6 +116,10 @@ security_keys_result_t security_keys_provision(
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
 #endif
 security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR;
+/* Authentication/replay completion is independent of upper semantics: an
+ * error can consume authenticated incoming counters but never output/event.
+ * Operational APS admission and authorized newer-slot adoption are durable;
+ * ordinary NWK-only completion uses the profile's existing replay policy. */
 security_keys_result_t security_keys_receive(
     const uint8_t * SDCC_VOLATILE raw_npdu, SDCC_VOLATILE uint16_t length,
     ed_packet_t * SDCC_VOLATILE output, uint8_t * SDCC_VOLATILE event,
@@ -115,5 +158,22 @@ security_keys_result_t security_keys_leave(
  * BDB completion, radio readiness or application-traffic permission from BDB.
  */
 security_keys_result_t security_keys_status(security_keys_status_t * SDCC_VOLATILE output) SECURITY_FAR;
+
+#if defined(CC2530_PARENT_RECOVERY)
+/* Explicit v2 -> v3 snapshot migration. Preserves all identity/key/replay
+ * bytes and the outgoing ceilings; never provisions or admits membership.
+ * Only complete VERIFIED/REJOINING records are eligible. */
+security_keys_result_t security_keys_upgrade_parent(uint16_t nv_polls) SECURITY_FAR;
+/* Independently trusted previously learned same-network router history,
+ * supplied only while VERIFIED. No key, READY, replay-floor reset or
+ * automatic unknown-neighbor enrollment. One lifetime identity, no eviction.
+ * Repeated calls must retain address/key identities and nondecreasing floors. */
+security_keys_result_t security_keys_remember_parent(
+    const security_keys_parent_t * SDCC_VOLATILE parent, uint16_t nv_polls) SECURITY_FAR;
+/* Stage a previously remembered router for a genuine protected rejoin.
+ * This does not change the durable admitted parent or application readiness. */
+security_keys_result_t security_keys_select_parent(
+    uint8_t router, uint8_t update_id, uint16_t nv_polls) SECURITY_FAR;
+#endif
 
 #endif

@@ -1126,6 +1126,13 @@ Exit:
 - The evidence records coordinator software/adapter versions and firmware
   revision, with private network data kept outside the repository.
 
+Status (first #27 slice): persisted VERIFIED/REJOINING membership now
+recovers through secured same-parent NWK rejoin, then Device Announce and ED
+Timeout to READY. A silent parent ends in a bounded NO_PARENT. See
+[ED_JOIN](ED_JOIN.md#secure-same-parent-recovery-m5).
+Parent loss, a new parent, LEFT resume, physical recovery and the 100-cycle
+restart test remain open.
+
 M5 is an authenticated lab ED milestone, not full BDB conformance or a claim
 that all discovery/application-profile requirements have been completed.
 M6 finishes those surfaces and their interoperability evidence; distributed

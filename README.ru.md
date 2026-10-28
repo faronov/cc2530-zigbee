@@ -8,6 +8,15 @@
 для независимого s51/uCsim. UNIFY-01 FULL **не запускался**; смена default
 не означает production qualification.
 
+В LLVM-only ветку перенесены исходники M5/M6 из архивного `1dd413b`:
+secure rejoin, завершение защищённого приёма, Read Reporting Configuration
+и Mgmt_Bind. Default остаётся `production`; расширенное хранилище родителей
+и экспериментальная Policy C включаются только явными вариантами
+`LLVM_VARIANT=parent-recovery` и `LLVM_VARIANT=parent-recovery-policy-c`.
+Проверки host/sanitizer доступны через `make test-m5-m6-host`.
+Принятый M6 FULL относится к прежней паре firmware/compiler и не квалифицирует
+эту новую интеграцию автоматически.
+
 Ниже сохранён исторический обзор. Его SDCC-команды и описания старых образов
 не являются актуальными инструкциями LLVM-only сборки.
 

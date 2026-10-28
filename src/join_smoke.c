@@ -3,6 +3,7 @@
 #include "flash_exec.h"
 #include "timebase.h"
 #include "zcl_sensor.h"
+#include "bdb_join_internal.h"
 #include <string.h>
 #if defined(CC2530_RX_DIAG)
 #include "cc2530_rx_diag.h"
@@ -15,16 +16,22 @@ MCU_XDATA radio_autoack_config_t join_smoke_initial;
 MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
+#if defined(CC2530_PARENT_RECOVERY)
+MCU_XDATA uint8_t join_smoke_parent_history[20];
+#endif
 #if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
 #endif
 
-static MCU_XDATA uint8_t initialized, gate, i;
+static MCU_XDATA uint8_t initialized, gate, i, resumed;
 /* Admission scratch is dead once started; the start loop and RUNNING/READY
  * reuse its storage. */
 static MCU_XDATA union {
     struct { uint8_t packet[8], any, opcode; } admit;
     struct { uint8_t backoff, draw, result; } serve;
+#if defined(CC2530_PARENT_RECOVERY)
+    security_keys_parent_t parent;
+#endif
 } scratch;
 #define BACKOFF scratch.serve.backoff
 #define DRAW scratch.serve.draw
@@ -183,12 +190,34 @@ void join_smoke_poll(void)
                !DEVICE.work.runtime.transport.ready || S.radio_errors) {
                 fault(JS_TERMINAL); return;
             }
+#if defined(CC2530_PARENT_RECOVERY)
+            if(memcmp(join_smoke_parent_history, "\0\0\0\0\0\0\0\0", 8)) {
+                if(resumed) { fault(JS_INPUT); return; }
+                memset(&scratch.parent,0,sizeof(scratch.parent));
+                memcpy(scratch.parent.ieee,join_smoke_parent_history,8);
+                scratch.parent.address=(uint16_t)join_smoke_parent_history[8] |
+                    (uint16_t)join_smoke_parent_history[9]<<8;
+                for(i=0;i<8;i++)
+                    scratch.parent.nwk_floor[i/4]|=(uint32_t)join_smoke_parent_history[10+i]<<(8u*(i%4));
+                scratch.parent.sequence[0]=join_smoke_parent_history[18];
+                scratch.parent.sequence[1]=join_smoke_parent_history[19];
+                S.security_result=security_keys_upgrade_parent(FLASH_EXEC_POLL_MAX);
+                if(S.security_result==SECURITY_KEYS_OK)
+                    S.security_result=security_keys_remember_parent(&scratch.parent,FLASH_EXEC_POLL_MAX);
+                if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+                memset(join_smoke_parent_history,0,sizeof(join_smoke_parent_history));
+            } else {
+                for(i=8;i<20;i++) if(join_smoke_parent_history[i]) { fault(JS_INPUT); return; }
+            }
+#endif
             if(S.draws==S.draw_limit) { fault(JS_RANDOM); return; }
             BACKOFF=join_smoke_draws[S.draws]; join_smoke_draws[S.draws++]=0;
             if(!BACKOFF) { fault(JS_RANDOM); return; }
             S.saw_ready=1; S.stage=5; gate=JS_READY; S.phase=gate;
             started=previous=now; steps=0;
-            zcl_sensor_init();
+            S.security_result=security_keys_status(&bdb_join_keys);
+            if(S.security_result!=SECURITY_KEYS_OK || bdb_join_keys.phase!=SECURITY_KEYS_VERIFIED ||
+               !zcl_sensor_init(&bdb_join_keys.config)) { fault(JS_SECURITY); return; }
         }
         return;
     }
@@ -220,17 +249,22 @@ void join_smoke_poll(void)
     started=timebase_read_awake_ticks24(); previous=started;
     S.stage=1;
     S.security_result=security_keys_open();
-    if(S.security_result!=SECURITY_KEYS_EMPTY) { fault(JS_SECURITY); return; }
+    /* Complete persisted membership resumes through secured rejoin; any other
+     * existing storage is still refused, never erased or reprovisioned. */
+    resumed=S.security_result==SECURITY_KEYS_OK && bdb_join_resumable();
+    if(!resumed) {
+        if(S.security_result!=SECURITY_KEYS_EMPTY) { fault(JS_SECURITY); return; }
 #if defined(CC2530_DEFAULT_TC_KEY)
-    if(IN.nwk_floor!=1 || IN.aps_floor!=1 ||
-       memcmp(IN.join.association.extraction.local,IN.identity.own_ieee,8)) {
-        fault(JS_INPUT); return;
-    }
+        if(IN.nwk_floor!=1 || IN.aps_floor!=1 ||
+           memcmp(IN.join.association.extraction.local,IN.identity.own_ieee,8)) {
+            fault(JS_INPUT); return;
+        }
 #else
-    S.security_result=security_keys_provision(&IN.identity,IN.install_code,
-        IN.nwk_floor,IN.aps_floor,&IN.join.transport.limits,IN.join.transport.nv_polls);
-    if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+        S.security_result=security_keys_provision(&IN.identity,IN.install_code,
+            IN.nwk_floor,IN.aps_floor,&IN.join.transport.limits,IN.join.transport.nv_polls);
+        if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
 #endif
+    }
     for(i=0;i<8;i++) INITIAL.ieee[i]=IN.identity.own_ieee[i];
     INITIAL.pan=INITIAL.short_address=0xffff;
     INITIAL.channel=IN.identity.channel; INITIAL.power=RADIO_AUTOACK_POWER_F5;
@@ -255,7 +289,8 @@ void join_smoke_poll(void)
     if(S.mac_result!=MAC_TX_OK) { fault(JS_MAC); return; }
     S.bdb_result=bdb_join_init(&DEVICE,CLOCK.symbols);
     if(S.bdb_result!=BDB_JOIN_OK) { fault(JS_BDB); return; }
-    S.bdb_result=bdb_join_start(&DEVICE,&TX,&IN.join,CLOCK.symbols);
+    S.bdb_result=resumed?bdb_join_resume(&DEVICE,&TX,&IN.join,CLOCK.symbols):
+        bdb_join_start(&DEVICE,&TX,&IN.join,CLOCK.symbols);
     if(S.bdb_result!=BDB_JOIN_OK) { fault(JS_BDB); return; }
     memset(&join_smoke_phase,0,sizeof(join_smoke_phase));
     S.driver_result=mac_link_driver_init(&DRIVER,&DEVICE,&INITIAL,

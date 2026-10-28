@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Shared fail-closed acceptance predicates for application service workloads."""
+
+
+def service_valid(service):
+    return (
+        type(service) is dict
+        and set(service) == {
+            "duration_ms", "protected_frames", "replay_drops", "reports",
+            "erases", "programs", "ordinary_rx_commands", "security_checkpoints",
+            "flash_controller_nominal_us"
+        }
+        and all(type(v) is int and v >= 0 for v in service.values())
+        and 600000 <= service["duration_ms"] < 601000
+        and service["protected_frames"] == 120
+        and service["replay_drops"] == 12
+        and service["reports"] >= 16
+        and service["erases"] <= 8
+        and service["programs"] == 45 * service["erases"]
+        and service["ordinary_rx_commands"] == 0
+        and service["security_checkpoints"] <= service["erases"]
+        and service["flash_controller_nominal_us"] ==
+            20000 * service["erases"] + 20 * service["programs"]
+    )
+
+
+def reporting_valid(reporting):
+    return (
+        type(reporting) is dict
+        and set(reporting) == {"requests", "responses", "reports", "state_checks", "min", "max", "change"}
+        and all(type(v) is int and v >= 0 for v in reporting.values())
+        and reporting["requests"] == reporting["responses"] == 8
+        and reporting["reports"] >= 6
+        and reporting["state_checks"] >= 8
+        and (reporting["min"], reporting["max"], reporting["change"]) == (7, 20, 50)
+    )
+
+
+def bindings_valid(bindings):
+    return (
+        type(bindings) is dict
+        and set(bindings) == {"requests", "responses", "reports", "state_checks",
+                             "readonly_checks", "final_entries", "temperature_endpoint",
+                             "humidity_endpoint", "power_endpoint"}
+        and all(type(v) is int and v >= 0 for v in bindings.values())
+        and bindings["requests"] == bindings["responses"] == 18
+        and bindings["reports"] >= 1
+        and bindings["state_checks"] >= 18
+        and bindings["readonly_checks"] >= 1
+        and (bindings["final_entries"], bindings["temperature_endpoint"],
+             bindings["humidity_endpoint"], bindings["power_endpoint"]) == (1, 0, 7, 0)
+    )

@@ -42,8 +42,9 @@ is explicitly unsupported rather than silently compiled with another compiler.
 FAST/SMOKE additionally need the independently reproduced s51/uCsim reference
 simulator (`make llvm-simulator LLVM_SIM_ARCHIVE=/path/to/sdcc_4.2.0+dfsg.orig.tar.xz`).
 The SDCC source archive builds **the simulator only**, never firmware.
-MCUEMU comparisons, golden oracle inputs, all 154 independent native executable
-recipes, and LLVM ABI/banking/static-stack/memory checks remain.
+MCUEMU comparisons, golden oracle inputs, all 154 original native executable
+recipes plus 16 restored M5/M6 recipes, and LLVM ABI/banking/static-stack/memory
+checks remain.
 See [current contribution checks](CONTRIBUTING.md#development-checks) and
 [LLVM build/CI details](docs/LLVM_DEVELOPMENT.md).
 
@@ -56,6 +57,24 @@ Frozen M6 firmware `1dd413b2bc5d69d7ec04b91137bb05c77bd13cca`, LLVM
 qualification of this compiler. F1a/F1b/F5 remain excluded pending review;
 F2 default-ABI exhaustion, F3 IDATA/XDATA contract and MachineVerifier blind
 spots remain OPEN; Confirm-Key C remains UNRESOLVED.
+
+### M5/M6 source integration
+
+The history-preserving integration of the archived `1dd413b` source includes
+secure same-parent rejoin, optional known-router recovery, authenticated
+receive completion, runtime Read Reporting Configuration and live Mgmt_Bind.
+Production C sources and headers are identical to that archived firmware;
+the LLVM-only build, exact compiler pin and current bootstrap tooling remain.
+This is source integration, not renewed FULL or hardware acceptance.
+
+The default variant remains `production`. Extended parent storage is
+explicitly selected with `LLVM_VARIANT=parent-recovery`; experimental RAM
+replay floors additionally require `LLVM_VARIANT=parent-recovery-policy-c`.
+Both use the standard `make firmware` path and sealed variant-bound receipts.
+Policy C's documented reset replay exposure is not enabled by default.
+See [Policy C](docs/M5_POLICY_C.md), [runtime reporting](docs/M6_RUNTIME_REPORTING_READ.md)
+and [Mgmt_Bind](docs/M6_MGMT_BIND.md). `make test-m5-m6-host` checks the restored
+native/sanitizer compositions without a target compiler.
 
 ## Historical SDCC-era overview and evidence
 
@@ -107,6 +126,15 @@ keeping both in RAM only; Read Reporting Configuration is unsupported.
 It serves until reset, but is not a real sensor, nor a sleepy, rejoining or
 production device. Router-parent joining is not
 implemented.
+
+The separate [LLVM development profile](docs/LLVM_DEVELOPMENT.md) has
+FULL-qualified secure same-parent restart/rejoin. Its opt-in
+[`parent-recovery` follow-up](docs/M5_CODE_PLACEMENT.md#integrated-known-router-candidate)
+adds bounded recovery through one independently trusted router, with local
+FAST/SMOKE and real-service host evidence; fresh complete MCU/FULL acceptance
+is pending. This is not new hardware evidence or general router-parent
+commissioning. Sustained router service is still limited by the unchanged
+durable-journal erase budget.
 
 [Русский обзор](README.ru.md)
 

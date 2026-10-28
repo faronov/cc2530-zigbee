@@ -59,6 +59,16 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
 #define FLAGS 108u
 #define PHASE 109u
 #define MAGIC 110u
+#if defined(CC2530_PARENT_RECOVERY)
+#define ROUTER 112u
+#define ROUTER_ADDR 120u
+#define ROUTER_NF 122u
+#define ROUTER_FLAGS 130u
+#define ROUTER_UPDATE 131u
+#define ROUTER_KNOWN 1u
+#define ROUTER_ACTIVE 2u
+#define ROUTER_ATTEMPT 4u
+#endif
 #define ACTIVE 4u
 #define NEWER 8u
 #define RETIRED 16u
@@ -68,12 +78,13 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
 #define PHASE_MASK 0x0fu
 #define PARENT_MASK 0x70u
 #define TIMEOUT_PENDING 0x80u
+#define APS_CURRENT_ADMITTED 2u
 
 /* No operational secrets survive a returning public call in this module.
  * The counter/journal still retain their real persistent/cached payloads. */
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
 static MCU_XDATA struct {
-    uint8_t record[112], a[116], b[116], hash_key[16];
+    uint8_t record[SECURITY_KEYS_RECORD_MAX], a[116], b[116], hash_key[16];
     ed_packet_t packet;
     nwk_frame_info_t nwk;
     zigbee_security_key_t key;
@@ -89,16 +100,23 @@ static MCU_XDATA struct {
 typedef char phase_fits_packed_byte[(SECURITY_KEYS_REJOINING <= PHASE_MASK) ? 1 : -1];
 typedef char phase_ranges[(SECURITY_KEYS_REQUESTED == SECURITY_KEYS_RECEIVED+1 &&
     SECURITY_KEYS_WAIT_CONFIRM == SECURITY_KEYS_PROVISIONAL+1) ? 1 : -1];
-typedef char payload_stays_112[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
+typedef char payload_fits_snapshot[(sizeof(w.record) == SECURITY_COUNTER_PAYLOAD_MAX) ? 1 : -1];
 static MCU_XDATA uint8_t security_keys_phase, security_keys_result;
 /* Lazy volatile state: NF floors and the PHASE byte's keepalive bits
- * (TIMEOUT_PENDING, parent information). Accepted DATA/MANAGEMENT frames
+ * (TIMEOUT_PENDING, parent information). Policy C adds independent router
+ * floors under the same selective-checkpoint contract. Accepted DATA/MANAGEMENT frames
  * without APS security or key-slot changes, and End Device Timeout requests,
  * update only these caches; everything else saves the whole record.
  * open/save/lazy paths keep them equal to the live state (floors never below
  * NV). Reset loses them: replay protection reverts to saved floors and the
  * keepalive bits to their last saved value. */
 static MCU_XDATA uint8_t floor_cache[8];
+#if defined(CC2530_REPLAY_POLICY_C)
+static MCU_XDATA uint8_t router_floor_cache[8];
+#if defined(CC2530_HOST_TEST)
+static unsigned host_checkpoints;
+#endif
+#endif
 static MCU_XDATA uint8_t phase_cache;
 
 static uint16_t u16(const uint8_t *p)
@@ -138,11 +156,37 @@ static uint8_t network(void) { return (w.record[FLAGS] & 3) != 0; }
 static uint8_t verified(void) { return (w.record[FLAGS] & WAS_VERIFIED) != 0; }
 static uint8_t phase(void) { return w.record[PHASE] & PHASE_MASK; }
 static uint8_t parent_information(void) { return (w.record[PHASE] >> 4) & 7u; }
+#if defined(CC2530_PARENT_RECOVERY)
+static uint8_t router_record(void) { return w.record[MAGIC+1] == 3; }
+static uint8_t parent_router(void)
+{
+    return router_record() && (w.record[ROUTER_FLAGS] &
+        (phase() == SECURITY_KEYS_REJOINING ? ROUTER_ATTEMPT : ROUTER_ACTIVE));
+}
+static uint8_t parent_ieee_offset(void) { return parent_router() ? ROUTER : TC; }
+static uint16_t parent_address(void) { return parent_router() ? u16(w.record+ROUTER_ADDR) : 0; }
+static uint8_t valid_router(void)
+{
+    uint8_t i, f = w.record[ROUTER_FLAGS];
+    if (!all(w.record+132, 12, 0) || (f & (uint8_t)~7u) ||
+        (!(f & ROUTER_ATTEMPT) && w.record[ROUTER_UPDATE])) return 0;
+    if (!(f & ROUTER_KNOWN)) return all(w.record+ROUTER, 19, 0);
+    if (!verified() || !identity(w.record+ROUTER) ||
+        same(w.record+ROUTER, w.record+OWN, 8) || same(w.record+ROUTER, w.record+TC, 8) ||
+        !u16(w.record+ROUTER_ADDR) || u16(w.record+ROUTER_ADDR) >= 0xfff8u ||
+        u16(w.record+ROUTER_ADDR) == u16(w.record+ADDR)) return 0;
+    for (i = 0; i < 2; i++)
+        if (!(w.record[FLAGS] & (1u << i)) && u32(w.record+ROUTER_NF+4u*i)) return 0;
+    return 1;
+}
+#endif
 static void set_phase(uint8_t value)
 {
     if (value <= SECURITY_KEYS_ASSOCIATED) w.record[PHASE] = value;
     else {
         w.record[PHASE] = (w.record[PHASE] & (uint8_t)~PHASE_MASK) | value;
+        if (value == SECURITY_KEYS_REJOINING)
+            w.record[PHASE] &= (uint8_t)~PARENT_MASK;
         if (value == SECURITY_KEYS_LEFT || value == SECURITY_KEYS_REJOINING)
             w.record[PHASE] &= (uint8_t)~TIMEOUT_PENDING;
     }
@@ -163,6 +207,14 @@ static security_keys_result_t finish(security_keys_result_t result)
 #endif
 }
 #if defined(CC2530_HOST_TEST)
+#if defined(CC2530_REPLAY_POLICY_C)
+unsigned security_keys_host_checkpoints(void) { return host_checkpoints; }
+void security_keys_host_replay_floors(uint8_t *out)
+{
+    memcpy(out, floor_cache, 8);
+    memcpy(out+8, router_floor_cache, 8);
+}
+#endif
 /* Host peripheral harness only: emulate CPU static-storage initialization,
  * including an interrupted operation's private staging. Not a target/public
  * recovery API, and never called between live crypto/NV operations. */
@@ -170,6 +222,10 @@ void security_keys_host_power_cycle(void)
 {
     security_keys_phase = SECURITY_KEYS_COLD;
     memset(floor_cache, 0, sizeof(floor_cache));
+#if defined(CC2530_REPLAY_POLICY_C)
+    memset(router_floor_cache, 0, sizeof(router_floor_cache));
+    host_checkpoints = 0;
+#endif
     phase_cache = 0;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     security_keys_result = SECURITY_KEYS_OK;
@@ -200,12 +256,20 @@ static uint8_t valid_config(void)
 static uint8_t valid_record(void)
 {
     uint8_t f = w.record[FLAGS], p = phase(), i;
-    if (w.size != 112 || w.record[MAGIC] != 'K' || w.record[MAGIC+1] != 2 ||
+    if (
+#if defined(CC2530_PARENT_RECOVERY)
+          !((w.size == 112 && w.record[MAGIC+1] == 2)
+          || (w.size == 144 && w.record[MAGIC+1] == 3 && valid_router())
+          ) || w.record[MAGIC] != 'K' ||
+#else
+          w.size != 112 || w.record[MAGIC] != 'K' || w.record[MAGIC+1] != 2 ||
+#endif
         !valid_config() || (f & 0x80) || p < SECURITY_KEYS_PROVISIONED ||
         p > SECURITY_KEYS_REJOINING || all(w.record+LK, 16, 0))
         return 0;
     if (p <= SECURITY_KEYS_ASSOCIATED || (p == SECURITY_KEYS_LEFT && !network())) {
-        if (f || !all(w.record+NK, 32, 0) || !all(w.record+PK, 28, 0) ||
+        /* Bootstrap APS can consume a floor before a network key is admitted. */
+        if (f || !all(w.record+NK, 32, 0) || !all(w.record+PK, 24, 0) ||
             w.record[SEQ] || w.record[SEQ+1] ||
             (w.record[PHASE] & (PARENT_MASK | TIMEOUT_PENDING))) return 0;
     } else {
@@ -251,11 +315,14 @@ static security_keys_result_t load(void)
         return (security_keys_result_t)security_keys_result;
     if (security_keys_phase < SECURITY_KEYS_PROVISIONED)
         return SECURITY_KEYS_STATE;
-    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, sizeof(w.record), &w.size)) != SECURITY_COUNTER_OK)
         return fault(SECURITY_KEYS_STORAGE);
     if (!valid_record() || phase() != security_keys_phase)
         return fault(SECURITY_KEYS_FORMAT);
     memcpy(w.record+NF, floor_cache, 8);
+#if defined(CC2530_REPLAY_POLICY_C)
+    if (router_record()) memcpy(w.record+ROUTER_NF, router_floor_cache, 8);
+#endif
     /* Zero until the first open/save: staged provision/association records
      * are read back unchanged. */
     if (phase_cache) w.record[PHASE] = phase_cache;
@@ -264,12 +331,23 @@ static security_keys_result_t load(void)
 static void keep_volatile(void)
 {
     memcpy(floor_cache, w.record+NF, sizeof(floor_cache));
+#if defined(CC2530_REPLAY_POLICY_C)
+    if (router_record()) memcpy(router_floor_cache, w.record+ROUTER_NF, 8);
+#endif
     phase_cache = w.record[PHASE];
 }
 static security_keys_result_t save(void)
 {
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t length = w.record[MAGIC+1] == 3 ? 144 : 112;
+    if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, length, w.polls)) != SECURITY_COUNTER_OK)
+#else
     if (KEY_CALL(LW_COUNTER_SAVE, security_counter_save(w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
+#endif
         return fault(SECURITY_KEYS_STORAGE);
+#if defined(CC2530_HOST_TEST) && defined(CC2530_REPLAY_POLICY_C)
+    host_checkpoints++;
+#endif
     security_keys_phase = phase();
     keep_volatile();
     return SECURITY_KEYS_OK;
@@ -330,12 +408,90 @@ security_keys_result_t security_keys_open(void) SECURITY_FAR
     }
     if (r != SECURITY_COUNTER_OK) return finish(fault(SECURITY_KEYS_STORAGE));
     result = SECURITY_KEYS_OK;
-    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, 112, &w.size)) != SECURITY_COUNTER_OK)
+    if (KEY_CALL(LW_COUNTER_READ, security_counter_read(w.record, sizeof(w.record), &w.size)) != SECURITY_COUNTER_OK)
         result = fault(SECURITY_KEYS_STORAGE);
     else if (!valid_record()) result = fault(SECURITY_KEYS_FORMAT);
     else { security_keys_phase = phase(); keep_volatile(); }
     return finish(result);
 }
+
+#if defined(CC2530_PARENT_RECOVERY)
+security_keys_result_t security_keys_upgrade_parent(uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t result = load();
+    if (result != SECURITY_KEYS_OK) return finish(result);
+    if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_CONTEXT);
+    if (w.size == 144) return finish(SECURITY_KEYS_OK);
+    memset(w.record+112, 0, 32);
+    w.record[MAGIC+1] = 3;
+    w.size = 144;
+    w.polls = nv_polls;
+    return finish(save());
+}
+
+security_keys_result_t security_keys_remember_parent(
+    const security_keys_parent_t * SDCC_VOLATILE parent, uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_EXTERNAL(parent, sizeof(*parent))) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
+    uint8_t i;
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (!parent || !nv_polls || !identity(parent->ieee) || !parent->address ||
+        parent->address >= 0xfff8u || parent->address == u16(w.record+ADDR) ||
+        same(parent->ieee, w.record+OWN, 8) || same(parent->ieee, w.record+TC, 8))
+        return finish(SECURITY_KEYS_ARGUMENT);
+    if (phase() != SECURITY_KEYS_VERIFIED || !router_record()) return finish(SECURITY_KEYS_CONTEXT);
+    if ((w.record[ROUTER_FLAGS] & ROUTER_KNOWN) &&
+        (!same(parent->ieee, w.record+ROUTER, 8) || parent->address != u16(w.record+ROUTER_ADDR)))
+        return finish(SECURITY_KEYS_UNSUPPORTED);
+    for (i = 0; i < 2; i++) {
+        if (w.record[FLAGS] & (1u << i)) {
+            if (parent->sequence[i] != w.record[SEQ+i] || !parent->nwk_floor[i] ||
+                parent->nwk_floor[i] < u32(w.record+ROUTER_NF+4u*i))
+                return finish(SECURITY_KEYS_REPLAY);
+        } else if (parent->nwk_floor[i] || parent->sequence[i]) return finish(SECURITY_KEYS_SELECTOR);
+    }
+    memcpy(w.record+ROUTER, parent->ieee, 8);
+    put16(w.record+ROUTER_ADDR, parent->address);
+    for (i = 0; i < 2; i++) put32(w.record+ROUTER_NF+4u*i, parent->nwk_floor[i]);
+    w.record[ROUTER_FLAGS] |= ROUTER_KNOWN;
+    w.polls = nv_polls;
+    return finish(save());
+}
+
+security_keys_result_t security_keys_select_parent(
+    uint8_t router, uint8_t update_id, uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (router > 1 || !nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (!router_record() || (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING))
+        return finish(SECURITY_KEYS_CONTEXT);
+    if (router && !(w.record[ROUTER_FLAGS] & ROUTER_KNOWN)) return finish(SECURITY_KEYS_IDENTITY);
+    if ((uint8_t)(update_id-w.record[UPDATE]) >= 128u) return finish(SECURITY_KEYS_CONTEXT);
+    if (router) {
+        w.record[ROUTER_FLAGS] |= ROUTER_ATTEMPT;
+        w.record[ROUTER_UPDATE] = update_id;
+    } else {
+        if (update_id != w.record[UPDATE]) return finish(SECURITY_KEYS_CONTEXT);
+        w.record[ROUTER_FLAGS] &= (uint8_t)~ROUTER_ATTEMPT;
+        w.record[ROUTER_UPDATE] = 0;
+    }
+    w.polls = nv_polls;
+    return finish(save());
+}
+#endif
 
 #if defined(CC2530_DEFAULT_TC_KEY)
 security_keys_result_t security_keys_provision_default(
@@ -487,6 +643,9 @@ static security_keys_result_t transport(void)
     }
     memcpy(w.record+NK+16u*i, w.packet.payload+2, 16);
     put32(w.record+NF+4u*i, 0); w.record[SEQ+i] = sequence;
+#if defined(CC2530_PARENT_RECOVERY)
+    if (router_record()) put32(w.record+ROUTER_NF+4u*i, 0);
+#endif
     w.event = SECURITY_KEYS_EVENT_NETWORK_KEY;
     return SECURITY_KEYS_OK;
 }
@@ -534,7 +693,14 @@ static security_keys_result_t aps_command(void)
 static security_keys_result_t nwk_command(void)
 {
     uint8_t command, delta;
-    if (!w.secured || !w.packet.length || w.packet.nwk.source != 0) return SECURITY_KEYS_CONTEXT;
+    if (!w.secured || !w.packet.length) return SECURITY_KEYS_CONTEXT;
+#if defined(CC2530_PARENT_RECOVERY)
+    if (w.packet.nwk.source !=
+        ((w.packet.payload[0] == 7 || w.packet.payload[0] == 12 || w.packet.payload[0] == 4) ?
+          parent_address() : 0u)) return SECURITY_KEYS_IDENTITY;
+#else
+    if (w.packet.nwk.source != 0) return SECURITY_KEYS_CONTEXT;
+#endif
     command = w.packet.payload[0];
     if (phase() == SECURITY_KEYS_REJOINING && command != 7 && command != 4)
         return SECURITY_KEYS_CONTEXT;
@@ -572,12 +738,30 @@ static security_keys_result_t nwk_command(void)
         if (phase() != SECURITY_KEYS_REJOINING) return SECURITY_KEYS_CONTEXT;
         if (w.packet.length != 4 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE ||
             w.packet.nwk.destination != u16(w.record+ADDR)) return SECURITY_KEYS_FORMAT;
-        /* Failed responses cannot change the binding or end the outstanding
-         * phase; caller owns bounded timeouts/retries and cancellation. */
-        if (w.packet.payload[3] != 0) return SECURITY_KEYS_CONTEXT;
+        /* R22 3.4.7/3.6.1.4.2: refusal is authenticated input, not silence.
+         * Retain REJOINING/binding but save its floor before reporting it. */
+        if (w.packet.payload[3] > 2) return SECURITY_KEYS_FORMAT;
+        if (w.packet.payload[3]) {
+            if (u16(w.packet.payload+1) != 0xffffu) return SECURITY_KEYS_FORMAT;
+            w.event = SECURITY_KEYS_EVENT_REJOIN_REFUSED;
+            return SECURITY_KEYS_OK;
+        }
         if (!u16(w.packet.payload+1) || u16(w.packet.payload+1) >= 0xfff8u)
             return SECURITY_KEYS_IDENTITY;
+#if defined(CC2530_PARENT_RECOVERY)
+        if (router_record() && (w.record[ROUTER_FLAGS] & ROUTER_KNOWN) &&
+            u16(w.packet.payload+1) == u16(w.record+ROUTER_ADDR)) return SECURITY_KEYS_IDENTITY;
+#endif
         memcpy(w.record+ADDR, w.packet.payload+1, 2);
+#if defined(CC2530_PARENT_RECOVERY)
+        if (router_record()) {
+            if (w.record[ROUTER_FLAGS] & ROUTER_ATTEMPT) {
+                w.record[ROUTER_FLAGS] |= ROUTER_ACTIVE;
+                w.record[UPDATE] = w.record[ROUTER_UPDATE];
+            }
+            else w.record[ROUTER_FLAGS] &= (uint8_t)~ROUTER_ACTIVE;
+        }
+#endif
         set_phase(SECURITY_KEYS_VERIFIED);
         w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
         w.event = SECURITY_KEYS_EVENT_REJOINED;
@@ -632,6 +816,7 @@ static security_keys_result_t open_aps(void)
             w.a+offset, length, w.b, 116, &w.info));
         if (r != SECURITY_KEYS_OK) return r;
         put32(w.record+AF, w.meta.counter+1);
+        w.aps_secured = APS_CURRENT_ADMITTED;
     }
     memcpy(w.a+offset, w.b, w.info.length); w.size = offset+w.info.length;
     return SECURITY_KEYS_OK;
@@ -650,6 +835,9 @@ security_keys_result_t security_keys_receive(
 #endif
     security_keys_result_t r = load();
     SDCC_VOLATILE uint8_t i;
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t sender = TC, floor = NF, logical = TC;
+#endif
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!raw_npdu || !output || !event || !limits_ok(limits, nv_polls))
         return finish(SECURITY_KEYS_ARGUMENT);
@@ -657,10 +845,24 @@ security_keys_result_t security_keys_receive(
         return finish(SECURITY_KEYS_STATE);
     r = crypto_result(ed_wire_nwk(raw_npdu, length, &w.nwk));
     if (r != SECURITY_KEYS_OK) return finish(r);
+#if defined(CC2530_PARENT_RECOVERY)
+    if (w.nwk.header.type == ED_NWK_COMMAND) {
+        if (w.nwk.header.source == parent_address()) logical = parent_ieee_offset();
+        else if (w.nwk.header.source != 0) return finish(SECURITY_KEYS_IDENTITY);
+    } else if (w.nwk.header.source != 0) return finish(SECURITY_KEYS_IDENTITY);
+    if (
+#else
     if (w.nwk.header.source != 0 ||
+#endif
         (w.nwk.header.destination != u16(w.record+ADDR) && !broadcast(w.nwk.header.destination)) ||
         ((w.nwk.header.flags & NWK_FLAG_SOURCE_IEEE) &&
-         !same(w.nwk.header.source_ieee, w.record+TC, 8)) ||
+         !same(w.nwk.header.source_ieee, w.record+
+#if defined(CC2530_PARENT_RECOVERY)
+               logical
+#else
+               TC
+#endif
+               , 8)) ||
         ((w.nwk.header.flags & NWK_FLAG_DESTINATION_IEEE) &&
          !same(w.nwk.header.destination_ieee, w.record+OWN, 8)))
         return finish(SECURITY_KEYS_IDENTITY);
@@ -668,63 +870,107 @@ security_keys_result_t security_keys_receive(
     if (w.secured) {
         r = crypto_result(ed_wire_inspect(ZIGBEE_SECURITY_NWK, raw_npdu, length, &w.meta));
         if (r != SECURITY_KEYS_OK) return finish(r);
+#if defined(CC2530_PARENT_RECOVERY)
+        if (parent_router() && same(w.meta.source, w.record+ROUTER, 8)) {
+            sender = ROUTER; floor = ROUTER_NF;
+        } else if (!same(w.meta.source, w.record+TC, 8) || parent_router())
+            return finish(SECURITY_KEYS_IDENTITY);
+#else
         if (!same(w.meta.source, w.record+TC, 8)) return finish(SECURITY_KEYS_IDENTITY);
+#endif
         for (i = 0; i < 2; i++)
             if ((w.record[FLAGS] & (1u << i)) && w.record[SEQ+i] == w.meta.key_sequence) break;
         if (i == 2) return finish(SECURITY_KEYS_SELECTOR);
         w.slot = i;
-        if (w.meta.counter == 0xffffffffUL || w.meta.counter < u32(w.record+NF+4u*i))
+        if (w.meta.counter == 0xffffffffUL || w.meta.counter < u32(w.record+
+#if defined(CC2530_PARENT_RECOVERY)
+            floor
+#else
+            NF
+#endif
+            +4u*i))
             return finish(SECURITY_KEYS_REPLAY);
         r = key(NK+16u*i, 1, 0);
         if (r != SECURITY_KEYS_OK) return finish(r);
+#if defined(CC2530_PARENT_RECOVERY)
+        memcpy(w.key.source, w.record+sender, 8);
+#endif
         w.key.key_sequence = w.record[SEQ+i];
         r = crypto_result(ed_wire_crypt(1, ZIGBEE_SECURITY_NWK, &w.key,
             raw_npdu, length, w.a, 116, &w.info));
         if (r != SECURITY_KEYS_OK) return finish(r);
-        put32(w.record+NF+4u*i, w.meta.counter+1); w.size = w.info.length;
+        put32(w.record+
+#if defined(CC2530_PARENT_RECOVERY)
+            floor
+#else
+            NF
+#endif
+            +4u*i, w.meta.counter+1); w.size = w.info.length;
         /* secured == 2: this frame switched the active key (durable). */
         if ((w.record[FLAGS] & NEWER) && i != active_slot()) { adopt(i); w.secured = 2; }
     } else {
         if (network() || length > 116) return finish(SECURITY_KEYS_CONTEXT);
         memcpy(w.a, raw_npdu, length); w.size = (uint8_t)length;
     }
+    w.aps_secured = 0; w.pending = 0;
     r = crypto_result(ed_wire_nwk(w.a, w.size, &w.nwk));
-    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (r != SECURITY_KEYS_OK) goto rejected;
     if (w.nwk.header.type != ED_NWK_COMMAND) {
-        if (!w.nwk.payload_length) return finish(SECURITY_KEYS_FORMAT);
+        if (!w.nwk.payload_length) { r = SECURITY_KEYS_FORMAT; goto rejected; }
         r = open_aps();
-        if (r != SECURITY_KEYS_OK) return finish(r);
+        if (r != SECURITY_KEYS_OK) goto rejected;
     }
     r = crypto_result(ed_wire_decode(w.a, w.size, &w.packet));
-    if (r != SECURITY_KEYS_OK) return finish(r);
-    if (w.packet.nwk.type != ED_NWK_COMMAND && !aps_addressing(0))
-        return finish(SECURITY_KEYS_IDENTITY);
-    if (phase() == SECURITY_KEYS_REJOINING && w.packet.nwk.type != ED_NWK_COMMAND)
-        return finish(SECURITY_KEYS_CONTEXT);
+    if (r != SECURITY_KEYS_OK) goto rejected;
+    if (w.packet.nwk.type != ED_NWK_COMMAND && !aps_addressing(0)) {
+        r = SECURITY_KEYS_IDENTITY; goto rejected;
+    }
+    if (phase() == SECURITY_KEYS_REJOINING && w.packet.nwk.type != ED_NWK_COMMAND) {
+        r = SECURITY_KEYS_CONTEXT; goto rejected;
+    }
     if (!w.secured && (w.packet.nwk.type == ED_NWK_COMMAND ||
         w.packet.aps.type != ED_APS_COMMAND || w.packet.length != 35 ||
-        w.packet.payload[0] != 5 || w.packet.payload[1] != 1))
-        return finish(SECURITY_KEYS_CONTEXT);
+        w.packet.payload[0] != 5 || w.packet.payload[1] != 1)) {
+        r = SECURITY_KEYS_CONTEXT; goto rejected;
+    }
     w.event = SECURITY_KEYS_EVENT_DATA;
     if (w.packet.nwk.type == ED_NWK_COMMAND) r = nwk_command();
     else if (w.packet.aps.type == ED_APS_COMMAND) r = aps_command();
     else if (w.pending || (w.aps_secured && w.key_id != 0)) r = SECURITY_KEYS_SELECTOR;
     else if (join_management()) w.event = SECURITY_KEYS_EVENT_MANAGEMENT;
     else if (!verified()) r = SECURITY_KEYS_CONTEXT;
-    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (r != SECURITY_KEYS_OK) goto rejected;
     /* No transport descriptor, key bytes or hashes escape via packet output. */
     if (w.packet.nwk.type != ED_NWK_COMMAND && w.packet.aps.type == ED_APS_COMMAND) {
         memset(w.packet.payload, 0, sizeof(w.packet.payload)); w.packet.length = 0;
     }
     /* Every APS command and durable NWK command reports an event above
      * MANAGEMENT; Network Status and ED Timeout responses stay lazy. */
-    if (w.event > SECURITY_KEYS_EVENT_MANAGEMENT || w.aps_secured || w.secured == 2) r = save();
+    if (w.event > SECURITY_KEYS_EVENT_MANAGEMENT || w.aps_secured || w.secured == 2
+#if defined(CC2530_PARENT_RECOVERY) && !defined(CC2530_REPLAY_POLICY_C)
+        || sender == ROUTER
+#endif
+        ) r = save();
     else keep_volatile();
     if (r == SECURITY_KEYS_OK) {
         *output = w.packet;
         *event = w.event | (w.aps_secured ? SECURITY_KEYS_EVENT_APS_SECURED : 0);
     }
     return finish(r);
+rejected:
+    /* Validators reject before semantic mutation. Only authenticated floors
+     * and authorized NWK adoption survive this exit; pending-key crypto is
+     * merely a confirmation trial. Preserve the error across the checkpoint. */
+    w.event = (uint8_t)r;
+    if (w.aps_secured == APS_CURRENT_ADMITTED || w.secured == 2
+#if defined(CC2530_PARENT_RECOVERY) && !defined(CC2530_REPLAY_POLICY_C)
+        || sender == ROUTER
+#endif
+        ) {
+        r = save();
+        if (r != SECURITY_KEYS_OK) return finish(r);
+    } else keep_volatile();
+    return finish((security_keys_result_t)w.event);
 }
 
 static inline security_keys_result_t seal(SDCC_VOLATILE uint8_t aps_secure)
@@ -869,24 +1115,54 @@ security_keys_result_t security_keys_send(
 #endif
     security_keys_result_t r = load();
     uint8_t transition = 0;
+#if defined(CC2530_PARENT_RECOVERY)
+    uint8_t destination = TC;
+    uint16_t address = 0;
+#endif
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!packet || !out || !written || aps_secure > 1 || !limits_ok(limits, nv_polls))
         return finish(SECURITY_KEYS_ARGUMENT);
     if (!network()) return finish(SECURITY_KEYS_STATE);
     w.packet = *packet;
+#if defined(CC2530_PARENT_RECOVERY)
+    if (w.packet.nwk.type == ED_NWK_COMMAND &&
+        (w.packet.payload[0] == 6 || w.packet.payload[0] == 11)) {
+        uint8_t router = w.packet.payload[0] == 6 ?
+            (router_record() && (w.record[ROUTER_FLAGS] & ROUTER_ATTEMPT)) : parent_router();
+        if (router) { destination = ROUTER; address = u16(w.record+ROUTER_ADDR); }
+    }
+#endif
     if (w.packet.nwk.source != u16(w.record+ADDR) ||
-        (w.packet.nwk.destination != 0 && !outbound_broadcast(w.packet.nwk.destination)) ||
+        (w.packet.nwk.destination !=
+#if defined(CC2530_PARENT_RECOVERY)
+         address
+#else
+         0
+#endif
+         && !outbound_broadcast(w.packet.nwk.destination)) ||
         ((w.packet.nwk.flags & NWK_FLAG_SOURCE_IEEE) &&
          !same(w.packet.nwk.source_ieee, w.record+OWN, 8)) ||
         ((w.packet.nwk.flags & NWK_FLAG_DESTINATION_IEEE) &&
-         !same(w.packet.nwk.destination_ieee, w.record+TC, 8)))
+         !same(w.packet.nwk.destination_ieee, w.record+
+#if defined(CC2530_PARENT_RECOVERY)
+               destination
+#else
+               TC
+#endif
+               , 8)))
         return finish(SECURITY_KEYS_IDENTITY);
     if (w.packet.nwk.type == ED_NWK_COMMAND) {
         if (aps_secure || w.packet.nwk.radius != 1) return finish(SECURITY_KEYS_UNSUPPORTED);
         if (w.packet.payload[0] == 6) {
             if (!verified() || w.packet.length != 2 ||
-                (w.packet.payload[1] != 0x88 && w.packet.payload[1] != 0x8c) ||
-                w.packet.nwk.destination != 0 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE)
+                (w.packet.payload[1] != 0x08 && w.packet.payload[1] != 0x0c) ||
+                w.packet.nwk.destination !=
+#if defined(CC2530_PARENT_RECOVERY)
+                    address ||
+#else
+                    0 ||
+#endif
+                (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE)
                 return finish(SECURITY_KEYS_UNSUPPORTED);
             if (!(w.record[FLAGS] & RETIRED) && !all(w.record+PK, 16, 0))
                 return finish(SECURITY_KEYS_CONTEXT); /* abandoned exchange needs recovery review */
@@ -904,7 +1180,13 @@ security_keys_result_t security_keys_send(
             transition = SECURITY_KEYS_LEFT;
         } else if (w.packet.payload[0] != 11 || w.packet.length != 3 ||
                    w.packet.payload[1] > 14 || w.packet.payload[2] ||
-                   w.packet.nwk.destination != 0 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE)
+                   w.packet.nwk.destination !=
+#if defined(CC2530_PARENT_RECOVERY)
+                       address ||
+#else
+                       0 ||
+#endif
+                   (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE)
             return finish(SECURITY_KEYS_UNSUPPORTED);
     } else {
         if (w.packet.aps.type == ED_APS_COMMAND) return finish(SECURITY_KEYS_UNSUPPORTED);
@@ -915,6 +1197,8 @@ security_keys_result_t security_keys_send(
     }
     if ((phase() == SECURITY_KEYS_LEFT || phase() == SECURITY_KEYS_REJOINING) &&
         !transition) return finish(SECURITY_KEYS_STATE);
+    if (transition == SECURITY_KEYS_REJOINING)
+        w.record[PHASE] &= (uint8_t)~(PARENT_MASK | TIMEOUT_PENDING);
     r = seal(aps_secure);
     /* Preflight capacity before any durable lifecycle transition. Allocation
      * and unsuccessful crypto can still burn outgoing counters, as promised. */
@@ -961,5 +1245,15 @@ security_keys_result_t security_keys_status(security_keys_status_t * SDCC_VOLATI
     output->newer_pending = (w.record[FLAGS] & NEWER) != 0;
     output->parent_information = parent_information();
     output->timeout_pending = (w.record[PHASE] & TIMEOUT_PENDING) != 0;
+#if defined(CC2530_PARENT_RECOVERY)
+    output->router_known = router_record() && (w.record[ROUTER_FLAGS] & ROUTER_KNOWN);
+    output->router_active = router_record() && (w.record[ROUTER_FLAGS] & ROUTER_ACTIVE);
+    output->router_selected = router_record() && (w.record[ROUTER_FLAGS] & ROUTER_ATTEMPT);
+    memset(output->router_ieee, 0, 8); output->router_address = 0;
+    if (output->router_known) {
+        memcpy(output->router_ieee, w.record+ROUTER, 8);
+        output->router_address = u16(w.record+ROUTER_ADDR);
+    }
+#endif
     return finish(SECURITY_KEYS_OK);
 }

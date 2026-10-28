@@ -6,7 +6,11 @@
 #include "join_smoke.h"
 #include "flash_exec.h"
 #include "security_counter.h"
+#include "zcl_sensor.h"
 #include <stddef.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 extern uint8_t flash_exec_work[9];
 extern uint8_t aes_used;
@@ -17,7 +21,46 @@ static const uint8_t public_install_code[18] = {
 static const uint8_t arm_packet[8] = {0x4a,0xb5,0x4e,0xb1,0xa9,0x56,1,0xfe};
 static const uint8_t run_packet[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
-enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY };
+enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOVERY=16,
+       CALLER_REJOIN_TIMEOUT };
+#if defined(CC2530_PARENT_RECOVERY)
+enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
+#if defined(CC2530_REPLAY_POLICY_C)
+enum { CALLER_SUSTAINED=21, CALLER_COMPLETION=22, CALLER_REPORTING=23, CALLER_BINDING=24, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
+#define SUSTAINED_CASE(c) ((c)==CALLER_SUSTAINED)
+#define COMPLETION_CASE(c) ((c)==CALLER_COMPLETION)
+#define REPORTING_CASE(c) ((c)==CALLER_REPORTING)
+#define BINDING_CASE(c) ((c)==CALLER_BINDING)
+static unsigned binding_requests, binding_readonly_checks;
+static unsigned reporting_requests, reporting_reports;
+static unsigned completion_steps, completion_replays;
+#define COMPLETION_INPUT_READY(c) (!COMPLETION_CASE(c) || completion_steps==4)
+static unsigned service_unique, service_replays, service_reports, service_erases, service_programs;
+static unsigned service_start_erases, service_start_commands, service_parent_start;
+static unsigned service_start_checkpoints, service_checkpoints, service_rx_commands;
+extern unsigned security_keys_host_checkpoints(void);
+static uint8_t service_saved[125], service_length, service_duplicate_due;
+static uint32_t service_begin, service_ms;
+#else
+#define SUSTAINED_CASE(c) 0
+#define COMPLETION_CASE(c) 0
+#define REPORTING_CASE(c) 0
+#define BINDING_CASE(c) 0
+#define COMPLETION_INPUT_READY(c) 1
+#endif
+#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c))
+#define HISTORY_CASE(c) ((c)==CALLER_KNOWN_HISTORY)
+static unsigned recovery_selected;
+#else
+#define ALTERNATE_CASE(c) 0
+#define HISTORY_CASE(c) 0
+#define SUSTAINED_CASE(c) 0
+#define COMPLETION_CASE(c) 0
+#define REPORTING_CASE(c) 0
+#define BINDING_CASE(c) 0
+#define COMPLETION_INPUT_READY(c) 1
+#endif
+#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
@@ -41,6 +84,79 @@ static void discovery_peer(void)
 }
 #endif
 static jmp_buf caller_flash_stop;
+
+/* CALLER_RECOVERY: a forked child runs the genuine case 0 (join, READY,
+ * serving) and hands over only durable NV and the coordinator's own state.
+ * This process never executed DUT code before its cold boot from that NV. */
+static int caller_dump=-1;
+static uint8_t recovery_nv[4096], recovery_state[LINK_PEER_STATE_MAX];
+static unsigned recovery_length;
+
+static void recovery_read(int fd, void *data, unsigned size)
+{
+    unsigned done=0;
+    while(done<size) {
+        ssize_t got=read(fd,(uint8_t *)data+done,size-done);
+        assert(got>0); done+=(unsigned)got;
+    }
+}
+static void recovery_write(const void *data, unsigned size)
+{
+    unsigned done=0;
+    while(done<size) {
+        ssize_t put=write(caller_dump,(const uint8_t *)data+done,size-done);
+        assert(put>0); done+=(unsigned)put;
+    }
+}
+static unsigned recovery_child(void)
+{
+    int fds[2], status, null;
+    pid_t child;
+    uint8_t extra;
+    fflush(stdout); fflush(stderr);
+    assert(!pipe(fds));
+    child=fork(); assert(child>=0);
+    if(!child) {
+        close(fds[0]); caller_dump=fds[1];
+        null=open("/dev/null",O_WRONLY); assert(null>=0 && dup2(null,1)==1); close(null);
+        return 1;
+    }
+    close(fds[1]);
+    recovery_read(fds[0],recovery_nv,sizeof(recovery_nv));
+    recovery_read(fds[0],&recovery_length,sizeof(recovery_length));
+    assert(recovery_length<=sizeof(recovery_state));
+    recovery_read(fds[0],recovery_state,recovery_length);
+    assert(read(fds[0],&extra,1)==0); close(fds[0]);
+    assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+    return 0;
+}
+/* Power is cut at the end of serving: whatever is durable now survives. */
+static void recovery_dump(void)
+{
+    unsigned length;
+    uint8_t state[LINK_PEER_STATE_MAX];
+    length=link_peer_save(state); assert(length<=sizeof(state));
+    recovery_write(security_joint_nv(),4096);
+    recovery_write(&length,sizeof(length)); recovery_write(state,length);
+    close(caller_dump); _exit(0);
+}
+/* The parent answers only through the air after the genuine Rejoin Request. */
+static void rejoin_peer(void)
+{
+    if(join_smoke_device.phase!=BDB_JOIN_RECOVERING || !link_peer_pending ||
+       !mac_adapter_diagnostic()->normal_rx || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
+       !XR(0x618b) || mode!=2 || ack_active || packets || mac_adapter_diagnostic()->held) return;
+    air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0;
+}
+static void caller_peer(void)
+{
+#if defined(CC2530_DEFAULT_TC_KEY)
+    discovery_peer();
+#else
+    peer_progress_for(&join_smoke_device,&join_smoke_tx);
+#endif
+    if(RECOVERY_CASE(caller_case)) rejoin_peer();
+}
 
 #if defined(JOIN_SMOKE_TRACE)
 #include "join_smoke_trace.h"
@@ -146,14 +262,11 @@ static void serve_ready(unsigned *calls)
     uint8_t tsn=0, draws=join_smoke_status.draws;
     uint64_t cycles=0, credited=0;
     while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
-          cycles<(uint64_t)SERVE_SECONDS*32000000u) {
+          cycles<(uint64_t)(SUSTAINED_CASE(caller_case)?600u:REPORTING_CASE(caller_case)||BINDING_CASE(caller_case)?110u:
+                           ALTERNATE_CASE(caller_case)?10u:SERVE_SECONDS)*32000000u) {
         uint32_t step;
         served++;
-#if defined(CC2530_DEFAULT_TC_KEY)
-        discovery_peer();
-#else
-        peer_progress_for(&join_smoke_device,&join_smoke_tx);
-#endif
+        caller_peer();
         if(link_peer_app!=seen) { assert(link_peer_app==seen+1u); seen++; serve_report(&reports,&tsn,counts); confirmed=served; }
         /* Coarse time only while no MAC transmission owns a stop window. */
         step=(join_smoke_status.announce==255 || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
@@ -165,12 +278,14 @@ static void serve_ready(unsigned *calls)
         ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
         credited=cycles*32768u/32000000u;
         handoff_tick();
-        if(served>=200 && !application_sent && !link_peer_pending && !sent_wait &&
+        if(!SUSTAINED_CASE(caller_case) && served>=(ALTERNATE_CASE(caller_case)?20u:200u) &&
+           !application_sent && !link_peer_pending && !sent_wait &&
            !packets && !ack_active && XR(0x618b) && mode==2 &&
            !mac_adapter_diagnostic()->held && mac_adapter_diagnostic()->normal_rx &&
            join_smoke_tx.engine.phase==MAC_TX_IDLE &&
            !join_smoke_device.work.runtime.transport.active &&
-           !join_smoke_device.work.runtime.transport.queued) {
+           !join_smoke_device.work.runtime.transport.queued &&
+           COMPLETION_INPUT_READY(caller_case)) {
             uint32_t saved_clocks=mmio_clocks;
             assert(!join_smoke_device.work.runtime.zdo.application_ready);
             /* Peer input must enter through traced peripherals, not private DUT memory. */
@@ -183,33 +298,230 @@ static void serve_ready(unsigned *calls)
             link_peer_pending=0; application_sent=served;
         }
         caller_poll();
-        assert(join_smoke_status.discarded<=1);
-        if(join_smoke_status.discarded) assert(application_sent &&
+#if defined(CC2530_REPLAY_POLICY_C)
+        if(BINDING_CASE(caller_case)) {
+            if(binding_requests<18 && link_peer_bindings==binding_requests &&
+               !link_peer_pending && !sent_wait && !packets && !ack_active &&
+               XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+               mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+               !join_smoke_device.work.runtime.transport.active &&
+               !join_smoke_device.work.runtime.transport.queued &&
+               !join_smoke_device.work.runtime.zdo.application_ready &&
+               !join_smoke_device.work.runtime.zdo.response_pending) {
+                uint32_t saved_clocks=mmio_clocks;
+                mmio_clocks=0; security_aes_peer_enter();
+                link_peer_receive_binding((uint8_t)binding_requests);
+                security_aes_peer_leave(); mmio_clocks=saved_clocks;
+                air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0; binding_requests++;
+            }
+            if(link_peer_bindings==18) {
+                uint8_t out[ED_PAYLOAD_MAX], nv[4096];
+                bdb_join_t before=join_smoke_device;
+                unsigned commands=security_joint_flash_commands();
+                memcpy(nv,security_joint_nv(),sizeof(nv));
+                assert(zcl_sensor_binding_page(0xf0,0,out,sizeof(out))==26);
+                assert(!memcmp(&before,&join_smoke_device,sizeof(before)) &&
+                       !memcmp(nv,security_joint_nv(),sizeof(nv)) &&
+                       commands==security_joint_flash_commands());
+                assert(!ZCL_SENSOR_STATE.bound[0] && ZCL_SENSOR_STATE.bound[1]==7 &&
+                       !ZCL_SENSOR_STATE.bound[2]);
+                binding_readonly_checks++;
+            }
+        }
+        if(REPORTING_CASE(caller_case)) {
+            if(reporting_requests<8 && link_peer_reporting==reporting_requests &&
+               !link_peer_pending && !sent_wait && !packets && !ack_active &&
+               XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+               mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+               !join_smoke_device.work.runtime.transport.active &&
+               !join_smoke_device.work.runtime.transport.queued &&
+               !join_smoke_device.work.runtime.zdo.application_ready &&
+               !join_smoke_device.work.runtime.zdo.response_pending) {
+                uint32_t saved_clocks=mmio_clocks;
+                mmio_clocks=0; security_aes_peer_enter();
+                link_peer_receive_reporting((uint8_t)reporting_requests);
+                security_aes_peer_leave(); mmio_clocks=saved_clocks;
+                air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0;
+                reporting_requests++;
+            }
+            if(link_peer_reporting) {
+                assert(ZCL_SENSOR_STATE.report[0].min==7 &&
+                       ZCL_SENSOR_STATE.report[0].max==20 &&
+                       ZCL_SENSOR_STATE.report[0].change==50);
+                assert(ZCL_SENSOR_STATE.bound[0]==1 && ZCL_SENSOR_STATE.bound[1]==1 &&
+                       ZCL_SENSOR_STATE.bound[2]==1);
+            }
+        }
+        if(COMPLETION_CASE(caller_case) && completion_steps<4 &&
+           !link_peer_pending && !sent_wait && !packets && !ack_active &&
+           XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+           mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+           !join_smoke_device.work.runtime.transport.active &&
+           !join_smoke_device.work.runtime.transport.queued &&
+           !join_smoke_device.work.runtime.zdo.application_ready) {
+            uint8_t captured[125], captured_length;
+            unsigned commands=security_joint_flash_commands(), checkpoints=security_keys_host_checkpoints();
+            uint32_t saved_clocks=mmio_clocks, serial=join_smoke_phase.driver.rx_serial;
+            unsigned draining=0;
+            mmio_clocks=0; security_aes_peer_enter();
+            link_peer_receive_completion((uint8_t)completion_steps);
+            security_aes_peer_leave(); mmio_clocks=saved_clocks;
+            captured_length=link_peer_length; memcpy(captured,link_peer_body,captured_length);
+            air_frame(captured,captured_length,1); link_peer_pending=0;
+            while(join_smoke_phase.driver.rx_serial==serial ||
+                  join_smoke_device.work.runtime.transport.receive_ready) {
+                assert(draining++<2000u);
+                caller_peer(); advance_clocks(4u*512u); handoff_tick(); caller_poll();
+                (*calls)++; served++;
+                assert(join_smoke_status.phase==JS_READY && !join_smoke_status.reason);
+            }
+            assert(join_smoke_phase.driver.consumer_result==
+                (completion_steps==2?BDB_JOIN_OK:BDB_JOIN_SECURITY));
+            if(completion_steps!=2)
+                assert(join_smoke_device.work.runtime.transport.error==SECURITY_KEYS_UNSUPPORTED);
+            assert(!join_smoke_device.work.runtime.zdo.application_ready &&
+                   !join_smoke_device.work.runtime.transport.receive_ready);
+            assert(security_joint_flash_commands()-commands==(completion_steps?46u:0u) &&
+                   security_keys_host_checkpoints()-checkpoints==(completion_steps?1u:0u));
+            if(completion_steps!=2) {
+                serial=join_smoke_phase.driver.rx_serial; draining=0;
+                air_frame(captured,captured_length,1);
+                while(join_smoke_phase.driver.rx_serial==serial) {
+                    assert(draining++<2000u);
+                    caller_peer(); advance_clocks(4u*512u); handoff_tick(); caller_poll();
+                    (*calls)++; served++;
+                    assert(join_smoke_status.phase==JS_READY && !join_smoke_status.reason);
+                }
+                assert(join_smoke_phase.driver.consumer_result==BDB_JOIN_SECURITY &&
+                       join_smoke_device.work.runtime.transport.error==SECURITY_KEYS_REPLAY);
+                assert(security_joint_flash_commands()-commands==(completion_steps?46u:0u));
+                completion_replays++;
+            }
+            completion_steps++;
+        }
+        if(SUSTAINED_CASE(caller_case)) {
+            unsigned old_commands, old_erases;
+            uint8_t discarded, duplicate;
+            uint32_t serial;
+            unsigned draining;
+            if(!service_begin) {
+                service_begin=1;
+                service_start_commands=security_joint_flash_commands();
+                service_start_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1);
+                service_parent_start=link_peer_parent;
+                service_start_checkpoints=security_keys_host_checkpoints();
+            }
+            service_ms=(uint32_t)(cycles/32000u);
+            if(!link_peer_pending && !sent_wait && !packets && !ack_active &&
+               XR(0x618b) && mode==2 && !mac_adapter_diagnostic()->held &&
+               mac_adapter_diagnostic()->normal_rx && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+               !join_smoke_device.work.runtime.transport.active &&
+               !join_smoke_device.work.runtime.transport.queued &&
+               !join_smoke_device.work.runtime.zdo.application_ready &&
+               (service_duplicate_due ||
+                (service_unique<SERVICE_FRAMES && service_ms>=service_unique*5000u))) {
+                discarded=join_smoke_status.discarded;
+                old_commands=security_joint_flash_commands();
+                old_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1);
+                serial=join_smoke_phase.driver.rx_serial;
+                duplicate=service_duplicate_due;
+                if(duplicate) {
+                    air_frame(service_saved,service_length,1);
+                    service_duplicate_due=0;
+                } else {
+                    uint32_t saved_clocks=mmio_clocks;
+                    mmio_clocks=0; security_aes_peer_enter();
+                    link_peer_receive_service(); security_aes_peer_leave(); mmio_clocks=saved_clocks;
+                    memcpy(service_saved,link_peer_body,link_peer_length); service_length=link_peer_length;
+                    air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0;
+                    service_unique++;
+                    if(!(service_unique%10u)) service_duplicate_due=1;
+                }
+                /* Drain the actual radio/adapter/crypto path without advancing
+                 * application time or injecting any DUT result/state. */
+                draining=0;
+                while(join_smoke_phase.driver.rx_serial==serial ||
+                      (!duplicate && join_smoke_status.discarded==discarded)) {
+                    assert(draining++<2000u);
+                    caller_peer(); advance_clocks(4u*512u); handoff_tick();
+                    caller_poll(); (*calls)++; served++;
+                    assert(join_smoke_status.phase==JS_READY && !join_smoke_status.reason);
+                }
+                if(duplicate) {
+                    assert(join_smoke_phase.driver.consumer_result==BDB_JOIN_SECURITY &&
+                        join_smoke_device.work.runtime.transport.error==SECURITY_KEYS_REPLAY &&
+                        join_smoke_status.discarded==discarded);
+                    service_replays++;
+                } else {
+                    assert(join_smoke_status.discarded==service_unique &&
+                        join_smoke_phase.driver.consumer_result==BDB_JOIN_OK);
+                }
+                service_rx_commands+=security_joint_flash_commands()-old_commands;
+                assert(!service_rx_commands &&
+                    security_joint_flash_erases(0)+security_joint_flash_erases(1)==old_erases);
+            }
+            assert(join_smoke_device.phase==BDB_JOIN_READY && join_smoke_device.member &&
+                join_smoke_device.work.runtime.transport.ready && !join_smoke_status.reason);
+        }
+#endif
+        assert(SUSTAINED_CASE(caller_case) || join_smoke_status.discarded<=1);
+        if(!SUSTAINED_CASE(caller_case) && join_smoke_status.discarded) assert(application_sent &&
             !join_smoke_device.work.runtime.zdo.application_ready &&
             !join_smoke_device.work.runtime.zdo.application.length);
         if(application_sent && served-application_sent>=128)
             assert(join_smoke_status.discarded==1);
         (*calls)++;
     }
-    if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=5)
-        fprintf(stderr,"serve phase=%u reason=%u stage=%u BDB=%u/%u driver=%u announce=%u served=%u\n",
+    if(join_smoke_status.phase!=JS_READY || join_smoke_status.stage!=5) {
+        security_keys_status_t keys;
+        unsigned key_result=security_keys_status(&keys);
+        fprintf(stderr,"serve phase=%u reason=%u stage=%u BDB=%u/%u driver=%u announce=%u served=%u keys=%u transport=%u\n",
             join_smoke_status.phase,join_smoke_status.reason,join_smoke_status.stage,
             join_smoke_device.phase,join_smoke_device.result,join_smoke_status.driver_result,
-            join_smoke_status.announce,served);
+            join_smoke_status.announce,served,key_result,
+            join_smoke_device.work.runtime.transport.error);
+        fprintf(stderr,"owner phase=%u result=%u flash=%u nv=%u counter=%u commands=%u\n",
+            keys.phase,keys.result,flash_exec_work[7],nv_record_status()->result,
+            security_counter_status()->result,security_joint_flash_commands());
+    }
     assert(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 && join_smoke_status.saw_ready);
     assert(join_smoke_device.phase==BDB_JOIN_READY && !join_smoke_status.announce);
-    assert(application_sent && join_smoke_status.discarded==1 && !join_smoke_status.dropped && served>200);
+    assert((SUSTAINED_CASE(caller_case) || (application_sent && join_smoke_status.discarded==1)) && !join_smoke_status.dropped &&
+        served>(ALTERNATE_CASE(caller_case)?20u:200u));
     /* Temperature and humidity change on every 2^22-symbol sample boundary
      * (one past the 30 s minimum each). In each 41-sample phase cycle,
      * BatteryPercentageRemaining (change 2, 0.5 % steps) reports on every
      * second of its 40 single steps plus the +40 wrap (21/41), and the
      * voltage on its three steps (3/41). */
-    assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
-    assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
-    assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
-    assert((int64_t)counts[2]+2>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+    if(!ALTERNATE_CASE(caller_case) && !REPORTING_CASE(caller_case) && !BINDING_CASE(caller_case)) {
+        assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
+        assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
+        assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
+        assert((int64_t)counts[2]+2>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+    }
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
+#if defined(CC2530_REPLAY_POLICY_C)
+    if(BINDING_CASE(caller_case)) {
+        assert(binding_requests==18 && link_peer_bindings==18 &&
+               link_peer_binding_reports>=1 && binding_readonly_checks);
+    }
+    if(REPORTING_CASE(caller_case)) {
+        assert(reporting_requests==8 && link_peer_reporting==8);
+        assert(counts[0]>=4 && counts[1]>=1 && reports>=6);
+        reporting_reports=reports;
+    }
+    if(COMPLETION_CASE(caller_case)) assert(completion_steps==4 && completion_replays==3);
+    if(SUSTAINED_CASE(caller_case)) {
+        service_reports=reports;
+        service_erases=security_joint_flash_erases(0)+security_joint_flash_erases(1)-service_start_erases;
+        service_programs=security_joint_flash_commands()-service_start_commands-service_erases;
+        service_checkpoints=security_keys_host_checkpoints()-service_start_checkpoints;
+        assert(service_unique==SERVICE_FRAMES && service_replays==12 && !service_duplicate_due);
+        assert(service_ms>=SERVICE_SECONDS*1000u && reports>=16 && link_peer_parent>service_parent_start);
+        assert(service_erases<=8 && service_programs==45u*service_erases);
+    }
+#endif
     /* The status snapshot follows the last report confirmation. */
     steps=(uint32_t)join_smoke_status.steps[0]|(uint32_t)join_smoke_status.steps[1]<<8|
         (uint32_t)join_smoke_status.steps[2]<<16|(uint32_t)join_smoke_status.steps[3]<<24;
@@ -219,6 +531,16 @@ static void serve_ready(unsigned *calls)
 static void prepare_caller(unsigned selected)
 {
     unsigned i;
+    if(RECOVERY_CASE(selected)) {
+        /* Modeled cold boot: only the flash written by the DUT survives. */
+        security_joint_reset(1);
+        memcpy(security_joint_nv(),recovery_nv,sizeof(recovery_nv));
+        link_peer_recover(&join_config,recovery_state,recovery_length);
+        link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
+#if defined(CC2530_PARENT_RECOVERY)
+        if(ALTERNATE_CASE(selected)) link_peer_alternate(selected==CALLER_DISCOVERY_EXHAUSTED);
+#endif
+    } else {
     /* Construct the external synthetic peer, then start a genuinely fresh
      * modeled DUT. No provisioned DUT state is injected into the caller. */
     security_joint_reset(1);
@@ -230,6 +552,7 @@ static void prepare_caller(unsigned selected)
         assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
     }
     security_joint_reset(selected!=4);
+    }
     crypto_read=host_mmio_read_hook; crypto_write=host_mmio_write_hook;
     crypto_xread=host_mmio_xread_hook; crypto_xwrite=host_mmio_xwrite_hook;
     crypto_address=host_mmio_xaddress_hook; crypto_cycles=host_mmio_cycles_hook;
@@ -244,6 +567,18 @@ static void prepare_caller(unsigned selected)
     scenario=selected==6?1:selected==CALLER_MISSING_KEY?3:0;
     if(selected==CALLER_FLASH_BUSY) security_joint_stall_flash(1);
     join_smoke_initialize();
+#if defined(CC2530_PARENT_RECOVERY)
+    memset(join_smoke_parent_history,0,sizeof(join_smoke_parent_history));
+    if(selected==CALLER_KNOWN_HISTORY) {
+        security_keys_parent_t parent;
+        link_peer_known_parent(&parent);
+        memcpy(join_smoke_parent_history,parent.ieee,8);
+        join_smoke_parent_history[8]=(uint8_t)parent.address;
+        join_smoke_parent_history[9]=(uint8_t)(parent.address>>8);
+        for(i=0;i<8;i++) join_smoke_parent_history[10+i]=(uint8_t)(parent.nwk_floor[i/4]>>(8u*(i%4)));
+        memcpy(join_smoke_parent_history+18,parent.sequence,2);
+    }
+#endif
     join_smoke_phase.admission.join=join_config;
     join_smoke_phase.admission.join.scan.saved.channel=15;
     join_smoke_phase.admission.join.association.saved.channel=15;
@@ -296,12 +631,22 @@ int main(int argc, char **argv)
     unsigned selected, calls=0;
     assert(argc==2);
     selected=(unsigned)strtoul(argv[1],NULL,10);
+#if defined(CC2530_PARENT_RECOVERY)
+    recovery_selected=selected;
+#endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert(selected<=CALLER_WRONG_TC && selected!=7);
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
 #else
-    assert(selected<=CALLER_FLASH_BUSY);
+    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
     if(selected==7) return reference_e2e_main();
 #endif
+    if(RECOVERY_CASE(selected) && recovery_child()) {
+#if defined(CC2530_PARENT_RECOVERY)
+        selected=ALTERNATE_CASE(recovery_selected)?CALLER_KNOWN_HISTORY:0;
+#else
+        selected=0;
+#endif
+    }
     caller_case=selected;
     prepare_caller(selected);
 #if defined(JOIN_SMOKE_TRACE)
@@ -326,6 +671,12 @@ int main(int argc, char **argv)
             assert(join_smoke_status.phase==JS_ADMITTED);
             assert(join_smoke_status.security_result==255 && !tx_started);
             caller_poll();
+            if(RECOVERY_CASE(selected)) {
+                /* Persisted membership is resumed, never reprovisioned or READY. */
+                assert(join_smoke_status.phase==JS_RUNNING && join_smoke_status.security_result==SECURITY_KEYS_OK);
+                assert(join_smoke_device.phase==BDB_JOIN_INSTALLING && join_smoke_device.recovery==1 &&
+                    !join_smoke_device.member && !join_smoke_status.saw_ready);
+            }
             if(selected==4) {
                 assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_SECURITY);
                 assert(join_smoke_status.security_result==SECURITY_KEYS_OK && !tx_started);
@@ -343,19 +694,19 @@ int main(int argc, char **argv)
                 while(join_smoke_status.phase==JS_RUNNING && !caller_stopped && calls++<JOIN_SMOKE_STEPS) {
                     uint8_t saved_aes_used=aes_used, saved_enccs=SOC_ENCCS;
                     unsigned saved_aes_blocks=security_aes_blocks();
-#if defined(CC2530_DEFAULT_TC_KEY)
-                    discovery_peer();
-#else
-                    peer_progress_for(&join_smoke_device,&join_smoke_tx);
-#endif
+                    caller_peer();
                     assert(aes_used==saved_aes_used && SOC_ENCCS==saved_enccs &&
                         security_aes_blocks()==saved_aes_blocks);
-                    advance_clocks(((selected==CALLER_MISSING_KEY
+                    advance_clocks((((selected==CALLER_MISSING_KEY
 #if defined(CC2530_DEFAULT_TC_KEY)
                         || selected==CALLER_WRONG_TC
 #endif
                         ) &&
-                        join_smoke_device.phase==BDB_JOIN_WAIT_KEY?50000u:4u)*512u);
+                        join_smoke_device.phase==BDB_JOIN_WAIT_KEY) ||
+                        ((selected==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(selected)) &&
+                         join_smoke_device.phase==BDB_JOIN_RECOVERING &&
+                         join_smoke_device.issued==2 && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
+                         !packets && !ack_active && !link_peer_pending)?50000u:4u)*512u);
                     handoff_tick();
                     if(selected==CALLER_RADIO_FAULT && !caller_radio_fault &&
                        mac_adapter_diagnostic()->phase==MAC_ADAPTER_CLOSING) {
@@ -367,6 +718,13 @@ int main(int argc, char **argv)
                     if(handoff_started) handoff_configured=0;
                     caller_poll();
                     handoff_started=0;
+                    if(RECOVERY_CASE(selected)) {
+                        assert((ALTERNATE_CASE(selected) || join_smoke_device.phase!=BDB_JOIN_SCANNING) &&
+                            join_smoke_device.phase!=BDB_JOIN_ASSOCIATING && !response_sent);
+                        if(join_smoke_status.phase!=JS_READY)
+                            assert(!join_smoke_status.saw_ready && !link_peer_app &&
+                                join_smoke_device.recovery && join_smoke_device.recovery<3);
+                    }
                 }
                 if(selected==CALLER_FLASH_BUSY) {
                     assert(caller_stopped && security_joint_flash_commands()==1);
@@ -391,6 +749,20 @@ int main(int argc, char **argv)
                     assert(response_sent && transport_sent && !join_smoke_device.member);
                     assert(join_smoke_device.result==BDB_JOIN_KEY_TIMEOUT);
 #endif
+                } else if(selected==CALLER_REJOIN_TIMEOUT
+#if defined(CC2530_PARENT_RECOVERY)
+                    || selected==CALLER_DISCOVERY_EXHAUSTED
+#endif
+                    ) {
+                    /* Bounded: three genuine requests, then NO_PARENT. The durable
+                     * membership is kept for a later attempt: no Leave, no erase. */
+                    security_keys_status_t keys;
+                    assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
+                    assert(join_smoke_device.result==BDB_JOIN_NO_PARENT && link_peer_rejoins==3);
+                    assert(!join_smoke_status.saw_ready && !link_peer_app && !link_peer_parent);
+                    assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
+                        (keys.phase==SECURITY_KEYS_VERIFIED || keys.phase==SECURITY_KEYS_REJOINING) &&
+                        keys.config.address==0x5678 && bdb_join_resumable());
                 } else if(selected==CALLER_MISSING_KEY) {
                     assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
                     assert(join_smoke_device.phase==BDB_JOIN_FAILED &&
@@ -414,8 +786,31 @@ int main(int argc, char **argv)
                     assert(join_smoke_status.phase==JS_READY && join_smoke_status.saw_ready);
                     assert(join_smoke_device.phase==BDB_JOIN_READY && join_smoke_device.member);
                     assert(join_smoke_status.stage==5 && join_smoke_status.announce==255);
+                    {
+                        security_keys_status_t identity;
+                        assert(security_keys_status(&identity)==SECURITY_KEYS_OK &&
+                            identity.phase==SECURITY_KEYS_VERIFIED);
+                        assert(!memcmp(ZCL_SENSOR_STATE.tc_ieee,identity.config.tc_ieee,8));
+                        assert(!memcmp(join_smoke_device.config.association.extraction.local,
+                            identity.config.own_ieee,8));
+                    }
                     serve_ready(&calls);
                     link_peer_verify();
+                    if(caller_dump>=0) recovery_dump();
+                    if(selected==CALLER_RECOVERY) {
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==1 && !response_sent);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
+                            keys.phase==SECURITY_KEYS_VERIFIED && keys.config.address==0x5678);
+                    }
+#if defined(CC2530_PARENT_RECOVERY)
+                    if(selected==CALLER_ALTERNATE) {
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==BDB_JOIN_ATTEMPTS+1u);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.router_active &&
+                            keys.router_known && keys.phase==SECURITY_KEYS_VERIFIED);
+                    }
+#endif
 #if defined(CC2530_DEFAULT_TC_KEY)
                     security_keys_status_t keys;
                     assert(security_keys_status(&keys)==SECURITY_KEYS_OK);

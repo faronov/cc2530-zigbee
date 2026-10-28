@@ -17,10 +17,10 @@
 
 MCU_XDATA security_counter_status_t security_counter_diagnostic;
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
-MCU_XDATA uint8_t security_counter_blob[128];
+MCU_XDATA uint8_t security_counter_blob[NV_RECORD_MAX];
 #define security_counter_check (child_work_arena.nv.counter_check)
 #else
-MCU_XDATA uint8_t security_counter_blob[128], security_counter_check[128];
+MCU_XDATA uint8_t security_counter_blob[NV_RECORD_MAX], security_counter_check[NV_RECORD_MAX];
 #endif
 extern MCU_XDATA uint8_t security_counter_reserved_end;
 

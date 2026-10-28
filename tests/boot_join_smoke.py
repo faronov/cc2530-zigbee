@@ -20,6 +20,7 @@ from boot_radio_tx_fixture import sections, stack_high_water
 from boot_zigbee_security import AES_ALIAS
 from join_smoke_analysis import instructions
 from join_smoke_image import identities, verify
+from join_smoke_service import service_valid
 from verify_firmware import cdb_address, peripheral_accesses, require
 
 
@@ -38,8 +39,14 @@ PERIPHERAL_SFR = frozenset((
     0xb4, 0xbc, 0xbd, 0xd9, 0xe1, 0xe9, 0x91, 0xbf, 0x94, 0xc3, 0xa2, 0xa3,
     0xa4, 0xa5, 0xa6, 0xa1, 0xa7, 0x9c,
 ))
-CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10)
+CASES = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22, 23, 24)
 FLASH_BUSY_CASE = 10
+# READY keeps serving: initial join, and secured rejoin from persisted NV.
+SERVING_CASES = (0, 16, 18, 20, 21, 22, 23, 24)
+
+
+def validate_service(service):
+    require(service_valid(service), "Malformed or below-threshold sustained service metrics")
 
 
 def active_phase(phase):
@@ -80,8 +87,12 @@ def hex_bytes(value, size):
 
 
 def validate_reference(vector):
-    require(set(vector) == {"case", "admission", "draws", "initial", "nv_initial", "steps",
+    require(set(vector) - {"parent_history", "service", "reporting", "bindings"} == {"case", "admission", "draws", "initial", "nv_initial", "steps",
                             "peer_tx", "aes_blocks", "flash_commands"}, "Malformed join reference")
+    if "parent_history" in vector:
+        hex_bytes(vector["parent_history"], 20)
+    require(vector.get("case") not in (18, 19, 20, 21, 22) or "parent_history" in vector,
+            "Parent-recovery case without explicit history input")
     require(type(vector["case"]) is int and vector["case"] in CASES, "Unknown join scenario")
     require(all(type(vector[name]) is int and vector[name] >= 0
                 for name in ("peer_tx", "aes_blocks", "flash_commands")), "Invalid reference counters")
@@ -93,7 +104,7 @@ def validate_reference(vector):
             "Initial state escapes synthetic peripheral ownership")
     require(isinstance(vector["steps"], list) and vector["steps"], "Missing caller steps")
     for index, step in enumerate(vector["steps"]):
-        require(set(step) == {"packet", "events", "status", "nv", "returned"}
+        require(set(step) - {"replay_floors", "application_state"} == {"packet", "events", "status", "nv", "returned"}
                 and isinstance(step["events"], list), "Malformed caller step")
         require(type(step["returned"]) is bool and step["returned"] == (
             vector["case"] != FLASH_BUSY_CASE or index != len(vector["steps"])-1),
@@ -101,6 +112,37 @@ def validate_reference(vector):
         hex_bytes(step["packet"], 8)
         hex_bytes(step["status"], 48)
         hex_bytes(step["nv"], 4096)
+        if "replay_floors" in step:
+            hex_bytes(step["replay_floors"], 16)
+        ready_reporting = vector["case"] in (16, 18, 20, 23, 24) and bytes.fromhex(step["status"])[6] == 5
+        require(("application_state" in step) == ready_reporting, "Missing or out-of-context application observation")
+        if ready_reporting:
+            hex_bytes(step["application_state"], 47 if vector["case"] == 23 else 63)
+    if vector["case"] == 21:
+        validate_service(vector.get("service"))
+        require(all("replay_floors" in s for s in vector["steps"]),
+                "Sustained service requires actual RAM-floor observations")
+        require(bytes.fromhex(vector["steps"][-1]["status"])[46] == 120,
+                "Sustained service accepted application count differs")
+    else:
+        require("service" not in vector, "Service metrics outside sustained scenario")
+    if vector["case"] == 22:
+        require(all("replay_floors" in s for s in vector["steps"]),
+                "Receive completion requires actual RAM-floor observations")
+    if vector["case"] == 23:
+        from join_smoke_service import reporting_valid
+        require(reporting_valid(vector.get("reporting")), "Missing runtime reporting validation")
+        require(vector["reporting"]["state_checks"] ==
+                sum("application_state" in s for s in vector["steps"]), "Application state-check count differs")
+    else:
+        require("reporting" not in vector, "Reporting metrics outside runtime reporting scenario")
+    if vector["case"] == 24:
+        from join_smoke_service import bindings_valid
+        require(bindings_valid(vector.get("bindings")), "Missing live Mgmt Bind validation")
+        require(vector["bindings"]["state_checks"] ==
+                sum("application_state" in s for s in vector["steps"]), "Binding state-check count differs")
+    else:
+        require("bindings" not in vector, "Binding metrics outside management scenario")
 
 
 def reference(output, case):
@@ -351,6 +393,9 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
                     commands += ["step 1", "run", marker(59980), "state", marker(59981)]
                 if index == 0:
                     commands += store("xram", symbols["_join_smoke_phase"], bytes.fromhex(vector["admission"]))
+                    if "parent_history" in vector:
+                        commands += store("xram", symbols["_join_smoke_parent_history"],
+                                          bytes.fromhex(vector["parent_history"]))
                     commands += store("xram", symbols["_join_smoke_draws"], bytes.fromhex(vector["draws"]))
                 require(pc in (wait, after), "Input outside public foreground boundary")
                 packet = bytes.fromhex(step["packet"])
@@ -494,7 +539,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
                 completed += 1
             print(f"join step{index} events {last}/{len(events)} SP{peak:02x}", flush=True)
     finished = completed == len(vector["steps"])
-    terminal_kind = "serving" if vector["case"] == 0 else (
+    terminal_kind = "serving" if vector["case"] in SERVING_CASES else (
         "flash-ram-stop" if vector["case"] == FLASH_BUSY_CASE else "fault")
     if finished and vector["case"] == FLASH_BUSY_CASE:
         discovery = "_security_keys_provision_default" in symbols
@@ -508,7 +553,7 @@ def replay(simulator, artifacts, vector, directory, *, limit=None, chunk=256):
         parts = sections(simulate_binary_dumps(simulator, commands))
         check_flash_retention(state, captured_sections(parts, 60000, ram_stop))
         check_flash_retention(state, captured_sections(parts, 60010, ram_stop), idle=True)
-    elif finished and vector["case"] == 0:
+    elif finished and vector["case"] in SERVING_CASES:
         # READY has no terminal loop: the last traced poll returned to main.
         require(state[0][0x1e06] == 5 and pc == after, "READY did not keep serving")
     elif finished:

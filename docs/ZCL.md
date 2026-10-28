@@ -20,6 +20,13 @@ links a separate, bounded application server, `zcl_sensor`, which serves
 synthetic data; it is described in
 [ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo). It does not
 reuse these modules and makes no cluster-conformance claim.
+Its bounded [runtime Read Reporting Configuration](M6_RUNTIME_REPORTING_READ.md)
+uses the live application records and the same primary wire semantics;
+host regressions compare the overlapping Temperature behavior directly
+against the standalone provider, without linking that engine into firmware.
+The application also exposes [live read-only Mgmt_Bind](M6_MGMT_BIND.md):
+three cluster destinations, verified TC identity and complete-record pages,
+without a new binding database or application NV.
 
 The separate [read-only Basic provider](ZCL_LAB.md) now constructs six
 primary-backed attributes in caller-owned storage and uses these same

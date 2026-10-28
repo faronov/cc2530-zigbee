@@ -40,6 +40,92 @@ and one operational APS replay record to fit the existing 112-byte opaque
 counter payload. More neighbors cannot be added without a reviewed schema
 and durable owner change.
 
+## Optional known-router durable ownership
+
+The optional `CC2530_PARENT_RECOVERY` profile increases the maximum journal
+snapshot from 128 to 160 bytes and the key payload from 112 to 144 bytes.
+The two reserved 2048-byte flash pages, journal version/header/commit-last
+protocol, outgoing lifetime domains and counter reservation policy are
+unchanged. The source-owned UPPER and CHILD arenas use these exact capacities;
+their loans still admit only their precise record address and supported length.
+The ordinary and RX_DIAG profiles retain the original capacities.
+
+`security_keys_upgrade_parent(nv_polls)` is an explicit K2-to-K3 migration for
+complete VERIFIED or REJOINING state. It uses the existing
+`security_counter_save`, never provisioning, erase or an alternate NV writer.
+Bytes 0..110 retain their existing layout and values, byte 111 becomes 3,
+and initializes bytes112..143 to zero. The accepted migration prerequisite
+was separate from the following opt-in router field semantics.
+It retains both network-key slots and their TC replay floors, APS history,
+pending/retired material, saved network parameters and both outgoing ceilings.
+Saving discards any remaining reserved outgoing values, rather than reusing
+them. An already valid K3 record is a no-write idempotent success.
+
+Opening accepts exact K2/112 and K3/144 pairs only, with all original validity
+conditions and the reserved-field checks. There is no implicit migration or
+new admission: persisted verification and migration never imply BDB READY.
+Incomplete exchange, deliberately LEFT credentials, invalid versions,
+nonzero reserved bytes and uncertain journal commits fail explicitly.
+Old firmware cannot read a migrated 160-byte snapshot and fails closed;
+**downgrading is not a rollback/migration mechanism**.
+
+K3's exact 144-byte layout extends K2 without changing bytes0..110:
+
+| Offset | Bytes | Ownership |
+| --- | ---: | --- |
+| 112 | 8 | One independently trusted same-network router IEEE |
+| 120 | 2 | Bound router short address, little-endian |
+| 122 | 8 | Two independent exclusive router NWK replay floors, little-endian |
+| 130 | 1 | KNOWN bit0, admitted ACTIVE bit1, selected ATTEMPT bit2 |
+| 131 | 1 | Staged selected-parent update ID, zero without ATTEMPT |
+| 132 | 12 | Reserved zero |
+
+`security_keys_remember_parent` accepts explicit previously learned, trusted
+history only while VERIFIED and after migration. It binds one lifetime
+identity/address: no eviction, replacement, counter-floor rollback or invented
+floor. Present key slots require matching sequences and nonzero exclusive
+floors; absent slots require zero history. This API is not an authentication
+assertion or an unknown-neighbor enrollment mechanism.
+`security_keys_select_parent` persists a selected target and non-stale,
+half-range-unambiguous update ID without changing the admitted parent.
+A reset restores this selection but not READY. Only a genuine protected
+response from that selected router atomically commits ACTIVE, the accepted
+own address, update ID and its consumed replay floor.
+
+NWK hop protection uses the router IEEE/nonce and independent NWK floors;
+APS logical TC source, link key, APS nonce and replay ownership remain TC's.
+Actual MAC unicast/broadcast next hop changes to the admitted router, while
+TC application destinations remain NWK0000. Parent commands use the selected
+or admitted router identity as appropriate. A genuinely new network-key slot
+gets a new router floor; old slot history is not reset by switching slots.
+In the strict `parent-recovery` variant, every admitted router-protected frame
+saves its floor before publication.
+
+The separate experimental `parent-recovery-policy-c` variant enables
+`CC2530_REPLAY_POLICY_C`: ordinary NWK-only input advances independent
+TC/router/key-slot RAM floors seeded from the same K3 durable lower bounds.
+Security checkpoints save all live incoming histories consistently; outgoing
+reservation writes remain unchanged and do not checkpoint incoming RAM state.
+The [approved checkpoint matrix and cold-reset threat model](M5_POLICY_C.md)
+are part of this profile's contract. Ordinary recorded suffixes above the last
+checkpoint can replay after reset, with no configured duration/volume bound.
+APS-secured inputs and accepted security transitions remain durable.
+
+**Strict-profile bounded-service limitation:** those saves consume the unchanged journal
+erase allowance (32 attempts per page per boot). The real-peripheral harness
+reaches that fail-closed guard during the longer alternate-parent serving
+exercise. The new replay case proves recovery and ten seconds of foreground
+service with a confirmed report and protected application input, not sustained
+operation. A durable, replay-safe wear/traffic policy is still required;
+neither raising the guard nor silently reverting to volatile floors is accepted.
+
+Native and sanitized tests retain the existing 112-byte golden corpus, verify every
+legacy field and counter ceiling across migration/reset, exercise all flash
+command cut positions, and check later saves retain the 144-byte schema even
+when the wire decoder reuses its length scratch. Router registration, selection,
+request sealing and admission add690 flash-command cuts, including670 explicit
+fail-closed storage outcomes. Key rotation preserves independent old-slot history.
+
 ## Public contract and state
 
 `include/security_keys.h` is the API; `ccm_star_limits_t` supplies real
@@ -71,6 +157,17 @@ only: no callbacks, ISR entry, recursion, concurrent observers or nested use.
   floors and keepalive bits; see *Volatile floors and keepalive state*. Initial unsecured NWK is accepted only
   for the APS-protected initial Network Transport-Key. All later traffic
   requires NWK security. No authenticated boolean is accepted from callers.
+  Authentication/replay completion is distinct from upper semantic admission:
+  an unsupported command, malformed APS semantics or addressing rejection
+  never publishes a packet, but cannot roll back authenticated NWK floors,
+  operational current-key APS floors or authorized installed-newer-slot
+  adoption. Ordinary NWK-only completion stays RAM-only under Policy C;
+  current-key APS admission and authorized adoption checkpoint even on semantic
+  error. A failed required save overrides that error with STORAGE and latches
+  FAILED. Pending-key trials do not acquire operational admission.
+  Initial bootstrap APS authentication can consume the existing AF field
+  before a network key is installed; pending key bytes and NWK floors must
+  still be zero in pre-network records. No serialized offset/version changes.
   The output event's low seven bits are the semantic event
   (`SECURITY_KEYS_EVENT_MASK=7F`). Bit `SECURITY_KEYS_EVENT_APS_SECURED=80`
   is set only when the admitted frame actually passed APS authentication,
@@ -140,7 +237,8 @@ All Transport-Key payload bytes are suppressed on successful receive:
 event (including its authenticated APS-security bit) remain for ACK/transaction handling. Other supported APS security
 commands are also suppressed. No secret descriptor or hash is returned to ZDO.
 All failures preserve packet, event, output bytes and `written`; consumed
-outgoing counters remain consumed. Capacity failure can therefore burn counters
+outgoing and authenticated incoming counters remain consumed as described above.
+Capacity failure can therefore burn counters
 but cannot publish a partially encrypted frame or commit a local lifecycle
 transition. Request needs exactly 47 bytes; Verify needs exactly 54.
 With minimum NWK/APS Data headers, the 116-byte NPDU bound permits at most
@@ -179,14 +277,15 @@ leaving the caller's APS transaction counter unchanged (Core2.2.8.4.4 p59).
 Do not replay an old secured NPDU as a fresh APS retry.
 
 The owner permits a fixed-parent **secured** NWK Rejoin Request through
-`send`: command `06`, awake ED capability `88` or `8C`, both IEEE addresses,
+`send`: command `06`, awake ED capability `08` or `0C`, both IEEE addresses,
 destination 0, radius 1 and the existing own short address. It persists
 REJOINING before returning the encrypted request. Only a genuine secured
 Rejoin Response `07 || newShortLE2 || status00` from the bound TC, to the old
 short and both correct IEEE addresses, can persist the new short address and
 return REJOINED. Failed/stale/unsolicited responses cannot change the binding.
-Ordinary traffic is blocked in REJOINING. This does not implement parent
-search, unsecured TC rejoin, key recovery or random address allocation.
+Ordinary traffic is blocked in REJOINING. The optional known-router profile
+extends the bound target as described above; it does not implement unknown
+parent enrollment, unsecured TC rejoin, key recovery or random address allocation.
 
 The owner also handles authenticated NWK Leave and locally generated
 secured Leave indications. Source IEEE and radius 1 are required. A request
@@ -200,9 +299,11 @@ failed-join `leave()` always clears it. Fixed-parent secured rejoin from LEFT
 requires that option and a previously verified TC key. No automatic
 reprovisioning/factory reset follows Leave. Rejoin/leave timing, retries and
 radio cleanup remain upper-layer responsibilities.
-The parent's initial BDB integration rejects persisted resume as
-recovery-required; this local-abandonment API does not implement or authorize
-#27 recovery. An abandoned pending exchange also blocks the existing narrow
+BDB `bdb_join_start` still rejects persisted state as recovery-required.
+Only complete VERIFIED/REJOINING membership resumes through the separate
+`bdb_join_resume` secure same-parent rejoin
+([ED_JOIN](ED_JOIN.md#secure-same-parent-recovery-m5)). This local-abandonment
+API neither implements nor authorizes that path. An abandoned pending exchange also blocks the existing narrow
 rejoin path pending that separate review.
 
 Repeated keyed `leave()` calls reconstruct fresh secured frames; no delivery

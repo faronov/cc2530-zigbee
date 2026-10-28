@@ -67,6 +67,14 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE u
     nwk_aps_work.mac_header.source_pan = nwk_aps_work.mac_header.destination_pan = nwk_aps_keys.config.pan;
     nwk_aps_work.mac_header.source[0] = (uint8_t)nwk_aps_keys.config.address;
     nwk_aps_work.mac_header.source[1] = (uint8_t)(nwk_aps_keys.config.address >> 8);
+#if defined(CC2530_PARENT_RECOVERY)
+    {
+        uint16_t parent = !ctx->special && p->nwk.type && p->payload[0] == 6 ?
+            SECURITY_REJOIN_ADDRESS(nwk_aps_keys) : SECURITY_PARENT_ADDRESS(nwk_aps_keys);
+        nwk_aps_work.mac_header.destination[0] = (uint8_t)parent;
+        nwk_aps_work.mac_header.destination[1] = (uint8_t)(parent >> 8);
+    }
+#endif
     /* R22 3.6.5: an ED sends NWK broadcasts to its parent's short address,
      * without MAC ACK, rather than acting as a broadcasting router. */
     if (acknowledgment || (ctx->special != 3 && (ctx->special || p->nwk.destination < 0xfffbu)))
