@@ -146,7 +146,6 @@ nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
     return NWK_APS_OK;
 }
 
-const MCU_CODE uint8_t nwk_aps_data_request = MAC_COMMAND_DATA_REQUEST;
 
 nwk_aps_result_t nwk_aps_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t rejoin, SDCC_VOLATILE uint32_t now)
 {

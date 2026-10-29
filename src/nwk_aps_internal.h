@@ -47,6 +47,5 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE u
 nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now);
 /* Short/short PAN-compressed MAC header to the current parent; ack request. */
 void nwk_aps_poll_header(SDCC_VOLATILE uint8_t rejoin);
-extern const MCU_CODE uint8_t nwk_aps_data_request;
 
 #endif
