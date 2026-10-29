@@ -96,10 +96,18 @@ static const MCU_CODE uint32_t crc_high[16] = {
     0x9b64c2b0UL, 0x86d3d2d4UL, 0xa00ae278UL, 0xbdbdf21cUL
 };
 
-static void crc_byte(uint8_t value)
+/* Block update keeps the per-byte loop inside one function: the banked
+ * linker may place callee and caller apart, and a per-byte thunk dominated
+ * journal traversal time. NULL input means erased (0xff) bytes. */
+static void crc_update(const uint8_t MCU_XDATA *bytes, uint16_t count)
 {
-    uint8_t index = (uint8_t)crc ^ value;
-    crc = (crc >> 8) ^ crc_low[index & 15u] ^ crc_high[index >> 4];
+    uint32_t value = crc;
+    uint8_t index;
+    while (count--) {
+        index = (uint8_t)value ^ (bytes ? *bytes++ : 255u);
+        value = (value >> 8) ^ crc_low[index & 15u] ^ crc_high[index >> 4];
+    }
+    crc = value;
 }
 
 static uint32_t decode(const uint8_t MCU_XDATA *bytes)
@@ -123,12 +131,12 @@ static nv_record_result_t scan_page(uint8_t page, uint8_t capture)
     for (offset = 0; offset < FLASH_PAGE_SIZE; offset += FLASH_READ_MAX) {
         nv_record_diagnostic.reader = flash_nv_read(page, offset, nv_record_chunk, FLASH_READ_MAX);
         if (nv_record_diagnostic.reader != FLASH_OK) return fault(NV_RECORD_READ_FAILED);
+        crc_update(nv_record_chunk, offset < 2040u-FLASH_READ_MAX ? FLASH_READ_MAX : 2040u-offset);
         for (i = 0; i < FLASH_READ_MAX; i++) {
             position = offset+i; value = nv_record_chunk[i];
             if (value != 255) erased = 0;
             if (position < 12) header[position] = value;
             if (position < 2040) {
-                crc_byte(value);
                 if (position >= 12u+header[6] && value != 255) padding = 1;
                 if (capture && position >= 12 && position < 12u+NV_RECORD_MAX)
                     nv_record_stage[position-12] = value;
@@ -243,9 +251,9 @@ begin(); result = select_record();
     header[4] = 1; header[5] = header[7] = 0; header[6] = length;
     encode(header+8, nv_record_diagnostic.generation+1);
     crc = 0xffffffffUL;
-    for (position = 0; position < 2040; position++)
-        crc_byte(position < 12 ? header[position] :
-                 position < 12u+length ? nv_record_stage[position-12] : 255);
+    crc_update(header, 12);
+    crc_update(nv_record_stage, length);
+    crc_update(NULL, 2028u-length);
     encode(footer, crc ^ 0xffffffffUL);
     nv_record_diagnostic.phase = 3;
     nv_record_diagnostic.erase_attempts[page]++;
