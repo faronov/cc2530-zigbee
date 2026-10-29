@@ -90,7 +90,7 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE u
 
 nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
-    SDCC_VOLATILE uint8_t command = MAC_COMMAND_DATA_REQUEST;
+    MCU_ESCAPED_LOCAL uint8_t command;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
@@ -99,6 +99,7 @@ nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLAT
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ENTER(LW_NWK_BUILD, NWK_APS_STATE);
 #endif
+    command = MAC_COMMAND_DATA_REQUEST;
     nwk_aps_poll_header((uint8_t)(ctx->poll == 2u));
     if (mac_frame_encode(&nwk_aps_work.mac_header, &command, 1, ctx->mac,
                          MAC_PREFIX+1u, &ctx->mac_length) != MAC_CODEC_OK ||

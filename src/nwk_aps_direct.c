@@ -95,7 +95,7 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE u
 
 nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
 {
-    SDCC_VOLATILE uint8_t command = MAC_COMMAND_DATA_REQUEST;
+    MCU_ESCAPED_LOCAL uint8_t command;
     LW_ROOT(NWK_APS_STATE);
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
     uint8_t * SDCC_VOLATILE frame = mac_tx_interval_stage(ctx->owner);
@@ -103,6 +103,7 @@ nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLAT
     if (!frame) return NWK_APS_STATE;
     if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
     LW_ENTER(LW_NWK_BUILD, NWK_APS_STATE);
+    command = MAC_COMMAND_DATA_REQUEST;
     nwk_aps_poll_header(rejoin);
     if (mac_frame_encode(&nwk_aps_work.mac_header, &command, 1, frame,
                          MAC_PREFIX+1u, &ctx->mac_length) != MAC_CODEC_OK ||
