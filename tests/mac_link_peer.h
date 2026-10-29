@@ -20,6 +20,7 @@ extern uint8_t link_peer_mute_rejoin;
 /* Association/descriptor capability (default 0x88). With bit3 clear the
  * peer accepts short-source MAC Data Request polls and counts them. */
 extern uint8_t link_peer_capability;
+extern uint8_t link_peer_parent_information;
 extern unsigned link_peer_polls;
 unsigned link_peer_save(uint8_t *out);
 void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned length);

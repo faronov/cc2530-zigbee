@@ -44,6 +44,7 @@ static uint32_t router_counter;
 #endif
 unsigned link_peer_rejoins, link_peer_polls;
 uint8_t link_peer_capability = 0x88;
+uint8_t link_peer_parent_information = 2;
 uint8_t link_peer_mute_rejoin;
 uint8_t link_beacon[48], link_response[27], link_peer_body[125];
 uint8_t link_beacon_length, link_response_length, link_peer_length, link_peer_pending;
@@ -304,7 +305,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
 #endif
             identity.tc_ieee, 8);
         memcpy(peer_out.nwk.destination_ieee, identity.own_ieee, 8);
-        peer_out.length = 3; peer_out.payload[0] = 0x0c; peer_out.payload[2] = 2;
+        peer_out.length = 3; peer_out.payload[0] = 0x0c; peer_out.payload[2] = link_peer_parent_information;
         seal_peer(0, 0, NULL, 1);
     } else if (peer_in.aps.type == ED_APS_ACK) return;
     else if (peer_in.aps.type == ED_APS_COMMAND) {

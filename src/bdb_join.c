@@ -163,6 +163,16 @@ static uint8_t finished(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t * S
     return nwk_aps_confirm(&ctx->work.runtime.transport, result) == NWK_APS_OK;
 }
 
+/* R22 3.6.10.3: the keepalive method follows nwkParentInformation. A polling
+ * (RX-off-when-idle) child may rely on MAC Data Poll keepalive (bit 0); the
+ * End Device Timeout Request keepalive is bit 1. */
+static uint8_t poll_keepalive(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx) BDB_RECOVERY_CODE;
+static uint8_t poll_keepalive(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
+{
+    return ctx->work.runtime.zdo.parent_known && (ctx->work.runtime.zdo.parent_information & 3u) == 1u &&
+        !(ctx->config.association.capability & 0x08u);
+}
+
 static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx) BDB_RECOVERY_CODE;
 static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
 {
@@ -236,7 +246,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     } else if (ctx->phase == BDB_JOIN_PARENT) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (!result && which == ZDO_RUNTIME_PARENT && ctx->work.runtime.zdo.parent_known &&
-                (ctx->work.runtime.zdo.parent_information & 2u)) {
+                ((ctx->work.runtime.zdo.parent_information & 2u) || poll_keepalive(ctx))) {
                 if (ctx->recovery) {
                     if (!ctx->work.runtime.transport.announced) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
                     else {
@@ -291,14 +301,15 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     } else if (ctx->phase == BDB_JOIN_READY) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (which != ZDO_RUNTIME_PARENT ||
-                (!result && !(ctx->work.runtime.zdo.parent_information & 2u)) ||
+                (!result && !(ctx->work.runtime.zdo.parent_information & 2u) && !poll_keepalive(ctx)) ||
                 (result && result != ZDO_RUNTIME_TIMEOUT && result != ZDO_RUNTIME_TRANSMIT) ||
                 (result && ctx->attempts == BDB_JOIN_KEEPALIVE_ATTEMPTS))
                 fail(ctx, BDB_JOIN_PARENT_FAILED);
             else if (result) ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE_RETRY;
             else { ctx->attempts = 0; ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE; }
         }
-        if (ctx->phase == BDB_JOIN_READY && expired(ctx->last, ctx->keepalive) && !ctx->work.runtime.zdo.query) {
+        if (ctx->phase == BDB_JOIN_READY && !poll_keepalive(ctx) && expired(ctx->last, ctx->keepalive) &&
+            !ctx->work.runtime.zdo.query) {
             rc = zdo_runtime_request(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ZDO_RUNTIME_PARENT, ctx->last);
             if (rc == ZDO_RUNTIME_OK) ctx->attempts++;
             else if (rc != ZDO_RUNTIME_FULL || expired(ctx->last, ctx->keepalive+BDB_JOIN_EXCHANGE_WAIT))
