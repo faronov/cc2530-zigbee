@@ -85,14 +85,14 @@ FORCE:
 HOST_CHECKS := host-nwk-frame-tests host-aps-frame-tests host-zcl-frame-tests host-nv-record-tests host-security-counter-tests
 test-host: $(addprefix $(BUILD)/,$(HOST_CHECKS)) $(BUILD)/host-join-smoke
 	set -e; for name in $(HOST_CHECKS); do "$(BUILD)/$$name"; done
-	set -e; for n in 0 2 4 9; do "$(BUILD)/host-join-smoke" $$n; done
+	set -e; for n in 0 2 4 9 25; do "$(BUILD)/host-join-smoke" $$n; done
 
 M5_M6_CHECKS := host-security-keys-tests host-bdb-join-tests host-parent-storage-tests host-parent-storage-audit-tests host-parent-recovery-tests host-parent-recovery-policy-c-tests host-parent-candidates-tests host-replay-policy-c-tests host-replay-log-reference-tests host-security-receive-completion-tests
 M5_M6_PROGRAMS := $(M5_M6_CHECKS) $(addsuffix -sanitize,$(M5_M6_CHECKS)) host-nwk-parent-tests host-nwk-parent-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-report-completion host-report-completion-sanitize
 test-m5-m6-host: $(addprefix $(BUILD)/,$(M5_M6_PROGRAMS))
 	set -e; for name in $(M5_M6_PROGRAMS); do "$(BUILD)/$$name"; done
 
-JOIN_SMOKE_HOST_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21 22 23 24)
+JOIN_SMOKE_HOST_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 25 $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21 22 23 24)
 test-join-smoke-host: $(addprefix $(BUILD)/,host-join-smoke host-join-smoke-sanitize host-join-smoke-deep host-join-smoke-deep-sanitize host-zcl-sensor host-zcl-sensor-sanitize)
 	"$(BUILD)/host-zcl-sensor"
 	"$(BUILD)/host-zcl-sensor-sanitize"

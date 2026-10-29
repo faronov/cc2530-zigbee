@@ -321,6 +321,7 @@ static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM
 static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now)
 {
     nwk_aps_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE t = &ctx->work.runtime.transport;
+    uint32_t period;
     if ((ctx->config.association.capability & 0x08u) ||
         !((ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase <= BDB_JOIN_READY) || ctx->phase == BDB_JOIN_RECOVERING)) {
         ctx->poll_phase = ctx->phase; return;
@@ -328,12 +329,15 @@ static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM
     if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY) ctx->poll_fast = now+BDB_JOIN_POLL_BURST;
     ctx->poll_phase = ctx->phase;
     if (expired(now, ctx->poll_fast)) ctx->poll_fast = now;
-    /* A deadline further than the slowest interval is stale storage. */
+    period = ctx->phase != BDB_JOIN_READY || ctx->poll_fast != now || t->queued || t->waiting ||
+        t->reply || ctx->work.runtime.zdo.query ? BDB_JOIN_POLL_FAST : BDB_JOIN_POLL_SLOW;
+    /* A deadline further than the slowest interval is stale storage. A slow
+     * deadline set while idle must not outlive the APS ACK wait of new work. */
     if ((uint32_t)(ctx->poll_at-now) > BDB_JOIN_POLL_SLOW) ctx->poll_at = now;
+    else if ((uint32_t)(ctx->poll_at-now) > period) ctx->poll_at = now+period;
     if (!expired(now, ctx->poll_at) || t->poll || t->active_poll || t->stopping) return;
     if (nwk_aps_poll(t, ctx->phase == BDB_JOIN_RECOVERING, now) != NWK_APS_OK) return;
-    ctx->poll_at = now+(ctx->phase != BDB_JOIN_READY || ctx->poll_fast != now || t->queued || t->waiting ||
-        t->reply || ctx->work.runtime.zdo.query ? BDB_JOIN_POLL_FAST : BDB_JOIN_POLL_SLOW);
+    ctx->poll_at = now+period;
 }
 
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,

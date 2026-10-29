@@ -789,10 +789,14 @@ mac_tx_result_t mac_tx_interval_submit_staged(mac_tx_interval_t *tx, uint16_t le
         return LW_RETURN(LW_TX_SUBMIT, MAC_TX_INVALID);
     if (control.generation == UINT32_MAX)
         return LW_RETURN(LW_TX_SUBMIT, MAC_TX_GENERATION_EXHAUSTED);
-    /* The same real codec and DATA admission as mac_tx_submit, in place. */
+    /* The same real codec and DATA admission as mac_tx_submit, in place, plus
+     * its short-destination Data Request (parent poll) under the DATA rules. */
     if (mac_frame_decode(tx->engine.frame, input.length, &decoded) != MAC_CODEC_OK
             || (decoded.header.flags & MAC_FLAG_PENDING)
-            || decoded.header.type != MAC_FRAME_DATA
+            || (decoded.header.type != MAC_FRAME_DATA
+                && !(decoded.header.type == MAC_FRAME_COMMAND
+                     && decoded.header.destination_mode == MAC_ADDRESS_SHORT
+                     && tx->engine.frame[decoded.payload_offset] == MAC_COMMAND_DATA_REQUEST))
             || decoded.header.source_pan == 0xffffu
             || decoded.header.destination_pan == 0xffffu
             || (!(decoded.header.flags & MAC_FLAG_PAN_COMPRESSION)
