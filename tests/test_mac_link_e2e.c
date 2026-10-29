@@ -48,12 +48,15 @@ static uint32_t bad_serial;
 static uint8_t bad_checked;
 enum {
     POLL_NO_ACK = 8, POLL_BUSY, IMMEDIATE_RESPONSE, BROADCAST_DRAIN, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
-    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, E2E_CASES
+    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, E2E_CASES
 };
 static unsigned poll_attempts, closed_checked, race_started, race_disarmed, race_completed;
 static unsigned race_random, race_tx, retire_wait, timeout_started, early_acks;
 static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked;
 static uint32_t scan_watermark, race_generation;
+/* INDIRECT_KEY: parent queue release bookkeeping (polls seen when queued). */
+static unsigned queued_polls, released_frames;
+static uint8_t queued_seen;
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
         "BDB=%u result=%u driver=%u adapter=%u/%u MAC=%u/%u action=%u " \
@@ -170,6 +173,7 @@ static void cold_start(void)
     host_mmio_xaddress_hook = joint_address; host_mmio_cycles_hook = joint_cycles;
     memcpy(config.value.ieee, link_identity.own_ieee, 8);
     config.value.pan = config.value.short_address = 0xffff; config.value.channel = 11;
+    link_peer_capability = scenario == INDIRECT_KEY ? 0x80 : 0x88;
     link_peer_setup(&join_config);
     CHECK(mac_adapter_init(&config.value, bound, cap) == MAC_ADAPTER_OK);
     epoch_origin = ((uint64_t)mac_radio_epoch.periods-mac_radio_epoch.symbols)*512u;
@@ -203,6 +207,7 @@ static void cold_start(void)
     race_random = race_tx = retire_wait = timeout_started = early_acks = 0;
     broadcast_sent = drain_delayed = foreign_sent = early_key_acked = 0;
     scan_watermark = race_generation = 0;
+    queued_polls = released_frames = queued_seen = 0;
 }
 
 /* Complete a genuine modeled PPDU. Its SFD is high during the body, sticky
@@ -384,6 +389,13 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
             security_aes_peer_leave();
             mmio_clocks = saved_clocks; transport_sent = 1;
         }
+        if (link_peer_pending && scenario == INDIRECT_KEY) {
+            /* RX-off-when-idle child: the parent holds the frame until a
+             * Data Request that arrives after it was queued. */
+            if (!queued_seen) { queued_seen = 1; queued_polls = link_peer_polls; }
+            if (link_peer_polls == queued_polls) return;
+            queued_seen = 0; released_frames++;
+        }
         if (link_peer_pending) {
             if (!corrupt_sent) {
                 bad_serial = mac_adapter_diagnostic()->frames + 1u;
@@ -533,7 +545,8 @@ static void tick_driver(void)
     e2e_steps++;
     /* Finite foreground latency; no consumer timestamp is supplied here.
      * Long idle security waits advance the physical Timer2 in bounded chunks. */
-    advance_clocks((device.phase == BDB_JOIN_WAIT_KEY && scenario == 3 ? 1000u : 4u)*512u);
+    advance_clocks(((device.phase == BDB_JOIN_WAIT_KEY && scenario == 3) ||
+        (scenario == INDIRECT_KEY && link_peer_pending && adapter_tx.engine.phase == MAC_TX_IDLE) ? 1000u : 4u)*512u);
     handoff_tick();
     handoff_started = mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING &&
         mac_adapter_diagnostic()->policy == MAC_ADAPTER_KEEP_AUTOACK &&
@@ -614,7 +627,7 @@ static void run(unsigned selected)
     }
     if (scenario == 0 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
         scenario == IMMEDIATE_RESPONSE || scenario == BROADCAST_DRAIN ||
-        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == 7) {
+        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == INDIRECT_KEY || scenario == 7) {
         if (device.phase != BDB_JOIN_READY)
             fprintf(stderr, "scan reason=%u unscanned=%lu candidates=%u peerTX=%u cmd=%u rx=%u through=%lu\n",
                 device.scan_result.reason,(unsigned long)device.scan_result.unscanned,
@@ -665,6 +678,10 @@ static void run(unsigned selected)
         CHECK(foreign_sent == (scenario == POLL_BUSY));
         CHECK(early_key_acked == (scenario == EARLY_KEY));
         CHECK(driver.dropped == (scenario == 7) && drop_checked == (scenario == 7));
+        /* Every peer frame after association, the corrupted TK included,
+         * was released by its own post-queue poll; none was sent directly. */
+        CHECK((scenario == INDIRECT_KEY) == !!link_peer_polls &&
+              released_frames == (scenario == INDIRECT_KEY ? link_peer_parent+6u : 0u));
     } else if (scenario == 1) {
         CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_NO_PARENT);
         CHECK(!device.scan_result.candidates && !device.scan_result.unscanned);

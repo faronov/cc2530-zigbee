@@ -42,7 +42,8 @@ static uint32_t router_counter;
 #define PEER_PARENT_IEEE identity.tc_ieee
 #define PEER_REJOIN_COUNT 1u
 #endif
-unsigned link_peer_rejoins;
+unsigned link_peer_rejoins, link_peer_polls;
+uint8_t link_peer_capability = 0x88;
 uint8_t link_peer_mute_rejoin;
 uint8_t link_beacon[48], link_response[27], link_peer_body[125];
 uint8_t link_beacon_length, link_response_length, link_peer_length, link_peer_pending;
@@ -233,9 +234,21 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
     link_peer_tx++;
     if (mh.header.type == MAC_FRAME_COMMAND) {
         CHECK(mac_command_decode(body+mh.payload_offset, mh.payload_length, &command) == MAC_CODEC_OK);
+        if (command.identifier == MAC_COMMAND_DATA_REQUEST && mh.header.source_mode == MAC_ADDRESS_SHORT) {
+            /* IEEE 802.15.4-2006 7.5.6.3 poll by an RX-off-when-idle child. */
+            CHECK(!(link_peer_capability & 0x08) && associated && extracted);
+            CHECK(mh.header.source[0] == 0x78 && mh.header.source[1] == 0x56 &&
+                  mh.header.destination_mode == MAC_ADDRESS_SHORT &&
+                  mh.header.destination[0] == (uint8_t)PEER_PARENT_ADDRESS &&
+                  mh.header.destination[1] == (uint8_t)(PEER_PARENT_ADDRESS >> 8) &&
+                  mh.header.destination_pan == identity.pan && (mh.header.flags & MAC_FLAG_ACK_REQUEST) &&
+                  (mh.header.flags & MAC_FLAG_PAN_COMPRESSION) && mh.payload_length == 1);
+            link_peer_polls++;
+            return;
+        }
         CHECK(!recovering || command.identifier == MAC_COMMAND_BEACON_REQUEST);
         if (command.identifier == MAC_COMMAND_ASSOCIATION_REQUEST) {
-            CHECK(command.capability == 0x88 && !memcmp(mh.header.source, identity.own_ieee, 8));
+            CHECK(command.capability == link_peer_capability && !memcmp(mh.header.source, identity.own_ieee, 8));
             associated = 1;
         } else if (command.identifier == MAC_COMMAND_DATA_REQUEST) {
             CHECK(associated && !memcmp(mh.header.source, identity.own_ieee, 8));
@@ -321,7 +334,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         if (recovering) { CHECK(rejoined && !reannounced && peer_in.nwk.destination == 0xfffdu); reannounced = 1; }
         else CHECK(extracted && !requested && peer_in.nwk.destination == 0xfffdu);
         CHECK(peer_in.length == 12 && peer_in.payload[1] == 0x78 && peer_in.payload[2] == 0x56);
-        CHECK(!memcmp(peer_in.payload+3, identity.own_ieee, 8) && peer_in.payload[11] == 0x88);
+        CHECK(!memcmp(peer_in.payload+3, identity.own_ieee, 8) && peer_in.payload[11] == link_peer_capability);
         announced = 1;
     } else if (!peer_in.aps.profile_id && peer_in.aps.cluster_id == 2) {
         CHECK(!recovering && announced && !requested && peer_in.length == 3 && !peer_in.payload[1] && !peer_in.payload[2]);
@@ -545,7 +558,7 @@ void link_peer_setup(bdb_join_config_t *config)
     zigbee_mmo_info_t info;
 #endif
     announced = described = requested = verified = permit = associated = extracted = 0;
-    recovering = rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = 0;
+    recovering = rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = link_peer_polls = 0;
 #if defined(CC2530_PARENT_RECOVERY)
     alternate = router_hop = 0; router_counter = 1000;
 #endif
@@ -580,7 +593,7 @@ void link_peer_config(bdb_join_config_t *config)
     config->scan.channels = 1UL << 15; config->scan.lifetime = 100000; config->scan.work = 512;
     config->scan.saved.pan = 0xffff; config->scan.saved.channel = 11;
     config->association.saved.pan = 0xffff; config->association.saved.channel = 11;
-    config->association.response_wait = 2; config->association.capability = 0x88;
+    config->association.response_wait = 2; config->association.capability = link_peer_capability;
     config->association.extraction.epoch = 1; config->association.extraction.frame_wait = 300;
     config->association.extraction.lifetime = 100000; config->association.extraction.work = 512;
     config->association.extraction.pan = identity.pan; config->association.extraction.channel = 15;
@@ -591,7 +604,7 @@ void link_peer_config(bdb_join_config_t *config)
     config->transport.endpoint = 1; config->link_cost = 1; config->transport.ack_wait = NWK_APS_ACK_WAIT;
     config->transport.broadcast_time = 1000000;
     config->descriptor.logical_type = 2; config->descriptor.frequency_band = 8;
-    config->descriptor.mac_capability = 0x88; config->descriptor.max_buffer = 127;
+    config->descriptor.mac_capability = link_peer_capability; config->descriptor.max_buffer = 127;
     config->descriptor.max_incoming = config->descriptor.max_outgoing = 64;
     config->descriptor.stack_revision = 22;
     memset(&mh, 0, sizeof(mh)); mh.type = MAC_FRAME_BEACON;

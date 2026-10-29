@@ -332,7 +332,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, MA
             || proposed.extraction.local_mode != MAC_ADDRESS_EXTENDED
             || (proposed.extraction.coordinator_mode != MAC_ADDRESS_SHORT
                 && proposed.extraction.coordinator_mode != MAC_ADDRESS_EXTENDED)
-            || (proposed.capability != 0x88u && proposed.capability != 0x8cu)
+            || (proposed.capability & 0xf3u) != 0x80u
             || proposed.profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return JOIN_RETURN(MAC_JOIN_UNSUPPORTED);
     if (proposed.extraction.coordinator_mode == MAC_ADDRESS_SHORT) {

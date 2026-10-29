@@ -134,8 +134,9 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * SDCC_VOLATILE tx,
      * Pending's receive-only allowance never authorizes transmission.
      */
     if (decoded.header.type == MAC_FRAME_COMMAND) {
-        /* IEEE 2006 7.3.1/Figure56; selected ED policy: RX-on, address allocation,
-         * no coordinator/FFD/MAC-security capability; truthful caller power bit.
+        /* IEEE 2006 7.3.1/Figure56; selected ED policy: address allocation,
+         * no coordinator/FFD/MAC-security capability; truthful caller
+         * RX-on-when-idle and power bits.
          * The codec has already validated addressing, ACK and exact length.
          * Only after identifying Association Request is the last byte CAP.
          */
@@ -143,7 +144,7 @@ mac_tx_result_t mac_tx_submit(mac_tx_t * SDCC_VOLATILE tx,
         if (!(command == MAC_COMMAND_BEACON_REQUEST
                 || (decoded.header.destination_pan != 0xffffu
                     && ((command == MAC_COMMAND_ASSOCIATION_REQUEST
-                         && (uint8_t)(body[(uint8_t)(input.length - 1u)] & 0xfbu) == 0x88u)
+                         && (uint8_t)(body[(uint8_t)(input.length - 1u)] & 0xf3u) == 0x80u)
                         || (command == MAC_COMMAND_DATA_REQUEST
                             && decoded.header.destination_mode != MAC_ADDRESS_NONE)))))
             return LW_RETURN(LW_TX_SUBMIT, MAC_TX_UNSUPPORTED);

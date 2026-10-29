@@ -315,6 +315,27 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     }
 }
 
+/* Indirect-delivery service for an RX-off-when-idle capability. The receiver
+ * itself stays on; only the parent's queueing behaviour requires the poll. */
+static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now) BDB_RECOVERY_CODE;
+static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now)
+{
+    nwk_aps_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE t = &ctx->work.runtime.transport;
+    if ((ctx->config.association.capability & 0x08u) ||
+        !((ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase <= BDB_JOIN_READY) || ctx->phase == BDB_JOIN_RECOVERING)) {
+        ctx->poll_phase = ctx->phase; return;
+    }
+    if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY) ctx->poll_fast = now+BDB_JOIN_POLL_BURST;
+    ctx->poll_phase = ctx->phase;
+    if (expired(now, ctx->poll_fast)) ctx->poll_fast = now;
+    /* A deadline further than the slowest interval is stale storage. */
+    if ((uint32_t)(ctx->poll_at-now) > BDB_JOIN_POLL_SLOW) ctx->poll_at = now;
+    if (!expired(now, ctx->poll_at) || t->poll || t->active_poll || t->stopping) return;
+    if (nwk_aps_poll(t, ctx->phase == BDB_JOIN_RECOVERING, now) != NWK_APS_OK) return;
+    ctx->poll_at = now+(ctx->phase != BDB_JOIN_READY || ctx->poll_fast != now || t->queued || t->waiting ||
+        t->reply || ctx->work.runtime.zdo.query ? BDB_JOIN_POLL_FAST : BDB_JOIN_POLL_SLOW);
+}
+
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
     const bdb_join_event_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE event,
     bdb_join_action_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE action) BDB_RECOVERY_CODE;
@@ -539,6 +560,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
         expired(now, ctx->commission_until))
         fail(ctx, ctx->recovery ? BDB_JOIN_NO_PARENT : BDB_JOIN_KEY_TIMEOUT);
     if (event && event->kind != BDB_JOIN_EVENT_TX) { event = NULL; ignored = 1; }
+    poll(ctx, now);
     if (BDB_JOIN_LIVE(ctx->phase) && ctx->work.runtime.transport.receive_ready) {
         runtime(ctx); handled = 1;
     }
@@ -652,6 +674,11 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
         if (ctx->work.runtime.transport.receive_ready) {
             ctx->timely = 1;
             if (expired(now, ctx->until)) ctx->timely = 0;
+        }
+        /* A unicast may be one of several queued indirect frames. */
+        if (work.receive.mac.header.destination[0] != 255 || work.receive.mac.header.destination[1] != 255) {
+            ctx->poll_at = now;
+            if (expired(now+BDB_JOIN_POLL_ACTIVE, ctx->poll_fast)) ctx->poll_fast = now+BDB_JOIN_POLL_ACTIVE;
         }
         return BDB_JOIN_OK;
     }

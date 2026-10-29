@@ -88,7 +88,28 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE u
     if (mac_tx_interval_submit_staged(ctx->owner, ctx->mac_length, now,
                                       NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
         return LW_RETURN(LW_NWK_BUILD, NWK_APS_RADIO);
-    ctx->active = 1; ctx->active_ack = acknowledgment;
+    ctx->active = 1; ctx->active_ack = acknowledgment; ctx->active_poll = 0;
     if (!acknowledgment) ctx->sent = 0;
+    return LW_RETURN(LW_NWK_BUILD, NWK_APS_OK);
+}
+
+nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
+{
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
+    uint8_t * SDCC_VOLATILE frame = mac_tx_interval_stage(ctx->owner);
+    SDCC_VOLATILE uint8_t rejoin = (uint8_t)(ctx->poll == 2u);
+    if (!frame) return NWK_APS_STATE;
+    if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
+    LW_ENTER(LW_NWK_BUILD, NWK_APS_STATE);
+    nwk_aps_poll_header(rejoin);
+    if (mac_frame_encode(&nwk_aps_work.mac_header, &nwk_aps_data_request, 1, frame,
+                         MAC_PREFIX+1u, &ctx->mac_length) != MAC_CODEC_OK ||
+        ctx->mac_length != MAC_PREFIX+1u)
+        return LW_RETURN(LW_NWK_BUILD, NWK_APS_WIRE);
+    if (mac_tx_interval_submit_staged(ctx->owner, ctx->mac_length, now,
+                                      NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
+        return LW_RETURN(LW_NWK_BUILD, NWK_APS_RADIO);
+    ctx->active = ctx->active_poll = 1; ctx->active_ack = ctx->poll = 0;
     return LW_RETURN(LW_NWK_BUILD, NWK_APS_OK);
 }

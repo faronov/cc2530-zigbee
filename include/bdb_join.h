@@ -26,6 +26,15 @@
  * arrives within aResponseWaitTime (32*aBaseSuperframeDuration symbols). */
 #define BDB_JOIN_REJOIN_WAIT 30720UL
 #define BDB_JOIN_RECOVERY_WAIT 6250000UL
+/* RX-off-when-idle (capability bit3 clear) parents hold our frames for
+ * macTransactionPersistenceTime (~7.68 s on 2.4 GHz with defaults), so a
+ * MAC Data Request must fetch them: 250 ms while commissioning, recovering,
+ * awaiting a reply or for BURST after READY / ACTIVE after unicast receipt;
+ * otherwise every 4 s, well inside the parent's persistence time. */
+#define BDB_JOIN_POLL_FAST 15625UL
+#define BDB_JOIN_POLL_SLOW 250000UL
+#define BDB_JOIN_POLL_BURST 11250000UL
+#define BDB_JOIN_POLL_ACTIVE 625000UL
 
 typedef enum {
     BDB_JOIN_OK = 0, BDB_JOIN_ARGUMENT, BDB_JOIN_STATE, BDB_JOIN_CLOCK,
@@ -141,11 +150,12 @@ typedef struct {
     nwk_parent_choice_t parent;
     NWK_APS_TX_T BDB_JOIN_RAM *owner;
     uint32_t last, until, keepalive, epoch, commission_until, work_at;
+    uint32_t poll_at, poll_fast;
     uint16_t token, steps;
     uint8_t version, phase, result, cleanup_error, attempts, issued, member;
     uint8_t got_tc, got_confirm, application_pending, application_done, application_result;
     uint8_t receive_result, abandon, timely;
-    uint8_t workspace;
+    uint8_t workspace, poll_phase;
     /* 0 commissioning; 1 resumed, 2 Rejoin Response accepted, 3 recovered READY. */
     uint8_t recovery;
 #if defined(CC2530_PARENT_RECOVERY)
