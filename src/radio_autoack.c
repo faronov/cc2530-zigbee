@@ -447,8 +447,19 @@ failed:
 }
 #endif
 #if defined(CC2530_RADIO_RX_ISR)
-/* Leaf ISR (no calls, no static frame): moves every complete head into the
- * queue with the same completeness rule as complete_head(). It only runs while
+/* Without FIFOP a count-complete head is finished only if no frame was in
+ * reception when FSMSTAT1 was sampled (before RXFIFOCNT) or a later frame's
+ * byte follows it. While SFD is high the tail frame can still be rejected and
+ * removed from RXFIFO even when all its bytes are counted (H2 LH10).
+ */
+static uint8_t finished_head(void)
+{
+    if (!complete_head()) return 0;
+    return !(status.signals & 0x20u) || status.count > status.phr + 1u;
+}
+
+/* Leaf ISR (no calls, no static frame): moves every finished head into the
+ * queue with the same completeness rule as finished_head(). It only runs while
  * armed (EA set between operations in RX/RX_NOACK). Any controller error or an
  * impossible count stops it with EA cleared; the next operation then sees the
  * FIFO through the ordinary polled path.
@@ -464,8 +475,11 @@ void radio_autoack_rx_isr(void)
     MMIO_WRITE(SOC_S1CON, 0);
     while ((uint8_t)(rx_put - rx_get) < RX_SLOTS) {
         if (MMIO_READ(SOC_RFERRF)) goto halt;
+        phr = RX_ISR_XREAD(0x6193);      /* FSMSTAT1 before RXFIFOCNT */
         count = RX_ISR_XREAD(0x619b);
         if (count > 128u) goto halt;
+        /* Same rule as finished_head(): with SFD high one more byte is needed. */
+        if ((phr & 0x20u) && count) count--;
         phr = RX_ISR_XREAD(0x619a) & 127u;
         if (phr < 5u || count <= phr) return;
         if ((MMIO_READ(SOC_RFD) & 127u) != phr) { rx_halt = 2; goto halt; }
@@ -692,7 +706,7 @@ static radio_autoack_result_t operate(uint8_t operation,
             radio_autoack_state == RADIO_AUTOACK_RX_NOACK || !status.count)
 #if defined(CC2530_RADIO_RX_ISR)
             /* ISR reads keep FIFOP low for heads it left behind (p232). */
-            && !(rx_enabled && status.count && complete_head())
+            && !(rx_enabled && status.count && finished_head())
 #endif
             ) {
             REQUIRE(radio_autoack_state == RADIO_AUTOACK_RX ||

@@ -63,7 +63,7 @@ static uint8_t queued_seen;
  * modeled FIFO holds a complete frame. Off for join-smoke/vector traces. */
 extern void radio_autoack_rx_isr(void);
 extern volatile uint8_t radio_autoack_rx_armed;
-static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts;
+static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts, isr_inflight;
 #endif
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
@@ -758,6 +758,36 @@ static void run(unsigned selected)
         scenario,device.phase,device.result,driver.fault,e2e_steps,e2e_checks,
         link_peer_checks,link_peer_tx,random_inputs);
 #if defined(CC2530_RADIO_RX_ISR)
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !count &&
+        !SOC_RFERRF && radio_autoack_state == RADIO_AUTOACK_RX) {
+        /* H2 LH10: every byte of a frame still in reception (SFD high, no
+         * FIFOP) is counted, but filtering can still remove it. Neither the
+         * vector nor a receive may read it as a finished head. */
+        radio_autoack_frame_t seen;
+        unsigned i, first = tail, reads = rfd_reads;
+        fifo[first] = 6;
+        for (i = 1; i < 7; i++) fifo[(first+i)&127] = (uint8_t)(0x40+i);
+        tail = (first+7)&127; count = 7; XR(0x6193) |= 0x20; signals();
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(count == 7 && rfd_reads == reads && radio_autoack_rx_armed);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+        CHECK(count == 7 && rfd_reads == reads && radio_autoack_rx_armed);
+        /* Rejection rolls RXFIFO back to the frame start and SFD falls. */
+        tail = first; count = 0; XR(0x6193) &= (uint8_t)~0x20; signals();
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+        CHECK(!count && rfd_reads == reads && radio_autoack_state == RADIO_AUTOACK_RX &&
+              !radio_autoack_fault);
+        /* A later frame's byte proves the head finished even with SFD high. */
+        enqueue(20, 0xe9, 0x35); first = tail;
+        fifo[first] = 30; fifo[(first+1)&127] = 0x41;
+        tail = (first+2)&127; count += 2; XR(0x6193) |= 0x20; signals();
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(!packets && count == 2 && rfd_reads == reads + 21 && radio_autoack_rx_armed);
+        tail = first; count = 0; XR(0x6193) &= (uint8_t)~0x20; signals();
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME && seen.length == 18);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY && !radio_autoack_fault);
+        isr_inflight++;
+    }
     if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !SOC_RFERRF) {
         /* Controller error: the vector stops without consuming and disarms;
          * the next operation owns the FIFO through the polled path. */
@@ -785,9 +815,9 @@ int MAC_LINK_E2E_MAIN(void)
     isr_live = 1;
     for (i = 0; i < E2E_CASES; i++) run(i);
     isr_live = 0;
-    printf("MAC link E2E RX ISR: %u cases, %u dispatches, %u frames queued, %u halts PASS.\n",
-           E2E_CASES,isr_runs,isr_frames,isr_halts);
-    CHECK(isr_runs && isr_frames && isr_halts);
+    printf("MAC link E2E RX ISR: %u cases, %u dispatches, %u frames queued, %u halts, "
+           "%u in-flight tails PASS.\n", E2E_CASES,isr_runs,isr_frames,isr_halts,isr_inflight);
+    CHECK(isr_runs && isr_frames && isr_halts && isr_inflight);
 #endif
     printf("MAC link E2E: %u cases, %u checks + %u peer checks, %u steps, %u test RANDOM inputs PASS.\n",
            E2E_CASES,totals,total_peer_checks,total_steps,total_random);

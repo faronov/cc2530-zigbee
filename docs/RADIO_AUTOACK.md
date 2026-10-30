@@ -339,8 +339,12 @@ storms while the foreground was in crypto/NWK work between radio operations
   (EA cleared), so the polled driver never runs concurrently with the ISR.
   `flash_exec_command` also clears EA and restores it only while still armed.
 - **ISR.** Clears RFIRQF0 FIFOP/RXPKTDONE (R/W0) and S1CON, then moves each
-  complete head (same completeness rule as `complete_head()`) into a 4-slot XDATA
-  queue as the raw FIFO image `[PHR][body][RSSI][CRC]`. It makes no calls, owns
+  finished head into a 4-slot XDATA queue as the raw FIFO image
+  `[PHR][body][RSSI][CRC]`. A head is finished when RXFIFOCNT exceeds its PHR
+  and either FSMSTAT1.SFD, sampled before RXFIFOCNT, was low or a later frame's
+  byte follows it. While SFD is high, a count-complete tail can still be rejected
+  and removed by filtering (H2 LH10, `docs/H2_RX_INVESTIGATION.md` section 17).
+  The foreground uses the same rule (`finished_head()`) for heads left with FIFOP low. It makes no calls, owns
   no static frame, uses DPTR0 and bank 0 only, and preserves 12 bytes
   (PSW/A/B/DPTR/R0/R2/R3 and four virtual registers). RFERRF, an impossible count
   or a PHR mismatch after the PHR byte was consumed stops it with EA cleared and

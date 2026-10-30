@@ -431,3 +431,37 @@ The check compared an observation upper bound with a coverage lower bound. LINK 
 requires stamp coverage only for PENDING_ZERO. A delivered frame preceded CLOSED, and the
 radio AUTOACKed it while RX was on. `tests/test_mac_link_join.c` reproduces the LH8 order:
 the old code fails and the fix passes. A busy-PAN hardware join (LH9) remains the gate.
+
+LH9 (image `35ea6bf6…`) then joined, was interviewed by ZHA and stayed READY through a
+600-second soak with 5/5 attribute reads.
+
+## 17. LH10: a frame still in reception read as a finished head
+
+LH10 re-added the LH9 image to ZHA after a fresh removal. It joined at +57 s and was
+interviewed, and one read succeeded. About 65 s after the start it faulted with
+`RADIO_AUTOACK_FIFO_ERROR`, reported up the stack as adapter FAULT and link driver RADIO.
+The terminal snapshot of the radio driver status shows:
+
+- Phase 4 (receive), 2 polls, 0 bytes read. The first `consume()` failed its count/head
+  recheck.
+- The ISR queue was empty (put = get = 72, no halt).
+- FSMSTAT1 = 0xad: FIFO and **SFD** high, FIFOP low. RXFIFOCNT 7 and PHR 6, so the FIFO held
+  exactly one 7-byte frame.
+
+The bytes counted in the FIFO belonged to the frame still being received. With SFD high its
+FCS/metadata were not final, and filtering could still reject it. This short 6-byte MPDU is
+malformed for any addressed frame type. Rejection removes the frame from RXFIFO, so the
+recheck found the count gone.
+
+Before the ISR, live RX waited for FIFOP. The ISR rule for heads it leaves behind with FIFOP
+low (SWRU191F p.232) accepted any count-complete head, and the vector loop used the same rule.
+
+`finished_head()` and the vector now accept a count-complete head without FIFOP only in two
+cases:
+- SFD was low when FSMSTAT1 was sampled, which happens before RXFIFOCNT.
+- A later frame's byte follows the head.
+
+A head left behind this way is read at the next RXPKTDONE or the next foreground receive.
+`tests/test_mac_link_e2e.c` adds an in-flight tail that is later rolled back; the old ISR
+and the old foreground rule each read it. It also adds a finished head followed by a frame
+in reception, which must still be queued. Image sleepy13 (`911a3529…`) carries the fix.
