@@ -129,7 +129,12 @@ R is a known staged decision period, not the total attempt lifetime.
 `extraction.lifetime/work` independently bound the whole attempt; extraction
 receives the remaining local lifetime and the configured work bound.
 `frame_wait` is a **caller-valid configured PIB F**, not an arbitrary
-application timeout or a guessed default.
+application timeout or a guessed default. The join-smoke admission uses 1986
+symbols, the IEEE 802.15.4-2006 macMaxFrameTotalWaitTime computed from the
+default PIB (macMinBE 3, macMaxBE 5, macMaxCSMABackoffs 4: 86*20+266). In
+MCUEMU a Telink sampleGW coordinator completes its indirect Association
+Response about 5.2 ms after the Data Request ACK, so the earlier 300-symbol
+(4.8 ms) setting dropped it after the hardware ACK.
 
 ### Bounded Response context without retimestamping
 

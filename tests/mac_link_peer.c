@@ -595,7 +595,11 @@ void link_peer_config(bdb_join_config_t *config)
     config->scan.saved.pan = 0xffff; config->scan.saved.channel = 11;
     config->association.saved.pan = 0xffff; config->association.saved.channel = 11;
     config->association.response_wait = 2; config->association.capability = link_peer_capability;
-    config->association.extraction.epoch = 1; config->association.extraction.frame_wait = 300;
+    /* IEEE 802.15.4-2006 macMaxFrameTotalWaitTime from default PIB values
+     * (minBE 3, maxBE 5, 4 CSMA backoffs): 86*20 + 266 symbols. A Telink
+     * coordinator finishes its indirect response about 5.2 ms (>300 symbols)
+     * after the Data Request ACK. */
+    config->association.extraction.epoch = 1; config->association.extraction.frame_wait = 1986;
     config->association.extraction.lifetime = 100000; config->association.extraction.work = 512;
     config->association.extraction.pan = identity.pan; config->association.extraction.channel = 15;
     config->association.extraction.local_mode = config->association.extraction.coordinator_mode = 3;
