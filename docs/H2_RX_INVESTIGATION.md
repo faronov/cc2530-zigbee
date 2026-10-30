@@ -495,3 +495,57 @@ channel-access failure) into NODE, REQUESTING, VERIFYING and PARENT:
 The previous source, and a mutant without the key-exchange retry, both fail.
 Image sleepy14 (`8e2c40ec…`) carries the fix.
 
+
+The retry initially also covered a delivery that `nwk_aps` had *cancelled*:
+`zdo_runtime` reported every non-zero confirm as TRANSMIT, so the e2e
+RETRY_CANCEL case re-sent a deliberately cancelled Node_Desc_req. A
+`NWK_APS_CANCELLED` confirm now reports `ZDO_RUNTIME_CANCELLED`, which BDB
+never retries. `host-mac-link-e2e-tests` (1.5 s) now runs in
+`test-m5-m6-host`, so CI covers it.
+
+## 19. LH12: one late TX arm after READY
+
+LH12 (sleepy14) reached READY and was interviewed. Later it stopped with
+`ATTEMPT_LATE_ARM`: TX_ACTIVE appeared about 20 ms after the STXON strobe,
+outside the attempt's arm window. A write-only `attempt_trace` (XDATA 0x15e8)
+now records the strobe-to-TX_ACTIVE wait. In LH13 every attempt saw
+TX_ACTIVE on the first read (max_wait 0). The LH12 delay is therefore a rare
+anomaly whose cause is still unknown; the trace stays in place to capture it.
+
+## 20. LH13: a transient recheck failure behind a foreign ACK head
+
+LH13 (sleepy15) associated as 0x38ef and reached READY. About 90 s after RF
+start it faulted with `RADIO_AUTOACK_FIFO_ERROR` in phase 4 (receive):
+- 0 bytes read, 2 polls.
+- RXFIFOCNT 7, PHR 5, FSMSTAT1 0xad (SFD high, FIFOP low).
+- First byte at 0x50, ISR queue empty.
+
+A read-only dump of the halted RXFIFO RAM (0x6000–0x607F) showed the FIFO
+full of foreign 5-byte ACK frames. Filtering accepts every ACK regardless of
+address. Their order from 0x50 matches the air capture. The head was a
+complete foreign ACK (seq 105, +82.918 s). The seventh byte was the first byte
+of the next frame: data 0x04d9→0x85fa at +82.938 s, which is not addressed to
+us, so filtering rejects it and removes its bytes (SWRU191F p.225).
+
+`finished_head()` correctly judged the head finished (count 7 > PHR+1), and
+RXFIRST_PTR still pointed at it after the halt. `consume()`'s first recheck
+failed anyway: either the count or the head pointer read wrong once, which
+coincided with the rejection. The ISR path, which has no recheck, would have
+read the head.
+
+Phase 4 now allows one soft retry:
+- **Conditions:** the first `consume()` fails with FIFO_ERROR, nothing has been
+  read, there is no overflow, the state is RX/RX_NOACK, and the previous
+  receive did not already retry.
+- **Effect:** the receive ends EMPTY (`head_retry`), and the next receive reads
+  the head. A repeated failure stays fatal.
+- **Evidence:** `head_trace` (0x15fc) records the retry count and the failing
+  count/RXFIRST_PTR/RXLAST_PTR/FSMSTAT1/re-read count, so the next occurrence
+  identifies the comparison that failed.
+
+`tests/test_mac_link_e2e.c` reproduces the LH13 FIFO: an ACK head, one
+in-flight byte, SFD high and FIFOP low, with RXFIFOCNT reading 0 once. It
+requires EMPTY with no RFD read, then the frame, then EMPTY; in case 0 it also
+requires that a second consecutive failure latches FIFO_ERROR. Two mutants
+fail it: one without the retry, and one with an unbounded retry. Image
+sleepy16 (`19dc4d17…`) carries the fix and reaches READY in MCUEMU.

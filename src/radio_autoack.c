@@ -85,6 +85,15 @@ static volatile MCU_XDATA uint8_t rx_put, rx_get, rx_halt, rx_enabled;
 volatile MCU_XDATA uint8_t radio_autoack_rx_armed;
 #define rx_armed radio_autoack_rx_armed
 #define QUEUED ((uint8_t)(rx_put - rx_get) != 0u)
+/* H2 LH13: a live receive's first head recheck failed once with the head
+ * intact. head_retry allows one EMPTY for that case per consecutive receive.
+ * head_trace is write-only debugger evidence: the failing RXFIFOCNT and the
+ * pointers, FSMSTAT1 and RXFIFOCNT sampled right after it.
+ */
+static MCU_XDATA uint8_t head_retry;
+static volatile MCU_XDATA struct {
+    uint8_t retries, count, first, last, signals, recount;
+} head_trace;
 #endif
 #if defined(CC2530_RX_DIAG)
 /* Write-only evidence (cc2530_rx_diag.h): copies of values already sampled and
@@ -410,8 +419,16 @@ static radio_autoack_result_t consume(void)
 #endif
         return RADIO_AUTOACK_CONTROLLER_ERROR;
     count = MMIO_XREAD(0x619b);
-    if (count < work.remaining || count > 128 || (MMIO_XREAD(0x619d) & 127u) != work.head)
+    if (count < work.remaining || count > 128 || (MMIO_XREAD(0x619d) & 127u) != work.head) {
+#if defined(CC2530_RADIO_RX_ISR)
+        head_trace.count = count;
+        head_trace.first = MMIO_XREAD(0x619d);
+        head_trace.last = MMIO_XREAD(0x619e);
+        head_trace.signals = MMIO_XREAD(0x6193);
+        head_trace.recount = MMIO_XREAD(0x619b);
+#endif
         return RADIO_AUTOACK_FIFO_ERROR;
+    }
     work.byte = read_fifo();
     status.bytes_read++;
     work.head = (work.head + 1u) & 127u;
@@ -535,6 +552,9 @@ static radio_autoack_result_t operate(uint8_t operation,
 {
     radio_autoack_result_t result;
     uint8_t i;
+#if defined(CC2530_RADIO_RX_ISR)
+    uint8_t retried;
+#endif
     if (radio_autoack_fault) return (radio_autoack_result_t)radio_autoack_fault;
     if (!timeout || timeout >= TIMEBASE_HALF_RANGE || !limit ||
         (operation == 0 && configuration == NULL) || (operation == 1 && output == NULL))
@@ -642,6 +662,9 @@ static radio_autoack_result_t operate(uint8_t operation,
         status.phase = operation == 0 ? 3 : 10; result = RADIO_AUTOACK_READY;
     } else if (operation == 1) {
         status.phase = 4;
+#if defined(CC2530_RADIO_RX_ISR)
+        retried = head_retry; head_retry = 0;
+#endif
 #if defined(CC2530_RX_DIAG)
         diag_service();
 #endif
@@ -720,7 +743,25 @@ static radio_autoack_result_t operate(uint8_t operation,
 head:
 #endif
 #if defined(CC2530_MAC_ATTEMPT)
+#if defined(CC2530_RADIO_RX_ISR)
+        result = receive_head();
+        /* H2 LH13: with a complete head and a later frame in reception, the
+         * first recheck failed although the head stayed intact at RXFIRST_PTR.
+         * Nothing was read, so one receive may end EMPTY; the next one reads
+         * the head and a repeated failure stays fatal.
+         */
+        if (result == RADIO_AUTOACK_FIFO_ERROR && !status.bytes_read && !retried &&
+            !work.overflow && (radio_autoack_state == RADIO_AUTOACK_RX ||
+                               radio_autoack_state == RADIO_AUTOACK_RX_NOACK)) {
+            head_retry = 1;
+            if ((uint8_t)(head_trace.retries + 1u)) head_trace.retries++;
+            result = RADIO_AUTOACK_EMPTY;
+            goto finished;
+        }
+        if (result != RADIO_AUTOACK_READY) goto failed;
+#else
         CHECK(receive_head());
+#endif
 #else
         work.head = status.first; work.remaining = status.phr + 1u;
         CHECK(consume());
@@ -963,6 +1004,15 @@ static SDCC_VOLATILE MCU_XDATA struct {
     uint32_t ticks, duration, until;
     uint8_t head, phr;
 } attempt;
+/* Write-only H2 evidence for the strobe-to-TX_ACTIVE interval (debugger read).
+ * Control flow never reads it. wait counts polls from ISTXONCCA to TX_ACTIVE;
+ * low counts loop reads with SAMPLED_CCA clear; max_ticks is before->armed.
+ */
+static volatile MCU_XDATA struct {
+    uint16_t attempts, busy, wait, max_wait;
+    uint32_t max_ticks;
+    uint8_t rssi, fsm0, fsm1, exit0, exit1, low;
+} attempt_trace;
 
 static radio_autoack_result_t attempt_elapsed(
     const mac_time_stamp_t MCU_XDATA *first, const mac_time_stamp_t MCU_XDATA *last)
@@ -1101,9 +1151,14 @@ radio_autoack_result_t radio_autoack_attempt(
             !(status.signals & 0xc0u) && tx_loaded(work.prepared_length+1u),
             RADIO_AUTOACK_STATE_CHANGED);
     ROOM(); status.phase = 19;
+    attempt_trace.rssi = MMIO_XREAD(0x6198);
     CHECK(attempt_sample(timeout, limit, &attempt_output->before));
+    attempt_trace.wait = status.polls;
     MMIO_WRITE(SOC_RFST, 0xea); status.writes++;
     signals = MMIO_XREAD(0x6193);
+    attempt_trace.fsm0 = MMIO_XREAD(0x6192); attempt_trace.fsm1 = signals;
+    attempt_trace.low = 0;
+    if ((uint16_t)(attempt_trace.attempts + 1u)) attempt_trace.attempts++;
     attempt_output->sampled_cca = (signals >> 3) & 1u;
     if (attempt_output->sampled_cca) {
         /* Positive own TX state prevents admission before the submitted TX.
@@ -1115,7 +1170,11 @@ radio_autoack_result_t radio_autoack_attempt(
             REQUIRE(!(MMIO_READ(SOC_RFIRQF1) & 2u),
                     RADIO_AUTOACK_ATTEMPT_LATE_ARM);
             signals = MMIO_XREAD(0x6193);
+            if (!(signals & 8u) && (uint8_t)(attempt_trace.low + 1u)) attempt_trace.low++;
         }
+        attempt_trace.exit0 = MMIO_XREAD(0x6192); attempt_trace.exit1 = signals;
+        attempt_trace.wait = status.polls - attempt_trace.wait;
+        if (attempt_trace.wait > attempt_trace.max_wait) attempt_trace.max_wait = attempt_trace.wait;
         REQUIRE(!(signals & 1u), RADIO_AUTOACK_STATE_CHANGED);
 #if defined(CC2530_MAC_LINK)
         if (MMIO_XREAD(0x6081) & 0x20u) {
@@ -1170,8 +1229,12 @@ radio_autoack_result_t radio_autoack_attempt(
                !status.rssi_valid);
     }
     CHECK(attempt_sample(timeout, limit, &attempt_output->armed));
-    if (!attempt_output->sampled_cca) { received = RADIO_AUTOACK_CCA_BUSY; goto complete; }
+    if (!attempt_output->sampled_cca) {
+        if ((uint16_t)(attempt_trace.busy + 1u)) attempt_trace.busy++;
+        received = RADIO_AUTOACK_CCA_BUSY; goto complete;
+    }
     CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->armed));
+    if (attempt.ticks > attempt_trace.max_ticks) attempt_trace.max_ticks = attempt.ticks;
     REQUIRE(attempt.ticks < attempt.duration,
             RADIO_AUTOACK_ATTEMPT_LATE_ARM);
     received = RADIO_AUTOACK_EMPTY; status.phase = 20;

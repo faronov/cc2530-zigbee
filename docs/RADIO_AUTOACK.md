@@ -344,7 +344,10 @@ storms while the foreground was in crypto/NWK work between radio operations
   and either FSMSTAT1.SFD, sampled before RXFIFOCNT, was low or a later frame's
   byte follows it. While SFD is high, a count-complete tail can still be rejected
   and removed by filtering (H2 LH10, `docs/H2_RX_INVESTIGATION.md` section 17).
-  The foreground uses the same rule (`finished_head()`) for heads left with FIFOP low. It makes no calls, owns
+  The foreground uses the same rule (`finished_head()`) for heads left with FIFOP low. If its
+  first `consume()` recheck of such a head fails before any byte is read, that receive ends
+  EMPTY once and the next one reads the head; a second consecutive failure is fatal (H2 LH13,
+  section 20; evidence in `head_trace`). The ISR makes no calls, owns
   no static frame, uses DPTR0 and bank 0 only, and preserves 12 bytes
   (PSW/A/B/DPTR/R0/R2/R3 and four virtual registers). RFERRF, an impossible count
   or a PHR mismatch after the PHR byte was consumed stops it with EA cleared and

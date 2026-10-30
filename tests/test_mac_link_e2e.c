@@ -64,6 +64,8 @@ static uint8_t queued_seen;
 extern void radio_autoack_rx_isr(void);
 extern volatile uint8_t radio_autoack_rx_armed;
 static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts, isr_inflight;
+static unsigned count_glitch, isr_rechecks;
+static uint8_t count_glitch_value;
 #endif
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
@@ -143,6 +145,13 @@ static uint8_t joint_xload(uint16_t a)
         advance_clocks(mmio_clocks);
         return crypto_xread(a);
     }
+#if defined(CC2530_RADIO_RX_ISR)
+    /* H2 LH13: the Nth RXFIFOCNT read returns count_glitch_value once. */
+    if (a == 0x619b && count_glitch && !--count_glitch) {
+        (void)handoff_xload(a);
+        return count_glitch_value;
+    }
+#endif
     return handoff_xload(a);
 }
 
@@ -788,6 +797,41 @@ static void run(unsigned selected)
         CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY && !radio_autoack_fault);
         isr_inflight++;
     }
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !count &&
+        !SOC_RFERRF && radio_autoack_state == RADIO_AUTOACK_RX) {
+        /* H2 LH13: a complete foreign ACK head left with FIFOP low (p232) and
+         * one byte of a later frame in reception that filtering rejects. The
+         * first recheck read RXFIFOCNT low once while the head stayed at
+         * RXFIRST_PTR: nothing is read, the receive ends EMPTY and the next
+         * one delivers the head. A repeated failure stays fatal. */
+        radio_autoack_frame_t seen;
+        unsigned first, reads = rfd_reads;
+        fifop_edge = 1;
+        enqueue(5, 0xe3, 0x69); fifop_high = 0;
+        first = tail; fifo[first] = 45; tail = (first+1)&127; count++;
+        XR(0x6193) |= 0x20; signals();
+        CHECK((XR(0x6193) & 0xe0) == 0xa0 && count == 7);
+        count_glitch = 2; count_glitch_value = 0;
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+        CHECK(!count_glitch && rfd_reads == reads && count == 7 && !radio_autoack_fault &&
+              radio_autoack_rx_armed);
+        tail = first; count--; XR(0x6193) &= (uint8_t)~0x20; signals();
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME &&
+              seen.length == 3 && seen.body[0] == 2 && !seen.body[1]); /* DSN: adapter_load */
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY &&
+              !radio_autoack_fault && !count && rfd_reads == reads + 6);
+        if (scenario == 0) {
+            reads = rfd_reads;
+            enqueue(5, 0xe3, 0x6a); fifop_high = 0; signals();
+            count_glitch = 2;
+            CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+            count_glitch = 2;
+            CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FIFO_ERROR &&
+                  radio_autoack_fault == RADIO_AUTOACK_FIFO_ERROR && rfd_reads == reads);
+        }
+        fifop_edge = 0;
+        isr_rechecks++;
+    }
     if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !SOC_RFERRF) {
         /* Controller error: the vector stops without consuming and disarms;
          * the next operation owns the FIFO through the polled path. */
@@ -816,8 +860,9 @@ int MAC_LINK_E2E_MAIN(void)
     for (i = 0; i < E2E_CASES; i++) run(i);
     isr_live = 0;
     printf("MAC link E2E RX ISR: %u cases, %u dispatches, %u frames queued, %u halts, "
-           "%u in-flight tails PASS.\n", E2E_CASES,isr_runs,isr_frames,isr_halts,isr_inflight);
-    CHECK(isr_runs && isr_frames && isr_halts && isr_inflight);
+           "%u in-flight tails, %u head rechecks PASS.\n", E2E_CASES,isr_runs,isr_frames,isr_halts,
+           isr_inflight,isr_rechecks);
+    CHECK(isr_runs && isr_frames && isr_halts && isr_inflight && isr_rechecks);
 #endif
     printf("MAC link E2E: %u cases, %u checks + %u peer checks, %u steps, %u test RANDOM inputs PASS.\n",
            E2E_CASES,totals,total_peer_checks,total_steps,total_random);
