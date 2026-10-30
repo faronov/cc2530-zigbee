@@ -295,7 +295,13 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         if (ctx->issued != 1) {
             if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) fail(ctx, BDB_JOIN_SECURITY);
             else if (ctx->recovery == 2 && bdb_join_keys.phase == SECURITY_KEYS_VERIFIED) {
-                ctx->member = 1; install(ctx);
+                /* INSTALLING does not step the transport: a polling child's
+                 * in-flight Data Request must finish (and disarm) first. */
+                if (!ctx->work.runtime.transport.active && !ctx->work.runtime.transport.poll &&
+                    !ctx->work.runtime.transport.reply && !ctx->work.runtime.transport.queued &&
+                    !ctx->work.runtime.transport.completed && !ctx->work.runtime.transport.stopping) {
+                    ctx->member = 1; install(ctx);
+                }
             } else if (!ctx->issued || expired(ctx->last, ctx->until)) {
                 if (ctx->attempts == BDB_JOIN_ATTEMPTS) fail(ctx, BDB_JOIN_NO_PARENT);
                 else {

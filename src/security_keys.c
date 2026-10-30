@@ -1155,7 +1155,8 @@ security_keys_result_t security_keys_send(
         if (aps_secure || w.packet.nwk.radius != 1) return finish(SECURITY_KEYS_UNSUPPORTED);
         if (w.packet.payload[0] == 6) {
             if (!verified() || w.packet.length != 2 ||
-                (w.packet.payload[1] != 0x08 && w.packet.payload[1] != 0x0c) ||
+                /* End device: only power source and RxOnWhenIdle may vary. */
+                (w.packet.payload[1] & (uint8_t)~0x0cu) ||
                 w.packet.nwk.destination !=
 #if defined(CC2530_PARENT_RECOVERY)
                     address ||
