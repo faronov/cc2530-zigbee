@@ -743,6 +743,12 @@ static void secured_rejoin(void)
     memcpy(packet.nwk.destination_ieee,config.tc_ieee,8);
     packet.length = 2; packet.payload[0] = 6; packet.payload[1] = 0x88;
     CHECK(security_keys_send(&packet,0,raw,44,&written,&limits,3) == SECURITY_KEYS_UNSUPPORTED);
+    packet.payload[1] = 0x0a;
+    CHECK(security_keys_send(&packet,0,raw,44,&written,&limits,3) == SECURITY_KEYS_UNSUPPORTED);
+    packet.payload[1] = 0x00; /* sleepy end device */
+    CHECK(security_keys_send(&packet,0,raw,43,&written,&limits,3) == SECURITY_KEYS_SPACE);
+    packet.payload[1] = 0x04;
+    CHECK(security_keys_send(&packet,0,raw,43,&written,&limits,3) == SECURITY_KEYS_SPACE);
     packet.payload[1] = 0x08;
     CHECK(security_keys_send(&packet,0,raw,43,&written,&limits,3) == SECURITY_KEYS_SPACE);
     state(SECURITY_KEYS_VERIFIED);

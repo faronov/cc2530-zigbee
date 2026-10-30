@@ -22,8 +22,9 @@ static const uint8_t arm_packet[8] = {0x4a,0xb5,0x4e,0xb1,0xa9,0x56,1,0xfe};
 static const uint8_t run_packet[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
 enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOVERY=16,
-       CALLER_REJOIN_TIMEOUT, CALLER_SLEEPY=25, CALLER_SLEEPY_POLL_KEEPALIVE };
-#define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || (s)==CALLER_SLEEPY_POLL_KEEPALIVE)
+       CALLER_REJOIN_TIMEOUT, CALLER_SLEEPY=25, CALLER_SLEEPY_POLL_KEEPALIVE, CALLER_SLEEPY_RECOVERY };
+/* CALLER_SLEEPY_RECOVERY: CALLER_RECOVERY for an RX-off-when-idle child. */
+#define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || (s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_RECOVERY)
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
 #if defined(CC2530_REPLAY_POLICY_C)
@@ -61,7 +62,7 @@ static unsigned recovery_selected;
 #define BINDING_CASE(c) 0
 #define COMPLETION_INPUT_READY(c) 1
 #endif
-#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(c))
+#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || (c)==CALLER_SLEEPY_RECOVERY || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
@@ -141,13 +142,24 @@ static void recovery_dump(void)
     recovery_write(&length,sizeof(length)); recovery_write(state,length);
     close(caller_dump); _exit(0);
 }
-/* The parent answers only through the air after the genuine Rejoin Request. */
+/* The parent answers only through the air after the genuine Rejoin Request.
+ * A polling child gets it as the indirect reply to its next Data Request,
+ * while that poll's own TX is still being retired. */
+static unsigned rejoin_queued_polls, rejoin_queued_seen, rejoin_poll_overlaps;
 static void rejoin_peer(void)
 {
-    if(join_smoke_device.phase!=BDB_JOIN_RECOVERING || !link_peer_pending ||
-       !mac_adapter_diagnostic()->normal_rx || join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
+    if(join_smoke_device.phase!=BDB_JOIN_RECOVERING || !link_peer_pending) {
+        rejoin_queued_seen=0; return;
+    }
+    if(caller_case==CALLER_SLEEPY_RECOVERY) {
+        if(!rejoin_queued_seen) { rejoin_queued_seen=1; rejoin_queued_polls=link_peer_polls; }
+        if(link_peer_polls==rejoin_queued_polls) return;
+    }
+    if(!mac_adapter_diagnostic()->normal_rx ||
+       (caller_case!=CALLER_SLEEPY_RECOVERY && join_smoke_tx.engine.phase!=MAC_TX_IDLE) ||
        !XR(0x618b) || mode!=2 || ack_active || packets || mac_adapter_diagnostic()->held) return;
-    air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0;
+    if(join_smoke_device.work.runtime.transport.active) rejoin_poll_overlaps++;
+    air_frame(link_peer_body,link_peer_length,1); link_peer_pending=0; rejoin_queued_seen=0;
 }
 static void caller_peer(void)
 {
@@ -542,6 +554,7 @@ static void prepare_caller(unsigned selected)
         /* Modeled cold boot: only the flash written by the DUT survives. */
         security_joint_reset(1);
         memcpy(security_joint_nv(),recovery_nv,sizeof(recovery_nv));
+        link_peer_capability=selected==CALLER_SLEEPY_RECOVERY?0x80:0x88;
         link_peer_recover(&join_config,recovery_state,recovery_length);
         link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
 #if defined(CC2530_PARENT_RECOVERY)
@@ -644,9 +657,10 @@ static void mailbox(const uint8_t *bytes)
 
 int main(int argc, char **argv)
 {
-    unsigned selected, calls=0;
+    unsigned selected, calls=0, child_case;
     assert(argc==2);
     selected=(unsigned)strtoul(argv[1],NULL,10);
+    child_case=selected==CALLER_SLEEPY_RECOVERY?CALLER_SLEEPY:0;
 #if defined(CC2530_PARENT_RECOVERY)
     recovery_selected=selected;
 #endif
@@ -658,9 +672,9 @@ int main(int argc, char **argv)
 #endif
     if(RECOVERY_CASE(selected) && recovery_child()) {
 #if defined(CC2530_PARENT_RECOVERY)
-        selected=ALTERNATE_CASE(recovery_selected)?CALLER_KNOWN_HISTORY:0;
+        selected=ALTERNATE_CASE(recovery_selected)?CALLER_KNOWN_HISTORY:child_case;
 #else
-        selected=0;
+        selected=child_case;
 #endif
     }
     caller_case=selected;
@@ -818,9 +832,11 @@ int main(int argc, char **argv)
                     else if(selected==CALLER_SLEEPY) assert(link_peer_parent>1u);
                     link_peer_verify();
                     if(caller_dump>=0) recovery_dump();
-                    if(selected==CALLER_RECOVERY) {
+                    if(selected==CALLER_RECOVERY || selected==CALLER_SLEEPY_RECOVERY) {
                         security_keys_status_t keys;
                         assert(join_smoke_device.recovery==3 && link_peer_rejoins==1 && !response_sent);
+                        /* The response overlapped the poll that released it. */
+                        assert(selected!=CALLER_SLEEPY_RECOVERY || rejoin_poll_overlaps==1);
                         assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
                             keys.phase==SECURITY_KEYS_VERIFIED && keys.config.address==0x5678);
                     }
