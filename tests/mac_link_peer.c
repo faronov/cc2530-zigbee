@@ -591,7 +591,12 @@ void link_peer_config(bdb_join_config_t *config)
     mac_header_t mh;
     uint8_t payload[19];
     memset(config, 0, sizeof(*config));
-    config->scan.channels = 1UL << 15; config->scan.lifetime = 100000; config->scan.work = 512;
+    /* bdbScanDuration default 0x04 (TI Z-Stack, NXP JN-SW-4170): a 16320-
+     * symbol dwell. LH6: a busy-PAN EZSP coordinator beaconed 19..93 ms after
+     * the request, beyond the 1920-symbol duration-0 window. Work counts
+     * steps, not events; the full allowance covers the dwell at host speed. */
+    config->scan.channels = 1UL << 15; config->scan.lifetime = 100000;
+    config->scan.work = MAC_SCAN_MAX_WORK; config->scan.duration = 4;
     config->scan.saved.pan = 0xffff; config->scan.saved.channel = 11;
     config->association.saved.pan = 0xffff; config->association.saved.channel = 11;
     config->association.response_wait = 2; config->association.capability = link_peer_capability;

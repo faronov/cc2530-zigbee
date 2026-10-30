@@ -613,6 +613,9 @@ static void prepare_caller(unsigned selected)
         join_smoke_phase.admission.join.scan.channels=NWK_CANDIDATES_CHANNEL_MASK;
         join_smoke_phase.admission.join.scan.lifetime=1000000;
         join_smoke_phase.admission.join.scan.work=MAC_SCAN_MAX_WORK;
+        /* Channel iteration, not dwell: sixteen duration-4 dwells exceed the
+         * per-scan work cap at host stepping speed. */
+        join_smoke_phase.admission.join.scan.duration=0;
     }
     if(selected==CALLER_CLOSED) {
         mac_frame_info_t beacon;

@@ -90,6 +90,17 @@ deadline is no longer used. Missing closure has a1024-symbol grace for
 confirmation delivery, not permission to keep RX enabled beyond its dwell.
 No clock progression is necessary to exhaust a positive work allowance.
 
+Work is counted per step, including idle steps inside a dwell, so the budget
+must cover the summed dwell divided by the symbols advanced per step on the
+fastest stepping platform. The shared join configuration
+(`tests/mac_link_peer.c`, also the MCUEMU/HIL admission vector) uses duration
+4, the BDB `bdbScanDuration` default (TI Z-Stack `BDB_DEFAULT_SCAN_DURATION
+0x04`, NXP JN-SW-4170 `BDB_SCAN_DURATION 0x04`): a 16320-symbol (~261 ms)
+single-channel dwell with work 4096. Duration 0 (1920 symbols) failed on H2
+(LH6, NO_PARENT): a busy EZSP coordinator beaconed 19-93 ms after each
+Request. A sixteen-channel duration-4 scan does not fit 4096 steps at host
+stepping speed; the all-channel host case therefore keeps duration 0.
+
 All clocks are the **same abstract modulo-32-bit symbol epoch** as `mac_tx`,
 one symbol being the selected nominal16 us. Every compared interval,
 foreground gap and event lag must be less than `80000000`; backward/half-range
