@@ -39,7 +39,8 @@ static flash_result_t observe(uint8_t bank)
     status = MMIO_READ(SOC_CLKCONSTA);
     arm = MMIO_READ(SOC_DMAARM);
     request = MMIO_READ(SOC_DMAREQ);
-    if (ien0 || ien1 || ien2 || arm || request || (sleep & 7u) != 4u ||
+    if ((ien0 & CC2530_IEN0_GUARD) || ien1 || (ien2 & CC2530_IEN2_GUARD) ||
+        arm || request || (sleep & 7u) != 4u ||
         command != saved_clock || command != status ||
         (command & 7u) != ((command & 0x40u) ? 1u : 0u) ||
         ((command & 0x40u) && !(command & 0x38u)))
@@ -100,11 +101,11 @@ saved_bank = MMIO_READ(SOC_MEMCTR);
     result = observe(7);
     if (result != FLASH_OK) goto failed;
     source = NV_WINDOW + (uint16_t)page * FLASH_PAGE_SIZE + offset;
-    for (i = 0; i < length; i++) {
-        staging[i] = MMIO_XREAD(source + i);
-        result = observe(7);
-        if (result != FLASH_OK) goto failed;
-    }
+    /* Nothing in this loop can change interrupt, DMA, clock, cache or mapping
+     * state; the staged bytes are published only after this check passes. */
+    for (i = 0; i < length; i++) staging[i] = MMIO_XREAD(source + i);
+    result = observe(7);
+    if (result != FLASH_OK) goto failed;
     MMIO_WRITE(SOC_MEMCTR, saved_bank);
     result = observe(saved_bank);
     if (result != FLASH_OK) goto failed;

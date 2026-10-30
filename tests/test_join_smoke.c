@@ -22,7 +22,8 @@ static const uint8_t arm_packet[8] = {0x4a,0xb5,0x4e,0xb1,0xa9,0x56,1,0xfe};
 static const uint8_t run_packet[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
 enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOVERY=16,
-       CALLER_REJOIN_TIMEOUT };
+       CALLER_REJOIN_TIMEOUT, CALLER_SLEEPY=25, CALLER_SLEEPY_POLL_KEEPALIVE };
+#define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || (s)==CALLER_SLEEPY_POLL_KEEPALIVE)
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
 #if defined(CC2530_REPLAY_POLICY_C)
@@ -260,7 +261,7 @@ static void serve_ready(unsigned *calls)
     unsigned application_sent=0;
     uint32_t steps;
     uint8_t tsn=0, draws=join_smoke_status.draws;
-    uint64_t cycles=0, credited=0;
+    uint64_t cycles=0, credited=0, origin=model_clocks;
     while(join_smoke_status.phase==JS_READY && join_smoke_status.stage==5 &&
           cycles<(uint64_t)(SUSTAINED_CASE(caller_case)?600u:REPORTING_CASE(caller_case)||BINDING_CASE(caller_case)?110u:
                            ALTERNATE_CASE(caller_case)?10u:SERVE_SECONDS)*32000000u) {
@@ -496,10 +497,14 @@ static void serve_ready(unsigned *calls)
      * second of its 40 single steps plus the +40 wrap (21/41), and the
      * voltage on its three steps (3/41). */
     if(!ALTERNATE_CASE(caller_case) && !REPORTING_CASE(caller_case) && !BINDING_CASE(caller_case)) {
-        assert(counts[0]+1u>=SERVE_SAMPLES && counts[0]<=SERVE_SAMPLES+1u);
+        /* Samples follow the device clock, which MMIO accesses (e.g. polls)
+         * advance beyond the served steps. */
+        unsigned samples=(unsigned)((model_clocks-origin)/512u >> 22);
+        assert(samples>=SERVE_SAMPLES && samples<=SERVE_SAMPLES+(SERVE_SAMPLES+31u)/32u);
+        assert(counts[0]+1u>=samples && counts[0]<=samples+1u);
         assert(counts[1]+1u>=counts[0] && counts[1]<=counts[0]+1u);
-        assert((int64_t)counts[3]+2>=SERVE_SAMPLES*21u/41u && counts[3]<=SERVE_SAMPLES*21u/41u+2u);
-        assert((int64_t)counts[2]+2>=SERVE_SAMPLES*3u/41u && counts[2]<=SERVE_SAMPLES*3u/41u+2u);
+        assert((int64_t)counts[3]+2>=samples*21u/41u && counts[3]<=samples*21u/41u+2u);
+        assert((int64_t)counts[2]+2>=samples*3u/41u && counts[2]<=samples*3u/41u+2u);
     }
     assert(reports==1u+counts[0]+counts[1]+counts[2]+counts[3]);
     assert(join_smoke_status.draws==draws);
@@ -546,6 +551,12 @@ static void prepare_caller(unsigned selected)
     /* Construct the external synthetic peer, then start a genuinely fresh
      * modeled DUT. No provisioned DUT state is injected into the caller. */
     security_joint_reset(1);
+    /* CALLER_SLEEPY: RX-off-when-idle child; the parent releases each queued
+     * frame (Association Response excepted) only after a later Data Request. */
+    link_peer_capability=SLEEPY_CASE(selected)?0x80:0x88;
+    /* CALLER_SLEEPY_POLL_KEEPALIVE: the parent offers only MAC Data Poll
+     * keepalive (Parent Information 0x01), as observed from a Telink parent. */
+    link_peer_parent_information=selected==CALLER_SLEEPY_POLL_KEEPALIVE?1:2;
     link_peer_setup(&join_config);
     if(selected==4) {
         /* Provisioning only stages; commit it so the DUT boots non-EMPTY. */
@@ -566,7 +577,7 @@ static void prepare_caller(unsigned selected)
     memcpy(config.value.ieee,link_identity.own_ieee,8);
     config.value.pan=config.value.short_address=0xffff; config.value.channel=15;
     config.value.power=RADIO_AUTOACK_POWER_F5;
-    scenario=selected==6?1:selected==CALLER_MISSING_KEY?3:0;
+    scenario=selected==6?1:selected==CALLER_MISSING_KEY?3:SLEEPY_CASE(selected)?INDIRECT_KEY:0;
     if(selected==CALLER_FLASH_BUSY) security_joint_stall_flash(1);
     join_smoke_initialize();
 #if defined(CC2530_PARENT_RECOVERY)
@@ -602,6 +613,9 @@ static void prepare_caller(unsigned selected)
         join_smoke_phase.admission.join.scan.channels=NWK_CANDIDATES_CHANNEL_MASK;
         join_smoke_phase.admission.join.scan.lifetime=1000000;
         join_smoke_phase.admission.join.scan.work=MAC_SCAN_MAX_WORK;
+        /* Channel iteration, not dwell: sixteen duration-4 dwells exceed the
+         * per-scan work cap at host stepping speed. */
+        join_smoke_phase.admission.join.scan.duration=0;
     }
     if(selected==CALLER_CLOSED) {
         mac_frame_info_t beacon;
@@ -637,9 +651,9 @@ int main(int argc, char **argv)
     recovery_selected=selected;
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert((selected<=CALLER_WRONG_TC && selected!=7) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
 #else
-    assert(selected<=CALLER_FLASH_BUSY || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
+    assert(selected<=CALLER_FLASH_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
     if(selected==7) return reference_e2e_main();
 #endif
     if(RECOVERY_CASE(selected) && recovery_child()) {
@@ -708,7 +722,9 @@ int main(int argc, char **argv)
                         ((selected==CALLER_REJOIN_TIMEOUT || ALTERNATE_CASE(selected)) &&
                          join_smoke_device.phase==BDB_JOIN_RECOVERING &&
                          join_smoke_device.issued==2 && join_smoke_tx.engine.phase==MAC_TX_IDLE &&
-                         !packets && !ack_active && !link_peer_pending)?50000u:4u)*512u);
+                         !packets && !ack_active && !link_peer_pending)?50000u:
+                        (SLEEPY_CASE(selected) && link_peer_pending &&
+                         join_smoke_tx.engine.phase==MAC_TX_IDLE)?1000u:4u)*512u);
                     handoff_tick();
                     if(selected==CALLER_RADIO_FAULT && !caller_radio_fault &&
                        mac_adapter_diagnostic()->phase==MAC_ADAPTER_CLOSING) {
@@ -796,7 +812,10 @@ int main(int argc, char **argv)
                         assert(!memcmp(join_smoke_device.config.association.extraction.local,
                             identity.config.own_ieee,8));
                     }
+                    if(SLEEPY_CASE(selected)) assert(link_peer_polls && released_frames);
                     serve_ready(&calls);
+                    if(selected==CALLER_SLEEPY_POLL_KEEPALIVE) assert(link_peer_parent==1u);
+                    else if(selected==CALLER_SLEEPY) assert(link_peer_parent>1u);
                     link_peer_verify();
                     if(caller_dump>=0) recovery_dump();
                     if(selected==CALLER_RECOVERY) {

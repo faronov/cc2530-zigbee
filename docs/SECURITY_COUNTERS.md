@@ -57,7 +57,9 @@ Opaque payload is for a future upper-layer security snapshot, not an
 authenticated key or membership record by itself. `security_counter_read()`
 copies it to caller storage; no private pointer/lease escapes.
 `security_counter_save()` replaces it atomically while preserving both
-ceilings and abandoning both remaining volatile ranges. Saving a zero-length
+ceilings and both live volatile ranges: every unused value stays below the
+unchanged durable ceiling, so the next allocations need no refill. After a
+reset, allocation still starts at the durable ceilings. Saving a zero-length
 payload is the counter-preserving foundation for leave/factory-reset state
 clearing, **not an implementation of those network procedures**.
 The older physical record may retain old payload bytes until later erase;

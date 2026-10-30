@@ -132,7 +132,8 @@ static aes_result_t observe(aes_diagnostics_t MCU_XDATA *d)
     sleep = MMIO_READ(SOC_SLEEPCMD);
     command = MMIO_READ(SOC_CLKCONCMD);
     status = MMIO_READ(SOC_CLKCONSTA);
-    if (ien0 || ien1 || ien2 || (sleep & 7u) != 4u || status != command ||
+    if ((ien0 & CC2530_IEN0_GUARD) || ien1 || (ien2 & CC2530_IEN2_GUARD) ||
+        (sleep & 7u) != 4u || status != command ||
         (command & 7u) != ((command & 0x40u) ? 1u : 0u) ||
         ((command & 0x40u) && !(command & 0x38u)))
         return AES_UNSUPPORTED_STATE;

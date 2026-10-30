@@ -392,3 +392,197 @@ SMOKE and FULL, and it needs separate operator authorization.
    - a large `first_gap` / `max_service_gap` points to (a);
    - several parent-addressed retransmissions in the FIFO point to (b);
    - foreign frames in an `RX_NOACK` interval point to (c).
+
+## 15. LH7 first-cause evidence and RX interrupt remedy
+
+LH7 (H2 against the home ZHA network, EZSP, channel 15; PR #102) failed with BDB
+`KEY_TIMEOUT` after a successful Association (SUCCESS, short 0x0a7a, AUTOACKed). The
+107-byte APS Transport-Key, sent as sequences 62/63/64 over eight attempts, was never ACKed
+by H2. In each RX window a 93-byte NWK broadcast relayed by 0x0000 preceded it. The
+coordinator's post-join route storm repeated about every 10 ms, and 94 + 108 FIFO bytes
+exceed the 128-byte RXFIFO. A 61-byte Association Response at the same −85 dBm was ACKed,
+so signal level is not the cause. This selects hypothesis (a): foreground service gaps.
+
+**Remedy (source change, LLVM production image):** `CC2530_RADIO_RX_ISR` adds a leaf RF
+ISR. It runs only while IEN0.EA is set between owner operations and copies each complete
+FIFO head into a 4-slot XDATA queue. See `docs/RADIO_AUTOACK.md` "RX interrupt" for the
+contract, gates and limits. The stack proof now includes the ISR: 106 + 14 = 120 of 128
+bytes. Host E2E runs the real ISR against the MMIO model, and MCUEMU checks join function.
+A busy-PAN join on H2 (LH8) is the remaining hardware gate. Flash windows with EA cleared
+still use the existing RX_LOST path.
+
+## 16. LH8: queued Association Response rejected at POLL closure
+
+LH8 ran the RX ISR image (`2fa4f9cd…`) against the same network and failed with BDB
+`ASSOCIATION_FAILED`. The terminal XDATA snapshot shows that the radio path worked. The ISR
+had queued two Association Responses (SUCCESS, short 0xcf4d, CRC OK), and the association
+record decoded one as a response. The failure came from the POLL layer instead:
+
+- ACK end 45949, receive end 47985, response stamp 48666 (symbols).
+- The receive window expired first. The POLL drained, and the adapter took its pre-stop
+  watermark.
+- The stop then popped the queued response, stamping it at the pop time, 681 symbols after
+  `receive_end`.
+- The LINK POLL accepts such an AUTOACKed frame (commit `0d8c0e1`). The CLOSED check still
+  required `through >= stamp`, so it reported `ADAPTER_ERROR`. That became `CLEANUP_FAILED`,
+  `MAC_JOIN_POLL_ERROR` and then `ASSOCIATION_FAILED`.
+
+The check compared an observation upper bound with a coverage lower bound. LINK CLOSED now
+requires stamp coverage only for PENDING_ZERO. A delivered frame preceded CLOSED, and the
+radio AUTOACKed it while RX was on. `tests/test_mac_link_join.c` reproduces the LH8 order:
+the old code fails and the fix passes. A busy-PAN hardware join (LH9) remains the gate.
+
+LH9 (image `35ea6bf6…`) then joined, was interviewed by ZHA and stayed READY through a
+600-second soak with 5/5 attribute reads.
+
+## 17. LH10: a frame still in reception read as a finished head
+
+LH10 re-added the LH9 image to ZHA after a fresh removal. It joined at +57 s and was
+interviewed, and one read succeeded. About 65 s after the start it faulted with
+`RADIO_AUTOACK_FIFO_ERROR`, reported up the stack as adapter FAULT and link driver RADIO.
+The terminal snapshot of the radio driver status shows:
+
+- Phase 4 (receive), 2 polls, 0 bytes read. The first `consume()` failed its count/head
+  recheck.
+- The ISR queue was empty (put = get = 72, no halt).
+- FSMSTAT1 = 0xad: FIFO and **SFD** high, FIFOP low. RXFIFOCNT 7 and PHR 6, so the FIFO held
+  exactly one 7-byte frame.
+
+The bytes counted in the FIFO belonged to the frame still being received. With SFD high its
+FCS/metadata were not final, and filtering could still reject it. This short 6-byte MPDU is
+malformed for any addressed frame type. Rejection removes the frame from RXFIFO, so the
+recheck found the count gone.
+
+Before the ISR, live RX waited for FIFOP. The ISR rule for heads it leaves behind with FIFOP
+low (SWRU191F p.232) accepted any count-complete head, and the vector loop used the same rule.
+
+`finished_head()` and the vector now accept a count-complete head without FIFOP only in two
+cases:
+- SFD was low when FSMSTAT1 was sampled, which happens before RXFIFOCNT.
+- A later frame's byte follows the head.
+
+A head left behind this way is read at the next RXPKTDONE or the next foreground receive.
+`tests/test_mac_link_e2e.c` adds an in-flight tail that is later rolled back; the old ISR
+and the old foreground rule each read it. It also adds a finished head followed by a frame
+in reception, which must still be queued. Image sleepy13 (`911a3529…`) carries the fix.
+
+## 18. LH11: one busy CCA aborted the TC Node Descriptor query
+
+LH11 ran sleepy13 against the same ZHA network. It associated at +43.6 s
+(short 0x3a3a), took the network key and broadcast Device_annce at +45.37 s.
+About seven routers re-broadcast that announce during the next ~70 ms. The
+device's own Node_Desc_req to the TC (NWK frame counter 1) never appeared on
+air. Its Node_Desc_rsp to zigpy's request (counter 2) did, at +45.74 s, and a
+NWK Leave followed at +46.59 s.
+
+The halt snapshot shows:
+- BDB FAILED with `TC_FAILED`, attempts 1, `got_tc` 0.
+- ZDO `result` 7 (`ZDO_RUNTIME_TRANSMIT`) and an all-zero TC descriptor.
+
+`zdo_runtime` sets TRANSMIT only when the query's transport confirm is
+non-zero. In NODE, `bdb_join` retried only TIMEOUT, so one failed MAC delivery
+during the announce re-broadcast burst ended commissioning. PARENT and the
+Request-Key/Verify-Key transmissions had the same single-shot rule. READY
+keepalives already retried TRANSMIT.
+
+These phases now retry TIMEOUT and TRANSMIT alike within `BDB_JOIN_ATTEMPTS`.
+`tests/test_bdb_join.c` (`transient_transmit`) injects five busy CCAs (one MAC
+channel-access failure) into NODE, REQUESTING, VERIFYING and PARENT:
+- One failure must still reach READY with exactly two attempts.
+- Sustained busy must fail after three attempts with TC_FAILED, TRANSMIT_FAILED
+  or PARENT_FAILED.
+
+The previous source, and a mutant without the key-exchange retry, both fail.
+Image sleepy14 (`8e2c40ec…`) carries the fix.
+
+
+The retry initially also covered a delivery that `nwk_aps` had *cancelled*:
+`zdo_runtime` reported every non-zero confirm as TRANSMIT, so the e2e
+RETRY_CANCEL case re-sent a deliberately cancelled Node_Desc_req. A
+`NWK_APS_CANCELLED` confirm now reports `ZDO_RUNTIME_CANCELLED`, which BDB
+never retries. `host-mac-link-e2e-tests` (1.5 s) now runs in
+`test-m5-m6-host`, so CI covers it.
+
+## 19. LH12: one late TX arm after READY
+
+LH12 (sleepy14) reached READY and was interviewed. Later it stopped with
+`ATTEMPT_LATE_ARM`: TX_ACTIVE appeared about 20 ms after the STXON strobe,
+outside the attempt's arm window. A write-only `attempt_trace` (XDATA 0x15e8)
+now records the strobe-to-TX_ACTIVE wait. In LH13 every attempt saw
+TX_ACTIVE on the first read (max_wait 0). The LH12 delay is therefore a rare
+anomaly whose cause is still unknown; the trace stays in place to capture it.
+
+## 20. LH13: a transient recheck failure behind a foreign ACK head
+
+LH13 (sleepy15) associated as 0x38ef and reached READY. About 90 s after RF
+start it faulted with `RADIO_AUTOACK_FIFO_ERROR` in phase 4 (receive):
+- 0 bytes read, 2 polls.
+- RXFIFOCNT 7, PHR 5, FSMSTAT1 0xad (SFD high, FIFOP low).
+- First byte at 0x50, ISR queue empty.
+
+A read-only dump of the halted RXFIFO RAM (0x6000–0x607F) showed the FIFO
+full of foreign 5-byte ACK frames. Filtering accepts every ACK regardless of
+address. Their order from 0x50 matches the air capture. The head was a
+complete foreign ACK (seq 105, +82.918 s). The seventh byte was the first byte
+of the next frame: data 0x04d9→0x85fa at +82.938 s, which is not addressed to
+us, so filtering rejects it and removes its bytes (SWRU191F p.225).
+
+`finished_head()` correctly judged the head finished (count 7 > PHR+1), and
+RXFIRST_PTR still pointed at it after the halt. `consume()`'s first recheck
+failed anyway: either the count or the head pointer read wrong once, which
+coincided with the rejection. The ISR path, which has no recheck, would have
+read the head.
+
+Phase 4 now allows one soft retry:
+- **Conditions:** the first `consume()` fails with FIFO_ERROR, nothing has been
+  read, there is no overflow, the state is RX/RX_NOACK, and the previous
+  receive did not already retry.
+- **Effect:** the receive ends EMPTY (`head_retry`), and the next receive reads
+  the head. A repeated failure stays fatal.
+- **Evidence:** `head_trace` (0x15fc) records the retry count and the failing
+  count/RXFIRST_PTR/RXLAST_PTR/FSMSTAT1/re-read count, so the next occurrence
+  identifies the comparison that failed.
+
+`tests/test_mac_link_e2e.c` reproduces the LH13 FIFO: an ACK head, one
+in-flight byte, SFD high and FIFOP low, with RXFIFOCNT reading 0 once. It
+requires EMPTY with no RFD read, then the frame, then EMPTY; in case 0 it also
+requires that a second consecutive failure latches FIFO_ERROR. Two mutants
+fail it: one without the retry, and one with an unbounded retry. Image
+sleepy16 (`19dc4d17…`) carries the fix and reaches READY in MCUEMU.
+
+## 21. LH14: late arm is a T2M0 FF phase lock
+
+LH14 (image sleepy16) removed and re-added the device in ZHA. It joined and
+reached READY, then halted about 87 s after RF start with ATTEMPT_LATE_ARM in
+phase 19. The fault matched LH12:
+- `before`→`armed` was 1259 periods (≈20.1 ms; LH12: 1258).
+- The radio work counter was exactly **256 polls** in both runs (limit 512).
+- TX_ACTIVE was present at the first read after STXON (`wait` 0), so the
+  radio armed on time.
+- The LH13 `head_retry` was not involved (0).
+
+In the LINK build, `attempt_sample()` is `handoff_sample()`. Its loop is
+`mac_time_handoff_read()` (PENDING on a T2M0 FF) → `progress()` → polls<limit.
+Disassembly of sleepy16 shows this loop has no data-dependent branch, except
+the 16-bit `status.polls++` (`inc lo; jnz; inc hi`). It takes one extra
+instruction only on the 255→256 carry. The CPU and T2 share the 32 MHz clock.
+If the loop length is a multiple of 256 clocks, one FF read makes every later
+read FF too. The lock breaks only at the polls carry, which explains the fixed
+≈20 ms and polls = 256 in both runs. `operate()` and
+`mac_time_attempt_read()` have the same FF→poll structure.
+
+Fix: all three readers still discard the whole FF sample (SWRZ031 §1.2), but
+re-read T2M0 **at once**. That is a fresh full latch fewer than 256 clocks
+later, so it cannot be FF while the timer runs. Only a second FF (a stopped
+timer) falls back to the bounded poll loop. Every FF read counts in
+`discarded`.
+
+`tests/test_mac_handoff.c` adds a time-neutral phase-lock model: every T2M0
+read not directly preceded by another T2M0 read returns FF. Case 39 runs a
+second time under that model and must reach READY. Two mutants fail it: one
+without the handoff re-read (radio WORK_LIMIT, the LH14 mechanism) and one
+without the `operate()` re-read (timer WORK_LIMIT in `attempt_begin`).
+Guard-span cases 36–38 are shifted by one clock so the 511-clock boundary read
+is not itself an FF, and an assert now enforces that precondition. Image
+sleepy17 (`c7490c67…`, bank 6 free 5549) reaches READY in MCUEMU.
+

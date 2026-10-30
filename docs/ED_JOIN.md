@@ -656,6 +656,11 @@ does not enable local child admission or claim receipt by every network device.
 Logical completion, MAC ACK, APS ACK and physical quiescence remain distinct.
 An ED sends its NWK broadcasts to the parent's MAC short address with MAC ACK
 disabled, not to MAC FFFF as a router would (R22 3.6.5 pp383-384).
+The Node Descriptor query, Request-Key/Verify-Key transmission and ED Timeout
+query each have `BDB_JOIN_ATTEMPTS` (3) attempts. A lost response and a failed
+MAC/APS delivery (busy CCA, no ACK) both consume one attempt and are retried;
+only exhaustion or a negative response fails commissioning. A delivery cancelled
+by `nwk_aps` reports `ZDO_RUNTIME_CANCELLED` and is not retried.
 Failed commissioning demotes readiness and requests a real protected Leave
 when possible. Keyless abandonment explicitly produces no frame. A physical
 cleanup failure retains the lower owner in FAULT, never resets it to fake IDLE.

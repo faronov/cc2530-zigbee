@@ -67,6 +67,9 @@ static uint16_t handoff_staging_address = 0x650;
 static unsigned guard_span;
 static unsigned guard_ff, guard_discard, guard_discarded;
 static unsigned guard_bad;
+/* LH12/LH14: a retry path of k*256 clocks re-reads T2M0 at FF forever. */
+static unsigned guard_lock, lock_case;
+static uint8_t last_load;
 static unsigned handoff_started, handoff_sfd_reads, handoff_configured, injection, injected;
 static unsigned automatic_acks, ack_active;
 static uint64_t ack_end;
@@ -173,6 +176,15 @@ static uint8_t handoff_load(uint8_t a, uint8_t value)
     if (a == SOC_RFIRQF0_ADDRESS && handoff_started && injection == 9)
         handoff_inject();
     if (handoff_started && guard_discard) assert(a < 0xa3 || a > 0xa6);
+    if (handoff_started && guard_lock && a == 0xa2 && last_load != 0xa2 &&
+        (SOC_T2CTRL & 4) && !(SOC_T2MSEL & 7)) {
+        /* Phase-locked read: lands on FF without any extra clocks. */
+        advance_clocks(mmio_clocks); logs(); last_load = a;
+        guard_discard = 1; guard_discarded++;
+        handoff_tick();
+        return 255;
+    }
+    last_load = a;
     result = attempt_load(a, value);
     if (handoff_started && a == 0xa2 && !(SOC_T2MSEL & 7)) {
         guard_discard = result == 255;
@@ -192,7 +204,11 @@ static void handoff_store(uint8_t a, uint8_t before, uint8_t value)
         SOC_RFIRQF1 = before & value;
         return;
     }
+#if defined(CC2530_RADIO_RX_ISR)
+    if (a == SOC_RFIRQF0_ADDRESS && value != 0xbb) {   /* 0xbb: RX ISR entry */
+#else
     if (a == SOC_RFIRQF0_ADDRESS) {
+#endif
         advance_clocks(mmio_clocks);
         assert(write_count == 1 && writes[0].address == a && writes[0].after == value && value == 0xfd);
         write_count = 0; logs();
@@ -201,6 +217,8 @@ static void handoff_store(uint8_t a, uint8_t before, uint8_t value)
                 mac_radio_handoff_clock.before.fine + guard_span;
             assert(desired >= model_clocks + 2u*mmio_clocks &&
                    desired-model_clocks-2u*mmio_clocks <= UINT32_MAX);
+            /* An FF target is discarded and re-latched later (SWRZ031 1.2). */
+            assert((desired & 255u) != 255u);
             advance_clocks((uint32_t)(desired-model_clocks-2u*mmio_clocks));
         }
         if (injection == 3 || injection == 4) handoff_inject();
@@ -277,7 +295,7 @@ static void handoff_reset(void)
     rewrite_reply = 1;
     guard_span = 0;
     guard_ff = guard_discard = guard_discarded = 0;
-    guard_bad = 0;
+    guard_bad = guard_lock = 0; last_load = 0;
     host_mmio_read_hook = handoff_load; host_mmio_write_hook = handoff_store;
     host_mmio_xread_hook = handoff_xload; host_mmio_xwrite_hook = handoff_xstore;
     host_mmio_xaddress_hook = handoff_address;
@@ -455,8 +473,11 @@ static void handoff_case(unsigned selected)
     assert(!receipt.autoack);
 #endif
     handoff_started = 1;
-    if (selected >= 36 && selected <= 38) guard_span = 511u + selected-36u;
-    if (selected == 39) { guard_ff = 1; mmio_clocks = 1; }
+    if (selected >= 36 && selected <= 38) {
+        guard_span = 511u + selected-36u;
+        advance_clocks(1); /* keep the measured boundary read off a low FF */
+    }
+    if (selected == 39) { guard_ff = !lock_case; guard_lock = lock_case; mmio_clocks = 1; }
     if (selected == 40) { guard_ff = 200; cap = 16; }
     if (selected >= 41) guard_bad = selected-40;
     if (selected < 13) injection = selected;
@@ -616,6 +637,7 @@ int MAC_HANDOFF_MAIN(int argc, char **argv)
         response_fcf = 2;
         handoff_case(n);
     }
+    lock_case = 1; response_fcf = 2; handoff_case(39); lock_case = 0;
     for (fcf = 2; fcf <= 65535u; fcf += 8) {
         response_fcf = (uint16_t)fcf;
         handoff_case(0);

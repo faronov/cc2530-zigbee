@@ -83,7 +83,31 @@ nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE u
     if (NWK_APS_SUBMIT(ctx->owner, ctx->mac, ctx->mac_length, now,
                       NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
         return LW_RETURN(LW_NWK_BUILD, NWK_APS_RADIO);
-    ctx->active = 1; ctx->active_ack = acknowledgment;
+    ctx->active = 1; ctx->active_ack = acknowledgment; ctx->active_poll = 0;
     if (!acknowledgment) ctx->sent = 0;
+    return LW_RETURN(LW_NWK_BUILD, NWK_APS_OK);
+}
+
+nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now)
+{
+    MCU_ESCAPED_LOCAL uint8_t command;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+    if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1)) return NWK_APS_ARGUMENT;
+#endif
+    if (security_keys_status(&nwk_aps_keys) != SECURITY_KEYS_OK) return NWK_APS_SECURITY;
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ENTER(LW_NWK_BUILD, NWK_APS_STATE);
+#endif
+    command = MAC_COMMAND_DATA_REQUEST;
+    nwk_aps_poll_header((uint8_t)(ctx->poll == 2u));
+    if (mac_frame_encode(&nwk_aps_work.mac_header, &command, 1, ctx->mac,
+                         MAC_PREFIX+1u, &ctx->mac_length) != MAC_CODEC_OK ||
+        ctx->mac_length != MAC_PREFIX+1u)
+        return LW_RETURN(LW_NWK_BUILD, NWK_APS_WIRE);
+    if (NWK_APS_SUBMIT(ctx->owner, ctx->mac, ctx->mac_length, now,
+                      NWK_APS_TX_LIFETIME, NWK_APS_TX_WORK) != MAC_TX_OK)
+        return LW_RETURN(LW_NWK_BUILD, NWK_APS_RADIO);
+    ctx->active = ctx->active_poll = 1; ctx->active_ack = ctx->poll = 0;
     return LW_RETURN(LW_NWK_BUILD, NWK_APS_OK);
 }

@@ -71,6 +71,7 @@
     X(SOC_ENCDO, 0xb2) \
     X(SOC_ENCCS, 0xb3) \
     X(SOC_S0CON, 0x98) \
+    X(SOC_S1CON, 0x9b) \
     X(SOC_ADCCON1, 0xb4) \
     X(SOC_RNDL, 0xbc) \
     X(SOC_RNDH, 0xbd) \
@@ -138,5 +139,19 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value);
 
 CC2530_REGISTER_LIST(DECLARE_SFR)
 #undef DECLARE_SFR
+
+/* Interrupt-enable bits that foreground guards must see clear. With
+ * CC2530_RADIO_RX_ISR the radio owner arms EA, IEN2.RFIE and RFIRQM0
+ * FIFOP|RXPKTDONE between its operations (docs/RADIO_AUTOACK.md).
+ */
+#if defined(CC2530_RADIO_RX_ISR)
+#define CC2530_IEN0_GUARD 0x7fu
+#define CC2530_IEN2_GUARD 0xfeu
+#define CC2530_RFIRQM0_GUARD 0xbbu
+#else
+#define CC2530_IEN0_GUARD 0xffu
+#define CC2530_IEN2_GUARD 0xffu
+#define CC2530_RFIRQM0_GUARD 0xffu
+#endif
 
 #endif

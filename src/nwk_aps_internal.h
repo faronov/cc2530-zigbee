@@ -44,5 +44,8 @@ void nwk_aps_broadcast_put(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t 
     SDCC_VOLATILE uint16_t source, SDCC_VOLATILE uint8_t sequence, SDCC_VOLATILE uint32_t now);
 nwk_aps_result_t nwk_aps_transmit(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t acknowledgment,
     SDCC_VOLATILE uint32_t now);
+nwk_aps_result_t nwk_aps_transmit_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now);
+/* Short/short PAN-compressed MAC header to the current parent; ack request. */
+void nwk_aps_poll_header(SDCC_VOLATILE uint8_t rejoin);
 
 #endif

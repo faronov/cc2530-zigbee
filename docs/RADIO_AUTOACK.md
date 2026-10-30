@@ -84,6 +84,8 @@ may precede it. All three IEN bytes, RF masks, DMAARM/DMAREQ and CSP execution
 must be inactive, with no scheduled work or competing debugger/peripheral
 access. Initial radio/FIFOs must be reset-empty and idle. Entry samples cannot
 prove that history or absence of future activity.
+With `CC2530_RADIO_RX_ISR` the owner itself later enables RFIE/RFIRQM0 and
+gates IEN0.EA between operations (see "RX interrupt"); nothing else may.
 
 Do not compose this lease with the old reset-exclusive `radio_rx`, `radio_tx`,
 `radio_fifo`, queue RX service or `mac_time` calls. Their APIs, contracts and
@@ -321,6 +323,47 @@ confirmed configuration bytes. Polls, consumed bytes and raw elapsed ticks
 are per-call. Invalid calls preserve the preceding diagnostic; retained fault
 calls preserve the original one. Sticky TXACKDONE/TXDONE observations are never
 converted into ACK counts, per-frame receipts or captured timestamps.
+
+## RX interrupt
+
+`CC2530_RADIO_RX_ISR` (production LLVM image and the join/E2E host builds; it
+requires the LINK/ADAPTER/HANDOFF owner) adds one leaf ISR on RF vector 16. It
+exists because the 128-byte RXFIFO overflowed on H2 during busy-PAN broadcast
+storms while the foreground was in crypto/NWK work between radio operations
+(LH7, see `docs/H2_RX_INVESTIGATION.md` §15).
+
+- **Arming.** RFIRQM0 = FIFOP|RXPKTDONE and IEN2.RFIE are set on the first arm
+  and stay set until reset. Only IEN0.EA gates the ISR: `rx_release()` sets it at
+  the end of an operation that leaves the owner in `RX`/`RX_NOACK` with no fault,
+  loss, halt or pending ACK handoff. Every operation starts with `rx_hold()`
+  (EA cleared), so the polled driver never runs concurrently with the ISR.
+  `flash_exec_command` also clears EA and restores it only while still armed.
+- **ISR.** Clears RFIRQF0 FIFOP/RXPKTDONE (R/W0) and S1CON, then moves each
+  finished head into a 4-slot XDATA queue as the raw FIFO image
+  `[PHR][body][RSSI][CRC]`. A head is finished when RXFIFOCNT exceeds its PHR
+  and either FSMSTAT1.SFD, sampled before RXFIFOCNT, was low or a later frame's
+  byte follows it. While SFD is high, a count-complete tail can still be rejected
+  and removed by filtering (H2 LH10, `docs/H2_RX_INVESTIGATION.md` section 17).
+  The foreground uses the same rule (`finished_head()`) for heads left with FIFOP low. If its
+  first `consume()` recheck of such a head fails before any byte is read, that receive ends
+  EMPTY once and the next one reads the head; a second consecutive failure is fatal (H2 LH13,
+  section 20; evidence in `head_trace`). The ISR makes no calls, owns
+  no static frame, uses DPTR0 and bank 0 only, and preserves 12 bytes
+  (PSW/A/B/DPTR/R0/R2/R3 and four virtual registers). RFERRF, an impossible count
+  or a PHR mismatch after the PHR byte was consumed stops it with EA cleared and
+  `rx_halt` set (mismatch = fatal FIFO error at the next receive).
+- **Receive.** Queued frames are delivered before the FIFO. When the queue is
+  full, remaining frames stay in the FIFO for the polled path.
+- **Gates.** `sframe_link_hw.py` and `stack_analysis.interrupt_roots()` fail
+  closed unless the only populated vector is `.mcs51_vector_16` = LJMP to common
+  `radio_autoack_rx_isr`, the foreground never calls it, it is a leaf and owns no
+  static frame. `stack_proof.py` adds `2 + ISR peak` to the foreground demand
+  (production: 106 + 14 = 120/128).
+- **Limits.** Flash erase/program windows keep EA cleared and can still overflow
+  (the existing RX_LOST path). Whether S1CON.RFIF is raised for a flag already
+  standing when the mask is first set is not established on silicon; a missed
+  edge only delays draining to the next frame or the next foreground receive.
+  MCUEMU verifies function, not H2 timing; hardware evidence is the authority.
 
 ## Memory, ABI and offline evidence
 

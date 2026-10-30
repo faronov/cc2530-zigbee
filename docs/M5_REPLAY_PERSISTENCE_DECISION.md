@@ -107,8 +107,8 @@ The relevant existing contracts are [keys](SECURITY_KEYS.md) and
 | Reset / READY | VERIFIED or REJOINING credentials resume into RECOVERING, not READY. Current receive gating permits contextual recovery control, not application data during REJOINING. ED Timeout, Device Announce and runtime readiness still have to be restored. |
 
 The snapshot journal remains the sole NV writer and uses commit-last atomic
-replacement of the inactive page. A save preserves outgoing ceilings but
-abandons both live outgoing ranges; their next allocations each reserve again.
+replacement of the inactive page. A save preserves outgoing ceilings and the
+live outgoing ranges below them; only exhaustion or a reset reserves again.
 **Outgoing reservation commits do not automatically checkpoint volatile
 incoming floors**: the counter owner has the durable snapshot, not the key
 owner's live floor cache. Do not promise periodic incoming checkpoints from
@@ -321,8 +321,8 @@ commands/hour. At 1/s it is 3600 erases/hour.
 
 Remaining writes are selective security snapshots, all accepted APS-secured
 inputs and outgoing reservations. At event rate `s`, direct selective snapshot
-cost is `3600*s` erases/hour. Snapshot saves still abandon TX ranges; subsequent
-NWK/APS use can add up to two replacements. An otherwise quiet profile with
+cost is `3600*s` erases/hour. Snapshot saves keep live TX ranges and add no
+reservation replacements. An otherwise quiet profile with
 720 new outbound NWK allocations/hour amortizes to `720/256 = 2.8125`
 reservation replacements/hour, plus startup, reset and control costs. Actual
 finite-hour totals depend on the starting range. APS security allocation is

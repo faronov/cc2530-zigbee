@@ -135,12 +135,15 @@ static void basic(void)
     CHECK(security_counter_open() == SECURITY_COUNTER_OK);
     take(0, 529); take(1, 265);
     CHECK(security_counter_save(NULL, 0, 3) == SECURITY_COUNTER_OK);
-    CHECK(STATUS.payload_length == 0 && STATUS.next[0] == 785 && STATUS.next[1] == 521);
-    take(0, 785);
+    CHECK(STATUS.payload_length == 0 && STATUS.next[0] == 530 && STATUS.next[1] == 266);
+    CHECK(STATUS.until[0] == 785 && STATUS.until[1] == 521);
+    before = events;
+    take(0, 530); take(1, 266); /* live ranges survive the save */
+    CHECK(events == before);
     counter_reset();
     CHECK(security_counter_open() == SECURITY_COUNTER_OK && STATUS.payload_length == 0);
     CHECK(security_counter_read(NULL, 0, &counter_length) == SECURITY_COUNTER_OK && !counter_length);
-    take(0, 1041); take(1, 521);
+    take(0, 785); take(1, 521);
     CHECK(security_counter_create(0, 0, NULL, 0, 3) == SECURITY_COUNTER_STATE);
     CHECK(security_counter_open() == SECURITY_COUNTER_STATE);
 }

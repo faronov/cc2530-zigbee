@@ -91,9 +91,9 @@ ACK was sent. There is no secondary RX queue. If `bdb_join_receive` returns
 retained `CONSUMER` fault. The original adapter head and the unexecuted grant
 are kept, and no frame is silently dropped.
 
-Receive loss (`lossy`) is a `COVERAGE` fault during scan-less association
-work only. Once RUNTIME owns the workspace, a normal AUTOACK RX FIFO overflow
-is an accepted loss: completed frames ahead of the overflow are salvaged, the
+Receive loss (`lossy`) is a `COVERAGE` fault only outside scan, association
+and RUNTIME work. In the association and RUNTIME workspaces a normal AUTOACK
+RX FIFO overflow is an accepted loss: completed frames ahead of the overflow are salvaged, the
 halted partial frame never passed its FCS and so was never acknowledged
 (SWRU191F §23.10.2). Upper-layer timeouts and retries handle the loss. This
 includes AUTOACK loss inside an ACK window, which closes lossy as NO_ACK and is
@@ -106,7 +106,10 @@ overflow signature is resampled once, and a persistent mismatch stays a
 Beacon/Association exchange, such as a neighbour's network frame following a
 busy-CCA Data Request, is never acknowledged. It is dropped, not delivered,
 and does not fault `COVERAGE`. That fault was hardware-observed on LG; the
-drop is host-tested (E2E `POLL_BUSY`).
+drop is host-tested (E2E `POLL_BUSY`). Association-workspace loss was a
+`COVERAGE` fault until LH5 hit it on H2: a busy-PAN broadcast burst overflowed
+the FIFO during an association retry. The lost frames were never ACKed, so
+the sender retries them; E2E `ASSOCIATION_OVERFLOW` covers the case.
 
 Three consumer checks changed, all only under `CC2530_MAC_LINK`:
 - **POLL ACK acceptance.** Report order is now checked separately from the
@@ -118,7 +121,13 @@ Three consumer checks changed, all only under `CC2530_MAC_LINK`:
   MAC's own closed-ACK-window or CCA evidence. The adapter is already OFF and
   drained before the later report. Its CLOSED watermark therefore need not
   reach that report stamp. The CLOSED delivery ordering, timeout coverage
-  through `receive_end` and frame/PENDING_ZERO coverage checks are unchanged.
+  through `receive_end` and PENDING_ZERO coverage checks are unchanged.
+- **POLL frame closure.** A frame delivered before CLOSED was received with
+  RX on and AUTOACKed. With the RF RX ISR it may sit in the software queue
+  until the stop drains it; the adapter then stamps it at pop time, after the
+  pre-stop watermark. CLOSED therefore need not cover a frame decision's
+  stamp. Hardware trial LH8 failed exactly so: a queued Association Response
+  closed as ADAPTER_ERROR, then CLEANUP_FAILED and ASSOCIATION_FAILED.
 
 ## Evidence
 
@@ -126,7 +135,7 @@ Three consumer checks changed, all only under `CC2530_MAC_LINK`:
 `tests/mac_link_peer.c` against the complete ED join, crypto/NV models, the real
 adapter and radio services, and the host MMIO radio model. It runs the result
 natively and under nonrecovering ASan/UBSan. All four runs (boards 0/1) give
-**15 cases, 48262 checks plus 943 peer checks, 8997 driver steps and 96
+**20 cases, 73365 checks plus 2227 peer checks, 13277 driver steps and 180
 explicit test RANDOM inputs**:
 
 | Case | Verified outcome |
@@ -135,7 +144,7 @@ explicit test RANDOM inputs**:
 | No beacon | `NO_PARENT` after three complete loss-free scans (ambiguous, closed, overflowed or unscanned results fail on the first scan) |
 | Association refusal | `ASSOCIATION_FAILED`, status 1, after three real attempts |
 | Missing Transport Key | `KEY_TIMEOUT` |
-| Late Response (ambiguous interval) | `MAC_JOIN_TIMING_UNCERTAIN`; no accepted Response or protocol success |
+| Late-observed Response (observed after A+F, before CLOSED) | Delivered, as AUTOACK already confirmed it; READY |
 | RF error during closure | Retained `RADIO` fault in driver and adapter |
 | Withheld RANDOM | Real deadline expiry, actual unprepare, zero transmissions |
 | RX admission FULL | Retained `CONSUMER` fault, original frame and grant preserved |
@@ -146,6 +155,7 @@ explicit test RANDOM inputs**:
 | Cancel with an active priority APS ACK | The ACK completes; the cancelled announce ends in normal FAILED |
 | Cancel at retry retirement | No re-ARM after RETIRED to DRAW; normal FAILED/TC_FAILED |
 | Real ZDO timeout after ARM emission | Retry, then READY |
+| Association FIFO overflow | Broadcast plus overflow in the first POLL window, Response withheld: NO_DATA, association retry, READY, no `COVERAGE` fault |
 
 The NO_ACK and CCA cases also check that the delivered CLOSED watermark equals
 the adapter's latest floored watermark, not the scan window's. The direct
@@ -171,8 +181,9 @@ cancel/stop (cancel case) and retry re-ARM suppression (retry-retirement case).
 
 The link corpora now cover ARM/ARMED, retry re-arming, DISARM, cancellation
 and lifetime while waiting, wrong identities and FAILURE. POLL/join has
-146 cases and 8185 checks, including NO_ACK closure and rejected future
-watermark, frame and PENDING_ZERO coverage. The scan corpus adds the delayed CLOSED
+152 cases and 8787 checks, including NO_ACK closure, rejected future
+watermark, PENDING_ZERO coverage and a drained frame stamped after the
+pre-stop watermark. The scan corpus adds the delayed CLOSED
 watermark.
 
 `test-mac-link` also compiles the driver composition with SDCC 4.2.0

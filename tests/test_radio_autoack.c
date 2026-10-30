@@ -278,6 +278,17 @@ static void store(uint8_t address, uint8_t before, uint8_t value)
            writes[0].before == before && writes[0].after == value);
     write_count = 0; logs();
     trace('w', address, value);
+#if defined(CC2530_RADIO_RX_ISR)
+    /* EA (IEN0.7) and IEN2.RFIE arm/hold; the host never dispatches the
+     * vector unless a harness calls radio_autoack_rx_isr() itself. */
+    if (address == SOC_IEN0_ADDRESS) { assert(value == 0 || value == 0x80); return; }
+    if (address == SOC_IEN2_ADDRESS) { assert(value == 1 && XR(0x61a3) == 0x44); return; }
+    /* ISR entry: R/W0 clear of FIFOP|RXPKTDONE, then the CPU RFIF flag. */
+    if (address == SOC_RFIRQF0_ADDRESS) {
+        assert(value == 0xbb); SOC_RFIRQF0 = before & value; return;
+    }
+    if (address == SOC_S1CON_ADDRESS) { assert(!value); return; }
+#endif
     if (address == SOC_RFERRF_ADDRESS) {
         assert(value == 0xfb && !rx_overflow && (mode == 5 || mode == 9));
         SOC_RFERRF = (uint8_t)((before & value) | (flush_rxabo ? 2u : 0u));
@@ -336,6 +347,14 @@ static void xstore(uint16_t address, uint8_t value)
     unsigned index;
     assert(xwrite_count == 1 && xwrites[0].address == address && xwrites[0].value == value);
     xwrite_count = 0; logs(); trace('w', address, value);
+#if defined(CC2530_RADIO_RX_ISR)
+    if (address == 0x61a3) {
+        /* RFIRQM0 FIFOP|RXPKTDONE: written once, at the first RX arm. */
+        assert(value == 0x44 && !XR(address) && (mode == 2 || mode == 7));
+        XR(address) = value;
+        return;
+    }
+#endif
     if (address == 0x618c) {
         assert(value == 1 && (mode == 0 || mode == 5) &&
                config_writes == 25 && !XR(0x618b) && !count && !packets);

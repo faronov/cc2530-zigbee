@@ -125,7 +125,8 @@ mac_tx_result_t mac_tx_init(mac_tx_t * SDCC_VOLATILE tx, uint8_t random_dsn, uin
  * retrieval requires extended source. No polling/response procedure is added.
  * Association requires extended source, short/extended coordinator
  * destination, source PAN FFFF, non-FFFF destination PAN, no compression/Pending,
- * ACK request and capability 88/8C (RX-on ED, allocate address, caller power bit).
+ * ACK request and capability 80/84/88/8C (ED, allocate address, caller
+ * RX-on-when-idle and power bits).
  * Caller supplies its actual IEEE address and the permitting coordinator's
  * Beacon-derived address/PAN/mode, while unassociated. No selection/authorization
  * or capability discovery is done here. Request ACK means MAC receipt only:

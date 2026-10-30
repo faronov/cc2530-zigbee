@@ -744,7 +744,9 @@ static mac_tx_result_t admission_reference(const uint8_t *bytes, uint16_t size)
             return MAC_TX_OK;
         if (bytes[decoded.payload_offset] == MAC_COMMAND_ASSOCIATION_REQUEST
                 && h->destination_pan != 0xffffu
-                && (bytes[decoded.payload_offset + 1] == 0x88
+                && (bytes[decoded.payload_offset + 1] == 0x80
+                    || bytes[decoded.payload_offset + 1] == 0x84
+                    || bytes[decoded.payload_offset + 1] == 0x88
                     || bytes[decoded.payload_offset + 1] == 0x8c))
             return MAC_TX_OK;
         if (bytes[decoded.payload_offset] == MAC_COMMAND_DATA_REQUEST
@@ -857,7 +859,7 @@ static uint16_t association_exhaustive(void)
                 vector[j] = (uint8_t)n;
                 CALL(exact_admission(vector, size, admission_reference(vector, (uint16_t)size)));
                 if (j == size - 1)
-                    CHECK((tx.phase == MAC_TX_DRAW) == (n == 0x88 || n == 0x8c));
+                    CHECK((tx.phase == MAC_TX_DRAW) == (n == 0x80 || n == 0x84 || n == 0x88 || n == 0x8c));
             }
         }
         for (n = 0; n <= 126; n++) {
@@ -925,7 +927,7 @@ static uint16_t association_exhaustive(void)
                 vector[size - 1] = (uint8_t)n;
                 CALL(exact_admission(vector, size, admission_reference(vector, (uint16_t)size)));
                 CHECK((tx.phase == MAC_TX_DRAW)
-                      == (layout < 2 && j == 1 && (n == 0x88 || n == 0x8c)));
+                      == (layout < 2 && j == 1 && (n == 0x80 || n == 0x84 || n == 0x88 || n == 0x8c)));
             }
         }
         if (layout == 3) {

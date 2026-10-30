@@ -145,7 +145,7 @@ typedef struct {
  * start leases an already initialized idle device-wide TX owner; DSN, generation
  * and IFS are never reset. Truthful unassociated local IEEE and permitting
  * coordinator selection are caller prerequisites. Only extended local source,
- * capability88/8C, page0 channels11..26 and explicit IEEE2006/R22 RX profile.
+ * capability 80/84/88/8C, page0 channels11..26 and explicit IEEE2006/R22 RX profile.
  * response_wait is caller-valid macResponseWaitTime (2..64), R=960*value.
  * extraction.frame_wait is caller-valid configured F, restricted to1..65534.
  * extraction.lifetime/work are LOCAL whole-attempt abort limits, not an

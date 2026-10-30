@@ -146,6 +146,40 @@ nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
     return NWK_APS_OK;
 }
 
+
+nwk_aps_result_t nwk_aps_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t rejoin, SDCC_VOLATILE uint32_t now)
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    LW_ROOT(NWK_APS_STATE);
+#endif
+    nwk_aps_result_t result = advance(ctx, now);
+    if (result) return result;
+    if (rejoin > 1) return NWK_APS_ARGUMENT;
+    if (ctx->stopping) return NWK_APS_STATE;
+    ctx->poll = (uint8_t)(1u+rejoin);
+    return NWK_APS_OK;
+}
+
+void nwk_aps_poll_header(SDCC_VOLATILE uint8_t rejoin)
+{
+#if defined(CC2530_PARENT_RECOVERY)
+    uint16_t parent = rejoin ? SECURITY_REJOIN_ADDRESS(nwk_aps_keys) : SECURITY_PARENT_ADDRESS(nwk_aps_keys);
+#else
+    (void)rejoin;
+#endif
+    memset(&nwk_aps_work.mac_header, 0, sizeof(nwk_aps_work.mac_header));
+    nwk_aps_work.mac_header.type = MAC_FRAME_COMMAND;
+    nwk_aps_work.mac_header.flags = MAC_FLAG_PAN_COMPRESSION | MAC_FLAG_ACK_REQUEST;
+    nwk_aps_work.mac_header.source_mode = nwk_aps_work.mac_header.destination_mode = MAC_ADDRESS_SHORT;
+    nwk_aps_work.mac_header.source_pan = nwk_aps_work.mac_header.destination_pan = nwk_aps_keys.config.pan;
+    nwk_aps_work.mac_header.source[0] = (uint8_t)nwk_aps_keys.config.address;
+    nwk_aps_work.mac_header.source[1] = (uint8_t)(nwk_aps_keys.config.address >> 8);
+#if defined(CC2530_PARENT_RECOVERY)
+    nwk_aps_work.mac_header.destination[0] = (uint8_t)parent;
+    nwk_aps_work.mac_header.destination[1] = (uint8_t)(parent >> 8);
+#endif
+}
+
 void nwk_aps_complete(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t result)
 {
     ed_packet_t * SDCC_VOLATILE p = &ctx->outgoing;
@@ -159,7 +193,7 @@ void nwk_aps_complete(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t resul
         p->payload[1] == (uint8_t)nwk_aps_keys.config.address &&
         p->payload[2] == (uint8_t)(nwk_aps_keys.config.address >> 8) &&
         !memcmp(p->payload+3, nwk_aps_keys.config.own_ieee, 8) &&
-        (p->payload[11] == 0x88 || p->payload[11] == 0x8c))
+        (p->payload[11] & 0xf3u) == 0x80u)
         ctx->announced = 1;
     if (p->aps.cluster_id == 0x0036u && p->length == 3 && p->payload[1] >= 180 &&
         p->payload[2] == 1 && p->nwk.destination == 0xfffcu && ctx->announced &&
@@ -259,7 +293,7 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
     if (ctx->active) {
 #if defined(CC2530_MAC_LINK)
         if (!ctx->armed && ctx->owner->engine.phase == MAC_TX_DRAW &&
-            !ctx->stopping && !(ctx->cancel && !ctx->active_ack) &&
+            !ctx->stopping && !(ctx->cancel && !ctx->active_ack && !ctx->active_poll) &&
             !reached(now, ctx->owner->engine.deadline)) {
             if (!ctx->arm_issued) arm(ctx, action);
             return event ? NWK_APS_IGNORED : NWK_APS_OK;
@@ -268,7 +302,7 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
 #if defined(CC2530_MAC_LINK_WORKSPACE)
         LW_ENTER(LW_NWK_CANCEL, NWK_APS_STATE);
 #endif
-        if ((ctx->stopping || (ctx->cancel && !ctx->active_ack)) && !ctx->cancel_sent && !event) {
+        if ((ctx->stopping || (ctx->cancel && !ctx->active_ack && !ctx->active_poll)) && !ctx->cancel_sent && !event) {
             memset(&nwk_aps_work.cancellation, 0, sizeof(nwk_aps_work.cancellation));
             NWK_APS_CANCEL_SOURCE.kind = MAC_TX_EVENT_CANCEL;
             NWK_APS_CANCEL_SOURCE.generation = NWK_APS_ENGINE(ctx->owner)->generation;
@@ -281,9 +315,9 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
         if (!LW_LEAVE(LW_NWK_CANCEL)) return NWK_APS_STATE;
 #endif
 #if defined(CC2530_MAC_LINK)
-        if (ctx->owner->engine.phase == MAC_TX_DRAW && !ctx->stopping && !(ctx->cancel && !ctx->active_ack)) arm(ctx, action);
+        if (ctx->owner->engine.phase == MAC_TX_DRAW && !ctx->stopping && !(ctx->cancel && !ctx->active_ack && !ctx->active_poll)) arm(ctx, action);
 #endif
-        if (!ctx->active_ack && NWK_APS_ENGINE(ctx->owner)->transmissions) ctx->sent = 1;
+        if (!ctx->active_ack && !ctx->active_poll && NWK_APS_ENGINE(ctx->owner)->transmissions) ctx->sent = 1;
         if (NWK_APS_ENGINE(ctx->owner)->phase == MAC_TX_FAULT) {
             ctx->ready = 0; ctx->error = NWK_APS_ENGINE(ctx->owner)->outcome;
             return NWK_APS_RADIO;
@@ -309,7 +343,7 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
             RX_DIAG.tx_outcome = outcome;
             RX_DIAG.tx_retries = NWK_APS_ENGINE(ctx->owner)->retries;
             RX_DIAG.tx_nb = NWK_APS_ENGINE(ctx->owner)->nb;
-            RX_DIAG.tx_special = ctx->active_ack ? 0x80u : ctx->special;
+            RX_DIAG.tx_special = ctx->active_ack ? 0x80u : ctx->active_poll ? 0x40u : ctx->special;
         }
 #endif
         if (NWK_APS_RELEASE(ctx->owner) != MAC_TX_OK) return NWK_APS_RADIO;
@@ -320,6 +354,8 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
         if (ctx->active_ack) {
             ctx->reply = ctx->cancel_sent = 0; ctx->reply_result = outcome;
             if (outcome != MAC_TX_ACKED && !ctx->stopping) return NWK_APS_ACK_FAILED;
+        } else if (ctx->active_poll) {
+            ctx->active_poll = 0; ctx->poll_result = outcome;
         } else if (ctx->cancel) nwk_aps_complete(ctx, ctx->cancel_result);
         else if (outcome != MAC_TX_ACKED && outcome != MAC_TX_UNACKNOWLEDGED) {
             nwk_aps_complete(ctx, NWK_APS_RADIO);
@@ -333,6 +369,7 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
     if (NWK_APS_ENGINE(ctx->owner)->phase != MAC_TX_IDLE) return NWK_APS_STATE;
     if (ctx->stopping) {
         if (ctx->reply) { ctx->reply = 0; ctx->reply_result = MAC_TX_CANCELLED; }
+        ctx->poll = 0;
         if (ctx->queued) nwk_aps_complete(ctx, NWK_APS_CANCELLED);
         ctx->stopping = ctx->cancel = ctx->cancel_sent = 0;
         return NWK_APS_OK;
@@ -344,11 +381,16 @@ nwk_aps_result_t nwk_aps_step(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_
         if (ctx->retries == NWK_APS_RETRIES) nwk_aps_complete(ctx, NWK_APS_TIMEOUT);
         else { ctx->retries++; ctx->sent = ctx->seen_ack = 0; }
     }
-    if (ctx->reply || (ctx->queued && !ctx->waiting)) {
-        result = nwk_aps_transmit(ctx, ctx->reply, now);
-        if (result) {
-            if (!ctx->reply) nwk_aps_complete(ctx, (uint8_t)result);
-            return result;
+    if (ctx->reply || (ctx->queued && !ctx->waiting) || ctx->poll) {
+        if (ctx->reply || (ctx->queued && !ctx->waiting)) {
+            result = nwk_aps_transmit(ctx, ctx->reply, now);
+            if (result) {
+                if (!ctx->reply) nwk_aps_complete(ctx, (uint8_t)result);
+                return result;
+            }
+        } else {
+            result = nwk_aps_transmit_poll(ctx, now);
+            if (result) { ctx->poll = 0; ctx->poll_result = (uint8_t)(0x80u|result); return NWK_APS_OK; }
         }
         if (!ctx->active) return NWK_APS_OK;
 #if defined(CC2530_MAC_LINK)

@@ -207,7 +207,16 @@ static void window(void)
     if (!j->window && j->poll.control.ack_seen && ENGINE(LJ_OWNER)->pending) {
         memset(&ar, 0, sizeof(ar));
         ar.epoch = j->request.extraction.epoch;
+#if defined(CC2530_MAC_LINK)
+        /* POLL owns the RX window: it delivers only frames received before
+         * its CLOSED, stamped by a late software observation bound. This
+         * context classifies that delivery within the POLL lifetime. */
+        ar.lifetime = j->poll.control.deadline - j->poll.control.ack_end;
+        if (ar.lifetime - 1u >= MAC_ASSOCIATION_MAX_LIFETIME)
+            ar.lifetime = MAC_ASSOCIATION_MAX_LIFETIME;
+#else
         ar.lifetime = j->request.extraction.frame_wait + 1u;
+#endif
         ar.work_limit = 2;
         ar.pan_id = j->request.extraction.pan;
         ar.channel = j->request.extraction.channel;
@@ -332,7 +341,7 @@ mac_join_result_t mac_join_start(mac_join_t MAC_JOIN_RAM * SDCC_VOLATILE ctx, MA
             || proposed.extraction.local_mode != MAC_ADDRESS_EXTENDED
             || (proposed.extraction.coordinator_mode != MAC_ADDRESS_SHORT
                 && proposed.extraction.coordinator_mode != MAC_ADDRESS_EXTENDED)
-            || (proposed.capability != 0x88u && proposed.capability != 0x8cu)
+            || (proposed.capability & 0xf3u) != 0x80u
             || proposed.profile > MAC_RX_R22_ASSOCIATION_RESPONSE)
         return JOIN_RETURN(MAC_JOIN_UNSUPPORTED);
     if (proposed.extraction.coordinator_mode == MAC_ADDRESS_SHORT) {

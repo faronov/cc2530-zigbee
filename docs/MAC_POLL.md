@@ -448,8 +448,8 @@ context stores `ack_end = A`, `ack_upper = B`, `accept_end = A+F` and
 
 | Item | Exact profile | Interval profile |
 | --- | --- | --- |
-| Frame acceptance | captured end in `(ACK end, ACK end+F]` | observation upper bound `<= A+F`, so the true end is inside the window |
-| Later addressed frame | NO_DATA after timeout | local `MAC_POLL_TIMING_UNCERTAIN` (11); an upper bound after A+F is not a late proof |
+| Frame acceptance | captured end in `(ACK end, ACK end+F]` | any matching frame reported before CLOSED, including after the timeout; RX was on and AUTOACK already confirmed it |
+| Later addressed frame | NO_DATA after timeout | delivered if reported before CLOSED; an observation bound after A+F is not a late proof |
 | NO_DATA timeout | CLOSED through `>= ACK end+F` | loss-free CLOSED through `>= B+F` |
 | Delivery stamp | captured PPDU end | conservative upward-rounded observation bound |
 
@@ -469,14 +469,21 @@ evidence, with the adapter already OFF and drained. Its CLOSED watermark need
 not reach the later report stamp; every other closure check is unchanged. See the
 [link driver](MAC_LINK_DRIVER.md#composition-policy).
 
-CRC, channel, codec and address classification happen before the timing
-check, so an unrelated or corrupt frame is still ignored instead of becoming
-uncertain. `MAC_ASSOCIATION` is unchanged in code. Under the profile, its forwarded FRAME
-and RESPONSE stamps are the same conservative upper bounds, and the
-contextual window still intersects POLL's proven acceptance window.
+CRC, channel, codec and address classification still ignore unrelated or
+corrupt frames. A matching frame is never rejected for its observation stamp:
+the stamp is when software first saw it, which on H2 (LH5) was about 40 ms
+after the ACK although the frame arrived 2.6 ms after it. Rejecting such an
+AUTOACKed Association Response left the parent with a child that kept
+retrying. `accept_end` is retained in the context but no longer gates
+acceptance. `MAC_POLL_TIMING_UNCERTAIN` remains only for an ambiguous Data
+Request ACK interval.
+`MAC_ASSOCIATION` is unchanged in code. Under the profile, its forwarded FRAME
+and RESPONSE stamps are the same conservative upper bounds; join opens its
+contextual window for the POLL lifetime (capped at
+`MAC_ASSOCIATION_MAX_LIFETIME`) so POLL alone owns the RX window.
 
 `tests/test_mac_link_join.c` drives the real observed interval engine,
-codecs, POLL, Association and join controllers: 146 cases and 8185 checks
+codecs, POLL, Association and join controllers: 146 cases and 8191 checks
 (136/7248 before the ARM handshake, 141/7685 before the TX-result closure fix),
 natively and under nonrecovering ASan/UBSan. It covers the successful
 Association sequence, Pending 0, closure and boundaries, fine phases, wrap,

@@ -48,12 +48,25 @@ static uint32_t bad_serial;
 static uint8_t bad_checked;
 enum {
     POLL_NO_ACK = 8, POLL_BUSY, IMMEDIATE_RESPONSE, BROADCAST_DRAIN, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
-    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, E2E_CASES
+    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, ASSOCIATION_OVERFLOW, E2E_CASES
 };
 static unsigned poll_attempts, closed_checked, race_started, race_disarmed, race_completed;
 static unsigned race_random, race_tx, retire_wait, timeout_started, early_acks;
-static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked;
+static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked, overflow_sent;
 static uint32_t scan_watermark, race_generation;
+/* INDIRECT_KEY: parent queue release bookkeeping (polls seen when queued). */
+static unsigned queued_polls, released_frames;
+static uint8_t queued_seen;
+#if defined(CC2530_RADIO_RX_ISR)
+/* isr_live: dispatch the real RF vector body between driver steps whenever the
+ * production arm set (EA, IEN2.RFIE, RFIRQM0 FIFOP|RXPKTDONE) is live and the
+ * modeled FIFO holds a complete frame. Off for join-smoke/vector traces. */
+extern void radio_autoack_rx_isr(void);
+extern volatile uint8_t radio_autoack_rx_armed;
+static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts, isr_inflight;
+static unsigned count_glitch, isr_rechecks;
+static uint8_t count_glitch_value;
+#endif
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
         "BDB=%u result=%u driver=%u adapter=%u/%u MAC=%u/%u action=%u " \
@@ -132,6 +145,13 @@ static uint8_t joint_xload(uint16_t a)
         advance_clocks(mmio_clocks);
         return crypto_xread(a);
     }
+#if defined(CC2530_RADIO_RX_ISR)
+    /* H2 LH13: the Nth RXFIFOCNT read returns count_glitch_value once. */
+    if (a == 0x619b && count_glitch && !--count_glitch) {
+        (void)handoff_xload(a);
+        return count_glitch_value;
+    }
+#endif
     return handoff_xload(a);
 }
 
@@ -170,6 +190,7 @@ static void cold_start(void)
     host_mmio_xaddress_hook = joint_address; host_mmio_cycles_hook = joint_cycles;
     memcpy(config.value.ieee, link_identity.own_ieee, 8);
     config.value.pan = config.value.short_address = 0xffff; config.value.channel = 11;
+    link_peer_capability = scenario == INDIRECT_KEY ? 0x80 : 0x88;
     link_peer_setup(&join_config);
     CHECK(mac_adapter_init(&config.value, bound, cap) == MAC_ADAPTER_OK);
     epoch_origin = ((uint64_t)mac_radio_epoch.periods-mac_radio_epoch.symbols)*512u;
@@ -201,8 +222,9 @@ static void cold_start(void)
     bad_serial = 0; bad_checked = 0;
     poll_attempts = closed_checked = race_started = race_disarmed = race_completed = 0;
     race_random = race_tx = retire_wait = timeout_started = early_acks = 0;
-    broadcast_sent = drain_delayed = foreign_sent = early_key_acked = 0;
+    broadcast_sent = drain_delayed = foreign_sent = early_key_acked = overflow_sent = 0;
     scan_watermark = race_generation = 0;
+    queued_polls = released_frames = queued_seen = 0;
 }
 
 /* Complete a genuine modeled PPDU. Its SFD is high during the body, sticky
@@ -367,6 +389,22 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
         mac_adapter_diagnostic()->normal_rx && dev->phase == BDB_JOIN_ASSOCIATING &&
         dev->work.association.context.poll.control.phase == MAC_POLL_RECEIVE &&
         tx->engine.phase == MAC_TX_DONE) {
+        if (scenario == ASSOCIATION_OVERFLOW && !overflow_sent) {
+            /* Busy PAN: a broadcast, then an incomplete frame overflows the
+             * FIFO. The withheld Response was never ACKed, as when lost. */
+            uint8_t broadcast[57];
+            unsigned i;
+            broadcast[0] = 0x41; broadcast[1] = 0x88; broadcast[2] = 0x4d;
+            broadcast[3] = (uint8_t)link_identity.pan; broadcast[4] = (uint8_t)(link_identity.pan >> 8);
+            broadcast[5] = broadcast[6] = 0xff; broadcast[7] = 0x22; broadcast[8] = 0x2f;
+            for (i = 9; i < sizeof(broadcast); i++) broadcast[i] = (uint8_t)(i * 3u);
+            air_frame(broadcast, sizeof(broadcast), 1);
+            CHECK(!ack_active);
+            inject_overflow(127);
+            overflow_sent = 1; command_wait = 0;
+            return;
+        }
+        /* Slow foreground: the AUTOACKed Response is observed after A+F. */
         if (scenario == 4) advance_clocks(320u*512u);
         if (scenario == 2) {
             link_response[link_response_length-3] = 255;
@@ -383,6 +421,13 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
             link_peer_transport(scenario == 7 || scenario == ACK_CANCEL_ARM);
             security_aes_peer_leave();
             mmio_clocks = saved_clocks; transport_sent = 1;
+        }
+        if (link_peer_pending && scenario == INDIRECT_KEY) {
+            /* RX-off-when-idle child: the parent holds the frame until a
+             * Data Request that arrives after it was queued. */
+            if (!queued_seen) { queued_seen = 1; queued_polls = link_peer_polls; }
+            if (link_peer_polls == queued_polls) return;
+            queued_seen = 0; released_frames++;
         }
         if (link_peer_pending) {
             if (!corrupt_sent) {
@@ -493,6 +538,21 @@ static void race_after(uint8_t old_action, uint8_t old_radio, uint8_t old_phase)
     }
 }
 
+#if defined(CC2530_RADIO_RX_ISR)
+static void isr_dispatch(void)
+{
+    unsigned before;
+    if (!isr_live || !(SOC_IEN0 & 0x80) || !(SOC_IEN2 & 1) || XR(0x61a3) != 0x44 || !packets)
+        return;
+    CHECK(radio_autoack_rx_armed && !in_isr);
+    before = packets; in_isr = 1;
+    radio_autoack_rx_isr();
+    in_isr = 0; isr_runs++;
+    CHECK(packets <= before);
+    isr_frames += before - packets;
+}
+#endif
+
 static void tick_driver(void)
 {
     mac_link_driver_result_t result;
@@ -533,13 +593,17 @@ static void tick_driver(void)
     e2e_steps++;
     /* Finite foreground latency; no consumer timestamp is supplied here.
      * Long idle security waits advance the physical Timer2 in bounded chunks. */
-    advance_clocks((device.phase == BDB_JOIN_WAIT_KEY && scenario == 3 ? 1000u : 4u)*512u);
+    advance_clocks(((device.phase == BDB_JOIN_WAIT_KEY && scenario == 3) ||
+        (scenario == INDIRECT_KEY && link_peer_pending && adapter_tx.engine.phase == MAC_TX_IDLE) ? 1000u : 4u)*512u);
     handoff_tick();
     handoff_started = mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING &&
         mac_adapter_diagnostic()->policy == MAC_ADAPTER_KEEP_AUTOACK &&
         adapter_tx.engine.outcome == MAC_TX_ACKED;
     if (handoff_started) handoff_configured = 0;
     if (scenario == 7) blocked_action = driver.action;
+#if defined(CC2530_RADIO_RX_ISR)
+    isr_dispatch();
+#endif
     result = mac_link_driver_step(&driver);
     if (scenario == 7 && driver.dropped && !drop_checked) {
         const mac_adapter_observation_t *o = mac_adapter_observation();
@@ -612,9 +676,10 @@ static void run(unsigned selected)
         }
         tick_driver();
     }
-    if (scenario == 0 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
+    if (scenario == 0 || scenario == 4 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
         scenario == IMMEDIATE_RESPONSE || scenario == BROADCAST_DRAIN ||
-        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == 7) {
+        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == INDIRECT_KEY || scenario == 7 ||
+        scenario == ASSOCIATION_OVERFLOW) {
         if (device.phase != BDB_JOIN_READY)
             fprintf(stderr, "scan reason=%u unscanned=%lu candidates=%u peerTX=%u cmd=%u rx=%u through=%lu\n",
                 device.scan_result.reason,(unsigned long)device.scan_result.unscanned,
@@ -663,8 +728,13 @@ static void run(unsigned selected)
         CHECK(early_acks == (scenario == IMMEDIATE_RESPONSE));
         CHECK(drain_delayed == (scenario == BROADCAST_DRAIN) && broadcast_sent == drain_delayed);
         CHECK(foreign_sent == (scenario == POLL_BUSY));
+        CHECK(overflow_sent == (scenario == ASSOCIATION_OVERFLOW));
         CHECK(early_key_acked == (scenario == EARLY_KEY));
         CHECK(driver.dropped == (scenario == 7) && drop_checked == (scenario == 7));
+        /* Every peer frame after association, the corrupted TK included,
+         * was released by its own post-queue poll; none was sent directly. */
+        CHECK((scenario == INDIRECT_KEY) == !!link_peer_polls &&
+              released_frames == (scenario == INDIRECT_KEY ? link_peer_parent+6u : 0u));
     } else if (scenario == 1) {
         CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_NO_PARENT);
         CHECK(!device.scan_result.candidates && !device.scan_result.unscanned);
@@ -674,11 +744,6 @@ static void run(unsigned selected)
     } else if (scenario == 3) {
         CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_KEY_TIMEOUT);
         CHECK(!transport_sent && !device.member);
-    } else if (scenario == 4) {
-        CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_ASSOCIATION_FAILED);
-        CHECK(device.record.reason == MAC_JOIN_TIMING_UNCERTAIN &&
-              device.record.association.outcome != MAC_ASSOCIATION_RESPONSE &&
-              !device.record.poll.protocol && !device.record.cleanup_error);
     } else if (scenario == 5) {
         mac_link_driver_t before = driver;
         CHECK(faulted && driver.fault == MAC_LINK_DRIVER_RADIO &&
@@ -701,6 +766,81 @@ static void run(unsigned selected)
     printf("E2E case%u: BDB=%u/%u driver=%u steps=%u checks=%u peer=%u TX=%u random=%u PASS\n",
         scenario,device.phase,device.result,driver.fault,e2e_steps,e2e_checks,
         link_peer_checks,link_peer_tx,random_inputs);
+#if defined(CC2530_RADIO_RX_ISR)
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !count &&
+        !SOC_RFERRF && radio_autoack_state == RADIO_AUTOACK_RX) {
+        /* H2 LH10: every byte of a frame still in reception (SFD high, no
+         * FIFOP) is counted, but filtering can still remove it. Neither the
+         * vector nor a receive may read it as a finished head. */
+        radio_autoack_frame_t seen;
+        unsigned i, first = tail, reads = rfd_reads;
+        fifo[first] = 6;
+        for (i = 1; i < 7; i++) fifo[(first+i)&127] = (uint8_t)(0x40+i);
+        tail = (first+7)&127; count = 7; XR(0x6193) |= 0x20; signals();
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(count == 7 && rfd_reads == reads && radio_autoack_rx_armed);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+        CHECK(count == 7 && rfd_reads == reads && radio_autoack_rx_armed);
+        /* Rejection rolls RXFIFO back to the frame start and SFD falls. */
+        tail = first; count = 0; XR(0x6193) &= (uint8_t)~0x20; signals();
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+        CHECK(!count && rfd_reads == reads && radio_autoack_state == RADIO_AUTOACK_RX &&
+              !radio_autoack_fault);
+        /* A later frame's byte proves the head finished even with SFD high. */
+        enqueue(20, 0xe9, 0x35); first = tail;
+        fifo[first] = 30; fifo[(first+1)&127] = 0x41;
+        tail = (first+2)&127; count += 2; XR(0x6193) |= 0x20; signals();
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(!packets && count == 2 && rfd_reads == reads + 21 && radio_autoack_rx_armed);
+        tail = first; count = 0; XR(0x6193) &= (uint8_t)~0x20; signals();
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME && seen.length == 18);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY && !radio_autoack_fault);
+        isr_inflight++;
+    }
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !count &&
+        !SOC_RFERRF && radio_autoack_state == RADIO_AUTOACK_RX) {
+        /* H2 LH13: a complete foreign ACK head left with FIFOP low (p232) and
+         * one byte of a later frame in reception that filtering rejects. The
+         * first recheck read RXFIFOCNT low once while the head stayed at
+         * RXFIRST_PTR: nothing is read, the receive ends EMPTY and the next
+         * one delivers the head. A repeated failure stays fatal. */
+        radio_autoack_frame_t seen;
+        unsigned first, reads = rfd_reads;
+        fifop_edge = 1;
+        enqueue(5, 0xe3, 0x69); fifop_high = 0;
+        first = tail; fifo[first] = 45; tail = (first+1)&127; count++;
+        XR(0x6193) |= 0x20; signals();
+        CHECK((XR(0x6193) & 0xe0) == 0xa0 && count == 7);
+        count_glitch = 2; count_glitch_value = 0;
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+        CHECK(!count_glitch && rfd_reads == reads && count == 7 && !radio_autoack_fault &&
+              radio_autoack_rx_armed);
+        tail = first; count--; XR(0x6193) &= (uint8_t)~0x20; signals();
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME &&
+              seen.length == 3 && seen.body[0] == 2 && !seen.body[1]); /* DSN: adapter_load */
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY &&
+              !radio_autoack_fault && !count && rfd_reads == reads + 6);
+        if (scenario == 0) {
+            reads = rfd_reads;
+            enqueue(5, 0xe3, 0x6a); fifop_high = 0; signals();
+            count_glitch = 2;
+            CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY);
+            count_glitch = 2;
+            CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FIFO_ERROR &&
+                  radio_autoack_fault == RADIO_AUTOACK_FIFO_ERROR && rfd_reads == reads);
+        }
+        fifop_edge = 0;
+        isr_rechecks++;
+    }
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !SOC_RFERRF) {
+        /* Controller error: the vector stops without consuming and disarms;
+         * the next operation owns the FIFO through the polled path. */
+        enqueue(20, 0xe9, 0x33);
+        SOC_RFERRF = 8; in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(!radio_autoack_rx_armed && !(SOC_IEN0 & 0x80) && packets == 1 && count == 21);
+        SOC_RFERRF = 0; isr_halts++;
+    }
+#endif
     totals += e2e_checks; total_peer_checks += link_peer_checks;
     total_steps += e2e_steps; total_random += random_inputs;
 }
@@ -714,6 +854,16 @@ int MAC_LINK_E2E_MAIN(void)
     for (i = 0; i < E2E_CASES; i++) run(i);
     /* Adapter-level AUTOACK RX loss inside an ACK window, LINK composition. */
     for (i = 4; i < 6; i++) loss_case(i);
+#if defined(CC2530_RADIO_RX_ISR)
+    /* Same scenarios with the RF vector body live between driver steps. */
+    isr_live = 1;
+    for (i = 0; i < E2E_CASES; i++) run(i);
+    isr_live = 0;
+    printf("MAC link E2E RX ISR: %u cases, %u dispatches, %u frames queued, %u halts, "
+           "%u in-flight tails, %u head rechecks PASS.\n", E2E_CASES,isr_runs,isr_frames,isr_halts,
+           isr_inflight,isr_rechecks);
+    CHECK(isr_runs && isr_frames && isr_halts && isr_inflight && isr_rechecks);
+#endif
     printf("MAC link E2E: %u cases, %u checks + %u peer checks, %u steps, %u test RANDOM inputs PASS.\n",
            E2E_CASES,totals,total_peer_checks,total_steps,total_random);
     return 0;

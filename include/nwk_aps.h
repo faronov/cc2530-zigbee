@@ -66,6 +66,8 @@ typedef struct {
     uint8_t completed, result, error, announced, permit_sent, ready, wrap_wait, version;
     uint8_t cancel, cancel_sent, cancel_result, parent_information, quiet;
     uint8_t stopping, reply_result;
+    /* poll: Data Request requested; active_poll: it owns the MAC slot. */
+    uint8_t poll, active_poll, poll_result;
 #if defined(CC2530_MAC_LINK)
     uint8_t armed, arm_issued, arm_retry, arm_nb, disarmed;
 #endif
@@ -109,6 +111,15 @@ nwk_aps_result_t nwk_aps_key_exchange(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATI
  * Admission, counters and the durable REJOINING transition belong to
  * security_keys_send at transmit time. */
 nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t capability, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+/* IEEE 802.15.4-2006 7.3.4 MAC Data Request (unsecured, short/short, ACK
+ * requested) to the current parent. It is the lowest-priority transmission:
+ * it is sent only while no reply or ready ordinary frame is waiting, never
+ * occupies the ordinary slot, never sets completed/sent and is not cancelled
+ * by ordinary-TX cancellation (stop still drops it). A pending request is
+ * idempotent. Indirect frames released by the parent arrive through the
+ * normal receive path; poll_result is only the MAC outcome of the request.
+ * rejoin=1 addresses the selected rejoin parent instead of the parent. */
+nwk_aps_result_t nwk_aps_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t rejoin, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
     const NWK_APS_EVENT_T * SDCC_VOLATILE event, NWK_APS_ACTION_T * SDCC_VOLATILE action) JOIN_FAR;
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * SDCC_VOLATILE ctx, const uint8_t * SDCC_VOLATILE npdu,

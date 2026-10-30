@@ -82,24 +82,38 @@ static void begin(void)
 }
 
 /* Reflected CRC-32 (0xEDB88320), one byte per step. The byte table is
- * linear in its index, so it is the XOR of a low- and a high-nibble entry. */
-static const MCU_CODE uint32_t crc_low[16] = {
-    0x00000000UL, 0x77073096UL, 0xee0e612cUL, 0x990951baUL,
-    0x076dc419UL, 0x706af48fUL, 0xe963a535UL, 0x9e6495a3UL,
-    0x0edb8832UL, 0x79dcb8a4UL, 0xe0d5e91eUL, 0x97d2d988UL,
-    0x09b64c2bUL, 0x7eb17cbdUL, 0xe7b82d07UL, 0x90bf1d91UL
+ * linear in its index, so it is the XOR of a low- and a high-nibble entry.
+ * Entries are split into little-endian byte planes so the 8051 loop uses
+ * only byte operations. */
+static const MCU_CODE uint8_t crc_low[4][16] = {
+    {0x00, 0x96, 0x2c, 0xba, 0x19, 0x8f, 0x35, 0xa3, 0x32, 0xa4, 0x1e, 0x88, 0x2b, 0xbd, 0x07, 0x91},
+    {0x00, 0x30, 0x61, 0x51, 0xc4, 0xf4, 0xa5, 0x95, 0x88, 0xb8, 0xe9, 0xd9, 0x4c, 0x7c, 0x2d, 0x1d},
+    {0x00, 0x07, 0x0e, 0x09, 0x6d, 0x6a, 0x63, 0x64, 0xdb, 0xdc, 0xd5, 0xd2, 0xb6, 0xb1, 0xb8, 0xbf},
+    {0x00, 0x77, 0xee, 0x99, 0x07, 0x70, 0xe9, 0x9e, 0x0e, 0x79, 0xe0, 0x97, 0x09, 0x7e, 0xe7, 0x90}
 };
-static const MCU_CODE uint32_t crc_high[16] = {
-    0x00000000UL, 0x1db71064UL, 0x3b6e20c8UL, 0x26d930acUL,
-    0x76dc4190UL, 0x6b6b51f4UL, 0x4db26158UL, 0x5005713cUL,
-    0xedb88320UL, 0xf00f9344UL, 0xd6d6a3e8UL, 0xcb61b38cUL,
-    0x9b64c2b0UL, 0x86d3d2d4UL, 0xa00ae278UL, 0xbdbdf21cUL
+static const MCU_CODE uint8_t crc_high[4][16] = {
+    {0x00, 0x64, 0xc8, 0xac, 0x90, 0xf4, 0x58, 0x3c, 0x20, 0x44, 0xe8, 0x8c, 0xb0, 0xd4, 0x78, 0x1c},
+    {0x00, 0x10, 0x20, 0x30, 0x41, 0x51, 0x61, 0x71, 0x83, 0x93, 0xa3, 0xb3, 0xc2, 0xd2, 0xe2, 0xf2},
+    {0x00, 0xb7, 0x6e, 0xd9, 0xdc, 0x6b, 0xb2, 0x05, 0xb8, 0x0f, 0xd6, 0x61, 0x64, 0xd3, 0x0a, 0xbd},
+    {0x00, 0x1d, 0x3b, 0x26, 0x76, 0x6b, 0x4d, 0x50, 0xed, 0xf0, 0xd6, 0xcb, 0x9b, 0x86, 0xa0, 0xbd}
 };
 
-static void crc_byte(uint8_t value)
+/* Block update keeps the per-byte loop inside one function: the banked
+ * linker may place callee and caller apart, and a per-byte thunk dominated
+ * journal traversal time. NULL input means erased (0xff) bytes. */
+static void crc_update(const uint8_t MCU_XDATA *bytes, uint16_t count)
 {
-    uint8_t index = (uint8_t)crc ^ value;
-    crc = (crc >> 8) ^ crc_low[index & 15u] ^ crc_high[index >> 4];
+    uint8_t c0 = (uint8_t)crc, c1 = (uint8_t)(crc >> 8), c2 = (uint8_t)(crc >> 16),
+        c3 = (uint8_t)(crc >> 24), lo, hi;
+    while (count--) {
+        lo = c0 ^ (bytes ? *bytes++ : 255u);
+        hi = lo >> 4; lo &= 15u;
+        c0 = c1 ^ crc_low[0][lo] ^ crc_high[0][hi];
+        c1 = c2 ^ crc_low[1][lo] ^ crc_high[1][hi];
+        c2 = c3 ^ crc_low[2][lo] ^ crc_high[2][hi];
+        c3 = crc_low[3][lo] ^ crc_high[3][hi];
+    }
+    crc = (uint32_t)c0 | ((uint32_t)c1 << 8) | ((uint32_t)c2 << 16) | ((uint32_t)c3 << 24);
 }
 
 static uint32_t decode(const uint8_t MCU_XDATA *bytes)
@@ -123,12 +137,12 @@ static nv_record_result_t scan_page(uint8_t page, uint8_t capture)
     for (offset = 0; offset < FLASH_PAGE_SIZE; offset += FLASH_READ_MAX) {
         nv_record_diagnostic.reader = flash_nv_read(page, offset, nv_record_chunk, FLASH_READ_MAX);
         if (nv_record_diagnostic.reader != FLASH_OK) return fault(NV_RECORD_READ_FAILED);
+        crc_update(nv_record_chunk, offset < 2040u-FLASH_READ_MAX ? FLASH_READ_MAX : 2040u-offset);
         for (i = 0; i < FLASH_READ_MAX; i++) {
             position = offset+i; value = nv_record_chunk[i];
             if (value != 255) erased = 0;
             if (position < 12) header[position] = value;
             if (position < 2040) {
-                crc_byte(value);
                 if (position >= 12u+header[6] && value != 255) padding = 1;
                 if (capture && position >= 12 && position < 12u+NV_RECORD_MAX)
                     nv_record_stage[position-12] = value;
@@ -243,9 +257,9 @@ begin(); result = select_record();
     header[4] = 1; header[5] = header[7] = 0; header[6] = length;
     encode(header+8, nv_record_diagnostic.generation+1);
     crc = 0xffffffffUL;
-    for (position = 0; position < 2040; position++)
-        crc_byte(position < 12 ? header[position] :
-                 position < 12u+length ? nv_record_stage[position-12] : 255);
+    crc_update(header, 12);
+    crc_update(nv_record_stage, length);
+    crc_update(NULL, 2028u-length);
     encode(footer, crc ^ 0xffffffffUL);
     nv_record_diagnostic.phase = 3;
     nv_record_diagnostic.erase_attempts[page]++;

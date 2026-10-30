@@ -163,6 +163,24 @@ static uint8_t finished(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t * S
     return nwk_aps_confirm(&ctx->work.runtime.transport, result) == NWK_APS_OK;
 }
 
+/* Join-time ZDO queries retry a lost response or a failed MAC/APS delivery
+ * (CSMA failure, missing ACK) within the attempt budget. */
+static uint8_t retryable(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t result)
+{
+    return (result == ZDO_RUNTIME_TIMEOUT || result == ZDO_RUNTIME_TRANSMIT) &&
+        ctx->attempts != BDB_JOIN_ATTEMPTS;
+}
+
+/* R22 3.6.10.3: the keepalive method follows nwkParentInformation. A polling
+ * (RX-off-when-idle) child may rely on MAC Data Poll keepalive (bit 0); the
+ * End Device Timeout Request keepalive is bit 1. */
+static uint8_t poll_keepalive(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx) BDB_RECOVERY_CODE;
+static uint8_t poll_keepalive(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
+{
+    return ctx->work.runtime.zdo.parent_known && (ctx->work.runtime.zdo.parent_information & 3u) == 1u &&
+        !(ctx->config.association.capability & 0x08u);
+}
+
 static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx) BDB_RECOVERY_CODE;
 static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
 {
@@ -207,8 +225,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
             if (!result && which == ZDO_RUNTIME_NODE && !ctx->work.runtime.zdo.tc.logical_type &&
                 ctx->work.runtime.zdo.tc.stack_revision >= 21) {
                 ctx->phase = BDB_JOIN_REQUESTING; ctx->issued = ctx->attempts = 0;
-            } else if (result != ZDO_RUNTIME_TIMEOUT || ctx->attempts == BDB_JOIN_ATTEMPTS)
-                fail(ctx, BDB_JOIN_TC_FAILED);
+            } else if (!retryable(ctx, result)) fail(ctx, BDB_JOIN_TC_FAILED);
         }
         if (ctx->phase == BDB_JOIN_NODE && !ctx->work.runtime.zdo.query) {
             rc = zdo_runtime_request(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ZDO_RUNTIME_NODE, ctx->last);
@@ -224,7 +241,9 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
             }
             else if (queued != NWK_APS_FULL) fail(ctx, BDB_JOIN_TC_FAILED);
         } else if (finished(ctx, &result)) {
-            if (result) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
+            /* A lost Request/Verify Key frame is re-queued like an expired wait. */
+            if (result && ctx->attempts == BDB_JOIN_ATTEMPTS) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
+            else if (result) ctx->issued = 0;
             else {
                 ctx->phase = ctx->phase == BDB_JOIN_REQUESTING ? BDB_JOIN_WAIT_TC : BDB_JOIN_WAIT_CONFIRM;
             }
@@ -236,7 +255,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     } else if (ctx->phase == BDB_JOIN_PARENT) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (!result && which == ZDO_RUNTIME_PARENT && ctx->work.runtime.zdo.parent_known &&
-                (ctx->work.runtime.zdo.parent_information & 2u)) {
+                ((ctx->work.runtime.zdo.parent_information & 2u) || poll_keepalive(ctx))) {
                 if (ctx->recovery) {
                     if (!ctx->work.runtime.transport.announced) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
                     else {
@@ -248,8 +267,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
                     ZDO_RUNTIME_BROADCAST_PERMIT, ctx->last) != ZDO_RUNTIME_OK)
                     fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
                 else ctx->phase = BDB_JOIN_PERMIT;
-            } else if (result != ZDO_RUNTIME_TIMEOUT || ctx->attempts == BDB_JOIN_ATTEMPTS)
-                fail(ctx, BDB_JOIN_PARENT_FAILED);
+            } else if (!retryable(ctx, result)) fail(ctx, BDB_JOIN_PARENT_FAILED);
         }
         if (ctx->phase == BDB_JOIN_PARENT && !ctx->work.runtime.zdo.query) {
             rc = zdo_runtime_request(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ZDO_RUNTIME_PARENT, ctx->last);
@@ -291,14 +309,15 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     } else if (ctx->phase == BDB_JOIN_READY) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
             if (which != ZDO_RUNTIME_PARENT ||
-                (!result && !(ctx->work.runtime.zdo.parent_information & 2u)) ||
+                (!result && !(ctx->work.runtime.zdo.parent_information & 2u) && !poll_keepalive(ctx)) ||
                 (result && result != ZDO_RUNTIME_TIMEOUT && result != ZDO_RUNTIME_TRANSMIT) ||
                 (result && ctx->attempts == BDB_JOIN_KEEPALIVE_ATTEMPTS))
                 fail(ctx, BDB_JOIN_PARENT_FAILED);
             else if (result) ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE_RETRY;
             else { ctx->attempts = 0; ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE; }
         }
-        if (ctx->phase == BDB_JOIN_READY && expired(ctx->last, ctx->keepalive) && !ctx->work.runtime.zdo.query) {
+        if (ctx->phase == BDB_JOIN_READY && !poll_keepalive(ctx) && expired(ctx->last, ctx->keepalive) &&
+            !ctx->work.runtime.zdo.query) {
             rc = zdo_runtime_request(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ZDO_RUNTIME_PARENT, ctx->last);
             if (rc == ZDO_RUNTIME_OK) ctx->attempts++;
             else if (rc != ZDO_RUNTIME_FULL || expired(ctx->last, ctx->keepalive+BDB_JOIN_EXCHANGE_WAIT))
@@ -313,6 +332,31 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         if (ctx->attempts == BDB_JOIN_ATTEMPTS) fail(ctx, BDB_JOIN_TC_FAILED);
         else { ctx->phase = ctx->phase == BDB_JOIN_WAIT_TC ? BDB_JOIN_REQUESTING : BDB_JOIN_VERIFYING; ctx->issued = 0; }
     }
+}
+
+/* Indirect-delivery service for an RX-off-when-idle capability. The receiver
+ * itself stays on; only the parent's queueing behaviour requires the poll. */
+static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now) BDB_RECOVERY_CODE;
+static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now)
+{
+    nwk_aps_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE t = &ctx->work.runtime.transport;
+    uint32_t period;
+    if ((ctx->config.association.capability & 0x08u) ||
+        !((ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase <= BDB_JOIN_READY) || ctx->phase == BDB_JOIN_RECOVERING)) {
+        ctx->poll_phase = ctx->phase; return;
+    }
+    if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY) ctx->poll_fast = now+BDB_JOIN_POLL_BURST;
+    ctx->poll_phase = ctx->phase;
+    if (expired(now, ctx->poll_fast)) ctx->poll_fast = now;
+    period = ctx->phase != BDB_JOIN_READY || ctx->poll_fast != now || t->queued || t->waiting ||
+        t->reply || ctx->work.runtime.zdo.query ? BDB_JOIN_POLL_FAST : BDB_JOIN_POLL_SLOW;
+    /* A deadline further than the slowest interval is stale storage. A slow
+     * deadline set while idle must not outlive the APS ACK wait of new work. */
+    if ((uint32_t)(ctx->poll_at-now) > BDB_JOIN_POLL_SLOW) ctx->poll_at = now;
+    else if ((uint32_t)(ctx->poll_at-now) > period) ctx->poll_at = now+period;
+    if (!expired(now, ctx->poll_at) || t->poll || t->active_poll || t->stopping) return;
+    if (nwk_aps_poll(t, ctx->phase == BDB_JOIN_RECOVERING, now) != NWK_APS_OK) return;
+    ctx->poll_at = now+period;
 }
 
 bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now,
@@ -539,6 +583,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
         expired(now, ctx->commission_until))
         fail(ctx, ctx->recovery ? BDB_JOIN_NO_PARENT : BDB_JOIN_KEY_TIMEOUT);
     if (event && event->kind != BDB_JOIN_EVENT_TX) { event = NULL; ignored = 1; }
+    poll(ctx, now);
     if (BDB_JOIN_LIVE(ctx->phase) && ctx->work.runtime.transport.receive_ready) {
         runtime(ctx); handled = 1;
     }
@@ -652,6 +697,11 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
         if (ctx->work.runtime.transport.receive_ready) {
             ctx->timely = 1;
             if (expired(now, ctx->until)) ctx->timely = 0;
+        }
+        /* A unicast may be one of several queued indirect frames. */
+        if (work.receive.mac.header.destination[0] != 255 || work.receive.mac.header.destination[1] != 255) {
+            ctx->poll_at = now;
+            if (expired(now+BDB_JOIN_POLL_ACTIVE, ctx->poll_fast)) ctx->poll_fast = now+BDB_JOIN_POLL_ACTIVE;
         }
         return BDB_JOIN_OK;
     }

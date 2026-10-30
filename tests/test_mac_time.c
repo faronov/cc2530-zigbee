@@ -453,9 +453,10 @@ int main(int argc, char **argv)
     }
     reset(); mac_time_test_limit = 0; step(0, 3);
     mac_time_test_limit = 1000; step(0, 1); mac_time_test_limit = 0; step(1, 3);
-    reset(); step(0, 1); force_ff = 65535; tick_step = 0; mac_time_test_limit = 65535;
+    /* Stuck FF: each poll discards the FF read and its immediate re-latch. */
+    reset(); step(0, 1); force_ff = 2u*65535u; tick_step = 0; mac_time_test_limit = 65535;
     step(1, 11); assert(mac_time_diagnostic()->polls == 65535 &&
-                       mac_time_diagnostic()->discarded == 65534); retained();
+                       mac_time_diagnostic()->discarded == (uint16_t)(2u*65534u)); retained();
     printf("MAC time: %u native calls, real timebase, coherent latch/erratum/bounds/retained failures PASS; synthetic only.\n", calls);
     return 0;
 }

@@ -129,7 +129,12 @@ R is a known staged decision period, not the total attempt lifetime.
 `extraction.lifetime/work` independently bound the whole attempt; extraction
 receives the remaining local lifetime and the configured work bound.
 `frame_wait` is a **caller-valid configured PIB F**, not an arbitrary
-application timeout or a guessed default.
+application timeout or a guessed default. The join-smoke admission uses 1986
+symbols, the IEEE 802.15.4-2006 macMaxFrameTotalWaitTime computed from the
+default PIB (macMinBE 3, macMaxBE 5, macMaxCSMABackoffs 4: 86*20+266). In
+MCUEMU a Telink sampleGW coordinator completes its indirect Association
+Response about 5.2 ms after the Data Request ACK, so the earlier 300-symbol
+(4.8 ms) setting dropped it after the hardware ACK.
 
 ### Bounded Response context without retimestamping
 
@@ -383,8 +388,8 @@ the join owner is `mac_tx_interval_t` and the `radio` action is a
 observed step described in MAC_POLL.md. `record.request_ack` is the Request
 ACK's `ceil(upper)` rather than a captured end. Extraction preparation waits
 until at least `request_ack + R`, so the true ACK end plus
-macResponseWaitTime has elapsed. A Request `TIMING_UNCERTAIN` or POLL
-`MAC_POLL_TIMING_UNCERTAIN` is a local abort,
+macResponseWaitTime has elapsed. A Request or POLL Data Request ACK
+`TIMING_UNCERTAIN` is a local abort,
 `MAC_JOIN_TIMING_UNCERTAIN` (10). It is never a fabricated protocol
 outcome. Retries, refusal and Response semantics are unchanged.
 

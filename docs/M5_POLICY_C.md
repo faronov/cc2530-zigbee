@@ -110,7 +110,7 @@ physical flash endurance qualification.
 
 The 20 ms erase / 20 us word-program values are synthetic peripheral timings,
 not measured radio blackout or manufacturer endurance. A justified checkpoint
-still costs the unchanged full replacement and can abandon remaining outgoing
+still costs the unchanged full replacement; it keeps the live outgoing
 reservation ranges. APS-secured/control traffic can still exhaust the guard.
 
 ## Sustained scenario and acceptance boundary
