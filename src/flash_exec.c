@@ -21,6 +21,10 @@ MCU_XDATA uint8_t flash_exec_work[9];
 volatile MCU_XDATA uint8_t flash_exec_ram[FLASH_EXEC_RAM_SIZE];
 static MCU_XDATA uint8_t mapping, clock_command, cache_mode;
 extern MCU_XDATA uint8_t flash_exec_reserved_end;
+#if defined(CC2530_RADIO_RX_ISR)
+/* radio_autoack.c: 1 while its RX interrupt owns EA (cleared by an ISR halt). */
+extern volatile MCU_XDATA uint8_t radio_autoack_rx_armed;
+#endif
 
 #if defined(__SDCC)
 extern const MCU_CODE uint8_t flash_exec_template_end;
@@ -161,7 +165,8 @@ static uint8_t MCU_COMMON_CODE idle(uint8_t expected_mapping)
     sleep = MMIO_READ(SOC_SLEEPCMD);
     command = MMIO_READ(SOC_CLKCONCMD); status = MMIO_READ(SOC_CLKCONSTA);
     control = MMIO_XREAD(FCTL); bank = MMIO_READ(SOC_MEMCTR);
-    return !ien0 && !ien1 && !ien2 && !arm && !request && (sleep & 7u) == 4u &&
+    /* EA is cleared by the caller; a latched IEN2.RFIE cannot dispatch. */
+    return !ien0 && !ien1 && !(ien2 & CC2530_IEN2_GUARD) && !arm && !request && (sleep & 7u) == 4u &&
         command == clock_command && command == status &&
         (command & 7u) == ((command & 0x40u) ? 1u : 0u) &&
         (!(command & 0x40u) || (command & 0x38u)) &&
@@ -206,6 +211,10 @@ flash_exec_result_t MCU_COMMON_CODE flash_exec_command(uint8_t operation, uint8_
 #endif
             return FLASH_EXEC_INVALID_ARGUMENT;
     }
+#if defined(CC2530_RADIO_RX_ISR)
+    /* No vector may run in the erase/program window or from the XMAP RAM copy. */
+    MMIO_CLEAR(SOC_IEN0, 0x80u);
+#endif
     mapping = MMIO_READ(SOC_MEMCTR);
     clock_command = MMIO_READ(SOC_CLKCONCMD);
     cache_mode = MMIO_XREAD(FCTL) & 0x0cu;
@@ -248,8 +257,12 @@ flash_exec_result_t MCU_COMMON_CODE flash_exec_command(uint8_t operation, uint8_
     if (!idle(mapping | 8u)) { result = FLASH_EXEC_UNSUPPORTED_STATE; goto failed; }
     MMIO_WRITE(SOC_MEMCTR, mapping);
     if (MMIO_READ(SOC_MEMCTR) != mapping) { result = FLASH_EXEC_MAPPING_CHANGED; goto failed; }
+#if defined(CC2530_RADIO_RX_ISR)
+    if (radio_autoack_rx_armed) MMIO_SET(SOC_IEN0, 0x80u);
+#endif
     return FLASH_EXEC_IDLE;
 failed:
+    /* Failures latch flash_exec_work[7] and leave EA clear: no further command. */
     flash_exec_work[7] = result;
     return result;
 }

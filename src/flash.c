@@ -39,7 +39,8 @@ static flash_result_t observe(uint8_t bank)
     status = MMIO_READ(SOC_CLKCONSTA);
     arm = MMIO_READ(SOC_DMAARM);
     request = MMIO_READ(SOC_DMAREQ);
-    if (ien0 || ien1 || ien2 || arm || request || (sleep & 7u) != 4u ||
+    if ((ien0 & CC2530_IEN0_GUARD) || ien1 || (ien2 & CC2530_IEN2_GUARD) ||
+        arm || request || (sleep & 7u) != 4u ||
         command != saved_clock || command != status ||
         (command & 7u) != ((command & 0x40u) ? 1u : 0u) ||
         ((command & 0x40u) && !(command & 0x38u)))

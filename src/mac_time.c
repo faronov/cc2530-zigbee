@@ -42,9 +42,9 @@ static mac_time_result_t observe(void)
     value = (read); \
     if (invalid) { status.guard = (id); goto unsupported; } \
 } while (0)
-    GUARD(MMIO_READ(SOC_IEN0), value, MAC_TIME_GUARD_IEN0);
+    GUARD(MMIO_READ(SOC_IEN0), value & CC2530_IEN0_GUARD, MAC_TIME_GUARD_IEN0);
     GUARD(MMIO_READ(SOC_IEN1), value, MAC_TIME_GUARD_IEN1);
-    GUARD(MMIO_READ(SOC_IEN2), value, MAC_TIME_GUARD_IEN2);
+    GUARD(MMIO_READ(SOC_IEN2), value & CC2530_IEN2_GUARD, MAC_TIME_GUARD_IEN2);
     GUARD(MMIO_READ(SOC_SLEEPCMD), (value & 7u) != 4u, MAC_TIME_GUARD_SLEEPCMD);
     GUARD(MMIO_READ(SOC_DMAARM), value, MAC_TIME_GUARD_DMAARM);
     GUARD(MMIO_READ(SOC_DMAREQ), value, MAC_TIME_GUARD_DMAREQ);
@@ -78,7 +78,7 @@ static mac_time_result_t observe(void)
 #else
     GUARD(MMIO_READ(SOC_RFERRF), value, MAC_TIME_GUARD_RFERRF);
 #endif
-    GUARD(MMIO_XREAD(0x61a3), value, MAC_TIME_GUARD_RFIRQM0);
+    GUARD(MMIO_XREAD(0x61a3), value & CC2530_RFIRQM0_GUARD, MAC_TIME_GUARD_RFIRQM0);
     GUARD(MMIO_XREAD(0x61a4), value, MAC_TIME_GUARD_RFIRQM1);
     GUARD(MMIO_XREAD(0x61a5), value, MAC_TIME_GUARD_RFERRM);
     GUARD(MMIO_READ(SOC_T2IRQM), value, MAC_TIME_GUARD_T2IRQM);

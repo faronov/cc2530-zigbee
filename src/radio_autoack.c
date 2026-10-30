@@ -56,6 +56,36 @@ static MCU_XDATA struct {
 #else
 #define OVERFLOWED 0
 #endif
+#if defined(CC2530_RADIO_RX_ISR)
+#if !defined(CC2530_MAC_LINK) || !defined(CC2530_MAC_ADAPTER) || !defined(CC2530_MAC_HANDOFF)
+#error "CC2530_RADIO_RX_ISR requires the LINK/ADAPTER/HANDOFF radio owner"
+#endif
+/* RF vector 16 (FIFOP|RXPKTDONE) drains complete heads into a small queue while
+ * the foreground is busy between radio operations. Every operation that can
+ * run in an armed state clears EA first; RFIRQM0/IEN2.RFIE stay enabled from
+ * the first arm until reset. See docs/RADIO_AUTOACK.md "RX interrupt".
+ */
+#define RX_SLOTS 4u
+/* Raw FIFO image per slot: [0] = PHR, [1..PHR] = body, RSSI, CRC/correlation.
+ * The ISR copies with one walking pointer; receive unpacks into staged.
+ */
+static MCU_XDATA uint8_t rx_slot[RX_SLOTS][128];
+#if defined(CC2530_CLANG)
+/* Explicit xdata space keeps the ISR free of generic-pointer temporaries. */
+#define RX_ISR_XDATA __xdata
+#define RX_ISR_XREAD(address) (*(const volatile __xdata uint8_t *)(address))
+#else
+#define RX_ISR_XDATA MCU_XDATA
+#define RX_ISR_XREAD(address) MMIO_XREAD(address)
+#endif
+/* rx_halt: 1 = ISR stopped without consuming (foreground decides), 2 = FIFO
+ * inconsistency after a consumed PHR byte (fatal at the next receive). */
+static volatile MCU_XDATA uint8_t rx_put, rx_get, rx_halt, rx_enabled;
+/* EA is set only while this is 1; the ISR halt and rx_hold() clear both. */
+volatile MCU_XDATA uint8_t radio_autoack_rx_armed;
+#define rx_armed radio_autoack_rx_armed
+#define QUEUED ((uint8_t)(rx_put - rx_get) != 0u)
+#endif
 #if defined(CC2530_RX_DIAG)
 /* Write-only evidence (cc2530_rx_diag.h): copies of values already sampled and
  * of work.start; never an extra MMIO or timebase access, never read back. */
@@ -181,7 +211,12 @@ static radio_autoack_result_t observe(void)
 {
     uint8_t i, value, clock;
     status.sample_valid = 0;
+#if defined(CC2530_RADIO_RX_ISR)
+    /* Operations run with EA clear; RFIE/RFIRQM0 are exactly the armed set. */
+    if (MMIO_READ(SOC_IEN0) || MMIO_READ(SOC_IEN1) || MMIO_READ(SOC_IEN2) != rx_enabled ||
+#else
     if (MMIO_READ(SOC_IEN0) || MMIO_READ(SOC_IEN1) || MMIO_READ(SOC_IEN2) ||
+#endif
         (MMIO_READ(SOC_SLEEPCMD) & 7u) != 4u ||
         MMIO_READ(SOC_DMAARM) || MMIO_READ(SOC_DMAREQ))
         return RADIO_AUTOACK_UNSUPPORTED_STATE;
@@ -190,7 +225,12 @@ static radio_autoack_result_t observe(void)
         return RADIO_AUTOACK_UNSUPPORTED_STATE;
     if (clock != work.clock) return RADIO_AUTOACK_STATE_CHANGED;
     if (MMIO_XREAD(0x624a) != 0xa5 || MMIO_XREAD(0x61e1) ||
+#if defined(CC2530_RADIO_RX_ISR)
+        MMIO_XREAD(0x61a3) != (rx_enabled ? 0x44u : 0u) ||
+        MMIO_XREAD(0x61a4) || MMIO_XREAD(0x61a5) ||
+#else
         MMIO_XREAD(0x61a3) || MMIO_XREAD(0x61a4) || MMIO_XREAD(0x61a5) ||
+#endif
         MMIO_XREAD(0x61a8) != 0x85 || MMIO_XREAD(0x61a9) != 0x14 ||
         MMIO_XREAD(0x61b8) != 0x75 || MMIO_XREAD(0x61b9) != 8 ||
         MMIO_XREAD(0x618e) != 0x0f)
@@ -406,6 +446,75 @@ failed:
     return result;
 }
 #endif
+#if defined(CC2530_RADIO_RX_ISR)
+/* Leaf ISR (no calls, no static frame): moves every complete head into the
+ * queue with the same completeness rule as complete_head(). It only runs while
+ * armed (EA set between operations in RX/RX_NOACK). Any controller error or an
+ * impossible count stops it with EA cleared; the next operation then sees the
+ * FIFO through the ordinary polled path.
+ */
+#if defined(CC2530_CLANG)
+__attribute__((interrupt(16)))
+#endif
+void radio_autoack_rx_isr(void)
+{
+    uint8_t RX_ISR_XDATA *slot;
+    uint8_t count, phr;
+    MMIO_WRITE(SOC_RFIRQF0, 0xbb);   /* R/W0: clear FIFOP and RXPKTDONE only */
+    MMIO_WRITE(SOC_S1CON, 0);
+    while ((uint8_t)(rx_put - rx_get) < RX_SLOTS) {
+        if (MMIO_READ(SOC_RFERRF)) goto halt;
+        count = RX_ISR_XREAD(0x619b);
+        if (count > 128u) goto halt;
+        phr = RX_ISR_XREAD(0x619a) & 127u;
+        if (phr < 5u || count <= phr) return;
+        if ((MMIO_READ(SOC_RFD) & 127u) != phr) { rx_halt = 2; goto halt; }
+        /* Slot offset without a x128 multiply (keeps the ISR frame small). */
+        slot = (uint8_t RX_ISR_XDATA *)rx_slot[0];
+        if (rx_put & 2u) slot += 256u;
+        if (rx_put & 1u) slot += 128u;
+        *slot = phr;
+        do *++slot = MMIO_READ(SOC_RFD); while (--phr);
+        rx_put++;
+    }
+    return;
+halt:
+    if (!rx_halt) rx_halt = 1;
+    MMIO_CLEAR(SOC_IEN0, 0x80u);
+    rx_armed = 0;
+}
+
+static void rx_hold(void)
+{
+    if (!rx_armed) return;
+    MMIO_CLEAR(SOC_IEN0, 0x80u);
+    rx_armed = 0;
+}
+
+/* Arm only in a live receive state with nothing that the next operation must
+ * see before an interrupt could run (fault, loss, halt, pending ACK handoff).
+ */
+static void rx_release(void)
+{
+    if (rx_armed || radio_autoack_fault || rx_halt || OVERFLOWED ||
+        (radio_autoack_state != RADIO_AUTOACK_RX &&
+         radio_autoack_state != RADIO_AUTOACK_RX_NOACK) ||
+        radio_autoack_handoff_eligible())
+        return;
+    if (!rx_enabled) {
+        MMIO_XWRITE(0x61a3, 0x44);   /* RFIRQM0: FIFOP | RXPKTDONE */
+        MMIO_SET(SOC_IEN2, 0x01u);   /* RFIE */
+        rx_enabled = 1;
+    }
+    rx_armed = 1;
+    MMIO_SET(SOC_IEN0, 0x80u);
+}
+#define RX_HOLD() rx_hold()
+#define RX_RELEASE() rx_release()
+#else
+#define RX_HOLD() do { } while (0)
+#define RX_RELEASE() do { } while (0)
+#endif
 static radio_autoack_result_t operate(uint8_t operation,
     const radio_autoack_config_t MCU_XDATA *configuration,
     radio_autoack_frame_t MCU_XDATA *output, uint32_t timeout, uint16_t limit)
@@ -440,6 +549,11 @@ static radio_autoack_result_t operate(uint8_t operation,
         result = storage(MMIO_XADDRESS(output), sizeof(*output));
         if (result != RADIO_AUTOACK_READY) return result;
     }
+#if defined(CC2530_RADIO_RX_ISR)
+    /* COLD exists only after reset: no RF vector enable can be live. */
+    if (operation == 0) rx_armed = rx_enabled = 0;
+#endif
+    RX_HOLD();
     memset(&status, 0, sizeof(status));
     work.limit = limit;
     work.start = timebase_read_awake_ticks24(); work.previous = work.start;
@@ -456,6 +570,9 @@ static radio_autoack_result_t operate(uint8_t operation,
 #endif
 #if defined(CC2530_MAC_ADAPTER)
             work.overflow = 0;
+#endif
+#if defined(CC2530_RADIO_RX_ISR)
+            rx_put = rx_get = rx_halt = 0;
 #endif
             status.phase = 1;
             CHECK(poll());
@@ -515,6 +632,23 @@ static radio_autoack_result_t operate(uint8_t operation,
         diag_service();
 #endif
         CHECK(poll());
+#if defined(CC2530_RADIO_RX_ISR)
+        /* Queued heads precede everything still in the FIFO. */
+        if (QUEUED) {
+            const uint8_t MCU_XDATA *raw;
+#if defined(CC2530_CLANG)
+            __asm__ volatile("" ::: "memory");   /* slot loads stay after QUEUED */
+#endif
+            raw = rx_slot[rx_get & (RX_SLOTS - 1u)];
+            staged.length = raw[0] - 2u;
+            for (i = 0; i < staged.length; i++) staged.body[i] = raw[1u + i];
+            staged.rssi_raw = raw[1u + i];
+            staged.crc_correlation = raw[2u + i];
+            rx_get++;
+            goto deliver;
+        }
+        REQUIRE(rx_halt != 2u, RADIO_AUTOACK_FIFO_ERROR);
+#endif
 #if defined(CC2530_MAC_ADAPTER)
         if (work.overflow) {
 #if defined(CC2530_RX_DIAG)
@@ -538,6 +672,9 @@ static radio_autoack_result_t operate(uint8_t operation,
                 REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
             }
             work.overflow = 0;
+#if defined(CC2530_RADIO_RX_ISR)
+            rx_halt = 0;
+#endif
 #if defined(CC2530_RX_DIAG)
             RX_DIAG_COUNT(rx_lost);
 #endif
@@ -552,7 +689,12 @@ static radio_autoack_result_t operate(uint8_t operation,
          * without FIFOP; live RX waits for the next FIFOP.
          */
         if (!(status.signals & 0x40u) && (radio_autoack_state == RADIO_AUTOACK_RX ||
-            radio_autoack_state == RADIO_AUTOACK_RX_NOACK || !status.count)) {
+            radio_autoack_state == RADIO_AUTOACK_RX_NOACK || !status.count)
+#if defined(CC2530_RADIO_RX_ISR)
+            /* ISR reads keep FIFOP low for heads it left behind (p232). */
+            && !(rx_enabled && status.count && complete_head())
+#endif
+            ) {
             REQUIRE(radio_autoack_state == RADIO_AUTOACK_RX ||
                     radio_autoack_state == RADIO_AUTOACK_RX_NOACK ||
                     !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
@@ -580,6 +722,9 @@ head:
         if ((radio_autoack_state == RADIO_AUTOACK_DRAINING ||
              radio_autoack_state == RADIO_AUTOACK_DRAIN_NOACK) && !OVERFLOWED)
             CHECK(stopped());
+#endif
+#if defined(CC2530_RADIO_RX_ISR)
+deliver:
 #endif
         for (i = 0; i < staged.length; i++) output->body[i] = staged.body[i];
         output->length = staged.length;
@@ -616,8 +761,14 @@ overflowed:
 #endif
         CHECK(stopped());
         status.phase = 6;
+#if defined(CC2530_RADIO_RX_ISR)
+        if (status.count || QUEUED) {
+            REQUIRE(!status.count || (status.signals & 0x40u) || complete_head(),
+                    RADIO_AUTOACK_FIFO_ERROR);
+#else
         if (status.count) {
             REQUIRE((status.signals & 0x40u) || complete_head(), RADIO_AUTOACK_FIFO_ERROR);
+#endif
             result = RADIO_AUTOACK_DRAIN;
         } else {
             REQUIRE(!(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
@@ -632,6 +783,9 @@ overflowed:
 #endif
             radio_autoack_state = work.profile ? RADIO_AUTOACK_OFF_NOACK : RADIO_AUTOACK_OFF;
             status.phase = 7;
+#if defined(CC2530_RADIO_RX_ISR)
+            if (rx_halt == 1u) rx_halt = 0;
+#endif
 #if defined(CC2530_RX_DIAG)
             RX_DIAG.off_stamp = work.start; RX_DIAG.flags = RX_DIAG_OFF_VALID;
 #endif
@@ -640,6 +794,7 @@ overflowed:
     }
 finished:
     status.result = result;
+    RX_RELEASE();
     return result;
 failed:
     radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
@@ -777,6 +932,7 @@ radio_autoack_result_t radio_autoack_send(
     diag_rx_on();
 #endif
     status.phase = 16; status.result = result;
+    RX_RELEASE();
     return result;
 failed:
     radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
@@ -1074,6 +1230,7 @@ complete:
     diag_rx_on();
 #endif
     status.phase = 21; status.result = received;
+    RX_RELEASE();
     return received;
 failed:
     radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;
@@ -1121,6 +1278,9 @@ uint8_t radio_autoack_handoff_eligible(void)
         work.cca == 4 && work.profile == 3 && !work.search_disabled &&
         work.prepared_length >= 3 && status.bytes_read == 6 &&
         staged.length == 3 && (staged.crc_correlation & 0x80u) &&
+#if defined(CC2530_RADIO_RX_ISR)
+        !QUEUED &&
+#endif
         (staged.body[0] & 7u) == 2u;
 }
 
@@ -1198,6 +1358,7 @@ radio_autoack_result_t radio_autoack_handoff(SDCC_VOLATILE uint32_t timeout,
     REQUIRE(!(status.flags0 & 2u), RADIO_AUTOACK_HANDOFF_RACE);
     radio_autoack_state = RADIO_AUTOACK_RX;
     status.phase = 23; status.result = RADIO_AUTOACK_READY;
+    RX_RELEASE();
     return RADIO_AUTOACK_READY;
 failed:
     radio_autoack_fault = result; radio_autoack_state = RADIO_AUTOACK_FAULT;

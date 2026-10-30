@@ -78,7 +78,8 @@ void host_mmio_xstore(uint16_t address, uint8_t value)
 {
     assert(xwrite_count < sizeof(xwrites) / sizeof(xwrites[0]));
     assert(host_mmio_xwrite_hook != NULL);
-    assert(!SOC_IEN0 && !SOC_IEN1 && !SOC_IEN2);
+    /* CC2530_RADIO_RX_ISR: EA/RFIE may be armed between radio operations. */
+    assert(!(SOC_IEN0 & CC2530_IEN0_GUARD) && !SOC_IEN1 && !(SOC_IEN2 & CC2530_IEN2_GUARD));
     xwrites[xwrite_count].address = address;
     xwrites[xwrite_count].value = value;
     xwrite_count++;
@@ -141,7 +142,7 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
                 assert(value == 0x1f && !SOC_IEN1 && !IRQ_T1CTL);
         } else
 #endif
-        assert(!SOC_IEN0 && !SOC_IEN1 && !SOC_IEN2);
+        assert(!(SOC_IEN0 & CC2530_IEN0_GUARD) && !SOC_IEN1 && !(SOC_IEN2 & CC2530_IEN2_GUARD));
     }
     writes[write_count].address = address;
     writes[write_count].before = *reg;

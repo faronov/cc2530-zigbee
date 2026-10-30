@@ -57,6 +57,14 @@ static uint32_t scan_watermark, race_generation;
 /* INDIRECT_KEY: parent queue release bookkeeping (polls seen when queued). */
 static unsigned queued_polls, released_frames;
 static uint8_t queued_seen;
+#if defined(CC2530_RADIO_RX_ISR)
+/* isr_live: dispatch the real RF vector body between driver steps whenever the
+ * production arm set (EA, IEN2.RFIE, RFIRQM0 FIFOP|RXPKTDONE) is live and the
+ * modeled FIFO holds a complete frame. Off for join-smoke/vector traces. */
+extern void radio_autoack_rx_isr(void);
+extern volatile uint8_t radio_autoack_rx_armed;
+static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts;
+#endif
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
         "BDB=%u result=%u driver=%u adapter=%u/%u MAC=%u/%u action=%u " \
@@ -521,6 +529,21 @@ static void race_after(uint8_t old_action, uint8_t old_radio, uint8_t old_phase)
     }
 }
 
+#if defined(CC2530_RADIO_RX_ISR)
+static void isr_dispatch(void)
+{
+    unsigned before;
+    if (!isr_live || !(SOC_IEN0 & 0x80) || !(SOC_IEN2 & 1) || XR(0x61a3) != 0x44 || !packets)
+        return;
+    CHECK(radio_autoack_rx_armed && !in_isr);
+    before = packets; in_isr = 1;
+    radio_autoack_rx_isr();
+    in_isr = 0; isr_runs++;
+    CHECK(packets <= before);
+    isr_frames += before - packets;
+}
+#endif
+
 static void tick_driver(void)
 {
     mac_link_driver_result_t result;
@@ -569,6 +592,9 @@ static void tick_driver(void)
         adapter_tx.engine.outcome == MAC_TX_ACKED;
     if (handoff_started) handoff_configured = 0;
     if (scenario == 7) blocked_action = driver.action;
+#if defined(CC2530_RADIO_RX_ISR)
+    isr_dispatch();
+#endif
     result = mac_link_driver_step(&driver);
     if (scenario == 7 && driver.dropped && !drop_checked) {
         const mac_adapter_observation_t *o = mac_adapter_observation();
@@ -731,6 +757,16 @@ static void run(unsigned selected)
     printf("E2E case%u: BDB=%u/%u driver=%u steps=%u checks=%u peer=%u TX=%u random=%u PASS\n",
         scenario,device.phase,device.result,driver.fault,e2e_steps,e2e_checks,
         link_peer_checks,link_peer_tx,random_inputs);
+#if defined(CC2530_RADIO_RX_ISR)
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !SOC_RFERRF) {
+        /* Controller error: the vector stops without consuming and disarms;
+         * the next operation owns the FIFO through the polled path. */
+        enqueue(20, 0xe9, 0x33);
+        SOC_RFERRF = 8; in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(!radio_autoack_rx_armed && !(SOC_IEN0 & 0x80) && packets == 1 && count == 21);
+        SOC_RFERRF = 0; isr_halts++;
+    }
+#endif
     totals += e2e_checks; total_peer_checks += link_peer_checks;
     total_steps += e2e_steps; total_random += random_inputs;
 }
@@ -744,6 +780,15 @@ int MAC_LINK_E2E_MAIN(void)
     for (i = 0; i < E2E_CASES; i++) run(i);
     /* Adapter-level AUTOACK RX loss inside an ACK window, LINK composition. */
     for (i = 4; i < 6; i++) loss_case(i);
+#if defined(CC2530_RADIO_RX_ISR)
+    /* Same scenarios with the RF vector body live between driver steps. */
+    isr_live = 1;
+    for (i = 0; i < E2E_CASES; i++) run(i);
+    isr_live = 0;
+    printf("MAC link E2E RX ISR: %u cases, %u dispatches, %u frames queued, %u halts PASS.\n",
+           E2E_CASES,isr_runs,isr_frames,isr_halts);
+    CHECK(isr_runs && isr_frames && isr_halts);
+#endif
     printf("MAC link E2E: %u cases, %u checks + %u peer checks, %u steps, %u test RANDOM inputs PASS.\n",
            E2E_CASES,totals,total_peer_checks,total_steps,total_random);
     return 0;

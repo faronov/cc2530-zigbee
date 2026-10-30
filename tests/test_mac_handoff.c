@@ -192,7 +192,11 @@ static void handoff_store(uint8_t a, uint8_t before, uint8_t value)
         SOC_RFIRQF1 = before & value;
         return;
     }
+#if defined(CC2530_RADIO_RX_ISR)
+    if (a == SOC_RFIRQF0_ADDRESS && value != 0xbb) {   /* 0xbb: RX ISR entry */
+#else
     if (a == SOC_RFIRQF0_ADDRESS) {
+#endif
         advance_clocks(mmio_clocks);
         assert(write_count == 1 && writes[0].address == a && writes[0].after == value && value == 0xfd);
         write_count = 0; logs();

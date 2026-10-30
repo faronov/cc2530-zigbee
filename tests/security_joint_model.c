@@ -196,6 +196,12 @@ static void store(uint8_t reg, uint8_t before, uint8_t value)
     if (reg == 0xc7) {
         logs();
         assert(value == 7 || value == 2 || value == 10);
+#if defined(CC2530_RADIO_RX_ISR)
+    } else if (reg == 0xa8) {
+        /* flash_exec EA-only clear/restore around the command window. */
+        logs();
+        assert(!active && (value == 0 || value == 0x80));
+#endif
     } else {
         assert(!active && SOC_MEMCTR == 2);
         aes_write(reg, before, value);

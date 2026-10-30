@@ -32,6 +32,31 @@ class Unmodelled(Exception):
     pass
 
 
+# The only interrupt the firmware may enable: RF vector 16 -> leaf RX ISR
+# (CC2530_RADIO_RX_ISR). Anything else in the vector table fails closed.
+ALLOWED_ISRS = {16: "radio_autoack_rx_isr"}
+
+
+def interrupt_roots(img):
+    """[(vector, isr_key)] for every populated vector; fail closed otherwise."""
+    roots = []
+    for s in img.elf.iter_sections():
+        if s.name == ".vectors":
+            if s["sh_size"] != 3:
+                raise Unmodelled(f".vectors is {s['sh_size']} bytes (reset LJMP only)")
+        elif s.name.startswith(".mcs51_vector_") and s["sh_size"]:
+            n = int(s.name[len(".mcs51_vector_"):])
+            name, data = ALLOWED_ISRS.get(n), s.data()
+            if name is None or name not in img.sym:
+                raise Unmodelled(f"unexpected interrupt vector {n}")
+            key = img.sym[name]
+            if len(data) != 3 or data[0] != 0x02 or (data[1] << 8 | data[2]) != key[1] or \
+                    key[0] != 0 or key[1] >= 0x8000:
+                raise Unmodelled(f"vector {n} is not LJMP to common {name}: {data.hex()}")
+            roots.append((n, key))
+    return roots
+
+
 class Image:
     def __init__(self, path):
         self.elf = ELFFile(open(path, "rb"))

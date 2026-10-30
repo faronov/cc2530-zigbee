@@ -106,6 +106,8 @@ typedef struct {
  * retry, RF-off promise or recovery API exists. Acquire still rejects OFF;
  * only explicit same-owner resume/send may rearm it. FAULT requires genuine full
  * reset. No other RF API may intervene. See docs/RADIO_AUTOACK.md.
+ * CC2530_RADIO_RX_ISR: valid operations clear IEN0.EA first and may leave it
+ * set on return in RX/RX_NOACK (RF vector 16 drains frames; "RX interrupt").
  */
 radio_autoack_result_t radio_autoack_acquire(
     const radio_autoack_config_t MCU_XDATA *configuration, uint32_t timeout, uint16_t limit);

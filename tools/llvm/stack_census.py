@@ -293,7 +293,10 @@ def main():
     chain = chain_of(img, mpath)
     levels, total, end = decompose(an, img, census, chain)
     assert end == 2 + mpeak, (end, mpeak)
-    report = dict(demand=2 + mpeak, capacity=128, interrupt_vectors_populated=0,
+    roots = SA.interrupt_roots(img)
+    isr = max((2 + an.function(key)[0] for _, key in roots), default=0)
+    report = dict(demand=2 + mpeak + isr, capacity=128, interrupt_vectors_populated=len(roots),
+                  isr_contribution=isr,
                   by_origin=dict(collections.Counter({"ret": 2}) + mcomp), by_category=dict(total),
                   worst_path=levels)
     paths = []

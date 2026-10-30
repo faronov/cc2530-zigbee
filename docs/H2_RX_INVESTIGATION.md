@@ -392,3 +392,21 @@ SMOKE and FULL, and it needs separate operator authorization.
    - a large `first_gap` / `max_service_gap` points to (a);
    - several parent-addressed retransmissions in the FIFO point to (b);
    - foreign frames in an `RX_NOACK` interval point to (c).
+
+## 15. LH7 first-cause evidence and RX interrupt remedy
+
+LH7 (H2 against the home ZHA network, EZSP, channel 15; PR #102) failed with BDB
+`KEY_TIMEOUT` after a successful Association (SUCCESS, short 0x0a7a, AUTOACKed). The
+107-byte APS Transport-Key, sent as sequences 62/63/64 over eight attempts, was never ACKed
+by H2. In each RX window a 93-byte NWK broadcast relayed by 0x0000 preceded it. The
+coordinator's post-join route storm repeated about every 10 ms, and 94 + 108 FIFO bytes
+exceed the 128-byte RXFIFO. A 61-byte Association Response at the same −85 dBm was ACKed,
+so signal level is not the cause. This selects hypothesis (a): foreground service gaps.
+
+**Remedy (source change, LLVM production image):** `CC2530_RADIO_RX_ISR` adds a leaf RF
+ISR. It runs only while IEN0.EA is set between owner operations and copies each complete
+FIFO head into a 4-slot XDATA queue. See `docs/RADIO_AUTOACK.md` "RX interrupt" for the
+contract, gates and limits. The stack proof now includes the ISR: 106 + 14 = 120 of 128
+bytes. Host E2E runs the real ISR against the MMIO model, and MCUEMU checks join function.
+A busy-PAN join on H2 (LH8) is the remaining hardware gate. Flash windows with EA cleared
+still use the existing RX_LOST path.

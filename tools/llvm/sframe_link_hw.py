@@ -60,8 +60,10 @@ EXTRA_P1 = ['-Wl,--noinhibit-exec']
 msg1, log1, elf1 = link(TAG + '-p1', P1, EXTRA_P1)
 if 'rc=0' not in msg1: sys.exit('pass 1 failed:\n' + log1[-3000:])
 img = sa.Image(elf1)
-vec = next(s for s in img.elf.iter_sections() if s.name == '.vectors')['sh_size']
-if vec > 3: sys.exit('FAIL CLOSED: interrupt vectors populated; ISR-reachable frames are not modelled')
+try:
+    roots = sa.interrupt_roots(img)
+except sa.Unmodelled as ex:
+    sys.exit('FAIL CLOSED: ' + str(ex))
 
 class Graph(sa.Analyzer):
     def __init__(s, i): super().__init__(i); s.edges = collections.defaultdict(set)
@@ -73,6 +75,17 @@ try:
     g.function(img.sym['main'])
 except sa.Unmodelled as ex:
     sys.exit('FAIL CLOSED: ' + str(ex))
+# An ISR may preempt any frame owner, so it must be a leaf that the foreground
+# never calls and must not own an overlaid static frame.
+for vec, key in roots:
+    if any(key in e for e in g.edges.values()):
+        sys.exit(f'FAIL CLOSED: foreground calls ISR {img.label(key)}')
+    try:
+        g.function(key)
+    except sa.Unmodelled as ex:
+        sys.exit('FAIL CLOSED: ' + str(ex))
+    if g.edges.get(key):
+        sys.exit(f'FAIL CLOSED: ISR {img.label(key)} calls {[img.label(c) for c in g.edges[key]]}')
 
 fr, groups = frames(elf1)
 def owner_key(obj, fn):
@@ -87,6 +100,7 @@ for obj, fn, sym, sz, _ in fr:
     if k is None: sys.exit(f'FAIL CLOSED: no owner for {sym} in {obj}')
     if k in size: sys.exit(f'FAIL CLOSED: two frames for {img.label(k)}')
     size[k] = sz; owner[(obj, sym)] = k
+if any(key in size for _, key in roots): sys.exit('FAIL CLOSED: ISR owns a static frame')
 
 # topological order of the reachable DAG (analyzer already rejected recursion)
 order = []; state = {}
