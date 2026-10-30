@@ -549,3 +549,40 @@ requires EMPTY with no RFD read, then the frame, then EMPTY; in case 0 it also
 requires that a second consecutive failure latches FIFO_ERROR. Two mutants
 fail it: one without the retry, and one with an unbounded retry. Image
 sleepy16 (`19dc4d17…`) carries the fix and reaches READY in MCUEMU.
+
+## 21. LH14: late arm is a T2M0 FF phase lock
+
+LH14 (image sleepy16) removed and re-added the device in ZHA. It joined and
+reached READY, then halted about 87 s after RF start with ATTEMPT_LATE_ARM in
+phase 19. The fault matched LH12:
+- `before`→`armed` was 1259 periods (≈20.1 ms; LH12: 1258).
+- The radio work counter was exactly **256 polls** in both runs (limit 512).
+- TX_ACTIVE was present at the first read after STXON (`wait` 0), so the
+  radio armed on time.
+- The LH13 `head_retry` was not involved (0).
+
+In the LINK build, `attempt_sample()` is `handoff_sample()`. Its loop is
+`mac_time_handoff_read()` (PENDING on a T2M0 FF) → `progress()` → polls<limit.
+Disassembly of sleepy16 shows this loop has no data-dependent branch, except
+the 16-bit `status.polls++` (`inc lo; jnz; inc hi`). It takes one extra
+instruction only on the 255→256 carry. The CPU and T2 share the 32 MHz clock.
+If the loop length is a multiple of 256 clocks, one FF read makes every later
+read FF too. The lock breaks only at the polls carry, which explains the fixed
+≈20 ms and polls = 256 in both runs. `operate()` and
+`mac_time_attempt_read()` have the same FF→poll structure.
+
+Fix: all three readers still discard the whole FF sample (SWRZ031 §1.2), but
+re-read T2M0 **at once**. That is a fresh full latch fewer than 256 clocks
+later, so it cannot be FF while the timer runs. Only a second FF (a stopped
+timer) falls back to the bounded poll loop. Every FF read counts in
+`discarded`.
+
+`tests/test_mac_handoff.c` adds a time-neutral phase-lock model: every T2M0
+read not directly preceded by another T2M0 read returns FF. Case 39 runs a
+second time under that model and must reach READY. Two mutants fail it: one
+without the handoff re-read (radio WORK_LIMIT, the LH14 mechanism) and one
+without the `operate()` re-read (timer WORK_LIMIT in `attempt_begin`).
+Guard-span cases 36–38 are shifted by one clock so the 511-clock boundary read
+is not itself an FF, and an assert now enforces that precondition. Image
+sleepy17 (`c7490c67…`, bank 6 free 5549) reaches READY in MCUEMU.
+

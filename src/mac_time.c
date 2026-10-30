@@ -206,8 +206,14 @@ static mac_time_result_t operate(uint8_t initialize, uint32_t timeout, uint16_t 
         /* SWRZ031 1.2: a low FF can be paired with next-cycle upper bytes.
          * Save the destructive read ONCE. Discard the WHOLE sample on FF;
          * a later read must trigger a new complete latch, never reuse bytes.
+         * Re-latch at once: a fixed-length retry loop can phase-lock on FF
+         * (H2 LH12/LH14); a read d<256 clocks later cannot be FF again.
          */
         low = MMIO_READ(SOC_T2M0);
+        if (low == 255) {
+            status.discarded++;
+            low = MMIO_READ(SOC_T2M0);
+        }
         if (low == 255) {
             status.discarded++; POLL();
             REQUIRE(status.control == 13, MAC_TIME_STATE_CHANGED);
@@ -295,8 +301,12 @@ mac_time_result_t mac_time_attempt_read(uint32_t timeout, uint16_t limit,
     fast = 1;
     for (;;) {
         if (status.polls == limit) { result = MAC_TIME_WORK_LIMIT; break; }
-        /* The same common live latch and whole-FF discard, SWRZ031 1.2. */
+        /* The same common live latch, whole-FF discard and re-latch, SWRZ031 1.2. */
         low = MMIO_READ(SOC_T2M0);
+        if (low == 255) {
+            status.discarded++;
+            low = MMIO_READ(SOC_T2M0);
+        }
         if (low != 255) {
             high = MMIO_READ(SOC_T2M1);
             a = MMIO_READ(SOC_T2MOVF0);
@@ -338,6 +348,8 @@ mac_time_result_t mac_time_handoff_read(void)
     if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
     if (!mac_time_ready || !mac_time_attempt_active) return MAC_TIME_NOT_INITIALIZED;
     low = MMIO_READ(SOC_T2M0);
+    /* Whole-FF discard and immediate re-latch, as in operate(). */
+    if (low == 255) low = MMIO_READ(SOC_T2M0);
     if (low == 255) {
         status.result = MAC_TIME_PENDING;
         return MAC_TIME_PENDING;
