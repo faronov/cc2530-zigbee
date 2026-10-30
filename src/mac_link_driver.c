@@ -112,8 +112,10 @@ static uint8_t observe(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
     }
 #endif
     /* Receive loss is an accepted, reported outcome of a scan window, and of
-     * runtime RX, where only never-ACKed frames can be lost. */
+     * association and runtime RX, where only never-ACKed frames can be lost:
+     * their senders retry, as after an over-air loss. */
     if (o->lossy && d->join->phase != BDB_JOIN_SCANNING &&
+        d->join->workspace != BDB_JOIN_WORK_ASSOCIATION &&
         d->join->workspace != BDB_JOIN_WORK_RUNTIME) {
         fault(d, MAC_LINK_DRIVER_COVERAGE); return 0;
     }

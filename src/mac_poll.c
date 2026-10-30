@@ -543,13 +543,14 @@ static mac_poll_result_t step(void)
                             || (!unbound && (decoded.header.source_mode != control.request.coordinator_mode
                                 || memcmp(decoded.header.source, control.request.coordinator, 8))))
                         observation = MAC_POLL_OBS_FOREIGN;
-#if defined(CC2530_MAC_LINK)
-                    else if (!reached(control.accept_end, input.stamp))
-                        drain(MAC_POLL_TIMING_UNCERTAIN);
-                    else if (control.timeout_pending)
-                        drain(MAC_POLL_ORDER_ERROR);
-#endif
                     else {
+#if defined(CC2530_MAC_LINK)
+                        /* Arrived before CLOSED, so RX was still on and
+                         * AUTOACK already confirmed it to the sender. The
+                         * stamp is only a software observation bound, which
+                         * proves nothing about lateness. */
+                        control.timeout_pending = 0;
+#endif
                         memcpy(receipt->body, input.body, input.length);
                         receipt->length = (uint8_t)input.length;
                         receipt->payload_offset = decoded.payload_offset;

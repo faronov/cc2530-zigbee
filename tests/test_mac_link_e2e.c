@@ -48,11 +48,11 @@ static uint32_t bad_serial;
 static uint8_t bad_checked;
 enum {
     POLL_NO_ACK = 8, POLL_BUSY, IMMEDIATE_RESPONSE, BROADCAST_DRAIN, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
-    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, E2E_CASES
+    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, ASSOCIATION_OVERFLOW, E2E_CASES
 };
 static unsigned poll_attempts, closed_checked, race_started, race_disarmed, race_completed;
 static unsigned race_random, race_tx, retire_wait, timeout_started, early_acks;
-static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked;
+static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked, overflow_sent;
 static uint32_t scan_watermark, race_generation;
 /* INDIRECT_KEY: parent queue release bookkeeping (polls seen when queued). */
 static unsigned queued_polls, released_frames;
@@ -205,7 +205,7 @@ static void cold_start(void)
     bad_serial = 0; bad_checked = 0;
     poll_attempts = closed_checked = race_started = race_disarmed = race_completed = 0;
     race_random = race_tx = retire_wait = timeout_started = early_acks = 0;
-    broadcast_sent = drain_delayed = foreign_sent = early_key_acked = 0;
+    broadcast_sent = drain_delayed = foreign_sent = early_key_acked = overflow_sent = 0;
     scan_watermark = race_generation = 0;
     queued_polls = released_frames = queued_seen = 0;
 }
@@ -372,6 +372,22 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
         mac_adapter_diagnostic()->normal_rx && dev->phase == BDB_JOIN_ASSOCIATING &&
         dev->work.association.context.poll.control.phase == MAC_POLL_RECEIVE &&
         tx->engine.phase == MAC_TX_DONE) {
+        if (scenario == ASSOCIATION_OVERFLOW && !overflow_sent) {
+            /* Busy PAN: a broadcast, then an incomplete frame overflows the
+             * FIFO. The withheld Response was never ACKed, as when lost. */
+            uint8_t broadcast[57];
+            unsigned i;
+            broadcast[0] = 0x41; broadcast[1] = 0x88; broadcast[2] = 0x4d;
+            broadcast[3] = (uint8_t)link_identity.pan; broadcast[4] = (uint8_t)(link_identity.pan >> 8);
+            broadcast[5] = broadcast[6] = 0xff; broadcast[7] = 0x22; broadcast[8] = 0x2f;
+            for (i = 9; i < sizeof(broadcast); i++) broadcast[i] = (uint8_t)(i * 3u);
+            air_frame(broadcast, sizeof(broadcast), 1);
+            CHECK(!ack_active);
+            inject_overflow(127);
+            overflow_sent = 1; command_wait = 0;
+            return;
+        }
+        /* Slow foreground: the AUTOACKed Response is observed after A+F. */
         if (scenario == 4) advance_clocks(320u*512u);
         if (scenario == 2) {
             link_response[link_response_length-3] = 255;
@@ -625,9 +641,10 @@ static void run(unsigned selected)
         }
         tick_driver();
     }
-    if (scenario == 0 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
+    if (scenario == 0 || scenario == 4 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
         scenario == IMMEDIATE_RESPONSE || scenario == BROADCAST_DRAIN ||
-        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == INDIRECT_KEY || scenario == 7) {
+        scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == INDIRECT_KEY || scenario == 7 ||
+        scenario == ASSOCIATION_OVERFLOW) {
         if (device.phase != BDB_JOIN_READY)
             fprintf(stderr, "scan reason=%u unscanned=%lu candidates=%u peerTX=%u cmd=%u rx=%u through=%lu\n",
                 device.scan_result.reason,(unsigned long)device.scan_result.unscanned,
@@ -676,6 +693,7 @@ static void run(unsigned selected)
         CHECK(early_acks == (scenario == IMMEDIATE_RESPONSE));
         CHECK(drain_delayed == (scenario == BROADCAST_DRAIN) && broadcast_sent == drain_delayed);
         CHECK(foreign_sent == (scenario == POLL_BUSY));
+        CHECK(overflow_sent == (scenario == ASSOCIATION_OVERFLOW));
         CHECK(early_key_acked == (scenario == EARLY_KEY));
         CHECK(driver.dropped == (scenario == 7) && drop_checked == (scenario == 7));
         /* Every peer frame after association, the corrupted TK included,
@@ -691,11 +709,6 @@ static void run(unsigned selected)
     } else if (scenario == 3) {
         CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_KEY_TIMEOUT);
         CHECK(!transport_sent && !device.member);
-    } else if (scenario == 4) {
-        CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_ASSOCIATION_FAILED);
-        CHECK(device.record.reason == MAC_JOIN_TIMING_UNCERTAIN &&
-              device.record.association.outcome != MAC_ASSOCIATION_RESPONSE &&
-              !device.record.poll.protocol && !device.record.cleanup_error);
     } else if (scenario == 5) {
         mac_link_driver_t before = driver;
         CHECK(faulted && driver.fault == MAC_LINK_DRIVER_RADIO &&

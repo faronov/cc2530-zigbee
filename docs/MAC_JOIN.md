@@ -388,8 +388,8 @@ the join owner is `mac_tx_interval_t` and the `radio` action is a
 observed step described in MAC_POLL.md. `record.request_ack` is the Request
 ACK's `ceil(upper)` rather than a captured end. Extraction preparation waits
 until at least `request_ack + R`, so the true ACK end plus
-macResponseWaitTime has elapsed. A Request `TIMING_UNCERTAIN` or POLL
-`MAC_POLL_TIMING_UNCERTAIN` is a local abort,
+macResponseWaitTime has elapsed. A Request or POLL Data Request ACK
+`TIMING_UNCERTAIN` is a local abort,
 `MAC_JOIN_TIMING_UNCERTAIN` (10). It is never a fabricated protocol
 outcome. Retries, refusal and Response semantics are unchanged.
 

@@ -207,7 +207,16 @@ static void window(void)
     if (!j->window && j->poll.control.ack_seen && ENGINE(LJ_OWNER)->pending) {
         memset(&ar, 0, sizeof(ar));
         ar.epoch = j->request.extraction.epoch;
+#if defined(CC2530_MAC_LINK)
+        /* POLL owns the RX window: it delivers only frames received before
+         * its CLOSED, stamped by a late software observation bound. This
+         * context classifies that delivery within the POLL lifetime. */
+        ar.lifetime = j->poll.control.deadline - j->poll.control.ack_end;
+        if (ar.lifetime - 1u >= MAC_ASSOCIATION_MAX_LIFETIME)
+            ar.lifetime = MAC_ASSOCIATION_MAX_LIFETIME;
+#else
         ar.lifetime = j->request.extraction.frame_wait + 1u;
+#endif
         ar.work_limit = 2;
         ar.pan_id = j->request.extraction.pan;
         ar.channel = j->request.extraction.channel;
