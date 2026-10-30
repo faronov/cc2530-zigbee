@@ -121,7 +121,13 @@ Three consumer checks changed, all only under `CC2530_MAC_LINK`:
   MAC's own closed-ACK-window or CCA evidence. The adapter is already OFF and
   drained before the later report. Its CLOSED watermark therefore need not
   reach that report stamp. The CLOSED delivery ordering, timeout coverage
-  through `receive_end` and frame/PENDING_ZERO coverage checks are unchanged.
+  through `receive_end` and PENDING_ZERO coverage checks are unchanged.
+- **POLL frame closure.** A frame delivered before CLOSED was received with
+  RX on and AUTOACKed. With the RF RX ISR it may sit in the software queue
+  until the stop drains it; the adapter then stamps it at pop time, after the
+  pre-stop watermark. CLOSED therefore need not cover a frame decision's
+  stamp. Hardware trial LH8 failed exactly so: a queued Association Response
+  closed as ADAPTER_ERROR, then CLEANUP_FAILED and ASSOCIATION_FAILED.
 
 ## Evidence
 
@@ -175,8 +181,9 @@ cancel/stop (cancel case) and retry re-ARM suppression (retry-retirement case).
 
 The link corpora now cover ARM/ARMED, retry re-arming, DISARM, cancellation
 and lifetime while waiting, wrong identities and FAILURE. POLL/join has
-146 cases and 8191 checks, including NO_ACK closure and rejected future
-watermark, frame and PENDING_ZERO coverage. The scan corpus adds the delayed CLOSED
+152 cases and 8787 checks, including NO_ACK closure, rejected future
+watermark, PENDING_ZERO coverage and a drained frame stamped after the
+pre-stop watermark. The scan corpus adds the delayed CLOSED
 watermark.
 
 `test-mac-link` also compiles the driver composition with SDCC 4.2.0

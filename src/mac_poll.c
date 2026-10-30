@@ -578,8 +578,11 @@ static mac_poll_result_t step(void)
 #if defined(CC2530_MAC_LINK)
                     /* TX_RESULT is backed by MAC CCA/closed-ACK-window
                      * evidence, not RX through its later delivery stamp.
-                     * OFF/drain is still required; no post-stop coverage. */
-                    receipt->cause != MAC_POLL_TX_RESULT &&
+                     * A delivered frame preceded CLOSED and was AUTOACKed
+                     * with RX on; its stamp is a pop-time observation bound
+                     * that may follow the pre-stop watermark when the stop
+                     * drains a queued frame. Only PENDING_ZERO needs it. */
+                    receipt->cause == MAC_POLL_PENDING_ZERO &&
 #endif
                     !reached(input.through, receipt->stamp)))
             drain(MAC_POLL_ADAPTER_ERROR);

@@ -216,7 +216,9 @@ mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
  * normal RX. Acceptance remains after A through A+F; absent-data closure still
  * requires a loss-free watermark through B+F and all ACK/IFS duties.
  * TX_RESULT (NO_ACK/CHANNEL_ACCESS) instead relies on MAC window/CCA evidence:
- * CLOSED need not cover its later report stamp. Frame/PENDING_ZERO decisions,
+ * CLOSED need not cover its later report stamp. Nor need it cover a frame
+ * decision: that frame preceded CLOSED and was AUTOACKed with RX on, and a
+ * stop that drains it stamps it after the pre-stop watermark. PENDING_ZERO,
  * timeout_pending coverage and through <= CLOSED delivery time are unchanged.
  */
 #else

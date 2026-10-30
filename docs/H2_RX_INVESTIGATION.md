@@ -410,3 +410,24 @@ contract, gates and limits. The stack proof now includes the ISR: 106 + 14 = 120
 bytes. Host E2E runs the real ISR against the MMIO model, and MCUEMU checks join function.
 A busy-PAN join on H2 (LH8) is the remaining hardware gate. Flash windows with EA cleared
 still use the existing RX_LOST path.
+
+## 16. LH8: queued Association Response rejected at POLL closure
+
+LH8 ran the RX ISR image (`2fa4f9cd…`) against the same network and failed with BDB
+`ASSOCIATION_FAILED`. The terminal XDATA snapshot shows that the radio path worked. The ISR
+had queued two Association Responses (SUCCESS, short 0xcf4d, CRC OK), and the association
+record decoded one as a response. The failure came from the POLL layer instead:
+
+- ACK end 45949, receive end 47985, response stamp 48666 (symbols).
+- The receive window expired first. The POLL drained, and the adapter took its pre-stop
+  watermark.
+- The stop then popped the queued response, stamping it at the pop time, 681 symbols after
+  `receive_end`.
+- The LINK POLL accepts such an AUTOACKed frame (commit `0d8c0e1`). The CLOSED check still
+  required `through >= stamp`, so it reported `ADAPTER_ERROR`. That became `CLEANUP_FAILED`,
+  `MAC_JOIN_POLL_ERROR` and then `ASSOCIATION_FAILED`.
+
+The check compared an observation upper bound with a coverage lower bound. LINK CLOSED now
+requires stamp coverage only for PENDING_ZERO. A delivered frame preceded CLOSED, and the
+radio AUTOACKed it while RX was on. `tests/test_mac_link_join.c` reproduces the LH8 order:
+the old code fails and the fix passes. A busy-PAN hardware join (LH9) remains the gate.

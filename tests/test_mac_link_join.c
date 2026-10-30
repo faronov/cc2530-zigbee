@@ -365,13 +365,16 @@ static void late_observed_frame(uint8_t nested, uint8_t timed_out, uint32_t star
         tick(NULL);
         CHECK(consumer()->control.timeout_pending);
     }
-    frame_event(timed_out ? b + 300u : a + 301u, 1, 1, sizeof(response));
+    /* timed_out: the stop began at receive_end (watermark), then drained
+     * a queued response and stamped it 681 symbols later (LH8). */
+    frame_event(timed_out ? b + 981u : a + 301u, 1, 1, sizeof(response));
     tick(&event);
     CHECK(!consumer()->control.reason && !consumer()->control.timeout_pending);
     CHECK(consumer()->record.protocol == MAC_POLL_NO_DATA && consumer()->record.cause == MAC_POLL_COMMAND);
     CHECK(consumer()->record.length == sizeof(response));
     if (nested) CHECK(join.record.association.outcome == MAC_ASSOCIATION_RESPONSE && !join.record.reason);
-    close_poll(now);
+    close_poll(timed_out ? b + 300u : now);
+    CHECK(consumer()->control.closed && !consumer()->control.reason && !consumer()->control.cleanup_error);
     finish();
     cases++;
 }
@@ -807,7 +810,10 @@ static void tx_result_closed(uint8_t nested, uint8_t future)
 
 static void decision_requires_coverage(uint8_t pending)
 {
-    case_name = "FRAME-or-PENDING_ZERO-still-needs-coverage";
+    /* PENDING_ZERO is ACK-backed and still needs closure coverage. A FRAME
+     * delivered before CLOSED was AUTOACKed with RX on; its pop-time stamp
+     * may follow the pre-stop watermark when the stop drains it (LH8). */
+    case_name = pending ? "PENDING_ZERO-still-needs-coverage" : "FRAME-before-CLOSED-needs-no-coverage";
     if (pending) {
         begin(0, 100, 1, 256, 100000);
         prepare(); poll_ack(0);
@@ -818,6 +824,13 @@ static void decision_requires_coverage(uint8_t pending)
     }
     CHECK(poll.record.protocol && poll.record.cause != MAC_POLL_TX_RESULT);
     close_poll(poll.record.stamp-1u);
+    if (!pending) {
+        CHECK(poll.control.closed && !poll.control.reason && !poll.control.cleanup_error);
+        finish();
+        CHECK(poll_record.cause == MAC_POLL_COMMAND);
+        cases++;
+        return;
+    }
     CHECK(!poll.control.closed && poll.control.reason == MAC_POLL_ADAPTER_ERROR);
     close_poll(now);
     CHECK(poll.control.phase == MAC_POLL_FAULT && mac_poll_release(&poll, &tx) == MAC_POLL_STATE);
@@ -842,6 +855,7 @@ int main(void)
             }
             uncertain_ack(1, 1, start, phases[f]);
             late_observed_frame(0, 1, start, phases[f]);
+            late_observed_frame(1, 1, start, phases[f]);
             timeout(0, start, phases[f]);
             timeout(1, start, phases[f]);
         }
