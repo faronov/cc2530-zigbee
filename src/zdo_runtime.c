@@ -298,8 +298,9 @@ zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(zdo_runtime_t * SDCC_VOLAT
         if (nwk_aps_confirm(transport, &result) != NWK_APS_OK) return ZDO_RUNTIME_TRANSMIT;
         if (ctx->query_tx) {
             ctx->query_tx = 0; ctx->tx_done = 1;
+            /* A cancelled delivery is not a lost one: BDB retries TRANSMIT only. */
             if (result && ctx->result != ZDO_RUNTIME_TIMEOUT && ctx->result != ZDO_RUNTIME_CANCELLED)
-                ctx->result = ZDO_RUNTIME_TRANSMIT;
+                ctx->result = result == NWK_APS_CANCELLED ? ZDO_RUNTIME_CANCELLED : ZDO_RUNTIME_TRANSMIT;
         } else {
             ctx->response_tx = 0; ctx->response_result = result;
             if (result) return ZDO_RUNTIME_DROPPED;
