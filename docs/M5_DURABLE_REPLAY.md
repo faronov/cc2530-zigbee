@@ -74,12 +74,12 @@ The modified field is one four-byte exclusive incoming replay floor; the chosen
 and one post-commit check account for seven 2048-byte traversals. The additional
 361 read bytes are erase preflight plus per-word preflight/readback.
 
-The extra two replacements are real amplification, not required reception
-writes: `security_counter_save` abandons both remaining outgoing reservations.
-The next allocation in each domain reserves again. A replay-only operation
-could retain live cursors **only while both persisted outgoing ceilings and
-all non-replay context remain unchanged**. A true reset must still start from
-the durable ceilings, never the abandoned volatile cursors.
+The audit measures the two allocations after a reset, where each domain must
+reserve from its durable ceiling. `security_counter_save` originally also
+abandoned both live outgoing reservations, so the same two replacements
+followed every save. It now rewrites both ceilings unchanged and retains the
+live cursors, which stay below them; saves no longer cause refills. A true
+reset still starts from the durable ceilings, never the volatile cursors.
 
 The baseline audit passes 8673 checks in both native and nonrecovering sanitizer
 builds, including 1582 command/reset cuts. Of those cuts, 1574 fail closed, two

@@ -276,11 +276,9 @@ result = current();
     if (result != SECURITY_COUNTER_OK)
         return CW_RETURN(CW_COUNTER_SAVE,result);
     payload(data, length);
+    /* The durable ceilings are rewritten unchanged, so the live cursors stay
+     * below them and remain valid; the next allocations need no refill. */
     result = commit(poll_limit);
-    if (result == SECURITY_COUNTER_OK) {
-        D.next[0] = D.until[0];
-        D.next[1] = D.until[1];
-    }
     return CW_RETURN(CW_COUNTER_SAVE,result);
 }
 

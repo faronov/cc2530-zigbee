@@ -52,7 +52,7 @@ static void nv_roundtrip_alias(void)
     NV_CHECK(security_counter_status()->until[0]==512 && nv_record_status()->generation==2);
     payload[7]^=0x80;
     NV_CHECK(security_counter_save(payload,112,64)==SECURITY_COUNTER_OK);
-    NV_CHECK(security_counter_status()->next[0]==512 && nv_record_status()->generation==3);
+    NV_CHECK(security_counter_status()->next[0]==257 && nv_record_status()->generation==3);
     NV_CHECK(security_joint_flash_commands()==114);
     memset(out,0xa5,sizeof(out));n=0x9a;
     NV_CHECK(security_counter_read(out,112,&n)==SECURITY_COUNTER_OK && n==112);

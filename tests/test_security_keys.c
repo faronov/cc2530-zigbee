@@ -938,7 +938,7 @@ static void local_leave(void)
               output.length == 2 && output.payload[0] == 4 && output.payload[1] == 0);
         CHECK(security_counter_status()->until[0] > first_count &&
               security_counter_status()->until[1] == aps_until &&
-              security_counter_status()->next[0] == security_counter_status()->until[0] &&
+              security_counter_status()->next[0] == first_count+1 && /* save retains cursors */
               security_counter_status()->next[1] == aps_until);
         retained_leave_record(before);
         reboot(NULL,SECURITY_KEYS_LEFT); retained_leave_record(before);

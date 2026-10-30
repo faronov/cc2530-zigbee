@@ -934,8 +934,9 @@ static void keepalive_storage(void)
     /* ED Timeout request/response keepalives are volatile: a READY device
      * can refresh its parent indefinitely without consuming NV erase budget. */
     ready();
-    /* The rejected old-key Confirm in deliver() also consumes its APS floor. */
-    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 10);
+    /* The rejected old-key Confirm in deliver() also consumes its APS floor.
+     * Snapshot saves keep live counter ranges, so no refill follows a save. */
+    CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1) == 8);
     commands = security_joint_flash_commands();
     for (cycle = 0; cycle < 17 && device.phase == BDB_JOIN_READY; cycle++) {
         uint32_t previous = device.keepalive;
@@ -2190,17 +2191,19 @@ static void recovery_storage(void)
 static void recovery_counters(void)
 {
     /* Near-exhausted NWK counters: recovery fails explicitly, never reuses. */
+    unsigned round;
     nwk_floor_start = 0xffffffffUL-3u*SECURITY_COUNTER_RANGE;
     ready(); nwk_floor_start = 1;
-    for (iterations = 0; iterations < 8; iterations++) {
+    /* recover() reuses the global iteration counter. */
+    for (round = 0; round < 8; round++) {
         power_cycle(); resume(); recover();
         if (device.phase != BDB_JOIN_READY) break;
         recovered();
     }
-    CHECK(iterations < 8 && device.phase == BDB_JOIN_FAILED);
+    CHECK(round < 8 && device.phase == BDB_JOIN_FAILED);
     CHECK(device.result == BDB_JOIN_SECURITY || device.result == BDB_JOIN_TRANSMIT_FAILED);
     CHECK(!runtime.transport.ready && !device.member);
-    printf("M5 counter exhaustion after %u recoveries, result %u\n", iterations, device.result);
+    printf("M5 counter exhaustion after %u recoveries, result %u\n", round, device.result);
 }
 
 int main(void)
