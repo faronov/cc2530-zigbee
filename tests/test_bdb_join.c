@@ -42,6 +42,8 @@ static uint32_t settle;
 static uint8_t leave_sent;
 static uint8_t wrap_mode, drop_all_acks;
 static uint8_t phy_busy, phy_lose, mute_timeout;
+static uint8_t busy_phase, busy_attempts;
+static unsigned busy_until;
 static unsigned lost_frames, muted, busy_events;
 static const uint8_t *aux_source;
 static uint16_t expected_reply_cluster;
@@ -573,6 +575,11 @@ static void commission(void)
     for (iterations = 0; iterations < 512 &&
         device.phase != BDB_JOIN_READY && device.phase < BDB_JOIN_FAILED; iterations++) {
         drive();
+        if (busy_phase) {
+            if (device.phase == busy_phase && !busy_events) phy_busy = 1;
+            if (phy_busy && (busy_events >= busy_until || device.phase != busy_phase)) phy_busy = 0;
+            if (device.phase == busy_phase && device.attempts > busy_attempts) busy_attempts = device.attempts;
+        }
         if (device.phase == BDB_JOIN_WAIT_KEY && !initial_key && test_case != 1) initial_transport();
         if (pending && device.workspace == BDB_JOIN_WORK_RUNTIME &&
             !runtime.transport.active && device.phase >= BDB_JOIN_WAIT_KEY) {
@@ -599,6 +606,36 @@ static void commission(void)
         }
     }
     CHECK(iterations < 512);
+}
+
+static void drain(void);
+
+/* LH11: one CSMA failure of a join-time request is retried; a sustained one
+ * exhausts the attempt budget. Five busy CCAs fail one MAC transmission. */
+static void transient_transmit(void)
+{
+    static const uint8_t phases[] = {
+        BDB_JOIN_NODE, BDB_JOIN_REQUESTING, BDB_JOIN_VERIFYING, BDB_JOIN_PARENT
+    };
+    uint8_t i, sustained;
+    for (i = 0; i < sizeof(phases); i++) {
+        for (sustained = 0; sustained < 2; sustained++) {
+            test_case = 0; setup();
+            busy_phase = phases[i]; busy_attempts = 0;
+            busy_until = sustained ? 0xffffu : 5u;
+            commission(); drain();
+            busy_phase = 0;
+            if (!sustained) {
+                CHECK(busy_events == 5 && busy_attempts == 2);
+                CHECK(device.phase == BDB_JOIN_READY && runtime.transport.ready && device.member);
+            } else {
+                CHECK(busy_events == 5u*BDB_JOIN_ATTEMPTS && busy_attempts == BDB_JOIN_ATTEMPTS);
+                CHECK(device.phase == BDB_JOIN_FAILED && !device.member && leave_sent);
+                CHECK(device.result == (phases[i] == BDB_JOIN_NODE ? BDB_JOIN_TC_FAILED :
+                    phases[i] == BDB_JOIN_PARENT ? BDB_JOIN_PARENT_FAILED : BDB_JOIN_TRANSMIT_FAILED));
+            }
+        }
+    }
 }
 
 static void ready(void)
@@ -2414,6 +2451,7 @@ int main(void)
             CHECK(test_case == 1 ? runtime.transport.quiet && !leave_sent : leave_sent && !runtime.transport.quiet);
         }
     }
+    transient_transmit();
     operational_failures(); update_pending_query(); response_backpressure();
     work_and_deadlines(); stopped_transport(); keepalive_storage(); terminal_control();
     phase_storage(); rejected_start_storage(); transport_configuration();

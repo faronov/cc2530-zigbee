@@ -465,3 +465,33 @@ A head left behind this way is read at the next RXPKTDONE or the next foreground
 `tests/test_mac_link_e2e.c` adds an in-flight tail that is later rolled back; the old ISR
 and the old foreground rule each read it. It also adds a finished head followed by a frame
 in reception, which must still be queued. Image sleepy13 (`911a3529…`) carries the fix.
+
+## 18. LH11: one busy CCA aborted the TC Node Descriptor query
+
+LH11 ran sleepy13 against the same ZHA network. It associated at +43.6 s
+(short 0x3a3a), took the network key and broadcast Device_annce at +45.37 s.
+About seven routers re-broadcast that announce during the next ~70 ms. The
+device's own Node_Desc_req to the TC (NWK frame counter 1) never appeared on
+air. Its Node_Desc_rsp to zigpy's request (counter 2) did, at +45.74 s, and a
+NWK Leave followed at +46.59 s.
+
+The halt snapshot shows:
+- BDB FAILED with `TC_FAILED`, attempts 1, `got_tc` 0.
+- ZDO `result` 7 (`ZDO_RUNTIME_TRANSMIT`) and an all-zero TC descriptor.
+
+`zdo_runtime` sets TRANSMIT only when the query's transport confirm is
+non-zero. In NODE, `bdb_join` retried only TIMEOUT, so one failed MAC delivery
+during the announce re-broadcast burst ended commissioning. PARENT and the
+Request-Key/Verify-Key transmissions had the same single-shot rule. READY
+keepalives already retried TRANSMIT.
+
+These phases now retry TIMEOUT and TRANSMIT alike within `BDB_JOIN_ATTEMPTS`.
+`tests/test_bdb_join.c` (`transient_transmit`) injects five busy CCAs (one MAC
+channel-access failure) into NODE, REQUESTING, VERIFYING and PARENT:
+- One failure must still reach READY with exactly two attempts.
+- Sustained busy must fail after three attempts with TC_FAILED, TRANSMIT_FAILED
+  or PARENT_FAILED.
+
+The previous source, and a mutant without the key-exchange retry, both fail.
+Image sleepy14 (`8e2c40ec…`) carries the fix.
+
