@@ -68,7 +68,7 @@ class LLVMOnlyBuild(unittest.TestCase):
                 self.assertEqual("-DCC2530_REPLAY_POLICY_C" in command, bool(policy))
                 self.assertNotIn("sdcc ", out)
         result = subprocess.run(
-            ["make", "-n", "JOIN_SMOKE_REPLAY_POLICY_C=1"],
+            ["make", "-n", "JOIN_SMOKE_PARENT_RECOVERY=0", "JOIN_SMOKE_REPLAY_POLICY_C=1"],
             cwd=firmware.REPO, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("requires JOIN_SMOKE_PARENT_RECOVERY=1", result.stderr)

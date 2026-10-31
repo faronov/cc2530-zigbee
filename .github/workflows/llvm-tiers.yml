@@ -26,7 +26,7 @@ on:
         description: firmware variant (parent-recovery is strict; parent-recovery-policy-c uses RAM replay floors)
         type: choice
         options: [production, rx-diag, parent-recovery, parent-recovery-policy-c]
-        default: production
+        default: parent-recovery
       llvm_repository:
         description: LLVM-MCS51 repository
         default: faronov/llvm-project
@@ -46,7 +46,7 @@ on:
         required: true
       variant:
         type: string
-        default: production
+        default: parent-recovery
       llvm_repository:
         type: string
         default: faronov/llvm-project
@@ -64,7 +64,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: llvm-tiers-${{ github.repository }}-${{ github.ref }}-${{ inputs.tier || github.event_name }}-${{ inputs.variant || 'production' }}
+  group: llvm-tiers-${{ github.repository }}-${{ github.ref }}-${{ inputs.tier || github.event_name }}-${{ inputs.variant || 'parent-recovery' }}
   cancel-in-progress: ${{ inputs.tier != 'full' }}
 
 env:
@@ -108,7 +108,7 @@ jobs:
         id: select
         env:
           TIER: ${{ inputs.tier || (github.event_name == 'pull_request' && 'smoke' || 'fast') }}
-          VARIANT: ${{ inputs.variant || 'production' }}
+          VARIANT: ${{ inputs.variant || 'parent-recovery' }}
           LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
           LLVM_REF: ${{ inputs.llvm_ref || 'ac1712447bf906daddba44f79e586173a045aa1f' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
