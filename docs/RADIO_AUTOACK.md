@@ -347,7 +347,8 @@ storms while the foreground was in crypto/NWK work between radio operations
   The foreground uses the same rule (`finished_head()`) for heads left with FIFOP low. If its
   first `consume()` recheck of such a head fails before any byte is read, that receive ends
   EMPTY once and the next one reads the head; a second consecutive failure is fatal (H2 LH13,
-  section 20; evidence in `head_trace`). A finished head whose PHR is below the
+  section 20; evidence in `head_trace`). Once `finished_head()` holds, RXFIRST is not read
+  again before the head read (H2 LH18, section 27). A finished head whose PHR is below the
   5-octet minimum PSDU (IEEE 802.15.4-2006 §7.2.2.3) is a runt: the ISR reads and
   drops its PHR bytes and continues; the foreground `discard_head()` does the same
   (live RX ends EMPTY, a stopped drain continues to the next head, the ACK window

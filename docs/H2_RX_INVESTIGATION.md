@@ -651,3 +651,42 @@ Endpoint Request (t 73.14) was answered at once and the whole interview took
 Request (t 44.77, DR 1) arriving during the TCLK exchange is MAC-acked but
 lost. The device does not poll for ~1.6 s before Request Key (and ~1.75 s
 before Verify Key); that stall is the next item.
+
+## 26. LH17 pre-key stall: redundant NV selection scans
+
+The ~1.6 s silence before Request Key/Verify Key was NV work, not radio. Each
+security step persists the replay/frame-counter record, and every
+`nv_record_replace()` (plus its verifying load) re-ran the two-page selection
+scan: 7 full traversals of 2 KB of flash per save. `nv_record` now reuses the
+previous clean selection (phase 8, OK, no recovery) under the existing
+no-other-writer contract and rechecks only the selected page; any mismatch
+falls back to a full selection, so ROLLBACK and recovery detection are
+unchanged (`docs/NV_RECORDS.md`). A save now costs 3 traversals; the pinned
+parent-storage audit moved from 14697/539 to 6505/283 reader calls/polls and
+the policy-C `fail_read` budget from 12650 to 4458. In MCUEMU the gaps between
+security steps shrank by ~40%. LH18 (same fix) reached "node in ZHA" at
++37.8 s, the same as LH17.
+
+## 27. LH18: RXFIRST re-read returned a rejected frame's PHR
+
+LH18 was interviewed and reported readings, then halted at +69.8 s with
+MAC_LINK_DRIVER_RADIO. Radio status: receive phase 4, FIFO_ERROR, 1 poll,
+0 bytes read, FSMSTAT1 0xAD (SFD high, FIFOP low), RXFIFOCNT 7, status PHR 72,
+`head_trace` clear. The RXFIFO RAM held a complete foreign ACK at the head
+(`05 02 00 3b ee ea`, PHR 5) followed by the start of a 72-octet frame that the
+filter was rejecting. With 1 poll and PHR 72 the only failing path is the
+`complete_head()` re-check after the ISR-gate `finished_head()` had already
+accepted the head: the first RXFIRST read returned 5, the second 72. Like the
+LH13 RXFIFOCNT read (section 20), a register read taken while a foreign frame
+is rejected under SFD can be wrong once.
+
+Fix: once `finished_head()` proves the head, the receive op goes straight to
+the head read without reading RXFIRST again; `receive_head()`/`consume()`
+rechecks and the LH13 soft retry stay. Host evidence: the LH18 case in the
+LH13 block of `tests/test_mac_link_e2e.c` injects a one-shot RXFIRST value of
+72 on the second read and expects the ACK, one RXFIRST read and no fault;
+restoring the re-read fails it with FIFO_ERROR.
+
+LH19 (the fix on top of section 26): "node in ZHA" at +42.7 s, the interview
+signature and five temperature/humidity reads in 600 s; soak PASS with no
+radio errors.
