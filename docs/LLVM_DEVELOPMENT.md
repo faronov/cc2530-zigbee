@@ -100,8 +100,9 @@ python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
 
 `--plan-only` prints the exact selection without running anything.
 
-`--variant` (Make: `LLVM_VARIANT=rx-diag`) selects the firmware image. The default
-`production` image is the admitted profile. `rx-diag` adds `-DCC2530_RX_DIAG` and links the
+`--variant` (Make: `LLVM_VARIANT=rx-diag`) selects the firmware image. The Python
+tools default to `production`; `make` and the CI tiers default the join image to
+`parent-recovery` (other images stay `production`). `rx-diag` adds `-DCC2530_RX_DIAG` and links the
 fixed diagnostic block; see
 [RX_DIAG diagnostic variant](#rx_diag-diagnostic-variant-llvm-only). The variant is part of
 the receipt identity, so evidence never crosses variants.
@@ -109,7 +110,7 @@ the receipt identity, so evidence never crosses variants.
 `parent-recovery` adds `-DCC2530_PARENT_RECOVERY` for the explicitly versioned
 known-router recovery extension described in
 [SECURITY_KEYS.md](SECURITY_KEYS.md#optional-known-router-durable-ownership).
-It does not enable RX_DIAG or change production defaults. Alternate recovery
+It does not enable RX_DIAG. Alternate recovery
 requires valid durable previously trusted router history; unknown identities
 are unsupported. `make test-parent-storage`, `test-parent-recovery` and
 `test-parent-candidates` run the real owner/controller/collector corpus

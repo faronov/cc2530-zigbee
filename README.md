@@ -71,9 +71,11 @@ false report commits on queue rejection. The LLVM-only build, exact compiler
 pin, NV schema and Confirm-Key policy remain unchanged. Neither source
 integration nor this correction transfers historical FULL or hardware acceptance.
 
-The default variant remains `production`. Extended parent storage is
-explicitly selected with `LLVM_VARIANT=parent-recovery`; experimental RAM
-replay floors additionally require `LLVM_VARIANT=parent-recovery-policy-c`.
+The join image defaults to `LLVM_VARIANT=parent-recovery` (extended parent
+storage and known-router recovery; host join-smoke defaults to
+`JOIN_SMOKE_PARENT_RECOVERY=1`). `LLVM_VARIANT=production` still selects the
+plain image; experimental RAM replay floors require
+`LLVM_VARIANT=parent-recovery-policy-c`.
 Both use the standard `make firmware` path and sealed variant-bound receipts.
 Policy C's documented reset replay exposure is not enabled by default.
 See [Policy C](docs/M5_POLICY_C.md), [runtime reporting](docs/M6_RUNTIME_REPORTING_READ.md)

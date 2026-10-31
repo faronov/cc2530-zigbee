@@ -10,7 +10,8 @@ LLVM_SRC ?= ../llvm-project
 LLVM_REVISION ?=
 LLVM_TREE ?=
 LLVM_LIT_EVIDENCE ?=
-LLVM_VARIANT ?= production
+# The join image defaults to known-router parent recovery; other images are production-only.
+LLVM_VARIANT ?= $(if $(filter join,$(IMAGE)),parent-recovery,production)
 LLVM_TIER_OUT ?= build/llvm-tiers
 LLVM_TIER_ARGS ?=
 LLVM_SIM_ARCHIVE ?= build/sdcc_4.2.0+dfsg.orig.tar.xz
@@ -21,7 +22,7 @@ JOIN_SMOKE_KEY_MODE ?= default-tc
 ifneq ($(filter $(JOIN_SMOKE_KEY_MODE),install-code default-tc),$(JOIN_SMOKE_KEY_MODE))
 $(error JOIN_SMOKE_KEY_MODE must be install-code or default-tc)
 endif
-JOIN_SMOKE_PARENT_RECOVERY ?= 0
+JOIN_SMOKE_PARENT_RECOVERY ?= 1
 JOIN_SMOKE_REPLAY_POLICY_C ?= 0
 ifneq ($(filter $(JOIN_SMOKE_PARENT_RECOVERY),0 1),$(JOIN_SMOKE_PARENT_RECOVERY))
 $(error JOIN_SMOKE_PARENT_RECOVERY must be 0 or 1)
