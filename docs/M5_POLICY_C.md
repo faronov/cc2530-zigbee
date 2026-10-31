@@ -105,7 +105,7 @@ physical flash endurance qualification.
 | Erase attempts | 1 | 0 |
 | Four-byte program commands | 45 | 0 |
 | Programmed bytes | 180 | 0 |
-| Flash read calls / bytes | 539 / 14,697 | 0 / 0 |
+| Flash read calls / bytes | 539 / 14,697 (283 / 6,505 with NV selection reuse) | 0 / 0 |
 | Modeled controller busy time | 20,900 us | 0 |
 
 The 20 ms erase / 20 us word-program values are synthetic peripheral timings,

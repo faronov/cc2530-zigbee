@@ -81,6 +81,25 @@ static void begin(void)
     nv_record_diagnostic.phase = 1;
 }
 
+/* Under the no-other-writer contract, the previous call's completed clean
+ * selection is still current, so begin() keeps it instead of rescanning
+ * both pages. Reset (zeroed diagnostic), degraded or failed calls force a
+ * full selection; load still rechecks the whole selected page. */
+static uint8_t resume(void)
+{
+    uint32_t generation = nv_record_diagnostic.generation;
+    uint8_t selected = nv_record_diagnostic.selected, length = nv_record_diagnostic.length,
+        page0 = nv_record_diagnostic.pages[0], page1 = nv_record_diagnostic.pages[1],
+        known = nv_record_diagnostic.phase == 8 && nv_record_diagnostic.result == NV_RECORD_OK &&
+            selected < 2 && !nv_record_diagnostic.recovered;
+    begin();
+    if (!known) return 0;
+    nv_record_diagnostic.selected = selected; nv_record_diagnostic.length = length;
+    nv_record_diagnostic.generation = generation;
+    nv_record_diagnostic.pages[0] = page0; nv_record_diagnostic.pages[1] = page1;
+    return 1;
+}
+
 /* Reflected CRC-32 (0xEDB88320), one byte per step. The byte table is
  * linear in its index, so it is the XOR of a low- and a high-nibble entry.
  * Entries are split into little-endian byte planes so the 8051 loop uses
@@ -207,7 +226,18 @@ nv_record_result_t nv_record_load(uint8_t MCU_XDATA * SDCC_VOLATILE output, uint
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (!child_work_enter(CW_RECORD_LOAD)) return NV_RECORD_BUFFER_OWNERSHIP;
 #endif
-begin(); result = select_record();
+    if (resume()) {
+        if (capacity < nv_record_diagnostic.length) return CW_RETURN(CW_RECORD_LOAD,finish(NV_RECORD_NO_SPACE));
+        selected = nv_record_diagnostic.selected;
+        nv_record_diagnostic.phase = 2;
+        if (scan_page(selected, 1) != NV_RECORD_OK) return CW_RETURN(CW_RECORD_LOAD,(nv_record_result_t)nv_record_fault);
+        result = NV_RECORD_OK;
+        if (nv_record_diagnostic.pages[selected] == NV_PAGE_VALID &&
+            generations[selected] == nv_record_diagnostic.generation &&
+            lengths[selected] == nv_record_diagnostic.length) goto publish;
+        begin();
+    }
+    result = select_record();
     if (result != NV_RECORD_OK && result != NV_RECORD_RECOVERED) return CW_RETURN(CW_RECORD_LOAD,finish(result));
     if (capacity < nv_record_diagnostic.length) return CW_RETURN(CW_RECORD_LOAD,finish(NV_RECORD_NO_SPACE));
     selected = nv_record_diagnostic.selected;
@@ -216,6 +246,7 @@ begin(); result = select_record();
     if (nv_record_diagnostic.pages[selected] != NV_PAGE_VALID ||
         generations[selected] != nv_record_diagnostic.generation ||
         lengths[selected] != nv_record_diagnostic.length) return CW_RETURN(CW_RECORD_LOAD,finish(NV_RECORD_CORRUPT));
+publish:
     for (i = 0; i < nv_record_diagnostic.length; i++) output[i] = nv_record_stage[i];
     nv_record_diagnostic.phase = 8;
     return CW_RETURN(CW_RECORD_LOAD,finish(result));
@@ -244,7 +275,7 @@ nv_record_result_t nv_record_replace(const uint8_t MCU_XDATA * SDCC_VOLATILE dat
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
     if (!child_work_enter(CW_RECORD_REPLACE)) return NV_RECORD_BUFFER_OWNERSHIP;
 #endif
-begin(); result = select_record();
+    result = resume() ? NV_RECORD_OK : select_record();
     if (result == NV_RECORD_RECOVERED && !allow_recovery) return CW_RETURN(CW_RECORD_REPLACE,finish(NV_RECORD_RECOVERY_REQUIRED));
     if (result != NV_RECORD_OK && result != NV_RECORD_RECOVERED && result != NV_RECORD_EMPTY)
         return CW_RETURN(CW_RECORD_REPLACE,finish(result));

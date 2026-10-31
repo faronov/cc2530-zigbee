@@ -236,7 +236,37 @@ int NV_RECORD_TEST_ENTRY(void)
     reboot(); memset(nv, 255, sizeof(nv)); check_load(NV_RECORD_EMPTY, 0);
     check_replace(NV_RECORD_OK, 1, 0); check_load(NV_RECORD_OK, 1);
     assert(erases[0] && nv_record_diagnostic.erase_attempts[0] == 1);
-    record(1, 2, 128); check_load(NV_RECORD_OK, 128);
+    /* An external page write is only legal across a reset (see below). */
+    reboot(); record(1, 2, 128); check_load(NV_RECORD_OK, 128);
+    /* A clean result keeps its selection until reset: load rechecks only the
+     * selected page and replace skips the two-page selection scan. */
+    {
+        static uint8_t kept[4096];
+        unsigned cached, full;
+        memcpy(kept, nv, sizeof(kept));
+        reboot(); memset(nv, 255, sizeof(nv)); check_replace(NV_RECORD_OK, 7, 0);
+        before = reads_nv; check_load(NV_RECORD_OK, 7); assert(reads_nv-before == 2048);
+        before = reads_nv; check_replace(NV_RECORD_OK, 9, 0); cached = reads_nv-before;
+        assert(nv_record_diagnostic.generation == 2 && nv_record_diagnostic.selected == 1);
+        memcpy(baseline, nv, sizeof(nv));
+        reboot(); memcpy(nv, baseline, sizeof(nv));
+        before = reads_nv; check_replace(NV_RECORD_OK, 9, 0); full = reads_nv-before;
+        assert(full == cached+4096 && nv_record_diagnostic.generation == 3 &&
+               nv_record_diagnostic.selected == 0);
+        /* A changed selected page falls back to a complete selection. */
+        record(0, 3, 11);
+        before = reads_nv; check_load(NV_RECORD_OK, 11);
+        assert(reads_nv-before == 4*2048 && nv_record_diagnostic.generation == 3);
+        /* Degraded and failed results never seed the shortcut. */
+        reboot(); memcpy(nv, baseline, sizeof(nv)); nv[12] ^= 1;
+        assert(nv_record_load(output, 128) == NV_RECORD_RECOVERED);
+        before = reads_nv; assert(nv_record_load(output, 128) == NV_RECORD_RECOVERED);
+        assert(reads_nv-before == 3*2048); checks += 2;
+        reboot(); memset(nv, 255, sizeof(nv)); check_replace(NV_RECORD_OK, 7, 0);
+        assert(nv_record_load(output, 6) == NV_RECORD_NO_SPACE);
+        before = reads_nv; check_load(NV_RECORD_OK, 7); assert(reads_nv-before == 3*2048);
+        memcpy(nv, kept, sizeof(kept));
+    }
     reboot(); assert(!flash_write_known);
     check_replace(NV_RECORD_OK, 125, 0); check_load(NV_RECORD_OK, 125);
     assert(nv_record_diagnostic.generation == 3 && nv_record_diagnostic.selected == 0 &&

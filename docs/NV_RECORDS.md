@@ -37,7 +37,8 @@ otherwise erased part of the page. It is accidental-corruption detection,
 The independent native oracle uses bit-reversed, non-reflected polynomial
 division; the linked oracle uses Python's standard-library `zlib.crc32`.
 
-The scanner reads every byte of both pages through the existing reader.
+The scanner reads every byte of both pages through the existing reader
+(a full selection; see selection reuse below).
 All-FF is EMPTY, not evidence of known program history. Missing/torn commit,
 bad format/padding and bad CRC have distinct page reasons. A committed
 unknown version blocks selection and writes; it is not silently downgraded.
@@ -57,12 +58,18 @@ that can safely be reset during factory reset.
 See [nv_record.h](../include/nv_record.h):
 
 - `nv_record_load(output, capacity)` selects, then rescans the entire selected
-  page while staging its payload. Only a still-valid matching generation and
+  page while staging its payload. **Selection reuse:** when the previous call
+  ended with a clean OK (phase 8, no recovery), its selection is still current
+  under the no-other-writer contract, so load skips the two-page selection
+  scan and only rechecks the selected page; any page/generation/length
+  mismatch falls back to a complete selection. Reset (zeroed diagnostic),
+  degraded and failed results always force full selection. Only a still-valid matching generation and
   length may be copied out. OK and RECOVERED publish data; all other results
   preserve caller output. Bytes beyond the payload remain unchanged.
   Insufficient capacity returns NO_SPACE without partial publication.
 - `nv_record_replace(data, length, poll_limit, allow_recovery)` rescans both
-  pages, stages the complete caller payload, and replaces the inactive page.
+  pages (or reuses a clean previous selection, as above), stages the complete
+  caller payload, and replaces the inactive page.
   `allow_recovery=0` rejects degraded selection with RECOVERY_REQUIRED before
   erasure. Exactly `1` explicitly permits discarding that damaged inactive
   page; the completed call still reports RECOVERED. It cannot bypass unknown

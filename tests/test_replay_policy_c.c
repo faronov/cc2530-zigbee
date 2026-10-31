@@ -65,7 +65,7 @@ static void ordinary_and_checkpoint(void)
     ordinary(10000,alt_key,0); reject(SECURITY_KEYS_REPLAY);
     record(); CHECK(u32(checkpoint+126)==1); /* Counter refill is not an RX checkpoint. */
     clear_cost(); update(10001); accept(SECURITY_KEYS_EVENT_UPDATE);
-    CHECK(erases==1 && programs==45 && read_bytes==14697 && reads==539);
+    CHECK(erases==1 && programs==45 && read_bytes==6505 && reads==283);
     record(); CHECK(u32(checkpoint+126)==10002);
     reboot(NULL,SECURITY_KEYS_VERIFIED);
     ordinary(10000,alt_key,0); reject(SECURITY_KEYS_REPLAY);
@@ -192,7 +192,7 @@ static void checkpoint_cuts(void)
     }
     CHECK(cuts==1582 && failures && committed);
     restore(); ordinary(1,alt_key,0); accept(SECURITY_KEYS_EVENT_DATA);
-    update(2); security_joint_fail_read(12650);
+    update(2); security_joint_fail_read(4458);
     reject(SECURITY_KEYS_STORAGE);
     CHECK(nv_record_status()->phase==7);
     reboot(NULL,SECURITY_KEYS_VERIFIED);
