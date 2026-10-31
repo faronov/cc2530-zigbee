@@ -47,6 +47,10 @@ typedef struct {
  * Unknown committed versions, conflicting generations and no-valid-record
  * corruption never silently select/initialize data.
  *
+ * A clean previous OK keeps its selection until reset: load then rechecks only
+ * the selected page (falling back to full selection on mismatch) and replace
+ * skips the selection scan. Degraded/failed results force full selection.
+ *
  * Replace rescans, stages caller bytes, erases ONLY the inactive page, writes
  * header/body/integrity and programs a distinct commit word LAST. The old
  * record remains intact. Every replacement starts a freshly verified erase,

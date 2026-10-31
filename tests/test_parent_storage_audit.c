@@ -68,8 +68,8 @@ static void amplification(void)
     commands=security_joint_flash_commands();
     erases=security_joint_flash_erases(0)+security_joint_flash_erases(1);
     clear_audit(); accept(SECURITY_KEYS_EVENT_DATA); result("router_nwk_only_receive");
-    CHECK(audit_erases==1 && audit_programs==45 && audit_read_bytes==14697 &&
-          audit_reads==539);
+    CHECK(audit_erases==1 && audit_programs==45 && audit_read_bytes==6505 &&
+          audit_reads==283);
     CHECK(security_joint_flash_commands()==commands+46);
     CHECK(security_joint_flash_erases(0)+security_joint_flash_erases(1)==erases+1);
     CHECK(security_counter_read(after,sizeof(after),&length)==SECURITY_COUNTER_OK);
@@ -80,10 +80,10 @@ static void amplification(void)
     CHECK(changed==1);
     clear_audit(); CHECK(security_counter_take(0,&count,3)==SECURITY_COUNTER_OK);
     result("next_outgoing_nwk_allocation");
-    CHECK(audit_erases==1 && audit_programs==45 && audit_read_bytes==14697);
+    CHECK(audit_erases==1 && audit_programs==45 && audit_read_bytes==6505);
     clear_audit(); CHECK(security_counter_take(1,&count,3)==SECURITY_COUNTER_OK);
     result("next_outgoing_aps_allocation");
-    CHECK(audit_erases==1 && audit_programs==45 && audit_read_bytes==14697);
+    CHECK(audit_erases==1 && audit_programs==45 && audit_read_bytes==6505);
     reboot(NULL,SECURITY_KEYS_VERIFIED);
     memcpy(raw,incoming,incoming_length); wire_length=incoming_length;
     clear_audit(); reject(SECURITY_KEYS_REPLAY); result("router_replay_after_reset");
@@ -127,7 +127,7 @@ static void interruption(void)
     restore();
     /* The first read of the journal's post-commit scan: error does not mean
      * that the physically committed replay update can be retried after reset. */
-    security_joint_fail_read(12650);
+    security_joint_fail_read(4458);
     reject(SECURITY_KEYS_STORAGE);
     CHECK(nv_record_status()->phase==7);
     reboot(NULL,SECURITY_KEYS_VERIFIED);

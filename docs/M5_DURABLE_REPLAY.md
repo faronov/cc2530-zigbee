@@ -63,16 +63,19 @@ authenticated router NWK frame after genuine key exchange and parent admission.
 
 | Operation | Erases | Programs | Program bytes | Read calls | Read bytes |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Router NWK-only frame | 1 | 45 | 180 | 539 | 14697 |
-| First subsequent NWK allocation | 1 | 45 | 180 | 539 | 14697 |
-| First subsequent APS allocation | 1 | 45 | 180 | 539 | 14697 |
+| Router NWK-only frame | 1 | 45 | 180 | 283 | 6505 |
+| First subsequent NWK allocation | 1 | 45 | 180 | 283 | 6505 |
+| First subsequent APS allocation | 1 | 45 | 180 | 283 | 6505 |
 | Same router frame after reset | 0 | 0 | 0 | 0 | 0 |
 
 The modified field is one four-byte exclusive incoming replay floor; the chosen
-`1 -> 2` example changes just one serialized byte. Three complete reads in
-`security_counter.current`, two in journal selection, one erase verification
-and one post-commit check account for seven 2048-byte traversals. The additional
-361 read bytes are erase preflight plus per-word preflight/readback.
+`1 -> 2` example changes just one serialized byte. The preceding clean journal
+result keeps its page selection (see [NV_RECORDS.md](NV_RECORDS.md)), so
+`security_counter.current` rechecks only the selected page and replacement
+skips selection: that page, one erase verification and one post-commit check
+account for three 2048-byte traversals. The additional 361 read bytes are erase
+preflight plus per-word preflight/readback. Before selection reuse the same
+operation read 539 calls / 14697 bytes (seven traversals).
 
 The audit measures the two allocations after a reset, where each domain must
 reserve from its durable ceiling. `security_counter_save` originally also

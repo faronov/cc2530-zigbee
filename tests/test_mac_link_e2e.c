@@ -66,6 +66,8 @@ extern volatile uint8_t radio_autoack_rx_armed;
 static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts, isr_inflight;
 static unsigned count_glitch, isr_rechecks, isr_runts;
 static uint8_t count_glitch_value;
+static unsigned rxfirst_glitch;
+static uint8_t rxfirst_glitch_value;
 #endif
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
     fprintf(stderr, "E2E case%u step%u line%u: %s\n" \
@@ -150,6 +152,11 @@ static uint8_t joint_xload(uint16_t a)
     if (a == 0x619b && count_glitch && !--count_glitch) {
         (void)handoff_xload(a);
         return count_glitch_value;
+    }
+    /* H2 LH18: the Nth RXFIRST read returns rxfirst_glitch_value once. */
+    if (a == 0x619a && rxfirst_glitch && !--rxfirst_glitch) {
+        (void)handoff_xload(a);
+        return rxfirst_glitch_value;
     }
 #endif
     return handoff_xload(a);
@@ -818,6 +825,22 @@ static void run(unsigned selected)
         tail = first; count--; XR(0x6193) &= (uint8_t)~0x20; signals();
         CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME &&
               seen.length == 3 && seen.body[0] == 2 && !seen.body[1]); /* DSN: adapter_load */
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY &&
+              !radio_autoack_fault && !count && rfd_reads == reads + 6);
+        /* H2 LH18: the same FIFO, but RXFIRST read the PHR of the rejected
+         * tail (72) after finished_head() had proved the ACK head. The head is
+         * read without a second RXFIRST read. */
+        reads = rfd_reads;
+        enqueue(5, 0xe3, 0x6b); fifop_high = 0;
+        first = tail; fifo[first] = 72; tail = (first+1)&127; count++;
+        XR(0x6193) |= 0x20; signals();
+        CHECK((XR(0x6193) & 0xe0) == 0xa0 && count == 7);
+        rxfirst_glitch = 2; rxfirst_glitch_value = 72;
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME &&
+              seen.length == 3 && seen.body[0] == 2 && !seen.body[1]);
+        CHECK(rxfirst_glitch == 1 && !radio_autoack_fault && rfd_reads == reads + 6 && count == 1);
+        rxfirst_glitch = 0;
+        tail = first; count--; XR(0x6193) &= (uint8_t)~0x20; signals();
         CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY &&
               !radio_autoack_fault && !count && rfd_reads == reads + 6);
         if (scenario == 0) {

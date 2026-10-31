@@ -762,12 +762,14 @@ again:
          * without FIFOP; live RX waits for the next FIFOP.
          */
         if (!(status.signals & 0x40u) && (radio_autoack_state == RADIO_AUTOACK_RX ||
-            radio_autoack_state == RADIO_AUTOACK_RX_NOACK || !status.count)
+            radio_autoack_state == RADIO_AUTOACK_RX_NOACK || !status.count)) {
 #if defined(CC2530_RADIO_RX_ISR)
-            /* ISR reads keep FIFOP low for heads it left behind (p232). */
-            && !(rx_enabled && status.count && finished_head())
+            /* ISR reads keep FIFOP low for heads it left behind (p232).
+             * H2 LH18: RXFIRST is not re-read once finished_head() proved the
+             * head; it read the PHR of a later frame under rejection once.
+             */
+            if (rx_enabled && status.count && finished_head()) goto head;
 #endif
-            ) {
             REQUIRE(radio_autoack_state == RADIO_AUTOACK_RX ||
                     radio_autoack_state == RADIO_AUTOACK_RX_NOACK ||
                     !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);

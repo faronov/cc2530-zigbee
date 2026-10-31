@@ -302,7 +302,7 @@ ordinary admitted router NWK frame:
 | Erases | 1 | 0 |
 | Four-byte programs | 45 | 0 |
 | Programmed bytes | 180 | 0 |
-| Flash read calls / bytes | 539 / 14697 | No flash calls required for this path; cached record access remains |
+| Flash read calls / bytes | 539 / 14697 (now 283 / 6505, NV selection reuse) | No flash calls required for this path; cached record access remains |
 | Useful modified security data | One 4-byte incoming floor | One 4-byte RAM floor |
 | Controller-only nominal storage time | 20.9 ms | 0 storage-command time |
 

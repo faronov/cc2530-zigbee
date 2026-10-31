@@ -329,7 +329,7 @@ static void completion_faults(void)
                 base(ED_APS_COMMAND); packet.length=1; packet.payload[0]=0xfe;
                 router_seal_counted(401,1,alt_key,0,500);
             }
-            security_joint_fail_read(prior?12650:1);
+            security_joint_fail_read(prior?4458:1);
             reject(SECURITY_KEYS_STORAGE);
             if(prior) CHECK(nv_record_status()->phase==7);
             else CHECK(!security_joint_flash_commands());
