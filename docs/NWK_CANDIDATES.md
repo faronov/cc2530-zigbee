@@ -108,6 +108,11 @@ Public API: [nwk_candidates.h](../include/nwk_candidates.h).
   three real decoders. `crc_valid` must be exactly0 or1; a truthful1 is an
   explicit caller/adapter precondition. Zero returns `BAD_CRC` without parsing
   or changing candidates. The function does **not** calculate or fake PHY CRC.
+* `nwk_candidates_parent(table, parent)` restricts an **empty** valid table to
+  one short-address parent (H2 LH16/LH16B: routers of a busy PAN filled the
+  table before the coordinator's beacon). Short sources other than `parent`
+  return `NOT_ELIGIBLE`; extended sources are unaffected. Re-init clears it.
+  BDB uses 0x0000 for fresh joins and the persisted router for recovery.
 * `nwk_candidates_get(table, index, result)` returns `OK` and copies an entry;
   there are no borrowed spans. All errors leave the output unchanged.
 

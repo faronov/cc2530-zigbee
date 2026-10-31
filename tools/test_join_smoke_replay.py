@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 from boot_join_smoke import (
-    CASES, PERIPHERAL_SFR, check_breakpoints, check_flash_retention, check_flash_stop,
+    CASES, DRAWS, PERIPHERAL_SFR, check_breakpoints, check_flash_retention, check_flash_stop,
     active_phase, events_for, stops_for, validate_reference,
 )
 from boot_mac_attempt import mmio_sites
@@ -21,7 +21,7 @@ class ReplayBoundaryTests(unittest.TestCase):
 
     def fixture(self):
         initial = {str(a): 0 for a in PERIPHERAL_SFR | set(range(0x6100, 0x6400))}
-        return {"case": 0, "admission": "00" * 150, "draws": "00" * 64,
+        return {"case": 0, "admission": "00" * 150, "draws": "00" * DRAWS,
                 "initial": initial, "nv_initial": "ff" * 4096, "peer_tx": 0,
                 "aes_blocks": 0, "flash_commands": 0,
                 "steps": [{"packet": "00" * 8, "events": [],
@@ -132,7 +132,7 @@ class ReplayBoundaryTests(unittest.TestCase):
             bad["initial"][str(address)] = 0
             with self.subTest(address=address), self.assertRaises(ValueError):
                 validate_reference(bad)
-        for field, value in (("admission", "00"), ("draws", "gg" * 64),
+        for field, value in (("admission", "00"), ("draws", "gg" * DRAWS), ("draws", "00" * 64),
                              ("nv_initial", "ff" * 4095)):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validate_reference(vector | {field: value})

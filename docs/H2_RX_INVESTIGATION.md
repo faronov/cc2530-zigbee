@@ -586,3 +586,39 @@ Guard-span cases 36–38 are shifted by one clock so the 511-clock boundary read
 is not itself an FF, and an assert now enforces that precondition. Image
 sleepy17 (`c7490c67…`, bank 6 free 5549) reaches READY in MCUEMU.
 
+## 22. LH16/LH16B: NO_PARENT from a full candidate table
+
+LH16 and LH16B (home ZHA, channel 15) ended NO_PARENT although the coordinator
+answered Beacon Requests. The 4-entry `nwk_candidates` table filled with routers
+of the busy PAN before the coordinator's beacon arrived; `FULL` drops new
+identities without eviction, and both fresh-join policies select only the PAN
+coordinator (0x0000). `nwk_candidates_parent()` now restricts an empty table to
+the one short parent the caller can select: 0x0000 for a fresh join, the
+persisted router address for a recovery rejoin. Other short sources are
+`NOT_ELIGIBLE`; extended sources still reach the caller's policy. Host cases
+`parent_filter` (`tests/test_nwk_candidates.c`) and join-smoke case 28 cover it.
+
+## 23. LH16C: pre-READY RANDOM budget exhausted
+
+LH16C associated, then halted with JS_RANDOM: a lost Transport Key kept the
+device retrying in WAIT_TC, and every Data Request poll consumes one CSMA RANDOM
+draw. `JOIN_SMOKE_DRAWS` is now 254 (the uint8 `qualified_draws` bound).
+
+## 24. LH16D: a finished runt head made RX fatal
+
+LH16D joined ZHA (nwk 0xEF99), was interviewed and reported readings, then
+halted with MAC_LINK_DRIVER_RADIO / FIFO_ERROR in receive phase 4. Snapshot:
+RXFIFOCNT 4, PHR 3, FSMSTAT1 0xC0 (FIFOP|FIFO, SFD low), RXP1_PTR =
+RXFIRST_PTR. The radio had stored a complete 3-octet PSDU, shorter than the
+5-octet minimum (ACK frame, IEEE 802.15.4-2006 §7.2.2.3), and
+`REQUIRE(complete_head())` treated it as corruption. The sniffer filters such
+frames, so the air capture cannot show it; PHR 0–2 are handled the same way
+without silicon evidence that they occur.
+
+Fix: `runt_head()` (PHR < 5, all PHR+1 bytes counted, and SFD low or a later
+byte present) is read and dropped by the ISR, the receive op, stop phase 6 and
+the ACK window. Live RX returns EMPTY, preserving the LH13 rule; a stopped drain
+continues. Host evidence: `runt_cases()` in `tests/test_radio_autoack.c` (PHR
+0..4 live/drain/stop, in-reception wait, short count fatal), the LH16D ISR block
+in `tests/test_mac_link_e2e.c` and the runt-before-ACK attempt. Mutants without
+the receive, ISR or ACK-window branch each fail.

@@ -64,7 +64,7 @@ static uint8_t queued_seen;
 extern void radio_autoack_rx_isr(void);
 extern volatile uint8_t radio_autoack_rx_armed;
 static unsigned isr_live, in_isr, isr_runs, isr_frames, isr_halts, isr_inflight;
-static unsigned count_glitch, isr_rechecks;
+static unsigned count_glitch, isr_rechecks, isr_runts;
 static uint8_t count_glitch_value;
 #endif
 #define CHECK(c) do { e2e_checks++; if (!(c)) { \
@@ -832,6 +832,31 @@ static void run(unsigned selected)
         fifop_edge = 0;
         isr_rechecks++;
     }
+    if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !count &&
+        !SOC_RFERRF && radio_autoack_state == RADIO_AUTOACK_RX) {
+        /* H2 LH16D: a finished PHR-3 head (shorter than the 5-octet minimum
+         * PSDU) sat at RXFIRST_PTR. The vector drops it and queues the next
+         * frame; while it is still in reception it is left alone. */
+        radio_autoack_frame_t seen;
+        unsigned reads = rfd_reads;
+        enqueue_runt(3, 0x36); enqueue(20, 0xe9, 0x37);
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(!packets && !count && rfd_reads == reads + 4 + 21 && radio_autoack_rx_armed);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_FRAME && seen.length == 18);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY && !radio_autoack_fault);
+        reads = rfd_reads;
+        enqueue_runt(4, 0x38); XR(0x6193) |= 0x20; signals();
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(count == 5 && rfd_reads == reads && radio_autoack_rx_armed);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY &&
+              count == 5 && rfd_reads == reads);
+        XR(0x6193) &= (uint8_t)~0x20; signals();
+        in_isr = 1; radio_autoack_rx_isr(); in_isr = 0;
+        CHECK(!count && !packets && rfd_reads == reads + 5 && radio_autoack_rx_armed &&
+              !radio_autoack_fault && radio_autoack_state == RADIO_AUTOACK_RX);
+        CHECK(radio_autoack_receive(5000, 64, &seen) == RADIO_AUTOACK_EMPTY && !radio_autoack_fault);
+        isr_runts++;
+    }
     if (isr_live && radio_autoack_rx_armed && (SOC_IEN0 & 0x80) && !packets && !SOC_RFERRF) {
         /* Controller error: the vector stops without consuming and disarms;
          * the next operation owns the FIFO through the polled path. */
@@ -860,9 +885,9 @@ int MAC_LINK_E2E_MAIN(void)
     for (i = 0; i < E2E_CASES; i++) run(i);
     isr_live = 0;
     printf("MAC link E2E RX ISR: %u cases, %u dispatches, %u frames queued, %u halts, "
-           "%u in-flight tails, %u head rechecks PASS.\n", E2E_CASES,isr_runs,isr_frames,isr_halts,
-           isr_inflight,isr_rechecks);
-    CHECK(isr_runs && isr_frames && isr_halts && isr_inflight && isr_rechecks);
+           "%u in-flight tails, %u head rechecks, %u runt drops PASS.\n", E2E_CASES,isr_runs,isr_frames,
+           isr_halts,isr_inflight,isr_rechecks,isr_runts);
+    CHECK(isr_runs && isr_frames && isr_halts && isr_inflight && isr_rechecks && isr_runts);
 #endif
     printf("MAC link E2E: %u cases, %u checks + %u peer checks, %u steps, %u test RANDOM inputs PASS.\n",
            E2E_CASES,totals,total_peer_checks,total_steps,total_random);

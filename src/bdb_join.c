@@ -422,7 +422,8 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                 ctx->workspace = BDB_JOIN_WORK_NONE;
                 if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK) return BDB_JOIN_STATE;
                 ctx->workspace = BDB_JOIN_WORK_SCAN;
-                if (mac_scan_start(&ctx->work.scan, ctx->owner, &ctx->config.scan, now) == MAC_SCAN_OK)
+                if (mac_scan_start(&ctx->work.scan, ctx->owner, &ctx->config.scan, now) == MAC_SCAN_OK &&
+                    nwk_candidates_parent(&ctx->work.scan.candidates, 0) == NWK_CANDIDATES_OK)
                     return BDB_JOIN_OK;
                 result = BDB_JOIN_SCAN_FAILED;
             }
@@ -549,7 +550,10 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                         ctx->workspace = BDB_JOIN_WORK_NONE;
                         if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK ||
                             mac_scan_start(&ctx->work.scan, ctx->owner, &ctx->config.scan, now) != MAC_SCAN_OK ||
-                            nwk_candidates_rejoin(&ctx->work.scan.candidates) != NWK_CANDIDATES_OK) {
+                            nwk_candidates_rejoin(&ctx->work.scan.candidates) != NWK_CANDIDATES_OK ||
+                            (bdb_join_keys.router_known &&
+                             nwk_candidates_parent(&ctx->work.scan.candidates,
+                                 bdb_join_keys.router_address) != NWK_CANDIDATES_OK)) {
                             ctx->phase = BDB_JOIN_FAULT; ctx->result = BDB_JOIN_SCAN_FAILED;
                         } else {
                             ctx->workspace = BDB_JOIN_WORK_SCAN; ctx->phase = BDB_JOIN_SCANNING;

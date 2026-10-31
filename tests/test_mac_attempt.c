@@ -67,6 +67,7 @@ static uint16_t fine, fine_latch, fine_period, fine_write;
 static uint32_t coarse, coarse_latch, coarse_period, coarse_write;
 static unsigned pending, order, ff, broken, clock_failure, printing_vector, calls;
 static uint32_t clocks, tx_remaining, reply_remaining;
+static unsigned runt_reply;
 static uint64_t model_clocks, epoch_origin, model_tx_end, model_rx_end, model_arm;
 static uint32_t mmio_clocks, extra_arm, extra_rx, window = 64, bound = 10000;
 static uint16_t cap = 1000;
@@ -121,7 +122,9 @@ static void advance_clocks(uint32_t delta)
             if (reply_after_tx && (XR(0x6189) == 0x40 ||
                 (XR(0x6189) == 0x60 && XR(0x6180) == RADIO_AUTOACK_NORMAL_FILTER &&
                  (XR(0x6181) & 0x20)))) {
-                reply_after_tx = 0; enqueue(5, bad_reply ? 0x69 : 0xe9, 0x5a);
+                reply_after_tx = 0;
+                if (runt_reply) enqueue_runt(3, 0x5b);
+                enqueue(5, bad_reply ? 0x69 : 0xe9, 0x5a);
             }
         } else reply_remaining -= delta;
     }
@@ -687,6 +690,9 @@ int MAC_ATTEMPT_MAIN(int argc, char **argv)
     }
     normal_config = 0xe00; normal_output = 0xd00; helper = 0x1200;
     for (n = 0; n < ATTEMPT_CASES; n++) attempt_case(n);
+    /* H2 LH16D: a finished runt head (PHR < 5) ahead of the ACK is dropped. */
+    runt_reply = 1; attempt_case(0); runt_reply = 0;
+    printf("MAC attempt: runt head before the ACK dropped PASS.\n");
     attempt_reset(); attempt_call(0, MAC_RADIO_READY);
     for (n = 1; n <= owner_end; n++) {
         output_address = receipt_address = (uint16_t)n;

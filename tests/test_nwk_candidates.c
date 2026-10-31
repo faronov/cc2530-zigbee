@@ -463,16 +463,54 @@ static uint16_t exact_and_fields(void)
     return 0;
 }
 
+/* A busy network: more permitting routers than capacity beacon before the
+ * only parent the join policy can select. The restriction must keep that
+ * parent instead of filling up and reporting FULL (HIL LH16B NO_PARENT). */
+static uint16_t parent_filter(void)
+{
+    CHECK(nwk_candidates_parent(NULL, 0) == NWK_CANDIDATES_INVALID_TABLE);
+    CHECK(nwk_candidates_init(&table, NWK_CANDIDATES_CHANNEL_MASK) == NWK_CANDIDATES_OK);
+    CHECK(nwk_candidates_parent(&table, 0) == NWK_CANDIDATES_OK);
+    CHECK(table.filtered == 1 && table.parent == 0 && table.count == 0);
+    memcpy(body, short_beacon, 26);
+    for (i = 0; i < 2u * NWK_CANDIDATES_CAPACITY; i++) {
+        body[5] = (uint8_t)(0x10u + i);
+        CALL(unchanged(NWK_CANDIDATES_NOT_ELIGIBLE, 26, 1, 15));
+    }
+    body[5] = 0; body[6] = 0x56;
+    CALL(unchanged(NWK_CANDIDATES_NOT_ELIGIBLE, 26, 1, 15)); /* Both octets match. */
+    body[6] = 0;
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    CHECK(table.count == 1 && !table.entries[0].coordinator[0] && !table.entries[0].coordinator[1]);
+    memcpy(body, long_beacon, sizeof(long_beacon));
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, sizeof(long_beacon)) == NWK_CANDIDATES_ADDED);
+    CHECK(table.count == 2);
+    CHECK(nwk_candidates_parent(&table, 0) == NWK_CANDIDATES_INVALID_TABLE);
+    CHECK(nwk_candidates_init(&table, NWK_CANDIDATES_CHANNEL_MASK) == NWK_CANDIDATES_OK);
+    CHECK(!table.filtered && !table.parent);
+    CHECK(nwk_candidates_parent(&table, 0x5678) == NWK_CANDIDATES_OK);
+    memcpy(body, short_beacon, 26);
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    body[5] = 0x79;
+    CALL(unchanged(NWK_CANDIDATES_NOT_ELIGIBLE, 26, 1, 15));
+    table.filtered = 2;
+    CALL(unchanged(NWK_CANDIDATES_INVALID_TABLE, 26, 1, 15));
+    CHECK(nwk_candidates_parent(&table, 0) == NWK_CANDIDATES_INVALID_TABLE);
+    return 0;
+}
+
 int main(void)
 {
     uint16_t result = self_test();
     if (!result)
         result = exact_and_fields();
+    if (!result)
+        result = parent_filter();
     if (result) {
         fprintf(stderr, "NWK candidates failed at C line %u\n", (unsigned)result);
         return 1;
     }
-    puts("NWK candidates: golden/state corpus, 72 pending layouts, exact sizes and field/channel/CRC matrices PASS");
+    puts("NWK candidates: golden/state corpus, 72 pending layouts, exact sizes, field/channel/CRC matrices and parent restriction PASS");
     return 0;
 }
 #else

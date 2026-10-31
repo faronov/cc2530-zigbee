@@ -88,11 +88,12 @@ volatile MCU_XDATA uint8_t radio_autoack_rx_armed;
 /* H2 LH13: a live receive's first head recheck failed once with the head
  * intact. head_retry allows one EMPTY for that case per consecutive receive.
  * head_trace is write-only debugger evidence: the failing RXFIFOCNT and the
- * pointers, FSMSTAT1 and RXFIFOCNT sampled right after it.
+ * pointers, FSMSTAT1 and RXFIFOCNT sampled right after it; runts counts heads
+ * dropped by runt_head() (H2 LH16D), saturating.
  */
 static MCU_XDATA uint8_t head_retry;
 static volatile MCU_XDATA struct {
-    uint8_t retries, count, first, last, signals, recount;
+    uint8_t retries, count, first, last, signals, recount, runts;
 } head_trace;
 #endif
 #if defined(CC2530_RX_DIAG)
@@ -352,6 +353,17 @@ static uint8_t complete_head(void)
     return 1;
 }
 
+/* H2 LH16D: a finished PHR 3 head (FIFOP set, RXP1_PTR at RXFIRST_PTR) halted
+ * READY. A PSDU below the 5-octet ACK minimum (IEEE 802.15.4-2006 7.2.2.3) is
+ * no MAC frame; its PHR+1 bytes are dropped. After complete_head() failed:
+ * finished by the finished_head() rule (SFD low, or a later byte follows).
+ */
+static uint8_t runt_head(void)
+{
+    return status.phr < 5u && status.count > status.phr &&
+           (!(status.signals & 0x20u) || status.count > status.phr + 1u);
+}
+
 static radio_autoack_result_t progress(void)
 {
     uint32_t now;
@@ -439,6 +451,23 @@ static radio_autoack_result_t consume(void)
 #define CHECK(call) do { result = (call); if (result != RADIO_AUTOACK_READY) goto failed; } while (0)
 #define REQUIRE(test, error) do { if (!(test)) { result = (error); goto failed; } } while (0)
 #define ROOM() REQUIRE(status.polls < work.limit, RADIO_AUTOACK_WORK_LIMIT)
+/* Reads and drops a runt_head() with the same pinned-head checks as a frame. */
+static radio_autoack_result_t discard_head(void)
+{
+    radio_autoack_result_t result;
+    work.head = status.first; work.remaining = status.phr + 1u;
+    CHECK(consume());
+    REQUIRE((work.byte & 127u) == status.phr, RADIO_AUTOACK_FIFO_ERROR);
+    while (work.remaining) CHECK(consume());
+    CHECK(poll());
+    REQUIRE(status.first == work.head, RADIO_AUTOACK_FIFO_ERROR);
+#if defined(CC2530_RADIO_RX_ISR)
+    if ((uint8_t)(head_trace.runts + 1u)) head_trace.runts++;
+#endif
+    return RADIO_AUTOACK_READY;
+failed:
+    return result;
+}
 #if defined(CC2530_MAC_ATTEMPT)
 static radio_autoack_result_t receive_head(void)
 {
@@ -498,8 +527,14 @@ void radio_autoack_rx_isr(void)
         /* Same rule as finished_head(): with SFD high one more byte is needed. */
         if ((phr & 0x20u) && count) count--;
         phr = RX_ISR_XREAD(0x619a) & 127u;
-        if (phr < 5u || count <= phr) return;
+        if (count <= phr) return;
         if ((MMIO_READ(SOC_RFD) & 127u) != phr) { rx_halt = 2; goto halt; }
+        if (phr < 5u) {
+            /* Finished runt (runt_head()): drop its remaining PHR bytes. */
+            while (phr--) (void)MMIO_READ(SOC_RFD);
+            if ((uint8_t)(head_trace.runts + 1u)) head_trace.runts++;
+            continue;
+        }
         /* Slot offset without a x128 multiply (keeps the ISR frame small). */
         slot = (uint8_t RX_ISR_XDATA *)rx_slot[0];
         if (rx_put & 2u) slot += 256u;
@@ -668,6 +703,7 @@ static radio_autoack_result_t operate(uint8_t operation,
 #if defined(CC2530_RX_DIAG)
         diag_service();
 #endif
+again:
         CHECK(poll());
 #if defined(CC2530_RADIO_RX_ISR)
         /* Queued heads precede everything still in the FIFO. */
@@ -738,7 +774,21 @@ static radio_autoack_result_t operate(uint8_t operation,
             result = RADIO_AUTOACK_EMPTY;
             goto finished;
         }
-        REQUIRE(complete_head(), RADIO_AUTOACK_FIFO_ERROR);
+        if (!complete_head()) {
+            REQUIRE(status.phr < 5u && status.count > status.phr, RADIO_AUTOACK_FIFO_ERROR);
+            if (runt_head()) {
+                CHECK(discard_head());
+                /* A stopped drain continues to the next head or to empty. */
+                if (radio_autoack_state != RADIO_AUTOACK_RX &&
+                    radio_autoack_state != RADIO_AUTOACK_RX_NOACK) goto again;
+            } else {
+                /* Only live RX: a runt still in reception may yet be rejected. */
+                REQUIRE(radio_autoack_state == RADIO_AUTOACK_RX ||
+                        radio_autoack_state == RADIO_AUTOACK_RX_NOACK, RADIO_AUTOACK_FIFO_ERROR);
+            }
+            result = RADIO_AUTOACK_EMPTY;
+            goto finished;
+        }
 #if defined(CC2530_MAC_ADAPTER)
 head:
 #endif
@@ -818,11 +868,12 @@ overflowed:
         status.phase = 6;
 #if defined(CC2530_RADIO_RX_ISR)
         if (status.count || QUEUED) {
-            REQUIRE(!status.count || (status.signals & 0x40u) || complete_head(),
-                    RADIO_AUTOACK_FIFO_ERROR);
+            REQUIRE(!status.count || (status.signals & 0x40u) || complete_head() ||
+                    runt_head(), RADIO_AUTOACK_FIFO_ERROR);
 #else
         if (status.count) {
-            REQUIRE((status.signals & 0x40u) || complete_head(), RADIO_AUTOACK_FIFO_ERROR);
+            REQUIRE((status.signals & 0x40u) || complete_head() || runt_head(),
+                    RADIO_AUTOACK_FIFO_ERROR);
 #endif
             result = RADIO_AUTOACK_DRAIN;
         } else {
@@ -1260,8 +1311,16 @@ radio_autoack_result_t radio_autoack_attempt(
              * bit7 is not a 128-byte RXFIFO offset, so compare [6:0] only.
              */
             REQUIRE((MMIO_XREAD(0x619f) & 127u) == attempt.head &&
-                    attempt.phr >= 5 && work.byte <= 128 && work.byte >= attempt.phr+1u &&
+                    work.byte <= 128 && work.byte >= attempt.phr+1u &&
                     !MMIO_READ(SOC_RFERRF), RADIO_AUTOACK_FIFO_ERROR);
+            if (attempt.phr < 5u) {
+                /* Finished runt (RXP1_PTR at the head): drop it, keep waiting. */
+                CHECK(poll());
+                REQUIRE(status.first == attempt.head, RADIO_AUTOACK_FIFO_ERROR);
+                status.phr = attempt.phr;
+                CHECK(discard_head());
+                continue;
+            }
             CHECK(attempt_sample(timeout, limit, &attempt_output->rx));
             CHECK(attempt_elapsed(&attempt_output->before, &attempt_output->rx));
             attempt_output->within_window = attempt.ticks <= attempt.until;

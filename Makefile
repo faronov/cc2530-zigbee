@@ -93,7 +93,7 @@ M5_M6_PROGRAMS := $(M5_M6_CHECKS) $(addsuffix -sanitize,$(M5_M6_CHECKS)) host-nw
 test-m5-m6-host: $(addprefix $(BUILD)/,$(M5_M6_PROGRAMS))
 	set -e; for name in $(M5_M6_PROGRAMS); do "$(BUILD)/$$name"; done
 
-JOIN_SMOKE_HOST_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 25 26 27 $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21 22 23 24)
+JOIN_SMOKE_HOST_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 25 26 27 $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15 28) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21 22 23 24)
 test-join-smoke-host: $(addprefix $(BUILD)/,host-join-smoke host-join-smoke-sanitize host-join-smoke-deep host-join-smoke-deep-sanitize host-zcl-sensor host-zcl-sensor-sanitize)
 	"$(BUILD)/host-zcl-sensor"
 	"$(BUILD)/host-zcl-sensor-sanitize"

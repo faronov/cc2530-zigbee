@@ -347,7 +347,13 @@ storms while the foreground was in crypto/NWK work between radio operations
   The foreground uses the same rule (`finished_head()`) for heads left with FIFOP low. If its
   first `consume()` recheck of such a head fails before any byte is read, that receive ends
   EMPTY once and the next one reads the head; a second consecutive failure is fatal (H2 LH13,
-  section 20; evidence in `head_trace`). The ISR makes no calls, owns
+  section 20; evidence in `head_trace`). A finished head whose PHR is below the
+  5-octet minimum PSDU (IEEE 802.15.4-2006 §7.2.2.3) is a runt: the ISR reads and
+  drops its PHR bytes and continues; the foreground `discard_head()` does the same
+  (live RX ends EMPTY, a stopped drain continues to the next head, the ACK window
+  keeps waiting). A runt not yet finished, or one whose bytes are not all counted,
+  is left alone or stays a FIFO error (H2 LH16D, section 24; `head_trace.runts`
+  counts drops). The ISR makes no calls, owns
   no static frame, uses DPTR0 and bank 0 only, and preserves 12 bytes
   (PSW/A/B/DPTR/R0/R2/R3 and four virtual registers). RFERRF, an impossible count
   or a PHR mismatch after the PHR byte was consumed stops it with EA cleared and

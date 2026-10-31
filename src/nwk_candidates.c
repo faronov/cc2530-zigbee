@@ -23,6 +23,7 @@ static uint8_t valid_table(const nwk_candidates_t * SDCC_VOLATILE table)
 #if defined(CC2530_PARENT_RECOVERY)
         && table->rejoin <= 1
 #endif
+        && table->filtered <= 1
         && table->count <= NWK_CANDIDATES_CAPACITY && valid_mask(table->channel_mask);
 }
 
@@ -37,6 +38,18 @@ nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * SDCC_VOLATILE tab
     memset(table, 0, sizeof(*table));
     table->channel_mask = channel_mask;
     table->version = NWK_CANDIDATES_VERSION;
+    return NWK_CANDIDATES_OK;
+}
+
+nwk_candidates_result_t nwk_candidates_parent(nwk_candidates_t * SDCC_VOLATILE table,
+                                              uint16_t parent)
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    if (!LW_IO(LW_NONE, table, sizeof(*table), 1)) return NWK_CANDIDATES_INVALID_ARGUMENT;
+#endif
+    if (!table || !valid_table(table) || table->count) return NWK_CANDIDATES_INVALID_TABLE;
+    table->parent = parent;
+    table->filtered = 1;
     return NWK_CANDIDATES_OK;
 }
 
@@ -122,7 +135,10 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
             table->rejoin ||
 #endif
             (candidate.superframe & MAC_SUPERFRAME_ASSOCIATION_PERMIT) != 0u)
-        && candidate.network.end_device_capacity != 0u;
+        && candidate.network.end_device_capacity != 0u
+        && (!table->filtered || candidate.address_mode != MAC_ADDRESS_SHORT
+            || (candidate.coordinator[0] == (uint8_t)table->parent
+                && candidate.coordinator[1] == (uint8_t)(table->parent >> 8)));
     for (i = 0; i < table->count; i++) {
         if (same_identity(&table->entries[i], &candidate)) {
             if (eligible) {

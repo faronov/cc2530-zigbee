@@ -24,6 +24,8 @@ from join_smoke_service import service_valid
 from verify_firmware import cdb_address, peripheral_accesses, require
 
 
+DRAWS = int(re.search(r"#define JOIN_SMOKE_DRAWS (\d+)u",
+                      (Path(__file__).resolve().parents[1] / "include/join_smoke.h").read_text()).group(1))
 CONSTANT = {0xb8: 0, 0x9a: 0, 0xbe: 4, 0xd7: 0, 0x624a: 0xa5, 0x6276: 0x44, 0x6277: 255}
 PASSIVE = set(CONSTANT) | {0xc6, 0xc7}
 CONDITION = {
@@ -97,7 +99,7 @@ def validate_reference(vector):
     require(all(type(vector[name]) is int and vector[name] >= 0
                 for name in ("peer_tx", "aes_blocks", "flash_commands")), "Invalid reference counters")
     hex_bytes(vector["admission"], 150)
-    hex_bytes(vector["draws"], 64)
+    hex_bytes(vector["draws"], DRAWS)
     hex_bytes(vector["nv_initial"], 4096)
     require(set(vector["initial"]) == {str(a) for a in PERIPHERAL_SFR | set(range(0x6100, 0x6400))}
             and all(type(v) is int and 0 <= v <= 255 for v in vector["initial"].values()),
