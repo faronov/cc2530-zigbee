@@ -52,7 +52,10 @@ static uint16_t adapter_address(const volatile void *p)
 }
 static uint8_t adapter_load(uint8_t a, uint8_t value)
 {
-    if (a == SOC_RFD_ADDRESS && tx_count >= 4 && packets && remaining == 6 && fifo[head] == 5)
+    /* Only an unread 5-byte ACK at its PHR; a data frame body byte equal to
+     * 5 with six bytes left is not an ACK (issue #101). */
+    if (a == SOC_RFD_ADDRESS && tx_count >= 4 && packets && remaining == 6 &&
+        lengths[packet_head] == 6 && fifo[head] == 5)
         fifo[(head+3)&127] = tx_fifo[3] ^ (wrong_dsn ? 1u : 0u);
     return handoff_load(a, value);
 }
