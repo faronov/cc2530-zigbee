@@ -4,7 +4,10 @@
 #include "bringup.h"
 #include "mac_link_driver.h"
 
-#define JOIN_SMOKE_DRAWS 64u
+/* One draw per pre-READY CSMA RANDOM request, including every Data Request
+ * poll. 64 ran out on a busy network (H2 LH16C: a lost Transport Key left
+ * WAIT_TC retrying). 254 keeps the uint8 qualified_draws bound checks real. */
+#define JOIN_SMOKE_DRAWS 254u
 #define JOIN_SMOKE_SERVICE_TICKS 4096UL
 #define JOIN_SMOKE_SERVICE_POLLS 512u
 #define JOIN_SMOKE_ADMISSION_POLLS 256u
