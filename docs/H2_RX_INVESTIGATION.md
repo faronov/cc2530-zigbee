@@ -622,3 +622,32 @@ continues. Host evidence: `runt_cases()` in `tests/test_radio_autoack.c` (PHR
 0..4 live/drain/stop, in-reception wait, short count fatal), the LH16D ISR block
 in `tests/test_mac_link_e2e.c` and the runt-before-ACK attempt. Mutants without
 the receive, ISR or ACK-window branch each fail.
+
+## 25. LH16E/LH17: Discover Route 2 doubled the ZHA interview
+
+LH16E reached "node in ZHA" only after 98.8 s although the join itself took
+~2 s. In the LH16D air capture every first copy of an APS-AR ZDO request from
+the EmberZNet coordinator was MAC-acked and never answered; only the APS retry
+8–28 s later was. The first copies all carry NWK FCF 0x0288 (Discover Route =
+2), the answered ones 0x0208/0x0248 (DR 0/1):
+
+| t (s), LH16D | NWK FCF | DR | device reply |
+|---|---|---|---|
+| 72.28, 80.58, 118.72, 127.01 | 0x0288 | 2 | none |
+| 81.54, 89.79, 128.02, 136.06 | 0x0208/0x0248 | 0/1 | yes |
+
+ZigBee 2007 (053474r17) defines DR 2 as "force route discovery"; R21+ marks
+2–3 reserved, but EmberZNet still sends 2. `nwk_frame_decode()` rejected it as
+INVALID_HEADER, so `ed_wire` dropped the frame as malformed before any counter.
+Decode now maps a unicast DR 2 to ENABLE (route discovery is irrelevant to an
+end-device receiver; AAD uses the original bytes). Broadcasts still require 0,
+DR 3 is still rejected and encode stays 0/1. Host evidence: the DR loop and
+`exhaustive_control` in `tests/test_nwk_frame.c` (mutant fails), and the
+join-smoke peer now sends its APS-AR application frame with DR 2.
+
+LH17 (same image plus the fix): "node in ZHA" at +37.6 s, the DR 2 Active
+Endpoint Request (t 73.14) was answered at once and the whole interview took
+~8 s; 600 s soak PASS. One 28 s gap remains: the pre-READY Active Endpoint
+Request (t 44.77, DR 1) arriving during the TCLK exchange is MAC-acked but
+lost. The device does not poll for ~1.6 s before Request Key (and ~1.75 s
+before Verify Key); that stall is the next item.

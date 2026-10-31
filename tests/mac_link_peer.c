@@ -150,6 +150,8 @@ static void key_context(zigbee_security_key_t *key, const uint8_t *material,
     key->counter = counter; key->limits = limits;
 }
 
+static uint8_t legacy_route;
+
 static void seal_peer(uint8_t aps_secure, uint8_t selector, const uint8_t *link, uint8_t nwk_secure)
 {
     zigbee_security_key_t key;
@@ -158,6 +160,9 @@ static void seal_peer(uint8_t aps_secure, uint8_t selector, const uint8_t *link,
     mac_header_t mh;
     CHECK(!link_peer_pending);
     CHECK(ed_wire_encode(&peer_out, npdu, sizeof(npdu), &npdu_length) == ZIGBEE_SECURITY_OK);
+    /* EmberZNet's legacy force-route discovery (2), authenticated as sent. */
+    if (legacy_route) npdu[0] = (uint8_t)((npdu[0] & 0x3fu) | 0x80u);
+    legacy_route = 0;
     CHECK(ed_wire_nwk(npdu, npdu_length, &header) == ZIGBEE_SECURITY_OK);
     if (aps_secure) {
         key_context(&key, link, 1, selector, peer_aps_counter++, 1);
@@ -419,6 +424,7 @@ static void receive_application(uint8_t acknowledge)
     peer_out.aps.source_endpoint = peer_out.aps.destination_endpoint = 1;
     peer_out.aps.profile_id = 0x0104;
     peer_out.length = 3; peer_out.payload[0] = 0x55;
+    legacy_route = acknowledge;
     seal_peer(0, 0, NULL, 1);
 }
 
