@@ -168,7 +168,8 @@ static uint8_t handoff_load(uint8_t a, uint8_t value)
     uint8_t result;
     handoff_tick();
     if (a == SOC_RFIRQF1_ADDRESS) value = SOC_RFIRQF1;
-    if (a == SOC_RFD_ADDRESS && rewrite_reply && packets && remaining == 6 && fifo[head] == 5) {
+    if (a == SOC_RFD_ADDRESS && rewrite_reply && packets && remaining == 6 &&
+        lengths[packet_head] == 6 && fifo[head] == 5) {
         fifo[(head+1)&127] = (uint8_t)response_fcf;
         fifo[(head+2)&127] = (uint8_t)(response_fcf >> 8);
         rewrite_reply = 0;

@@ -304,6 +304,8 @@ static void serve_ready(unsigned *calls)
         advance_clocks(step);
         /* The modeled 32.768-kHz sleep timer otherwise moves only per read. */
         cycles+=step;
+        /* Follow device time: MMIO accesses advance the model past served steps (issue #101). */
+        if(model_clocks-origin>cycles) cycles=model_clocks-origin;
         ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
         credited=cycles*32768u/32000000u;
         handoff_tick();
