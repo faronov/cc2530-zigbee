@@ -77,7 +77,7 @@ static uint8_t tx_fifo[128], body_length;
 static unsigned tx_count, tx_attempts, tx_started, tx_flushes, tx_delay, rx_delay, cca_clear, cca_cycles;
 static unsigned hold_tx, lost_tx, reply_after_tx, bad_reply, ignored_tx_clear, ignored_flush;
 static unsigned tx_write_fault, phase_write_fault, tx_error, late_cca_loss;
-static unsigned unexpected_rx;
+static unsigned unexpected_rx, runt_ok;
 static unsigned fifop_edge, fifop_high, overflow_at_errors;
 static unsigned rx_overflow, overflow_on_stop, flush_settle, flush_rxabo, overflow_after_reads;
 static unsigned head, tail, count, packets, packet_head, packet_tail, remaining;
@@ -128,7 +128,7 @@ static void signals(void)
 static void enqueue(unsigned length, unsigned crc, unsigned seed)
 {
     unsigned i;
-    assert(length >= 5 && length <= 127 && count + length + 1 <= 128 && packets < 24);
+    assert((length >= 5 || runt_ok) && length <= 127 && count + length + 1 <= 128 && packets < 24);
     lengths[packet_tail] = (uint8_t)(length + 1);
     packet_tail = (packet_tail + 1) % 24;
     if (!packets) remaining = length + 1;
@@ -150,6 +150,12 @@ static void enqueue(unsigned length, unsigned crc, unsigned seed)
         tail = (tail + 1) & 127; count++;
     }
     fifop_high = 1; signals(); SOC_RFIRQF0 |= 0x66;
+}
+
+/* H2 LH16D: the controller finished a PHR 3 head (FIFOP set, RXP1_PTR at it). */
+static void enqueue_runt(unsigned length, unsigned seed)
+{
+    runt_ok = 1; enqueue(length, 0xe9, seed); runt_ok = 0;
 }
 
 /* An incomplete frame fills the FIFO: reception halts in FSM state 17 with
@@ -505,11 +511,15 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
     radio_autoack_diagnostics_t diagnostic;
     uint8_t expected_body[125], expected_length, expected_rssi, expected_crc;
     unsigned i, initial_reads = rfd_reads, initial_accesses = accesses, previous_fault = radio_autoack_fault;
-    unsigned previous_state = radio_autoack_state;
-    expected_length = fifo[head] & 127u;
-    for (i = 0; i < 125; i++) expected_body[i] = fifo[(head + 1 + i) & 127];
-    expected_rssi = fifo[(head + expected_length - 1) & 127];
-    expected_crc = fifo[(head + expected_length) & 127];
+    unsigned previous_state = radio_autoack_state, at = head, skipped = 0;
+    /* A drain may discard complete runt heads before returning the next frame. */
+    while ((fifo[at] & 127u) < 5u && skipped + (fifo[at] & 127u) + 1u < count) {
+        skipped += (fifo[at] & 127u) + 1u; at = (at + (fifo[at] & 127u) + 1u) & 127u;
+    }
+    expected_length = fifo[at] & 127u;
+    for (i = 0; i < 125; i++) expected_body[i] = fifo[(at + 1 + i) & 127];
+    expected_rssi = fifo[(at + expected_length - 1) & 127];
+    expected_crc = fifo[(at + expected_length) & 127];
     if (operation == 1 && mode == 7 && phase + 1 > rx_delay && !packets && reply_after_tx) {
         expected_length = 5;
         expected_body[0] = 2; expected_body[1] = 0; expected_body[2] = 0x5a;
@@ -546,7 +556,7 @@ static void call(unsigned operation, uint32_t timeout, uint16_t limit, radio_aut
         assert(config.before[i] == 0xa5 && config.after[i] == 0xa5 &&
                frame.before[i] == 0x69 && frame.after[i] == 0x69);
     if (result == RADIO_AUTOACK_FRAME || result == RADIO_AUTOACK_BAD_CRC) {
-        assert(rfd_reads - initial_reads == expected_length + 1u);
+        assert(rfd_reads - initial_reads == skipped + expected_length + 1u);
         assert(frame.value.length == expected_length - 2 &&
                frame.value.rssi_raw == expected_rssi && frame.value.crc_correlation == expected_crc);
         assert(!memcmp(frame.value.body, expected_body, expected_length - 2));
@@ -894,7 +904,10 @@ static void scenario(unsigned n)
             if (n == 65) after_reads = 1;
             if (n == 66) after_reads = 12;
             if (n == 67) corrupt_head = 1;
-            CALL(1, n == 65 || n == 66 ? RADIO_AUTOACK_CONTROLLER_ERROR : RADIO_AUTOACK_FIFO_ERROR);
+            /* A finished PHR 4 head is a runt: its 5 bytes are dropped. */
+            CALL(1, n == 63 ? RADIO_AUTOACK_EMPTY : n == 65 || n == 66 ?
+                 RADIO_AUTOACK_CONTROLLER_ERROR : RADIO_AUTOACK_FIFO_ERROR);
+            if (n == 63) assert(rfd_reads == 5 && count == 7 && !radio_autoack_fault);
         } else if (n == 68) {
             XR(0x6193) = 4; CALL(1, RADIO_AUTOACK_STATE_CHANGED);
         } else if (n == 69) {
@@ -912,7 +925,8 @@ static void scenario(unsigned n)
         } else if (n == 75) {
             ignored_clear = 1; SOC_RFIRQF1 = 5; CALL(2, RADIO_AUTOACK_STATE_CHANGED);
         } else if (n == 76) {
-            count = tail = 3; signals(); CALL(2, RADIO_AUTOACK_FIFO_ERROR);
+            /* Incomplete PHR 9 head without FIFOP (PHR < 5 would be a runt). */
+            fifo[0] = 9; count = tail = 3; signals(); CALL(2, RADIO_AUTOACK_FIFO_ERROR);
         } else if (n == 77) {
             SOC_CLKCONCMD = SOC_CLKCONSTA = 0x08; CALL(1, RADIO_AUTOACK_STATE_CHANGED);
         } else if (n == 78) {
@@ -942,7 +956,7 @@ static void scenario(unsigned n)
         } else if (n == 102) {
             SOC_RFERRF = 8; CALL(2, RADIO_AUTOACK_CONTROLLER_ERROR);
         } else if (n == 104) {
-            count = tail = 3; signals();
+            fifo[0] = 9; count = tail = 3; signals();
             CALL(1, RADIO_AUTOACK_EMPTY); CALL(2, RADIO_AUTOACK_FIFO_ERROR);
         } else if (n == 105) {
             for (i = 0; i < 21; i++) enqueue(5, 128, i);
@@ -982,6 +996,50 @@ end:
 static void incomplete_tail(void)
 {
     fifo[tail] = 56; tail = (tail + 3) & 127; count += 3; signals();
+}
+
+/* H2 LH16D: finished heads shorter than an ACK PSDU are dropped, never fatal. */
+static void runt_cases(void)
+{
+    unsigned length, reads;
+    for (length = 0; length < 5; length++) {
+        reset(); CALL(0, RADIO_AUTOACK_READY);
+        enqueue_runt(length, 0x30 + length); enqueue(11, 128, 0x38);
+        CALL(1, RADIO_AUTOACK_EMPTY);
+        assert(rfd_reads == length + 1 && count == 12 && !radio_autoack_fault);
+        CALL(1, RADIO_AUTOACK_FRAME); assert(frame.value.length == 9);
+        CALL(1, RADIO_AUTOACK_EMPTY); CALL(2, RADIO_AUTOACK_STOPPED);
+    }
+    /* Still in reception (SFD high, no later byte): filtering may yet remove it. */
+    reset(); CALL(0, RADIO_AUTOACK_READY);
+    enqueue_runt(3, 0x41); XR(0x6193) |= 0x20; signals();
+    CALL(1, RADIO_AUTOACK_EMPTY); assert(!rfd_reads && count == 4);
+    /* A later frame's byte finishes it even with SFD high. */
+    enqueue(5, 128, 0x41); XR(0x6193) |= 0x20; signals();
+    CALL(1, RADIO_AUTOACK_EMPTY); assert(rfd_reads == 4 && count == 6);
+    XR(0x6193) &= (uint8_t)~0x20; signals();
+    CALL(1, RADIO_AUTOACK_FRAME); CALL(2, RADIO_AUTOACK_STOPPED);
+    /* Stopped drain walks past runts to the next head, then to empty. */
+    reset(); CALL(0, RADIO_AUTOACK_READY);
+    enqueue_runt(3, 0x42); enqueue(11, 128, 0x38); enqueue_runt(0, 0);
+    CALL(2, RADIO_AUTOACK_DRAIN);
+    CALL(1, RADIO_AUTOACK_FRAME); assert(frame.value.length == 9 && rfd_reads == 16);
+    CALL(1, RADIO_AUTOACK_EMPTY); assert(!count && rfd_reads == 17);
+    CALL(2, RADIO_AUTOACK_STOPPED);
+    /* Stop without FIFOP (p232): a finished runt head still drains. */
+    reset(); fifop_edge = 1; CALL(0, RADIO_AUTOACK_READY);
+    enqueue_runt(2, 0x43); fifop_high = 0; signals();
+    CALL(2, RADIO_AUTOACK_DRAIN);
+    CALL(1, RADIO_AUTOACK_EMPTY); assert(!count && rfd_reads == 3);
+    CALL(2, RADIO_AUTOACK_STOPPED);
+    /* A runt whose bytes are not all counted stays fatal. */
+    reset(); CALL(0, RADIO_AUTOACK_READY);
+    enqueue_runt(3, 0x44); count = 3; tail = (head + 3) & 127; signals();
+    reads = rfd_reads;
+    CALL(1, RADIO_AUTOACK_FIFO_ERROR);
+    assert(radio_autoack_fault == RADIO_AUTOACK_FIFO_ERROR && rfd_reads == reads);
+    reset();
+    printf("AUTOACK runts: PHR 0..4 dropped live/drain/stop, in-reception wait, short count fatal PASS.\n");
 }
 
 static void fifop_cases(void)
@@ -1418,6 +1476,7 @@ int main(int argc, char **argv)
         CALL(4, RADIO_AUTOACK_FIFO_ERROR);
     }
     fifop_cases();
+    runt_cases();
 #if defined(CC2530_MAC_ADAPTER) && !defined(CC2530_MAC_ATTEMPT)
     overflow_cases();
 #endif
