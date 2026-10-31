@@ -132,7 +132,7 @@ admission. This bare codec remains unchanged and rejects protected input.
 
 | Offset | Field | Supported treatment |
 | --- | --- | --- |
-| 0..1 | Little-endian Frame Control | Type 0, version 2; Discover Route 0/1 for unicast, 0 for broadcast |
+| 0..1 | Little-endian Frame Control | Type 0, version 2; Discover Route 0/1 for unicast (decode also accepts 2, see below), 0 for broadcast |
 | 2..3 | Destination network address | Unicast `0000..FFF7`, or defined broadcasts `FFFB`, `FFFC`, `FFFD`, `FFFF` |
 | 4..5 | Source network address | `0000..FFF7`; never a broadcast/reserved address |
 | 6 | Radius | Preserve all 0..255; no decrement, forwarding or lifetime decision |
@@ -145,7 +145,12 @@ error; bit 9 (security) returns an unsupported-security error. Bits 11/12
 indicate destination/source IEEE address presence. Bit 13, End Device
 Initiator, is preserved as metadata; setting it correctly needs actual
 source-role and `nwkParentInformation` state, which this codec does not own.
-Reserved FCF bits 14/15 and Discover Route values 2/3 are rejected.
+Reserved FCF bits 14/15 and Discover Route value 3 are rejected. Value 2 is
+ZigBee 2007 "force route discovery", reserved since R21; EmberZNet (ZHA over
+EZSP) still sends it on unicasts, for example on APS-ACK-requested ZDO requests.
+Route discovery is the sender's choice, so decode accepts it on a unicast and
+reports `NWK_DISCOVER_ROUTE_ENABLE`; every decoded header stays encodable.
+Encode emits only 0/1, and a broadcast still requires 0.
 `nwk_header_t.flags` contains only the high-octet flags, not type/version/route
 bits. Unsupported flag constants exist to identify rejected inputs, not
 advertise those features.

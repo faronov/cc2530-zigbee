@@ -93,6 +93,11 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     candidate.header.source = read_le16(body + 4);
     candidate.header.radius = body[6];
     candidate.header.sequence = body[7];
+    /* EmberZNet still sends ZigBee 2007 "force route discovery" (2, reserved
+     * since R21) on unicasts; it is the sender's routing choice, so receive
+     * it as enable and keep every decoded header encodable. */
+    if (candidate.header.discover_route == 2u && candidate.header.destination < 0xfff8u)
+        candidate.header.discover_route = NWK_DISCOVER_ROUTE_ENABLE;
     status = header_shape(&candidate.header, &size);
     if (status != NWK_CODEC_OK)
         return CW_RETURN(CW_NWK_DECODE,status);

@@ -298,7 +298,15 @@ static uint16_t rejected_cases(void)
             body[0] |= (uint8_t)(i << 6);
             expected = NWK_CODEC_INVALID_HEADER;
         }
-        CHECK(decode_failure(body, 11, expected) == 0);
+        if (i == 2) {
+            /* Legacy unicast force-route discovery is received as enable. */
+            CHECK(nwk_frame_decode(body, 11, &decoded) == NWK_CODEC_OK);
+            CHECK(decoded.header.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
+            CHECK(decoded.header.destination == 0x5678 && decoded.payload_length == 3);
+            body[2] = body[3] = 0xff;
+            CHECK(decode_failure(body, 11, expected) == 0);
+        } else
+            CHECK(decode_failure(body, 11, expected) == 0);
         CHECK(encode_failure(&header, payload, 3, expected) == 0);
     }
     return 0;
@@ -347,7 +355,7 @@ static uint16_t exhaustive_control(void)
     uint8_t input[24], output[24], written;
     uint32_t control, address, accepted;
     nwk_codec_result_t status;
-    int valid;
+    int valid, legacy;
 
     for (address = 0; address < 2; address++) {
         accepted = 0;
@@ -357,7 +365,8 @@ static uint16_t exhaustive_control(void)
             input[1] = (uint8_t)(control >> 8);
             if (address)
                 input[2] = input[3] = 0xff;
-            valid = control % 4 == 0 && control / 4 % 16 == 2 && control / 64 % 4 < 2
+            legacy = !address && control / 64 % 4 == 2;
+            valid = control % 4 == 0 && control / 4 % 16 == 2 && (control / 64 % 4 < 2 || legacy)
                     && (control & 0xc700UL) == 0;
             if (address && (control / 64 % 4 != 0 || (control & 0x0800UL)))
                 valid = 0;
@@ -372,19 +381,25 @@ static uint16_t exhaustive_control(void)
             header.flags = (uint16_t)(control & 0xff00UL);
             if (address)
                 header.destination = 0xffff;
-            if (!valid) {
-                CHECK(memcmp(&decoded, &saved, sizeof(decoded)) == 0);
+            if (!valid || legacy) {
+                if (!valid)
+                    CHECK(memcmp(&decoded, &saved, sizeof(decoded)) == 0);
                 CHECK(nwk_frame_encode(&header, NULL, 0, output, sizeof(output), &written) != NWK_CODEC_OK);
-            } else {
+            }
+            if (valid) {
                 accepted++;
                 CHECK(nwk_frame_encode(&decoded.header, input + decoded.payload_offset,
                                        decoded.payload_length, output, sizeof(output), &written) == NWK_CODEC_OK);
+                if (legacy)
+                    input[0] ^= 0xc0u;
                 CHECK(written == sizeof(input) && memcmp(input, output, sizeof(input)) == 0);
-                CHECK(nwk_frame_encode(&header, NULL, 0, output, sizeof(output), &written) == NWK_CODEC_OK);
-                CHECK(output[0] == input[0] && output[1] == input[1]);
+                if (!legacy) {
+                    CHECK(nwk_frame_encode(&header, NULL, 0, output, sizeof(output), &written) == NWK_CODEC_OK);
+                    CHECK(output[0] == input[0] && output[1] == input[1]);
+                }
             }
         }
-        CHECK(accepted == (address ? 4u : 16u));
+        CHECK(accepted == (address ? 4u : 24u));
     }
     for (control = 0; control <= 65535UL; control++) {
         base_header();
