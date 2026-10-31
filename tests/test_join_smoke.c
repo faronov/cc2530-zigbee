@@ -66,7 +66,10 @@ static unsigned recovery_selected;
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
-       CALLER_WRONG_TC };
+       CALLER_WRONG_TC, CALLER_BUSY=28 };
+/* CALLER_BUSY: a network-wide permit (HIL LH16B). More permitting routers
+ * than candidate capacity beacon before the coordinator; still READY. */
+#define BUSY_ROUTERS 6u
 static unsigned caller_extra_beacons;
 
 static void discovery_peer(void)
@@ -81,6 +84,19 @@ static void discovery_peer(void)
         assert(mac_frame_decode(link_beacon,link_beacon_length,&beacon)==MAC_CODEC_OK);
         link_beacon[beacon.payload_offset+7]++;
         air_frame(link_beacon,link_beacon_length,1);
+        caller_extra_beacons++;
+    } else if (caller_case==CALLER_BUSY && received_frames && caller_extra_beacons<BUSY_ROUTERS &&
+        join_smoke_device.phase==BDB_JOIN_SCANNING &&
+        join_smoke_device.work.scan.phase==MAC_SCAN_RX &&
+        XR(0x618b) && mode==2 && !ack_active && !packets &&
+        !mac_adapter_diagnostic()->held) {
+        mac_frame_info_t beacon;
+        uint8_t router[48], length;
+        assert(mac_frame_decode(link_beacon,link_beacon_length,&beacon)==MAC_CODEC_OK);
+        beacon.header.source[0]=(uint8_t)(0x11u+caller_extra_beacons); beacon.header.source[1]=0x10;
+        assert(mac_frame_encode(&beacon.header,link_beacon+beacon.payload_offset,beacon.payload_length,
+            router,sizeof(router),&length)==MAC_CODEC_OK);
+        air_frame(router,length,1);
         caller_extra_beacons++;
     } else peer_progress_for(&join_smoke_device,&join_smoke_tx);
 }
@@ -665,7 +681,7 @@ int main(int argc, char **argv)
     recovery_selected=selected;
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert((selected<=CALLER_WRONG_TC && selected!=7) || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || selected==CALLER_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
 #else
     assert(selected<=CALLER_FLASH_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
     if(selected==7) return reference_e2e_main();
@@ -857,6 +873,9 @@ int main(int argc, char **argv)
                     if(selected==CALLER_ALL_CHANNELS)
                         assert(join_smoke_device.scan_result.sent==NWK_CANDIDATES_CHANNEL_MASK &&
                             !join_smoke_device.scan_result.unscanned);
+                    if(selected==CALLER_BUSY)
+                        assert(caller_extra_beacons==BUSY_ROUTERS && !join_smoke_device.scan_result.overflow &&
+                            join_smoke_device.scan_result.candidates==1);
 #endif
                 }
             }

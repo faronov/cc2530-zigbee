@@ -61,6 +61,8 @@ typedef struct {
     uint8_t rejoin;
 #endif
     nwk_candidate_t entries[NWK_CANDIDATES_CAPACITY];
+    uint8_t filtered;
+    uint16_t parent;
 } nwk_candidates_t;
 
 /* Init/re-init clears only this table. Mask is a nonempty subset of bits 11..26
@@ -68,6 +70,13 @@ typedef struct {
  */
 nwk_candidates_result_t nwk_candidates_init(nwk_candidates_t * SDCC_VOLATILE table,
                                             uint32_t channel_mask);
+/* Restricts an empty table to the only short parent the caller's policy can
+ * select, so unrelated routers in a busy network never consume capacity.
+ * Short-addressed beacons from any other address are NOT_ELIGIBLE; extended
+ * sources still pass to the caller's policy. Re-init clears the restriction.
+ */
+nwk_candidates_result_t nwk_candidates_parent(nwk_candidates_t * SDCC_VOLATILE table,
+                                              uint16_t parent);
 #if defined(CC2530_PARENT_RECOVERY)
 nwk_candidates_result_t nwk_candidates_rejoin(nwk_candidates_t * SDCC_VOLATILE table);
 #endif
@@ -77,7 +86,8 @@ nwk_candidates_result_t nwk_candidates_rejoin(nwk_candidates_t * SDCC_VOLATILE t
  * no PHY CRC is computed, assumed or repaired here. 0 never changes the table.
  * Actual mac_frame/mac_beacon/nwk_beacon decoders must all succeed.
  *
- * Preliminary filter: profile2, BO15, Association Permit AND ED Capacity.
+ * Preliminary filter: profile2, BO15, Association Permit AND ED Capacity,
+ * plus the optional nwk_candidates_parent short-source restriction.
  * SO is ignored for BO15; update/depth/offset are raw, not ranking/freshness.
  * Identity: channel/PAN/Extended PAN/source mode/source wire octets.
  * Eligible duplicate replaces metadata; ineligible valid duplicate withdraws.
