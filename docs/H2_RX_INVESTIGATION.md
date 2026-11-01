@@ -745,3 +745,19 @@ the run also confirms the beacons stayed closed.
 Note: after every fresh join the device itself broadcasts
 `Mgmt_Permit_Joining_req` with a 180 s duration (BDB-04). A hold test must
 close permit after that window, not just after the join.
+
+LH21C repeated LH21 with the nRF sniffer running.
+- Join PASS. "Node in ZHA" took +210.8 s, for the reason described next.
+- Hold PASS. Beacons from 0x0000 showed Association Permit = 0 for the whole
+  hold.
+- Rejoin PASS at +514.9 s, with 21.10 °C and 45.25 %.
+
+The slow first join was caused by two parent NWK Leaves (request, rejoin = 1),
+at 8.5 s and 7.8 s after two associations. Both associations were duplicates:
+1. The Data Request's ACK was missing on air.
+2. The coordinator sent the Association Response anyway, and AUTOACK
+   acknowledged its retransmission.
+3. The device treated the poll as NO_ACK and associated again.
+
+The third association, a single exchange, stayed. A frame acknowledged by
+AUTOACK but discarded by the MAC is tracked separately.
