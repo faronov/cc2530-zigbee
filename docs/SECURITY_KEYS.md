@@ -297,7 +297,14 @@ key is not an outstanding Confirm context and is never promoted by Leave.
 The generic packet/received leave's rejoin option is retained; the dedicated
 failed-join `leave()` always clears it. Fixed-parent secured rejoin from LEFT
 requires that option and a previously verified TC key. No automatic
-reprovisioning/factory reset follows Leave. Rejoin/leave timing, retries and
+reprovisioning/factory reset follows Leave inside this owner. In the
+default-TC profile, `security_keys_recommission(void)` lets the caller
+re-steer from a committed LEFT/PROVISIONED/EXCHANGING record: it refuses
+VERIFIED/REJOINING/FAILED and uncommitted state, drops the RAM key/floor/phase
+caches and reports UNPROVISIONED without NV I/O. The following
+`provision_default` then rewrites the record through `security_counter_save`
+(never `create`), so both outgoing ceilings survive (outgoing frame counters
+are never reset by Leave or reprovisioning). Rejoin/leave timing, retries and
 radio cleanup remain upper-layer responsibilities.
 BDB `bdb_join_start` still rejects persisted state as recovery-required.
 Only complete VERIFIED/REJOINING membership resumes through the separate

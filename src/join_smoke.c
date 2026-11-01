@@ -253,10 +253,17 @@ void join_smoke_poll(void)
     started=timebase_read_awake_ticks24(); previous=started;
     S.stage=1;
     S.security_result=security_keys_open();
-    /* Complete persisted membership resumes through secured rejoin; any other
-     * existing storage is still refused, never erased or reprovisioned. */
+    /* Complete persisted membership resumes through secured rejoin. Default-TC:
+     * LEFT or an incomplete join is recommissioned (journal and counter
+     * ceilings kept, never erased); otherwise existing storage is refused. */
     resumed=S.security_result==SECURITY_KEYS_OK && bdb_join_resumable();
     if(!resumed) {
+#if defined(CC2530_DEFAULT_TC_KEY)
+        if(S.security_result==SECURITY_KEYS_OK) {
+            S.security_result=security_keys_recommission();
+            if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+        } else
+#endif
         if(S.security_result!=SECURITY_KEYS_EMPTY) { fault(JS_SECURITY); return; }
 #if defined(CC2530_DEFAULT_TC_KEY)
         if(IN.nwk_floor!=1 || IN.aps_floor!=1 ||

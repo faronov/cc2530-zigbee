@@ -454,5 +454,25 @@ class Summary(unittest.TestCase):
         self.assertEqual(summary["verdict"], "FAIL")
 
 
+try:
+    import llvm_join_replay  # noqa: E402
+except ImportError:  # pyelftools absent
+    llvm_join_replay = None
+
+
+@unittest.skipIf(llvm_join_replay is None, "pyelftools not installed")
+class MergedBreaks(unittest.TestCase):
+    def test_banked_hooks_at_one_pc_share_one_break(self):
+        symbols = {"_join_smoke_wait": 0x5fffd, "_join_smoke_fault": 0x3fffd, "_join_smoke_poll": 0x2f2af}
+        breaks = llvm_join_replay.merged_breaks(
+            [llvm_join_replay.hook(symbols, n)[1] for n in ("wait", "poll", "fault")])
+        self.assertEqual(breaks, [
+            'break 0xfffd 1 if "((sfr[0x9f]==5)&&((sfr[0xc7]&8)==0))||((sfr[0x9f]==3)&&((sfr[0xc7]&8)==0))"',
+            'break 0xf2af 1 if "((sfr[0x9f]==2)&&((sfr[0xc7]&8)==0))"'])
+
+    def test_unbanked_hook_stays_plain(self):
+        self.assertEqual(llvm_join_replay.merged_breaks(["break 0x1234"]), ["break 0x1234"])
+
+
 if __name__ == "__main__":
     unittest.main()

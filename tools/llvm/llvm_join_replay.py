@@ -227,6 +227,19 @@ def hook(symbols, name):
     return v, f"break {v:#x}"
 
 
+def merged_breaks(commands):
+    """One break per address: s51 rejects a second break at the same pc, so
+    banked hooks sharing a logical pc (e.g. wait and fault both at 0xfffd in
+    different banks) are OR-ed into one conditional break."""
+    conditions = {}
+    for c in commands:
+        pc = int(c.split()[1], 0)
+        conditions.setdefault(pc, []).append(c.split(' if "', 1)[1][:-1] if ' if "' in c else "1")
+    return [f"break {pc:#x}" if cl == ["1"] else
+            f'break {pc:#x} 1 if "' + "||".join(f"({x})" for x in cl) + '"'
+            for pc, cl in conditions.items()]
+
+
 def stops_for(sites, symbols, ram_stop):
     conditions = {}
     for pc, (kind, address, _) in sites.items():
@@ -297,7 +310,7 @@ def guess(prev, cur, learned):
 def check_poll_loop(simulator, base, symbols, after, sp):
     names = ("wait", "poll", "fault")
     hooks = {n: hook(symbols, n) for n in names}
-    stops = [c for _, c in hooks.values()]
+    stops = merged_breaks([c for _, c in hooks.values()])
     commands = base + stops + ["set memory sfr 0x9f 0", "set memory sfr 0xa8 0"]
     expected = ("wait", "wait", "wait", "poll", "poll", "fault")
     for phase, name in enumerate(expected, 1):

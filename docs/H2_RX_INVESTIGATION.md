@@ -690,3 +690,74 @@ restoring the re-read fails it with FIFO_ERROR.
 LH19 (the fix on top of section 26): "node in ZHA" at +42.7 s, the interview
 signature and five temperature/humidity reads in 600 s; soak PASS with no
 radio errors.
+
+## 28. LH21: autonomous image, DMA_PAUSE left by the harness
+
+LH21 ran the autonomous `join_smoke` image (no debugger hook) on H2. It
+associated and received the APS Transport Key but never sent Device Announce.
+A breakpoint on the `restart` bank thunk caught JS_FAULT reason JS_DRIVER,
+driver result MAC_LINK_DRIVER_RADIO, and `radio_result` 13. That byte is a
+`mac_radio_result_t`, so 13 means MAC_RADIO_TIMER_ERROR, not radio_autoack
+FIFO_ERROR. The mac_time status showed MAC_TIME_UNSUPPORTED_STATE from guard
+DMAARM, value 0x03. AES showed `aes_fault` AES_POLL_LIMIT. The chain:
+
+1. The LH21 harness reset-attached the target. That leaves debug config 0x26,
+   which includes DMA_PAUSE, and the harness never called
+   `enable_dma_after_reset()`. LH20 does call it.
+2. With DMA paused, the AES input and output DMA channels (0 and 1) never
+   completed. The Transport Key decrypt hit AES_POLL_LIMIT and left
+   DMAARM = 3.
+3. The next mac_time observation refused the armed DMA channels, which became
+   MAC_RADIO_TIMER_ERROR and then a driver fault.
+
+This was a harness artifact, not a firmware defect. MCUEMU passed because it
+does not model DMA_PAUSE. After a WDT reset the debug config reads 0x00, and
+attaching to an existing debug session does not change it.
+
+Fix: in the LH21 harness `run`, a fresh reset-attach must reach config 0x22
+via `enable_dma_after_reset()` before the target runs.
+
+LH21B (fixed harness):
+- Join: "node in ZHA" at +41 s, interview, temperature 21.00 °C, humidity
+  45.00 %.
+- Rejoin after reset: PASS.
+- Final status: READY, BDB 13.
+- Hold stage: FAIL. The node reappeared about 250 s after the ZHA remove,
+  with permit supposedly closed.
+
+A repeat of the remove and hold under the nRF sniffer explained the hold
+failure, using the network key from the captured Transport Key. These times
+are relative to capture start:
+
+| t (s) | frame |
+|---|---|
+| 9.66 | 0x0000 -> device: NWK Leave (request, rejoin = 1), the queued ZHA remove |
+| 13.8-274.1 | 0x0000 beacons: Association Permit = 0; device scans only, about every 60 s |
+| 300.2 | 0x0000 broadcasts Mgmt_Permit_Joining_req, duration 254, for an unrelated Telink device (0xA295, "Zigbee-RS"), outside the test |
+| 300.2-335.8 | coordinator and router beacons: Association Permit = 1 |
+| 336.7 | device: Association Request, then Transport Key and Device Announce |
+
+The device associated only when permit was open, as intended:
+`nwk_candidates.c` requires `MAC_SUPERFRAME_ASSOCIATION_PERMIT` for a
+non-rejoin candidate. The hold stage is invalid on a shared network unless
+the run also confirms the beacons stayed closed.
+
+Note: after every fresh join the device itself broadcasts
+`Mgmt_Permit_Joining_req` with a 180 s duration (BDB-04). A hold test must
+close permit after that window, not just after the join.
+
+LH21C repeated LH21 with the nRF sniffer running.
+- Join PASS. "Node in ZHA" took +210.8 s, for the reason described next.
+- Hold PASS. Beacons from 0x0000 showed Association Permit = 0 for the whole
+  hold.
+- Rejoin PASS at +514.9 s, with 21.10 °C and 45.25 %.
+
+The slow first join was caused by two parent NWK Leaves (request, rejoin = 1),
+at 8.5 s and 7.8 s after two associations. Both associations were duplicates:
+1. The Data Request's ACK was missing on air.
+2. The coordinator sent the Association Response anyway, and AUTOACK
+   acknowledged its retransmission.
+3. The device treated the poll as NO_ACK and associated again.
+
+The third association, a single exchange, stayed. A frame acknowledged by
+AUTOACK but discarded by the MAC is tracked separately.
