@@ -17,13 +17,18 @@
 #define ZDO_RUNTIME_NO_EVENT 255u
 #define ZDO_RUNTIME_BROADCAST_ANNOUNCE 1u
 #define ZDO_RUNTIME_BROADCAST_PERMIT 2u
+/* R22 Table 3-73 NWK status, reported by Mgmt_Leave_rsp for another device. */
+#define ZDO_RUNTIME_UNKNOWN_DEVICE 0xc8u
 
 typedef enum {
     ZDO_RUNTIME_OK = 0, ZDO_RUNTIME_ARGUMENT, ZDO_RUNTIME_STATE,
     ZDO_RUNTIME_FULL, ZDO_RUNTIME_FORMAT, ZDO_RUNTIME_IGNORED,
     ZDO_RUNTIME_TIMEOUT, ZDO_RUNTIME_TRANSMIT, ZDO_RUNTIME_REMOTE,
     ZDO_RUNTIME_CONFLICT, ZDO_RUNTIME_SECURITY, ZDO_RUNTIME_CLOCK,
-    ZDO_RUNTIME_DROPPED, ZDO_RUNTIME_CANCELLED
+    ZDO_RUNTIME_DROPPED, ZDO_RUNTIME_CANCELLED,
+    /* Mgmt_Leave_rsp for this device finished (any TX outcome); the owner
+     * must now leave with Rejoin=FALSE (R22 2.4.3.3.5). */
+    ZDO_RUNTIME_LEAVE
 } zdo_runtime_result_t;
 
 typedef struct {
@@ -39,13 +44,14 @@ typedef struct {
     uint8_t version, next_tsn, sequence, query, query_tx, tx_done, result;
     uint8_t response_pending, response_tx, application_ready, security_event;
     uint8_t parent_information, parent_known, conflict;
-    uint8_t response_result;
+    uint8_t response_result, leave;
 } zdo_runtime_t;
 
 /* Fixed direct TC/parent, one client transaction, one server response and one
  * application delivery. Incoming packets are taken ONLY from real nwk_aps.
  * No authenticated-input flag or external successful-admission shortcut.
  * request: Node Descriptor, single NWK/IEEE address resolution, ED Timeout1.
+ * Server: NWK/IEEE_addr and Mgmt_Leave here, other ZDP via zdo_srv.
  * ZDO requests use AR0; the bounded client retries own response transactions.
  * step never drives MAC. It preserves its pending TX through cancellation and
  * quiescence; take_result cannot turn a logical response into physical release.

@@ -144,6 +144,30 @@ static zdo_runtime_result_t address_request(zdo_runtime_t * SDCC_VOLATILE contex
     return ZDO_RUNTIME_OK;
 }
 
+/* R22 2.4.3.3.5/2.4.4.4.5: unicast only. NULL or own EUI64 accepts self
+ * removal, answered before leaving; an ED has no other devices to remove
+ * (NLME-LEAVE UNKNOWN_DEVICE). Remove Children/Rejoin are not used. */
+static zdo_runtime_result_t mgmt_leave(zdo_runtime_t * SDCC_VOLATILE context, const ed_packet_t * SDCC_VOLATILE packet)
+{
+    zdo_runtime_t *ctx = context;
+    const ed_packet_t *p = packet;
+    ed_packet_t *r = &ctx->response;
+    uint8_t i, self = 1, null = 1;
+    if (p->nwk.destination >= 0xfffbu || p->aps.delivery_mode == 2) return ZDO_RUNTIME_IGNORED;
+    if (p->length < 10) return ZDO_RUNTIME_FORMAT;
+    for (i = 0; i < 8; i++) {
+        if (p->payload[1+i]) null = 0;
+        if (p->payload[1+i] != keys.config.own_ieee[i]) self = 0;
+    }
+    base(r, p->nwk.source, ZDO_SRV_MGMT_LEAVE_REQUEST | 0x8000u);
+    r->aps.destination_endpoint = p->aps.source_endpoint;
+    r->payload[0] = p->payload[0];
+    r->payload[1] = self || null ? 0 : ZDO_RUNTIME_UNKNOWN_DEVICE;
+    r->length = 2;
+    ctx->leave = self || null; ctx->response_pending = 1;
+    return ZDO_RUNTIME_OK;
+}
+
 static zdo_runtime_result_t announce(zdo_runtime_t * SDCC_VOLATILE context, nwk_aps_t * SDCC_VOLATILE link,
     const ed_packet_t * SDCC_VOLATILE packet)
 {
@@ -263,6 +287,7 @@ static zdo_runtime_result_t received(zdo_runtime_t * SDCC_VOLATILE context, nwk_
         return LW_RETURN(LW_ZDO_RX, ZDO_RUNTIME_DROPPED);
     }
     if (p->aps.cluster_id < 2) return LW_RETURN(LW_ZDO_RX, address_request(ctx, p));
+    if (p->aps.cluster_id == ZDO_SRV_MGMT_LEAVE_REQUEST) return LW_RETURN(LW_ZDO_RX, mgmt_leave(ctx, p));
     /* Volatile parameters only: register-held aliases would be pushed
      * around the deepest linked call chain. */
     work.server.local.descriptor = context->local; work.server.local.address = keys.config.address;
@@ -303,6 +328,7 @@ zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(zdo_runtime_t * SDCC_VOLAT
                 ctx->result = result == NWK_APS_CANCELLED ? ZDO_RUNTIME_CANCELLED : ZDO_RUNTIME_TRANSMIT;
         } else {
             ctx->response_tx = 0; ctx->response_result = result;
+            if (ctx->leave) { ctx->leave = 0; return ZDO_RUNTIME_LEAVE; }
             if (result) return ZDO_RUNTIME_DROPPED;
         }
     }
@@ -318,6 +344,7 @@ zdo_runtime_result_t MCU_COMMON_CODE zdo_runtime_step(zdo_runtime_t * SDCC_VOLAT
         queued = nwk_aps_queue(transport, &ctx->response, 0, now);
         if (queued == NWK_APS_EXHAUSTED) {
             ctx->response_pending = 0; ctx->response_result = (uint8_t)queued;
+            if (ctx->leave) { ctx->leave = 0; return ZDO_RUNTIME_LEAVE; }
             return ZDO_RUNTIME_DROPPED;
         }
         if (queued != NWK_APS_OK) return queued == NWK_APS_FULL ? ZDO_RUNTIME_FULL : ZDO_RUNTIME_TRANSMIT;
@@ -342,6 +369,7 @@ zdo_runtime_result_t zdo_runtime_cancel(zdo_runtime_t * SDCC_VOLATILE ctx, nwk_a
     if (ctx->response_pending) {
         ctx->response_pending = 0; ctx->response_result = NWK_APS_CANCELLED;
     }
+    ctx->leave = 0;
     return ZDO_RUNTIME_OK;
 }
 

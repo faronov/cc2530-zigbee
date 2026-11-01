@@ -175,6 +175,77 @@ static uint16_t endpoint_cases(void)
     return 0;
 }
 
+static uint16_t match_reply(uint16_t length, uint8_t status, uint8_t size, uint16_t consumed)
+{
+    memset(output, 0xc7, sizeof(output));
+    memset(&info, 0xa5, sizeof(info));
+    CHECK(zdo_srv_handle(&local, &rx, input, length, output + 1, sizeof(simple_expected), &info) == ZDO_SRV_OK);
+    CHECK(info.kind == ZDO_SRV_REPLY && info.cluster_id == 0x8006 && info.endpoint == 7);
+    CHECK(info.sequence == 0x5a && info.status == status && info.length == size && info.consumed == consumed);
+    CHECK(output[0] == 0xc7 && output[1] == 0x5a && output[2] == status
+          && filled(output + 1 + size, sizeof(output) - 1u - size, 0xc7));
+    return 0;
+}
+
+static void match_input(uint16_t address, uint16_t profile, uint16_t in_cluster, uint8_t out_count)
+{
+    reset(); rx.header.cluster_id = ZDO_SRV_MATCH_DESC_REQUEST;
+    input[1] = (uint8_t)address; input[2] = (uint8_t)(address >> 8);
+    input[3] = (uint8_t)profile; input[4] = (uint8_t)(profile >> 8);
+    input[5] = 2; input[6] = 0x06; input[7] = 0x00;
+    input[8] = (uint8_t)in_cluster; input[9] = (uint8_t)(in_cluster >> 8);
+    input[10] = out_count; input[11] = 0x02; input[12] = 0x04;
+}
+
+static uint16_t match_power_cases(void)
+{
+    static const MCU_CODE uint16_t clusters[] = {0x0000, 0x0001, 0x0003, 0x0402, 0x0405};
+    uint8_t n, mode;
+    reset(); rx.header.cluster_id = ZDO_SRV_POWER_DESC_REQUEST;
+    CHECK(endpoint_reply(ZDO_SRV_POWER_DESC_REQUEST, 100, 0, 6) == 0);
+    CHECK(output[5] == ZDO_SRV_POWER_DESCRIPTOR_0 && output[6] == ZDO_SRV_POWER_DESCRIPTOR_1);
+    for (n = 0; n < 3; n++) CHECK(unchanged(ZDO_SRV_TRUNCATED, n, 17) == 0);
+    for (n = 0; n < 6; n++) CHECK(unchanged(ZDO_SRV_SPACE, 3, n) == 0);
+    input[1] = 0x35;
+    CHECK(endpoint_reply(ZDO_SRV_POWER_DESC_REQUEST, 3, 0x80, 4) == 0);
+    reset(); rx.header.cluster_id = ZDO_SRV_POWER_DESC_REQUEST; rx.broadcast = 1;
+    CHECK(zdo_srv_handle(&local, &rx, input, 3, output + 1, 17, &info) == ZDO_SRV_OK);
+    CHECK(info.kind == ZDO_SRV_DROP_BROADCAST && info.length == 0 && filled(output, sizeof(output), 0xc7));
+
+    for (n = 0; n < 5; n++) {
+        match_input(0x1234, n == 4 ? 0xffff : 0x0104, clusters[n], 0);
+        CHECK(match_reply(100, 0, 6, 11) == 0);
+        CHECK(output[3] == 0x34 && output[4] == 0x12 && output[5] == 1 && output[6] == 1);
+    }
+    match_input(0x1234, 0x0104, 0x0402, 1);
+    CHECK(match_reply(13, 0, 6, 13) == 0 && output[6] == 1);
+    for (n = 11; n < 13; n++) CHECK(unchanged(ZDO_SRV_TRUNCATED, n, 17) == 0);
+    for (n = 0; n < 11; n++) CHECK(unchanged(ZDO_SRV_TRUNCATED, n, 17) == 0);
+    match_input(0x1234, 0x0104, 0x0006, 0);
+    CHECK(match_reply(11, 0, 5, 11) == 0 && output[3] == 0x34 && output[4] == 0x12 && output[5] == 0);
+    match_input(0x1234, 0x0105, 0x0402, 0);
+    CHECK(match_reply(11, 0, 5, 11) == 0 && output[5] == 0);
+    match_input(0x1234, 0x0104, 0x0402, 0); local.endpoint = 0;
+    CHECK(match_reply(11, 0, 5, 11) == 0 && output[5] == 0);
+    match_input(0x1235, 0x0104, 0x0402, 0);
+    CHECK(match_reply(11, 0x80, 3, 11) == 0 && output[3] == 0);
+    for (mode = 0; mode < 2; mode++) {
+        match_input(0xfffd, 0x0104, 0x0405, 0);
+        if (mode) rx.header.delivery_mode = APS_DELIVERY_BROADCAST; else rx.broadcast = 1;
+        CHECK(match_reply(11, 0, 6, 11) == 0);
+        CHECK(output[3] == 0xfd && output[4] == 0xff && output[5] == 1 && output[6] == 1);
+        for (n = 0; n < 3; n++) {
+            match_input(n == 2 ? 0x1235 : 0x1234, n == 1 ? 0x0105 : 0x0104, n == 0 ? 0x0006 : 0x0402, 0);
+            if (mode) rx.header.delivery_mode = APS_DELIVERY_BROADCAST; else rx.broadcast = 1;
+            CHECK(zdo_srv_handle(&local, &rx, input, 11, output + 1, 17, &info) == ZDO_SRV_OK);
+            CHECK(info.kind == ZDO_SRV_DROP_BROADCAST && info.length == 0 && filled(output, sizeof(output), 0xc7));
+        }
+    }
+    match_input(0x1234, 0x0104, 0x0402, 0);
+    for (n = 0; n < 6; n++) CHECK(unchanged(ZDO_SRV_SPACE, 11, n) == 0);
+    return 0;
+}
+
 static uint16_t no_reply_cases(void)
 {
     uint8_t kind, mode;
@@ -303,6 +374,7 @@ static uint16_t run_tests(void)
     uint16_t failure;
     failure = reply_cases(); if (failure) return failure;
     failure = endpoint_cases(); if (failure) return failure;
+    failure = match_power_cases(); if (failure) return failure;
     failure = no_reply_cases(); if (failure) return failure;
     failure = invalid_cases(); if (failure) return failure;
     return chain_cases();
@@ -347,7 +419,7 @@ static uint16_t exact_cases(void)
             status = zdo_srv_handle(own, context, query, 3, output + 1, 17, out);
             expected_result = cluster & 0x8000u ? ZDO_SRV_NOT_REQUEST
                 : cluster == 0x13 || cluster == 0x3b ? ZDO_SRV_NOTIFICATION
-                : cluster == 4 && !mode ? ZDO_SRV_TRUNCATED : ZDO_SRV_OK;
+                : (cluster == 4 && !mode) || cluster == 6 ? ZDO_SRV_TRUNCATED : ZDO_SRV_OK;
             CHECK(status == expected_result);
             if (status != ZDO_SRV_OK) {
                 CHECK(filled(out, sizeof(*out), 0xa5) && filled(output, sizeof(output), 0xc7));
@@ -356,8 +428,8 @@ static uint16_t exact_cases(void)
                 CHECK(out->length == 0 && filled(output, sizeof(output), 0xc7));
             } else {
                 CHECK(out->kind == ZDO_SRV_REPLY && out->cluster_id == (cluster | 0x8000u));
-                CHECK(out->sequence == 0x5a && out->status == (cluster == 2 || cluster == 5 ? 0 : 0x84));
-                CHECK(out->length == (cluster == 2 ? 17 : cluster == 5 ? 6 : 2));
+                CHECK(out->sequence == 0x5a && out->status == (cluster == 2 || cluster == 3 || cluster == 5 ? 0 : 0x84));
+                CHECK(out->length == (cluster == 2 ? 17 : cluster == 3 || cluster == 5 ? 6 : 2));
                 CHECK(output[0] == 0xc7 && filled(output + 1 + out->length,
                       sizeof(output) - 1u - out->length, 0xc7));
             }

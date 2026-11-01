@@ -59,7 +59,7 @@ static void fail(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, SDCC_VOLATILE uint
         }
     }
 #endif
-    ctx->abandon = result == BDB_JOIN_ADDRESS_CONFLICT ||
+    ctx->abandon = result == BDB_JOIN_ADDRESS_CONFLICT || result == BDB_JOIN_LOCAL_LEAVE ||
         (result != BDB_JOIN_WORK_LIMIT && ctx->phase < BDB_JOIN_READY && !ctx->recovery &&
          !(ctx->phase == BDB_JOIN_INSTALLING && ctx->member));
     ctx->result = result; ctx->member = ctx->work.runtime.transport.ready = 0;
@@ -189,6 +189,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     rc = zdo_runtime_step(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ctx->last);
     ctx->receive_result = (uint8_t)rc;
     if (rc == ZDO_RUNTIME_CONFLICT) { fail(ctx, BDB_JOIN_ADDRESS_CONFLICT); return; }
+    if (rc == ZDO_RUNTIME_LEAVE) { fail(ctx, BDB_JOIN_LOCAL_LEAVE); return; }
     if (rc == ZDO_RUNTIME_SECURITY || rc == ZDO_RUNTIME_TRANSMIT) {
         fail(ctx, rc == ZDO_RUNTIME_SECURITY ? BDB_JOIN_SECURITY : BDB_JOIN_TRANSMIT_FAILED); return;
     }

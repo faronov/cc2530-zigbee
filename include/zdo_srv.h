@@ -11,13 +11,22 @@
 #define ZDO_SRV_DEVICE_ANNCE 0x0013u
 #define ZDO_SRV_PARENT_ANNCE 0x001fu
 #define ZDO_SRV_UPDATE_NOTIFY 0x003bu
+#define ZDO_SRV_POWER_DESC_REQUEST 0x0003u
 #define ZDO_SRV_SIMPLE_DESC_REQUEST 0x0004u
 #define ZDO_SRV_ACTIVE_EP_REQUEST 0x0005u
+#define ZDO_SRV_MATCH_DESC_REQUEST 0x0006u
 #define ZDO_SRV_INVALID_EP 0x82u
 #define ZDO_SRV_NOT_ACTIVE 0x83u
 #define ZDO_SRV_BIND_REQUEST 0x0021u
 #define ZDO_SRV_UNBIND_REQUEST 0x0022u
 #define ZDO_SRV_MGMT_BIND_REQUEST 0x0033u
+#define ZDO_SRV_MGMT_LEAVE_REQUEST 0x0034u
+/* R22 2.3.2.4 Tables 2-34..2-38, nibbles in transmission order: power mode
+ * 0 (follows the node descriptor's receiver-on-when-idle), available and
+ * current source disposable battery, level 100%. There is no battery
+ * measurement yet, so the level is a fixed declaration, not a reading. */
+#define ZDO_SRV_POWER_DESCRIPTOR_0 0x40u
+#define ZDO_SRV_POWER_DESCRIPTOR_1 0xc4u
 #define ZDO_SRV_BASIC_CLUSTER 0x0000u
 #define ZDO_SRV_POWER_CLUSTER 0x0001u
 #define ZDO_SRV_IDENTIFY_CLUSTER 0x0003u
@@ -80,11 +89,19 @@ typedef struct {
  * local is a caller-supplied truthful ED descriptor with logical_type2 and
  * address1..FFF7. No membership/address assignment or production defaults.
  * Node_Desc_req returns the local descriptor or INV_REQUESTTYPE for another
- * queried address. Active_EP_req lists the single application endpoint, if
+ * queried address. Power_Desc_req returns the fixed power descriptor or
+ * INV_REQUESTTYPE (address echoed, no descriptor) for another address.
+ * Active_EP_req lists the single application endpoint, if
  * any. Simple_Desc_req returns INVALID_EP for 0/FF, INV_REQUESTTYPE for another
  * address, NOT_ACTIVE for other endpoints, else profile, ZDO_SRV_DEVICE and
- * three input clusters: Basic, Temperature and Relative Humidity Measurement;
- * the caller must actually serve those clusters.
+ * five input clusters: Basic, Power Configuration, Identify, Temperature and
+ * Relative Humidity Measurement; the caller must actually serve those clusters.
+ * Match_Desc_req (R22 2.4.4.2.7) is the only request also processed when
+ * broadcast: own or broadcast (>=FFFB) address of interest matches when the
+ * profile is equal or FFFF and any requested input cluster is listed; reply
+ * SUCCESS with the echoed address and 0/1 endpoint. Broadcast requests
+ * without a match, and broadcasts for another address, are dropped; unicast
+ * for another address gets TSN/INV_REQUESTTYPE/MatchLength0 only.
  * Other unicast requests get TSN/status-only NOT_SUPPORTED.
  * Unknown mandatory services are still missing, not made conformant by fallback.
  *
