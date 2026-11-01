@@ -41,6 +41,8 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
     MCU_ESCAPED_LOCAL uint8_t size;
     uint8_t simple;
 #endif
+    uint16_t address, cluster, end;
+    uint8_t broadcast, drop = 0;
 
     if (local == NULL || rx == NULL || body == NULL || response == NULL || info == NULL)
         return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_ARGUMENT);
@@ -73,12 +75,57 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
     memset(&candidate, 0, sizeof(candidate));
     candidate.sequence = body[0];
     candidate.consumed = 1;
+    broadcast = rx->broadcast || rx->header.delivery_mode == APS_DELIVERY_BROADCAST;
     if (rx->header.cluster_id == ZDO_SRV_PARENT_ANNCE) {
         candidate.kind = ZDO_SRV_DROP_PARENT;
-    } else if (rx->broadcast || rx->header.delivery_mode == APS_DELIVERY_BROADCAST) {
+    } else if (broadcast && rx->header.cluster_id != ZDO_SRV_MATCH_DESC_REQUEST) {
         candidate.kind = ZDO_SRV_DROP_BROADCAST;
     } else {
-        if (rx->header.cluster_id == ZDO_SRV_ACTIVE_EP_REQUEST
+        if (rx->header.cluster_id == ZDO_SRV_POWER_DESC_REQUEST
+                || rx->header.cluster_id == ZDO_SRV_MATCH_DESC_REQUEST) {
+            if (length < 3u)
+                return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_TRUNCATED);
+            staged[0] = body[0]; staged[2] = body[1]; staged[3] = body[2];
+            address = (uint16_t)body[1] | ((uint16_t)body[2] << 8);
+            size = 4; candidate.consumed = 3;
+            if (rx->header.cluster_id == ZDO_SRV_POWER_DESC_REQUEST) {
+                /* R22 2.4.4.2.4: an ED answers only for its own address. */
+                if (address != local->address)
+                    reply.status = ZDO_NODE_INVALID_REQUEST;
+                else {
+                    staged[4] = ZDO_SRV_POWER_DESCRIPTOR_0; staged[5] = ZDO_SRV_POWER_DESCRIPTOR_1;
+                    size = 6;
+                }
+            } else {
+                /* R22 2.4.4.2.7 steps 1-7 for an ED without children. */
+                if (length < 6u)
+                    return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_TRUNCATED);
+                end = 6u + 2u * body[5];
+                if (length <= end || length < end + 1u + 2u * body[end])
+                    return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_TRUNCATED);
+                candidate.consumed = (uint8_t)(end + 1u + 2u * body[end]);
+                simple = 0;
+                if (address != local->address && address < 0xfffbu) {
+                    if (broadcast) drop = 1;
+                    reply.status = ZDO_NODE_INVALID_REQUEST; staged[2] = 0; size = 3;
+                } else {
+                    cluster = (uint16_t)body[3] | ((uint16_t)body[4] << 8);
+                    /* Only input clusters can match: Simple_Desc lists no outputs. */
+                    if (local->endpoint && (cluster == local->profile || cluster == 0xffffu)) {
+                        for (; end > 6u; end -= 2u) {
+                            cluster = (uint16_t)body[end - 2u] | ((uint16_t)body[end - 1u] << 8);
+                            if (cluster == ZDO_SRV_BASIC_CLUSTER || cluster == ZDO_SRV_POWER_CLUSTER
+                                    || cluster == ZDO_SRV_IDENTIFY_CLUSTER
+                                    || cluster == ZDO_SRV_TEMPERATURE_CLUSTER
+                                    || cluster == ZDO_SRV_HUMIDITY_CLUSTER) simple = 1;
+                        }
+                    }
+                    if (!simple && broadcast) drop = 1;
+                    staged[4] = simple; staged[5] = local->endpoint; size = (uint8_t)(5u + simple);
+                }
+            }
+            staged[1] = reply.status;
+        } else if (rx->header.cluster_id == ZDO_SRV_ACTIVE_EP_REQUEST
                 || rx->header.cluster_id == ZDO_SRV_SIMPLE_DESC_REQUEST) {
             simple = rx->header.cluster_id == ZDO_SRV_SIMPLE_DESC_REQUEST;
             if (length < (uint16_t)(simple ? 4u : 3u))
@@ -125,14 +172,18 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
             if (zdo_node_rsp_encode(&reply, staged, sizeof(staged), &size) != ZDO_NODE_OK)
                 return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_LOCAL);
         }
-        if (capacity < size)
-            return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_SPACE);
-        candidate.kind = ZDO_SRV_REPLY;
-        candidate.cluster_id = rx->header.cluster_id | 0x8000u;
-        candidate.endpoint = rx->header.source_endpoint;
-        candidate.status = reply.status;
-        candidate.length = size;
-        memcpy(response, staged, size);
+        if (drop) {
+            candidate.kind = ZDO_SRV_DROP_BROADCAST;
+        } else {
+            if (capacity < size)
+                return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_SPACE);
+            candidate.kind = ZDO_SRV_REPLY;
+            candidate.cluster_id = rx->header.cluster_id | 0x8000u;
+            candidate.endpoint = rx->header.source_endpoint;
+            candidate.status = reply.status;
+            candidate.length = size;
+            memcpy(response, staged, size);
+        }
     }
     *info = candidate;
     return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_OK);

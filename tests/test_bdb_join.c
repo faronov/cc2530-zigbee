@@ -205,7 +205,7 @@ static void observe_transmission(void)
                 peer_in.nwk.destination == 0xfffdu && peer_in.nwk.radius == 1);
             CHECK(peer_in.nwk.flags & NWK_FLAG_SOURCE_IEEE);
             CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_LEFT);
-            CHECK(!runtime.transport.ready); leave_sent = 1;
+            CHECK(!runtime.transport.ready && (expected_reply_cluster != 0x8034u || reply_seen)); leave_sent = 1;
             return;
         }
         if (peer_in.payload[0] == 6) {
@@ -1004,6 +1004,44 @@ static void announcement(uint16_t source, uint16_t address, const uint8_t *ieee)
     seal_peer(0, 0, NULL, 1); aux_source = NULL;
 }
 
+/* R22 2.4.3.3.5: Mgmt_Leave_req is answered first, then the ED leaves. */
+static void mgmt_leave_request(uint8_t mode)
+{
+    base_peer(0, 0, 0x0034u);
+    peer_out.payload[0] = 0x61; peer_out.length = 10;
+    if (mode != 2) memcpy(peer_out.payload+1, identity.own_ieee, 8);
+    if (mode == 1) peer_out.payload[8] ^= 1;
+    if (mode == 3) { peer_out.nwk.destination = 0xfffdu; peer_out.aps.delivery_mode = 2; }
+    seal_peer(0, 0, NULL, 1);
+    (void)bdb_join_receive(&device, mac_body, mac_length, 1, now);
+    pending = 0;
+}
+
+static void mgmt_leave_control(void)
+{
+    uint8_t mode;
+    ready();
+    mgmt_leave_request(3); drive(); drain();
+    CHECK(device.phase == BDB_JOIN_READY && !leave_sent && !runtime.zdo.response_pending && !runtime.zdo.leave);
+    expected_reply_cluster = 0x8034u; expected_reply_status = 0xc8; expected_reply_length = 2; reply_seen = 0;
+    mgmt_leave_request(1);
+    for (iterations = 0; iterations < 128 &&
+        (!reply_seen || runtime.transport.active || runtime.transport.queued || runtime.zdo.response_tx); iterations++)
+        drive();
+    CHECK(iterations < 128 && reply_seen && device.phase == BDB_JOIN_READY && !leave_sent && !runtime.zdo.leave);
+    for (mode = 0; mode < 3; mode += 2) {
+        ready();
+        expected_reply_cluster = 0x8034u; expected_reply_status = 0; expected_reply_length = 2; reply_seen = 0;
+        mgmt_leave_request(mode);
+        CHECK(device.phase == BDB_JOIN_READY && !leave_sent);
+        drive(); drain();
+        CHECK(reply_seen && leave_sent && !runtime.zdo.leave);
+        CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_LOCAL_LEAVE && !device.member);
+        expected_reply_cluster = 0;
+        retained(SECURITY_KEYS_LEFT);
+    }
+}
+
 static void terminal_control(void)
 {
     static const uint8_t third_ieee[8] = {0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38};
@@ -1033,6 +1071,7 @@ static void terminal_control(void)
     pending = 0; drive(); drain();
     CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_REMOTE_LEAVE && !leave_sent);
     retained(SECURITY_KEYS_LEFT);
+    mgmt_leave_control();
 }
 
 static void before_runtime(void)
@@ -2304,7 +2343,7 @@ int main(void)
     }
     pending = 0;
     for (i = 0; i < 6; i++) {
-        base_peer(0, 0, i == 5 ? 6 : i == 4 ? 1 : 0);
+        base_peer(0, 0, i == 5 ? 7 : i == 4 ? 1 : 0);
         peer_out.aps.flags = APS_FLAG_ACK_REQUEST;
         peer_out.payload[0] = (uint8_t)(0x80+i);
         peer_out.length = i == 5 ? 1 : i == 4 ? 5 : 11;
