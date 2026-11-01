@@ -48,11 +48,14 @@ static uint32_t bad_serial;
 static uint8_t bad_checked;
 enum {
     POLL_NO_ACK = 8, POLL_BUSY, IMMEDIATE_RESPONSE, BROADCAST_DRAIN, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
-    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, ASSOCIATION_OVERFLOW, E2E_CASES
+    RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, ASSOCIATION_OVERFLOW, POLL_ACK_LOST_RESPONSE,
+    E2E_CASES
 };
 static unsigned poll_attempts, closed_checked, race_started, race_disarmed, race_completed;
 static unsigned race_random, race_tx, retire_wait, timeout_started, early_acks;
 static unsigned broadcast_sent, drain_delayed, foreign_sent, early_key_acked, overflow_sent;
+/* POLL_ACK_LOST_RESPONSE: association Requests and Data Requests on air. */
+static unsigned association_requests, association_polls;
 static uint32_t scan_watermark, race_generation;
 /* INDIRECT_KEY: parent queue release bookkeeping (polls seen when queued). */
 static unsigned queued_polls, released_frames;
@@ -129,8 +132,16 @@ static void joint_store(uint8_t a, uint8_t before, uint8_t value)
             sent_body[sent_length-1] == MAC_COMMAND_DATA_REQUEST ? 0x12 : 2;
         /* Peripheral inputs only: fail the first association's POLL, or
          * the first unicast query attempt used by the retry/cancel case. */
+        if (scenario == POLL_ACK_LOST_RESPONSE && device.phase == BDB_JOIN_ASSOCIATING) {
+            if (response_fcf == 0x12) association_polls++;
+            else association_requests++;
+        }
+        /* LH21C: the parent received the first association Data Request but
+         * its ACK was lost on air. */
         replies = !((scenario == POLL_NO_ACK && device.attempts == 1 && response_fcf == 0x12) ||
-                    (scenario == RETRY_CANCEL && device.phase == BDB_JOIN_NODE && !race_started));
+                    (scenario == RETRY_CANCEL && device.phase == BDB_JOIN_NODE && !race_started) ||
+                    (scenario == POLL_ACK_LOST_RESPONSE && device.phase == BDB_JOIN_ASSOCIATING &&
+                     response_fcf == 0x12 && association_polls == 1));
         cca_clear = !(scenario == POLL_BUSY && device.attempts == 1 && response_fcf == 0x12);
         if ((scenario == POLL_NO_ACK || scenario == POLL_BUSY) &&
             device.attempts == 1 && response_fcf == 0x12) poll_attempts++;
@@ -230,6 +241,7 @@ static void cold_start(void)
     poll_attempts = closed_checked = race_started = race_disarmed = race_completed = 0;
     race_random = race_tx = retire_wait = timeout_started = early_acks = 0;
     broadcast_sent = drain_delayed = foreign_sent = early_key_acked = overflow_sent = 0;
+    association_requests = association_polls = 0;
     scan_watermark = race_generation = 0;
     queued_polls = released_frames = queued_seen = 0;
 }
@@ -377,6 +389,27 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
             air_frame(link_beacon, link_beacon_length, 1);
             CHECK(rejected_frames == before+1u && packets);
         }
+    } else if (scenario == POLL_ACK_LOST_RESPONSE && command_wait == MAC_COMMAND_DATA_REQUEST &&
+        dev->phase == BDB_JOIN_ASSOCIATING && response_sent && association_requests == 1) {
+        /* LH21C: the parent already delivered the Response; a retried Data
+         * Request only gets ACK pending=1 and no frame. A new Association
+         * Request is answered again (the duplicate association). */
+        command_wait = 0;
+    } else if (scenario == POLL_ACK_LOST_RESPONSE && command_wait == MAC_COMMAND_DATA_REQUEST &&
+        dev->phase == BDB_JOIN_ASSOCIATING && !response_sent && tx->engine.phase != MAC_TX_DONE &&
+        mac_adapter_diagnostic()->transmitted &&
+        (mac_adapter_diagnostic()->phase == MAC_ADAPTER_WAIT_MAC ||
+         mac_adapter_diagnostic()->phase == MAC_ADAPTER_COLLECT ||
+         mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING)) {
+        /* LH21C sniffer: Data Request not ACKed, yet the parent sends the
+         * Association Response, which armed AUTOACK acknowledges. */
+        unsigned before = automatic_acks;
+        CHECK(association_polls == 1 && !dev->work.association.context.poll.control.ack_seen);
+        air_frame(link_response, link_response_length, 1);
+        CHECK(ack_active);
+        while (ack_active) { advance_clocks(512u); handoff_tick(); }
+        CHECK(automatic_acks == before+1u);
+        command_wait = 0; response_sent++;
     } else if (scenario == IMMEDIATE_RESPONSE && command_wait == MAC_COMMAND_DATA_REQUEST &&
         dev->phase == BDB_JOIN_ASSOCIATING && tx->engine.phase != MAC_TX_DONE &&
         mac_adapter_diagnostic()->transmitted &&
@@ -686,7 +719,7 @@ static void run(unsigned selected)
     if (scenario == 0 || scenario == 4 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
         scenario == IMMEDIATE_RESPONSE || scenario == BROADCAST_DRAIN ||
         scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == INDIRECT_KEY || scenario == 7 ||
-        scenario == ASSOCIATION_OVERFLOW) {
+        scenario == ASSOCIATION_OVERFLOW || scenario == POLL_ACK_LOST_RESPONSE) {
         if (device.phase != BDB_JOIN_READY)
             fprintf(stderr, "scan reason=%u unscanned=%lu candidates=%u peerTX=%u cmd=%u rx=%u through=%lu\n",
                 device.scan_result.reason,(unsigned long)device.scan_result.unscanned,
@@ -736,6 +769,10 @@ static void run(unsigned selected)
         CHECK(drain_delayed == (scenario == BROADCAST_DRAIN) && broadcast_sent == drain_delayed);
         CHECK(foreign_sent == (scenario == POLL_BUSY));
         CHECK(overflow_sent == (scenario == ASSOCIATION_OVERFLOW));
+        /* One association: the implicitly ACKed Response ends the poll. */
+        if (scenario == POLL_ACK_LOST_RESPONSE)
+            CHECK(association_requests == 1 && association_polls == 1 &&
+                  device.record.poll.cause == MAC_POLL_COMMAND && !device.record.poll_reason);
         CHECK(early_key_acked == (scenario == EARLY_KEY));
         CHECK(driver.dropped == (scenario == 7) && drop_checked == (scenario == 7));
         /* Every peer frame after association, the corrupted TK included,

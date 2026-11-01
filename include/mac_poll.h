@@ -240,8 +240,10 @@ mac_poll_result_t mac_poll_release(mac_poll_t MAC_POLL_RAM * SDCC_VOLATILE poll,
 /* step grants one foreground mac_tx_step, never repeats it. Deliver its report
  * before any later-time poll/cancel/frame; no retimestamping. copy is permitted.
  * Frames end in (accepted ACK end, ACK end+F], inclusive at the upper boundary
- * before timeout. Timeout NO_DATA requires CLOSED; elapsed time alone is not
- * coverage. CLOSED retires prior PREPARE/CLOSE rights even after cancellation.
+ * before timeout, or after the Request TX end while no ACK was seen (implicit
+ * ACK; the retry is cancelled). Timeout NO_DATA requires CLOSED; elapsed time
+ * alone is not coverage. CLOSED retires prior PREPARE/CLOSE rights even after
+ * cancellation.
  */
 #endif
 /* Local aborts have no protocol confirmation; established receipts survive
