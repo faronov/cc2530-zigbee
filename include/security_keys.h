@@ -109,6 +109,13 @@ security_keys_result_t security_keys_provision_default(
     const security_keys_config_t * SDCC_VOLATILE config,
     SDCC_VOLATILE uint32_t nwk_floor, SDCC_VOLATILE uint32_t aps_floor,
     const ccm_star_limits_t *limits, uint16_t nv_polls) SECURITY_FAR;
+/* Autonomous re-steering after LEFT or an incomplete join: only after open()
+ * returned OK with a committed phase other than VERIFIED/REJOINING, before
+ * any start. RAM only: the journal is not erased; the old record becomes
+ * unusable and the phase UNPROVISIONED. The next provision_default replaces
+ * the payload with save(), so both outgoing counter ceilings survive (frame
+ * counters never rewind). STATE for any other phase. */
+security_keys_result_t security_keys_recommission(void) SECURITY_FAR;
 #else
 security_keys_result_t security_keys_provision(
     const security_keys_config_t * volatile config, const uint8_t * volatile install_code18,

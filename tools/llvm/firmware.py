@@ -61,7 +61,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--board", choices=("generic", "lg_esl29_rev03"), required=True)
     parser.add_argument("--image", choices=("join", "bringup", "timebase_fixture"), default="join")
-    parser.add_argument("--variant", choices=tiers.VARIANTS, default="production")
+    parser.add_argument("--variant", choices=tiers.VARIANTS + ("autonomous",), default="production")
     args = parser.parse_args()
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
     pin = json.loads((HERE / "toolchain.json").read_text())

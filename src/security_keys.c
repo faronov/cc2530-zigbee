@@ -118,6 +118,11 @@ static unsigned host_checkpoints;
 #endif
 #endif
 static MCU_XDATA uint8_t phase_cache;
+#if defined(CC2530_DEFAULT_TC_KEY)
+/* Set by recommission: the committed journal (and both counter ceilings)
+ * stays; the next default provisioning saves instead of creating. */
+static MCU_XDATA uint8_t retained;
+#endif
 
 static uint16_t u16(const uint8_t *p)
 {
@@ -227,6 +232,9 @@ void security_keys_host_power_cycle(void)
     host_checkpoints = 0;
 #endif
     phase_cache = 0;
+#if defined(CC2530_DEFAULT_TC_KEY)
+    retained = 0;
+#endif
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     security_keys_result = SECURITY_KEYS_OK;
     link_work_host_reset();
@@ -535,11 +543,40 @@ security_keys_result_t security_keys_provision(
 #endif
     w.record[MAGIC] = 'K'; w.record[MAGIC+1] = 2;
     set_phase(SECURITY_KEYS_PROVISIONED);
+#if defined(CC2530_DEFAULT_TC_KEY)
+    if (retained) {
+        /* Recommissioned: save keeps both persisted ceilings; the floors
+         * arguments cannot lower them and are not used. */
+        if (save() != SECURITY_KEYS_OK) return finish(SECURITY_KEYS_STORAGE);
+        retained = 0;
+        return finish(SECURITY_KEYS_OK);
+    }
+#endif
     if (KEY_CALL(LW_COUNTER_CREATE, security_counter_create(nwk_floor, aps_floor, w.record, 112, w.polls)) != SECURITY_COUNTER_OK)
         return finish(fault(SECURITY_KEYS_STORAGE));
     security_keys_phase = SECURITY_KEYS_PROVISIONED;
     return finish(SECURITY_KEYS_OK);
 }
+
+#if defined(CC2530_DEFAULT_TC_KEY)
+security_keys_result_t security_keys_recommission(void) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    if (security_keys_phase < SECURITY_KEYS_PROVISIONED || security_keys_phase == SECURITY_KEYS_FAILED ||
+        security_keys_phase == SECURITY_KEYS_VERIFIED || security_keys_phase == SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_STATE);
+    memset(floor_cache, 0, sizeof(floor_cache));
+#if defined(CC2530_REPLAY_POLICY_C)
+    memset(router_floor_cache, 0, sizeof(router_floor_cache));
+#endif
+    phase_cache = 0;
+    retained = 1;
+    security_keys_phase = SECURITY_KEYS_UNPROVISIONED;
+    return finish(SECURITY_KEYS_OK);
+}
+#endif
 
 security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t nv_polls) SECURITY_FAR
 {

@@ -73,8 +73,15 @@ extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smo
  * input fields, and requires the same own IEEE in both public input views.
  * Existing VERIFIED/REJOINING durable membership is resumed: provisioning
  * is skipped and BDB enters RECOVERING (secured same-parent NWK rejoin, ED
- * Timeout, Device Announce) before READY. Any other existing NV is refused,
- * never erased/reprovisioned.
+ * Timeout, Device Announce) before READY. In the default-TC profile any other
+ * committed record (LEFT, abandoned exchange) is recommissioned in place by
+ * security_keys_recommission: never erased, outgoing ceilings preserved, and
+ * the first provisioning save rewrites it. Install-code builds and invalid or
+ * uncommitted NV are refused, never erased/reprovisioned.
+ * CC2530_AUTONOMOUS (examples/join_smoke_main.c) fills this admission in
+ * firmware (info-page IEEE, BDB primary channels 11/15/20/25, draws from an
+ * LFSR seeded by ST0 and the IEEE: NOT entropy) and turns every FAULT into a
+ * watchdog reset after 2 s (leave), 60 s (after a watchdog reset) or 5 s.
  * READY is authenticated BDB readiness, NOT radio OFF or complete HA interview.
  * READY then serves (stage 5) WITHOUT a time or step budget until reset or a
  * fault: ZDO and Basic/Temperature/Humidity requests are answered by the

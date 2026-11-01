@@ -65,6 +65,9 @@ static unsigned recovery_selected;
 #define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || (c)==CALLER_SLEEPY_RECOVERY || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
+static uint32_t recommission_used[2];
+#endif
+#if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
        CALLER_WRONG_TC, CALLER_BUSY=28 };
 /* CALLER_BUSY: a network-wide permit (HIL LH16B). More permitting routers
@@ -594,6 +597,13 @@ static void prepare_caller(unsigned selected)
         uint8_t record[112], length;
         assert(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK);
         assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+#if defined(CC2530_DEFAULT_TC_KEY)
+        /* Spend counters: recommissioning must never rewind either domain. */
+        for(i=0;i<3;i++) {
+            assert(security_counter_take(SECURITY_COUNTER_NWK,&recommission_used[0],FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+            assert(security_counter_take(SECURITY_COUNTER_APS,&recommission_used[1],FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+        }
+#endif
     }
     security_joint_reset(selected!=4);
     }
@@ -725,11 +735,14 @@ int main(int argc, char **argv)
                 assert(join_smoke_device.phase==BDB_JOIN_INSTALLING && join_smoke_device.recovery==1 &&
                     !join_smoke_device.member && !join_smoke_status.saw_ready);
             }
+#if !defined(CC2530_DEFAULT_TC_KEY)
             if(selected==4) {
                 assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_SECURITY);
                 assert(join_smoke_status.security_result==SECURITY_KEYS_OK && !tx_started);
             }
-            else {
+            else
+#endif
+            {
                 if(join_smoke_status.phase!=JS_RUNNING)
                     fprintf(stderr,"initial phase=%u reason=%u stage=%u security=%u adapter=%u mac=%u bdb=%u driver=%u\n",
                         join_smoke_status.phase,join_smoke_status.reason,join_smoke_status.stage,
@@ -872,6 +885,12 @@ int main(int argc, char **argv)
                     assert(!memcmp(&keys.config,&link_identity,offsetof(security_keys_config_t,address)));
                     assert(keys.config.address==0x5678 && keys.config.channel==link_identity.channel);
                     assert(join_smoke_device.record.association.source_relation==MAC_ASSOCIATION_SOURCE_UNBOUND);
+                    if(selected==4) {
+                        /* Recommissioned over the committed journal: ceilings kept. */
+                        const security_counter_status_t *counters=security_counter_status();
+                        assert(counters->generation>1 && counters->next[SECURITY_COUNTER_NWK]>recommission_used[0] &&
+                            counters->next[SECURITY_COUNTER_APS]>recommission_used[1]);
+                    }
                     if(selected==CALLER_ALL_CHANNELS)
                         assert(join_smoke_device.scan_result.sent==NWK_CANDIDATES_CHANNEL_MASK &&
                             !join_smoke_device.scan_result.unscanned);
