@@ -128,15 +128,25 @@ Three consumer checks changed, all only under `CC2530_MAC_LINK`:
   pre-stop watermark. CLOSED therefore need not cover a frame decision's
   stamp. Hardware trial LH8 failed exactly so: a queued Association Response
   closed as ADAPTER_ERROR, then CLEANUP_FAILED and ASSOCIATION_FAILED.
+- **POLL implicit ACK.** A matching frame received while the Data Request
+  is on air but unacknowledged (REQUEST, no ACK seen) is AUTOACKed too and
+  proves the Request arrived. POLL delivers it as in RECEIVE and stops the
+  pending MAC retry through DRAIN/`tx_cancel`; the TX's later CANCELLED or
+  NO_ACK report does not replace the delivery. See
+  [MAC_POLL](MAC_POLL.md#implicit-data-request-ack-lh21c).
 
 ## Evidence
 
-`make BOARD=<board> test-mac-link` builds `tests/test_mac_link_e2e.c` with
+`$(BUILD)/host-mac-link-e2e-tests` (run by `make BOARD=<board> test-m5-m6-host`)
+and its `-sanitize` twin build `tests/test_mac_link_e2e.c` with
 `tests/mac_link_peer.c` against the complete ED join, crypto/NV models, the real
-adapter and radio services, and the host MMIO radio model. It runs the result
-natively and under nonrecovering ASan/UBSan. All four runs (boards 0/1) give
-**20 cases, 73365 checks plus 2227 peer checks, 13277 driver steps and 180
-explicit test RANDOM inputs**:
+adapter and radio services, and the host MMIO radio model. Each binary runs
+every case twice, once with the RF RX ISR body live between driver steps.
+All four runs (boards 0/1, native and nonrecovering ASan/UBSan) give
+**21 cases, 328495 checks plus 4794 peer checks, 62592 driver steps and 382
+explicit test RANDOM inputs** summed over both passes, and for the RX ISR pass
+146 dispatches, 145 queued frames, 12 halts, 13 in-flight tails, 13 head
+rechecks and 12 runt drops:
 
 | Case | Verified outcome |
 | --- | --- |
@@ -156,12 +166,15 @@ explicit test RANDOM inputs**:
 | Cancel at retry retirement | No re-ARM after RETIRED to DRAW; normal FAILED/TC_FAILED |
 | Real ZDO timeout after ARM emission | Retry, then READY |
 | Association FIFO overflow | Broadcast plus overflow in the first POLL window, Response withheld: NO_DATA, association retry, READY, no `COVERAGE` fault |
+| Data Request ACK lost, Response sent (LH21C) | The peer withholds the first Data Request ACK but sends the Association Response, which the device AUTOACKs during the ACK wait: implicit-ACK delivery, MAC retry cancelled, one Association Request and one Data Request, READY |
 
 The NO_ACK and CCA cases also check that the delivered CLOSED watermark equals
 the adapter's latest floored watermark, not the scan window's. The direct
 cancel/stop cases are labelled as mimicking the existing callers; the last case
 uses the real ZDO timeout caller. Cases 0–7 kept their previous outcomes and
-counters.
+counters. Adding case 20 (the LH21C implicit ACK) left the per-case output of
+cases 0–19 byte-identical. Before the POLL fix, case 20 associated twice
+(two Responses, two Association Requests, three Data Requests), as on hardware.
 
 The test PRNG is deterministic and explicitly not a production entropy
 source. Twelve driver-path mutations are killed. Eight are killed by the

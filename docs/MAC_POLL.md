@@ -173,6 +173,38 @@ drainage and safe receiver-on handoff before releasing the shared transmitter.
 The controller does not mutate read-only `ready_at`, queue immediate ACKs as
 ordinary CSMA frames, or supply a successful hardware stub.
 
+### Implicit Data Request ACK (LH21C)
+
+A FRAME report in REQUEST is also delivered when the Data Request has been on
+air at least once (`transmissions != 0`) and no Data Request ACK has been
+seen, whether the MAC is waiting for the ACK or backing off for a retry. The
+exact profile also requires the frame's captured end after the latest
+Request's TX end. Such a frame passes the same CRC, channel, codec, PAN,
+destination and source rules as in RECEIVE, including the unbound Association
+Response source. It has the same receipt causes (COMMAND, DATA or EMPTY) and
+protocol results, and it is stamped like any delivery. The frame proves that
+the parent received the Request, and RX AUTOACK has already confirmed the
+frame to the parent. POLL therefore enters DRAIN with the decision made, and
+the pending MAC retry is stopped through the ordinary `tx_cancel` action. The
+TX's later CANCELLED, NO_ACK or CHANNEL_ACCESS report, or a late ACK, does not
+replace the delivery. Frames that do not match, and any frame before the first
+transmission, remain FOREIGN, LATE or otherwise classified as before. The
+join controller opens the Association context at the delivery stamp when no
+Pending ACK opened it.
+
+nRF sniffer trial LH21C showed the case on hardware: H2 joined an EmberZNet
+coordinator. The device's Data Request (DSN 99) was not acknowledged. The
+coordinator then sent its Association Response for 0xced3 (DSN 55) twice,
+and the device's AUTOACK confirmed the second copy. The device dropped that
+Response as LATE and retried the Data Request, which was ACKed with Pending 1,
+but no frame followed. The device then started a second Association. The
+coordinator saw a duplicate association and sent NWK Leave (rejoin) about
+8 s later, so the join took about 210 s instead of about 40 s.
+`tests/test_mac_poll.c` covers delivery during the ACK wait and during the
+retry backoff, with foreign and pre-transmission frames as negative cases.
+`MAC_LINK_DRIVER` E2E case 20 covers the full join. Evidence level:
+**host-tested**; the fix has not yet been observed on hardware.
+
 ## Explicit R22 Response reception (#64)
 
 `mac_poll_step_rx(poll,tx,now,event,action,profile)` selects the existing
@@ -448,7 +480,7 @@ context stores `ack_end = A`, `ack_upper = B`, `accept_end = A+F` and
 
 | Item | Exact profile | Interval profile |
 | --- | --- | --- |
-| Frame acceptance | captured end in `(ACK end, ACK end+F]` | any matching frame reported before CLOSED, including after the timeout; RX was on and AUTOACK already confirmed it |
+| Frame acceptance | captured end in `(ACK end, ACK end+F]`, or after the Request TX end with no ACK seen (implicit ACK) | any matching frame reported before CLOSED, including after the timeout or before a lost Data Request ACK; RX was on and AUTOACK already confirmed it |
 | Later addressed frame | NO_DATA after timeout | delivered if reported before CLOSED; an observation bound after A+F is not a late proof |
 | NO_DATA timeout | CLOSED through `>= ACK end+F` | loss-free CLOSED through `>= B+F` |
 | Delivery stamp | captured PPDU end | conservative upward-rounded observation bound |

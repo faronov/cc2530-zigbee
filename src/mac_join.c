@@ -204,14 +204,20 @@ static void finish_window(void);
 
 static void window(void)
 {
-    if (!j->window && j->poll.control.ack_seen && ENGINE(LJ_OWNER)->pending) {
+    SDCC_VOLATILE uint32_t start;
+    /* Pending ACK opens it at ACK end. An implicit-ACK Response delivered
+     * before any ACK (mac_poll LH21C rule) opens it at its own stamp. */
+    if (!j->window && ((j->poll.control.ack_seen && ENGINE(LJ_OWNER)->pending)
+            || (!j->poll.control.ack_seen && j->poll.control.ready && !j->poll.control.taken
+                && j->poll.record.cause == MAC_POLL_COMMAND))) {
+        start = j->poll.control.ack_seen ? j->poll.control.ack_end : j->poll.record.stamp;
         memset(&ar, 0, sizeof(ar));
         ar.epoch = j->request.extraction.epoch;
 #if defined(CC2530_MAC_LINK)
         /* POLL owns the RX window: it delivers only frames received before
          * its CLOSED, stamped by a late software observation bound. This
          * context classifies that delivery within the POLL lifetime. */
-        ar.lifetime = j->poll.control.deadline - j->poll.control.ack_end;
+        ar.lifetime = j->poll.control.deadline - start;
         if (ar.lifetime - 1u >= MAC_ASSOCIATION_MAX_LIFETIME)
             ar.lifetime = MAC_ASSOCIATION_MAX_LIFETIME;
 #else
@@ -223,7 +229,7 @@ static void window(void)
         ar.coordinator_mode = j->request.extraction.coordinator_mode;
         memcpy(ar.coordinator, j->request.extraction.coordinator, 8);
         memcpy(ar.local, j->request.extraction.local, 8);
-        j->record.association_rc = mac_association_start(&j->association, &ar, j->poll.control.ack_end);
+        j->record.association_rc = mac_association_start(&j->association, &ar, start);
         if (j->record.association_rc != MAC_ASSOCIATION_OK)
             abort_attempt(MAC_JOIN_CONTEXT_ERROR);
         else

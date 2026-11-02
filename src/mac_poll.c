@@ -503,16 +503,24 @@ static mac_poll_result_t step(void)
     if (kind == MAC_POLL_FRAME) {
         control.rx_serial = input.serial;
         observation = MAC_POLL_OBS_LATE;
+        /* Implicit ACK (LH21C): the Data Request is on air but its ACK was
+         * lost. A matching parent frame proves the Request arrived, and RX
+         * AUTOACK already acknowledged it, so deliver it as in RECEIVE. */
 #if defined(CC2530_MAC_LINK)
         if (control.phase == MAC_POLL_RECEIVE
-                || (control.phase == MAC_POLL_DRAIN && control.timeout_pending)) {
+                || (control.phase == MAC_POLL_DRAIN && control.timeout_pending)
+                || (control.phase == MAC_POLL_REQUEST && !control.ack_seen
+                    && ENGINE(step_tx)->transmissions)) {
 #else
         if (control.phase == MAC_POLL_DRAIN && control.timeout_pending
                 && reached(input.stamp, control.ack_end + 1u)
                 && reached(control.receive_end, input.stamp))
             drain(MAC_POLL_ORDER_ERROR); /* Timeout poll preceded completed frame. */
-        if (control.phase == MAC_POLL_RECEIVE && reached(input.stamp, control.ack_end + 1u)
-                && reached(control.receive_end, input.stamp)) {
+        if ((control.phase == MAC_POLL_RECEIVE && reached(input.stamp, control.ack_end + 1u)
+                && reached(control.receive_end, input.stamp))
+                || (control.phase == MAC_POLL_REQUEST && !control.ack_seen
+                    && ENGINE(step_tx)->transmissions
+                    && reached(input.stamp, ENGINE(step_tx)->tx_end + 1u))) {
 #endif
             if (input.channel != control.request.channel)
                 observation = MAC_POLL_OBS_FOREIGN;

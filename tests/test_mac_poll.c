@@ -593,6 +593,40 @@ static void native(void)
         send(); free(exact);
         CHECK((poll.record.cause == MAC_POLL_COMMAND) == (n == sizeof(response_r22)));
     }
+    /* LH21C: the parent got the Data Request but its ACK was lost. The
+     * AUTOACKed Response (n=0 in the ACK wait, n=1 in the retry backoff) is
+     * an implicit ACK: delivered once, the retry cancelled, never re-sent. */
+    scenario = 0;
+    for (n = 0; n < 2 && !failure; n++) {
+        setup(); mode = 2; prepare();
+        memcpy(bytes, response, sizeof(response)); length = sizeof(response);
+        frame_event(); send();
+        CHECK(action.observation == MAC_POLL_OBS_LATE && !poll.control.ready); /* No Request on air. */
+        CHECK(poll.control.tx_issued && action.kind == MAC_POLL_ACTION_NONE);
+        action.kind = MAC_POLL_ACTION_TX; action.token = poll.control.tx_token; /* Same grant. */
+        while (tx.phase != MAC_TX_ACK_WAIT && !failure) pump();
+        if (n) do pump(); while (tx.phase != MAC_TX_DRAW && !failure); /* Backoff before the retry. */
+        CHECK(tx.transmissions == 1 && tx.retries == n && !poll.control.ack_seen &&
+              poll.control.phase == MAC_POLL_REQUEST);
+        bytes[13] ^= 1; /* Another source: still not the polled parent. */
+        now += 2; frame_event(); send();
+        CHECK(action.observation == MAC_POLL_OBS_FOREIGN && !poll.control.ready &&
+              poll.control.phase == MAC_POLL_REQUEST && !poll.record.length);
+        bytes[13] ^= 1;
+        now += 2; frame_event(); send();
+        CHECK(action.observation == MAC_POLL_OBS_DELIVERY && action.ready && !poll.control.reason);
+        CHECK(poll.control.phase == MAC_POLL_DRAIN && !poll.control.ack_seen);
+        CHECK(poll.record.cause == MAC_POLL_COMMAND && poll.record.protocol == MAC_POLL_NO_DATA &&
+              poll.record.stamp == now && poll.record.source_relation == MAC_POLL_SOURCE_MATCHED);
+        close_poll();
+        CHECK(poll.control.phase == MAC_POLL_DONE && !poll.control.reason && !poll.control.cleanup_error);
+        CHECK(tx.phase == MAC_TX_DONE && tx.outcome == MAC_TX_CANCELLED && tx.transmissions == 1 && tx.retries == n);
+        take();
+        CHECK(record.cause == MAC_POLL_COMMAND && record.length == sizeof(response) &&
+              !memcmp(record.body, response, sizeof(response)));
+        forward_response();
+        CHECK(mac_poll_release(&poll, &tx) == MAC_POLL_OK);
+    }
     /* Alternate decoded-frame -> encoder-header -> decoded-frame lifetimes,
      * and FRAME -> output -> rejected input, without disturbing a receipt or
      * reinitializing either world's live owner. All lower calls are genuine. */
