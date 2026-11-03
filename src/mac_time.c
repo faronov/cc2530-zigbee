@@ -87,7 +87,12 @@ static mac_time_result_t observe(void)
     status.select = MMIO_READ(SOC_T2MSEL);
     status.irq_flags = MMIO_READ(SOC_T2IRQF);
     if ((status.control & 0xfbu) != work.control ||
+#if defined(CC2530_PM2_IDLE)
+        /* 9 asynchronous and 10/11 synchronous RUN changes may be in flight. */
+        (work.control < 9 && (status.control & 4)) ||
+#else
         (work.control != 9 && (status.control & 4)) ||
+#endif
         status.select != work.select || (status.irq_flags & 0xc0u) ||
         MMIO_READ(SOC_T2EVTCFG) != work.event)
         return MAC_TIME_STATE_CHANGED;
@@ -372,5 +377,59 @@ const mac_time_stamp_t MCU_XDATA *mac_time_handoff_value(void)
 {
     return &staged;
 }
+#endif
+#if defined(CC2530_PM2_IDLE)
+MCU_XDATA uint8_t mac_time_paused;
+/* SWRU191F 22.4: SYNC set while running, then RUN=0 stops at the next 32-kHz
+ * edge and stores the Sleep Timer; a later SYNC start reloads the counters as
+ * if the timer had never stopped. Clearing SYNC again restores the live 0x0D.
+ */
+static mac_time_result_t synchronize(uint8_t pause, uint32_t timeout, uint16_t limit)
+{
+    mac_time_result_t result;
+    uint8_t i;
+    if (mac_time_fault) return (mac_time_result_t)mac_time_fault;
+    if (!mac_time_ready) return MAC_TIME_NOT_INITIALIZED;
+#if defined(CC2530_MAC_ATTEMPT)
+    if (mac_time_attempt_active) return MAC_TIME_UNSUPPORTED_STATE;
+#endif
+    if (mac_time_paused == pause) return MAC_TIME_UNSUPPORTED_STATE;
+    if (!timeout || timeout >= TIMEBASE_HALF_RANGE || !limit) return MAC_TIME_INVALID_ARGUMENT;
+#if defined(CC2530_MAC_RADIO)
+    work.radio = 0;
+#endif
+    for (i = 0; i < sizeof(status); i++) ((uint8_t MCU_XDATA *)&status)[i] = 0;
+    status.result = MAC_TIME_PENDING; status.phase = pause ? 9 : 12;
+    work.control = pause ? 9 : 10; work.select = 0; work.event = 0x77;
+    result = observe(); if (result != MAC_TIME_OK) goto failed;
+    REQUIRE(status.control == (pause ? 13 : 10), MAC_TIME_STATE_CHANGED);
+    work.limit = limit; work.start = timebase_read_awake_ticks24(); work.previous = work.start;
+    status.timebase_status = timebase_deadline_after(work.start, timeout, TIMEBASE_POINTER_CAST(uint32_t, &work.deadline));
+    REQUIRE(status.timebase_status == TIMEBASE_OK, MAC_TIME_TIMEBASE_ERROR);
+    POLL();
+    if (pause) {
+        ROOM(); status.phase = 10; work.control = 11;
+        MMIO_WRITE(SOC_T2CTRL, 11); POLL();
+        REQUIRE(status.control == 15, MAC_TIME_STATE_CHANGED);
+        ROOM(); status.phase = 11; work.control = 10;
+        MMIO_WRITE(SOC_T2CTRL, 10);
+        do { POLL(); } while (status.control & 4);
+    } else {
+        ROOM(); status.phase = 13; work.control = 11;
+        MMIO_WRITE(SOC_T2CTRL, 11);
+        do { POLL(); } while (!(status.control & 4));
+        ROOM(); status.phase = 14; work.control = 9;
+        MMIO_WRITE(SOC_T2CTRL, 9); POLL();
+        REQUIRE(status.control == 13, MAC_TIME_STATE_CHANGED);
+    }
+    mac_time_paused = pause;
+    status.phase = 15; status.result = MAC_TIME_OK;
+    return MAC_TIME_OK;
+failed:
+    mac_time_fault = result; status.result = result;
+    return result;
+}
+mac_time_result_t mac_time_pause(uint32_t timeout, uint16_t limit) { return synchronize(1, timeout, limit); }
+mac_time_result_t mac_time_resume(uint32_t timeout, uint16_t limit) { return synchronize(0, timeout, limit); }
 #endif
 MCU_XDATA uint8_t mac_time_reserved_end;

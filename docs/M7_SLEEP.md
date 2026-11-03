@@ -8,8 +8,9 @@ The device already associates as an RX-off-when-idle child (MAC capability
 bit 3 clear) and polls its parent with MAC Data Requests (`bdb_join.c`
 `poll()`): 250 ms while commissioning, recovering, waiting for a reply, for
 180 s after READY entry and 10 s after a unicast receipt; otherwise the slow
-READY period. The CPU never sleeps and the stack requires IEN0/1/2 == 0
-outside the guarded RF-vector window (`mac_time.h`).
+READY period. Outside the `autonomous-pm2` variant the CPU never sleeps; the
+stack requires IEN0/1/2 == 0 outside the guarded RF-vector and PM2 windows
+(`mac_time.h`).
 
 ## M7a — receiver off when idle (hardware-observed on H2)
 
@@ -64,27 +65,50 @@ parent-recovery images are byte-identical to the pre-M7a build.
   RX-on, small next to the always-awake CPU, so shortening this tail is
   deferred until M7b.
 
-## M7b — PM2 between polls (planned, all items unverified)
+## M7b — PM2 between polls (simulated, hardware pending)
 
-Sleep with the Sleep Timer as the wake source between READY polls. Notes for
-the implementation, from SWRU191F and the emulator:
+`CC2530_PM2_IDLE`, enabled only for the `autonomous-pm2` variant
+(`make firmware LLVM_VARIANT=autonomous-pm2`, which also defines the M7a
+`CC2530_RX_OFF_IDLE`). Default, autonomous and parent-recovery images are
+byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
+`join_smoke_poll()`:
 
-- PCON write: the instruction after `MOV PCON,#1` must not start on a 4-byte
-  boundary when the flash cache is enabled (SWRU191F §4.2); align explicitly.
-- Wake needs an interrupt: IEN0.STIE with IRCON.STIF, EA set only for the
-  sleep window and `CLR EA` immediately after `MOV PCON,#1` (TI example). This
-  is a narrow, documented exception to the IEN == 0 invariant and must keep
-  the existing guards meaningful.
-- Sleep Timer compare at least 5 ticks ahead; write ST2, ST1, then ST0, after
-  STLOAD.LDRDY is set.
-- After wake: wait for a SLEEPSTA.CLK32K edge before reading ST, and for
-  CLKCONSTA.OSC == 0 (32 MHz XOSC) before using the radio.
-- AES registers are not retained in PM2 (§4.6): `aes.c` state must be
-  re-initialised after every wake.
-- Timer2/`mac_time` has no re-initialisation path; PM2 needs a pause and SYNC
-  resume contract for the MAC epoch, verified on hardware.
-- MCUEMU requires EA = 1 to wake and freezes Timer2/WDT in PM1-3, so emulator
-  runs cannot validate Timer2 continuity.
+- Gates (counted in `join_smoke_sleep_status.skips`, last gate in `reason`):
+  1 READY with RX off idle and no BDB/transport/ZDO work; 2 MAC driver, TX
+  engine and adapter idle (adapter OFF); 3 radio and SoC quiescent (RXENABLE
+  0, FSMSTAT0/1 idle, IEN0/1/2 except RFIE zero, SLEEPCMD.MODE 0, no DMA);
+  4 deadline: the next poll (`poll_at`) or, unless the parent selected MAC
+  data poll keepalive, the ED Timeout keepalive. The span is capped at
+  1 875 000 symbols (30 s), converted to 32.768 kHz ticks rounded down and
+  reduced by a 33-tick (~1 ms) wake margin; spans under 197 ticks stay awake.
+- Sleep: `mac_time_pause()` (stops Timer2 through T2CTRL.SYNC and the
+  32 kHz edge, `mac_time.h`), Sleep Timer compare written ST2, ST1, ST0 after
+  STLOAD.LDRDY and re-checked at least 164 ticks ahead (`late` otherwise),
+  IEN2 saved and cleared, SLEEPCMD = 0x06, then common-code `enter_pm2()`:
+  `CLR STIF; MOV IEN0,#0xA0; MOV PCON,#1; CLR EA`. The IEN0 write delays any
+  interrupt by one instruction, so no ISR runs before PCON. `.p2align 2`
+  places PCON at 4k+3, so its successor is not on a 4-byte boundary
+  (SWRU191F 4.2). The build does not check this alignment; recheck the
+  disassembly after toolchain changes.
+- Wake: vector 5 `join_smoke_sleep_isr` clears STIF; IEN0 = 0, SLEEPCMD back
+  to 0x04, IEN2 restored; `stray` counts wakes with IRCON.STIF clear. Wait
+  for CLKCONSTA == CLKCONCMD (32 MHz XOSC) and a SLEEPSTA.CLK32K rising
+  edge, then `mac_time_resume()` (Timer2 restart by SYNC on that edge) and
+  `aes_power_restored()`. Any failure sets `failure` and faults the image
+  with `JS_SLEEP`.
+- Retention: SWRU191F 4.6 lists only AES, I2C, USB, OBSSEL and TR0 as not
+  retained in PM2. `aes_power_restored()` re-applies the key-load mode when
+  ENCCS reads the reset value 0x08 and rejects any other state.
+- Stack proof: the ISRs (vector 16 RX, vector 5 Sleep Timer) share the reset
+  priority level; `stack_analysis.py` rejects any IP0/IP1 write, so they
+  never nest and the maximum ISR peak bounds them. Demand 127/128 bytes.
+- Reports may be delayed by up to one sleep (about 7 s in slow READY); the
+  device has no wake source except the Sleep Timer.
+- Simulated (MCUEMU, Telink sampleGW parent, 45 s): join to READY, then 136
+  PM2 sleeps in 33 s of the 250 ms post-READY poll phase, about 82% of the
+  time asleep, polls every 250.1 ms, no mac_time/AES fault, no stray or late
+  wake. MCUEMU freezes Timer2 in PM1-3, so Timer2 continuity, the
+  7 s slow-poll phase and current are not validated there.
 
 ## M7c — measurements (planned)
 

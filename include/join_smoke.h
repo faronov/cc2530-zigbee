@@ -16,7 +16,8 @@
 
 enum { JS_DISARMED=1, JS_ARMED, JS_ADMITTED, JS_RUNNING, JS_READY, JS_FAULT };
 enum { JS_NONE, JS_PACKET, JS_ADMISSION_EXPIRED, JS_INPUT, JS_SECURITY,
-       JS_ADAPTER, JS_MAC, JS_BDB, JS_DRIVER, JS_RANDOM, JS_TIME, JS_WORK, JS_TERMINAL };
+       JS_ADAPTER, JS_MAC, JS_BDB, JS_DRIVER, JS_RANDOM, JS_TIME, JS_WORK, JS_TERMINAL,
+       JS_SLEEP };
 
 typedef struct {
     bdb_join_config_t join;
@@ -46,6 +47,29 @@ typedef char join_smoke_status_size[sizeof(join_smoke_status_t)==48 ? 1 : -1];
 typedef char join_smoke_admission_size[
     sizeof(join_smoke_admission_t)<=sizeof(mac_link_driver_t) ? 1 : -1];
 
+#if defined(CC2530_PM2_IDLE)
+/* M7b sleep bounds: Sleep Timer ticks (32.768 kHz) unless noted. CAP is in
+ * MAC symbols (30 s); MARGIN covers wake, XOSC start and the Timer2 resync
+ * before the poll deadline; MIN is the shortest worthwhile PM2 sleep (5 ms,
+ * SWRU191F 4.1.3: PM1 is no better below ~3 ms). */
+#define JOIN_SMOKE_SLEEP_CAP 1875000UL
+#define JOIN_SMOKE_SLEEP_MARGIN 33u
+#define JOIN_SMOKE_SLEEP_MIN 164u
+#define JOIN_SMOKE_SLEEP_SYNC_TICKS 64u
+#define JOIN_SMOKE_SLEEP_SYNC_POLLS 1000u
+/* Debugger evidence, not part of the 48-byte JSN1 status. reason: last skip
+ * (1 device work, 2 link/radio owner, 3 hardware/interrupts, 4 deadline) or
+ * failure stage (6 pause, 7 wake, 8 resume, 9 AES); failure keeps the stage
+ * of a JS_SLEEP fault. stray counts wakes without STIF; late counts compares
+ * missed after the pause (Timer2 resumed, no sleep). slept is ticks mod 2^32. */
+typedef struct {
+    uint32_t sleeps, skips, slept;
+    uint8_t reason, failure, time_result, aes_result, stray, late;
+} join_smoke_sleep_t;
+extern MCU_XDATA join_smoke_sleep_t join_smoke_sleep_status;
+void join_smoke_sleep(void);
+void join_smoke_sleep_isr(void);
+#endif
 extern MCU_XDATA bdb_join_t join_smoke_device;
 extern MCU_XDATA mac_tx_interval_t join_smoke_tx;
 extern MCU_XDATA join_smoke_phase_t join_smoke_phase;

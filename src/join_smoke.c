@@ -8,6 +8,16 @@
 #if defined(CC2530_RX_DIAG)
 #include "cc2530_rx_diag.h"
 #endif
+#if defined(CC2530_PM2_IDLE)
+#if !defined(CC2530_RX_OFF_IDLE) || !defined(CC2530_RADIO_RX_ISR) || \
+    !defined(CC2530_MAC_RADIO) || !defined(CC2530_CLANG)
+#error "CC2530_PM2_IDLE requires the LLVM RX-off-when-idle radio owner"
+#endif
+#include "mac_time.h"
+#include "aes.h"
+#define SOC_SLEEPSTA_ADDRESS 0x9du
+#define SOC_STLOAD_ADDRESS 0xadu
+#endif
 
 MCU_XDATA bdb_join_t join_smoke_device;
 MCU_XDATA mac_tx_interval_t join_smoke_tx;
@@ -145,6 +155,123 @@ static uint8_t input_ready(void)
         IN.join.transport.limits.block_polls==JOIN_SMOKE_SERVICE_POLLS &&
         IN.join.transport.nv_polls==FLASH_EXEC_POLL_MAX;
 }
+
+#if defined(CC2530_PM2_IDLE)
+MCU_XDATA join_smoke_sleep_t join_smoke_sleep_status;
+static MCU_XDATA uint32_t span, mark, wake;
+static MCU_XDATA uint16_t spin;
+static MCU_XDATA uint8_t interrupts;
+#define SL join_smoke_sleep_status
+#define T DEVICE.work.runtime.transport
+#define Z DEVICE.work.runtime.zdo
+#define SPIN(condition) for(spin=1; condition; ) if(!++spin) goto failed
+
+/* Never taken in a correct sequence: the PCON write follows an IEN0 write
+ * (no interrupt between them) and the instruction after the wake clears EA
+ * before the vector can run (SWRU191F 4.2). A leaf that only clears STIF. */
+__attribute__((interrupt(5))) MCU_COMMON_CODE void join_smoke_sleep_isr(void)
+{
+    __asm__ volatile("clr 0xc7");
+}
+
+/* STIF clear; IEN0 = EA|STIE, then PCON.IDLE whose successor must not start
+ * on a 4-byte boundary (SWRU191F 4.2); clr EA runs before any ISR. Common
+ * code: the alignment padding stays out of the size-packed banks. */
+__attribute__((noinline)) MCU_COMMON_CODE static void enter_pm2(void)
+{
+    __asm__ volatile("clr 0xc7\n\t.p2align 2\n\tmov 0xa8,#0xa0\n\tmov 0x87,#1\n\tclr 0xaf" ::: "memory");
+}
+
+/* M7b: PM2 between READY polls (docs/M7_SLEEP.md). Only a fully quiescent
+ * READY state sleeps: radio OFF and idle, no MAC/NWK/APS/ZDO/application
+ * work, no armed DMA or interrupt. The Sleep Timer compare is the only wake
+ * source; it is set a margin before the next Data Poll or keepalive deadline
+ * (capped at JOIN_SMOKE_SLEEP_CAP symbols). Timer2 is stopped and restarted in
+ * Sleep-Timer sync mode, so MAC symbol time stays continuous. Any failure
+ * after the pause is a JS_SLEEP fault (autonomous builds restart). */
+void join_smoke_sleep(void)
+{
+    if(gate!=JS_READY) return;
+    SL.reason=1;
+    if(DEVICE.phase!=BDB_JOIN_READY || (DEVICE.config.association.capability&8u) ||
+       DEVICE.application_pending || DEVICE.application_done ||
+       T.queued || T.active || T.waiting || T.reply || T.receive_ready || T.completed ||
+       T.cancel || T.stopping || T.poll || T.active_poll || T.armed ||
+       Z.query || Z.query_tx || Z.response_pending || Z.response_tx ||
+       Z.application_ready || Z.leave) goto skip;
+    SL.reason=2;
+    diagnostic=mac_adapter_diagnostic();
+    if(DRIVER.fault || DRIVER.radio.control.kind || DRIVER.action.kind || DRIVER.random_wait ||
+       DRIVER.random_ready || DRIVER.stage || DRIVER.rx_held || TX.engine.phase!=MAC_TX_IDLE ||
+       diagnostic->phase!=MAC_ADAPTER_OFF || diagnostic->ready || diagnostic->goal ||
+       diagnostic->held) goto skip;
+    SL.reason=3;
+    if(MMIO_XREAD(0x618b) || (MMIO_XREAD(0x6192)&0x7fu) || (MMIO_XREAD(0x6193)&0x27u) ||
+       MMIO_READ(SOC_IEN0) || MMIO_READ(SOC_IEN1) || (MMIO_READ(SOC_IEN2)&0xfeu) ||
+       (MMIO_READ(SOC_SLEEPCMD)&7u)!=4u || MMIO_READ(SOC_DMAARM)) goto skip;
+    SL.reason=4;
+    S.adapter_result=mac_adapter_now(JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS,&CLOCK);
+    if(S.adapter_result!=MAC_ADAPTER_OK) { fault(JS_ADAPTER); return; }
+    span=DEVICE.poll_at-CLOCK.symbols;
+    if(span>=0x80000000UL) goto skip;
+    /* bdb_join poll_keepalive(): otherwise the ED Timeout keepalive is due. */
+    if(!(Z.parent_known && (Z.parent_information&3u)==1u)) {
+        mark=DEVICE.keepalive-CLOCK.symbols;
+        if(mark>=0x80000000UL) goto skip;
+        if(mark<span) span=mark;
+    }
+    if(span>JOIN_SMOKE_SLEEP_CAP) span=JOIN_SMOKE_SLEEP_CAP;
+    span=((span>>3)*2147u)>>9;   /* 16-us symbols to 32.768-kHz ticks, rounded down */
+    if(span<JOIN_SMOKE_SLEEP_MIN+JOIN_SMOKE_SLEEP_MARGIN) goto skip;
+    span-=JOIN_SMOKE_SLEEP_MARGIN;
+    SL.reason=6;
+    SL.time_result=mac_time_pause(JOIN_SMOKE_SLEEP_SYNC_TICKS,JOIN_SMOKE_SLEEP_SYNC_POLLS);
+    if(SL.time_result!=MAC_TIME_OK) goto failed;
+    /* SWRU191F 11.2: ST0 latches ST1/ST2; compare loads ST2, ST1, then ST0. */
+    mark=timebase_read_awake_ticks24();
+    wake=(mark+span)&TIMEBASE_TICKS_MASK;
+    SPIN(!(MMIO_READ(SOC_STLOAD)&1u));
+    MMIO_WRITE(SOC_ST2,(uint8_t)(wake>>16));
+    MMIO_WRITE(SOC_ST1,(uint8_t)(wake>>8));
+    MMIO_WRITE(SOC_ST0,(uint8_t)wake);
+    if(((wake-timebase_read_awake_ticks24())&TIMEBASE_TICKS_MASK)<JOIN_SMOKE_SLEEP_MIN) {
+        SL.late++;
+    } else {
+        interrupts=MMIO_READ(SOC_IEN2);
+        MMIO_WRITE(SOC_IEN2,0);
+        MMIO_WRITE(SOC_SLEEPCMD,0x06);   /* PM2, unused 16-MHz RCOSC off */
+        enter_pm2();
+        MMIO_WRITE(SOC_IEN0,0);
+        MMIO_WRITE(SOC_SLEEPCMD,0x04);
+        MMIO_WRITE(SOC_IEN2,interrupts);
+        if(!(MMIO_READ(SOC_IRCON)&0x80u)) SL.stray++;
+        SL.reason=7;
+        /* XOSC back as system clock, then a fresh 32-kHz edge (SWRU191F 22.4). */
+        SPIN(MMIO_READ(SOC_CLKCONSTA)!=MMIO_READ(SOC_CLKCONCMD));
+        SPIN(MMIO_READ(SOC_SLEEPSTA)&1u);
+        SPIN(!(MMIO_READ(SOC_SLEEPSTA)&1u));
+        SL.sleeps++;
+    }
+    SL.reason=8;
+    SL.time_result=mac_time_resume(JOIN_SMOKE_SLEEP_SYNC_TICKS,JOIN_SMOKE_SLEEP_SYNC_POLLS);
+    if(SL.time_result!=MAC_TIME_OK) goto failed;
+    SL.reason=9;
+    SL.aes_result=aes_power_restored();
+    if(SL.aes_result!=AES_OK) goto failed;
+    SL.slept+=(timebase_read_awake_ticks24()-mark)&TIMEBASE_TICKS_MASK;
+    SL.reason=0;
+    return;
+skip:
+    SL.skips++;
+    return;
+failed:
+    SL.failure=SL.reason;
+    fault(JS_SLEEP);
+}
+#undef T
+#undef Z
+#undef SPIN
+#endif
 
 void join_smoke_initialize(void)
 {
