@@ -11,7 +11,7 @@ bit 3 clear) and polls its parent with MAC Data Requests (`bdb_join.c`
 READY period. The CPU never sleeps and the stack requires IEN0/1/2 == 0
 outside the guarded RF-vector window (`mac_time.h`).
 
-## M7a — receiver off when idle (this change, host-tested)
+## M7a — receiver off when idle (hardware-observed on H2)
 
 `CC2530_RX_OFF_IDLE`, enabled only for the `autonomous` firmware variant
 (`tools/llvm/build.sh`, `make firmware LLVM_VARIANT=autonomous`). Default and
@@ -33,13 +33,27 @@ parent-recovery images are byte-identical to the pre-M7a build.
   macMaxFrameRetries and foreground/NV latency. 7.5 s would leave <0.2 s.
   Keepalive (30 s ED timeout request, 2-minute requested timeout, 5 s × 6
   retries) is unchanged.
+- ACTIVE window (rxoff builds only): a received unicast still triggers an
+  immediate poll (`poll_at = now`, so Frame Pending drains a queued tail), but
+  only NWK data frames open the 10 s 250 ms window. A NWK command such as the
+  keepalive's ED Timeout Response ends its exchange; before this change each
+  keepalive cost about 40 fast polls per 30 s.
 - Diagnostics: `ready_time`, `rx_on`, `rx_opens` in `mac_link_driver_t`
   (rxoff builds only). Host results: E2E `RX_OFF_IDLE` 0.77% RX-on over a
-  modeled minute of slow polling; join-smoke sleepy cases 25-27
+  modeled minute of slow polling with 84 polls (0.19% and 13 polls after
+  the ACTIVE change; the E2E checks the bound); join-smoke sleepy cases 25-27
   (`JOIN_SMOKE_RX_OFF_IDLE=1`) about 3.7% over 3 modeled hours, because that
   peer model sets Frame Pending in every Data Request ACK and each keepalive
   response restarts 10 s of 250 ms polling.
-- Not yet observed on hardware (H2 against EmberZNet).
+- Hardware-observed (H2 against EmberZNet, LH22, before the ACTIVE change):
+  join, Leave + 180 s hold, rejoin, 5/5 ZHA reads; 5.5-7.4% RX-on in idle
+  60 s windows (100% before M7a), dominated by keepalive-triggered fast polls.
+- Per-poll receiver time (simulated, MCUEMU, FSMSTAT0 sampled every 50 µs,
+  LH22 image): about 22.75 ms per poll without Frame Pending. TX and ACK end
+  2.6 ms after RX start; the rest is the adapter retire/close sequence, about
+  3 ms per main-loop iteration. At the 7 s slow period that is about 0.33%
+  RX-on, small next to the always-awake CPU, so shortening this tail is
+  deferred until M7b.
 
 ## M7b — PM2 between polls (planned, all items unverified)
 
