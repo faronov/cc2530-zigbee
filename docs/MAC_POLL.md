@@ -205,6 +205,12 @@ retry backoff, with foreign and pre-transmission frames as negative cases.
 `MAC_LINK_DRIVER` E2E case 20 covers the full join. Evidence level:
 **host-tested**; the fix has not yet been observed on hardware.
 
+`mac_poll` itself is used only for association extraction, where RX stays on.
+READY Data Requests are `nwk_aps` transmissions; with `CC2530_RX_OFF_IDLE`
+the [link driver](MAC_LINK_DRIVER.md#ready-receiver-lifecycle-m7a-cc2530_rx_off_idle)
+applies the same two rules to them: ACK Frame Pending or a lost ACK keeps (or
+reopens) RX for `frame_wait` (macMaxFrameTotalWaitTime), otherwise RX closes.
+
 ## Explicit R22 Response reception (#64)
 
 `mac_poll_step_rx(poll,tx,now,event,action,profile)` selects the existing

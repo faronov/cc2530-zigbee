@@ -404,6 +404,17 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
             join_event(d, MAC_JOIN_DISARMED);
             (void)consumer(d, 1);
         } else {
+#if defined(CC2530_RX_OFF_IDLE)
+            /* IEEE 802.15.4-2006 7.5.6.3: a Data Request ACK with Frame
+             * Pending keeps RX on for macMaxFrameTotalWaitTime; so does a
+             * lost ACK, as the parent may still deliver (implicit ACK). */
+            if (d->join->work.runtime.transport.active_poll &&
+                (d->owner->engine.outcome == MAC_TX_NO_ACK ||
+                 (d->owner->engine.outcome == MAC_TX_ACKED && d->owner->engine.pending))) {
+                d->rx_hold = d->now + d->join->config.association.extraction.frame_wait;
+                d->rx_held = 1;
+            }
+#endif
             d->consumer_result = bdb_join_disarmed(d->join, d->action.data.tx.control.generation,
                 d->action.data.tx.control.retry, d->action.data.tx.control.nb);
             if (d->consumer_result != BDB_JOIN_OK) fault(d, MAC_LINK_DRIVER_CONSUMER);
@@ -446,6 +457,35 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
         d->adapter_result = mac_adapter_close(reached(d->now, d->end.symbols) ? NULL : &d->end);
         if (d->adapter_result != MAC_ADAPTER_OK) return fault(d, MAC_LINK_DRIVER_RADIO);
     }
+#if defined(CC2530_RX_OFF_IDLE)
+    /* M7a: an RX-off-when-idle READY child (capability bit3 clear) needs RX
+     * only for its own TX/ACK (prepare/retirement) and held poll windows. */
+    rx = d->join->phase == BDB_JOIN_READY && !(d->join->config.association.capability & 0x08u);
+    phase = mac_adapter_diagnostic()->phase;
+    if (rx) {
+        d->ready_time += d->now - d->rx_mark;
+        if (phase != MAC_ADAPTER_OFF && phase != MAC_ADAPTER_PREPARED) d->rx_on += d->now - d->rx_mark;
+    } else d->rx_held = 0;
+    d->rx_mark = d->now;
+    if (rx) {
+        if (d->rx_held && reached(d->now, d->rx_hold)) d->rx_held = 0;
+        /* Keep the AUTOACK guard inside the half-epoch reached() range. */
+        if (reached(d->now, d->rx_ready_at)) d->rx_ready_at = d->now;
+        if (d->owner->engine.phase == MAC_TX_IDLE && !mac_adapter_diagnostic()->ready &&
+            !mac_adapter_diagnostic()->goal) {
+            if (phase == MAC_ADAPTER_RX && !d->rx_held && d->rx_ready_at == d->now) {
+                d->adapter_result = mac_adapter_close(NULL);
+                if (d->adapter_result != MAC_ADAPTER_OK) return fault(d, MAC_LINK_DRIVER_RADIO);
+                d->gaps++;
+            } else if (phase == MAC_ADAPTER_OFF && d->rx_held) {
+                result = mac_adapter_open(d->timeout, d->limit, &d->clock);
+                d->adapter_result = result;
+                if (d->adapter_result != MAC_ADAPTER_OK) return fault(d, MAC_LINK_DRIVER_RADIO);
+                d->rx_opens++;
+            }
+        }
+    } else
+#endif
     if (d->join->workspace == BDB_JOIN_WORK_RUNTIME && mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF &&
         d->owner->engine.phase == MAC_TX_IDLE && !mac_adapter_diagnostic()->ready) {
         result = mac_adapter_open(d->timeout, d->limit, &d->clock);

@@ -30,9 +30,17 @@
  * macTransactionPersistenceTime (~7.68 s on 2.4 GHz with defaults), so a
  * MAC Data Request must fetch them: 250 ms while commissioning, recovering,
  * awaiting a reply or for BURST after READY / ACTIVE after unicast receipt;
- * otherwise every 4 s, well inside the parent's persistence time. */
+ * otherwise every 4 s, well inside the parent's persistence time. With
+ * CC2530_RX_OFF_IDLE (M7a) the idle receiver is off, so the slow period is
+ * 7.0 s: poll_at counts from poll queueing, and the ~0.68 s left to 7.68 s
+ * covers CSMA backoffs, macMaxFrameRetries and foreground/NV latency. It stays
+ * far below the 30 s ED keepalive and the requested 2-minute parent timeout. */
 #define BDB_JOIN_POLL_FAST 15625UL
+#if defined(CC2530_RX_OFF_IDLE)
+#define BDB_JOIN_POLL_SLOW 437500UL
+#else
 #define BDB_JOIN_POLL_SLOW 250000UL
+#endif
 #define BDB_JOIN_POLL_BURST 11250000UL
 #define BDB_JOIN_POLL_ACTIVE 625000UL
 

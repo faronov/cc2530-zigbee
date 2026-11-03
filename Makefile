@@ -24,6 +24,7 @@ $(error JOIN_SMOKE_KEY_MODE must be install-code or default-tc)
 endif
 JOIN_SMOKE_PARENT_RECOVERY ?= 1
 JOIN_SMOKE_REPLAY_POLICY_C ?= 0
+JOIN_SMOKE_RX_OFF_IDLE ?= 0
 ifneq ($(filter $(JOIN_SMOKE_PARENT_RECOVERY),0 1),$(JOIN_SMOKE_PARENT_RECOVERY))
 $(error JOIN_SMOKE_PARENT_RECOVERY must be 0 or 1)
 endif
@@ -35,7 +36,7 @@ ifneq ($(JOIN_SMOKE_PARENT_RECOVERY),1)
 $(error JOIN_SMOKE_REPLAY_POLICY_C requires JOIN_SMOKE_PARENT_RECOVERY=1)
 endif
 endif
-JOIN_SMOKE_RECOVERY_DEFINES := $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),-DCC2530_PARENT_RECOVERY) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),-DCC2530_REPLAY_POLICY_C)
+JOIN_SMOKE_RECOVERY_DEFINES := $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),-DCC2530_PARENT_RECOVERY) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),-DCC2530_REPLAY_POLICY_C) $(if $(filter 1,$(JOIN_SMOKE_RX_OFF_IDLE)),-DCC2530_RX_OFF_IDLE)
 
 ifeq ($(BOARD),generic)
 BOARD_NUMBER := 0
@@ -84,12 +85,12 @@ $(BUILD)/host-profile.txt: FORCE | $(BUILD)
 FORCE:
 
 HOST_CHECKS := host-nwk-frame-tests host-aps-frame-tests host-zcl-frame-tests host-nv-record-tests host-security-counter-tests
-test-host: $(addprefix $(BUILD)/,$(HOST_CHECKS)) $(BUILD)/host-join-smoke
-	set -e; for name in $(HOST_CHECKS); do "$(BUILD)/$$name"; done
+test-host: $(addprefix $(BUILD)/,$(HOST_CHECKS)) $(BUILD)/host-join-smoke $(BUILD)/host-mac-link-e2e-rxoff-tests
+	set -e; for name in $(HOST_CHECKS) host-mac-link-e2e-rxoff-tests; do "$(BUILD)/$$name"; done
 	set -e; for n in 0 2 4 9 25 26; do "$(BUILD)/host-join-smoke" $$n; done
 
 M5_M6_CHECKS := host-security-keys-tests host-bdb-join-tests host-parent-storage-tests host-parent-storage-audit-tests host-parent-recovery-tests host-parent-recovery-policy-c-tests host-parent-candidates-tests host-replay-policy-c-tests host-replay-log-reference-tests host-security-receive-completion-tests
-M5_M6_PROGRAMS := $(M5_M6_CHECKS) $(addsuffix -sanitize,$(M5_M6_CHECKS)) host-nwk-parent-tests host-nwk-parent-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-report-completion host-report-completion-sanitize host-mac-link-e2e-tests
+M5_M6_PROGRAMS := $(M5_M6_CHECKS) $(addsuffix -sanitize,$(M5_M6_CHECKS)) host-nwk-parent-tests host-nwk-parent-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-report-completion host-report-completion-sanitize host-mac-link-e2e-tests host-mac-link-e2e-rxoff-tests host-mac-link-e2e-rxoff-tests-sanitize
 test-m5-m6-host: $(addprefix $(BUILD)/,$(M5_M6_PROGRAMS))
 	set -e; for name in $(M5_M6_PROGRAMS); do "$(BUILD)/$$name"; done
 

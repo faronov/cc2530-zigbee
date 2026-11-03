@@ -38,6 +38,14 @@ typedef struct {
     uint8_t stage, random_wait, random_ready, random_byte;
     /* Saturating count of MAC-accepted DATA frames dropped on consumer FULL. */
     uint8_t dropped;
+#if defined(CC2530_RX_OFF_IDLE)
+    /* M7a diagnostics, symbols mod 2^32: ready_time is READY time seen by the
+     * runtime step, rx_on the part of it with the adapter neither OFF nor
+     * PREPARED; rx_opens counts idle opens for a poll response window held
+     * until rx_hold (rx_held). rx_mark is the last accounting point. */
+    uint32_t rx_hold, rx_mark, rx_on, ready_time, rx_opens;
+    uint8_t rx_held;
+#endif
 } mac_link_driver_t;
 
 /* Bind an already initialized real adapter, OFF after consumed close/drain,
@@ -72,6 +80,11 @@ mac_link_driver_result_t mac_link_driver_random(mac_link_driver_t MCU_XDATA * SD
  * Association Request uses STOP_RX. POLL uses KEEP_AUTOACK; non-ACK frames
  * before normal handoff are a terminal local coverage error, not success.
  * Runtime unicast uses KEEP_AUTOACK; non-ACK TX uses STOP_RX then normal open.
+ * CC2530_RX_OFF_IDLE (M7a): in READY with capability bit3 clear the idle
+ * receiver is instead closed (normal close/drain) and reopened only while a
+ * Data Request response window is held: ACK Frame Pending or no ACK, for
+ * extraction.frame_wait (macMaxFrameTotalWaitTime) from DISARM. Our own TX
+ * still opens RX for CCA/ACK through prepare. Other phases keep RX on.
  * gaps counts driver-initiated RX closures. OFF/configure/prepare intervals
  * never contribute coverage, including adapter-internal STOP_RX retirement.
  * CLOSED uses the latest event's real pre-stop watermark, including TX-only

@@ -83,6 +83,47 @@ RX_CLOSED and RETIRED, so it never comes from an earlier RX episode and never
 claims time after the stop. `gaps` counts driver-initiated RX closures. An INSTALL event echoes
 the original epoch/token only after the new configuration is really open.
 
+### READY receiver lifecycle (M7a, `CC2530_RX_OFF_IDLE`)
+
+Without the define, the RUNTIME workspace reopens normal RX whenever the
+adapter is OFF and the TX engine is idle, so the receiver is on permanently.
+With `CC2530_RX_OFF_IDLE` (enabled only for the `autonomous` firmware variant
+and the `host-mac-link-e2e-rxoff-tests` / `JOIN_SMOKE_RX_OFF_IDLE=1` host
+builds), a READY child whose association capability has bit 3 (RxOnWhenIdle)
+clear keeps the receiver OFF except:
+
+| Need | Receiver |
+| --- | --- |
+| Own TX | Prepare/CCA/TX/ACK wait as in the table above; after an ACKed `KEEP_AUTOACK` TX the retained RX closes once the 74-symbol AUTOACK guard has passed |
+| Data Request ACKed with Frame Pending | Held open for `extraction.frame_wait` (macMaxFrameTotalWaitTime, 1986 symbols in the shipped configuration) from DISARM, IEEE 802.15.4-2006 §7.5.6.3 |
+| Data Request without ACK (NO_ACK) | Reopened from OFF and held for the same window: the parent may have received the Request and still deliver (implicit ACK, [MAC_POLL](MAC_POLL.md#implicit-data-request-ack-lh21c)) |
+| Data Request ACKed without Frame Pending | Closed at the guard |
+
+The hold is set only at the poll's DISARM and is never shortened. Every close
+is the ordinary `mac_adapter_close(NULL)` from idle RX (`!ready`, no goal), so
+a queued or AUTOACKed frame is drained and delivered before CLOSED, and `gaps`
+counts it. No idle reopen happens: only the next TX prepare or a held poll
+window opens RX. Commissioning (WAIT_KEY..VERIFYING), RECOVERING and any
+capability-bit-3-set device keep the previous always-on behaviour. A frame
+still being received when the stop is issued is lost (accepted RUNTIME loss,
+recovered by upper-layer retries). The guarded fields at the end of
+`mac_link_driver_t` are tiny diagnostics in 16-µs symbols mod 2^32:
+`ready_time` (READY time seen by the RUNTIME step), `rx_on` (the part of it
+with the adapter neither OFF nor PREPARED) and `rx_opens` (held-window opens
+from OFF). The 48-byte `join_smoke_status` ABI is unchanged; tools read the
+fields from the driver in `join_smoke_phase`. In READY the driver also
+refreshes the expired AUTOACK guard `rx_ready_at` so it stays within the
+half-epoch `reached()` range (without the define it is not refreshed).
+
+E2E `RX_OFF_IDLE` (rxoff build) proves: a frame released late in the
+Frame-Pending window is received; a frame released at the window end is in the
+FIFO when the driver closes (DRAINING) and is still delivered; a poll whose four
+ACKs are lost reopens RX once and receives the implicitly acknowledged frame;
+no OFF→RX transition without own TX or a held window; every due close happens;
+and over a modeled minute of slow READY polling RX is on 0.77% of the time with
+a 7.0 s (438488-symbol measured) maximum poll gap. Mutations removing the
+close, the hold, the NO_ACK hold or reinstating the idle reopen each fail it.
+
 After a received ACK-requesting frame, the driver delays the next preparation
 by a conservative `12 + 22 + 40 = 74`-symbol turnaround, ACK and IFS guard
 (IEEE 802.15.4-2006 §§7.5.6.4.2, 7.5.1.3). The guard is not evidence that an
