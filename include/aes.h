@@ -69,5 +69,9 @@ aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
                                   const MCU_GENERIC uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,
                                   uint16_t limit, aes_diagnostics_t MCU_XDATA *diagnostics) LINK_FAR;
+#if defined(CC2530_PM2_IDLE)
+/* After a PM2 wake: restore the ENCCS idle mode lost in PM2 (SWRU191F 4.6). */
+aes_result_t aes_power_restored(void);
+#endif
 
 #endif

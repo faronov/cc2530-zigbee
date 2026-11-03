@@ -136,6 +136,9 @@ void main(void)
     for(;;) {
         if(join_smoke_status.phase!=JS_RUNNING && join_smoke_status.phase!=JS_READY) join_smoke_wait();
         join_smoke_poll();
+#if defined(CC2530_PM2_IDLE)
+        join_smoke_sleep();
+#endif
         if(join_smoke_status.phase==JS_FAULT) {
 #if defined(CC2530_AUTONOMOUS)
             restart();

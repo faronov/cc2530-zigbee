@@ -20,6 +20,7 @@ import llvm_image  # noqa: F401  (sets the harness path)
 from boot_security_resident import LENGTHS
 
 SP, FMAP, ACC = 0x81, 0x9F, 0xE0
+IP = (0xA9, 0xB9)
 # Opcodes that never write the accumulator (A-tracking survives them).
 KEEP_A = {0xC0, 0x75, 0x85, 0xF5, 0xF6, 0xF7, 0xF0, 0xF2, 0xF3, 0x90, 0xA3, 0x76, 0x77, 0xC3, 0xD3,
           0x86, 0x87, 0xA6, 0xA7, 0x05, 0x15, 0x06, 0x07, 0x16, 0x17, 0xB2, 0xC2, 0xD2, 0x92, 0xA2,
@@ -32,9 +33,10 @@ class Unmodelled(Exception):
     pass
 
 
-# The only interrupt the firmware may enable: RF vector 16 -> leaf RX ISR
-# (CC2530_RADIO_RX_ISR). Anything else in the vector table fails closed.
-ALLOWED_ISRS = {16: "radio_autoack_rx_isr"}
+# The only interrupts the firmware may enable: RF vector 16 -> leaf RX ISR
+# (CC2530_RADIO_RX_ISR) and Sleep Timer vector 5 -> leaf STIF clear
+# (CC2530_PM2_IDLE). Anything else in the vector table fails closed.
+ALLOWED_ISRS = {16: "radio_autoack_rx_isr", 5: "join_smoke_sleep_isr"}
 
 
 def interrupt_roots(img):
@@ -149,6 +151,11 @@ class Analyzer:
                     raise Unmodelled(f"common code jumps into banked window {target:#x} at {img.label(key)}")
                 return img.canon(bank, target)
 
+            # Same-level interrupts never nest, so the ISR bound is the max of
+            # all ISRs only while IP0/IP1 (not bit-addressable) keep reset 0.
+            if ((op in (0x75, 0xF5, 0x05, 0x15, 0xD0, 0x42, 0x43, 0x52, 0x53, 0x62, 0x63, 0xC5, 0xD5)
+                 or 0x86 <= op <= 0x8F) and raw[1] in IP) or (op == 0x85 and raw[2] in IP):
+                raise Unmodelled(f"interrupt priority write {raw.hex()} at {img.label(key)}")
             writes_sp = (op in (0x75, 0xF5, 0x05, 0x15, 0xD0) and raw[1] == SP) or \
                         (op == 0x85 and raw[2] == SP) or (0x86 <= op <= 0x8F and raw[1] == SP)
             if writes_sp:

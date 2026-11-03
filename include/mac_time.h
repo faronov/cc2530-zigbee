@@ -61,8 +61,9 @@ typedef struct {
  * All operations: 0<timeout<0x800000 raw Sleep Timer ticks and positive 16-bit poll
  * budget. Fixed entry preflight precedes the deadline; every hardware action
  * has a remaining confirmation poll. Equality times out. CPU progress and
- * true half-range/continuity assumptions are mandatory. PM, reset, debugger
- * halt/step/resume or unowned timer/clock accesses invalidate this contract.
+ * true half-range/continuity assumptions are mandatory. PM (except the
+ * CC2530_PM2_IDLE pause/resume bracket below), reset, debugger halt/step/resume
+ * or unowned timer/clock accesses invalidate this contract.
  *
  * First operational fault is retained; subsequent init/read returns that
  * result without MMIO or diagnostic/output writes, even for invalid arguments.
@@ -113,6 +114,21 @@ mac_time_result_t mac_time_read_radio(uint32_t timeout, uint16_t poll_limit,
  * fields zero. Retained faults preserve the complete first-failure diagnostic.
  */
 const mac_time_diagnostics_t MCU_XDATA *mac_time_diagnostic(void);
+#if defined(CC2530_PM2_IDLE)
+/* M7b PM2 bracket, the only sanctioned discontinuity of the contract above.
+ * pause: from live RUN (0x0D) set SYNC, clear RUN and confirm STATE=0 at the
+ * next 32-kHz edge (T2CTRL 0x0A); the Sleep Timer value is stored by hardware.
+ * resume: after wake, a stable undivided XOSC32 and a CLK32K rising edge (so
+ * the Sleep Timer reads current), SYNC-start, confirm STATE=1, then clear SYNC
+ * (0x0D). Hardware adds the slept Sleep Timer time (+-1 Timer2 clock, at the
+ * nominal 32.768-kHz ratio), so mac_tx symbol time stays continuous across a
+ * stop shorter than ~268 s. Both require the quiescent read preconditions
+ * (radio off, no attempt scope), the same timeout/limit rules and retain the
+ * first fault. Nothing may read Timer2 between pause and resume.
+ */
+mac_time_result_t mac_time_pause(uint32_t timeout, uint16_t limit);
+mac_time_result_t mac_time_resume(uint32_t timeout, uint16_t limit);
+#endif
 #if defined(CC2530_MAC_ATTEMPT)
 #ifndef CC2530_MAC_RADIO
 #error CC2530_MAC_ATTEMPT requires CC2530_MAC_RADIO

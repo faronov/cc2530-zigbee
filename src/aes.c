@@ -202,6 +202,26 @@ static void input_descriptor(uint16_t source)
     aes_dma0[4] = 0; aes_dma0[5] = 16; aes_dma0[6] = 29; aes_dma0[7] = 0x41;
 }
 #undef timebase_expired
+#if defined(CC2530_PM2_IDLE)
+/* SWRU191F 4.6: PM2 resets ENCCS to 0x08 but retains DMA0/1CFG. After first
+ * use the idle contract is ECB/RDY (0x48); restore MODE so entry checks hold.
+ */
+aes_result_t aes_power_restored(void)
+{
+    uint8_t control;
+    if (aes_fault) return (aes_result_t)aes_fault;
+    control = MMIO_READ(SOC_ENCCS);
+    if (aes_used && control == 8) {
+        MMIO_WRITE(SOC_ENCCS, 0x40);
+        control = MMIO_READ(SOC_ENCCS);
+    }
+    if (control != (aes_used ? 0x48 : 8)) {
+        aes_fault = AES_UNSUPPORTED_STATE;
+        return AES_UNSUPPORTED_STATE;
+    }
+    return AES_OK;
+}
+#endif
 aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
                                   const MCU_GENERIC uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,

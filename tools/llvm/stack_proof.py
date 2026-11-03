@@ -14,7 +14,9 @@ elf, out = sys.argv[1:3]
 img = SA.Image(elf)
 an = SC.CensusAnalyzer(img)
 mpeak, _, mpath, mcomp = an.function(img.sym['main'])
-# One non-nesting ISR may preempt any foreground depth: 2 (vector call) + its peak.
+# One ISR may preempt any foreground depth: 2 (vector call) + its peak. The
+# allowed ISRs share the reset priority level (the analyzer rejects IP0/IP1
+# writes), so they never nest and the maximum bounds them all.
 roots = SA.interrupt_roots(img)
 isrs = {SC.name_of(an, img, key): 2 + an.function(key)[0] for _, key in roots}
 isr = max(isrs.values(), default=0)
@@ -28,6 +30,6 @@ rep = dict(elf=elf, interrupt_vectors=[n for n, _ in roots], isr_peaks=isrs, isr
            worst_path=names, worst_path_banked_calls=sum(1 for x in chain if x in an.thunks),
            top_paths=[dict(peak=p, functions=[SC.name_of(an, img, x) for x in ch if x not in an.thunks],
                            banked_calls=sum(1 for x in ch if x in an.thunks)) for p, ch in SC.top_paths(an, img)])
-rep['verdict'] = 'PASS' if len(roots) <= 1 and rep['demand'] <= 128 else 'FAIL'
+rep['verdict'] = 'PASS' if len(roots) <= len(SA.ALLOWED_ISRS) and rep['demand'] <= 128 else 'FAIL'
 json.dump(rep, open(out, 'w'), indent=1)
 print(json.dumps({k: rep[k] for k in ('demand', 'isr_contribution', 'capacity', 'predicted_peak_sp', 'by_origin', 'worst_path_banked_calls', 'verdict')}))
