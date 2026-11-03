@@ -714,6 +714,11 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
         /* A unicast may be one of several queued indirect frames. */
         if (work.receive.mac.header.destination[0] != 255 || work.receive.mac.header.destination[1] != 255) {
             ctx->poll_at = now;
+#if defined(CC2530_RX_OFF_IDLE)
+            /* NWK commands (e.g. the keepalive's ED Timeout Response) end
+             * an exchange; frame pending still drains any queued tail. */
+            if (work.receive.nwk.header.type == NWK_FRAME_DATA)
+#endif
             if (expired(now+BDB_JOIN_POLL_ACTIVE, ctx->poll_fast)) ctx->poll_fast = now+BDB_JOIN_POLL_ACTIVE;
         }
         return BDB_JOIN_OK;

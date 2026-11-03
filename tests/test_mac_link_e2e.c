@@ -828,6 +828,7 @@ static void rx_off_tail(void)
 {
     nwk_aps_t *t = &device.work.runtime.transport;
     uint32_t on, total, end;
+    unsigned parent;
     CHECK(window_release && drain_release && drain_seen && drain_delivered && !lost_release);
     link_peer_application(&application);
     CHECK(bdb_join_send(&device, &application, 1, driver.now) == BDB_JOIN_OK);
@@ -846,11 +847,14 @@ static void rx_off_tail(void)
         advance_clocks(((uint32_t)(device.poll_fast-driver.now) > 4000000u ? 4000000u :
             device.poll_fast-driver.now+1u)*512u);
     }
-    on = driver.rx_on; total = driver.ready_time; end = driver.now+3750000u; rx_measure = 1;
+    on = driver.rx_on; total = driver.ready_time; end = driver.now+3750000u; rx_measure = 1; parent = link_peer_parent;
     while ((uint32_t)(end-driver.now) < MAC_TX_HALF) { CHECK(!driver.fault && e2e_steps < 200000u); tick_driver(); }
     on = driver.rx_on-on; total = driver.ready_time-total; rx_measure = 0;
     CHECK(total > 3740000u && on*50u < total && poll_count >= 5u);
     CHECK(poll_max > BDB_JOIN_POLL_SLOW && poll_max < BDB_JOIN_POLL_SLOW+4000u);
+    /* Keepalive answers (NWK commands) end an exchange without an ACTIVE
+     * fast-poll window: the minute stays near slow cadence. */
+    CHECK(link_peer_parent >= parent+2u && poll_count <= 16u);
     CHECK(device.phase == BDB_JOIN_READY && device.member && !driver.fault && !mac_adapter_diagnostic()->fault);
     CHECK(hold_opens && tx_opens && nodata_closes && driver.rx_opens == hold_opens);
     printf("E2E RX-off READY: RX on %lu/%lu symbols (%lu ppm), %u polls max gap %lu, %u TX opens, "
