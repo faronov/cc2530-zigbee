@@ -35,19 +35,28 @@ parent-recovery images are byte-identical to the pre-M7a build.
   retries) is unchanged.
 - ACTIVE window (rxoff builds only): a received unicast still triggers an
   immediate poll (`poll_at = now`, so Frame Pending drains a queued tail), but
-  only NWK data frames open the 10 s 250 ms window. A NWK command such as the
-  keepalive's ED Timeout Response ends its exchange; before this change each
-  keepalive cost about 40 fast polls per 30 s.
+  only NWK data frames that deliver an APS payload open the 10 s 250 ms
+  window. A NWK command such as the keepalive's ED Timeout Response ends its
+  exchange; before this change each keepalive cost about 40 fast polls per
+  30 s. An APS ACK for an own report also ends its exchange and no longer
+  opens the window.
 - Diagnostics: `ready_time`, `rx_on`, `rx_opens` in `mac_link_driver_t`
   (rxoff builds only). Host results: E2E `RX_OFF_IDLE` 0.77% RX-on over a
   modeled minute of slow polling with 84 polls (0.19% and 13 polls after
-  the ACTIVE change; the E2E checks the bound); join-smoke sleepy cases 25-27
+  the ACTIVE change; 16 polls and 0.236% with an acknowledged application
+  send inside the measured minute; the E2E checks both bounds); join-smoke sleepy cases 25-27
   (`JOIN_SMOKE_RX_OFF_IDLE=1`) about 3.7% over 3 modeled hours, because that
   peer model sets Frame Pending in every Data Request ACK and each keepalive
   response restarts 10 s of 250 ms polling.
 - Hardware-observed (H2 against EmberZNet, LH22, before the ACTIVE change):
   join, Leave + 180 s hold, rejoin, 5/5 ZHA reads; 5.5-7.4% RX-on in idle
   60 s windows (100% before M7a), dominated by keepalive-triggered fast polls.
+- Hardware-observed (H2, LH23, NWK-data-only ACTIVE window): join, Leave +
+  180 s hold, rejoin, 5/5 ZHA reads (0.42-0.75 s); idle 60 s windows 0.82,
+  0.97, 1.12, 3.76 and 1.21% RX-on, no extra receiver opens. The sniffer
+  shows keepalives no longer start fast polling; the 3.76% window held an
+  own ZCL report whose APS ACK (a NWK data frame) opened the window, which
+  the later APS ACK exclusion addresses (host-tested, not yet on hardware).
 - Per-poll receiver time (simulated, MCUEMU, FSMSTAT0 sampled every 50 µs,
   LH22 image): about 22.75 ms per poll without Frame Pending. TX and ACK end
   2.6 ms after RX start; the rest is the adapter retire/close sequence, about
