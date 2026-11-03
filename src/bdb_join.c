@@ -341,8 +341,10 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     }
 }
 
-/* Indirect-delivery service for an RX-off-when-idle capability. The receiver
- * itself stays on; only the parent's queueing behaviour requires the poll. */
+/* Indirect-delivery service for an RX-off-when-idle capability. Without
+ * CC2530_RX_OFF_IDLE the receiver itself stays on and only the parent's
+ * queueing requires the poll; with it (M7a) the READY receiver is off between
+ * polls and the link driver opens it for each poll's response window. */
 static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now) BDB_RECOVERY_CODE;
 static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM_VOLATILE uint32_t now)
 {

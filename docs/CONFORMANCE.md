@@ -52,7 +52,7 @@ refer only to the dated parent-observed LG records, never generic hardware.
 | [Passive RX](RADIO_RX.md#channel-reset-and-metadata-interpretation) | API channels11..26, reset-exclusive polling, raw signed RSSI/seven-bit correlation; [LG channel15 only](RADIO_RX.md#physical-evidence-and-remaining-gates) | Other-channel RF, calibrated frequency/timing/RSSI/LQI, independent FCS and controller-fault recovery remain unobserved; no TX/ACK/ISR/MAC claim |
 | [Boot-disarmed TX fixture](RADIO_TX_FIXTURE.md) | Both-board offline proofs; separate one-attempt LG/raw05 PHY_DONE and independent body matches on [channel15](DEBUGGING.md#2026-09-19-lg-single-attempt-tx-acceptance) and [channel26](DEBUGGING.md#2026-09-19-lg-channel26-isolated-tx-acceptance) | Channel exclusivity, physical busy-channel, independent FCS, calibration and fault recovery remain open; no ACK, retry, same-reset RX adapter or MAC/network claim |
 | [Flash](ARCHITECTURE.md#verified-reserved-page-erase-and-program) | #6/#7 real RAM executor, bounds/history/readback and retained fail-stop have offline evidence; [#8 fixture](FLASH_FIXTURE.md) is boot-disarmed and offline-only for both boards | Physical program/erase, full excluded-region preservation, mapped-RAM inspection and reset/interruption recovery remain open |
-| [Board/memory ownership](ARCHITECTURE.md#memory-contract) | Board startup owns GPIO; code/NV/lock partitions, status reservation, IRAM alias and ISR ownership are documented and checked | Sleep remains disabled. No generic-board physical evidence or arbitrary cross-service ownership handoff is established |
+| [Board/memory ownership](ARCHITECTURE.md#memory-contract) | Board startup owns GPIO; code/NV/lock partitions, status reservation, IRAM alias and ISR ownership are documented and checked | PM sleep remains disabled (the CPU stays awake; [M7 plan](M7_SLEEP.md)); only the autonomous variant turns the idle READY receiver off ([M7a](MAC_LINK_DRIVER.md#ready-receiver-lifecycle-m7a-cc2530_rx_off_idle)). No generic-board physical evidence or arbitrary cross-service ownership handoff is established |
 
 These are isolated, ownership-constrained foundations, not an integrated
 concurrent platform runtime. Full-reset/exclusive-history requirements cannot
@@ -66,7 +66,7 @@ substitution of FIFO flush, EA ownership or raw samples.
 The remaining #9 audit/calibration scope is now consolidated into #4; the
 administrative closure supplies no new hardware evidence and does not close
 M2 or #8. Entropy remains #10. Further physical work
-requires separate board/image/operation/recovery authorization. Sleep,
+requires separate board/image/operation/recovery authorization. PM sleep,
 generic-board support and cryptographic entropy must not be inferred from the
 historical LG baseline; durable NV/security remain later, separate gates.
 
@@ -117,7 +117,7 @@ Page numbers refer to the printed pages of R22.
 | SEC-01 | Outgoing NWK counter survives reboot, factory reset and NWK Leave without rollback | section 4.3.4 p.416 | Planned / none | M4 |
 | SEC-02 | Two network keys | section 4.3.4.1 p.417 | Planned / none | M4 |
 | SEC-03 | Link keys and applicable Trust Center verification procedures | sections 4.4.7-8 and 4.7.2; BDB 3.0.1 sections 6.3-4,10.1-2 | Planned / none; base-text development permitted with unreviewed errata risk | M4-M5 |
-| SED-01 | Parent polling and rejoin-response retrieval while sleepy | p.215; section 3.6.1.4.2 p.342 | Planned / none | M7 |
+| SED-01 | Parent polling and rejoin-response retrieval while sleepy | p.215; section 3.6.1.4.2 p.342 | Polling RX-off-when-idle child: 250 ms commissioning/burst polls, READY slow poll 7.0 s (autonomous) or 4 s; autonomous READY receiver off between polls ([M7a](M7_SLEEP.md)), host-tested only; PM sleep not implemented | M7 |
 
 The reporting application's binding, reporting and attribute requirements are
 added with its pinned profile/ZCL revision. Synthetic lab values must be

@@ -49,6 +49,9 @@ static uint8_t bad_checked;
 enum {
     POLL_NO_ACK = 8, POLL_BUSY, IMMEDIATE_RESPONSE, BROADCAST_DRAIN, CANCEL_ARM, STOP_ARM, ACK_CANCEL_ARM,
     RETRY_CANCEL, QUERY_TIMEOUT_ARM, EARLY_KEY, INDIRECT_KEY, ASSOCIATION_OVERFLOW, POLL_ACK_LOST_RESPONSE,
+#if defined(CC2530_RX_OFF_IDLE)
+    RX_OFF_IDLE,
+#endif
     E2E_CASES
 };
 static unsigned poll_attempts, closed_checked, race_started, race_disarmed, race_completed;
@@ -60,6 +63,16 @@ static uint32_t scan_watermark, race_generation;
 /* INDIRECT_KEY: parent queue release bookkeeping (polls seen when queued). */
 static unsigned queued_polls, released_frames;
 static uint8_t queued_seen;
+#if defined(CC2530_RX_OFF_IDLE)
+/* RX_OFF_IDLE (M7a): READY releases 1-3 test the response window (late in
+ * it), a frame aired as the window closes (drained) and a lost poll ACK. */
+static unsigned rx_releases, window_release, drain_release, drain_seen, drain_delivered;
+static unsigned lost_polls, lost_release, nodata_closes, hold_opens, tx_opens;
+static uint32_t drain_serial, lost_opens, poll_last, poll_max;
+static unsigned poll_count;
+static uint8_t rx_measure;
+static uint8_t sym_reached(uint32_t now, uint32_t at) { return (uint32_t)(now-at) < MAC_TX_HALF; }
+#endif
 #if defined(CC2530_RADIO_RX_ISR)
 /* isr_live: dispatch the real RF vector body between driver steps whenever the
  * production arm set (EA, IEN2.RFIE, RFIRQM0 FIFOP|RXPKTDONE) is live and the
@@ -145,6 +158,20 @@ static void joint_store(uint8_t a, uint8_t before, uint8_t value)
         cca_clear = !(scenario == POLL_BUSY && device.attempts == 1 && response_fcf == 0x12);
         if ((scenario == POLL_NO_ACK || scenario == POLL_BUSY) &&
             device.attempts == 1 && response_fcf == 0x12) poll_attempts++;
+#if defined(CC2530_RX_OFF_IDLE)
+        /* A READY parent sets ACK Frame Pending only while it holds a frame;
+         * every attempt of the poll before release 3 loses its ACK. */
+        if (scenario == RX_OFF_IDLE && device.phase == BDB_JOIN_READY && response_fcf == 0x12) {
+            if (!link_peer_pending) response_fcf = 2;
+            else if (rx_releases == 2 && !lost_release) { replies = 0; lost_polls++; lost_opens = driver.rx_opens; }
+        }
+        if (scenario == RX_OFF_IDLE && device.phase == BDB_JOIN_READY && sent_body[sent_length-1] ==
+            MAC_COMMAND_DATA_REQUEST && (sent_body[0] & 7u) == MAC_FRAME_COMMAND && rx_measure) {
+            uint32_t at = (uint32_t)((model_clocks-epoch_origin)/512u);
+            if (poll_count && (uint32_t)(at-poll_last) > poll_max) poll_max = at-poll_last;
+            poll_last = at; poll_count++;
+        }
+#endif
     }
     if (a == 0xc7 || (a >= 0xd1 && a <= 0xd6) || a == 0xb3 || a == 0x98) {
         advance_clocks(mmio_clocks);
@@ -209,6 +236,9 @@ static void cold_start(void)
     memcpy(config.value.ieee, link_identity.own_ieee, 8);
     config.value.pan = config.value.short_address = 0xffff; config.value.channel = 11;
     link_peer_capability = scenario == INDIRECT_KEY ? 0x80 : 0x88;
+#if defined(CC2530_RX_OFF_IDLE)
+    if (scenario == RX_OFF_IDLE) link_peer_capability = 0x80;
+#endif
     link_peer_setup(&join_config);
     CHECK(mac_adapter_init(&config.value, bound, cap) == MAC_ADAPTER_OK);
     epoch_origin = ((uint64_t)mac_radio_epoch.periods-mac_radio_epoch.symbols)*512u;
@@ -244,6 +274,12 @@ static void cold_start(void)
     association_requests = association_polls = 0;
     scan_watermark = race_generation = 0;
     queued_polls = released_frames = queued_seen = 0;
+#if defined(CC2530_RX_OFF_IDLE)
+    rx_releases = window_release = drain_release = drain_seen = drain_delivered = 0;
+    lost_polls = lost_release = nodata_closes = hold_opens = tx_opens = 0;
+    drain_serial = lost_opens = poll_last = poll_max = 0;
+    poll_count = rx_measure = 0;
+#endif
 }
 
 /* Complete a genuine modeled PPDU. Its SFD is high during the body, sticky
@@ -298,6 +334,35 @@ static void air_frame(const uint8_t *body, uint8_t length, uint8_t crc)
     received_frames++;
 }
 
+#if defined(CC2530_RX_OFF_IDLE)
+#define IS_RX_OFF_IDLE (scenario == RX_OFF_IDLE)
+/* READY: a released frame meets an open receiver only inside a poll window
+ * held by the driver. Gates choose where in that window the parent sends. */
+static uint8_t rx_off_release(void)
+{
+    uint32_t opened = driver.rx_hold - join_config.association.extraction.frame_wait;
+    CHECK(driver.rx_held && mac_adapter_diagnostic()->phase == MAC_ADAPTER_RX &&
+          mac_adapter_diagnostic()->normal_rx);
+    if (rx_releases == 0) {
+        /* Late in macMaxFrameTotalWaitTime: RX must still be on. */
+        if ((uint32_t)(driver.now-opened) < 1200u) return 0;
+        window_release = 1;
+    } else if (rx_releases == 1) {
+        /* At the window end: the next step closes RX with it in the FIFO. */
+        if (!sym_reached(driver.now, driver.rx_hold)) return 0;
+        drain_serial = mac_adapter_diagnostic()->frames + 1u; drain_release = 1;
+    } else if (rx_releases == 2) {
+        /* After a lost ACK the parent still delivers (implicit ACK). */
+        CHECK(lost_polls == 4 && driver.rx_opens == lost_opens+1u);
+        lost_release = 1;
+    }
+    rx_releases++;
+    return 1;
+}
+#else
+#define IS_RX_OFF_IDLE 0
+#endif
+
 static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
 {
     mac_frame_info_t mh;
@@ -311,6 +376,12 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
         link_peer_transmitted(sent_body, sent_length);
         security_aes_peer_leave();
         mmio_clocks = saved_clocks;
+#if defined(CC2530_RX_OFF_IDLE)
+        /* Queued at the parent now; only a later poll releases it. */
+        if (scenario == RX_OFF_IDLE && link_peer_pending && !queued_seen) {
+            queued_seen = 1; queued_polls = link_peer_polls;
+        }
+#endif
         CHECK(mac_frame_decode(sent_body, sent_length, &mh) == MAC_CODEC_OK);
         if (mh.header.type == MAC_FRAME_COMMAND)
             command_wait = sent_body[mh.payload_offset];
@@ -462,11 +533,14 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
             security_aes_peer_leave();
             mmio_clocks = saved_clocks; transport_sent = 1;
         }
-        if (link_peer_pending && scenario == INDIRECT_KEY) {
+        if (link_peer_pending && (scenario == INDIRECT_KEY || IS_RX_OFF_IDLE)) {
             /* RX-off-when-idle child: the parent holds the frame until a
              * Data Request that arrives after it was queued. */
             if (!queued_seen) { queued_seen = 1; queued_polls = link_peer_polls; }
             if (link_peer_polls == queued_polls) return;
+#if defined(CC2530_RX_OFF_IDLE)
+            if (scenario == RX_OFF_IDLE && dev->phase == BDB_JOIN_READY && !rx_off_release()) return;
+#endif
             queued_seen = 0; released_frames++;
         }
         if (link_peer_pending) {
@@ -599,6 +673,19 @@ static void tick_driver(void)
     uint32_t last = driver.now;
     uint8_t old_action = 0, old_phase = mac_adapter_diagnostic()->phase, poll_close = 0;
     uint8_t old_radio = driver.radio.control.kind;
+#if defined(CC2530_RX_OFF_IDLE)
+    const mac_adapter_diagnostics_t *ad = mac_adapter_diagnostic();
+    uint32_t opens = driver.rx_opens;
+    uint8_t rx_off = scenario == RX_OFF_IDLE && device.phase == BDB_JOIN_READY, close_due = 0, open_due = 0;
+    uint8_t idle = !driver.action.kind && !driver.radio.control.kind && !driver.random_wait &&
+        adapter_tx.engine.phase == MAC_TX_IDLE && !ad->ready && !ad->goal;
+    if (rx_off && idle) {
+        /* What the driver must do this step, from its own last sample. */
+        close_due = ad->phase == MAC_ADAPTER_RX && sym_reached(driver.now, driver.rx_ready_at) &&
+            (!driver.rx_held || sym_reached(driver.now, driver.rx_hold));
+        open_due = ad->phase == MAC_ADAPTER_OFF && driver.rx_held && !sym_reached(driver.now, driver.rx_hold);
+    }
+#endif
     if (scenario >= CANCEL_ARM) race_before();
     if (scenario >= CANCEL_ARM && driver.action.kind == BDB_JOIN_ACTION_TX)
         old_action = driver.action.data.tx.control.kind;
@@ -634,7 +721,11 @@ static void tick_driver(void)
     /* Finite foreground latency; no consumer timestamp is supplied here.
      * Long idle security waits advance the physical Timer2 in bounded chunks. */
     advance_clocks(((device.phase == BDB_JOIN_WAIT_KEY && scenario == 3) ||
-        (scenario == INDIRECT_KEY && link_peer_pending && adapter_tx.engine.phase == MAC_TX_IDLE) ? 1000u : 4u)*512u);
+        ((scenario == INDIRECT_KEY || (IS_RX_OFF_IDLE && device.phase != BDB_JOIN_READY)) &&
+         link_peer_pending && adapter_tx.engine.phase == MAC_TX_IDLE) ||
+        (IS_RX_OFF_IDLE && device.phase == BDB_JOIN_READY && !driver.action.kind &&
+         adapter_tx.engine.phase == MAC_TX_IDLE &&
+         mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF) ? 1000u : 4u)*512u);
     handoff_tick();
     handoff_started = mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING &&
         mac_adapter_diagnostic()->policy == MAC_ADAPTER_KEEP_AUTOACK &&
@@ -655,6 +746,31 @@ static void tick_driver(void)
         drop_checked = 1;
     }
     handoff_started = 0;
+#if defined(CC2530_RX_OFF_IDLE)
+    if (rx_off && device.phase == BDB_JOIN_READY) {
+        CHECK(!driver.fault && !ad->fault);
+        if (close_due) {
+            /* Normal close: OFF, or DRAINING/CLOSED with frames still owed. */
+            CHECK(ad->phase != MAC_ADAPTER_RX);
+            if (!drain_release || drain_seen) nodata_closes++;
+        }
+        if (open_due) CHECK(ad->phase == MAC_ADAPTER_RX && driver.rx_opens == opens+1u);
+        if (old_phase == MAC_ADAPTER_OFF && ad->phase != MAC_ADAPTER_OFF) {
+            /* No idle reopen: only our TX or a held poll window opens RX. */
+            if (driver.rx_opens != opens) { CHECK(open_due && driver.rx_opens == opens+1u); hold_opens++; }
+            else { CHECK(adapter_tx.engine.phase != MAC_TX_IDLE); tx_opens++; }
+        } else CHECK(driver.rx_opens == opens);
+        if (drain_release && !drain_seen) {
+            /* The next step closes RX with the window-end frame queued. */
+            CHECK(close_due && ad->phase == MAC_ADAPTER_DRAINING && driver.rx_serial == drain_serial-1u);
+            drain_seen = 1;
+        }
+        if (drain_seen && !drain_delivered && driver.rx_serial == drain_serial) {
+            CHECK(driver.consumer_result == BDB_JOIN_OK);
+            drain_delivered = 1;
+        }
+    }
+#endif
     if (scenario >= CANCEL_ARM) race_after(old_action, old_radio, old_phase);
     if (poll_close && driver.event.kind == BDB_JOIN_EVENT_ASSOCIATION &&
         driver.event.data.association.kind == MAC_JOIN_CLOSED) {
@@ -704,6 +820,48 @@ static void tick_driver(void)
     if (!driver.fault) peer_progress();
 }
 
+#if defined(CC2530_RX_OFF_IDLE)
+#define E2E_LIMIT(n) ((n)*(IS_RX_OFF_IDLE ? 10u : 1u))
+/* M7a: a second APS exchange (its APS ACK fetched by a poll whose MAC ACK is
+ * lost), then a minute of slow READY polling with the idle receiver off. */
+static void rx_off_tail(void)
+{
+    nwk_aps_t *t = &device.work.runtime.transport;
+    uint32_t on, total, end;
+    CHECK(window_release && drain_release && drain_seen && drain_delivered && !lost_release);
+    link_peer_application(&application);
+    CHECK(bdb_join_send(&device, &application, 1, driver.now) == BDB_JOIN_OK);
+    while (!device.application_done || link_peer_pending || t->queued || t->active || packets) {
+        CHECK(!driver.fault && e2e_steps < 80000u); tick_driver();
+    }
+    CHECK(bdb_join_confirm(&device, &app_sent) == BDB_JOIN_OK && app_sent == NWK_APS_OK);
+    CHECK(link_peer_app == 2 && lost_release && lost_polls == 4u && rx_releases >= 3u);
+    /* Skip the READY burst/ACTIVE fast polling; time passes with RX off. */
+    for (;;) {
+        do { CHECK(!driver.fault && e2e_steps < 120000u); tick_driver(); }
+        while (adapter_tx.engine.phase != MAC_TX_IDLE || driver.action.kind || link_peer_pending ||
+               t->queued || t->active || device.work.runtime.zdo.query ||
+               mac_adapter_diagnostic()->phase != MAC_ADAPTER_OFF);
+        if ((uint32_t)(device.poll_fast-driver.now-1u) >= MAC_TX_HALF-1u) break;
+        advance_clocks(((uint32_t)(device.poll_fast-driver.now) > 4000000u ? 4000000u :
+            device.poll_fast-driver.now+1u)*512u);
+    }
+    on = driver.rx_on; total = driver.ready_time; end = driver.now+3750000u; rx_measure = 1;
+    while ((uint32_t)(end-driver.now) < MAC_TX_HALF) { CHECK(!driver.fault && e2e_steps < 200000u); tick_driver(); }
+    on = driver.rx_on-on; total = driver.ready_time-total; rx_measure = 0;
+    CHECK(total > 3740000u && on*50u < total && poll_count >= 5u);
+    CHECK(poll_max > BDB_JOIN_POLL_SLOW && poll_max < BDB_JOIN_POLL_SLOW+4000u);
+    CHECK(device.phase == BDB_JOIN_READY && device.member && !driver.fault && !mac_adapter_diagnostic()->fault);
+    CHECK(hold_opens && tx_opens && nodata_closes && driver.rx_opens == hold_opens);
+    printf("E2E RX-off READY: RX on %lu/%lu symbols (%lu ppm), %u polls max gap %lu, %u TX opens, "
+           "%u hold opens, %u closes, %u releases PASS\n", (unsigned long)on, (unsigned long)total,
+           (unsigned long)((uint64_t)on*1000000u/total), poll_count, (unsigned long)poll_max,
+           tx_opens, hold_opens, nodata_closes, rx_releases);
+}
+#else
+#define E2E_LIMIT(n) (n)
+#endif
+
 static void run(unsigned selected)
 {
     unsigned faulted = 0;
@@ -719,7 +877,7 @@ static void run(unsigned selected)
     if (scenario == 0 || scenario == 4 || scenario == POLL_NO_ACK || scenario == POLL_BUSY ||
         scenario == IMMEDIATE_RESPONSE || scenario == BROADCAST_DRAIN ||
         scenario == QUERY_TIMEOUT_ARM || scenario == EARLY_KEY || scenario == INDIRECT_KEY || scenario == 7 ||
-        scenario == ASSOCIATION_OVERFLOW || scenario == POLL_ACK_LOST_RESPONSE) {
+        scenario == ASSOCIATION_OVERFLOW || scenario == POLL_ACK_LOST_RESPONSE || IS_RX_OFF_IDLE) {
         if (device.phase != BDB_JOIN_READY)
             fprintf(stderr, "scan reason=%u unscanned=%lu candidates=%u peerTX=%u cmd=%u rx=%u through=%lu\n",
                 device.scan_result.reason,(unsigned long)device.scan_result.unscanned,
@@ -748,7 +906,7 @@ static void run(unsigned selected)
         link_peer_verify();
         link_peer_application(&application);
         CHECK(bdb_join_send(&device, &application, 1, driver.now) == BDB_JOIN_OK);
-        while (!device.application_done && !driver.fault) { CHECK(e2e_steps < 6000); tick_driver(); }
+        while (!device.application_done && !driver.fault) { CHECK(e2e_steps < E2E_LIMIT(6000)); tick_driver(); }
         CHECK(!driver.fault && link_peer_app == 1);
         CHECK(bdb_join_confirm(&device, &app_sent) == BDB_JOIN_OK && app_sent == NWK_APS_OK);
         CHECK(response_sent == 1 && automatic_acks >= 1 &&
@@ -758,7 +916,7 @@ static void run(unsigned selected)
         advance_clocks((device.keepalive-driver.now)*512u);
         while (link_peer_parent < 2 || device.work.runtime.zdo.query || link_peer_pending ||
                packets || mac_adapter_diagnostic()->held) {
-            CHECK(e2e_steps < 6500); tick_driver();
+            CHECK(e2e_steps < E2E_LIMIT(6500)); tick_driver();
         }
         CHECK(device.phase == BDB_JOIN_READY && device.member && link_peer_parent == 2);
         if (scenario == POLL_NO_ACK || scenario == POLL_BUSY)
@@ -777,8 +935,13 @@ static void run(unsigned selected)
         CHECK(driver.dropped == (scenario == 7) && drop_checked == (scenario == 7));
         /* Every peer frame after association, the corrupted TK included,
          * was released by its own post-queue poll; none was sent directly. */
-        CHECK((scenario == INDIRECT_KEY) == !!link_peer_polls &&
-              released_frames == (scenario == INDIRECT_KEY ? link_peer_parent+6u : 0u));
+        CHECK((scenario == INDIRECT_KEY || IS_RX_OFF_IDLE) == !!link_peer_polls &&
+              released_frames == (scenario == INDIRECT_KEY || IS_RX_OFF_IDLE ? link_peer_parent+6u : 0u));
+#if defined(CC2530_RX_OFF_IDLE)
+        if (scenario == RX_OFF_IDLE) rx_off_tail();
+        else if (device.config.association.capability & 0x08u) CHECK(!driver.rx_opens && !driver.ready_time);
+        else CHECK(driver.ready_time && driver.rx_on < driver.ready_time);
+#endif
     } else if (scenario == 1) {
         CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_NO_PARENT);
         CHECK(!device.scan_result.candidates && !device.scan_result.unscanned);

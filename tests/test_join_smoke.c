@@ -919,6 +919,15 @@ int main(int argc, char **argv)
             !memcmp(&join_smoke_tx,&before_tx,sizeof(before_tx)));
         assert(accesses==old_accesses && security_joint_flash_commands()==old_flash);
     }
+#if defined(CC2530_RX_OFF_IDLE)
+    /* M7a: only an RX-off-when-idle child in READY closes its idle receiver. */
+    if(!SLEEPY_CASE(selected)) assert(!join_smoke_phase.driver.ready_time && !join_smoke_phase.driver.rx_opens);
+    else if(join_smoke_status.phase==JS_READY) {
+        uint32_t on=join_smoke_phase.driver.rx_on, total=join_smoke_phase.driver.ready_time;
+        printf("Join caller case%u: READY RX on %lu/%lu symbols\n",selected,(unsigned long)on,(unsigned long)total);
+        assert(total && on<total);
+    }
+#endif
 #if defined(JOIN_SMOKE_TRACE)
     join_trace_finish();
 #else
