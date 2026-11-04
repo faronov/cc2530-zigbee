@@ -27,6 +27,15 @@
 #define BOARD_MODEL_LENGTH 7u
 #endif
 
+/* CC2530_CHIP_SENSE reporting (zcl_sensor.h). BatteryPercentageRemaining is
+ * linear in AVDD between EMPTY and FULL millivolts (FULL-EMPTY a multiple of
+ * 200); ASSUMPTION, not a measured cell curve: 2.0 V is the CC2530 minimum
+ * supply (SWRS081B), 3.0 V a fresh 3 V lithium cell. The die-temperature
+ * offset (centi-degrees C) is added to the uncalibrated datasheet nominal. */
+#define BOARD_BATTERY_EMPTY_MV 2000u
+#define BOARD_BATTERY_FULL_MV 3000u
+#define BOARD_CHIP_TEMPERATURE_OFFSET 0
+
 typedef struct {
     uint8_t identifier;
     uint8_t policy;

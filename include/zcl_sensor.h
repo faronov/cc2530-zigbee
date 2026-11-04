@@ -6,7 +6,8 @@
 #include "bdb_join.h"
 #include "board.h"
 
-/* SYNTHETIC demonstration values, NOT measurements: one sawtooth phase
+/* Without CC2530_CHIP_SENSE every value is a SYNTHETIC demonstration
+ * value, NOT a measurement: one sawtooth phase
  * 0..40 over the 8-bit sample index, bits 22..29 of the runtime's MAC-symbol
  * time (zdo.last), so one step per 2^22 symbols (~67 s). Temperature
  * 21.00..25.00 C in 0.10 steps, humidity 45.00..55.00 %RH in 0.25 steps,
@@ -19,6 +20,38 @@
 #define ZCL_SENSOR_HUMIDITY(phase) ((uint16_t)(4500u + (uint16_t)((uint8_t)(phase) * (uint8_t)25)))
 #define ZCL_SENSOR_PERCENTAGE(phase) ((uint8_t)(200u - (uint8_t)(phase)))
 #define ZCL_SENSOR_VOLTAGE(phase) ((uint8_t)(30u - (uint8_t)((uint8_t)(phase) / (uint8_t)14)))
+
+/* CC2530_CHIP_SENSE (autonomous LLVM variants) replaces the synthetic
+ * temperature and battery values with measurements; humidity stays
+ * synthetic. Every ZCL_SENSOR_MEASURE seconds of READY ticks (and at init)
+ * single ADCCON3 conversions use the internal reference, 512 decimation
+ * (12 MSBs, SWRU191F 12.2.10), first AVDD5/3 (channel F) then the die
+ * temperature sensor (channel E, TR0.ADCTM=1 and ATEST=01 only during the
+ * measurement, SWRU191F 12.2.1; one discarded conversion). SWRS081B
+ * nominals: internal reference 1.15 V; sensor 1480 at 25 C and 3 V, 4.5 /C,
+ * 1 /0.1 V, uncalibrated (board offset). Sums of the samples feed the
+ * macros below. A conversion that misses its poll bound or reads negative
+ * publishes invalid values: MeasuredValue 8000, BatteryVoltage and
+ * BatteryPercentageRemaining FF, CurrentTemperature 8000. */
+#define ZCL_SENSOR_MEASURE 10u
+#define ZCL_SENSOR_TEMPERATURE_SAMPLES 8u
+#define ZCL_SENSOR_VDD_SAMPLES 4u
+#define ZCL_SENSOR_INVALID_TEMPERATURE ((int16_t)-0x8000)
+/* mV = sum/4 * 3 * 1150 / 2048 */
+#define ZCL_SENSOR_MILLIVOLTS(sum) ((uint16_t)(((uint32_t)(sum) * 3450u + 4096u) >> 13))
+/* centi-C = 2500 + (sum - 8*1480 - 8*(mV-3000)/100) * 100/36, 25/9 ~ 711/256 */
+#define ZCL_SENSOR_COUNTS(sum, mv) ((int16_t)((int16_t)(sum) - 11840 - \
+    (int16_t)(((int16_t)(mv) - 3000) * 2 / 25)))
+#define ZCL_SENSOR_CENTI(sum, mv) ((int16_t)(2500 + BOARD_CHIP_TEMPERATURE_OFFSET + \
+    (int16_t)(((int32_t)ZCL_SENSOR_COUNTS(sum, mv) * 711 + 128) >> 8)))
+/* ZCL Device Temperature Configuration CurrentTemperature, whole degrees C. */
+#define ZCL_SENSOR_DEGREES(centi) ((int16_t)(centi) == ZCL_SENSOR_INVALID_TEMPERATURE ? \
+    ZCL_SENSOR_INVALID_TEMPERATURE : (int16_t)(((int16_t)(centi) + ((int16_t)(centi) < 0 ? -50 : 50)) / 100))
+/* BatteryVoltage (100 mV) and BatteryPercentageRemaining (0.5 %); 0 mV is invalid. */
+#define ZCL_SENSOR_DECIVOLTS(mv) ((uint8_t)(!(mv) ? 0xffu : ((uint16_t)(mv) + 50u) / 100u))
+#define ZCL_SENSOR_HALF_PERCENT(mv) ((uint8_t)(!(mv) ? 0xffu : \
+    (uint16_t)(mv) <= BOARD_BATTERY_EMPTY_MV ? 0u : (uint16_t)(mv) >= BOARD_BATTERY_FULL_MV ? 200u : \
+    ((uint16_t)(mv) - BOARD_BATTERY_EMPTY_MV) / ((BOARD_BATTERY_FULL_MV - BOARD_BATTERY_EMPTY_MV) / 200u)))
 
 /* Reportable attributes: temperature, humidity, BatteryVoltage and
  * BatteryPercentageRemaining; Basic ModelIdentifier is BASIC. */
@@ -46,6 +79,11 @@ typedef struct {
     /* Receive scratch: kept here, not in SDCC XSEG locals. */
     uint16_t id, min, max, delta;
     uint8_t length, header, at, in, entry, type, kind, dir, status, apply;
+    /* CC2530_CHIP_SENSE: last die temperature (0.01 C, INVALID on failure),
+     * AVDD (mV, 0 on failure) and READY seconds since that measurement. */
+    int16_t temperature;
+    uint16_t millivolts;
+    uint8_t measured;
 } zcl_sensor_state_t;
 
 /* The single application device, owned by join_smoke. In READY its

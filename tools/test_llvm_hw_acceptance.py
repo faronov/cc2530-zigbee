@@ -10,7 +10,7 @@ T0 = datetime(2030, 1, 1, 12, 0, 0, tzinfo=ZONE)
 IEEE, OTHER, NWK = "02:00:00:00:00:00:00:01", "02:00:00:00:00:00:00:02", 0x1234
 DETAIL = dict(nwk=NWK, model="LG-ESL29", manufacturer="cc2530-zigbee", signature=dict(endpoints={"1": dict(
     profile_id="0x0104", device_type="0xffff", output_clusters=[],
-    input_clusters=["0x0000", "0x0001", "0x0003", "0x0402", "0x0405"])}))
+    input_clusters=["0x0000", "0x0001", "0x0002", "0x0003", "0x0402", "0x0405"])}))
 READS = dict(temperature_raw=2110, humidity_raw=4525, battery_voltage_raw=30, battery_percentage_raw=199)
 TC = {"UNSECURED": ("STANDARD_SECURITY_UNSECURED_JOIN", 1, "USE_PRECONFIGURED_KEY", 0),
       "SECURED_REJOIN": ("STANDARD_SECURITY_SECURED_REJOIN", 0, "NO_ACTION", 3),

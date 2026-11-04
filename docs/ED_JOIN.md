@@ -1012,17 +1012,21 @@ sleepy behaviour, rejoin after reset or production NV endurance is claimed.
 
 ### Synthetic temperature and humidity demo
 
-**The values are synthetic demonstration data, not measurements.** The LG
-board has no temperature, humidity or battery sensor. Endpoint 1 (device ID
-still `FFFF`) advertises the input clusters Basic `0000`, Power Configuration
-`0001`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
+**Without `CC2530_CHIP_SENSE` the values are synthetic demonstration data,
+not measurements.** The LG board has no temperature or humidity sensor; see
+[chip sensing](#chip-temperature-and-vdd-sensing) for the autonomous LLVM
+variants. Endpoint 1 (device ID still `FFFF`) advertises the input clusters
+Basic `0000`, Power Configuration `0001`, Device Temperature Configuration
+`0002`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
 Measurement `0405`. `zdo_runtime` publishes endpoint frames and ZDO
 Bind/Unbind and Mgmt_Bind requests, and the banked application server `zcl_sensor` answers
 them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
 
 - **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
   MeasuredValue/Min/Max for both measurement clusters, BatteryVoltage,
-  BatteryPercentageRemaining, IdentifyTime and ClusterRevision. Other
+  BatteryPercentageRemaining, Device Temperature CurrentTemperature (whole
+  °C, read-only, not reportable: Configure Reporting returns `8C`),
+  IdentifyTime and ClusterRevision. Other
   attributes return UNSUPPORTED_ATTRIBUTE.
 - **Values:** one sawtooth phase 0..40, one step per 2^22 MAC symbols
   (~67 s). Temperature runs 21.0-25.0 °C in 0.1 °C steps and humidity
@@ -1057,6 +1061,39 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   security-owner identity, never an association record or alternate MAC parent.
   No mutable duplicate table or NV field is added. See [the bounded contract
   and qualification status](M6_MGMT_BIND.md).
+
+
+### Chip temperature and VDD sensing
+
+The `autonomous` and `autonomous-pm2` LLVM variants define
+`CC2530_CHIP_SENSE` ([`tools/llvm/build.sh`](../tools/llvm/build.sh)); other
+variants and the s51/host reference models keep the synthetic values.
+`zcl_sensor` measures at READY entry and then every 10 READY seconds with
+single ADC conversions (SWRU191F 12.2.10): internal 1.15 V reference, 512
+decimation, four AVDD5/3 samples, then one discarded and eight die-sensor
+samples with TR0.ADCTM and ATEST enabled only for that measurement
+(SWRU191F 12.2.1). A measurement is about 1.7 ms of busy polling.
+
+- Temperature Measurement `0402` MeasuredValue and Device Temperature
+  `0002` CurrentTemperature come from the **uncalibrated chip die sensor**
+  (SWRS081B nominals: 1480 at 25 °C and 3 V, 4.5 /°C, 1 /0.1 V, VDD
+  compensated). It reads the die, not the room, and the part-to-part offset is
+  `BOARD_CHIP_TEMPERATURE_OFFSET` (0, not calibrated).
+- BatteryVoltage is AVDD in 100 mV units. BatteryPercentageRemaining is
+  linear between `BOARD_BATTERY_EMPTY_MV` 2.0 V and `BOARD_BATTERY_FULL_MV`
+  3.0 V, an assumption, not a cell discharge curve. A debugger-powered board
+  (about 3.3 V) reads 100 %.
+- Humidity `0405` stays synthetic until an external sensor is connected (M8).
+- A conversion that misses its 4000-poll bound publishes invalid values:
+  MeasuredValue/CurrentTemperature `8000`, BatteryVoltage and
+  BatteryPercentageRemaining `FF`.
+- ZHA displays Device Temperature divided by 100 (its sensor entity uses a
+  divisor of 100), so 25 °C appears as 0.25 °C; the attribute itself is
+  spec-correct whole degrees. Zigbee2MQTT shows °C. Use `0402` for the value.
+
+Host coverage: `host-zcl-sensor-chip` (and its sanitizer build) runs the
+application tests against a modeled ADC (cadence, ATEST/TR0 restore,
+timeouts, invalid values and reporting).
 
 ### Report attempt and response ownership
 
