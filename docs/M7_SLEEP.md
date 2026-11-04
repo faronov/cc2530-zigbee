@@ -65,7 +65,7 @@ parent-recovery images are byte-identical to the pre-M7a build.
   RX-on, small next to the always-awake CPU, so shortening this tail is
   deferred until M7b.
 
-## M7b — PM2 between polls (simulated, hardware pending)
+## M7b — PM2 between polls (H2 HIL, debugger-powered)
 
 `CC2530_PM2_IDLE`, enabled only for the `autonomous-pm2` variant
 (`make firmware LLVM_VARIANT=autonomous-pm2`, which also defines the M7a
@@ -123,6 +123,14 @@ byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
   join: one sleep, then the radio owner fault above 0.6 s after READY. The
   debugger keeps the regulator on, so full PM2 retention loss is not
   exercised by this setup.
+- LH25 (re-latch image): no firmware fault, 802 sleeps in 637 s, `lost` 34
+  (RFIDLE is lost only on some wakes), reports and ED Timeout exchanged with
+  the coordinator, but ZHA never completed the initial interview (not
+  captured; not reproduced). LH25C (same image, sniffer and zigpy debug
+  logging): PASS — interviewed 63 s after start, leave/hold/rejoin, five
+  steady reads (latency up to 7.4 s, one slow poll), five 60 s idle windows
+  52-64 s asleep each; 865 sleeps, `lost` 97, no failure or late compare.
+  `stray` 5 are debugger HALT wakes. Current is not measured (M7c).
 
 ## M7c — measurements (planned)
 
