@@ -58,10 +58,117 @@ static void convert_model(uint8_t command)
     if (adc.stuck != 1u && (adc.stuck != 2u || command != 0x3eu)) SOC_ADCCON1 |= 0x80u;
 }
 
+#if defined(CC2530_SHT3X)
+/* Bit-level SHT3x-DIS slave on the board.h port 1 lines (open drain: a line
+ * is low if the master drives it, P1DIR set with latch 0, or the slave pulls
+ * SDA). Single shot 0x2400 measures at once; the next busy read headers are
+ * NACKed, then the result is read once. */
+volatile uint8_t SOC_P1, SOC_P1DIR, SOC_P1SEL;
+#define SDA BOARD_SHT3X_SDA
+#define SCL BOARD_SHT3X_SCL
+enum { BUS_IDLE, BUS_RX, BUS_ACK, BUS_TX, BUS_MASTER_ACK };
+static struct {
+    uint8_t present, stuck, corrupt, ready;
+    uint16_t busy, wait, t, h, command;
+    uint8_t out[6], index, mode, bits, byte, first, reading, ncommand, pull, sda, scl, acked;
+    unsigned starts, stops, measures, results, nacked, unknown, reads, latch;
+} sht;
+
+static uint8_t sht_crc(uint16_t word)
+{
+    uint8_t c = 0xffu, i, b;
+    for (b = 0; b < 2; b++) {
+        c ^= (uint8_t)(b ? word : word >> 8);
+        for (i = 0; i < 8; i++) c = c & 0x80u ? (uint8_t)(c << 1 ^ 0x31u) : (uint8_t)(c << 1);
+    }
+    return c;
+}
+
+static uint8_t level(uint8_t mask)
+{
+    if ((SOC_P1DIR & mask) && !(SOC_P1 & mask)) return 0;
+    if (mask == SCL) return !sht.stuck;
+    return !sht.pull;
+}
+
+static void sht_received(void)
+{
+    uint8_t ack = 0, b = sht.byte;
+    if (sht.first) {
+        sht.first = 0;
+        if (sht.present && (b >> 1) == BOARD_SHT3X_ADDRESS) {
+            if (!(b & 1u)) { ack = 1; sht.reading = 0; sht.ncommand = 0; sht.command = 0; }
+            else if (sht.ready && !sht.wait) { ack = 1; sht.reading = 1; sht.index = 0; sht.ready = 0; sht.reads++; }
+            else { if (sht.wait) sht.wait--; sht.nacked++; }
+        }
+    } else if (sht.ncommand < 2u) {
+        ack = 1;
+        sht.command = (uint16_t)(sht.command << 8 | b);
+        if (++sht.ncommand == 2u) {
+            if (sht.command == 0x2400u) {
+                sht.out[0] = (uint8_t)(sht.t >> 8); sht.out[1] = (uint8_t)sht.t; sht.out[2] = sht_crc(sht.t);
+                sht.out[3] = (uint8_t)(sht.h >> 8); sht.out[4] = (uint8_t)sht.h; sht.out[5] = sht_crc(sht.h);
+                if (sht.corrupt) { sht.out[5] ^= 1u; sht.corrupt--; }
+                sht.ready = 1; sht.wait = sht.busy; sht.measures++;
+            } else sht.unknown++;
+        }
+    } else sht.unknown++;
+    sht.pull = ack;
+    sht.mode = ack ? BUS_ACK : BUS_IDLE;
+}
+
+static void sht_transmit(void)
+{
+    sht.byte = sht.out[sht.index++]; sht.bits = 0;
+    sht.pull = !(sht.byte & 0x80u);
+    sht.mode = BUS_TX;
+}
+
+static void sht_bus(void)
+{
+    uint8_t sda = level(SDA), scl = level(SCL);
+    if (scl && sht.scl && sda != sht.sda) {
+        if (!sda) { sht.starts++; sht.mode = BUS_RX; sht.bits = 0; sht.byte = 0; sht.first = 1; }
+        else { sht.stops++; sht.mode = BUS_IDLE; }
+        sht.pull = 0;
+    } else if (scl && !sht.scl) {
+        if (sht.mode == BUS_RX && sht.bits < 8u) { sht.byte = (uint8_t)(sht.byte << 1 | sda); sht.bits++; }
+        else if (sht.mode == BUS_MASTER_ACK) sht.acked = !sda;
+    } else if (!scl && sht.scl) {
+        if (sht.mode == BUS_RX && sht.bits == 8u) sht_received();
+        else if (sht.mode == BUS_ACK) {
+            sht.pull = 0;
+            if (sht.reading) sht_transmit();
+            else { sht.mode = BUS_RX; sht.bits = 0; sht.byte = 0; }
+        } else if (sht.mode == BUS_TX) {
+            if (++sht.bits == 8u) { sht.pull = 0; sht.mode = BUS_MASTER_ACK; }
+            else sht.pull = !((uint8_t)(sht.byte << sht.bits) & 0x80u);
+        } else if (sht.mode == BUS_MASTER_ACK) {
+            if (sht.index == 6u) sht.results++;
+            if (sht.acked && sht.index < 6u) sht_transmit();
+            else { sht.mode = BUS_IDLE; sht.pull = 0; }
+        }
+    }
+    sht.sda = level(SDA); sht.scl = level(SCL);
+}
+
+static void sht_set(double centi, double humidity, uint8_t present)
+{
+    memset(&sht, 0, sizeof(sht));
+    sht.present = present;
+    sht.t = (uint16_t)((centi/100.0 + 45.0) / 175.0 * 65535.0 + 0.5);
+    sht.h = (uint16_t)(humidity/100.0 / 100.0 * 65535.0 + 0.5);
+    sht.sda = sht.scl = 1;
+}
+#endif
+
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address)
 {
     uint8_t v = *reg;
     if (address == SOC_ADCH_ADDRESS) { SOC_ADCCON1 &= 0x7fu; adc.fresh = 0; }
+#if defined(CC2530_SHT3X)
+    if (address == SOC_P1_ADDRESS) v = (uint8_t)((v & (uint8_t)~(SDA | SCL)) | (level(SDA) ? SDA : 0) | (level(SCL) ? SCL : 0));
+#endif
     return v;
 }
 
@@ -69,6 +176,10 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
 {
     *reg = value;
     if (address == SOC_ADCCON3_ADDRESS) convert_model(value);
+#if defined(CC2530_SHT3X)
+    if (address == SOC_P1_ADDRESS && (value & (SDA | SCL))) sht.latch++;
+    if (address == SOC_P1DIR_ADDRESS || address == SOC_P1_ADDRESS) sht_bus();
+#endif
 }
 
 uint8_t host_mmio_xload(uint16_t address)
@@ -874,12 +985,17 @@ static void chip(void)
     CHECK(adc.vdd == 4 && adc.temperature == 9 && adc.conversions == 13 && !adc.foreign);
     CHECK(!adc.unsensed && !adc.overlapped && adc.atest == 0x5a && !adc.tr0 && !(SOC_ADCCON1 & 0x80u));
     CHECK(abs(ST.millivolts - 3000) <= 2 && abs(ST.temperature - 2500) <= 3);
-    CHECK(ST.report[0].last == (uint16_t)ST.temperature && ST.report[2].last == 30 && ST.report[3].last == 200);
+#if !defined(CC2530_SHT3X)
+    CHECK(ST.report[0].last == (uint16_t)ST.temperature);
+#endif
+    CHECK(ST.report[2].last == 30 && ST.report[3].last == 200);
     zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\x1e\x21\x00\x00\x20\xc8", 13);
     zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x19\x00", 9);
     memcpy(expected, "\x18\x42\x01\x00\x00\x00\x29", 7);
+#if !defined(CC2530_SHT3X)
     expected[7] = (uint8_t)ST.temperature; expected[8] = (uint8_t)((uint16_t)ST.temperature >> 8);
     zcl(0x0402, "\x00\x42\x00\x00\x00", 5, expected, 9);
+#endif
     memcpy(expected, "\x18\x43\x01\x05\x00\x00\x42", 7); expected[7] = sizeof(model)-1;
     CHECK(sizeof(model)-1 <= sizeof(expected)-8); memcpy(expected+8, model, sizeof(model)-1);
     zcl(0x0000, "\x00\x43\x00\x05\x00", 5, expected, (uint8_t)(8+sizeof(model)-1));
@@ -912,7 +1028,9 @@ static void chip(void)
     CHECK(ST.temperature == ZCL_SENSOR_INVALID_TEMPERATURE && !ST.millivolts);
     zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\xff\x21\x00\x00\x20\xff", 13);
     zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x00\x80", 9);
+#if !defined(CC2530_SHT3X)
     zcl(0x0402, "\x00\x42\x00\x00\x00", 5, "\x18\x42\x01\x00\x00\x00\x29\x00\x80", 9);
+#endif
     /* Recovery on the next measurement. */
     adc_set(3000, 2500, 0);
     CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
@@ -922,12 +1040,112 @@ static void chip(void)
     CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
     CHECK(adc.vdd == 4 && adc.temperature == 1 && adc.atest == 0x5a && !adc.tr0);
     CHECK(ST.temperature == ZCL_SENSOR_INVALID_TEMPERATURE && !ST.millivolts);
+#if !defined(CC2530_SHT3X)
     /* Changed values report through the existing scheduler. */
     adc_set(3000, 3100, 0);
     ST.report[0].age = 0xff; ST.report[0].last = 0; ST.basic = 0; ST.bound[0] = 1; ST.bound[1] = ST.bound[2] = 0;
     CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND;
     zcl_sensor_tick();
     CHECK(abs(ST.temperature - 3100) <= 3 && report(0x0402, 0, 0x29, (uint16_t)ST.temperature));
+    idle();
+#endif
+}
+#endif
+
+#if defined(CC2530_SHT3X)
+/* extra: STOPs without a START (the init bus clear). */
+static void bus_idle(unsigned extra)
+{
+    CHECK(sht.mode == BUS_IDLE && !sht.pull && !(SOC_P1DIR & (SDA | SCL)) && !sht.latch && !ST.bus);
+    CHECK(level(SDA) && level(SCL) && !sht.unknown && sht.starts + extra == sht.stops);
+}
+
+static void climate_read(int16_t centi, uint16_t humidity)
+{
+    uint8_t expected[9];
+    memcpy(expected, "\x18\x50\x01\x00\x00\x00\x29", 7);
+    expected[7] = (uint8_t)centi; expected[8] = (uint8_t)((uint16_t)centi >> 8);
+    zcl(0x0402, "\x00\x50\x00\x00\x00", 5, expected, 9);
+    memcpy(expected, "\x18\x51\x01\x00\x00\x00\x21", 7);
+    expected[7] = (uint8_t)humidity; expected[8] = (uint8_t)(humidity >> 8);
+    zcl(0x0405, "\x00\x51\x00\x00\x00", 5, expected, 9);
+}
+
+static void sht3x(void)
+{
+    static const uint8_t device[] = {0x00, 0x41, 0x00, 0x00, 0x00};
+    long long u;
+    unsigned measures;
+    /* Model and macros against the datasheet CRC example and exact formulas. */
+    CHECK(sht_crc(0xbeefu) == 0x92u);
+    for (u = 0; u <= 0xffff; u++) {
+        CHECK(llabs(ZCL_SENSOR_SHT3X_CENTI(u)*65535ll - (17500*u - 4500ll*65535)) < 65535);
+        CHECK(llabs(ZCL_SENSOR_SHT3X_HUMIDITY(u)*65535ll - 10000*u) < 65535);
+    }
+    CHECK(ZCL_SENSOR_SHT3X_CENTI(0) == -4500 && ZCL_SENSOR_SHT3X_CENTI(0xffffu) == 13000);
+    CHECK(ZCL_SENSOR_SHT3X_HUMIDITY(0) == 0 && ZCL_SENSOR_SHT3X_HUMIDITY(0xffffu) == 10000);
+    /* Init claims only the two pins, clocks the bus clear (a STOP without
+     * START), starts, polls through three busy NACKs, reads once and starts
+     * the next measurement. The die temperature stays in 0x0002. */
+    sensed(3000, 2500, 0); sht_set(2134, 4567, 1); sht.busy = 3;
+    SOC_P1SEL = 0xffu; SOC_P1 = 0xffu; SOC_P1DIR = 0x02u;
+    reset(5ul << 22);
+    CHECK(SOC_P1SEL == (uint8_t)~(SDA | SCL) && SOC_P1 == (uint8_t)~(SDA | SCL) && SOC_P1DIR == 0x02u);
+    SOC_P1DIR = 0;
+    CHECK(sht.measures == 2 && sht.nacked == 3 && sht.reads == 1 && sht.results == 1 && sht.starts == 6);
+    bus_idle(1);
+    CHECK(abs(ST.climate - 2134) <= 1 && abs((int)ST.humidity - 4567) <= 1);
+    CHECK(ST.report[0].last == (uint16_t)ST.climate && ST.report[1].last == ST.humidity);
+    climate_read(ST.climate, ST.humidity);
+    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x19\x00", 9);
+    /* Each measurement period returns the result started one period earlier. */
+    sht.t = (uint16_t)((30.0 + 45.0) / 175.0 * 65535.0 + 0.5); sht.starts = sht.stops = 0; sht.busy = sht.wait = 0;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(abs(ST.climate - 2134) <= 1 && sht.measures == 3 && sht.reads == 2 && sht.starts == 2);
+    bus_idle(0);
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(abs(ST.climate - 3000) <= 1 && sht.measures == 4 && sht.reads == 3);
+    climate_read(ST.climate, ST.humidity);
+    /* A corrupted humidity CRC invalidates both; the next period recovers. */
+    sht.corrupt = 1;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(ST.climate == ZCL_SENSOR_INVALID_TEMPERATURE && ST.humidity == ZCL_SENSOR_INVALID_HUMIDITY);
+    climate_read(ZCL_SENSOR_INVALID_TEMPERATURE, ZCL_SENSOR_INVALID_HUMIDITY);
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(abs(ST.climate - 3000) <= 1 && abs((int)ST.humidity - 4567) <= 1 && sht.results == 6);
+    /* A held SCL (bounded wait) invalidates and flags the period. */
+    sht.stuck = 1; sht.starts = sht.stops = 0;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(ST.climate == ZCL_SENSOR_INVALID_TEMPERATURE && ST.bus && !sht.starts);
+    sht.stuck = 0;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(abs(ST.climate - 3000) <= 1 && !ST.bus);
+    /* A removed sensor NACKs: invalid at the next period, no data clocked. */
+    sht.present = 0; measures = sht.measures;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(ST.climate == ZCL_SENSOR_INVALID_TEMPERATURE && ST.humidity == ZCL_SENSOR_INVALID_HUMIDITY);
+    CHECK(sht.measures == measures);
+    /* Absent at init: the start command is NACKed, so no read header polls. */
+    sensed(3000, 2500, 0); sht_set(2500, 5000, 0);
+    reset(5ul << 22);
+    CHECK(sht.starts == 2 && !sht.nacked && !sht.measures && ST.climate == ZCL_SENSOR_INVALID_TEMPERATURE);
+    bus_idle(1);
+    /* A sensor that never finishes bounds the init poll. */
+    sensed(3000, 2500, 0); sht_set(2500, 5000, 1); sht.busy = 60000u;
+    reset(5ul << 22);
+    CHECK(sht.nacked == ZCL_SENSOR_SHT3X_POLLS && ST.humidity == ZCL_SENSOR_INVALID_HUMIDITY);
+    /* Changed values report through the existing scheduler. */
+    sht_set(2500, 5000, 1); reset(5ul << 22);
+    sht.t = (uint16_t)((31.0 + 45.0) / 175.0 * 65535.0 + 0.5);
+    ST.basic = 0; ST.bound[0] = ST.bound[1] = 1; ST.bound[2] = 0;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND;
+    ST.report[0].age = 0xff;
+    CHECK(abs(ST.climate - 2500) <= 1);
+    CHECK(report(0x0402, 0, 0x29, (uint16_t)ZCL_SENSOR_SHT3X_CENTI(sht.t)));
+    CHECK(abs(ST.climate - 3100) <= 1);
     idle();
 }
 #endif
@@ -941,10 +1159,19 @@ int main(int argc, char **argv)
     }
 #if defined(CC2530_CHIP_SENSE)
     sensed(3000, 2500, 0);
+#if defined(CC2530_SHT3X)
+    sht_set(2500, 5000, 1);
+#endif
     management_bind(); read_reporting(); values(); defaults_and_discards(); identify(); configure(); bind();
     chip();
+#if defined(CC2530_SHT3X)
+    sht3x();
+    printf("ZCL sensor chip sense + SHT3x: %lu checks PASS; modeled ADC and bit-level SHT3x I2C, "
+           "CRC, lag, NACK/stuck/CRC failures (host only).\n", checks);
+#else
     printf("ZCL sensor chip sense: %lu checks PASS; modeled ADC VDD and die temperature, "
            "cadence, invalid values (host only).\n", checks);
+#endif
 #else
     management_bind(); read_reporting(); values(); reads(); defaults_and_discards(); identify(); configure(); bind(); reports();
     printf("ZCL sensor: %lu checks PASS; SYNTHETIC values, Read/Write/Configure/Read Reporting, "

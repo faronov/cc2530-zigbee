@@ -1083,7 +1083,8 @@ samples with TR0.ADCTM and ATEST enabled only for that measurement
   linear between `BOARD_BATTERY_EMPTY_MV` 2.0 V and `BOARD_BATTERY_FULL_MV`
   3.0 V, an assumption, not a cell discharge curve. A debugger-powered board
   (about 3.3 V) reads 100 %.
-- Humidity `0405` stays synthetic until an external sensor is connected (M8).
+- Humidity `0405` stays synthetic unless the opt-in
+  [SHT3x variant](#optional-sht3x-temperature-and-humidity) is built.
 - A conversion that misses its 4000-poll bound publishes invalid values:
   MeasuredValue/CurrentTemperature `8000`, BatteryVoltage and
   BatteryPercentageRemaining `FF`.
@@ -1094,6 +1095,41 @@ samples with TR0.ADCTM and ATEST enabled only for that measurement
 Host coverage: `host-zcl-sensor-chip` (and its sanitizer build) runs the
 application tests against a modeled ADC (cadence, ATEST/TR0 restore,
 timeouts, invalid values and reporting).
+
+### Optional SHT3x temperature and humidity
+
+The opt-in `autonomous-pm2-sht3x` LLVM variant adds `CC2530_SHT3X` to the
+`autonomous-pm2` flags. No default variant enables it; it is not yet
+hardware-qualified. It requires `CC2530_CHIP_SENSE` (a build error otherwise).
+
+- Bus: bit-banged open-drain I2C on `BOARD_SHT3X_SDA` P1.6 and
+  `BOARD_SHT3X_SCL` P1.7, address `BOARD_SHT3X_ADDRESS` `44`
+  ([`include/board.h`](../include/board.h)). These pins are an **assumption**:
+  they avoid the display pins, but no ESL29 pad has been verified. The bus relies
+  on external pull-ups (or the reset-default port 1 pull-ups, which are weak).
+  A line is driven low through P1DIR with the latch at 0, and released as an
+  input. The bit rate is not measured.
+- Protocol (Sensirion SHT3x-DIS datasheet): single shot, high repeatability,
+  no clock stretching (`24 00`). A read header is NACKed until the result is
+  ready. Each 16-bit word carries CRC-8 (polynomial `31`, init `FF`).
+  T = −45 + 175·S/65535 °C and RH = 100·S/65535 %, rounded to ZCL 0.01 units.
+- At READY entry the driver claims the pins as GPIO, clocks out a stuck slave
+  (nine clocks, STOP), starts a measurement and polls for it, at most 600
+  reads. Each later 10 s chip measurement reads the result started one period
+  before (one-period lag), then starts the next one. A sensor read never waits.
+- Temperature Measurement `0402` and Relative Humidity `0405` MeasuredValue
+  come from the SHT3x. Device Temperature `0002` stays the die temperature.
+- A NACK, CRC mismatch or SCL that does not rise within 256 polls publishes
+  invalid values (`8000` and `FFFF`) until a later read succeeds.
+
+Host coverage: `host-zcl-sensor-sht` (and its sanitizer build) runs the
+application tests against a bit-level I2C slave model. It covers the CRC
+example, conversion error, busy NACKs, lag, CRC corruption, stuck SCL, a
+removed or absent sensor, the bounded initial poll and reporting. In MCUEMU,
+the `sht3x.lua` I2C part on open-drain P1.6/P1.7 nets with pull-ups reads
+back 21.50 °C and 47.00 %RH. The image also joins and sleeps (PM2). That
+run found an LLVM MCS-51 branch defect in the first CRC code
+([study §25](LLVM_MCS51_PORT_STUDY.md#25-open-defect-acc-bit-branch-without-an-implicit-use-of-a)).
 
 ### Report attempt and response ownership
 

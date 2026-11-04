@@ -115,6 +115,116 @@ static void measure(void)
 }
 #endif
 
+#if defined(CC2530_SHT3X)
+#define SDA BOARD_SHT3X_SDA
+#define SCL BOARD_SHT3X_SCL
+
+/* Pulls a port 1 line low (latch 0, output) or releases it, then pauses. A
+ * released SCL must read high within 256 polls (rise time), else ST.bus. */
+static void line(uint8_t mask, uint8_t high)
+{
+    uint8_t n = 0;
+    if (!high) MMIO_SET(SOC_P1DIR, mask);
+    else {
+        MMIO_CLEAR(SOC_P1DIR, mask);
+        if (mask == SCL)
+            while (!(MMIO_READ(SOC_P1) & SCL))
+                if (!++n) { ST.bus = 1; break; }
+    }
+    for (n = ZCL_SENSOR_SHT3X_PAUSE; n; n--) (void)MMIO_READ(SOC_P1);
+}
+
+/* Nine clocks from SCL low back to SCL low: out MSB first, then ninth
+ * (nonzero releases SDA). Returns the sampled SDA levels, the ninth in bit 0. */
+static uint16_t frame(uint8_t out, uint8_t ninth)
+{
+    uint16_t in = 0;
+    uint8_t i;
+    for (i = 9; i; i--, out <<= 1) {
+        line(SDA, i == 1u ? ninth : (uint8_t)(out & 0x80u));
+        line(SCL, 1);
+        in = in << 1 | !!(MMIO_READ(SOC_P1) & SDA);
+        line(SCL, 0);
+    }
+    return in;
+}
+
+/* START (or repeated START) and the address octet; 1 if acknowledged. */
+static uint8_t begin(uint8_t read)
+{
+    line(SDA, 1); line(SCL, 1); line(SDA, 0); line(SCL, 0);
+    return !(frame((uint8_t)(BOARD_SHT3X_ADDRESS << 1 | read), 1) & 1u);
+}
+
+static void end(void)
+{
+    line(SDA, 0); line(SCL, 1); line(SDA, 1);
+}
+
+static uint8_t crc(uint16_t word)
+{
+    uint8_t c = 0xffu, i;
+    for (i = 16; i; i--) {
+        if (i == 16u) c ^= (uint8_t)(word >> 8);
+        else if (i == 8u) c ^= (uint8_t)word;
+        /* Branch-free: the LLVM MCS-51 `jnb ACC.7` peephole lacks an implicit
+         * use of A, so branch folding hoisted the shared shift above a select
+         * test and the test read the shifted value. */
+        c = (uint8_t)(c << 1) ^ (uint8_t)(0x31u & (uint8_t)(0u - (c >> 7)));
+    }
+    return c;
+}
+
+/* Single shot, high repeatability, no clock stretching. */
+static uint8_t command(void)
+{
+    uint8_t ok = begin(0) && !(frame(0x24u, 1) & 1u) && !(frame(0x00u, 1) & 1u);
+    end();
+    return ok;
+}
+
+/* One result read: 0 NACK (not ready or absent), 1 valid, 2 otherwise. An
+ * acknowledged read always clocks all six octets, NACKing the last. */
+static uint8_t fetch(void)
+{
+    uint8_t k, octet, got = begin(1);
+    uint16_t word = 0;
+    for (k = 0; got && k < 6u; k++) {
+        octet = (uint8_t)(frame(0xffu, k == 5u) >> 1);
+        if (k % 3u != 2u) word = word << 8 | octet;
+        else if (octet != crc(word)) got = 2;
+        else if (k == 2u) ST.climate = ZCL_SENSOR_SHT3X_CENTI(word);
+        else ST.humidity = ZCL_SENSOR_SHT3X_HUMIDITY(word);
+    }
+    end();
+    return ST.bus ? 2u : got;
+}
+
+/* first (init): claim the pins, clock out a stuck slave (nine clocks with
+ * SDA released, STOP), start a measurement and poll for it. Otherwise fetch
+ * the measurement started one period ago. Both start the next one. */
+static void climate(uint8_t first)
+{
+    uint16_t polls = 1;
+    uint8_t got = 0;
+    ST.bus = 0;
+    if (first) {
+        MMIO_CLEAR(SOC_P1SEL, SDA | SCL);
+        MMIO_CLEAR(SOC_P1, SDA | SCL);
+        line(SCL, 0);
+        (void)frame(0xffu, 1);
+        end();
+        polls = command() ? ZCL_SENSOR_SHT3X_POLLS : 0u;
+    }
+    while (polls-- && !(got = fetch())) {}
+    if (got != 1u) {
+        ST.climate = ZCL_SENSOR_INVALID_TEMPERATURE;
+        ST.humidity = ZCL_SENSOR_INVALID_HUMIDITY;
+    }
+    (void)command();
+}
+#endif
+
 static uint16_t value(uint8_t entry)
 {
     uint8_t phase = ZCL_SENSOR_PHASE(ZCL_SENSOR_SAMPLE(CTX.last));
@@ -126,6 +236,10 @@ static uint16_t value(uint8_t entry)
     int16_t centi = (int16_t)ZCL_SENSOR_TEMPERATURE(phase);
     if (entry == 2u) return ZCL_SENSOR_VOLTAGE(phase);
     if (entry == 3u) return ZCL_SENSOR_PERCENTAGE(phase);
+#endif
+#if defined(CC2530_SHT3X)
+    if (!entry) return (uint16_t)ST.climate;
+    if (entry == 1u) return ST.humidity;
 #endif
     if (!entry) return (uint16_t)centi;
     if (entry == 1u) return ZCL_SENSOR_HUMIDITY(phase);
@@ -547,6 +661,9 @@ uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_F
 #if defined(CC2530_CHIP_SENSE)
     measure();
 #endif
+#if defined(CC2530_SHT3X)
+    climate(1);
+#endif
     for (i = 0; i < ZCL_SENSOR_REPORTS; i++) {
         restore(i);
         reporting(i)->last = value(i);
@@ -576,7 +693,12 @@ void zcl_sensor_tick(void) JOIN_FAR
 #endif
     }
 #if defined(CC2530_CHIP_SENSE)
-    if (ST.measured >= ZCL_SENSOR_MEASURE) measure();
+    if (ST.measured >= ZCL_SENSOR_MEASURE) {
+        measure();
+#if defined(CC2530_SHT3X)
+        climate(0);
+#endif
+    }
 #endif
 }
 

@@ -36,6 +36,15 @@
 #define BOARD_BATTERY_FULL_MV 3000u
 #define BOARD_CHIP_TEMPERATURE_OFFSET 0
 
+/* CC2530_SHT3X bit-banged I2C on port 1 (open drain through P1DIR, latch 0).
+ * ASSUMPTION, not a verified LG ESL29 pad: P1.6 SDA and P1.7 SCL are unused by
+ * the display (P0.2-P0.5, P0.7, P1.1, P1.2); pull-ups are external or the
+ * reset-default port 1 pull-ups (SWRU191F P1INP=0, P2INP.PDUP1=0).
+ * Address 0x44 is the SHT3x-DIS ADDR-low address. */
+#define BOARD_SHT3X_SDA 0x40u
+#define BOARD_SHT3X_SCL 0x80u
+#define BOARD_SHT3X_ADDRESS 0x44u
+
 typedef struct {
     uint8_t identifier;
     uint8_t policy;

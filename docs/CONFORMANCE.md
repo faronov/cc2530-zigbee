@@ -127,7 +127,9 @@ The LG join-smoke demo's `zcl_sensor` server is a bounded interoperability
 demonstration with ZHA. It is not an implementation of these requirements. It
 advertises device ID `FFFF` (no HA/BDB device type), serves synthetic values
 (autonomous LLVM variants: uncalibrated chip die temperature and AVDD,
-[chip sensing](ED_JOIN.md#chip-temperature-and-vdd-sensing)),
+[chip sensing](ED_JOIN.md#chip-temperature-and-vdd-sensing); the opt-in
+[SHT3x variant](ED_JOIN.md#optional-sht3x-temperature-and-humidity) is not
+hardware-qualified),
 supports Configure Reporting and coordinator-only Bind/Unbind in RAM only, and
 rejects Read Reporting Configuration with UNSUP_GENERAL_COMMAND
 ([ED_JOIN](ED_JOIN.md#synthetic-temperature-and-humidity-demo)). BDB-09 and

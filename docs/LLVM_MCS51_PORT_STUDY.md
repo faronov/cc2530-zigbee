@@ -2062,3 +2062,25 @@ authorization.
 
 H2 is unchanged from §23. The offline RX-path investigation plan is in
 LLVM_DEVELOPMENT.
+
+## 25. Open defect: ACC-bit branch without an implicit use of A
+
+Found in MCUEMU while bringing up the opt-in SHT3x driver. The compiler is unchanged; the
+firmware works around it in source.
+
+- Mechanism: a post-RA peephole in `MCS51TargetMachine.cpp` (`Testing one bit after an AND`)
+  rewrites `mov a, rN; anl a, #bit; jz/jnz` as `mov a, rN; jnb/jb ACC.n`. The new `JB`/`JNB`
+  carries only a bit address, so it does not record its use of A. Branch folding then
+  hoisted the code that both select arms share (`clr c; rlc a; ... xrl a, #0x31`) above the
+  branch. The test then read the shifted value: bit 6 of the original byte, not bit 7.
+- Trigger: `c = c & 0x80 ? (uint8_t)(c << 1 ^ 0x31) : (uint8_t)(c << 1)`, the CRC-8 step.
+  Each SHT3x CRC failed on the device, while the host build passed.
+- Workaround: the CRC step is branch-free (`(c << 1) ^ (0x31 & (0 - (c >> 7)))`). That
+  compiles to `mov a, r4; mov c, ACC.7; clr a; subb a, #0`, and MCUEMU reads the modeled
+  sensor correctly.
+- Audit of the `autonomous-pm2-sht3x` image: there are 20 `jb`/`jnb` on ACC bits (224–231).
+  In 19 of them, the instruction before the branch is the `mov a, rN` that loads the tested
+  byte. The remaining one is `movx a, @r1; mov r4, a`, which leaves A unchanged. Only the old
+  CRC step was affected.
+- Compiler fix (not applied): add an implicit use of `A` to the generated `JB`/`JNB` for
+  bit addresses `E0`–`E7`, or run the peephole after branch folding.
