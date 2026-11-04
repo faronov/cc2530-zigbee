@@ -1247,7 +1247,9 @@ Deliver:
 - An explicitly selected I2C sensor with a licensed driver and honest units,
   calibration/accuracy and error handling. Interim: autonomous variants
   report the uncalibrated chip die temperature and AVDD
-  ([chip sensing](ED_JOIN.md#chip-temperature-and-vdd-sensing)).
+  ([chip sensing](ED_JOIN.md#chip-temperature-and-vdd-sensing)). An opt-in
+  SHT3x driver is host-tested but not hardware-qualified, and its pins are
+  not verified ([SHT3x](ED_JOIN.md#optional-sht3x-temperature-and-humidity)).
 - Board-specific software-I2C ownership; UART and I2C cannot own the same pins.
 - A cooperative streamed display driver: short transfer slices, scheduled
   waits, timeouts and safe power-off.

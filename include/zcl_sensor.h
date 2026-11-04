@@ -53,6 +53,27 @@
     (uint16_t)(mv) <= BOARD_BATTERY_EMPTY_MV ? 0u : (uint16_t)(mv) >= BOARD_BATTERY_FULL_MV ? 200u : \
     ((uint16_t)(mv) - BOARD_BATTERY_EMPTY_MV) / ((BOARD_BATTERY_FULL_MV - BOARD_BATTERY_EMPTY_MV) / 200u)))
 
+/* CC2530_SHT3X (needs CC2530_CHIP_SENSE; opt-in variant only) moves
+ * Temperature and Relative Humidity MeasuredValue to an SHT3x on bit-banged
+ * I2C (board.h pins); the die temperature stays in Device Temperature. The
+ * SHT3x-DIS datasheet: single shot without clock stretching, high
+ * repeatability, command 0x2400; a read header is NACKed until the result is
+ * ready; 6 result octets T MSB, LSB, CRC, RH MSB, LSB, CRC; CRC-8 polynomial
+ * 0x31, init 0xFF (0xBEEF -> 0x92); T = -45 + 175*S/65535 C and
+ * RH = 100*S/65535 %. Each measure() fetches the previous result and starts
+ * the next one, so values lag one ZCL_SENSOR_MEASURE period without a busy
+ * wait; only init polls (at most ZCL_SENSOR_SHT3X_POLLS read headers). A
+ * NACK, CRC mismatch or SCL held low publishes 8000 / FFFF (ZCL invalid). */
+#define ZCL_SENSOR_SHT3X_POLLS 600u
+#define ZCL_SENSOR_SHT3X_PAUSE 6u
+#define ZCL_SENSOR_INVALID_HUMIDITY 0xffffu
+/* Rounded S*17500/65536 and S*10000/65536: under 1 unit from the /65535 forms. */
+#define ZCL_SENSOR_SHT3X_CENTI(s) ((int16_t)((int16_t)(((uint32_t)(uint16_t)(s) * 17500u + 32768u) >> 16) - 4500))
+#define ZCL_SENSOR_SHT3X_HUMIDITY(s) ((uint16_t)(((uint32_t)(uint16_t)(s) * 10000u + 32768u) >> 16))
+#if defined(CC2530_SHT3X) && !defined(CC2530_CHIP_SENSE)
+#error CC2530_SHT3X requires CC2530_CHIP_SENSE
+#endif
+
 /* Reportable attributes: temperature, humidity, BatteryVoltage and
  * BatteryPercentageRemaining; Basic ModelIdentifier is BASIC. */
 #define ZCL_SENSOR_REPORTS 4u
@@ -84,6 +105,13 @@ typedef struct {
     int16_t temperature;
     uint16_t millivolts;
     uint8_t measured;
+#if defined(CC2530_SHT3X)
+    /* Last SHT3x temperature (0.01 C) and humidity (0.01 %RH); bus records
+     * SCL held low (bounded wait) during the last measurement period. */
+    int16_t climate;
+    uint16_t humidity;
+    uint8_t bus;
+#endif
 } zcl_sensor_state_t;
 
 /* The single application device, owned by join_smoke. In READY its

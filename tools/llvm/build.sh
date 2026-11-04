@@ -8,7 +8,8 @@
 # parent-recovery (strict), parent-recovery-policy-c (experimental RAM floors) or
 # autonomous (parent-recovery without a debugger: built-in admission, reset retry,
 # M7a RX-off-when-idle READY receiver and ADC chip temperature/VDD sensing) or
-# autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls).
+# autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls) or
+# autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor).
 set -euo pipefail
 H=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$H/../.." && pwd)
@@ -22,6 +23,7 @@ case $VARIANT in
   parent-recovery-policy-c) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C" ;;
   autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
+  autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac
 LLVM_SRC=${LLVM_SRC:?LLVM_SRC required}
