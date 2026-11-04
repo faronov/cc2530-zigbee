@@ -332,7 +332,9 @@ exists because the 128-byte RXFIFO overflowed on H2 during busy-PAN broadcast
 storms while the foreground was in crypto/NWK work between radio operations
 (LH7, see `docs/H2_RX_INVESTIGATION.md` §15). The `autonomous-pm2` variant
 adds a second leaf ISR (vector 5, Sleep Timer) that is enabled only inside the
-PM2 window, with IEN2 cleared ([M7b](M7_SLEEP.md)).
+PM2 window, with IEN2 cleared ([M7b](M7_SLEEP.md)). RFIRQF1.RFIDLE is not
+retained across PM2 on H2, so each wake re-latches it with ISRXON+ISRFOFF
+before the owner runs again.
 
 - **Arming.** RFIRQM0 = FIFOP|RXPKTDONE and IEN2.RFIE are set on the first arm
   and stay set until reset. Only IEN0.EA gates the ISR: `rx_release()` sets it at

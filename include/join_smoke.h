@@ -59,12 +59,14 @@ typedef char join_smoke_admission_size[
 #define JOIN_SMOKE_SLEEP_SYNC_POLLS 1000u
 /* Debugger evidence, not part of the 48-byte JSN1 status. reason: last skip
  * (1 device work, 2 link/radio owner, 3 hardware/interrupts, 4 deadline) or
- * failure stage (6 pause, 7 wake, 8 resume, 9 AES); failure keeps the stage
- * of a JS_SLEEP fault. stray counts wakes without STIF; late counts compares
- * missed after the pause (Timer2 resumed, no sleep). slept is ticks mod 2^32. */
+ * failure stage (6 pause, 7 wake, 8 resume, 9 AES, 10 radio idle re-latch);
+ * failure keeps the stage of a JS_SLEEP fault. stray counts wakes without
+ * STIF; late counts compares missed after the pause (Timer2 resumed, no
+ * sleep); lost counts wakes that found RFIRQF1.RFIDLE clear. slept is ticks
+ * mod 2^32. */
 typedef struct {
     uint32_t sleeps, skips, slept;
-    uint8_t reason, failure, time_result, aes_result, stray, late;
+    uint8_t reason, failure, time_result, aes_result, stray, late, lost;
 } join_smoke_sleep_t;
 extern MCU_XDATA join_smoke_sleep_t join_smoke_sleep_status;
 void join_smoke_sleep(void);
