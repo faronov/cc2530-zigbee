@@ -93,12 +93,21 @@ byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
 - Wake: vector 5 `join_smoke_sleep_isr` clears STIF; IEN0 = 0, SLEEPCMD back
   to 0x04, IEN2 restored; `stray` counts wakes with IRCON.STIF clear. Wait
   for CLKCONSTA == CLKCONCMD (32 MHz XOSC) and a SLEEPSTA.CLK32K rising
-  edge, then `mac_time_resume()` (Timer2 restart by SYNC on that edge) and
-  `aes_power_restored()`. Any failure sets `failure` and faults the image
+  edge, then re-latch the radio idle state (below), `mac_time_resume()`
+  (Timer2 restart by SYNC on that edge) and `aes_power_restored()`. Any failure sets `failure` and faults the image
   with `JS_SLEEP`.
 - Retention: SWRU191F 4.6 lists only AES, I2C, USB, OBSSEL and TR0 as not
   retained in PM2. `aes_power_restored()` re-applies the key-load mode when
   ENCCS reads the reset value 0x08 and rejects any other state.
+- RFIDLE re-latch: on hardware (H2, LH24) RFIRQF1.RFIDLE reads 0 after PM2
+  although the RF configuration is retained; the radio owner requires the
+  flag while OFF and faulted the first TX after the first wake
+  (`STATE_CHANGED`). ISRFOFF alone in idle gives STROBEERR, so each wake
+  issues ISRXON then ISRFOFF back to back (RFOFF during calibration, no RX),
+  waits for RFIDLE and FSMSTAT0 idle, and fails with `reason` 10 on any
+  RFERRF, RFIRQF1 bit 3-7, FSMSTAT1 RX/TX/lock/SFD, RXFIFOCNT or new RFIRQF0
+  bit other than RXMASKZERO. `lost` counts wakes that found RFIDLE clear.
+  MCUEMU retains the flag (`lost` 0) but exercises the same sequence.
 - Stack proof: the ISRs (vector 16 RX, vector 5 Sleep Timer) share the reset
   priority level; `stack_analysis.py` rejects any IP0/IP1 write, so they
   never nest and the maximum ISR peak bounds them. Demand 127/128 bytes.
@@ -108,7 +117,12 @@ byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
   PM2 sleeps in 33 s of the 250 ms post-READY poll phase, about 82% of the
   time asleep, polls every 250.1 ms, no mac_time/AES fault, no stray or late
   wake. MCUEMU freezes Timer2 in PM1-3, so Timer2 continuity, the
-  7 s slow-poll phase and current are not validated there.
+  7 s slow-poll phase and current are not validated there. With the RFIDLE
+  re-latch: 116 sleeps in 25 s of READY, no fault.
+- LH24 (H2, ZHA/ZBT-1, debugger attached with SOFT_POWER_MODE): FAIL, no
+  join: one sleep, then the radio owner fault above 0.6 s after READY. The
+  debugger keeps the regulator on, so full PM2 retention loss is not
+  exercised by this setup.
 
 ## M7c — measurements (planned)
 

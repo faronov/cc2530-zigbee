@@ -160,7 +160,7 @@ static uint8_t input_ready(void)
 MCU_XDATA join_smoke_sleep_t join_smoke_sleep_status;
 static MCU_XDATA uint32_t span, mark, wake;
 static MCU_XDATA uint16_t spin;
-static MCU_XDATA uint8_t interrupts;
+static MCU_XDATA uint8_t interrupts, flags;
 #define SL join_smoke_sleep_status
 #define T DEVICE.work.runtime.transport
 #define Z DEVICE.work.runtime.zdo
@@ -238,6 +238,7 @@ void join_smoke_sleep(void)
         SL.late++;
     } else {
         interrupts=MMIO_READ(SOC_IEN2);
+        flags=MMIO_READ(SOC_RFIRQF0);
         MMIO_WRITE(SOC_IEN2,0);
         MMIO_WRITE(SOC_SLEEPCMD,0x06);   /* PM2, unused 16-MHz RCOSC off */
         enter_pm2();
@@ -250,6 +251,18 @@ void join_smoke_sleep(void)
         SPIN(MMIO_READ(SOC_CLKCONSTA)!=MMIO_READ(SOC_CLKCONCMD));
         SPIN(MMIO_READ(SOC_SLEEPSTA)&1u);
         SPIN(!(MMIO_READ(SOC_SLEEPSTA)&1u));
+        SL.reason=10;
+        /* H2 (LH24): RFIRQF1.RFIDLE is lost across PM2, although SWRU191F 4.6
+         * lists RF registers as retained, and the radio owner requires it while
+         * OFF. ISRXON then ISRFOFF ends calibration before RX starts and
+         * latches RFIDLE (and RFIRQF0.RXMASKZERO) like a normal stop. */
+        if(!(MMIO_READ(SOC_RFIRQF1)&4u)) SL.lost++;
+        MMIO_WRITE(SOC_RFST,0xe3);
+        MMIO_WRITE(SOC_RFST,0xef);
+        SPIN(!(MMIO_READ(SOC_RFIRQF1)&4u) || (MMIO_XREAD(0x6192)&0xbfu));
+        if(MMIO_READ(SOC_RFERRF) || (MMIO_READ(SOC_RFIRQF1)&0xf8u) ||
+           (MMIO_XREAD(0x6193)&0x27u) || MMIO_XREAD(0x619b) ||
+           (MMIO_READ(SOC_RFIRQF0)&(uint8_t)~flags&0x7fu)) goto failed;
         SL.sleeps++;
     }
     SL.reason=8;
