@@ -2063,24 +2063,34 @@ authorization.
 H2 is unchanged from §23. The offline RX-path investigation plan is in
 LLVM_DEVELOPMENT.
 
-## 25. Open defect: ACC-bit branch without an implicit use of A
+## 25. Fixed defect: ACC-bit branch without an implicit use of A
 
-Found in MCUEMU while bringing up the opt-in SHT3x driver. The compiler is unchanged; the
-firmware works around it in source.
+Found in MCUEMU while bringing up the opt-in SHT3x driver. Fixed in LLVM
+`d1456a1d05933372fd09a2a15496c7d55bfa68a7` (tag `mcs51-acc-bit-branch-use-20261104`),
+now the pinned compiler.
 
-- Mechanism: a post-RA peephole in `MCS51TargetMachine.cpp` (`Testing one bit after an AND`)
-  rewrites `mov a, rN; anl a, #bit; jz/jnz` as `mov a, rN; jnb/jb ACC.n`. The new `JB`/`JNB`
-  carries only a bit address, so it does not record its use of A. Branch folding then
-  hoisted the code that both select arms share (`clr c; rlc a; ... xrl a, #0x31`) above the
-  branch. The test then read the shifted value: bit 6 of the original byte, not bit 7.
+- Mechanism (from `-print-after-all`): an `i8` test `c & 0x80` becomes a signed compare. Its
+  custom inserter in `MCS51ISelLowering.cpp` emitted `MOV_A_RN rN; JNB ACC.7` without an
+  implicit use of A on the `JNB`. The `MOV` was then a dead def, and `dead-mi-elimination`
+  deleted it. The branch tested whatever A last held: here `xrl a, #0x31` of the shifted
+  byte, so bit 6 of the original byte instead of bit 7. An earlier version of this section
+  blamed the post-RA peephole and branch folding; the pass dump shows the `MOV` was already
+  gone before register allocation.
 - Trigger: `c = c & 0x80 ? (uint8_t)(c << 1 ^ 0x31) : (uint8_t)(c << 1)`, the CRC-8 step.
   Each SHT3x CRC failed on the device, while the host build passed.
-- Workaround: the CRC step is branch-free (`(c << 1) ^ (0x31 & (0 - (c >> 7)))`). That
-  compiles to `mov a, r4; mov c, ACC.7; clr a; subb a, #0`, and MCUEMU reads the modeled
-  sensor correctly.
+- Fix: the inserter adds the implicit use of A. `insertBranch` restores it for `JB`/`JNB`/`JBC`
+  on `E0`–`E7`, since `analyzeBranch` drops implicit operands. The post-RA peephole that forms
+  `JB`/`JNB` from `anl a, #bit; jz/jnz` also adds it. Regression:
+  `clang/test/MCS51/acc-bit-branch-use.c` with `-verify-machineinstrs`. It fails on the
+  previous pin.
+- Evidence: all 18 images of the LG join variants, bringup and timebase fixture are
+  byte-identical to the previous pin, so the defect was not live in main. The old ternary CRC
+  built with the fixed compiler reads the modeled sensor in MCUEMU (21.50 °C, 47.00 %RH).
+  The tests pass: `CodeGen/8051` 168/168 and `clang/test/MCS51` with `MC/MCS51` 17/17. The
+  lld MCS51 tests pass 11/12; the remaining one is the known `mcs51-address-space-overlap.s`
+  exclusion.
+- The firmware keeps the branch-free CRC step (`(c << 1) ^ (0x31 & (0 - (c >> 7)))`). It
+  compiles to `mov a, r4; mov c, ACC.7; clr a; subb a, #0`.
 - Audit of the `autonomous-pm2-sht3x` image: there are 20 `jb`/`jnb` on ACC bits (224–231).
   In 19 of them, the instruction before the branch is the `mov a, rN` that loads the tested
-  byte. The remaining one is `movx a, @r1; mov r4, a`, which leaves A unchanged. Only the old
-  CRC step was affected.
-- Compiler fix (not applied): add an implicit use of `A` to the generated `JB`/`JNB` for
-  bit addresses `E0`–`E7`, or run the peephole after branch folding.
+  byte. The remaining one is `movx a, @r1; mov r4, a`, which leaves A unchanged.
