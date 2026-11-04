@@ -73,6 +73,9 @@
     X(SOC_S0CON, 0x98) \
     X(SOC_S1CON, 0x9b) \
     X(SOC_ADCCON1, 0xb4) \
+    X(SOC_ADCCON3, 0xb6) \
+    X(SOC_ADCL, 0xba) \
+    X(SOC_ADCH, 0xbb) \
     X(SOC_RNDL, 0xbc) \
     X(SOC_RNDH, 0xbd) \
     X(SOC_RFD, 0xd9) \

@@ -23,6 +23,75 @@ static const uint8_t tc[8] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
 static const char model[] = BOARD_MODEL, manufacturer[] = BOARD_MANUFACTURER;
 static unsigned long checks;
 
+#if defined(CC2530_CHIP_SENSE)
+/* ADC model (SWRS081B nominals): AVDD5/3 against 1.15 V and the die sensor,
+ * 1480 at 25 C and 3 V, 4.5 /C, 1 /0.1 V, live only with TR0=1, ATEST=1. */
+volatile uint8_t SOC_ADCCON1, SOC_ADCCON3, SOC_ADCL, SOC_ADCH;
+static struct {
+    long millivolts, centi;
+    uint8_t tr0, atest, stuck, fresh;
+    unsigned conversions, vdd, temperature, unsensed, overlapped, foreign;
+} adc;
+
+static void convert_model(uint8_t command)
+{
+    long code;
+    if ((SOC_ADCCON1 & 0x80u) || adc.fresh) adc.overlapped++;
+    adc.conversions++;
+    if (command == 0x3fu) {
+        adc.vdd++;
+        code = (adc.millivolts*2048 + 1725) / 3450;
+    } else if (command == 0x3eu) {
+        adc.temperature++;
+        if (adc.tr0 != 1u || adc.atest != 1u) { adc.unsensed++; code = 0; }
+        else code = 1480 + (adc.centi-2500)*45/1000 + (adc.millivolts-3000)/100;
+        /* Tests use whole-count temperatures: 25 C plus multiples of 2 C. */
+        CHECK((adc.centi-2500) % 200 == 0 && (adc.millivolts-3000) % 100 == 0);
+    } else {
+        adc.foreign++;
+        code = 0;
+    }
+    if (code > 2047) code = 2047;
+    code = (long)((uint16_t)(code << 4));
+    SOC_ADCL = (uint8_t)code; SOC_ADCH = (uint8_t)(code >> 8);
+    adc.fresh = 1;
+    if (adc.stuck != 1u && (adc.stuck != 2u || command != 0x3eu)) SOC_ADCCON1 |= 0x80u;
+}
+
+uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address)
+{
+    uint8_t v = *reg;
+    if (address == SOC_ADCH_ADDRESS) { SOC_ADCCON1 &= 0x7fu; adc.fresh = 0; }
+    return v;
+}
+
+void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
+{
+    *reg = value;
+    if (address == SOC_ADCCON3_ADDRESS) convert_model(value);
+}
+
+uint8_t host_mmio_xload(uint16_t address)
+{
+    CHECK(address == 0x61bdu);
+    return adc.atest;
+}
+
+void host_mmio_xstore(uint16_t address, uint8_t value)
+{
+    CHECK(address == 0x61bdu || address == 0x624bu);
+    if (address == 0x61bdu) adc.atest = value; else adc.tr0 = value;
+}
+
+static void adc_set(long millivolts, long centi, uint8_t stuck)
+{
+    uint8_t atest = adc.atest;
+    memset(&adc, 0, sizeof(adc));
+    adc.millivolts = millivolts; adc.centi = centi; adc.stuck = stuck; adc.atest = atest;
+    SOC_ADCCON1 = 0x30u;
+}
+#endif
+
 static void reset(uint32_t now)
 {
     security_keys_config_t identity;
@@ -305,8 +374,27 @@ static void values(void)
     }
     CHECK(ZCL_SENSOR_TEMPERATURE(40) == 2500 && ZCL_SENSOR_HUMIDITY(40) == 5500);
     CHECK(ZCL_SENSOR_PERCENTAGE(40) == 160 && ZCL_SENSOR_VOLTAGE(40) == 28);
+    /* Chip sense conversions: 1781 per sample is 3.0 V on AVDD5/3. */
+    CHECK(ZCL_SENSOR_MILLIVOLTS(0) == 0 && ZCL_SENSOR_MILLIVOLTS(4*1781) == 3000);
+    CHECK(ZCL_SENSOR_MILLIVOLTS(4*2047) == 3448 && ZCL_SENSOR_MILLIVOLTS(4*1187) == 2000);
+    CHECK(ZCL_SENSOR_COUNTS(11840, 3000) == 0 && ZCL_SENSOR_COUNTS(11848, 3100) == 0);
+    CHECK(ZCL_SENSOR_COUNTS(11840, 2000) == 80);
+    CHECK(ZCL_SENSOR_CENTI(11840, 3000) == 2500 + BOARD_CHIP_TEMPERATURE_OFFSET);
+    CHECK(ZCL_SENSOR_CENTI(11840+36*10, 3000) == 3500 + BOARD_CHIP_TEMPERATURE_OFFSET);
+    /* 711/256 approximates 25/9 within 0.02 %. */
+    CHECK(abs(ZCL_SENSOR_CENTI(11840-36*35, 3000) - (-1000 + BOARD_CHIP_TEMPERATURE_OFFSET)) <= 1);
+    CHECK(abs(ZCL_SENSOR_CENTI(11840+36*60, 3000) - (8500 + BOARD_CHIP_TEMPERATURE_OFFSET)) <= 2);
+    CHECK(ZCL_SENSOR_DEGREES(2549) == 25 && ZCL_SENSOR_DEGREES(2550) == 26 && ZCL_SENSOR_DEGREES(0) == 0);
+    CHECK(ZCL_SENSOR_DEGREES(-2549) == -25 && ZCL_SENSOR_DEGREES(-2550) == -26 && ZCL_SENSOR_DEGREES(-49) == 0);
+    CHECK(ZCL_SENSOR_DEGREES(ZCL_SENSOR_INVALID_TEMPERATURE) == ZCL_SENSOR_INVALID_TEMPERATURE);
+    CHECK(ZCL_SENSOR_DECIVOLTS(0) == 0xff && ZCL_SENSOR_DECIVOLTS(2949) == 29 && ZCL_SENSOR_DECIVOLTS(2950) == 30);
+    CHECK(ZCL_SENSOR_HALF_PERCENT(0) == 0xff && ZCL_SENSOR_HALF_PERCENT(1) == 0);
+    CHECK(ZCL_SENSOR_HALF_PERCENT(BOARD_BATTERY_EMPTY_MV) == 0);
+    CHECK(ZCL_SENSOR_HALF_PERCENT(BOARD_BATTERY_FULL_MV) == 200 && ZCL_SENSOR_HALF_PERCENT(3600) == 200);
+    CHECK(ZCL_SENSOR_HALF_PERCENT((BOARD_BATTERY_EMPTY_MV+BOARD_BATTERY_FULL_MV)/2) == 100);
 }
 
+#if !defined(CC2530_CHIP_SENSE)
 static void reads(void)
 {
     static const uint8_t basic[] = {0x00, 0x31, 0x00, 0x04, 0x00, 0x05, 0x00, 0x00, 0x00, 0x07, 0x00,
@@ -334,6 +422,11 @@ static void reads(void)
     zcl(0x0001, power, sizeof(power),
         "\x18\x33\x01\x20\x00\x00\x20\x1e\x21\x00\x00\x20\xc3\xfd\xff\x00\x21\x02\x00\x00\x00\x86", 22);
     zcl(0x0003, "\x00\x35\x00\x00\x00\xfd\xff", 7, "\x18\x35\x01\x00\x00\x00\x21\x00\x00\xfd\xff\x00\x21\x02\x00", 15);
+    /* Device Temperature: whole degrees of the temperature value (21.50 -> 22). */
+    zcl(0x0002, "\x00\x37\x00\x00\x00\xfd\xff\x01\x00", 9,
+        "\x18\x37\x01\x00\x00\x00\x29\x16\x00\xfd\xff\x00\x21\x01\x00\x01\x00\x86", 18);
+    zcl(0x0002, "\x00\x38\x06\x00\x00\x00\x29\x01\x00\x02\x00\x01\x00", 13, "\x18\x38\x07\x8c\x00\x00\x00", 7);
+    zcl(0x0002, "\x00\x39\x08\x00\x00\x00", 6, "\x18\x39\x09\x8c\x00\x00\x00", 7);
     /* Disable-default-response does not suppress a Read Attributes Response;
      * a trailing odd octet is ignored. */
     memcpy(expected, "\x18\x34\x01\x05\x00\x00\x42", 7); expected[7] = sizeof(model)-1;
@@ -355,6 +448,7 @@ static void reads(void)
     }
     zcl(0x0000, request, ED_PAYLOAD_MAX-1, expected, at);
 }
+#endif
 
 static void defaults_and_discards(void)
 {
@@ -512,6 +606,8 @@ static void bind(void)
     CHECK(zdo(0x0021, request, 12) == ZCL_SENSOR_DISCARDED && !CTX.response_pending);
 }
 
+/* Synthetic sawtooth schedule; chip() covers measured reports. */
+#if !defined(CC2530_CHIP_SENSE)
 static void reports(void)
 {
     uint32_t t;
@@ -589,6 +685,8 @@ static void reports(void)
     CHECK(ST.report[0].age == 0xffff);
 }
 
+#endif
+
 static uint8_t binding_golden(uint8_t *output, uint8_t sequence, uint8_t start, uint8_t capacity)
 {
     static const uint16_t clusters[] = {0x0402, 0x0405, 0x0001};
@@ -647,7 +745,12 @@ static void management_bind(void)
     zcl_sensor_state_t before;
     ed_packet_t occupied;
     security_keys_config_t identity;
+    uint16_t initial;
     reset(0);
+    initial = ST.report[0].last;
+#if !defined(CC2530_CHIP_SENSE)
+    CHECK(initial == 2100);
+#endif
     CHECK(zdo(0x0033, "\x91\x00", 2) == ZCL_SENSOR_HANDLED);
     CHECK(CTX.response_pending && CTX.response.length == 68);
     CHECK(!memcmp(CTX.response.payload, "\x91\x00\x03\x00\x03", 5));
@@ -658,7 +761,7 @@ static void management_bind(void)
     ST.sent = 1; ST.pending = 0; ST.value = 2340; ST.report[0].age = 17;
     CTX.last += 3*ZCL_SENSOR_SECOND;
     management_query(0, 0x92, 2);
-    CHECK(ST.sent == 1 && ST.report[0].age == 17 && ST.report[0].last == 2100);
+    CHECK(ST.sent == 1 && ST.report[0].age == 17 && ST.report[0].last == initial);
     reset(0);
     for (mask = 0; mask < 8; mask++) {
         reset(0);
@@ -751,6 +854,84 @@ static void management_bind(void)
     for (i = 0; i < sizeof(output); i++) CHECK(output[i] == 0xa5);
 }
 
+#if defined(CC2530_CHIP_SENSE)
+static void sensed(long millivolts, long centi, uint8_t stuck)
+{
+    adc_set(millivolts, centi, stuck);
+    adc.atest = 0x5a;
+}
+
+static void chip(void)
+{
+    static const uint8_t power[] = {0x00, 0x40, 0x00, 0x20, 0x00, 0x21, 0x00};
+    static const uint8_t device[] = {0x00, 0x41, 0x00, 0x00, 0x00};
+    uint8_t expected[40];
+    uint32_t t;
+    unsigned i;
+    /* Init measures once: four VDD then one discarded and eight sensor
+     * conversions, ATEST restored, TR0 off, no overlapping conversion. */
+    sensed(3000, 2500, 0); reset(5ul << 22);
+    CHECK(adc.vdd == 4 && adc.temperature == 9 && adc.conversions == 13 && !adc.foreign);
+    CHECK(!adc.unsensed && !adc.overlapped && adc.atest == 0x5a && !adc.tr0 && !(SOC_ADCCON1 & 0x80u));
+    CHECK(abs(ST.millivolts - 3000) <= 2 && abs(ST.temperature - 2500) <= 3);
+    CHECK(ST.report[0].last == (uint16_t)ST.temperature && ST.report[2].last == 30 && ST.report[3].last == 200);
+    zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\x1e\x21\x00\x00\x20\xc8", 13);
+    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x19\x00", 9);
+    memcpy(expected, "\x18\x42\x01\x00\x00\x00\x29", 7);
+    expected[7] = (uint8_t)ST.temperature; expected[8] = (uint8_t)((uint16_t)ST.temperature >> 8);
+    zcl(0x0402, "\x00\x42\x00\x00\x00", 5, expected, 9);
+    memcpy(expected, "\x18\x43\x01\x05\x00\x00\x42", 7); expected[7] = sizeof(model)-1;
+    CHECK(sizeof(model)-1 <= sizeof(expected)-8); memcpy(expected+8, model, sizeof(model)-1);
+    zcl(0x0000, "\x00\x43\x00\x05\x00", 5, expected, (uint8_t)(8+sizeof(model)-1));
+    memcpy(expected, "\x18\x44\x01\x04\x00\x00\x42", 7); expected[7] = sizeof(manufacturer)-1;
+    CHECK(sizeof(manufacturer)-1 <= sizeof(expected)-8); memcpy(expected+8, manufacturer, sizeof(manufacturer)-1);
+    zcl(0x0000, "\x00\x44\x00\x04\x00", 5, expected, (uint8_t)(8+sizeof(manufacturer)-1));
+    /* Cadence: nine whole seconds do not measure, the tenth does. */
+    adc_set(2500, -1100, 0);
+    for (i = 1, t = CTX.last; i < ZCL_SENSOR_MEASURE; i++) {
+        CTX.last = t + i*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+        CHECK(!adc.conversions && ST.measured == i);
+    }
+    CTX.last = t + ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND - 1u; zcl_sensor_tick();
+    CHECK(!adc.conversions);
+    CTX.last += 1u; zcl_sensor_tick();
+    CHECK(adc.conversions == 13 && !ST.measured && !adc.unsensed && !adc.overlapped);
+    CHECK(abs(ST.millivolts - 2500) <= 2 && abs(ST.temperature + 1100) <= 3);
+    zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\x19\x21\x00\x00\x20\x64", 13);
+    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\xf5\xff", 9);
+    /* A long gap measures once, saturating the second count meanwhile. */
+    adc_set(3300, 4100, 0);
+    CTX.last += 1000ul*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(adc.conversions == 13 && !ST.measured && abs(ST.temperature - 4100) <= 3);
+    zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\x21\x21\x00\x00\x20\xc8", 13);
+    /* A conversion that never ends publishes invalid values and stops
+     * after the first VDD poll bound; the sensor is never enabled. */
+    adc_set(3000, 2500, 1);
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(adc.conversions == 1 && !adc.temperature && !adc.tr0 && adc.atest == 0x5a);
+    CHECK(ST.temperature == ZCL_SENSOR_INVALID_TEMPERATURE && !ST.millivolts);
+    zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\xff\x21\x00\x00\x20\xff", 13);
+    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x00\x80", 9);
+    zcl(0x0402, "\x00\x42\x00\x00\x00", 5, "\x18\x42\x01\x00\x00\x00\x29\x00\x80", 9);
+    /* Recovery on the next measurement. */
+    adc_set(3000, 2500, 0);
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(abs(ST.millivolts - 3000) <= 2 && abs(ST.temperature - 2500) <= 3 && adc.conversions == 13);
+    /* A stuck sensor conversion invalidates both and restores ATEST and TR0. */
+    sensed(3000, 2500, 2);
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(adc.vdd == 4 && adc.temperature == 1 && adc.atest == 0x5a && !adc.tr0);
+    CHECK(ST.temperature == ZCL_SENSOR_INVALID_TEMPERATURE && !ST.millivolts);
+    /* Changed values report through the existing scheduler. */
+    adc_set(3000, 3100, 0);
+    ST.report[0].age = 0xff; ST.report[0].last = 0; ST.basic = 0; ST.bound[0] = 1; ST.bound[1] = ST.bound[2] = 0;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND;
+    zcl_sensor_tick();
+    CHECK(abs(ST.temperature - 3100) <= 3 && report(0x0402, 0, 0x29, (uint16_t)ST.temperature));
+    idle();
+}
+#endif
+
 int main(int argc, char **argv)
 {
     if (argc == 2 && !strcmp(argv[1], "mgmt-bind")) {
@@ -758,8 +939,16 @@ int main(int argc, char **argv)
         printf("Mgmt Bind initial live table: %lu checks PASS.\n", checks);
         return 0;
     }
+#if defined(CC2530_CHIP_SENSE)
+    sensed(3000, 2500, 0);
+    management_bind(); read_reporting(); values(); defaults_and_discards(); identify(); configure(); bind();
+    chip();
+    printf("ZCL sensor chip sense: %lu checks PASS; modeled ADC VDD and die temperature, "
+           "cadence, invalid values (host only).\n", checks);
+#else
     management_bind(); read_reporting(); values(); reads(); defaults_and_discards(); identify(); configure(); bind(); reports();
     printf("ZCL sensor: %lu checks PASS; SYNTHETIC values, Read/Write/Configure/Read Reporting, "
            "Identify, Bind/Unbind and report scheduling (host only).\n", checks);
+#endif
     return 0;
 }

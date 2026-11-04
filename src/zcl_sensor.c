@@ -18,6 +18,7 @@
 #define SILENT 0xfeu
 #define MODEL 6u
 #define IDENTIFY 4u
+#define DEVICE 18u
 
 typedef char zcl_sensor_overlay[sizeof(zcl_sensor_state_t) <= sizeof(join_smoke_device.record) ? 1 : -1];
 
@@ -28,7 +29,9 @@ typedef struct {
 } zcl_attribute_t;
 
 /* Entries 0..3 are the reportable attributes, indexed like report[];
- * 4 is IdentifyTime, 5/6 the Basic strings, the rest constants. */
+ * 4 is IdentifyTime, 5/6 the Basic strings, DEVICE the Device Temperature
+ * Configuration CurrentTemperature (readable, not reportable: ZCL8 3.4.2.2),
+ * the rest constants. */
 static const MCU_CODE zcl_attribute_t attributes[] = {
     { 0x0402u, 0x0000u, 0x29u, 0 }, { 0x0405u, 0x0000u, 0x21u, 0 },
     { 0x0001u, 0x0020u, 0x20u, 0 }, { 0x0001u, 0x0021u, 0x20u, 0 },
@@ -37,8 +40,10 @@ static const MCU_CODE zcl_attribute_t attributes[] = {
     { 0x0000u, 0x0000u, 0x20u, 8 }, { 0x0000u, 0x0007u, 0x30u, 3 }, { 0x0000u, 0xfffdu, 0x21u, 3 },
     { 0x0001u, 0xfffdu, 0x21u, 2 }, { 0x0003u, 0xfffdu, 0x21u, 2 },
     { 0x0402u, 0x0001u, 0x29u, 2100 }, { 0x0402u, 0x0002u, 0x29u, 2500 }, { 0x0402u, 0xfffdu, 0x21u, 3 },
-    { 0x0405u, 0x0001u, 0x21u, 4500 }, { 0x0405u, 0x0002u, 0x21u, 5500 }, { 0x0405u, 0xfffdu, 0x21u, 2 }
+    { 0x0405u, 0x0001u, 0x21u, 4500 }, { 0x0405u, 0x0002u, 0x21u, 5500 }, { 0x0405u, 0xfffdu, 0x21u, 2 },
+    { 0x0002u, 0x0000u, 0x29u, 0 }, { 0x0002u, 0xfffdu, 0x21u, 1 }
 };
+typedef char zcl_sensor_device_entry[DEVICE+2u == sizeof(attributes)/sizeof(attributes[0]) ? 1 : -1];
 static const MCU_CODE uint16_t defaults[ZCL_SENSOR_REPORTS][3] = {
     { 30, 300, 10 }, { 30, 300, 25 }, { 60, 3600, 1 }, { 60, 3600, 2 }
 };
@@ -57,14 +62,75 @@ static uint8_t find(void)
     return ST.entry = NONE;
 }
 
+#if defined(CC2530_CHIP_SENSE)
+#define TR0 0x624bu
+#define ATEST 0x61bdu
+#define POLLS 4000u
+
+/* One extra conversion (SWRU191F 12.2.10): EOC sets when done, reading ADCH
+ * clears it. Returns the 12 MSBs, negative after the poll bound. */
+static int16_t convert(uint8_t command)
+{
+    uint16_t polls = 0;
+    uint8_t low;
+    (void)MMIO_READ(SOC_ADCH);
+    MMIO_WRITE(SOC_ADCCON3, command);
+    while (!(MMIO_READ(SOC_ADCCON1) & 0x80u))
+        if (++polls == POLLS) return -1;
+    low = MMIO_READ(SOC_ADCL);
+    return (int16_t)((uint16_t)((uint16_t)MMIO_READ(SOC_ADCH) << 8 | low)) >> 4;
+}
+
+/* Sum of n conversions after skip discarded ones; negative on failure. */
+static int16_t sample(uint8_t command, uint8_t skip, uint8_t n)
+{
+    int16_t code, sum = 0;
+    for (n += skip; n; n--) {
+        if ((code = convert(command)) < 0) return -1;
+        if (skip) skip--;
+        else sum += code;
+    }
+    return sum;
+}
+
+static void measure(void)
+{
+    uint8_t atest = MMIO_XREAD(ATEST);
+    int16_t vdd, sum = -1;
+    ST.measured = 0;
+    /* Internal reference, 512 decimation, AVDD5/3. */
+    vdd = sample(0x3fu, 0, ZCL_SENSOR_VDD_SAMPLES);
+    if (vdd > 0) {
+        MMIO_XWRITE(TR0, 1); MMIO_XWRITE(ATEST, 1);
+        sum = sample(0x3eu, 1, ZCL_SENSOR_TEMPERATURE_SAMPLES);
+        MMIO_XWRITE(ATEST, atest); MMIO_XWRITE(TR0, 0);
+    }
+    if (sum <= 0) {
+        ST.temperature = ZCL_SENSOR_INVALID_TEMPERATURE;
+        ST.millivolts = 0;
+        return;
+    }
+    ST.millivolts = ZCL_SENSOR_MILLIVOLTS(vdd);
+    ST.temperature = ZCL_SENSOR_CENTI(sum, ST.millivolts);
+}
+#endif
+
 static uint16_t value(uint8_t entry)
 {
     uint8_t phase = ZCL_SENSOR_PHASE(ZCL_SENSOR_SAMPLE(CTX.last));
-    if (!entry) return ZCL_SENSOR_TEMPERATURE(phase);
-    if (entry == 1u) return ZCL_SENSOR_HUMIDITY(phase);
+#if defined(CC2530_CHIP_SENSE)
+    int16_t centi = ST.temperature;
+    if (entry == 2u) return ZCL_SENSOR_DECIVOLTS(ST.millivolts);
+    if (entry == 3u) return ZCL_SENSOR_HALF_PERCENT(ST.millivolts);
+#else
+    int16_t centi = (int16_t)ZCL_SENSOR_TEMPERATURE(phase);
     if (entry == 2u) return ZCL_SENSOR_VOLTAGE(phase);
     if (entry == 3u) return ZCL_SENSOR_PERCENTAGE(phase);
+#endif
+    if (!entry) return (uint16_t)centi;
+    if (entry == 1u) return ZCL_SENSOR_HUMIDITY(phase);
     if (entry == IDENTIFY) return ST.identify;
+    if (entry == DEVICE) return (uint16_t)ZCL_SENSOR_DEGREES(centi);
     return attributes[entry].value;
 }
 
@@ -478,6 +544,9 @@ uint8_t zcl_sensor_init(const security_keys_config_t MCU_XDATA *identity) JOIN_F
         return 0;
     memcpy(ST.tc_ieee, identity->tc_ieee, 8);
     memset((uint8_t MCU_XDATA *)&ST+8, 0, sizeof(ST)-8u);
+#if defined(CC2530_CHIP_SENSE)
+    measure();
+#endif
     for (i = 0; i < ZCL_SENSOR_REPORTS; i++) {
         restore(i);
         reporting(i)->last = value(i);
@@ -502,7 +571,13 @@ void zcl_sensor_tick(void) JOIN_FAR
         for (r = ST.report; r != ST.report+ZCL_SENSOR_REPORTS; r++)
             if (r->age != 0xffffu) r->age++;
         if (ST.identify) ST.identify--;
+#if defined(CC2530_CHIP_SENSE)
+        if (ST.measured != 0xffu) ST.measured++;
+#endif
     }
+#if defined(CC2530_CHIP_SENSE)
+    if (ST.measured >= ZCL_SENSOR_MEASURE) measure();
+#endif
 }
 
 uint8_t zcl_sensor_serve(void) JOIN_FAR

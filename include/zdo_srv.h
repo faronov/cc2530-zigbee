@@ -29,10 +29,11 @@
 #define ZDO_SRV_POWER_DESCRIPTOR_1 0xc4u
 #define ZDO_SRV_BASIC_CLUSTER 0x0000u
 #define ZDO_SRV_POWER_CLUSTER 0x0001u
+#define ZDO_SRV_DEVICE_TEMPERATURE_CLUSTER 0x0002u
 #define ZDO_SRV_IDENTIFY_CLUSTER 0x0003u
 #define ZDO_SRV_TEMPERATURE_CLUSTER 0x0402u
 #define ZDO_SRV_HUMIDITY_CLUSTER 0x0405u
-#define ZDO_SRV_INPUT_CLUSTERS 5u
+#define ZDO_SRV_INPUT_CLUSTERS 6u
 /* No Home Automation device type is claimed: the endpoint's minimal
  * application servers (zcl_sensor.h) have not been conformance-tested
  * against any HA/BDB device definition. */
@@ -94,8 +95,8 @@ typedef struct {
  * Active_EP_req lists the single application endpoint, if
  * any. Simple_Desc_req returns INVALID_EP for 0/FF, INV_REQUESTTYPE for another
  * address, NOT_ACTIVE for other endpoints, else profile, ZDO_SRV_DEVICE and
- * five input clusters: Basic, Power Configuration, Identify, Temperature and
- * Relative Humidity Measurement; the caller must actually serve those clusters.
+ * six input clusters: Basic, Power Configuration, Device Temperature
+ * Configuration, Identify, Temperature and Relative Humidity Measurement; the caller must actually serve those clusters.
  * Match_Desc_req (R22 2.4.4.2.7) is the only request also processed when
  * broadcast: own or broadcast (>=FFFB) address of interest matches when the
  * profile is equal or FFFF and any requested input cluster is listed; reply

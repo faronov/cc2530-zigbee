@@ -1245,7 +1245,9 @@ Exit:
 Deliver:
 
 - An explicitly selected I2C sensor with a licensed driver and honest units,
-  calibration/accuracy and error handling.
+  calibration/accuracy and error handling. Interim: autonomous variants
+  report the uncalibrated chip die temperature and AVDD
+  ([chip sensing](ED_JOIN.md#chip-temperature-and-vdd-sensing)).
 - Board-specific software-I2C ownership; UART and I2C cannot own the same pins.
 - A cooperative streamed display driver: short transfer slices, scheduled
   waits, timeouts and safe power-off.
