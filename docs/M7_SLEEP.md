@@ -81,6 +81,10 @@ byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
   data poll keepalive, the ED Timeout keepalive. The span is capped at
   1 875 000 symbols (30 s), converted to 32.768 kHz ticks rounded down and
   reduced by a 33-tick (~1 ms) wake margin; spans under 197 ticks stay awake.
+  5 (`CC2530_EPD` only) display: no sleep while a refresh streams or waits
+  on a short panel step; during the panel's own refresh the span is limited
+  to the expected rest of 5 s, then to 250 ms steps
+  ([e-paper display](ED_JOIN.md#optional-e-paper-display)).
 - Sleep: `mac_time_pause()` (stops Timer2 through T2CTRL.SYNC and the
   32 kHz edge, `mac_time.h`), Sleep Timer compare written ST2, ST1, ST0 after
   STLOAD.LDRDY and re-checked at least 164 ticks ahead (`late` otherwise),

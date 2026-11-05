@@ -166,6 +166,8 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-zcl-sensor-sht \
 	$(BUILD)/host-zcl-sensor-sht-sanitize \
 	$(BUILD)/host-zcl-sensor-sanitize \
+	$(BUILD)/host-epd \
+	$(BUILD)/host-epd-sanitize \
 	$(BUILD)/host-zcl-temperature-tests \
 	$(BUILD)/host-zcl-temperature-tests-sanitize \
 	$(BUILD)/host-zcl-value-tests \
@@ -693,6 +695,12 @@ $(BUILD)/host-zcl-sensor-sht: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_t
 
 $(BUILD)/host-zcl-sensor-sht-sanitize: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -DCC2530_CHIP_SENSE -DCC2530_SHT3X -I. -Isrc -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-sensor-sht-sanitize
+
+$(BUILD)/host-epd: tests/test_epd.c boards/lg_esl29_rev03.c src/epd.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -UCC2530_BOARD -DCC2530_BOARD=1 -DCC2530_CHIP_SENSE -DCC2530_EPD tests/test_epd.c boards/lg_esl29_rev03.c -o $(BUILD)/host-epd
+
+$(BUILD)/host-epd-sanitize: tests/test_epd.c boards/lg_esl29_rev03.c src/epd.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -UCC2530_BOARD -DCC2530_BOARD=1 -DCC2530_CHIP_SENSE -DCC2530_EPD -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_epd.c boards/lg_esl29_rev03.c -o $(BUILD)/host-epd-sanitize
 
 $(BUILD)/host-zcl-temperature-tests: tests/test_zcl_temperature.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_temperature.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-temperature-tests
