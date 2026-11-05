@@ -64,9 +64,6 @@
     (int16_t)(((int16_t)(mv) - 3000) * 2 / 25)))
 #define ZCL_SENSOR_CENTI(sum, mv, word) ((int16_t)(ZCL_SENSOR_BASE(word) + BOARD_CHIP_TEMPERATURE_OFFSET + \
     (int16_t)(((int32_t)ZCL_SENSOR_COUNTS(sum, mv, word) * 711 + 128) >> 8)))
-/* ZCL Device Temperature Configuration CurrentTemperature, whole degrees C. */
-#define ZCL_SENSOR_DEGREES(centi) ((int16_t)(centi) == ZCL_SENSOR_INVALID_TEMPERATURE ? \
-    ZCL_SENSOR_INVALID_TEMPERATURE : (int16_t)(((int16_t)(centi) + ((int16_t)(centi) < 0 ? -50 : 50)) / 100))
 /* BatteryVoltage (100 mV) and BatteryPercentageRemaining (0.5 %); 0 mV is invalid. */
 #define ZCL_SENSOR_DECIVOLTS(mv) ((uint8_t)(!(mv) ? 0xffu : ((uint16_t)(mv) + 50u) / 100u))
 #define ZCL_SENSOR_HALF_PERCENT(mv) ((uint8_t)(!(mv) ? 0xffu : \
@@ -75,7 +72,7 @@
 
 /* CC2530_SHT3X (needs CC2530_CHIP_SENSE; opt-in variant only) moves
  * Temperature and Relative Humidity MeasuredValue to an SHT3x on bit-banged
- * I2C (board.h pins); the die temperature stays in Device Temperature. The
+ * I2C (board.h pins); the die temperature is then only measured, not served. The
  * SHT3x-DIS datasheet: single shot without clock stretching, high
  * repeatability, command 0x2400; a read header is NACKed until the result is
  * ready; 6 result octets T MSB, LSB, CRC, RH MSB, LSB, CRC; CRC-8 polynomial

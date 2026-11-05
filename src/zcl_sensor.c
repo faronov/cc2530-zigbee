@@ -18,7 +18,6 @@
 #define SILENT 0xfeu
 #define MODEL 6u
 #define IDENTIFY 4u
-#define DEVICE 18u
 
 typedef char zcl_sensor_overlay[sizeof(zcl_sensor_state_t) <= sizeof(join_smoke_device.record) ? 1 : -1];
 
@@ -29,9 +28,9 @@ typedef struct {
 } zcl_attribute_t;
 
 /* Entries 0..3 are the reportable attributes, indexed like report[];
- * 4 is IdentifyTime, 5/6 the Basic strings, DEVICE the Device Temperature
- * Configuration CurrentTemperature (readable, not reportable: ZCL8 3.4.2.2),
- * the rest constants. */
+ * 4 is IdentifyTime, 5/6 the Basic strings, the rest constants. Device
+ * Temperature Configuration 0002 is not served: its CurrentTemperature is
+ * whole degrees C, Temperature Measurement 0402 already carries the reading. */
 static const MCU_CODE zcl_attribute_t attributes[] = {
     { 0x0402u, 0x0000u, 0x29u, 0 }, { 0x0405u, 0x0000u, 0x21u, 0 },
     { 0x0001u, 0x0020u, 0x20u, 0 }, { 0x0001u, 0x0021u, 0x20u, 0 },
@@ -40,10 +39,8 @@ static const MCU_CODE zcl_attribute_t attributes[] = {
     { 0x0000u, 0x0000u, 0x20u, 8 }, { 0x0000u, 0x0007u, 0x30u, 3 }, { 0x0000u, 0xfffdu, 0x21u, 3 },
     { 0x0001u, 0xfffdu, 0x21u, 2 }, { 0x0003u, 0xfffdu, 0x21u, 2 },
     { 0x0402u, 0x0001u, 0x29u, 2100 }, { 0x0402u, 0x0002u, 0x29u, 2500 }, { 0x0402u, 0xfffdu, 0x21u, 3 },
-    { 0x0405u, 0x0001u, 0x21u, 4500 }, { 0x0405u, 0x0002u, 0x21u, 5500 }, { 0x0405u, 0xfffdu, 0x21u, 2 },
-    { 0x0002u, 0x0000u, 0x29u, 0 }, { 0x0002u, 0xfffdu, 0x21u, 1 }
+    { 0x0405u, 0x0001u, 0x21u, 4500 }, { 0x0405u, 0x0002u, 0x21u, 5500 }, { 0x0405u, 0xfffdu, 0x21u, 2 }
 };
-typedef char zcl_sensor_device_entry[DEVICE+2u == sizeof(attributes)/sizeof(attributes[0]) ? 1 : -1];
 static const MCU_CODE uint16_t defaults[ZCL_SENSOR_REPORTS][3] = {
     { 30, 300, 10 }, { 30, 300, 25 }, { 60, 3600, 1 }, { 60, 3600, 2 }
 };
@@ -250,7 +247,6 @@ static uint16_t value(uint8_t entry)
     if (!entry) return (uint16_t)centi;
     if (entry == 1u) return ZCL_SENSOR_HUMIDITY(phase);
     if (entry == IDENTIFY) return ST.identify;
-    if (entry == DEVICE) return (uint16_t)ZCL_SENSOR_DEGREES(centi);
     return attributes[entry].value;
 }
 

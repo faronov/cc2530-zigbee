@@ -115,7 +115,6 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                         for (; end > 6u; end -= 2u) {
                             cluster = (uint16_t)body[end - 2u] | ((uint16_t)body[end - 1u] << 8);
                             if (cluster == ZDO_SRV_BASIC_CLUSTER || cluster == ZDO_SRV_POWER_CLUSTER
-                                    || cluster == ZDO_SRV_DEVICE_TEMPERATURE_CLUSTER
                                     || cluster == ZDO_SRV_IDENTIFY_CLUSTER
                                     || cluster == ZDO_SRV_TEMPERATURE_CLUSTER
                                     || cluster == ZDO_SRV_HUMIDITY_CLUSTER) simple = 1;
@@ -143,21 +142,19 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
             } else if (body[3] != local->endpoint) {
                 reply.status = ZDO_SRV_NOT_ACTIVE;
             } else {
-                staged[4] = 20; staged[5] = local->endpoint;
+                staged[4] = 18; staged[5] = local->endpoint;
                 staged[6] = (uint8_t)local->profile; staged[7] = (uint8_t)(local->profile >> 8);
                 staged[8] = (uint8_t)ZDO_SRV_DEVICE; staged[9] = (uint8_t)(ZDO_SRV_DEVICE >> 8);
                 staged[10] = ZDO_SRV_DEVICE_VERSION; staged[11] = ZDO_SRV_INPUT_CLUSTERS;
                 staged[12] = (uint8_t)ZDO_SRV_BASIC_CLUSTER; staged[13] = (uint8_t)(ZDO_SRV_BASIC_CLUSTER >> 8);
                 staged[14] = (uint8_t)ZDO_SRV_POWER_CLUSTER; staged[15] = (uint8_t)(ZDO_SRV_POWER_CLUSTER >> 8);
-                staged[16] = (uint8_t)ZDO_SRV_DEVICE_TEMPERATURE_CLUSTER;
-                staged[17] = (uint8_t)(ZDO_SRV_DEVICE_TEMPERATURE_CLUSTER >> 8);
-                staged[18] = (uint8_t)ZDO_SRV_IDENTIFY_CLUSTER;
-                staged[19] = (uint8_t)(ZDO_SRV_IDENTIFY_CLUSTER >> 8);
-                staged[20] = (uint8_t)ZDO_SRV_TEMPERATURE_CLUSTER;
-                staged[21] = (uint8_t)(ZDO_SRV_TEMPERATURE_CLUSTER >> 8);
-                staged[22] = (uint8_t)ZDO_SRV_HUMIDITY_CLUSTER;
-                staged[23] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
-                staged[24] = 0; size = 25;
+                staged[16] = (uint8_t)ZDO_SRV_IDENTIFY_CLUSTER;
+                staged[17] = (uint8_t)(ZDO_SRV_IDENTIFY_CLUSTER >> 8);
+                staged[18] = (uint8_t)ZDO_SRV_TEMPERATURE_CLUSTER;
+                staged[19] = (uint8_t)(ZDO_SRV_TEMPERATURE_CLUSTER >> 8);
+                staged[20] = (uint8_t)ZDO_SRV_HUMIDITY_CLUSTER;
+                staged[21] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
+                staged[22] = 0; size = 23;
             }
             staged[1] = reply.status;
         } else {
