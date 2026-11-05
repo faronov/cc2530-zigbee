@@ -32,18 +32,38 @@
  * 1 /0.1 V, uncalibrated (board offset). Sums of the samples feed the
  * macros below. A conversion that misses its poll bound or reads negative
  * publishes invalid values: MeasuredValue 8000, BatteryVoltage and
- * BatteryPercentageRemaining FF, CurrentTemperature 8000. */
+ * BatteryPercentageRemaining FF, CurrentTemperature 8000.
+ * EXPERIMENTAL per-chip reference (CC2530_CHIP_FACTORY): the information
+ * page holds undocumented per-chip production data; the big-endian word at
+ * ZCL_SENSOR_FACTORY reads like a left-aligned ADCH:ADCL result (two chips:
+ * 1440 and 1447 as 12 bits). It is ASSUMED to be the die sensor at
+ * ZCL_SENSOR_FACTORY_CENTI and 3 V and replaces the 1480 nominal when its
+ * 12 bits lie in 1380..1580; otherwise (erased 0xFFFF) the nominal stays. */
 #define ZCL_SENSOR_MEASURE 10u
 #define ZCL_SENSOR_TEMPERATURE_SAMPLES 8u
 #define ZCL_SENSOR_VDD_SAMPLES 4u
 #define ZCL_SENSOR_INVALID_TEMPERATURE ((int16_t)-0x8000)
+#define ZCL_SENSOR_FACTORY 0x781eu
+#ifndef ZCL_SENSOR_FACTORY_CENTI
+#define ZCL_SENSOR_FACTORY_CENTI 2500
+#endif
+/* Reference of an 8-sample sum: 8*1480 nominal, or 8*(word>>4) = word>>1
+ * (keeping the two extra bits) for a plausible factory word. */
+#define ZCL_SENSOR_NOMINAL 11840
+#define ZCL_SENSOR_FACTORY_VALID(word) ((uint16_t)(word) >= (uint16_t)(1380u << 4) && \
+    (uint16_t)(word) < (uint16_t)(1581u << 4))
+#define ZCL_SENSOR_REFERENCE(word) ((int16_t)(ZCL_SENSOR_FACTORY_VALID(word) ? \
+    (int16_t)((uint16_t)(word) >> 1) : ZCL_SENSOR_NOMINAL))
+#define ZCL_SENSOR_BASE(word) ((int16_t)(ZCL_SENSOR_FACTORY_VALID(word) ? \
+    ZCL_SENSOR_FACTORY_CENTI : 2500))
 /* mV = sum/4 * 3 * 1150 / 2048 */
 #define ZCL_SENSOR_MILLIVOLTS(sum) ((uint16_t)(((uint32_t)(sum) * 3450u + 4096u) >> 13))
-/* centi-C = 2500 + (sum - 8*1480 - 8*(mV-3000)/100) * 100/36, 25/9 ~ 711/256 */
-#define ZCL_SENSOR_COUNTS(sum, mv) ((int16_t)((int16_t)(sum) - 11840 - \
+/* centi-C = base + (sum - reference - 8*(mV-3000)/100) * 100/36, 25/9 ~ 711/256;
+ * reference 8*1480 and base 2500 without a factory word (word 0xFFFF). */
+#define ZCL_SENSOR_COUNTS(sum, mv, word) ((int16_t)((int16_t)(sum) - ZCL_SENSOR_REFERENCE(word) - \
     (int16_t)(((int16_t)(mv) - 3000) * 2 / 25)))
-#define ZCL_SENSOR_CENTI(sum, mv) ((int16_t)(2500 + BOARD_CHIP_TEMPERATURE_OFFSET + \
-    (int16_t)(((int32_t)ZCL_SENSOR_COUNTS(sum, mv) * 711 + 128) >> 8)))
+#define ZCL_SENSOR_CENTI(sum, mv, word) ((int16_t)(ZCL_SENSOR_BASE(word) + BOARD_CHIP_TEMPERATURE_OFFSET + \
+    (int16_t)(((int32_t)ZCL_SENSOR_COUNTS(sum, mv, word) * 711 + 128) >> 8)))
 /* ZCL Device Temperature Configuration CurrentTemperature, whole degrees C. */
 #define ZCL_SENSOR_DEGREES(centi) ((int16_t)(centi) == ZCL_SENSOR_INVALID_TEMPERATURE ? \
     ZCL_SENSOR_INVALID_TEMPERATURE : (int16_t)(((int16_t)(centi) + ((int16_t)(centi) < 0 ? -50 : 50)) / 100))
@@ -105,6 +125,10 @@ typedef struct {
     int16_t temperature;
     uint16_t millivolts;
     uint8_t measured;
+    /* Last raw sensor sum (negative on failure) and the factory word used
+     * (0xFFFF without CC2530_CHIP_FACTORY), for calibration diagnostics. */
+    int16_t sum;
+    uint16_t factory;
 #if defined(CC2530_SHT3X)
     /* Last SHT3x temperature (0.01 C) and humidity (0.01 %RH); bus records
      * SCL held low (bounded wait) during the last measurement period. */

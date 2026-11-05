@@ -32,6 +32,13 @@ static struct {
     uint8_t tr0, atest, stuck, fresh;
     unsigned conversions, vdd, temperature, unsensed, overlapped, foreign;
 } adc;
+/* Per-chip sensor bias (counts at 25 C, 3 V) and the information-page word
+ * at ZCL_SENSOR_FACTORY (big endian); reads counts loads of that word. */
+static struct {
+    long bias;
+    uint16_t word;
+    unsigned reads;
+} chip_page = { 0, 0xffffu, 0 };
 
 static void convert_model(uint8_t command)
 {
@@ -44,7 +51,7 @@ static void convert_model(uint8_t command)
     } else if (command == 0x3eu) {
         adc.temperature++;
         if (adc.tr0 != 1u || adc.atest != 1u) { adc.unsensed++; code = 0; }
-        else code = 1480 + (adc.centi-2500)*45/1000 + (adc.millivolts-3000)/100;
+        else code = 1480 + chip_page.bias + (adc.centi-2500)*45/1000 + (adc.millivolts-3000)/100;
         /* Tests use whole-count temperatures: 25 C plus multiples of 2 C. */
         CHECK((adc.centi-2500) % 200 == 0 && (adc.millivolts-3000) % 100 == 0);
     } else {
@@ -184,6 +191,12 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
 
 uint8_t host_mmio_xload(uint16_t address)
 {
+#if defined(CC2530_CHIP_FACTORY)
+    if (address == ZCL_SENSOR_FACTORY || address == ZCL_SENSOR_FACTORY+1u) {
+        chip_page.reads++;
+        return address == ZCL_SENSOR_FACTORY ? (uint8_t)(chip_page.word >> 8) : (uint8_t)chip_page.word;
+    }
+#endif
     CHECK(address == 0x61bdu);
     return adc.atest;
 }
@@ -488,13 +501,22 @@ static void values(void)
     /* Chip sense conversions: 1781 per sample is 3.0 V on AVDD5/3. */
     CHECK(ZCL_SENSOR_MILLIVOLTS(0) == 0 && ZCL_SENSOR_MILLIVOLTS(4*1781) == 3000);
     CHECK(ZCL_SENSOR_MILLIVOLTS(4*2047) == 3448 && ZCL_SENSOR_MILLIVOLTS(4*1187) == 2000);
-    CHECK(ZCL_SENSOR_COUNTS(11840, 3000) == 0 && ZCL_SENSOR_COUNTS(11848, 3100) == 0);
-    CHECK(ZCL_SENSOR_COUNTS(11840, 2000) == 80);
-    CHECK(ZCL_SENSOR_CENTI(11840, 3000) == 2500 + BOARD_CHIP_TEMPERATURE_OFFSET);
-    CHECK(ZCL_SENSOR_CENTI(11840+36*10, 3000) == 3500 + BOARD_CHIP_TEMPERATURE_OFFSET);
+    CHECK(ZCL_SENSOR_COUNTS(11840, 3000, 0xffffu) == 0 && ZCL_SENSOR_COUNTS(11848, 3100, 0xffffu) == 0);
+    CHECK(ZCL_SENSOR_COUNTS(11840, 2000, 0xffffu) == 80);
+    CHECK(ZCL_SENSOR_CENTI(11840, 3000, 0xffffu) == 2500 + BOARD_CHIP_TEMPERATURE_OFFSET);
+    CHECK(ZCL_SENSOR_CENTI(11840+36*10, 3000, 0xffffu) == 3500 + BOARD_CHIP_TEMPERATURE_OFFSET);
     /* 711/256 approximates 25/9 within 0.02 %. */
-    CHECK(abs(ZCL_SENSOR_CENTI(11840-36*35, 3000) - (-1000 + BOARD_CHIP_TEMPERATURE_OFFSET)) <= 1);
-    CHECK(abs(ZCL_SENSOR_CENTI(11840+36*60, 3000) - (8500 + BOARD_CHIP_TEMPERATURE_OFFSET)) <= 2);
+    CHECK(abs(ZCL_SENSOR_CENTI(11840-36*35, 3000, 0xffffu) - (-1000 + BOARD_CHIP_TEMPERATURE_OFFSET)) <= 1);
+    CHECK(abs(ZCL_SENSOR_CENTI(11840+36*60, 3000, 0xffffu) - (8500 + BOARD_CHIP_TEMPERATURE_OFFSET)) <= 2);
+    /* Factory word: 12 bits 1380..1580 replace the 1480 nominal, keeping the
+     * two extra bits (word>>1 per 8 samples); others are ignored. */
+    CHECK(!ZCL_SENSOR_FACTORY_VALID(0xffffu) && !ZCL_SENSOR_FACTORY_VALID(0) && !ZCL_SENSOR_FACTORY_VALID(0x563cu));
+    CHECK(ZCL_SENSOR_FACTORY_VALID(0x5640u) && ZCL_SENSOR_FACTORY_VALID(0x62ccu) && !ZCL_SENSOR_FACTORY_VALID(0x62d0u));
+    CHECK(ZCL_SENSOR_REFERENCE(0xffffu) == 11840 && ZCL_SENSOR_REFERENCE(0x5a08u) == 11524);
+    CHECK(ZCL_SENSOR_BASE(0xffffu) == 2500 && ZCL_SENSOR_BASE(0x5a08u) == ZCL_SENSOR_FACTORY_CENTI);
+    CHECK(ZCL_SENSOR_CENTI(11524, 3000, 0x5a08u) == ZCL_SENSOR_FACTORY_CENTI + BOARD_CHIP_TEMPERATURE_OFFSET);
+    CHECK(ZCL_SENSOR_CENTI(11524+36*10, 3000, 0x5a08u) == ZCL_SENSOR_FACTORY_CENTI + 1000 + BOARD_CHIP_TEMPERATURE_OFFSET);
+    CHECK(ZCL_SENSOR_COUNTS(11532, 3100, 0x5a08u) == 0 && ZCL_SENSOR_COUNTS(11522, 3000, 0x5a80u) == -62);
     CHECK(ZCL_SENSOR_DEGREES(2549) == 25 && ZCL_SENSOR_DEGREES(2550) == 26 && ZCL_SENSOR_DEGREES(0) == 0);
     CHECK(ZCL_SENSOR_DEGREES(-2549) == -25 && ZCL_SENSOR_DEGREES(-2550) == -26 && ZCL_SENSOR_DEGREES(-49) == 0);
     CHECK(ZCL_SENSOR_DEGREES(ZCL_SENSOR_INVALID_TEMPERATURE) == ZCL_SENSOR_INVALID_TEMPERATURE);
@@ -1052,6 +1074,23 @@ static void chip(void)
 }
 #endif
 
+#if defined(CC2530_CHIP_FACTORY)
+/* chip() ran with a biased sensor and its factory word: every measurement
+ * loaded the word and read true temperatures. An erased word falls back to
+ * the nominal and reads the bias; a valid word removes it again. */
+static void factory(void)
+{
+    CHECK(chip_page.reads && !(chip_page.reads & 1u) && ST.factory == 0x5a00u);
+    adc_set(3000, 2500, 0); chip_page.word = 0xffffu;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(ST.factory == 0xffffu && ST.sum == 8*1440 && abs(ST.temperature - (2500 - 889)) <= 3);
+    adc_set(3200, 4500, 0); chip_page.word = 0x5a00u;
+    CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
+    CHECK(ST.factory == 0x5a00u && abs(ST.millivolts - 3200) <= 2 && abs(ST.temperature - 4500) <= 3);
+    chip_page.bias = 0; chip_page.word = 0xffffu;
+}
+#endif
+
 #if defined(CC2530_SHT3X)
 /* extra: STOPs without a START (the init bus clear). */
 static void bus_idle(unsigned extra)
@@ -1158,16 +1197,26 @@ int main(int argc, char **argv)
         return 0;
     }
 #if defined(CC2530_CHIP_SENSE)
+#if defined(CC2530_CHIP_FACTORY)
+    /* A chip reading 40 counts (~8.9 C) below nominal, with its factory word. */
+    chip_page.bias = -40; chip_page.word = (uint16_t)((1480-40) << 4);
+#endif
     sensed(3000, 2500, 0);
 #if defined(CC2530_SHT3X)
     sht_set(2500, 5000, 1);
 #endif
     management_bind(); read_reporting(); values(); defaults_and_discards(); identify(); configure(); bind();
     chip();
+#if defined(CC2530_CHIP_FACTORY)
+    factory();
+#endif
 #if defined(CC2530_SHT3X)
     sht3x();
     printf("ZCL sensor chip sense + SHT3x: %lu checks PASS; modeled ADC and bit-level SHT3x I2C, "
            "CRC, lag, NACK/stuck/CRC failures (host only).\n", checks);
+#elif defined(CC2530_CHIP_FACTORY)
+    printf("ZCL sensor chip sense + factory reference: %lu checks PASS; modeled biased die "
+           "sensor, information-page word and erased fallback (host only).\n", checks);
 #else
     printf("ZCL sensor chip sense: %lu checks PASS; modeled ADC VDD and die temperature, "
            "cadence, invalid values (host only).\n", checks);
