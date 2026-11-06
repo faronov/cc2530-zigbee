@@ -19,6 +19,9 @@ typedef struct {
     uint8_t channel, update_id;
 } security_keys_config_t;
 
+#if defined(CC2530_ROUTER_JOIN) && !defined(CC2530_PARENT_RECOVERY)
+#error Router-parent joining requires the known-router profile.
+#endif
 #if defined(CC2530_REPLAY_POLICY_C) && !defined(CC2530_PARENT_RECOVERY)
 #error Policy C requires the experimental known-router profile.
 #endif
@@ -181,6 +184,13 @@ security_keys_result_t security_keys_remember_parent(
  * This does not change the durable admitted parent or application readiness. */
 security_keys_result_t security_keys_select_parent(
     uint8_t router, uint8_t update_id, uint16_t nv_polls) SECURITY_FAR;
+#endif
+#if defined(CC2530_ROUTER_JOIN)
+/* Initial join through a router parent: while ASSOCIATED (TC = association
+ * source placeholder) record the router as the admitted parent. The unsecured
+ * relayed Transport Key from that router then binds the TC to the APS extended
+ * nonce source (also the payload source); any other identity is refused. */
+security_keys_result_t security_keys_router_parent(uint16_t router_address, uint16_t nv_polls) SECURITY_FAR;
 #endif
 
 #endif

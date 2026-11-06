@@ -29,6 +29,39 @@ this is not full primary/secondary steering or router-parent support.
 Neither an open beacon nor the publicly shared initial key proves that the
 network belongs to the intended HA installation.
 
+### Router-parent initial join (`CC2530_ROUTER_JOIN`)
+
+`CC2530_ROUTER_JOIN` (requires `CC2530_PARENT_RECOVERY` and
+`CC2530_DEFAULT_TC_KEY`; enabled only in the `flower` variant) lets a fresh
+join use a permitting router as parent. All other images keep the
+direct-coordinator policy above.
+
+- Discovery: the fresh scan is unfiltered. When the four-entry collector is
+  full, an eligible beacon replaces the weakest entry only when its score
+  (raw RSSI, +10 for the PAN coordinator) is strictly higher, so there is no
+  overflow. Any eligible beacon with a different Extended PAN marks the table
+  mixed, even when it is not kept. A mixed table fails with `NO_PARENT`
+  without the lost-beacon rescan. The best score gets link cost 1 and the
+  others 3. Recovery tables stay parent-filtered and still report `FULL`.
+- Unbound router state: after association through a router (short address not
+  0000), `security_keys_router_parent()` stages the K3 router record with the
+  `UNBOUND` flag and router IEEE = configured TC placeholder. While unbound:
+  - only frames with NWK source = the parent short are accepted;
+  - the relayed Transport Key must use an extended APS nonce whose source is
+    not this node or the parent, and must match the command's source field;
+  - the first network key binds that source as the TC IEEE and clears
+    `UNBOUND`.
+  After that, Request Key / Verify / Confirm run through the router exactly as
+  in parent recovery.
+- Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
+  still commits the replay state with a full NV save.
+- Host coverage: `host-router-join-tests` (relayed Transport Key, TC learning,
+  rejects for coordinator-sourced, short-nonce, own/parent source, mismatched
+  source and replays, then the full exchange to VERIFIED),
+  `host-router-candidates-tests` (eviction, coordinator bonus, mixed, filtered
+  overflow) and `make test-join-smoke-host JOIN_SMOKE_ROUTER_JOIN=1`.
+  Real EZSP relay formatting is not yet proved on hardware.
+
 After contextual Association Response and genuine take/release, the key owner
 is provisioned with the discovered network and the observed source IEEE.
 A short-selected coordinator still reports `SOURCE_UNBOUND`: learning an
@@ -1176,9 +1209,10 @@ hardware-qualified.
   measurement. Other boards keep `0xF8`, and the LG image is byte-identical.
 - Hardware join status: with the threshold fixed, all channels are scanned and
   the board receives several router beacons from the target PAN on channel 15
-  (raw RSSI −6…+14). It did not receive the coordinator's beacon, and the
-  join policy here accepts only a direct coordinator parent, so steering still
-  ends with `BDB_JOIN_NO_PARENT` at that location.
+  (raw RSSI −6…+14). It did not receive the coordinator's beacon, so the
+  direct-coordinator policy ended with `BDB_JOIN_NO_PARENT`. The variant now
+  enables [router-parent join](#router-parent-initial-join-cc2530_router_join);
+  its hardware join is still to be tested.
 
 Host coverage: `host-zcl-flower` (and its sanitizer build) models the ADC and
 Timer 3. It covers conversions, descriptors, the cycle across the 32-bit wrap,

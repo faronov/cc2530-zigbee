@@ -5,6 +5,9 @@
 #include "sdcc_volatile.h"
 #include <stddef.h>
 #include <string.h>
+#if defined(CC2530_ROUTER_JOIN) && !defined(CC2530_DEFAULT_TC_KEY)
+#error Router-parent joining is a default-TC-key fresh-join policy.
+#endif
 #if defined(CC2530_RX_DIAG)
 #include "cc2530_rx_diag.h"
 #endif
@@ -119,7 +122,30 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
     work.policy.minimum_known = 1; work.policy.minimum_update_id = bdb_join_keys.config.update_id;
 #else
     if (ctx->work.scan.overflow || ctx->work.scan.unscanned) return BDB_JOIN_NO_PARENT;
+#if defined(CC2530_ROUTER_JOIN)
+    /* A nonzero mask also blocks the lost-beacon rescan: ambiguity is final. */
+    if (ctx->work.scan.candidates.mixed) { work.policy.potential_mask = 1; return BDB_JOIN_NO_PARENT; }
 #endif
+#endif
+#if defined(CC2530_DEFAULT_TC_KEY) && defined(CC2530_ROUTER_JOIN)
+    {
+        /* One network only (mixed refused above): every open coordinator or
+         * router is potential; the strongest wins, the PAN coordinator +10. */
+        uint8_t best = 0;
+        int16_t score, top = -32768;
+        for (i = 0; i < ctx->work.scan.candidates.count; i++) {
+            const nwk_candidate_t * SDCC_VOLATILE c = &ctx->work.scan.candidates.entries[i];
+            score = nwk_candidates_score(c);
+            if (score > top) { top = score; best = i; }
+            work.policy.potential_mask |= (uint8_t)(1u << i);
+        }
+        for (i = 0; i < ctx->work.scan.candidates.count; i++)
+            work.policy.link_cost[i] = i == best ? 1 : 3;
+        if (ctx->work.scan.candidates.count)
+            memcpy(work.policy.extended_pan_id,
+                   ctx->work.scan.candidates.entries[0].network.extended_pan_id, 8);
+    }
+#else
     for (i = 0; i < ctx->work.scan.candidates.count; i++) {
         const nwk_candidate_t * SDCC_VOLATILE c = &ctx->work.scan.candidates.entries[i];
         work.policy.link_cost[i] = ctx->config.link_cost;
@@ -139,6 +165,7 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
             !memcmp(c->coordinator, bdb_join_keys.config.tc_ieee, 8)) work.policy.potential_mask |= 1u << i;
 #endif
     }
+#endif
     if (ctx->work.scan.reason != MAC_SCAN_FINISHED ||
         nwk_parent_select(&ctx->work.scan.candidates, &work.policy, &ctx->parent) != NWK_PARENT_OK)
         return BDB_JOIN_NO_PARENT;
@@ -425,8 +452,11 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                 ctx->workspace = BDB_JOIN_WORK_NONE;
                 if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK) return BDB_JOIN_STATE;
                 ctx->workspace = BDB_JOIN_WORK_SCAN;
-                if (mac_scan_start(&ctx->work.scan, ctx->owner, &ctx->config.scan, now) == MAC_SCAN_OK &&
-                    nwk_candidates_parent(&ctx->work.scan.candidates, 0) == NWK_CANDIDATES_OK)
+                if (mac_scan_start(&ctx->work.scan, ctx->owner, &ctx->config.scan, now) == MAC_SCAN_OK
+#if !defined(CC2530_ROUTER_JOIN)
+                    && nwk_candidates_parent(&ctx->work.scan.candidates, 0) == NWK_CANDIDATES_OK
+#endif
+                    )
                     return BDB_JOIN_OK;
                 result = BDB_JOIN_SCAN_FAILED;
             }
@@ -522,6 +552,14 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                 else
 #endif
                 if (security_keys_associate(ctx->record.association.short_address, ctx->config.transport.nv_polls) != SECURITY_KEYS_OK ||
+#if defined(CC2530_ROUTER_JOIN)
+                    /* A router parent stays the admitted relay until the TC is known. */
+                    (!ctx->recovery && ctx->parent.candidate.address_mode == MAC_ADDRESS_SHORT &&
+                     (ctx->parent.candidate.coordinator[0] || ctx->parent.candidate.coordinator[1]) &&
+                     security_keys_router_parent((uint16_t)(ctx->parent.candidate.coordinator[0] |
+                         ((uint16_t)ctx->parent.candidate.coordinator[1] << 8)),
+                         ctx->config.transport.nv_polls) != SECURITY_KEYS_OK) ||
+#endif
                     security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK)
                     pending = 2;
                 else if (bdb_join_keys.phase != SECURITY_KEYS_ASSOCIATED ||
