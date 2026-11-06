@@ -1,7 +1,7 @@
 {
   "repository": "faronov/llvm-project",
-  "revision": "ac1712447bf906daddba44f79e586173a045aa1f",
-  "status": "UNIFY-01 plus upstream eeef1bec bit-toggle fix; development candidate; FULL NOT RUN",
+  "revision": "ffada1d1b4198787559f99fe0ed448c32c46d2c7",
+  "status": "UNIFY-01 plus upstream eeef1bec bit-toggle fix, the ACC-bit branch A-use fix and the same-bank bank-call trampoline bypass; development candidate; FULL NOT RUN",
   "runtime": "llvm/lib/Target/MCS51/mcs51-runtime.c",
   "F1a_F1b_F5": "EXCLUDED",
   "F2": "OPEN",

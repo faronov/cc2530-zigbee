@@ -2063,24 +2063,131 @@ authorization.
 H2 is unchanged from §23. The offline RX-path investigation plan is in
 LLVM_DEVELOPMENT.
 
-## 25. Open defect: ACC-bit branch without an implicit use of A
+## 25. Fixed defect: ACC-bit branch without an implicit use of A
 
-Found in MCUEMU while bringing up the opt-in SHT3x driver. The compiler is unchanged; the
-firmware works around it in source.
+Found in MCUEMU while bringing up the opt-in SHT3x driver. Fixed in LLVM
+`d1456a1d05933372fd09a2a15496c7d55bfa68a7` (tag `mcs51-acc-bit-branch-use-20261104`),
+now the pinned compiler.
 
-- Mechanism: a post-RA peephole in `MCS51TargetMachine.cpp` (`Testing one bit after an AND`)
-  rewrites `mov a, rN; anl a, #bit; jz/jnz` as `mov a, rN; jnb/jb ACC.n`. The new `JB`/`JNB`
-  carries only a bit address, so it does not record its use of A. Branch folding then
-  hoisted the code that both select arms share (`clr c; rlc a; ... xrl a, #0x31`) above the
-  branch. The test then read the shifted value: bit 6 of the original byte, not bit 7.
+- Mechanism (from `-print-after-all`): an `i8` test `c & 0x80` becomes a signed compare. Its
+  custom inserter in `MCS51ISelLowering.cpp` emitted `MOV_A_RN rN; JNB ACC.7` without an
+  implicit use of A on the `JNB`. The `MOV` was then a dead def, and `dead-mi-elimination`
+  deleted it. The branch tested whatever A last held: here `xrl a, #0x31` of the shifted
+  byte, so bit 6 of the original byte instead of bit 7. An earlier version of this section
+  blamed the post-RA peephole and branch folding; the pass dump shows the `MOV` was already
+  gone before register allocation.
 - Trigger: `c = c & 0x80 ? (uint8_t)(c << 1 ^ 0x31) : (uint8_t)(c << 1)`, the CRC-8 step.
   Each SHT3x CRC failed on the device, while the host build passed.
-- Workaround: the CRC step is branch-free (`(c << 1) ^ (0x31 & (0 - (c >> 7)))`). That
-  compiles to `mov a, r4; mov c, ACC.7; clr a; subb a, #0`, and MCUEMU reads the modeled
-  sensor correctly.
+- Fix: the inserter adds the implicit use of A. `insertBranch` restores it for `JB`/`JNB`/`JBC`
+  on `E0`–`E7`, since `analyzeBranch` drops implicit operands. The post-RA peephole that forms
+  `JB`/`JNB` from `anl a, #bit; jz/jnz` also adds it. Regression:
+  `clang/test/MCS51/acc-bit-branch-use.c` with `-verify-machineinstrs`. It fails on the
+  previous pin.
+- Evidence: all 18 images of the LG join variants, bringup and timebase fixture are
+  byte-identical to the previous pin, so the defect was not live in main. The old ternary CRC
+  built with the fixed compiler reads the modeled sensor in MCUEMU (21.50 °C, 47.00 %RH).
+  The tests pass: `CodeGen/8051` 168/168 and `clang/test/MCS51` with `MC/MCS51` 17/17. The
+  lld MCS51 tests pass 11/12; the remaining one is the known `mcs51-address-space-overlap.s`
+  exclusion.
+- The firmware keeps the branch-free CRC step (`(c << 1) ^ (0x31 & (0 - (c >> 7)))`). It
+  compiles to `mov a, r4; mov c, ACC.7; clr a; subb a, #0`.
 - Audit of the `autonomous-pm2-sht3x` image: there are 20 `jb`/`jnb` on ACC bits (224–231).
   In 19 of them, the instruction before the branch is the `mov a, rN` that loads the tested
-  byte. The remaining one is `movx a, @r1; mov r4, a`, which leaves A unchanged. Only the old
-  CRC step was affected.
-- Compiler fix (not applied): add an implicit use of `A` to the generated `JB`/`JNB` for
-  bit addresses `E0`–`E7`, or run the peephole after branch folding.
+  byte. The remaining one is `movx a, @r1; mov r4, a`, which leaves A unchanged.
+
+## 26. Same-bank bank-call trampoline bypass
+
+The LG join images were at 120–127/128 bytes of static stack, which left no room for new
+features. Auto-banked functions are placed by the linker, so the compiler calls each one
+through its `__mcs51_bankcall_*` trampoline even when the caller ends up in the same bank.
+That costs 3 bytes of stack per hop on the worst path (the trampoline saves the mapping and
+returns through the bank switch). Pinned LLVM
+`ffada1d1b4198787559f99fe0ed448c32c46d2c7` (tag `mcs51-same-bank-thunk-bypass-20261106`,
+on top of §25) removes those hops.
+
+- AsmPrinter: a strong trampoline goes into `.text.autobankthunks.direct.N` only when the
+  target is auto-banked, not variadic and has no fixed stack objects (no stack arguments).
+  Those are the only trampolines whose callee entry does not depend on the 3-byte bias.
+- lld: an `LCALL`/`LJMP` (`R_8051_16_BE`, addend 0) from a banked code section to such a
+  trampoline is relocated to the trampoline's own target when that target is in the
+  caller's bank. A local trampoline is referenced through its section symbol, so the check
+  accepts the section symbol as well as the `__mcs51_bankcall_` name. Calls from common
+  code, to another bank and to stack-argument callees keep the trampoline.
+- Regressions: `lld/test/ELF/mcs51-same-bank-thunk-bypass.s` (new) and
+  `llvm/test/CodeGen/8051/cc2530-auto-bank.c` (link checks for a direct same-bank call and
+  a trampoline to another bank). `CodeGen/8051`, `MC/8051`, `clang/test/MCS51` and the
+  lld MCS51 tests pass, except the known `mcs51-address-space-overlap.s` exclusion.
+- Code size and layout are unchanged: only `LCALL` operands change. In the
+  `autonomous-pm2-epd-factory` image 180 call sites (360 bytes) differ and nothing else.
+
+Static stack demand (`stack_analysis`), previous pin → this pin, all images PASS admission
+with identical CODE, common and bank7 free space:
+
+| LG join variant | Stack |
+| --- | --- |
+| production, rx-diag, parent-recovery | 120 → 108 |
+| parent-recovery-policy-c | 120 → 114 |
+| autonomous, autonomous-pm2 | 127 → 121 |
+| autonomous-pm2-sht3x | 127 → 118 |
+| autonomous-pm2-epd-factory (`epaper-uc8151` stack) | 127 → 118 |
+
+The bringup and timebase fixtures also build and pass. The remaining worst path still goes
+through `ccm_star_crypt`, which takes stack arguments and keeps its trampoline.
+
+Runtime evidence for `autonomous-pm2-epd-factory`, built from the same source with both
+compilers:
+- MCUEMU, 126 s simulated each: both reach READY with one member, about 459 sleeps, no
+  faults. The stack high-water mark falls from 0xE6 to 0xDD, so the observed depth falls
+  from 103 to 94 bytes.
+- H2 HIL LH29 (HEX `fd475f70…`, identical with this pin and the intermediate build): fresh
+  join, interview and reads, leave held while permit is closed, rejoin when it reopens,
+  steady and idle windows all completed. Final state: phase READY, BDB phase 13, member,
+  920 sleeps, no sleep failure, two e-paper refreshes without failure, SP 0x8A as in LH28.
+  Five idle windows match LH28 (13–14 sleeps and about 58.6 s asleep per minute, RX on
+  1.1–1.7 %). The script's verdict is FAIL only because it still reads Device Temperature
+  (0x0002), which this image no longer has. Four steady 0x0402 reads took 0.5–3.7 s and one
+  took 34.9 s; LH27/LH28 stayed under 2 s. The single outlier was not explained (the HA log
+  had already rotated).
+- SMOKE on this pin (production variant): PASS 16/16 in 274 s. `check_repository` and the
+  `tools/llvm` unit tests pass.
+
+## 27. Hot-path helpers in common code
+
+After §26 the worst main-loop path still crossed banks 17 times (3 bytes each). A call into
+common code needs no trampoline, so moving small leaf helpers from that path into common
+removes those hops. A greedy pass over the stack model, ranked by stack saved per byte of
+code, picked eight functions marked `MCU_COMMON_CODE`: `timebase_deadline_after`,
+`timebase_expired`, the AES `sample` poll, `ccm_star.c` `encrypt`/`flush`/`counter`,
+`mac_link_child_workspace.c` `edge` and the autonomous `post`. Total size is about 2.2 KB.
+That much bank space is freed, so total CODE does not grow; it shrinks by 30–60 bytes
+because fewer trampolines are emitted. No source behavior changes.
+
+Static stack demand, §26 pin → this change, all images PASS admission:
+
+| LG join variant | Stack | Common used |
+| --- | --- | --- |
+| production | 108 → 105 | 19793 → 21918 |
+| rx-diag | 108 → 102 | +2.1 KB |
+| parent-recovery, parent-recovery-policy-c | 108 / 114 → 99 | +2.1 KB |
+| autonomous | 121 → 104 | +2.1 KB |
+| autonomous-pm2 | 121 → 103 | 20705 → 22940 |
+| autonomous-pm2-sht3x | 118 → 103 | 20771 → 23006 |
+| autonomous-pm2-epd-factory (`epaper-uc8151` stack) | 118 → 103 | 24875 → 27106 |
+
+The new worst path (about 89 bytes plus the ISR) runs through `ccm_star_crypt`. That
+function takes stack arguments, so its trampoline cannot be bypassed. The next greedy steps
+would save only 3–5 bytes for another 1.2–1.5 KB of common code, so they are not taken; common
+space is kept for display features.
+
+Evidence:
+- SMOKE (production): PASS 16/16. `check_repository` and the `tools/llvm` unit tests pass.
+- MCUEMU, `autonomous-pm2-epd-factory` A/B (same source, with and without this change): both
+  are READY with one member, about 398 sleeps and no faults at 111 s simulated. The stack
+  high-water mark falls from 0xDD to 0xD4, so the observed depth falls from 94 to 85 bytes.
+  The emulator backend closed at about 120 s in both runs.
+- H2 HIL LH30 (`autonomous-pm2-epd-factory` with this change merged onto the e-paper stack,
+  HEX `d06c21be…`): PASS. Fresh join, interview and read, leave held while permit is closed,
+  rejoin when it reopens, steady reads and five idle windows all completed. Final state:
+  phase READY, BDB phase 13, member, 923 sleeps, no sleep failure, two e-paper refreshes
+  without failure, SP 0x8A. The idle windows match LH29: 10–14 sleeps and 57–59 s asleep
+  per minute, RX on 0.9–1.5 %. Steady 0x0402 reads took 0.6–7.3 s.
