@@ -1165,6 +1165,20 @@ hardware-qualified.
 - Simple descriptors come from `CC2530_ZDO_DESCRIPTORS`. Reports are grouped
   per bound cluster; the Basic model is reported once after joining.
 - The interval is not persisted yet (NV is stage 4).
+- CCA threshold: `BOARD_CCA_THRESHOLD_RAW` is `0xFE` (≈ −75 dBm with the
+  datasheet RSSI offset of 73, the IEEE 802.15.4-2006 §6.9.9 maximum) instead
+  of the common `0xF8`. On the first flower v2 board the idle RSSI on
+  channel 15 was raw −9…−10 (≈ −82 dBm). Energy-only CCA with hysteresis 2
+  then reported "clear" in only 29 % of samples at `0xF8`, but 95 % at `0xFE`.
+  So every active-scan Beacon Request on channel 15 failed channel access after
+  `MAC_SCAN_BUSY_RETRIES`, the channel stayed unscanned and steering ended
+  with `BDB_JOIN_NO_PARENT`. This is a single-board, single-location
+  measurement. Other boards keep `0xF8`, and the LG image is byte-identical.
+- Hardware join status: with the threshold fixed, all channels are scanned and
+  the board receives several router beacons from the target PAN on channel 15
+  (raw RSSI −6…+14). It did not receive the coordinator's beacon, and the
+  join policy here accepts only a direct coordinator parent, so steering still
+  ends with `BDB_JOIN_NO_PARENT` at that location.
 
 Host coverage: `host-zcl-flower` (and its sanitizer build) models the ADC and
 Timer 3. It covers conversions, descriptors, the cycle across the 32-bit wrap,

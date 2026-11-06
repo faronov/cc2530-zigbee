@@ -38,6 +38,18 @@
 #define BOARD_MODEL_LENGTH 7u
 #endif
 
+/* MAC CSMA energy-only CCA threshold, raw CCACTRL0 (two's complement RSSI,
+ * about dBm+73, SWRS081B). F8 (about -81 dBm, clear below -83 with the
+ * hysteresis of two) is the TI reference value. The FlowerX E18-MS1 board idles
+ * at raw -9..-10 on channels 15-20 (debugger-measured, one board), so F8 held
+ * channel 15 busy and the beacon request never left; FE is -75 dBm, the
+ * IEEE 802.15.4-2006 6.9.9 maximum (sensitivity -85 dBm plus 10 dB). */
+#if CC2530_BOARD == BOARD_FLOWER_V2
+#define BOARD_CCA_THRESHOLD_RAW 0xfeu
+#else
+#define BOARD_CCA_THRESHOLD_RAW 0xf8u
+#endif
+
 /* CC2530_CHIP_SENSE reporting (zcl_sensor.h). BatteryPercentageRemaining is
  * linear in AVDD between EMPTY and FULL millivolts (FULL-EMPTY a multiple of
  * 200); ASSUMPTION, not a measured cell curve: 2.0 V is the CC2530 minimum
