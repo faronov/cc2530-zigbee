@@ -1146,12 +1146,22 @@ hardware-qualified.
   stage 2 and 3: their clusters are only described when detected.
 - Cycle (default 300 s, Diagnostics `FF09`, 30–3600 s): rail and excitation
   on, 50 ms warm-up (the device stays awake; PM2 stops Timer 3), then battery
-  VDD/3 ×5, light ×5 and soil ×3, rail off. `zcl_sensor_quiet()` bounds the
+  VDD/3 ×5, die temperature ×8 (one discarded), light ×5 and soil ×3, rail
+  off. `zcl_sensor_quiet()` bounds the
   sleep span (sleep reason 5 while the cycle is awake).
 - Conversions follow flower: mV = raw·0.443, Alkaline 2S percent curve,
   illuminance 10000·log10(raw)+1 (integer log, within one unit), soil from the
   battery-compensated air/water calibration. Unlike flower, a soil reading
   more than one calibrated span outside air..water is invalid (`FFFF`).
+- Chip temperature: EP1 Temperature (0x0402) is described when a BME280 is
+  present or when no external sensor is detected (a DS18B20 alone reports on
+  EP2 instead). Without a BME280 it carries the CC2530 die sensor: 14-bit
+  reading, supply-compensated by 4 counts per 100 mV around 3.0 V, 18 counts
+  per °C, referenced to 25 °C. The reference is the info-page word at `0x781E`
+  when its 12-bit value is in 1380..1580, otherwise the datasheet nominal 1480.
+  That factory word is undocumented by TI (experimental, see PR #122); the
+  read-only Diagnostics attributes `FF12` (averaged die reading) and `FF13`
+  (raw factory word) exist to check it against a reference thermometer.
 - Simple descriptors come from `CC2530_ZDO_DESCRIPTORS`. Reports are grouped
   per bound cluster; the Basic model is reported once after joining.
 - The interval is not persisted yet (NV is stage 4).

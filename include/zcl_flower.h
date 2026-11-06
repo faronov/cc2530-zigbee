@@ -7,7 +7,8 @@
  * FlowerX soil sensor application, wire-compatible with the faronov/flower
  * Zigbee2MQTT converter and ZHA quirk. Endpoint 1: Basic, Identify, Power
  * Configuration, Diagnostics (0x0B05), Soil Moisture (0x0408), Illuminance
- * and, with a BME280, Temperature, Relative Humidity and Pressure.
+ * and, with a BME280, Temperature, Relative Humidity and Pressure. Without
+ * any external sensor, Temperature on endpoint 1 is the CC2530 die sensor.
  * Endpoint 2: DS18B20 Temperature. The irrigation attributes are read-only
  * constants (irrigation disabled). RAM only: a reset restores defaults. */
 
@@ -53,12 +54,31 @@
 #define ZCL_FLOWER_AIR(raw) ((uint16_t)(((uint32_t)(raw) * 179u + 3926000u) / 1000u))
 #define ZCL_FLOWER_WATER(raw) ((uint16_t)(((uint32_t)(raw) * 146u + 2020000u) / 1000u))
 
+/* Die sensor (SWRS081B): 1480 12-bit counts at 25 C and 3 V, 4.5 per C and
+ * 1 per 100 mV; as the 14-bit averages of adc() 5920, 18 per C, 4 per 100 mV.
+ * EXPERIMENTAL, undocumented by TI: the big-endian information-page word at
+ * ZCL_FLOWER_FACTORY (left-aligned like ADCH:ADCL) is assumed to be this
+ * chip's 25 C / 3 V reading and replaces the nominal when its 12 bits lie in
+ * 1380..1580 (an erased FFFF keeps the nominal). */
+#define ZCL_FLOWER_FACTORY 0x781eu
+#define ZCL_FLOWER_DIE_NOMINAL 5920
+#define ZCL_FLOWER_FACTORY_VALID(word) ((uint16_t)(word) >= (uint16_t)(1380u << 4) && \
+    (uint16_t)(word) < (uint16_t)(1581u << 4))
+#define ZCL_FLOWER_DIE_REFERENCE(word) ((int16_t)(ZCL_FLOWER_FACTORY_VALID(word) ? \
+    (int16_t)((uint16_t)(word) >> 2) : ZCL_FLOWER_DIE_NOMINAL))
+/* centi-C = 2500 + (die - reference - (mV-3000)/25) * 100/18, 50/9 ~ 1422/256 */
+#define ZCL_FLOWER_DIE_CENTI(die, mv, word) ((int16_t)(2500 + (int16_t)(((int32_t)((int16_t)(die) - \
+    ZCL_FLOWER_DIE_REFERENCE(word) - ((int16_t)(mv)-3000)/25) * 1422 + 128) >> 8)))
+
 typedef struct {
     /* Kept by zcl_sensor_init: measurements, schedule and configuration. */
     uint16_t values[ZCL_SENSOR_REPORTS];
     uint32_t deadline;
     uint16_t interval;
     uint8_t sensors, phase, started;
+    /* Last die sensor average (FFFF invalid) and information-page word:
+     * Diagnostics FF12/FF13, for checking the factory reference. */
+    uint16_t die, factory;
     /* zcl_sensor_init copies tc_ieee and clears everything from report on. */
     uint8_t tc_ieee[8];
     zcl_sensor_reporting_t report[ZCL_SENSOR_REPORTS];

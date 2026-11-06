@@ -28,6 +28,8 @@
 #define MODEL 14u
 #define INTERVAL 17u
 #define CHANNEL 18u
+#define DIE 41u
+#define FACTORY 42u
 /* Irrigation attributes: reportable read-only constants. Configure Reporting
  * succeeds without storing anything; reading it back is NOT_FOUND. */
 #define SINK 19u
@@ -65,6 +67,8 @@ static const MCU_CODE zcl_attribute_t attributes[] = {
     { 0x0b05u, 0xff05u, 0x28u, 1, 4 }, { 0x0b05u, 0xff06u, 0x21u, 1, 0 },
     /* TX power mode MAX (fixed +4.5 dBm) and manual setting: read-only. */
     { 0x0b05u, 0xff07u, 0x20u, 1, 2 }, { 0x0b05u, 0xff08u, 0x20u, 1, 2 },
+    /* Die sensor average and the information-page word: read-only. */
+    { 0x0b05u, 0xff12u, 0x21u, 1, 0 }, { 0x0b05u, 0xff13u, 0x21u, 1, 0 },
     { 0x0403u, 0x0014u, 0x28u, 1, 0xffu },
     { 0x0000u, 0xfffdu, 0x21u, 1, 1 }, { 0x0003u, 0xfffdu, 0x21u, 1, 1 }, { 0x0001u, 0xfffdu, 0x21u, 1, 1 },
     { 0x0b05u, 0xfffdu, 0x21u, 1, 1 }, { 0x0408u, 0xfffdu, 0x21u, 1, 1 }, { 0x0400u, 0xfffdu, 0x21u, 1, 1 },
@@ -92,7 +96,9 @@ static const MCU_CODE char build[] = "2026.11-llvm";
 static uint8_t present(uint8_t ep, uint16_t cluster)
 {
     if (ep == 2u) return ST.sensors & ZCL_FLOWER_DS18B20;
-    if (cluster == 0x0402u || cluster == 0x0405u || cluster == 0x0403u) return ST.sensors & ZCL_FLOWER_BME280;
+    /* Temperature: BME280, or the die sensor without any external sensor. */
+    if (cluster == 0x0402u) return ST.sensors != ZCL_FLOWER_DS18B20;
+    if (cluster == 0x0405u || cluster == 0x0403u) return ST.sensors & ZCL_FLOWER_BME280;
     return 1;
 }
 
@@ -122,6 +128,8 @@ static uint16_t value(uint8_t entry)
     if (entry == IDENTIFY) return ST.identify;
     if (entry == INTERVAL) return ST.interval;
     if (entry == CHANNEL) return ST.channel;
+    if (entry == DIE) return ST.die;
+    if (entry == FACTORY) return ST.factory;
     return attributes[entry].value;
 }
 
@@ -643,6 +651,7 @@ void zcl_sensor_boot(void) JOIN_FAR
     for (i = 0; i < ZCL_SENSOR_REPORTS; i++)
         ST.values[i] = attributes[i].type == 0x29u ? ZCL_FLOWER_INVALID_S16 : ZCL_FLOWER_INVALID_U16;
     ST.interval = ZCL_FLOWER_INTERVAL;
+    ST.die = ST.factory = ZCL_FLOWER_INVALID_U16;
     MMIO_CLEAR(SOC_PERCFG, 0x20u);
     MMIO_SET(SOC_P2SEL, 0x20u);
     MMIO_WRITE(SOC_T3CTL, 0x07u);
@@ -720,7 +729,28 @@ static uint16_t illuminance(uint16_t raw)
     return (uint16_t)(((uint32_t)l*30103u+40959u)/40960u+1u);
 }
 
-/* Battery (VDD/3, internal reference), then illuminance and soil (AVDD
+#define TR0 0x624bu
+#define ATEST 0x61bdu
+
+/* Die sensor: TR0.ADCTM then ATEST connect it to channel 14 (one discarded
+ * conversion, eight averaged); ATEST is restored before the AIN channels.
+ * It is the endpoint 1 temperature only without a BME280. */
+static void chip(uint16_t battery)
+{
+    uint8_t atest = MMIO_XREAD(ATEST);
+    MMIO_XWRITE(TR0, 1); MMIO_XWRITE(ATEST, 1);
+    (void)adc(0x3eu, 1);
+    ST.die = adc(0x3eu, 8);
+    MMIO_XWRITE(ATEST, atest); MMIO_XWRITE(TR0, 0);
+    ST.factory = (uint16_t)MMIO_XREAD(ZCL_FLOWER_FACTORY) << 8 | MMIO_XREAD(ZCL_FLOWER_FACTORY+1u);
+    if (ST.sensors & ZCL_FLOWER_BME280) return;
+    /* A zero (negative) or missed average is a fault: invalid. */
+    ST.values[ZCL_FLOWER_TEMPERATURE] = (uint16_t)(ST.die-1u) >= ZCL_FLOWER_ADC_MAX ||
+        (uint16_t)(battery-1u) >= ZCL_FLOWER_ADC_MAX ?
+        ZCL_FLOWER_INVALID_S16 : (uint16_t)ZCL_FLOWER_DIE_CENTI(ST.die, ZCL_FLOWER_MILLIVOLTS(battery), ST.factory);
+}
+
+/* Battery (VDD/3, internal reference), the die sensor, then illuminance and soil (AVDD
  * reference) like flower's APP_PHASE_ADC; the soil curve uses the battery
  * raw ADC. */
 static void measure(void)
@@ -728,6 +758,7 @@ static void measure(void)
     uint16_t battery, light, soil, mv;
     MMIO_SET(SOC_APCFG, BOARD_FLOWER_SOIL | BOARD_FLOWER_LIGHT);
     battery = adc(0x3fu, 5);
+    chip(battery);
     light = adc(0xb7u, 5);
     soil = adc(0xb4u, 3);
     MMIO_CLEAR(SOC_APCFG, BOARD_FLOWER_SOIL | BOARD_FLOWER_LIGHT);

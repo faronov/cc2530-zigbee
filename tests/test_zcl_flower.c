@@ -25,10 +25,16 @@ static unsigned long checks;
 volatile uint8_t SOC_ADCCON1, SOC_ADCCON3, SOC_ADCL, SOC_ADCH, SOC_APCFG;
 volatile uint8_t SOC_P1, SOC_P1SEL, SOC_P2SEL, SOC_PERCFG, SOC_T3CTL, SOC_T3CCTL1, SOC_T3CC0;
 static struct {
-    uint16_t battery, light, soil;
-    uint8_t stuck, negative, commands[16], n;
-    unsigned conversions, unpowered;
+    uint16_t battery, light, soil, die;
+    uint8_t stuck, negative, commands[32], n;
+    unsigned conversions, unpowered, detached;
 } adc_model;
+/* TR0, ATEST and the information-page word at ZCL_FLOWER_FACTORY. */
+static struct {
+    uint8_t tr0, atest;
+    uint16_t word;
+    unsigned reads;
+} chip_page = { 0, 0x5au, 0xffffu, 0 };
 
 uint8_t host_mmio_load(const volatile uint8_t *reg, uint8_t address)
 {
@@ -44,10 +50,12 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
     if (address != SOC_ADCCON3_ADDRESS) return;
     adc_model.conversions++;
     if (adc_model.n < sizeof(adc_model.commands)) adc_model.commands[adc_model.n++] = value;
-    if (value != 0x3fu && (!(SOC_P1 & BOARD_FLOWER_RAIL) || !(SOC_T3CTL & 0x10u))) adc_model.unpowered++;
+    if (value != 0x3fu && value != 0x3eu && (!(SOC_P1 & BOARD_FLOWER_RAIL) || !(SOC_T3CTL & 0x10u))) adc_model.unpowered++;
+    /* The die sensor needs TR0.ADCTM and ATEST; AIN channels need them off. */
+    if ((value == 0x3eu) != (chip_page.tr0 == 1u && chip_page.atest == 1u)) adc_model.detached++;
     if (adc_model.stuck) return;
     code = value == 0x3fu ? adc_model.battery : value == 0xb7u ? adc_model.light :
-        value == 0xb4u ? adc_model.soil : 0;
+        value == 0xb4u ? adc_model.soil : value == 0x3eu ? adc_model.die : 0;
     code = adc_model.negative ? 0xfff0u : (uint16_t)(code << 2);
     SOC_ADCL = (uint8_t)code; SOC_ADCH = (uint8_t)(code >> 8);
     SOC_ADCCON1 |= 0x80u;
@@ -55,21 +63,27 @@ void host_mmio_store(volatile uint8_t *reg, uint8_t address, uint8_t value)
 
 uint8_t host_mmio_xload(uint16_t address)
 {
-    (void)address;
+    if (address == ATEST) return chip_page.atest;
+    if (address == ZCL_FLOWER_FACTORY || address == ZCL_FLOWER_FACTORY+1u) {
+        chip_page.reads++;
+        return address == ZCL_FLOWER_FACTORY ? (uint8_t)(chip_page.word >> 8) : (uint8_t)chip_page.word;
+    }
     CHECK(0);
     return 0;
 }
 
 void host_mmio_xstore(uint16_t address, uint8_t value)
 {
-    (void)address; (void)value;
-    CHECK(0);
+    if (address == TR0) chip_page.tr0 = value;
+    else if (address == ATEST) chip_page.atest = value;
+    else CHECK(0);
 }
 
 static void adc_set(uint16_t battery, uint16_t light, uint16_t soil)
 {
     memset(&adc_model, 0, sizeof(adc_model));
     adc_model.battery = battery; adc_model.light = light; adc_model.soil = soil;
+    adc_model.die = ZCL_FLOWER_DIE_NOMINAL;
 }
 
 static void boot(uint8_t sensors)
@@ -192,6 +206,17 @@ static void conversions(void)
         reference = 10000.0*log10((double)raw)+1.0;
         CHECK(fabs(illuminance((uint16_t)raw)-reference) <= 1.0);
     }
+    /* Die sensor: nominal 5920 at 25 C and 3 V, 18 per C, 4 per 100 mV. */
+    CHECK(ZCL_FLOWER_DIE_CENTI(5920, 3000, 0xffffu) == 2500 && ZCL_FLOWER_DIE_CENTI(5920+180, 3000, 0xffffu) == 3500);
+    CHECK(ZCL_FLOWER_DIE_CENTI(5920+4, 3100, 0xffffu) == 2500 && ZCL_FLOWER_DIE_CENTI(5920-40, 2000, 0xffffu) == 2500);
+    CHECK(abs(ZCL_FLOWER_DIE_CENTI(5920-18*35, 3000, 0xffffu) - -1000) <= 2);
+    CHECK(abs(ZCL_FLOWER_DIE_CENTI(5920+18*60, 3000, 0xffffu) - 8500) <= 3);
+    /* Factory word: 12 bits 1380..1580 replace the nominal (word>>2 as a
+     * 14-bit average); others, erased FFFF included, are ignored. */
+    CHECK(!ZCL_FLOWER_FACTORY_VALID(0xffffu) && !ZCL_FLOWER_FACTORY_VALID(0) && !ZCL_FLOWER_FACTORY_VALID(0x563cu));
+    CHECK(ZCL_FLOWER_FACTORY_VALID(0x5640u) && ZCL_FLOWER_FACTORY_VALID(0x62ccu) && !ZCL_FLOWER_FACTORY_VALID(0x62d0u));
+    CHECK(ZCL_FLOWER_DIE_REFERENCE(0xffffu) == 5920 && ZCL_FLOWER_DIE_REFERENCE(0x5a08u) == 5762);
+    CHECK(ZCL_FLOWER_DIE_CENTI(5762, 3000, 0x5a08u) == 2500 && ZCL_FLOWER_DIE_CENTI(5762+180, 3000, 0x5a08u) == 3500);
     /* flower battery.c: mV = raw*0.443, voltage rounds to 100 mV, percent
      * is the Alkaline 2S curve in 0.5 % units. */
     for (raw = 0; raw <= ZCL_FLOWER_ADC_MAX; raw++)
@@ -215,9 +240,15 @@ static void conversions(void)
 
 static void descriptors(void)
 {
+    /* Without external sensors the die sensor serves Temperature. */
     static const uint8_t ep1[] = {
+        22, 1, 0x04, 0x01, 0x0c, 0x00, 2, 7,
+        0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0x0b, 0x08, 0x04, 0x00, 0x04, 0x02, 0x04, 0 };
+    /* DS18B20 only: its temperature is on endpoint 2 alone. */
+    static const uint8_t probe[] = {
         20, 1, 0x04, 0x01, 0x0c, 0x00, 2, 6,
-        0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0x0b, 0x08, 0x04, 0x00, 0x04, 0 };
+        0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0x0b, 0x08, 0x04, 0x00, 0x04, 0,
+        10, 2, 0x04, 0x01, 0x0c, 0x00, 2, 1, 0x02, 0x04, 0, 0 };
     static const uint8_t full[] = {
         26, 1, 0x04, 0x01, 0x0c, 0x00, 2, 9,
         0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0x0b, 0x08, 0x04, 0x00, 0x04,
@@ -234,6 +265,10 @@ static void descriptors(void)
     CHECK(ST.interval == ZCL_FLOWER_INTERVAL && !ST.started && !ST.phase);
     for (i = 0; i < ZCL_SENSOR_REPORTS; i++)
         CHECK(ST.values[i] == (attributes[i].type == 0x29u ? 0x8000u : 0xffffu));
+    CHECK(ST.die == 0xffffu && ST.factory == 0xffffu);
+    boot(ZCL_FLOWER_DS18B20);
+    CHECK(!memcmp(zdo_srv_descriptors, probe, sizeof(probe)));
+    CHECK(!present(1, 0x0402) && present(2, 0x0402));
     boot(ZCL_FLOWER_BME280 | ZCL_FLOWER_DS18B20);
     CHECK(sizeof(full) <= ZCL_FLOWER_DESCRIPTORS);
     CHECK(!memcmp(zdo_srv_descriptors, full, sizeof(full)));
@@ -249,17 +284,22 @@ static void cycle(void)
     CHECK(zcl_sensor_quiet(now) == 0 && ST.phase == 1);
     CHECK((SOC_P1 & BOARD_FLOWER_RAIL) && (SOC_P1SEL & BOARD_FLOWER_PWM) && (SOC_T3CTL & 0x10u));
     CHECK(zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP-1u) == 0 && !adc_model.conversions);
-    /* Past the warm-up (across the 32-bit wrap): battery x5, light x5, soil x3. */
+    /* Past the warm-up (across the 32-bit wrap): battery x5, die 1+8, light
+     * x5, soil x3; TR0 and ATEST only around the die sensor. */
     CHECK(zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP) == 0);
-    CHECK(adc_model.conversions == 13 && !adc_model.unpowered);
-    CHECK(!memcmp(adc_model.commands, "\x3f\x3f\x3f\x3f\x3f\xb7\xb7\xb7\xb7\xb7\xb4\xb4\xb4", 13));
+    CHECK(adc_model.conversions == 22 && !adc_model.unpowered && !adc_model.detached);
+    CHECK(!memcmp(adc_model.commands, "\x3f\x3f\x3f\x3f\x3f\x3e\x3e\x3e\x3e\x3e\x3e\x3e\x3e\x3e"
+                  "\xb7\xb7\xb7\xb7\xb7\xb4\xb4\xb4", 22));
+    CHECK(!chip_page.tr0 && chip_page.atest == 0x5au && chip_page.reads == 2);
     CHECK(!SOC_APCFG && !(SOC_P1 & (BOARD_FLOWER_RAIL | BOARD_FLOWER_PWM)) && !(SOC_P1SEL & BOARD_FLOWER_PWM));
     CHECK(!(SOC_T3CTL & 0x10u) && ST.phase == 0 && ST.started);
     CHECK(ST.values[ZCL_FLOWER_BATTERY_RAW] == 6772 && ST.values[ZCL_FLOWER_SOIL_BATTERY] == 6772);
     CHECK(ST.values[ZCL_FLOWER_VOLTAGE] == 30 && ST.values[ZCL_FLOWER_PERCENT] == 198);
     CHECK(ST.values[ZCL_FLOWER_SOIL_RAW] == 4073 && ST.values[ZCL_FLOWER_SOIL] == 5000);
     CHECK(ST.values[ZCL_FLOWER_ILLUMINANCE] == 30001);
-    CHECK(ST.values[ZCL_FLOWER_TEMPERATURE] == 0x8000u && ST.values[ZCL_FLOWER_PROBE] == 0x8000u);
+    /* No external sensor: the die sensor at nominal reads 25.00 C. */
+    CHECK(ST.die == 5920 && ST.factory == 0xffffu);
+    CHECK(ST.values[ZCL_FLOWER_TEMPERATURE] == 2500 && ST.values[ZCL_FLOWER_PROBE] == 0x8000u);
     /* Asleep until the interval, then the next cycle. */
     now += ZCL_FLOWER_WARMUP;
     CHECK(zcl_sensor_quiet(now) == 300ul*ZCL_SENSOR_SECOND);
@@ -268,14 +308,31 @@ static void cycle(void)
     /* A missed conversion and a negative result: invalid, never stale. */
     adc_set(6772, 1000, 4073); adc_model.stuck = 1;
     CHECK(zcl_sensor_quiet(now+300ul*ZCL_SENSOR_SECOND+ZCL_FLOWER_WARMUP) == 0);
-    CHECK(adc_model.conversions == 3 && !SOC_APCFG);
+    CHECK(adc_model.conversions == 5 && !SOC_APCFG && !chip_page.tr0 && chip_page.atest == 0x5au);
+    CHECK(ST.values[ZCL_FLOWER_TEMPERATURE] == 0x8000u && ST.die == 0xffffu);
     CHECK(ST.values[ZCL_FLOWER_VOLTAGE] == 0xffu && ST.values[ZCL_FLOWER_PERCENT] == 0xffu);
     CHECK(ST.values[ZCL_FLOWER_BATTERY_RAW] == 0xffffu && ST.values[ZCL_FLOWER_SOIL] == 0xffffu);
     CHECK(ST.values[ZCL_FLOWER_ILLUMINANCE] == 0xffffu && ST.values[ZCL_FLOWER_SOIL_RAW] == 0xffffu);
     ST.started = 0; adc_set(6772, 1000, 4073); adc_model.negative = 1;
     CHECK(zcl_sensor_quiet(now) == 0 && zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP) == 0);
     CHECK(ST.values[ZCL_FLOWER_BATTERY_RAW] == 0 && ST.values[ZCL_FLOWER_ILLUMINANCE] == 0);
-    CHECK(ST.values[ZCL_FLOWER_SOIL] == 0xffffu);
+    CHECK(ST.values[ZCL_FLOWER_SOIL] == 0xffffu && ST.values[ZCL_FLOWER_TEMPERATURE] == 0x8000u);
+    /* A chip reading 40 12-bit counts (~8.9 C) low: the nominal reads the
+     * bias, its factory word removes it; out-of-range words are ignored. */
+    ST.started = 0; adc_set(6772, 1000, 4073); adc_model.die = (1480-40)*4;
+    CHECK(zcl_sensor_quiet(now) == 0 && zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP) == 0);
+    CHECK(ST.values[ZCL_FLOWER_TEMPERATURE] == (uint16_t)(2500-889));
+    ST.started = 0; chip_page.word = (1480-40) << 4;
+    CHECK(zcl_sensor_quiet(now) == 0 && zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP) == 0);
+    CHECK(ST.factory == 0x5a00u && ST.values[ZCL_FLOWER_TEMPERATURE] == 2500);
+    ST.started = 0; chip_page.word = 1300 << 4;
+    CHECK(zcl_sensor_quiet(now) == 0 && zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP) == 0);
+    CHECK(ST.factory == 0x5140u && ST.values[ZCL_FLOWER_TEMPERATURE] == (uint16_t)(2500-889));
+    /* With a BME280 the die sensor is measured but leaves Temperature. */
+    ST.started = 0; ST.sensors = ZCL_FLOWER_BME280; ST.values[ZCL_FLOWER_TEMPERATURE] = 0x8000u;
+    CHECK(zcl_sensor_quiet(now) == 0 && zcl_sensor_quiet(now+ZCL_FLOWER_WARMUP) == 0);
+    CHECK(ST.die == (1480-40)*4 && ST.values[ZCL_FLOWER_TEMPERATURE] == 0x8000u);
+    chip_page.word = 0xffffu;
 }
 
 static void server(void)
@@ -285,14 +342,15 @@ static void server(void)
     boot(0);
     reset(1000);
     CHECK(!memcmp(ST.tc_ieee, tc, 8) && ST.basic && ST.channel == 15 && ST.interval == 300);
-    CHECK(ST.bound[0] == 1 && ST.bound[1] == 1 && ST.bound[2] == 1 && !ST.bound[3] && !ST.bound[4]);
+    CHECK(ST.bound[0] == 1 && ST.bound[1] == 1 && ST.bound[2] == 1 && ST.bound[3] == 1 && !ST.bound[4]);
     CHECK(!ST.bound[5] && ST.bound[6] == 1 && !ST.bound[7]);
     zcl_req(0x0000, "\x00\x01\x00\x05\x00", 5, model, sizeof(model)-1u);
     zcl_req(0x0000, "\x00\x02\x00\x04\x00", 5, maker, sizeof(maker)-1u);
     zcl_req(0x0000, "\x00\x03\x00\x00\x00\x07\x00\x00\x40", 9,
             "\x18\x03\x01\x00\x00\x00\x20\x01\x07\x00\x00\x30\x03\x00\x40\x00\x42\x0c" "2026.11-llvm", 30);
-    /* Absent climate clusters and EP2 without the DS18B20. */
-    zcl_req(0x0402, "\x00\x04\x00\x00\x00", 5, "\x18\x04\x0b\x00\xc3", 5);
+    /* Die-sensor Temperature, absent climate clusters, EP2 without the DS18B20. */
+    zcl_req(0x0402, "\x00\x04\x00\x00\x00", 5, "\x18\x04\x01\x00\x00\x00\x29\x00\x80", 9);
+    zcl_req(0x0405, "\x00\x04\x00\x00\x00", 5, "\x18\x04\x0b\x00\xc3", 5);
     CHECK(receive(0x0402, 2, "\x00\x05\x00\x00\x00", 5) == ZCL_SENSOR_DISCARDED && !CTX.response_pending);
     /* Power configuration constants and invalid values before a measurement. */
     zcl_req(0x0001, "\x00\x06\x00\x20\x00\x21\x00\x31\x00\x33\x00\x00\x02", 13,
@@ -302,6 +360,11 @@ static void server(void)
     zcl_req(0x0b05, "\x00\x07\x00\x09\xff\x04\xff\x0b\xff\x10\xff", 11,
             "\x18\x07\x01\x09\xff\x00\x21\x2c\x01\x04\xff\x00\x20\x0f"
             "\x0b\xff\x00\x20\x1e\x10\xff\x00\x10\x00", 24);
+    /* Die sensor average and factory word: read-only diagnostics. */
+    ST.die = 5800; ST.factory = 0x5a08u;
+    zcl_req(0x0b05, "\x00\x07\x00\x12\xff\x13\xff", 7,
+            "\x18\x07\x01\x12\xff\x00\x21\xa8\x16\x13\xff\x00\x21\x08\x5a", 15);
+    zcl_req(0x0b05, "\x00\x07\x02\x12\xff\x21\x00\x00", 8, "\x18\x07\x04\x88\x12\xff", 6);
     /* Interval 30..3600 is writable and samples at once; others read-only. */
     ST.started = 1;
     zcl_req(0x0b05, "\x00\x08\x02\x09\xff\x21\x1d\x00", 8, "\x18\x08\x04\x87\x09\xff", 6);
@@ -340,6 +403,7 @@ static void reports(void)
     static const uint8_t soil[] = { 0x00, 0x00, 0x21, 0x88, 0x13, 0x00, 0x02, 0x21, 0xe9, 0x0f,
                                     0x01, 0x02, 0x21, 0x74, 0x1a };
     static const uint8_t light[] = { 0x00, 0x00, 0x21, 0x31, 0x75 };
+    static const uint8_t chip[] = { 0x00, 0x00, 0x29, 0xc4, 0x09 };
     static const uint8_t model[] = "\x05\x00\x42\x0e" "DIYRuZ_FlowerX";
     uint32_t now = 5000;
     boot(0);
@@ -356,6 +420,7 @@ static void reports(void)
     reported(0x0001, 1, 1, power, sizeof(power));
     reported(0x0408, 1, 1, soil, sizeof(soil));
     reported(0x0400, 1, 1, light, sizeof(light));
+    reported(0x0402, 1, 1, chip, sizeof(chip));
     idle();
     CHECK(ST.report[ZCL_FLOWER_SOIL].last == 5000 && !ST.report[ZCL_FLOWER_SOIL].age);
     /* Below the reportable change and min: silent; a change past min reports
@@ -391,6 +456,7 @@ static void reports(void)
     expect(0x8021, 0, "\x25\x82", 2);
     seconds(1800);
     reported(0x0408, 1, 7, (const uint8_t *)"\x00\x00\x21\xec\x13\x00\x02\x21\xe9\x0f\x01\x02\x21\x74\x1a", 15);
+    reported(0x0402, 1, 1, chip, sizeof(chip));
     idle();
     CHECK(ST.report[ZCL_FLOWER_SOIL].age == 0 && ST.report[ZCL_FLOWER_SOIL_RAW].age == 0);
 }
