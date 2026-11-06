@@ -22,7 +22,7 @@ static const MCU_CODE struct { uint16_t first, length; } regions[CW_FRAMES] = {
     R(nv.counter_check),R(nv.counter_check),R(nv.counter_check),R(nv.counter_check),
     R(nv.counter_check),R(nv.record),R(nv.record),R(nv.writer),R(nv.reader),{0,0},{0,0}
 };
-static uint8_t edge(uint8_t parent, uint8_t child)
+static uint8_t MCU_COMMON_CODE edge(uint8_t parent, uint8_t child)
 {
     if (!parent) return child>0 && child<CW_AES;
     if (parent>=CW_WIRE_NWK && parent<=CW_WIRE_CRYPT) {

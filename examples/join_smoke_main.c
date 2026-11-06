@@ -27,7 +27,7 @@ static MCU_XDATA uint8_t reset_cause, lfsr;
 static const uint8_t arm[8] = {0x4a,0xb5,0x4e,0xb1,0xa9,0x56,1,0xfe};
 static const uint8_t run[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
-static void post(const uint8_t *packet)
+static void MCU_COMMON_CODE post(const uint8_t *packet)
 {
     uint8_t n;
     for(n=0;n<8;n++) join_smoke_mailbox[n]=packet[n];
