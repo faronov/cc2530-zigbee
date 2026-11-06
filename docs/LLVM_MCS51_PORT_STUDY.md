@@ -2150,3 +2150,44 @@ compilers:
   had already rotated).
 - SMOKE on this pin (production variant): PASS 16/16 in 274 s. `check_repository` and the
   `tools/llvm` unit tests pass.
+
+## 27. Hot-path helpers in common code
+
+After §26 the worst main-loop path still crossed banks 17 times (3 bytes each). A call into
+common code needs no trampoline, so moving small leaf helpers from that path into common
+removes those hops. A greedy pass over the stack model, ranked by stack saved per byte of
+code, picked eight functions marked `MCU_COMMON_CODE`: `timebase_deadline_after`,
+`timebase_expired`, the AES `sample` poll, `ccm_star.c` `encrypt`/`flush`/`counter`,
+`mac_link_child_workspace.c` `edge` and the autonomous `post`. Total size is about 2.2 KB.
+That much bank space is freed, so total CODE does not grow; it shrinks by 30–60 bytes
+because fewer trampolines are emitted. No source behavior changes.
+
+Static stack demand, §26 pin → this change, all images PASS admission:
+
+| LG join variant | Stack | Common used |
+| --- | --- | --- |
+| production | 108 → 105 | 19793 → 21918 |
+| rx-diag | 108 → 102 | +2.1 KB |
+| parent-recovery, parent-recovery-policy-c | 108 / 114 → 99 | +2.1 KB |
+| autonomous | 121 → 104 | +2.1 KB |
+| autonomous-pm2 | 121 → 103 | 20705 → 22940 |
+| autonomous-pm2-sht3x | 118 → 103 | 20771 → 23006 |
+| autonomous-pm2-epd-factory (`epaper-uc8151` stack) | 118 → 103 | 24875 → 27106 |
+
+The new worst path (about 89 bytes plus the ISR) runs through `ccm_star_crypt`. That
+function takes stack arguments, so its trampoline cannot be bypassed. The next greedy steps
+would save only 3–5 bytes for another 1.2–1.5 KB of common code, so they are not taken; common
+space is kept for display features.
+
+Evidence:
+- SMOKE (production): PASS 16/16. `check_repository` and the `tools/llvm` unit tests pass.
+- MCUEMU, `autonomous-pm2-epd-factory` A/B (same source, with and without this change): both
+  are READY with one member, about 398 sleeps and no faults at 111 s simulated. The stack
+  high-water mark falls from 0xDD to 0xD4, so the observed depth falls from 94 to 85 bytes.
+  The emulator backend closed at about 120 s in both runs.
+- H2 HIL LH30 (`autonomous-pm2-epd-factory` with this change merged onto the e-paper stack,
+  HEX `d06c21be…`): PASS. Fresh join, interview and read, leave held while permit is closed,
+  rejoin when it reopens, steady reads and five idle windows all completed. Final state:
+  phase READY, BDB phase 13, member, 923 sleeps, no sleep failure, two e-paper refreshes
+  without failure, SP 0x8A. The idle windows match LH29: 10–14 sleeps and 57–59 s asleep
+  per minute, RX on 0.9–1.5 %. Steady 0x0402 reads took 0.6–7.3 s.
