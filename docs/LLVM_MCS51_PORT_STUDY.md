@@ -2094,3 +2094,59 @@ now the pinned compiler.
 - Audit of the `autonomous-pm2-sht3x` image: there are 20 `jb`/`jnb` on ACC bits (224–231).
   In 19 of them, the instruction before the branch is the `mov a, rN` that loads the tested
   byte. The remaining one is `movx a, @r1; mov r4, a`, which leaves A unchanged.
+
+## 26. Same-bank bank-call trampoline bypass
+
+The LG join images were at 120–127/128 bytes of static stack, which left no room for new
+features. Auto-banked functions are placed by the linker, so the compiler calls each one
+through its `__mcs51_bankcall_*` trampoline even when the caller ends up in the same bank.
+That costs 3 bytes of stack per hop on the worst path (the trampoline saves the mapping and
+returns through the bank switch). Pinned LLVM
+`ffada1d1b4198787559f99fe0ed448c32c46d2c7` (tag `mcs51-same-bank-thunk-bypass-20261106`,
+on top of §25) removes those hops.
+
+- AsmPrinter: a strong trampoline goes into `.text.autobankthunks.direct.N` only when the
+  target is auto-banked, not variadic and has no fixed stack objects (no stack arguments).
+  Those are the only trampolines whose callee entry does not depend on the 3-byte bias.
+- lld: an `LCALL`/`LJMP` (`R_8051_16_BE`, addend 0) from a banked code section to such a
+  trampoline is relocated to the trampoline's own target when that target is in the
+  caller's bank. A local trampoline is referenced through its section symbol, so the check
+  accepts the section symbol as well as the `__mcs51_bankcall_` name. Calls from common
+  code, to another bank and to stack-argument callees keep the trampoline.
+- Regressions: `lld/test/ELF/mcs51-same-bank-thunk-bypass.s` (new) and
+  `llvm/test/CodeGen/8051/cc2530-auto-bank.c` (link checks for a direct same-bank call and
+  a trampoline to another bank). `CodeGen/8051`, `MC/8051`, `clang/test/MCS51` and the
+  lld MCS51 tests pass, except the known `mcs51-address-space-overlap.s` exclusion.
+- Code size and layout are unchanged: only `LCALL` operands change. In the
+  `autonomous-pm2-epd-factory` image 180 call sites (360 bytes) differ and nothing else.
+
+Static stack demand (`stack_analysis`), previous pin → this pin, all images PASS admission
+with identical CODE, common and bank7 free space:
+
+| LG join variant | Stack |
+| --- | --- |
+| production, rx-diag, parent-recovery | 120 → 108 |
+| parent-recovery-policy-c | 120 → 114 |
+| autonomous, autonomous-pm2 | 127 → 121 |
+| autonomous-pm2-sht3x | 127 → 118 |
+| autonomous-pm2-epd-factory (`epaper-uc8151` stack) | 127 → 118 |
+
+The bringup and timebase fixtures also build and pass. The remaining worst path still goes
+through `ccm_star_crypt`, which takes stack arguments and keeps its trampoline.
+
+Runtime evidence for `autonomous-pm2-epd-factory`, built from the same source with both
+compilers:
+- MCUEMU, 126 s simulated each: both reach READY with one member, about 459 sleeps, no
+  faults. The stack high-water mark falls from 0xE6 to 0xDD, so the observed depth falls
+  from 103 to 94 bytes.
+- H2 HIL LH29 (HEX `fd475f70…`, identical with this pin and the intermediate build): fresh
+  join, interview and reads, leave held while permit is closed, rejoin when it reopens,
+  steady and idle windows all completed. Final state: phase READY, BDB phase 13, member,
+  920 sleeps, no sleep failure, two e-paper refreshes without failure, SP 0x8A as in LH28.
+  Five idle windows match LH28 (13–14 sleeps and about 58.6 s asleep per minute, RX on
+  1.1–1.7 %). The script's verdict is FAIL only because it still reads Device Temperature
+  (0x0002), which this image no longer has. Four steady 0x0402 reads took 0.5–3.7 s and one
+  took 34.9 s; LH27/LH28 stayed under 2 s. The single outlier was not explained (the HA log
+  had already rotated).
+- SMOKE on this pin (production variant): PASS 16/16 in 274 s. `check_repository` and the
+  `tools/llvm` unit tests pass.
