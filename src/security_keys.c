@@ -1137,7 +1137,15 @@ static security_keys_result_t publish(uint8_t *out, uint16_t capacity, uint8_t *
 static void command_packet(uint8_t nwk_seq, uint8_t aps_counter)
 {
     w.packet.nwk.version = 2; w.packet.nwk.source = u16(w.record+ADDR);
-    w.packet.nwk.destination = 0; w.packet.nwk.radius = 1;
+    w.packet.nwk.destination = 0;
+    w.packet.nwk.radius = 1;
+#if defined(CC2530_ROUTER_JOIN)
+    /* Through a router parent the TC is not one hop away: radius 1 would
+     * make the parent drop the request instead of routing it. */
+    if (parent_address()) {
+        w.packet.nwk.radius = 30; w.packet.nwk.discover_route = NWK_DISCOVER_ROUTE_ENABLE;
+    }
+#endif
     w.packet.nwk.sequence = nwk_seq; w.packet.aps.type = ED_APS_COMMAND;
     w.packet.aps.counter = aps_counter;
 }

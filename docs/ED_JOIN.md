@@ -52,7 +52,11 @@ direct-coordinator policy above.
   - the first network key binds that source as the TC IEEE and clears
     `UNBOUND`.
   After that, Request Key / Verify / Confirm run through the router exactly as
-  in parent recovery.
+  in parent recovery. While the parent is a router, Request Key and Verify Key
+  leave with NWK radius 30 and route discovery enabled. With radius 1 the
+  parent consumes the frame instead of routing it to the TC; this was seen on
+  hardware as three unanswered Request Keys and `TC_FAILED`. A direct
+  coordinator parent keeps radius 1, so existing images are byte-identical.
 - Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
   still commits the replay state with a full NV save.
 - Host coverage: `host-router-join-tests` (relayed Transport Key, TC learning,
@@ -60,7 +64,8 @@ direct-coordinator policy above.
   source and replays, then the full exchange to VERIFIED),
   `host-router-candidates-tests` (eviction, coordinator bonus, mixed, filtered
   overflow) and `make test-join-smoke-host JOIN_SMOKE_ROUTER_JOIN=1`.
-  Real EZSP relay formatting is not yet proved on hardware.
+  Hardware: the FlowerX joined ZHA (ZBT-1 EZSP) through a Zigbee-RS router
+  parent to READY, and the quirk interview completed.
 
 After contextual Association Response and genuine take/release, the key owner
 is provisioned with the discovered network and the observed source IEEE.
@@ -1170,8 +1175,8 @@ The `flower` LLVM variant (`--board flower_v2 --variant flower`) builds the
 LEAN PM2 sleepy end device for the faronov/flower v2 board (E18-MS1-PCB). It
 replaces the ESL29 application with `src/zcl_flower.c` and keeps the
 DIYRuZ_FlowerX attributes that the flower Z2M converter and ZHA quirk use
-(manufacturer `modkam.ru`, model `DIYRuZ_FlowerX`). It is not yet
-hardware-qualified.
+(manufacturer `modkam.ru`, model `DIYRuZ_FlowerX`). It has joined ZHA on
+hardware, but it is not yet fully qualified (see below).
 
 - Pins ([`include/board.h`](../include/board.h)): sensor rail P1.1, soil
   excitation P1.4 (Timer 3 alternative 1, channel 1), soil ADC AIN4, light ADC
@@ -1211,8 +1216,11 @@ hardware-qualified.
   the board receives several router beacons from the target PAN on channel 15
   (raw RSSI −6…+14). It did not receive the coordinator's beacon, so the
   direct-coordinator policy ended with `BDB_JOIN_NO_PARENT`. The variant now
-  enables [router-parent join](#router-parent-initial-join-cc2530_router_join);
-  its hardware join is still to be tested.
+  enables [router-parent join](#router-parent-initial-join-cc2530_router_join).
+  With it, the board joined ZHA through router 0x4a76 and reached READY. The
+  `zha_quirk_diyruz_flowerx` quirk matched, and battery, soil, illuminance,
+  die temperature and TX power entities report. Sleep current, the BME280 and
+  the DS18B20 are not qualified yet.
 
 Host coverage: `host-zcl-flower` (and its sanitizer build) models the ADC and
 Timer 3. It covers conversions, descriptors, the cycle across the 32-bit wrap,

@@ -1621,11 +1621,19 @@ static void router_join(void)
     reboot(NULL, SECURITY_KEYS_RECEIVED);
     CHECK(security_keys_request(7,8,raw,47,&written,&limits,3) == SECURITY_KEYS_OK);
     state(SECURITY_KEYS_REQUESTED);
+    /* The parent must route the request onward to the TC (hardware-observed:
+     * radius 1 stopped at the router). */
+    outgoing_open(bootstrap,8);
+    CHECK(output.nwk.destination == 0 && output.nwk.radius == 30 &&
+          output.nwk.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
     transport(4,new_tc,0); via_router(bootstrap,3,1,0);
     accept(SECURITY_KEYS_EVENT_TC_KEY);
     reboot(NULL, SECURITY_KEYS_PROVISIONAL);
     CHECK(security_keys_verify(9,10,raw,54,&written,&limits,3) == SECURITY_KEYS_OK);
     state(SECURITY_KEYS_WAIT_CONFIRM);
+    outgoing_open(NULL,15);
+    CHECK(output.nwk.destination == 0 && output.nwk.radius == 30 &&
+          output.nwk.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
     base(ED_APS_COMMAND); packet.length = 11;
     packet.payload[0] = 16; packet.payload[1] = 0; packet.payload[2] = 4;
     memcpy(packet.payload+3,config.own_ieee,8);
