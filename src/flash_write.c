@@ -123,7 +123,7 @@ flash_write_result_t flash_nv_erase(uint8_t page, uint16_t poll_limit)
     return operate(FLASH_EXEC_ERASE, page, 0, NULL, poll_limit);
 }
 
-flash_write_result_t flash_nv_program(uint8_t page, uint16_t offset,
+flash_write_result_t MCU_COMMON_CODE flash_nv_program(uint8_t page, uint16_t offset,
                                      const uint8_t MCU_XDATA *word, uint16_t poll_limit)
 {
     return operate(FLASH_EXEC_PROGRAM, page, offset, word, poll_limit);
