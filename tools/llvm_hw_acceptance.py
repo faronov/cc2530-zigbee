@@ -51,7 +51,7 @@ class Profile:
     endpoint: int = 1
     profile_id: int = 0x0104
     device_type: int = 0xFFFF
-    input_clusters: tuple = (0x0000, 0x0001, 0x0002, 0x0003, 0x0402, 0x0405)
+    input_clusters: tuple = (0x0000, 0x0001, 0x0003, 0x0402, 0x0405)
     bind_clusters: tuple = (0x0001, 0x0402, 0x0405)
     report_max_interval: tuple = ((0x0402, 900), (0x0405, 900))
     report_tolerance_s: int = 120

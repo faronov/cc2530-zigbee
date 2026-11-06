@@ -1016,17 +1016,17 @@ sleepy behaviour, rejoin after reset or production NV endurance is claimed.
 not measurements.** The LG board has no temperature or humidity sensor; see
 [chip sensing](#chip-temperature-and-vdd-sensing) for the autonomous LLVM
 variants. Endpoint 1 (device ID still `FFFF`) advertises the input clusters
-Basic `0000`, Power Configuration `0001`, Device Temperature Configuration
-`0002`, Identify `0003`, Temperature Measurement `0402` and Relative Humidity
-Measurement `0405`. `zdo_runtime` publishes endpoint frames and ZDO
+Basic `0000`, Power Configuration `0001`, Identify `0003`, Temperature
+Measurement `0402` and Relative Humidity Measurement `0405`. Device Temperature
+Configuration `0002` is not served (UNSUPPORTED_CLUSTER): its
+CurrentTemperature is whole °C, ZHA divides it by 100, and `0402` already
+carries the reading. `zdo_runtime` publishes endpoint frames and ZDO
 Bind/Unbind and Mgmt_Bind requests, and the banked application server `zcl_sensor` answers
 them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
 
 - **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
   MeasuredValue/Min/Max for both measurement clusters, BatteryVoltage,
-  BatteryPercentageRemaining, Device Temperature CurrentTemperature (whole
-  °C, read-only, not reportable: Configure Reporting returns `8C`),
-  IdentifyTime and ClusterRevision. Other
+  BatteryPercentageRemaining, IdentifyTime and ClusterRevision. Other
   attributes return UNSUPPORTED_ATTRIBUTE.
 - **Values:** one sawtooth phase 0..40, one step per 2^22 MAC symbols
   (~67 s). Temperature runs 21.0-25.0 °C in 0.1 °C steps and humidity
@@ -1074,8 +1074,8 @@ decimation, four AVDD5/3 samples, then one discarded and eight die-sensor
 samples with TR0.ADCTM and ATEST enabled only for that measurement
 (SWRU191F 12.2.1). A measurement is about 1.7 ms of busy polling.
 
-- Temperature Measurement `0402` MeasuredValue and Device Temperature
-  `0002` CurrentTemperature come from the **uncalibrated chip die sensor**
+- Temperature Measurement `0402` MeasuredValue comes from the
+  **uncalibrated chip die sensor**
   (SWRS081B nominals: 1480 at 25 °C and 3 V, 4.5 /°C, 1 /0.1 V, VDD
   compensated). It reads the die, not the room, and the part-to-part offset is
   `BOARD_CHIP_TEMPERATURE_OFFSET` (0, not calibrated).
@@ -1086,11 +1086,8 @@ samples with TR0.ADCTM and ATEST enabled only for that measurement
 - Humidity `0405` stays synthetic unless the opt-in
   [SHT3x variant](#optional-sht3x-temperature-and-humidity) is built.
 - A conversion that misses its 4000-poll bound publishes invalid values:
-  MeasuredValue/CurrentTemperature `8000`, BatteryVoltage and
+  MeasuredValue `8000`, BatteryVoltage and
   BatteryPercentageRemaining `FF`.
-- ZHA displays Device Temperature divided by 100 (its sensor entity uses a
-  divisor of 100), so 25 °C appears as 0.25 °C; the attribute itself is
-  spec-correct whole degrees. Zigbee2MQTT shows °C. Use `0402` for the value.
 
 Host coverage: `host-zcl-sensor-chip` (and its sanitizer build) runs the
 application tests against a modeled ADC (cadence, ATEST/TR0 restore,
@@ -1137,7 +1134,7 @@ hardware-qualified. It requires `CC2530_CHIP_SENSE` (a build error otherwise).
   reads. Each later 10 s chip measurement reads the result started one period
   before (one-period lag), then starts the next one. A sensor read never waits.
 - Temperature Measurement `0402` and Relative Humidity `0405` MeasuredValue
-  come from the SHT3x. Device Temperature `0002` stays the die temperature.
+  come from the SHT3x. The die temperature is still measured but not served.
 - A NACK, CRC mismatch or SCL that does not rise within 256 polls publishes
   invalid values (`8000` and `FFFF`) until a later read succeeds.
 
