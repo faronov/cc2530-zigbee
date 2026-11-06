@@ -2191,3 +2191,59 @@ Evidence:
   phase READY, BDB phase 13, member, 923 sleeps, no sleep failure, two e-paper refreshes
   without failure, SP 0x8A. The idle windows match LH29: 10–14 sleeps and 57–59 s asleep
   per minute, RX on 0.9–1.5 %. Steady 0x0402 reads took 0.6–7.3 s.
+
+## 28. Lean production checks: AES
+
+The checked drivers verify their arguments, buffer ownership and every register snapshot
+on each call. Host tests, fixtures and SMOKE need that. A deployed device does not, and the
+code costs both flash and stack. `CC2530_LEAN` is an opt-in define for the deployable
+`autonomous*` variants (and the e-paper `autonomous*` variants). `production`, `rx-diag`
+and `parent-recovery*` stay strict, so SMOKE and the fixtures keep exercising the checked
+path.
+
+The lean `aes128_encrypt_block` in `src/aes.c` keeps the exact MMIO write sequence (DMA
+descriptors, arming with the nine-NOP delay, `ENCCS` commands, `DMAIRQ` clears, `S0CON`
+restore), the same per-phase completion conditions, the 24-bit deadline, the poll limit
+(checked before each observation) and the `aes_fault` latch. It drops the NULL, range,
+overlap and ownership checks and the register-snapshot verification. It writes only
+`diagnostics->polls`, the only field the callers read. `tests/test_aes_lean.c`
+(`host-aes-lean-tests`, part of `make test-host`) checks it against a relaxed engine model:
+KATs, 257 consecutive operations, in-place blocks, every `S0CON` upper value, exact poll
+counts and limits, deadline wrap, stalls in every phase and the fault latch.
+
+Code shrinkage repacked the banks and made a flash/NV commit chain the new worst path,
+with a bank hop at nearly every step. Three small leaves of that chain moved to common code
+with `MCU_COMMON_CODE`: `flash_nv_program`, `security_keys.c` `take` and `nv_record.c`
+`program` (about 230 bytes).
+
+Static stack demand / common used / CODE, main → this change, all images PASS admission:
+
+| LG join variant | Stack | Common used | CODE |
+| --- | --- | --- | --- |
+| production | 105 → 105 | 21918 → 22130 | 225079 → 225057 |
+| rx-diag | 102 → 102 | 21951 → 22163 | 226587 → 226565 |
+| parent-recovery, parent-recovery-policy-c | 99 → 99 | 22093 → 22305 | −22 |
+| autonomous (lean) | 104 → 97 | 22863 → 22019 | 236487 → 232283 |
+| autonomous-pm2 (lean) | 103 → 98 | 22940 → 22096 | 239525 → 235321 |
+| autonomous-pm2-sht3x (lean) | 103 → 98 | 23006 → 22162 | 240820 → 236616 |
+| autonomous-pm2-epd-factory (lean, e-paper stack) | 103 → 96 | 27106 → 26262 | 243831 → 239627 |
+
+Lean images lose about 4.2 KB of CODE and 840 bytes of common code; bank 7 gains about
+3.2 KB.
+
+Evidence:
+- `make test-host`, `test-m5-m6-host` and `test-join-smoke-host`: PASS, including the strict
+  `host-aes-tests` (unchanged checked path) and the new `host-aes-lean-tests`.
+- SMOKE (production): PASS 16/16. `check_repository` and the `tools/llvm` unit tests pass.
+- MCUEMU, `autonomous-pm2-epd-factory` A/B (e-paper stack with and without this change): both
+  are joined with one member, about 398 sleeps and no faults at 111 s simulated. The stack
+  high-water mark falls from 0xD4 to 0xCF (observed depth 85 → 80 bytes).
+- H2 HIL LH32 (`autonomous-pm2-epd-factory` with this change merged onto the e-paper stack,
+  HEX `ee61892c…`): PASS. Fresh join, interview and read, leave held while permit is closed,
+  rejoin when it reopens, steady reads and five idle windows all completed. Final state:
+  BDB phase 13, member, 884 sleeps, no sleep failure, AES result 0, two e-paper refreshes
+  without failure, SP 0x8A. Idle windows match LH30: 13–14 sleeps and 58–59 s asleep per
+  minute, RX on 1.1–1.5 %. Steady 0x0402 reads took 0.5–3.5 s. An earlier run (LH31) of
+  the same HEX read the counters at LH30's hard-coded XDATA addresses, which the lean
+  layout had moved. Its final XDATA dump decodes to the same healthy state; LH32 takes the
+  addresses from the ELF.
