@@ -1096,6 +1096,25 @@ Host coverage: `host-zcl-sensor-chip` (and its sanitizer build) runs the
 application tests against a modeled ADC (cadence, ATEST/TR0 restore,
 timeouts, invalid values and reporting).
 
+#### Experimental: information-page factory reference
+
+The opt-in `autonomous-pm2-epd-factory` variant adds `CC2530_CHIP_FACTORY`.
+Each measurement loads the big-endian word at information page `0x781E`
+and, if its 12-bit value (`word >> 4`) is within 1380..1580, uses it
+instead of the 1480 nominal as the sensor reading at
+`ZCL_SENSOR_FACTORY_CENTI` (25 °C); the two low extra bits are kept
+(`word >> 1` per eight samples). Other values, including an erased
+`FFFF`, fall back to the nominal.
+
+This location is **not documented by TI**: SWRU191F documents only the IEEE
+address in the information page, and SWRS081B gives ±10 °C uncalibrated
+(±5 °C after a one-point calibration) without a factory calibration field.
+The word differs between the two boards checked and was inferred from
+information-page dumps; its temperature and supply conditions are unknown
+(25 °C and 3.0 V are assumed). Keep it experimental until it is confirmed
+against a reference sensor on several boards. Host coverage:
+`host-zcl-sensor-factory` (and its sanitizer build).
+
 ### Optional SHT3x temperature and humidity
 
 The opt-in `autonomous-pm2-sht3x` LLVM variant adds `CC2530_SHT3X` to the
