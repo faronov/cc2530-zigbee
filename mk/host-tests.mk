@@ -6,6 +6,7 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-report-completion-sanitize \
 	$(BUILD)/host-aes-fixture-tests_$(BOARD) \
 	$(BUILD)/host-aes-tests \
+	$(BUILD)/host-aes-lean-tests \
 	$(BUILD)/host-aps-frame-tests \
 	$(BUILD)/host-bdb-join-tests \
 	$(BUILD)/host-bdb-join-tests-sanitize \
@@ -188,6 +189,9 @@ $(BUILD)/host-aes-fixture-tests_$(BOARD): tests/test_aes_fixture.c tests/aes_ref
 
 $(BUILD)/host-aes-tests: tests/test_aes.c tests/aes_reference.c tests/host_mmio.c src/aes.c src/timebase.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_aes.c tests/aes_reference.c tests/host_mmio.c src/aes.c src/timebase.c -o $(BUILD)/host-aes-tests
+
+$(BUILD)/host-aes-lean-tests: tests/test_aes_lean.c tests/aes_reference.c tests/host_mmio.c src/aes.c src/timebase.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_LEAN tests/test_aes_lean.c tests/aes_reference.c tests/host_mmio.c src/aes.c src/timebase.c -o $(BUILD)/host-aes-lean-tests
 
 $(BUILD)/host-aps-frame-tests: tests/test_aps_frame.c src/aps_frame.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_aps_frame.c src/aps_frame.c -o $(BUILD)/host-aps-frame-tests

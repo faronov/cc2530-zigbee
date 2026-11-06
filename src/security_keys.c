@@ -391,7 +391,7 @@ static security_keys_result_t key(SDCC_VOLATILE uint8_t offset, SDCC_VOLATILE ui
     } else memcpy(w.key.key, w.record+offset, 16);
     return SECURITY_KEYS_OK;
 }
-static inline security_keys_result_t take(uint8_t domain)
+static inline security_keys_result_t MCU_COMMON_CODE take(uint8_t domain)
 {
     security_counter_result_t r = KEY_CALL(LW_COUNTER_TAKE, security_counter_take(domain, &w.counter, w.polls));
     if (r == SECURITY_COUNTER_EXHAUSTED) return SECURITY_KEYS_EXHAUSTED;
