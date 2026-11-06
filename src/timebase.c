@@ -22,7 +22,7 @@ uint32_t timebase_read_awake_ticks24(void)
     return (uint32_t)low | ((uint32_t)middle << 8) | ((uint32_t)high << 16);
 }
 
-timebase_result_t timebase_deadline_after(uint32_t now, uint32_t delay,
+timebase_result_t MCU_COMMON_CODE timebase_deadline_after(uint32_t now, uint32_t delay,
                                           TIMEBASE_POINTER uint32_t *deadline)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
@@ -34,7 +34,7 @@ timebase_result_t timebase_deadline_after(uint32_t now, uint32_t delay,
     return TIMEBASE_OK;
 }
 
-timebase_result_t timebase_expired(uint32_t now, uint32_t deadline, TIMEBASE_POINTER bool *expired)
+timebase_result_t MCU_COMMON_CODE timebase_expired(uint32_t now, uint32_t deadline, TIMEBASE_POINTER bool *expired)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE) /* volatile reload via address: no saved register copy on the stack */
     if (!LW_IO(LW_NONE, *(bool * SDCC_VOLATILE *)&expired, sizeof(*expired), 1)) return TIMEBASE_INVALID_ARGUMENT;

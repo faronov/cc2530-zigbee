@@ -153,7 +153,7 @@ static aes_result_t observe(aes_diagnostics_t MCU_XDATA *d)
     return AES_OK;
 }
 #define observe(d) observe(LW_SHALLOW_READ(aes_diagnostics_t MCU_XDATA *, d))
-static aes_result_t sample(aes_diagnostics_t MCU_XDATA *d, uint8_t final)
+static aes_result_t MCU_COMMON_CODE sample(aes_diagnostics_t MCU_XDATA *d, uint8_t final)
 {
     aes_result_t result;
     uint32_t now;

@@ -38,7 +38,7 @@ static void account(void)
     state.info.polls += state.diagnostics.polls;
 }
 
-static uint8_t encrypt(void)
+static uint8_t MCU_COMMON_CODE encrypt(void)
 {
     state.info.blocks++;
     state.info.aes_status = (uint8_t)aes128_encrypt_block(
@@ -50,7 +50,7 @@ static uint8_t encrypt(void)
     return state.info.aes_status == AES_OK;
 }
 
-static uint8_t flush(void)
+static uint8_t MCU_COMMON_CODE flush(void)
 {
     uint8_t i;
     for (i = 0; i < 16; i++)
@@ -96,7 +96,7 @@ static uint8_t authenticate(const uint8_t * SDCC_VOLATILE aad, SDCC_VOLATILE uin
     return feed(state.work, size) && (!state.position || flush());
 }
 
-static uint8_t counter(uint8_t number)
+static uint8_t MCU_COMMON_CODE counter(uint8_t number)
 {
     state.block[0] = 1;
     memcpy(state.block + 1, state.nonce, 13);
