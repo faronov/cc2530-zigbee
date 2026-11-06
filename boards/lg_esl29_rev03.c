@@ -26,3 +26,7 @@ void board_early_off(void)
     MMIO_SET(SOC_P0DIR, DISPLAY_PORT0_CONTROLS);
     MMIO_SET(SOC_P1DIR, DISPLAY_RESET);
 }
+
+#if defined(CC2530_EPD)
+#include "../src/epd.c"
+#endif

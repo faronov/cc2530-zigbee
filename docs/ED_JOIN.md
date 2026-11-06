@@ -1131,6 +1131,51 @@ back 21.50 °C and 47.00 %RH. The image also joins and sleeps (PM2). That
 run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the pinned compiler
 ([study §25](LLVM_MCS51_PORT_STUDY.md#25-fixed-defect-acc-bit-branch-without-an-implicit-use-of-a)).
 
+### Optional e-paper display
+
+The opt-in `autonomous-pm2-epd` and `autonomous-pm2-sht3x-epd` LLVM variants
+add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`). It
+requires the LG ESL29 board and `CC2530_CHIP_SENSE` (a build error
+otherwise). The fixed 45-unit LLVM link is kept: `boards/lg_esl29_rev03.c`
+includes [`src/epd.c`](../src/epd.c). The driver is in common code
+(`MCU_COMMON_CODE`), so it does not use banked space.
+
+- Panel (H2, LG ESL29 Rev0.3): 2.9" 128×296 UC8151D. The pins, SPI setup
+  and refresh sequence were verified on H2 with a RAM test pattern
+  ([`include/epd.h`](../include/epd.h)): P0.7 power (high on), P1.1 RST,
+  P1.2 BUSY (low busy), P0.2 DC, P0.4 CS, USART0 alternative 1 SPI master
+  (P0.3 MOSI, P0.5 SCK) at 1 MHz, MSB first, CS low for each octet.
+  Sequence: power, RST low 20 ms, high, BUSY; `06 17 17 17`, `04` (power on,
+  ~50 ms); `00 1F 0D`, `61 80 01 28`, `82 12`, `50 97`; `10` old and `13` new
+  plane (4,736 octets each, bit 1 white); `12` (refresh, ~4.9 s); `02`
+  (power off, ~40 ms); power cut. Panel setting `1F` (REG 0) selects the
+  panel's OTP waveforms; no LUT is loaded.
+- Content: temperature (`ZCL_SENSOR_STATE.temperature`, or `climate` with
+  SHT3x) as `21.5°C` (scale 6), humidity `47%` (scale 4, SHT3x only) and
+  AVDD `3.01V` (scale 2) from a 5×7 font. Invalid values show `--.-°C`,
+  `--%` and `-.--V`. Gate row 0 is the right edge; each row's octet 0 holds
+  the top 8 pixels. Rows are rendered on the fly, 16 octets at a time; there
+  is no framebuffer.
+- Schedule: from READY, `epd_show()` runs after `zcl_sensor_tick()`. The
+  first refresh starts at once; later ones start only when the text changed
+  and at least 600 s passed since the last refresh, checked every 10 s.
+  `epd_step()` runs on every READY-gate poll. It streams at most 4 rows or
+  makes one bounded wait check per call. During the panel's own refresh the
+  device may enter PM2 (sleep gate 5, [M7b](M7_SLEEP.md)).
+- Faults: BUSY waits are bounded (500 ms per step, 30 s refresh), and each
+  SPI octet's TX_BYTE wait is bounded to 255 polls. A fault cuts the panel
+  power through `board_early_off()` and counts `epd.failures`. The next try
+  follows the normal schedule.
+- Not verified: the pixel bit order within an octet (MSB the top pixel) and
+  the full firmware on the panel. Panel current while off (P1.2's
+  reset-default pull-up) is not measured.
+
+Host coverage: `host-epd` (and its sanitizer build) runs the board unit
+against a UC8151D model. It checks the command sequence and data, CS framing,
+DC level, SPI setup, BUSY ordering and both planes. An independent decoder
+checks the pixels, field boxes and orientation. The model also covers the
+schedule, the PM2 limit, a stuck BUSY, a stuck refresh and an SPI stall.
+
 ### Report attempt and response ownership
 
 The current LLVM-only caller runs `zcl_sensor_tick()` once per READY poll,

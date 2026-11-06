@@ -3,6 +3,9 @@
 #include "flash_exec.h"
 #include "timebase.h"
 #include "zcl_sensor.h"
+#if defined(CC2530_EPD)
+#include "epd.h"
+#endif
 #include "bdb_join_internal.h"
 #include <string.h>
 #if defined(CC2530_RX_DIAG)
@@ -93,8 +96,18 @@ static void fault(uint8_t reason)
  * leave the report uncommitted, so a later poll rebuilds it. */
 static void serve(void)
 {
+#if defined(CC2530_EPD)
+    epd_step(DEVICE.last);
+#endif
     if(DEVICE.phase!=BDB_JOIN_READY) return;
     zcl_sensor_tick();
+#if defined(CC2530_EPD)
+#if defined(CC2530_SHT3X)
+    epd_show(DEVICE.last,ZCL_SENSOR_STATE.climate,ZCL_SENSOR_STATE.humidity,ZCL_SENSOR_STATE.millivolts);
+#else
+    epd_show(DEVICE.last,ZCL_SENSOR_STATE.temperature,EPD_NO_HUMIDITY,ZCL_SENSOR_STATE.millivolts);
+#endif
+#endif
     RESULT=zcl_sensor_serve();
     if(DEVICE.work.runtime.zdo.application_ready) {
         if(zdo_runtime_discard_application(&DEVICE.work.runtime.zdo)!=ZDO_RUNTIME_OK) {
@@ -220,6 +233,11 @@ void join_smoke_sleep(void)
         if(mark>=0x80000000UL) goto skip;
         if(mark<span) span=mark;
     }
+#if defined(CC2530_EPD)
+    SL.reason=5;
+    mark=epd_sleep_limit(CLOCK.symbols);
+    if(mark<span) span=mark;
+#endif
     if(span>JOIN_SMOKE_SLEEP_CAP) span=JOIN_SMOKE_SLEEP_CAP;
     span=((span>>3)*2147u)>>9;   /* 16-us symbols to 32.768-kHz ticks, rounded down */
     if(span<JOIN_SMOKE_SLEEP_MIN+JOIN_SMOKE_SLEEP_MARGIN) goto skip;
