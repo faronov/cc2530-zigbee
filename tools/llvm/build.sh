@@ -9,7 +9,9 @@
 # autonomous (parent-recovery without a debugger: built-in admission, reset retry,
 # M7a RX-off-when-idle READY receiver and ADC chip temperature/VDD sensing) or
 # autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls) or
-# autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor).
+# autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
+# flower (autonomous-pm2 on the faronov/flower v2 board: the FlowerX soil sensor
+# application replaces zcl_sensor and the flower board file replaces LG ESL29).
 # The deployable autonomous* variants add CC2530_LEAN: drivers keep their exact
 # MMIO sequences, deadlines and poll budgets but drop self-verification.
 set -euo pipefail
@@ -26,6 +28,7 @@ case $VARIANT in
   autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
+  flower) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_FLOWER -DCC2530_ZDO_DESCRIPTORS -DCC2530_APP_QUIET -UCC2530_BOARD -DCC2530_BOARD=2" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac
 LLVM_SRC=${LLVM_SRC:?LLVM_SRC required}
@@ -54,9 +57,18 @@ printf '%s\n' "$DEFS" > $OUT/defines.txt
 CFLAGS="$TARGET -std=c99 -Oz $SF $ABI -ffunction-sections -fdata-sections -Itoolchain/clang/include $DEFS"
 echo "$T/clang $CFLAGS -c SRC -o OBJ   (cwd = firmware source root)" > $OUT/compile-command.txt
 cd $OUT/src
+SRCMAP=$H/inputs/srcmap-stk.txt
+if [ "$VARIANT" = flower ]; then
+  SRCMAP=$OUT/srcmap.txt
+  sed -e 's|^zcl_sensor src/zcl_sensor.c$|zcl_sensor src/zcl_flower.c|' \
+      -e 's|^lg_esl29_rev03 boards/lg_esl29_rev03.c$|lg_esl29_rev03 boards/flower_v2.c|' \
+      $H/inputs/srcmap-stk.txt > $SRCMAP
+  grep -qx 'zcl_sensor src/zcl_flower.c' $SRCMAP && grep -qx 'lg_esl29_rev03 boards/flower_v2.c' $SRCMAP \
+    || { echo "flower srcmap substitution failed"; exit 2; }
+fi
 while read -r unit src; do
   echo "$unit $src"
-done < $H/inputs/srcmap-stk.txt | xargs -P "${JOBS:-8}" -L1 sh -c \
+done < $SRCMAP | xargs -P "${JOBS:-8}" -L1 sh -c \
   '"$0" '"$CFLAGS"' -c "$2" -o "'"$OUT"'/obj/$1.o" 2> "'"$OUT"'/obj/$1.err" || { echo "FAIL $1"; cat "'"$OUT"'/obj/$1.err" >&2; exit 255; }' $T/clang
 n=$(ls $OUT/obj/*.o | wc -l); [ "$n" = 45 ] || { echo "object count $n != 45"; exit 2; }
 $T/clang $TARGET -c $OUT/src/src/flash_exec_mcs51.s -o $OUT/link/flash_exec_mcs51.o

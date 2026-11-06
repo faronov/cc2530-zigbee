@@ -59,9 +59,9 @@ def main():
     parser.add_argument("--llvm-src", type=Path, required=True)
     parser.add_argument("--llvm-revision", help="explicit full LLVM SHA for compiler CI; default: toolchain.json pin")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--board", choices=("generic", "lg_esl29_rev03"), required=True)
+    parser.add_argument("--board", choices=("generic", "lg_esl29_rev03", "flower_v2"), required=True)
     parser.add_argument("--image", choices=("join", "bringup", "timebase_fixture"), default="join")
-    parser.add_argument("--variant", choices=tiers.VARIANTS + ("autonomous", "autonomous-pm2", "autonomous-pm2-sht3x"), default="production")
+    parser.add_argument("--variant", choices=tiers.VARIANTS + ("autonomous", "autonomous-pm2", "autonomous-pm2-sht3x", "flower"), default="production")
     args = parser.parse_args()
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
     pin = json.loads((HERE / "toolchain.json").read_text())
@@ -74,8 +74,10 @@ def main():
         raise SystemExit("standard build requires the exact clean pinned or explicitly requested LLVM source revision")
     if revision not in compiler["version"]:
         raise SystemExit("compiler executable version does not identify the requested source revision")
-    if args.image == "join" and args.board != "lg_esl29_rev03":
-        raise SystemExit("the admitted join profile is LG-only; generic supports bringup/timebase_fixture")
+    if args.image == "join" and args.board == "generic":
+        raise SystemExit("the admitted join profile needs a real board; generic supports bringup/timebase_fixture")
+    if (args.board == "flower_v2") != (args.variant == "flower"):
+        raise SystemExit("the flower variant is exactly the flower_v2 board firmware")
     if args.image != "join" and args.variant != "production":
         raise SystemExit("non-production variants are supported only by the join image")
     identity = {"compiler": compiler, "firmware": tiers.firmware_identity(REPO),

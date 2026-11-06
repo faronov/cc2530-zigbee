@@ -1131,6 +1131,36 @@ back 21.50 °C and 47.00 %RH. The image also joins and sleeps (PM2). That
 run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the pinned compiler
 ([study §25](LLVM_MCS51_PORT_STUDY.md#25-fixed-defect-acc-bit-branch-without-an-implicit-use-of-a)).
 
+### FlowerX soil sensor (board `flower_v2`, variant `flower`)
+
+The `flower` LLVM variant (`--board flower_v2 --variant flower`) builds the
+LEAN PM2 sleepy end device for the faronov/flower v2 board (E18-MS1-PCB). It
+replaces the ESL29 application with `src/zcl_flower.c` and keeps the
+DIYRuZ_FlowerX attributes that the flower Z2M converter and ZHA quirk use
+(manufacturer `modkam.ru`, model `DIYRuZ_FlowerX`). It is not yet
+hardware-qualified.
+
+- Pins ([`include/board.h`](../include/board.h)): sensor rail P1.1, soil
+  excitation P1.4 (Timer 3 alternative 1, channel 1), soil ADC AIN4, light ADC
+  AIN7, button P2.0, LED P0.1. BME280 (P0.5/P0.6) and DS18B20 (P1.3) are
+  stage 2 and 3: their clusters are only described when detected.
+- Cycle (default 300 s, Diagnostics `FF09`, 30–3600 s): rail and excitation
+  on, 50 ms warm-up (the device stays awake; PM2 stops Timer 3), then battery
+  VDD/3 ×5, light ×5 and soil ×3, rail off. `zcl_sensor_quiet()` bounds the
+  sleep span (sleep reason 5 while the cycle is awake).
+- Conversions follow flower: mV = raw·0.443, Alkaline 2S percent curve,
+  illuminance 10000·log10(raw)+1 (integer log, within one unit), soil from the
+  battery-compensated air/water calibration. Unlike flower, a soil reading
+  more than one calibrated span outside air..water is invalid (`FFFF`).
+- Simple descriptors come from `CC2530_ZDO_DESCRIPTORS`. Reports are grouped
+  per bound cluster; the Basic model is reported once after joining.
+- The interval is not persisted yet (NV is stage 4).
+
+Host coverage: `host-zcl-flower` (and its sanitizer build) models the ADC and
+Timer 3. It covers conversions, descriptors, the cycle across the 32-bit wrap,
+reads, writes, reporting configuration, Identify, bind/unbind and grouped
+reports.
+
 ### Report attempt and response ownership
 
 The current LLVM-only caller runs `zcl_sensor_tick()` once per READY poll,

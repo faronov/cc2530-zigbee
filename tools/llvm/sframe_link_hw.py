@@ -124,12 +124,19 @@ if other_pdata: sys.exit('FAIL CLOSED: firmware has its own PDATA objects; the p
 if pool > 256: sys.exit(f'FAIL: overlaid pool {pool} B exceeds the 256-byte PDATA page')
 
 # ---- pass 2: one output section per frame at its fixed address
+# A variant srcmap may compile a source under another unit name (zcl_flower.c ->
+# zcl_sensor.o); the linker matches the object file, not STT_FILE.
+unit = {}
+if os.path.exists(OUT + '/srcmap.txt'):
+    for line in open(OUT + '/srcmap.txt'):
+        if line.strip():
+            u, src = line.split(); unit[os.path.basename(src)] = u
 blk = []; want = {}
 for (obj, sym), k in owner.items():
     a = off[k] if k in reach else 0
     fn = sym[len('__sframe.'):]
     sec = re.sub(r'[^A-Za-z0-9_]', '_', f'sf_{obj}_{fn}')
-    blk.append(f'  .{sec} {a:#x} (NOLOAD) : {{ */{os.path.splitext(os.path.basename(obj))[0]}.o(.mcs51.pdata.bss.sframe.{fn}) }} > SFRAME\n')
+    blk.append(f'  .{sec} {a:#x} (NOLOAD) : {{ */{unit.get(os.path.basename(obj), os.path.splitext(os.path.basename(obj))[0])}.o(.mcs51.pdata.bss.sframe.{fn}) }} > SFRAME\n')
     want[(obj, sym)] = a
 reserve = f'    *(.mcs51.pdata.bss)\n    . = MAX(., {pool:#x});\n'
 ld2 = BASE_LD.replace(PDATA_BSS, reserve)

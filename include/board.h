@@ -8,18 +8,29 @@
 
 #define BOARD_GENERIC 0u
 #define BOARD_LG_ESL29_REV03 1u
+#define BOARD_FLOWER_V2 2u
 #define BOARD_POLICY_DISPLAY_OFF 0x01u
 
 #ifndef CC2530_BOARD
 #error The build must select CC2530_BOARD
 #endif
-#if CC2530_BOARD != BOARD_GENERIC && CC2530_BOARD != BOARD_LG_ESL29_REV03
+#if CC2530_BOARD != BOARD_GENERIC && CC2530_BOARD != BOARD_LG_ESL29_REV03 && \
+    CC2530_BOARD != BOARD_FLOWER_V2
 #error Unsupported CC2530 board
 #endif
 
 /* ZCL Basic identity strings; metadata only, no hardware access. */
+#if CC2530_BOARD == BOARD_FLOWER_V2
+/* Wire identity of faronov/flower (DIYRuZ FlowerX); the Z2M converter and the
+ * ZHA quirk match on these strings. */
+#define BOARD_MANUFACTURER "modkam.ru"
+#define BOARD_MODEL "DIYRuZ_FlowerX"
+#define BOARD_MODEL_LENGTH 14u
+#else
 #define BOARD_MANUFACTURER "cc2530-zigbee"
-#if CC2530_BOARD == BOARD_LG_ESL29_REV03
+#endif
+#if CC2530_BOARD == BOARD_FLOWER_V2
+#elif CC2530_BOARD == BOARD_LG_ESL29_REV03
 #define BOARD_MODEL "LG-ESL29"
 #define BOARD_MODEL_LENGTH 8u
 #else
@@ -52,7 +63,21 @@ typedef struct {
 
 extern const MCU_CODE board_description_t board_description;
 
-#if CC2530_BOARD == BOARD_LG_ESL29_REV03
+/* faronov/flower v2 (E18-MS1-PCB), HAL_BOARD_FLOWER pin map of the reference
+ * firmware: LED P0.1 active high, button P2.0 active low (pull-up), sensor
+ * rail P1.1 high=on, soil excitation P1.4 (Timer3 alt1 ch1), soil AIN4 P0.4,
+ * light AIN7 P0.7, BME280 I2C P0.5 SCL / P0.6 SDA, DS18B20 1-Wire P1.3. */
+#define BOARD_FLOWER_LED 0x02u
+#define BOARD_FLOWER_BUTTON 0x01u
+#define BOARD_FLOWER_RAIL 0x02u
+#define BOARD_FLOWER_PWM 0x10u
+#define BOARD_FLOWER_SOIL 0x10u
+#define BOARD_FLOWER_LIGHT 0x80u
+#define BOARD_FLOWER_SCL 0x20u
+#define BOARD_FLOWER_SDA 0x40u
+#define BOARD_FLOWER_ONEWIRE 0x08u
+
+#if CC2530_BOARD == BOARD_LG_ESL29_REV03 || CC2530_BOARD == BOARD_FLOWER_V2
 /* Called before C data initialization; only direct MMIO operations are allowed. */
 void board_early_off(void);
 #endif

@@ -220,6 +220,14 @@ void join_smoke_sleep(void)
         if(mark>=0x80000000UL) goto skip;
         if(mark<span) span=mark;
     }
+#if defined(CC2530_APP_QUIET)
+    /* Application sensor cycle (zcl_flower.h): 0 keeps the device awake. */
+    SL.reason=5;
+    mark=zcl_sensor_quiet(CLOCK.symbols);
+    if(!mark) goto skip;
+    SL.reason=4;
+    if(mark<span) span=mark;
+#endif
     if(span>JOIN_SMOKE_SLEEP_CAP) span=JOIN_SMOKE_SLEEP_CAP;
     span=((span>>3)*2147u)>>9;   /* 16-us symbols to 32.768-kHz ticks, rounded down */
     if(span<JOIN_SMOKE_SLEEP_MIN+JOIN_SMOKE_SLEEP_MARGIN) goto skip;

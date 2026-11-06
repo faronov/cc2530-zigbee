@@ -161,6 +161,8 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-zcl-frame-tests \
 	$(BUILD)/host-zcl-identify-tests \
 	$(BUILD)/host-zcl-identify-tests-sanitize \
+	$(BUILD)/host-zcl-flower \
+	$(BUILD)/host-zcl-flower-sanitize \
 	$(BUILD)/host-zcl-sensor \
 	$(BUILD)/host-zcl-sensor-chip \
 	$(BUILD)/host-zcl-sensor-chip-sanitize \
@@ -679,6 +681,13 @@ $(BUILD)/host-zcl-identify-tests: tests/test_zcl_identify.c src/zcl_identify.c s
 
 $(BUILD)/host-zcl-identify-tests-sanitize: tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-identify-tests-sanitize
+
+# FlowerX application (board flower_v2, variant flower); the test includes src/zcl_flower.c.
+$(BUILD)/host-zcl-flower: tests/test_zcl_flower.c src/zcl_flower.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(filter-out -DCC2530_BOARD=%,$(HOST_FLAGS)) -DCC2530_BOARD=2 $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) -DCC2530_FLOWER -DCC2530_ZDO_DESCRIPTORS -DCC2530_APP_QUIET -I. -Isrc tests/test_zcl_flower.c -lm -o $@
+
+$(BUILD)/host-zcl-flower-sanitize: tests/test_zcl_flower.c src/zcl_flower.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(filter-out -DCC2530_BOARD=%,$(HOST_FLAGS)) -DCC2530_BOARD=2 $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) -DCC2530_FLOWER -DCC2530_ZDO_DESCRIPTORS -DCC2530_APP_QUIET -I. -Isrc -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_flower.c -lm -o $@
 
 $(BUILD)/host-zcl-sensor: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -I. -Isrc tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-sensor

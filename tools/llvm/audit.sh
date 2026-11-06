@@ -11,19 +11,23 @@ $PY $H/measure.py $ELF > $A/measure.json
 $PY $H/thunk_audit.py $ELF $A/thunks.json
 # build.sh records the exact defines (production plus any FIRMWARE_VARIANT).
 DEFS_FILE=$OUT/defines.txt; [ -f $DEFS_FILE ] || DEFS_FILE=$H/inputs/production-defines.txt
-$PY $H/mir_stackargs.py $T $OUT/src $H/inputs/srcmap-stk.txt $DEFS_FILE $OUT/mir
+# A board variant (flower) records its substituted source map.
+SRCMAP=$OUT/srcmap.txt; [ -f $SRCMAP ] || SRCMAP=$H/inputs/srcmap-stk.txt
+$PY $H/mir_stackargs.py $T $OUT/src $SRCMAP $DEFS_FILE $OUT/mir
 $PY $H/stackarg_entry_audit.py $ELF $OUT/mir $A/stackarg.json
 $PY $H/stack_proof.py $ELF $A/stack.json
 $PY $H/mkhex.py $ELF $A/hw1.hex $A/hex.json
 $T/llvm-objcopy -O ihex $ELF $A/objcopy.hex
 $PY $H/proofs.py $OUT hw1 $A/proofs.json
-$PY $H/sensor_layout.py $OUT
+# The LG harness observes zcl_sensor state inside the record overlay; the
+# flower application keeps its own state and has no such harness.
+[ "$SRCMAP" = $H/inputs/srcmap-stk.txt ] && $PY $H/sensor_layout.py $OUT
 $PY $H/hexbanks.py $A/hexbanks.json llvm=$A/hw1.hex
 # Generic-pointer call-site proof on assembly emitted by the same compiler/flags.
 DEFS=$(cat $DEFS_FILE)
 CFLAGS="-target mcs51 -mcpu=cc2530 -std=c99 -Oz ${SF_FLAGS?} ${ABI_FLAGS?} -ffunction-sections -fdata-sections -Itoolchain/clang/include $DEFS"
 cd $OUT/src
-while read -r unit src; do echo "$unit $src"; done < $H/inputs/srcmap-stk.txt | \
+while read -r unit src; do echo "$unit $src"; done < $SRCMAP | \
   xargs -P "${JOBS:-8}" -L1 sh -c '"$0" '"$CFLAGS"' -S "$2" -o "'"$OUT"'/asm/$1.s"' $T/clang
 cd $OUT/asm && $PY $H/gp_proof.py $A/gp-sites.json > $A/gp-sites.txt
 tail -1 $A/gp-sites.txt
