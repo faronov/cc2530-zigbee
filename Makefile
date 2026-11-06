@@ -84,7 +84,7 @@ $(BUILD)/host-profile.txt: FORCE | $(BUILD)
 	rm -f "$@.tmp"
 FORCE:
 
-HOST_CHECKS := host-nwk-frame-tests host-aps-frame-tests host-zcl-frame-tests host-nv-record-tests host-security-counter-tests
+HOST_CHECKS := host-aes-lean-tests host-nwk-frame-tests host-aps-frame-tests host-zcl-frame-tests host-nv-record-tests host-security-counter-tests
 test-host: $(addprefix $(BUILD)/,$(HOST_CHECKS)) $(BUILD)/host-join-smoke $(BUILD)/host-mac-link-e2e-rxoff-tests
 	set -e; for name in $(HOST_CHECKS) host-mac-link-e2e-rxoff-tests; do "$(BUILD)/$$name"; done
 	set -e; for n in 0 2 4 9 25 26; do "$(BUILD)/host-join-smoke" $$n; done
