@@ -1128,8 +1128,8 @@ example, conversion error, busy NACKs, lag, CRC corruption, stuck SCL, a
 removed or absent sensor, the bounded initial poll and reporting. In MCUEMU,
 the `sht3x.lua` I2C part on open-drain P1.6/P1.7 nets with pull-ups reads
 back 21.50 °C and 47.00 %RH. The image also joins and sleeps (PM2). That
-run found an LLVM MCS-51 branch defect in the first CRC code
-([study §25](LLVM_MCS51_PORT_STUDY.md#25-open-defect-acc-bit-branch-without-an-implicit-use-of-a)).
+run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the pinned compiler
+([study §25](LLVM_MCS51_PORT_STUDY.md#25-fixed-defect-acc-bit-branch-without-an-implicit-use-of-a)).
 
 ### Optional e-paper display
 

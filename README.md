@@ -7,13 +7,16 @@
 
 An experimental CC2530 Zigbee end-device project, without proprietary TI stack
 libraries. Firmware uses **Clang MCS51, LLD and the runtime from exactly
-`ac1712447bf906daddba44f79e586173a045aa1f`** in
-[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/ac1712447bf906daddba44f79e586173a045aa1f).
+`ffada1d1b4198787559f99fe0ed448c32c46d2c7`** in
+[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/ffada1d1b4198787559f99fe0ed448c32c46d2c7).
 The machine-readable pin is [toolchain.json](tools/llvm/toolchain.json).
 SDCC firmware compilation, linker/overlay builds and production CI are retired;
 there is no compiler fallback.
 This is UNIFY-01 plus the exact upstream `eeef1bec` bit-toggle correction and
-its `bit-toggle.c` regression; the frozen UNIFY-01 and M6 revisions are unchanged.
+its `bit-toggle.c` regression, plus the ACC-bit branch fix (implicit use of A, with the
+`acc-bit-branch-use.c` regression) and the same-bank bank-call trampoline bypass
+([study §26](docs/LLVM_MCS51_PORT_STUDY.md#26-same-bank-bank-call-trampoline-bypass));
+the frozen UNIFY-01 and M6 revisions are unchanged.
 
 With that clean LLVM source checkout, its built tools, GNU Make, a host C compiler
 and Python with `pyelftools`:

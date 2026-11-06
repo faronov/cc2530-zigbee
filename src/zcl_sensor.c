@@ -167,9 +167,8 @@ static uint8_t crc(uint16_t word)
     for (i = 16; i; i--) {
         if (i == 16u) c ^= (uint8_t)(word >> 8);
         else if (i == 8u) c ^= (uint8_t)word;
-        /* Branch-free: the LLVM MCS-51 `jnb ACC.7` peephole lacks an implicit
-         * use of A, so branch folding hoisted the shared shift above a select
-         * test and the test read the shifted value. */
+        /* Branch-free. Compilers before LLVM d1456a1d dropped the load of A
+         * before a `jnb ACC.7` select test (study section 25). */
         c = (uint8_t)(c << 1) ^ (uint8_t)(0x31u & (uint8_t)(0u - (c >> 7)));
     }
     return c;
