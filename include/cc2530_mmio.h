@@ -33,6 +33,18 @@
 #error Select SDCC for firmware or CC2530_HOST_TEST for host tests
 #endif
 
+/* Application-owned registers. They stay out of the shared list so the
+ * simulator's peripheral ownership (tests/boot_join_smoke.py) is unchanged
+ * for every other image. */
+#if defined(CC2530_FLOWER)
+#define CC2530_APP_REGISTER_LIST(X) \
+    X(SOC_T3CTL, 0xcb) \
+    X(SOC_T3CC0, 0xcd) \
+    X(SOC_T3CCTL1, 0xce)
+#else
+#define CC2530_APP_REGISTER_LIST(X)
+#endif
+
 /* Public CC2530 SFR addresses; declarations do not enable peripherals. */
 #define CC2530_REGISTER_LIST(X) \
     X(SOC_P0, 0x80) \
@@ -93,13 +105,7 @@
     X(SOC_T2IRQF, 0xa1) \
     X(SOC_T2IRQM, 0xa7) \
     X(SOC_T2EVTCFG, 0x9c) \
-    X(SOC_T1CNTL, 0xe2) \
-    X(SOC_T1CNTH, 0xe3) \
-    X(SOC_T1CTL, 0xe4) \
-    X(SOC_T3CTL, 0xcb) \
-    X(SOC_T3CC0, 0xcd) \
-    X(SOC_T3CCTL1, 0xce) \
-    X(SOC_T3CC1, 0xcf)
+    CC2530_APP_REGISTER_LIST(X)
 
 #define SFR_ADDRESS(name, address) name##_ADDRESS = address,
 enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };
