@@ -16,7 +16,13 @@ static uint16_t link_address = 0x1900, opened_address = 0x1920;
 static unsigned reconfig_writes, reconfig_corrupt, tx_channels, rx_opens;
 static uint8_t tx_channel[16], rx_channel[16];
 static uint16_t last_reconfig;
+#if defined(CC2530_TX_POWER)
+#define RECONFIG_CASES 7u
+#define RECONFIG_WRITABLE(a) (((a) >= 0x6172 && (a) <= 0x6175) || (a) == 0x618f || (a) == 0x6190)
+#else
 #define RECONFIG_CASES 6u
+#define RECONFIG_WRITABLE(a) (((a) >= 0x6172 && (a) <= 0x6175) || (a) == 0x618f)
+#endif
 
 static uint8_t frequency(uint8_t channel) { return (uint8_t)(11u + 5u * (channel - 11u)); }
 static int before_or_equal(const mac_epoch_stamp_t *a, const mac_epoch_stamp_t *b)
@@ -33,7 +39,7 @@ static uint16_t reconfig_address(const volatile void *p)
 }
 static void reconfig_xstore(uint16_t a, uint8_t value)
 {
-    if (mode == 5 && ((a >= 0x6172 && a <= 0x6175) || a == 0x618f)) {
+    if (mode == 5 && RECONFIG_WRITABLE(a)) {
         handoff_tick(); advance_clocks(mmio_clocks);
         assert(xwrite_count == 1 && xwrites[0].address == a && xwrites[0].value == value);
         xwrite_count = 0; logs(); trace('w', a, value);
@@ -163,6 +169,12 @@ static void invalid_reconfig(void)
     link.value.channel = 10; assert(configure_link() == MAC_ADAPTER_INVALID);
     link.value.channel = 27; assert(configure_link() == MAC_ADAPTER_INVALID);
     link.value.channel = 15; link.value.power = 0; assert(configure_link() == MAC_ADAPTER_INVALID);
+#if defined(CC2530_TX_POWER)
+    link.value.power = 0x06; assert(configure_link() == MAC_ADAPTER_INVALID);
+    link.value.power = 0xf4; assert(configure_link() == MAC_ADAPTER_INVALID);
+#else
+    link.value.power = RADIO_AUTOACK_POWER_F5; assert(configure_link() == MAC_ADAPTER_INVALID);
+#endif
     link.value.power = RADIO_AUTOACK_POWER_05;
     for (i = 0; i < 8; i++) {
         link.value.ieee[i] ^= 0x80; assert(configure_link() == MAC_ADAPTER_INVALID);
@@ -318,6 +330,35 @@ static void reconfig_case(unsigned selected)
         open_link();
         deliver_to(0x1234, 0x9abc); assert(ack_active);
         (void)next_frame(); consume_observation(); close_receiver();
+#if defined(CC2530_TX_POWER)
+    } else if (selected == 6) {
+        /* SWRS081B Table 2: every TXPOWER setting, then channel and power together. */
+        static const uint8_t powers[] = { 0xf5, 0xe5, 0xd5, 0xc5, 0x05, 0x85 };
+        link_adapter();
+        assert(XR(0x6190) == RADIO_AUTOACK_POWER_05);
+        for (i = 0; i < sizeof(powers); i++) {
+            link.value.power = powers[i];
+            assert(configure_link() == MAC_ADAPTER_OK && XR(0x6190) == powers[i]);
+            installed(0x1234, 0x9abc, 26);
+            assert(mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF && !XR(0x618b));
+        }
+        assert(reconfig_writes == 6);
+        link.value.power = 0x35; link.value.channel = 15;
+        assert(configure_link() == MAC_ADAPTER_OK && reconfig_writes == 8 &&
+               radio_autoack_diagnostic()->writes == 2 && radio_autoack_diagnostic()->verified == 2);
+        assert(XR(0x6190) == 0x35); installed(0x1234, 0x9abc, 15);
+        assert(configure_link() == MAC_ADAPTER_OK && reconfig_writes == 8);
+        submit_packet(0); assert(drive_tx(MAC_ADAPTER_KEEP_RAW) == MAC_ADAPTER_OK);
+        assert(adapter_tx.engine.outcome == MAC_TX_UNACKNOWLEDGED && tx_channels == 1 &&
+               tx_channel[0] == frequency(15) && XR(0x6190) == 0x35);
+        assert(mac_tx_interval_release(&adapter_tx) == MAC_TX_OK);
+        close_receiver();
+        reconfig_corrupt = 9; link.value.power = 0xf5;
+        assert(configure_link() == MAC_ADAPTER_RADIO_ERROR &&
+               radio_autoack_diagnostic()->result == RADIO_AUTOACK_STATE_CHANGED &&
+               radio_autoack_state == RADIO_AUTOACK_FAULT);
+        retained_fault();
+#endif
     } else {
         assert(selected == 5); invalid_reconfig();
     }
@@ -329,6 +370,10 @@ int main(int argc, char **argv)
     assert(argc == 1);
     for (selected = 0; selected < RECONFIG_CASES; selected++) reconfig_case(selected);
     assert(adapter_component_main(1, argv) == 0);
+#if defined(CC2530_TX_POWER)
+    puts("MAC reconfiguration (CC2530_TX_POWER): OFF-only PAN/short/channel/TXPOWER install, reopen, raw sweep, guards and faults PASS.");
+#else
     puts("MAC reconfiguration: OFF-only PAN/short/channel install, reopen, raw sweep, guards and faults PASS.");
+#endif
     return 0;
 }

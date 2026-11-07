@@ -41,7 +41,7 @@ the public C struct is not a storage format.
 |0..3|Family magic `CTR1`|
 |4|Schema version1|
 |5|Opaque payload length0..112|
-|6..7|Reserved zero|
+|6..7|Reserved zero; application settings with `CC2530_APP_SETTINGS`|
 |8..11|NWK exclusive ceiling|
 |12..15|APS exclusive ceiling|
 |16 onward|Exactly the declared opaque payload|
@@ -52,6 +52,13 @@ reserved fields and exact length are checked before accepting state.
 An unknown counter schema fails VERSION; an unknown journal format remains
 an explicit NV failure with the underlying UNSUPPORTED reason. No implicit
 migration, truncation or default initialization occurs.
+
+With `CC2530_APP_SETTINGS`, bytes 6..7 are two application-owned bytes
+(`security_counter_app[2]`). `open()` loads them without checking them; every
+`create()` and commit stores the current values. `security_counter_app_pending()`
+reports a committed record whose stored bytes differ from the live ones. An
+image without the option still refuses nonzero bytes with FORMAT, so going back
+to such an image needs the bytes to be zero.
 
 Opaque payload is for a future upper-layer security snapshot, not an
 authenticated key or membership record by itself. `security_counter_read()`

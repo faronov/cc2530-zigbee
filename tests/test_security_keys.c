@@ -757,6 +757,19 @@ static void secured_rejoin(void)
     state(SECURITY_KEYS_REJOINING);
     CHECK(ed_wire_inspect(0,raw,written,&meta) == ZIGBEE_SECURITY_OK && meta.counter >= old_ceiling);
     reboot(NULL,SECURITY_KEYS_REJOINING);
+#if defined(CC2530_APP_SETTINGS)
+    /* A resumed REJOINING member commits settings without a phase change. */
+    security_counter_app[0] = 0x5a; security_counter_app[1] = 0xa5;
+    CHECK(security_counter_app_pending());
+    CHECK(security_keys_checkpoint(0) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_checkpoint(3) == SECURITY_KEYS_OK);
+    CHECK(!security_counter_app_pending());
+    state(SECURITY_KEYS_REJOINING);
+    security_counter_app[0] = security_counter_app[1] = 0;
+    reboot(NULL,SECURITY_KEYS_REJOINING);
+    CHECK(security_counter_app[0] == 0x5a && security_counter_app[1] == 0xa5);
+    CHECK(!security_counter_app_pending());
+#endif
     data(3,nwk_key,255); reject(SECURITY_KEYS_CONTEXT);
     reboot(NULL,SECURITY_KEYS_REJOINING);
     base(0); packet.nwk.type = ED_NWK_COMMAND;
@@ -782,6 +795,16 @@ static void secured_rejoin(void)
     seal_packet(NULL,0,0,nwk_key,255,7); accept(SECURITY_KEYS_EVENT_REJOINED);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.config.address == 0x2345);
     reboot(NULL,SECURITY_KEYS_VERIFIED); CHECK(status.config.address == 0x2345);
+#if defined(CC2530_APP_SETTINGS)
+    CHECK(security_counter_app[0] == 0x5a && security_counter_app[1] == 0xa5);
+    security_counter_app[1] = 0x3c;
+    CHECK(security_keys_checkpoint(3) == SECURITY_KEYS_OK);
+    state(SECURITY_KEYS_VERIFIED);
+    security_counter_app[1] = 0;
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(security_counter_app[0] == 0x5a && security_counter_app[1] == 0x3c);
+    CHECK(status.config.address == 0x2345);
+#endif
     data(4,nwk_key,255); reject(SECURITY_KEYS_IDENTITY); /* old short no longer admitted */
     base(0); packet.nwk.type = ED_NWK_COMMAND;
     packet.nwk.source = 0x2345; packet.nwk.destination = 0xfffd;

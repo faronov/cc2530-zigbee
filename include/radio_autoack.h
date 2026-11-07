@@ -22,6 +22,18 @@
 #define RADIO_AUTOACK_POWER_05 0x05u
 #define RADIO_AUTOACK_POWER_D5 0xd5u
 #define RADIO_AUTOACK_POWER_F5 0xf5u
+/* CC2530_TX_POWER (needs CC2530_MAC_RECONFIG): every SWRS081B Table 2 TXPOWER
+ * setting (0x05..0xF5, low nibble 5; 0xF5 4.5 dBm .. 0x05 -22 dBm) is valid
+ * and configure may change it while OFF. Otherwise only 05, D5 and F5. */
+#if defined(CC2530_TX_POWER)
+#if !defined(CC2530_MAC_RECONFIG)
+#error CC2530_TX_POWER requires CC2530_MAC_RECONFIG
+#endif
+#define RADIO_AUTOACK_POWER_VALID(p) (((p) & 0x0fu) == 0x05u)
+#else
+#define RADIO_AUTOACK_POWER_VALID(p) ((p) == RADIO_AUTOACK_POWER_05 || \
+    (p) == RADIO_AUTOACK_POWER_D5 || (p) == RADIO_AUTOACK_POWER_F5)
+#endif
 
 typedef enum {
     RADIO_AUTOACK_READY = 0, RADIO_AUTOACK_FRAME, RADIO_AUTOACK_BAD_CRC,
@@ -84,7 +96,7 @@ typedef struct {
  *
  * Cold acquisition copies the configuration; no pointer is retained. All PAN,
  * short and IEEE values are raw caller-owned filter configuration, not identity
- * validation or security. Channel11..26; only raw power05, D5 or F5. The normal profile is
+ * validation or security. Channel11..26; raw power05, D5 or F5 (any Table 2 value with CC2530_TX_POWER). The normal profile is
  * version<=0, reserved-FCF mask0, non-coordinator, DATA/ACK/command accepted,
  * filtering/AUTOCRC/AUTOACK on, unslotted, RX-to-RX timeout off, Pending0 and
  * source matching/AUTOPEND off. Security-enabled bodies are NOT excluded.
@@ -229,7 +241,8 @@ radio_autoack_result_t radio_autoack_handoff(SDCC_VOLATILE uint32_t timeout, SDC
 /* Co-owner hook. OFF/OFF_NOACK only, after this owner's STOPPED and complete
  * drain. Rewrites only differing PAN, short-address and FREQCTRL bytes while
  * the receiver mask is clear, verifying the whole owned profile after each
- * write. IEEE, power and the filter/AUTOACK/CCA profile are immutable here.
+ * write. IEEE and the filter/AUTOACK/CCA profile are immutable here; TXPOWER
+ * is too unless CC2530_TX_POWER, which rewrites it like the other bytes.
  * The state stays OFF/OFF_NOACK: a separate resume starts a new RX episode.
  * Frames transmitted during the gap are not received. Invalid input changes
  * nothing; an operational fault is terminal like every other operation.

@@ -93,6 +93,8 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-mac-radio-tests-sanitize \
 	$(BUILD)/host-mac-reconfig-tests \
 	$(BUILD)/host-mac-reconfig-tests-sanitize \
+	$(BUILD)/host-mac-reconfig-power-tests \
+	$(BUILD)/host-mac-reconfig-power-tests-sanitize \
 	$(BUILD)/host-mac-scan-tests \
 	$(BUILD)/host-mac-stamp-tests \
 	$(BUILD)/host-mac-stamp-tests-sanitize \
@@ -150,6 +152,10 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-router-join-tests-sanitize \
 	$(BUILD)/host-security-counter-tests \
 	$(BUILD)/host-security-counter-tests-sanitize \
+	$(BUILD)/host-security-counter-settings-tests \
+	$(BUILD)/host-security-counter-settings-tests-sanitize \
+	$(BUILD)/host-security-keys-settings-tests \
+	$(BUILD)/host-security-keys-settings-tests-sanitize \
 	$(BUILD)/host-security-keys-tests \
 	$(BUILD)/host-security-keys-tests-sanitize \
 	$(BUILD)/host-security-receive-completion-tests \
@@ -474,6 +480,12 @@ $(BUILD)/host-mac-radio-tests: tests/test_mac_radio.c src/timebase.c src/clock.c
 $(BUILD)/host-mac-radio-tests-sanitize: tests/test_mac_radio.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c tests/host_mmio.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_RADIO -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_radio.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c tests/host_mmio.c -o $(BUILD)/host-mac-radio-tests-sanitize
 
+$(BUILD)/host-mac-reconfig-power-tests: tests/test_mac_reconfig.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_frame.c src/mac_tx.c src/mac_adapter.c tests/host_mmio.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_TX_POWER -I$(BUILD)/mac-adapter tests/test_mac_reconfig.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_frame.c src/mac_tx.c src/mac_adapter.c tests/host_mmio.c -o $(BUILD)/host-mac-reconfig-power-tests
+
+$(BUILD)/host-mac-reconfig-power-tests-sanitize: tests/test_mac_reconfig.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_frame.c src/mac_tx.c src/mac_adapter.c tests/host_mmio.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_TX_POWER -I$(BUILD)/mac-adapter -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_mac_reconfig.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_frame.c src/mac_tx.c src/mac_adapter.c tests/host_mmio.c -o $(BUILD)/host-mac-reconfig-power-tests-sanitize
+
 $(BUILD)/host-mac-reconfig-tests: tests/test_mac_reconfig.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_frame.c src/mac_tx.c src/mac_adapter.c tests/host_mmio.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -I$(BUILD)/mac-adapter tests/test_mac_reconfig.c src/timebase.c src/clock.c src/mac_time.c src/radio_autoack.c src/mac_epoch.c src/mac_radio.c src/mac_attempt.c src/mac_frame.c src/mac_tx.c src/mac_adapter.c tests/host_mmio.c -o $(BUILD)/host-mac-reconfig-tests
 
@@ -644,6 +656,18 @@ $(BUILD)/host-replay-policy-c-tests: tests/test_replay_policy_c.c tests/security
 
 $(BUILD)/host-replay-policy-c-tests-sanitize: tests/test_replay_policy_c.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -Xlinker --wrap=flash_nv_read -Xlinker --wrap=flash_nv_erase -Xlinker --wrap=flash_nv_program -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_replay_policy_c.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c -o $(BUILD)/host-replay-policy-c-tests-sanitize
+
+$(BUILD)/host-security-keys-settings-tests: tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_APP_SETTINGS tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c -o $(BUILD)/host-security-keys-settings-tests
+
+$(BUILD)/host-security-keys-settings-tests-sanitize: tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_APP_SETTINGS -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c -o $(BUILD)/host-security-keys-settings-tests-sanitize
+
+$(BUILD)/host-security-counter-settings-tests: tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_APP_SETTINGS tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c -o $(BUILD)/host-security-counter-settings-tests
+
+$(BUILD)/host-security-counter-settings-tests-sanitize: tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_APP_SETTINGS -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c -o $(BUILD)/host-security-counter-settings-tests-sanitize
 
 $(BUILD)/host-security-counter-tests: tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_security_counter.c tests/host_flash_engine.c tests/host_mmio.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c -o $(BUILD)/host-security-counter-tests

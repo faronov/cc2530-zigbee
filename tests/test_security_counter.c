@@ -209,6 +209,13 @@ static void formats(void)
         counter_reset(); memset(nv, 255, sizeof(nv)); counter_record(0, 1, 7, 11, 0);
         nv[12+i] ^= 0x80;
         set_u32(nv+2040, crc_reference(nv, 2040));
+#if defined(CC2530_APP_SETTINGS)
+        if (i == 6 || i == 7) {
+            CHECK(security_counter_open() == SECURITY_COUNTER_OK &&
+                  security_counter_app[i-6] == 0x80 && security_counter_app[7-i] == 0);
+            continue;
+        }
+#endif
         CHECK(security_counter_open() == (i == 4 ? SECURITY_COUNTER_VERSION : SECURITY_COUNTER_FORMAT));
         before = events;
         CHECK(security_counter_take(0, &counter_value, 3) != SECURITY_COUNTER_OK);
@@ -373,9 +380,46 @@ static void destructive_failures(void)
     }
 }
 
+#if defined(CC2530_APP_SETTINGS)
+static void settings(void)
+{
+    counter_reset(); memset(nv, 255, sizeof(nv));
+    security_counter_app[0] = 0x5a; security_counter_app[1] = 0x03;
+    CHECK(!security_counter_app_pending());
+    CHECK(security_counter_open() == SECURITY_COUNTER_EMPTY && !security_counter_app_pending());
+    CHECK(security_counter_create(17, 9, counter_payload, 5, 3) == SECURITY_COUNTER_OK);
+    CHECK(!security_counter_app_pending() && commands == 0);
+    take(0, 17);
+    CHECK(STATUS.generation == 1 && !security_counter_app_pending());
+    security_counter_app[0] = 0x11;
+    CHECK(security_counter_app_pending());
+    take(0, 18); /* in-range takes do not write */
+    CHECK(security_counter_app_pending());
+    CHECK(security_counter_save(counter_payload, 5, 3) == SECURITY_COUNTER_OK);
+    CHECK(STATUS.generation == 2 && !security_counter_app_pending());
+    counter_reset(); security_counter_app[0] = security_counter_app[1] = 0;
+    CHECK(security_counter_open() == SECURITY_COUNTER_OK);
+    CHECK(security_counter_app[0] == 0x11 && security_counter_app[1] == 0x03 &&
+          !security_counter_app_pending() && STATUS.payload_length == 5);
+    take(0, STATUS.next[0]); take(1, STATUS.next[1]);
+    security_counter_app[1] = 0xff;
+    CHECK(security_counter_save(NULL, 0, 3) == SECURITY_COUNTER_OK && !security_counter_app_pending());
+    counter_reset(); security_counter_app[0] = security_counter_app[1] = 0;
+    CHECK(security_counter_open() == SECURITY_COUNTER_OK);
+    CHECK(security_counter_app[0] == 0x11 && security_counter_app[1] == 0xff);
+    starting(7, 11, 0); counter_record(0, 9, 7, 11, 0);
+    security_counter_app[0] ^= 1;
+    CHECK(security_counter_save(NULL, 0, 3) == SECURITY_COUNTER_ROLLBACK);
+    CHECK(!security_counter_app_pending());
+}
+#endif
+
 int main(void)
 {
     basic(); staged_create(); formats(); bounds(); interrupted(); destructive_failures();
+#if defined(CC2530_APP_SETTINGS)
+    settings();
+#endif
     printf("Security counters: %u host checks PASS; real NV/flash, synthetic cuts, no physical durability.\n",
            counter_checks);
     return 0;
