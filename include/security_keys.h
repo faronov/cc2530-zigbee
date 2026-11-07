@@ -186,7 +186,7 @@ security_keys_result_t security_keys_select_parent(
     uint8_t router, uint8_t update_id, uint16_t nv_polls) SECURITY_FAR;
 #endif
 #if defined(CC2530_APP_SETTINGS)
-/* VERIFIED only: rewrite the unchanged record so the commit also stores
+/* VERIFIED or REJOINING: rewrite the unchanged record so the commit also stores
  * security_counter_app. No key, phase, floor or membership change. */
 security_keys_result_t security_keys_checkpoint(uint16_t nv_polls) SECURITY_FAR;
 #endif

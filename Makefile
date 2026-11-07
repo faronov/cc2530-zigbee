@@ -96,7 +96,7 @@ test-host: $(addprefix $(BUILD)/,$(HOST_CHECKS)) $(BUILD)/host-join-smoke $(BUIL
 	set -e; for n in 0 2 4 9 25 26; do "$(BUILD)/host-join-smoke" $$n; done
 
 M5_M6_CHECKS := host-security-keys-tests host-bdb-join-tests host-parent-storage-tests host-parent-storage-audit-tests host-parent-recovery-tests host-parent-recovery-policy-c-tests host-parent-candidates-tests host-router-candidates-tests host-router-join-tests host-replay-policy-c-tests host-replay-log-reference-tests host-security-receive-completion-tests
-M5_M6_PROGRAMS := $(M5_M6_CHECKS) $(addsuffix -sanitize,$(M5_M6_CHECKS)) host-nwk-parent-tests host-nwk-parent-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-report-completion host-report-completion-sanitize host-mac-link-e2e-tests host-mac-link-e2e-rxoff-tests host-mac-link-e2e-rxoff-tests-sanitize host-mac-reconfig-tests host-mac-reconfig-tests-sanitize host-mac-reconfig-power-tests host-mac-reconfig-power-tests-sanitize host-security-counter-settings-tests host-security-counter-settings-tests-sanitize
+M5_M6_PROGRAMS := $(M5_M6_CHECKS) $(addsuffix -sanitize,$(M5_M6_CHECKS)) host-nwk-parent-tests host-nwk-parent-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-report-completion host-report-completion-sanitize host-mac-link-e2e-tests host-mac-link-e2e-rxoff-tests host-mac-link-e2e-rxoff-tests-sanitize host-mac-reconfig-tests host-mac-reconfig-tests-sanitize host-mac-reconfig-power-tests host-mac-reconfig-power-tests-sanitize host-security-counter-settings-tests host-security-counter-settings-tests-sanitize host-security-keys-settings-tests host-security-keys-settings-tests-sanitize
 test-m5-m6-host: $(addprefix $(BUILD)/,$(M5_M6_PROGRAMS))
 	set -e; for name in $(M5_M6_PROGRAMS); do "$(BUILD)/$$name"; done
 

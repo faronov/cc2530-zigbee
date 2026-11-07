@@ -511,7 +511,9 @@ security_keys_result_t security_keys_checkpoint(uint16_t nv_polls) SECURITY_FAR
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
-    if (phase() != SECURITY_KEYS_VERIFIED) return finish(SECURITY_KEYS_CONTEXT);
+    /* A resumed member may still hold REJOINING until its rejoin completes. */
+    if (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_CONTEXT);
     w.polls = nv_polls;
     return finish(save());
 }

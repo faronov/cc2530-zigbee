@@ -69,9 +69,10 @@ Both options need `CC2530_PM2_IDLE`. `CC2530_TX_POWER` also needs
   record (`security_counter_app[2]`, see
   [SECURITY_COUNTERS.md](SECURITY_COUNTERS.md#record-and-opaque-state)).
   - After the record is opened and the device is resumed or recommissioned, the
-    stack calls `zcl_sensor_start(member)`. `member` is 1 for a resumed,
-    verified member and 0 otherwise. The bytes are loaded by then, so the
-    application may read them, change them and set `join_smoke_power`.
+    stack calls `zcl_sensor_start(member)`. `member` is 1 for a resumed
+    member (record VERIFIED or still REJOINING) and 0 otherwise. The bytes are
+    loaded by then, so the application may read them, change them and set
+    `join_smoke_power`.
   - Changed bytes are written by the next record save. For a resumed member the
     stack checkpoints them straight after `zcl_sensor_start()`; later changes
     are checkpointed at the next quiescent sleep point
