@@ -58,7 +58,7 @@ LLVM_TIER = $(PYTHON) -B tools/llvm/tiers.py --tools "$(abspath $(LLVM_TOOLS))" 
 	$(if $(LLVM_TREE),--llvm-build "$(abspath $(LLVM_TREE))") \
 	$(if $(LLVM_LIT_EVIDENCE),--lit-evidence "$(abspath $(LLVM_LIT_EVIDENCE))") $(LLVM_TIER_ARGS)
 
-.PHONY: all firmware llvm test test-fast test-smoke test-full test-llvm-fast test-llvm-smoke test-llvm-full test-host test-m5-m6-host test-join-smoke-host llvm-simulator FORCE
+.PHONY: all firmware llvm test test-fast test-smoke test-full test-llvm-fast test-llvm-smoke test-llvm-full test-host test-m5-m6-host test-join-smoke-host test-app-host llvm-simulator FORCE
 all: firmware
 firmware llvm:
 	$(PYTHON) -B tools/llvm/firmware.py --tools "$(abspath $(LLVM_TOOLS))" --llvm-src "$(abspath $(LLVM_SRC))" \
@@ -101,15 +101,13 @@ test-m5-m6-host: $(addprefix $(BUILD)/,$(M5_M6_PROGRAMS))
 	set -e; for name in $(M5_M6_PROGRAMS); do "$(BUILD)/$$name"; done
 
 JOIN_SMOKE_HOST_CASES := 0 1 2 3 4 5 6 8 9 10 16 17 25 26 27 $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),11 12 13 14 15 28) $(if $(filter 1,$(JOIN_SMOKE_PARENT_RECOVERY)),18 19 20) $(if $(filter 1,$(JOIN_SMOKE_REPLAY_POLICY_C)),21 22 23 24)
-test-join-smoke-host: $(addprefix $(BUILD)/,host-join-smoke host-join-smoke-sanitize host-join-smoke-deep host-join-smoke-deep-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-zcl-sensor-chip host-zcl-sensor-chip-sanitize host-zcl-sensor-sht host-zcl-sensor-sht-sanitize host-zcl-flower host-zcl-flower-sanitize)
+test-join-smoke-host: $(addprefix $(BUILD)/,host-join-smoke host-join-smoke-sanitize host-join-smoke-deep host-join-smoke-deep-sanitize host-zcl-sensor host-zcl-sensor-sanitize host-zcl-sensor-chip host-zcl-sensor-chip-sanitize host-zcl-sensor-sht host-zcl-sensor-sht-sanitize)
 	"$(BUILD)/host-zcl-sensor"
 	"$(BUILD)/host-zcl-sensor-sanitize"
 	"$(BUILD)/host-zcl-sensor-chip"
 	"$(BUILD)/host-zcl-sensor-chip-sanitize"
 	"$(BUILD)/host-zcl-sensor-sht"
 	"$(BUILD)/host-zcl-sensor-sht-sanitize"
-	"$(BUILD)/host-zcl-flower"
-	"$(BUILD)/host-zcl-flower-sanitize"
 	set -e; for n in $(JOIN_SMOKE_HOST_CASES); do \
 		"$(BUILD)/host-join-smoke" $$n > "$(BUILD)/join-smoke-$$n.txt"; \
 		"$(BUILD)/host-join-smoke-sanitize" $$n > "$(BUILD)/join-smoke-$$n-sanitize.txt"; \

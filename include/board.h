@@ -8,45 +8,44 @@
 
 #define BOARD_GENERIC 0u
 #define BOARD_LG_ESL29_REV03 1u
-#define BOARD_FLOWER_V2 2u
+#define BOARD_EXTERNAL 2u
 #define BOARD_POLICY_DISPLAY_OFF 0x01u
 
 #ifndef CC2530_BOARD
 #error The build must select CC2530_BOARD
 #endif
 #if CC2530_BOARD != BOARD_GENERIC && CC2530_BOARD != BOARD_LG_ESL29_REV03 && \
-    CC2530_BOARD != BOARD_FLOWER_V2
+    CC2530_BOARD != BOARD_EXTERNAL
 #error Unsupported CC2530 board
+#endif
+/* An external board belongs to an external application (docs/EXTERNAL_APP.md):
+ * its app_config.h, included by cc2530_mmio.h, supplies BOARD_MANUFACTURER,
+ * BOARD_MODEL, BOARD_MODEL_LENGTH and optionally BOARD_CCA_THRESHOLD_RAW. */
+#if CC2530_BOARD == BOARD_EXTERNAL && !defined(CC2530_APP)
+#error CC2530_BOARD=BOARD_EXTERNAL requires an external application (CC2530_APP)
 #endif
 
 /* ZCL Basic identity strings; metadata only, no hardware access. */
-#if CC2530_BOARD == BOARD_FLOWER_V2
-/* Wire identity of faronov/flower (DIYRuZ FlowerX); the Z2M converter and the
- * ZHA quirk match on these strings. */
-#define BOARD_MANUFACTURER "modkam.ru"
-#define BOARD_MODEL "DIYRuZ_FlowerX"
-#define BOARD_MODEL_LENGTH 14u
-#else
+#if CC2530_BOARD != BOARD_EXTERNAL
 #define BOARD_MANUFACTURER "cc2530-zigbee"
-#endif
-#if CC2530_BOARD == BOARD_FLOWER_V2
-#elif CC2530_BOARD == BOARD_LG_ESL29_REV03
+#if CC2530_BOARD == BOARD_LG_ESL29_REV03
 #define BOARD_MODEL "LG-ESL29"
 #define BOARD_MODEL_LENGTH 8u
 #else
 #define BOARD_MODEL "generic"
 #define BOARD_MODEL_LENGTH 7u
 #endif
+#endif
+#if !defined(BOARD_MANUFACTURER) || !defined(BOARD_MODEL) || !defined(BOARD_MODEL_LENGTH)
+#error The board must define BOARD_MANUFACTURER, BOARD_MODEL and BOARD_MODEL_LENGTH
+#endif
 
 /* MAC CSMA energy-only CCA threshold, raw CCACTRL0 (two's complement RSSI,
  * about dBm+73, SWRS081B). F8 (about -81 dBm, clear below -83 with the
- * hysteresis of two) is the TI reference value. The FlowerX E18-MS1 board idles
- * at raw -9..-10 on channels 15-20 (debugger-measured, one board), so F8 held
- * channel 15 busy and the beacon request never left; FE is -75 dBm, the
- * IEEE 802.15.4-2006 6.9.9 maximum (sensitivity -85 dBm plus 10 dB). */
-#if CC2530_BOARD == BOARD_FLOWER_V2
-#define BOARD_CCA_THRESHOLD_RAW 0xfeu
-#else
+ * hysteresis of two) is the TI reference value. A board whose idle noise floor
+ * keeps F8 busy may raise it up to FE (-75 dBm, the IEEE 802.15.4-2006 6.9.9
+ * maximum: sensitivity -85 dBm plus 10 dB). */
+#ifndef BOARD_CCA_THRESHOLD_RAW
 #define BOARD_CCA_THRESHOLD_RAW 0xf8u
 #endif
 
@@ -75,21 +74,7 @@ typedef struct {
 
 extern const MCU_CODE board_description_t board_description;
 
-/* faronov/flower v2 (E18-MS1-PCB), HAL_BOARD_FLOWER pin map of the reference
- * firmware: LED P0.1 active high, button P2.0 active low (pull-up), sensor
- * rail P1.1 high=on, soil excitation P1.4 (Timer3 alt1 ch1), soil AIN4 P0.4,
- * light AIN7 P0.7, BME280 I2C P0.5 SCL / P0.6 SDA, DS18B20 1-Wire P1.3. */
-#define BOARD_FLOWER_LED 0x02u
-#define BOARD_FLOWER_BUTTON 0x01u
-#define BOARD_FLOWER_RAIL 0x02u
-#define BOARD_FLOWER_PWM 0x10u
-#define BOARD_FLOWER_SOIL 0x10u
-#define BOARD_FLOWER_LIGHT 0x80u
-#define BOARD_FLOWER_SCL 0x20u
-#define BOARD_FLOWER_SDA 0x40u
-#define BOARD_FLOWER_ONEWIRE 0x08u
-
-#if CC2530_BOARD == BOARD_LG_ESL29_REV03 || CC2530_BOARD == BOARD_FLOWER_V2
+#if CC2530_BOARD == BOARD_LG_ESL29_REV03 || CC2530_BOARD == BOARD_EXTERNAL
 /* Called before C data initialization; only direct MMIO operations are allowed. */
 void board_early_off(void);
 #endif

@@ -6,7 +6,7 @@
 #endif
 #include "flash_exec.h"
 #include "timebase.h"
-#if defined(CC2530_FLOWER)
+#if defined(CC2530_APP)
 #include "zcl_sensor.h"
 #endif
 #include <string.h>
@@ -133,7 +133,7 @@ void main(void)
     reset_cause=MMIO_READ(SOC_SLEEPSTA)&SLEEPSTA_RST_MASK;
 #endif
     join_smoke_initialize();
-#if defined(CC2530_FLOWER)
+#if defined(CC2530_APP)
     zcl_sensor_boot();
 #endif
 #if defined(CC2530_AUTONOMOUS)

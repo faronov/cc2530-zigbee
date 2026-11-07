@@ -33,15 +33,14 @@
 #error Select SDCC for firmware or CC2530_HOST_TEST for host tests
 #endif
 
-/* Application-owned registers. They stay out of the shared list so the
- * simulator's peripheral ownership (tests/boot_join_smoke.py) is unchanged
- * for every other image. */
-#if defined(CC2530_FLOWER)
-#define CC2530_APP_REGISTER_LIST(X) \
-    X(SOC_T3CTL, 0xcb) \
-    X(SOC_T3CC0, 0xcd) \
-    X(SOC_T3CCTL1, 0xce)
-#else
+/* An external application (docs/EXTERNAL_APP.md) supplies app_config.h:
+ * macros only, no includes. CC2530_APP_REGISTER_LIST names the SFRs it owns
+ * beyond the shared list; they stay out of every other image so the
+ * simulator's peripheral ownership (tests/boot_join_smoke.py) is unchanged. */
+#if defined(CC2530_APP)
+#include "app_config.h"
+#endif
+#ifndef CC2530_APP_REGISTER_LIST
 #define CC2530_APP_REGISTER_LIST(X)
 #endif
 

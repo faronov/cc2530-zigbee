@@ -124,7 +124,7 @@ if other_pdata: sys.exit('FAIL CLOSED: firmware has its own PDATA objects; the p
 if pool > 256: sys.exit(f'FAIL: overlaid pool {pool} B exceeds the 256-byte PDATA page')
 
 # ---- pass 2: one output section per frame at its fixed address
-# A variant srcmap may compile a source under another unit name (zcl_flower.c ->
+# The app srcmap may compile a source under another unit name (app/src/x.c ->
 # zcl_sensor.o); the linker matches the object file, not STT_FILE.
 unit = {}
 if os.path.exists(OUT + '/srcmap.txt'):

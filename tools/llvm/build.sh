@@ -10,8 +10,9 @@
 # M7a RX-off-when-idle READY receiver and ADC chip temperature/VDD sensing) or
 # autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls) or
 # autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
-# flower (autonomous-pm2 on the faronov/flower v2 board: the FlowerX soil sensor
-# application replaces zcl_sensor and the flower board file replaces LG ESL29).
+# app (an external application, docs/EXTERNAL_APP.md: firmware.py --app passes
+# APP_DIR, its complete APP_DEFINES and APP_UNITS "unit=path ..." that replace
+# srcmap units with files of the application's tracked tree, copied to src/app).
 # The deployable autonomous* variants add CC2530_LEAN: drivers keep their exact
 # MMIO sequences, deadlines and poll budgets but drop self-verification.
 set -euo pipefail
@@ -28,7 +29,7 @@ case $VARIANT in
   autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
-  flower) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_ROUTER_JOIN -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_FLOWER -DCC2530_ZDO_DESCRIPTORS -DCC2530_APP_QUIET -UCC2530_BOARD -DCC2530_BOARD=2" ;;
+  app) VDEFS="${APP_DEFINES:?APP_DEFINES required}"; : "${APP_DIR:?APP_DIR required}" "${APP_UNITS:?APP_UNITS required}" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac
 LLVM_SRC=${LLVM_SRC:?LLVM_SRC required}
@@ -38,6 +39,11 @@ RTSRC=$LLVM_SRC/llvm/lib/Target/MCS51
 mkdir -p $OUT/src $OUT/obj $OUT/rt/mcs51 $OUT/link
 OUT=$(cd $OUT && pwd)
 (cd "$REPO" && git ls-files -z --cached | tar --null -T - -cf -) | tar -x -C $OUT/src
+if [ "$VARIANT" = app ]; then
+  # Tracked application files only; a submodule (this stack) stays an empty directory.
+  mkdir $OUT/src/app
+  (cd "$APP_DIR" && git ls-files -z --cached | tar --null --no-recursion -T - -cf -) | tar -x -C $OUT/src/app
+fi
 
 TARGET="-target mcs51 -mcpu=cc2530"
 ABI=${ABI_FLAGS?ABI_FLAGS required (may be empty)}
@@ -58,13 +64,14 @@ CFLAGS="$TARGET -std=c99 -Oz $SF $ABI -ffunction-sections -fdata-sections -Itool
 echo "$T/clang $CFLAGS -c SRC -o OBJ   (cwd = firmware source root)" > $OUT/compile-command.txt
 cd $OUT/src
 SRCMAP=$H/inputs/srcmap-stk.txt
-if [ "$VARIANT" = flower ]; then
+if [ "$VARIANT" = app ]; then
   SRCMAP=$OUT/srcmap.txt
-  sed -e 's|^zcl_sensor src/zcl_sensor.c$|zcl_sensor src/zcl_flower.c|' \
-      -e 's|^lg_esl29_rev03 boards/lg_esl29_rev03.c$|lg_esl29_rev03 boards/flower_v2.c|' \
-      $H/inputs/srcmap-stk.txt > $SRCMAP
-  grep -qx 'zcl_sensor src/zcl_flower.c' $SRCMAP && grep -qx 'lg_esl29_rev03 boards/flower_v2.c' $SRCMAP \
-    || { echo "flower srcmap substitution failed"; exit 2; }
+  cp $H/inputs/srcmap-stk.txt $SRCMAP
+  for pair in $APP_UNITS; do
+    unit=${pair%%=*}; path=${pair#*=}
+    [ -f "app/$path" ] && grep -q "^$unit " $SRCMAP || { echo "app unit $pair: no such unit or tracked file"; exit 2; }
+    sed -i "s|^$unit .*\$|$unit app/$path|" $SRCMAP
+  done
 fi
 while read -r unit src; do
   echo "$unit $src"

@@ -83,8 +83,9 @@ typedef struct {
 /* The single application device, owned by join_smoke. */
 extern MCU_XDATA bdb_join_t join_smoke_device;
 
-#if defined(CC2530_FLOWER)
-#include "zcl_flower.h"
+#if defined(CC2530_APP)
+/* An external application replaces this server (docs/EXTERNAL_APP.md). */
+#include "app_zcl.h"
 #else
 /* Reportable attributes: temperature, humidity, BatteryVoltage and
  * BatteryPercentageRemaining; Basic ModelIdentifier is BASIC. */

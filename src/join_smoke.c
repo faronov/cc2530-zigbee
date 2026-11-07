@@ -221,7 +221,7 @@ void join_smoke_sleep(void)
         if(mark<span) span=mark;
     }
 #if defined(CC2530_APP_QUIET)
-    /* Application sensor cycle (zcl_flower.h): 0 keeps the device awake. */
+    /* Application sensor cycle (zcl_sensor_quiet()): 0 keeps the device awake. */
     SL.reason=5;
     mark=zcl_sensor_quiet(CLOCK.symbols);
     if(!mark) goto skip;
