@@ -364,8 +364,11 @@ void join_smoke_poll(void)
         if(gate==JS_READY) { serve(); return; }
         if(DEVICE.phase==BDB_JOIN_READY) {
             snapshot();
+            /* A latched RXOVERF (RFERRF bit 2) is a handled receive loss: the
+             * driver salvages complete frames and flushes on the next receive.
+             * An unhandled one is DRIVER.fault. Other error bits stay fatal. */
             if(DRIVER.fault || DEVICE.workspace!=BDB_JOIN_WORK_RUNTIME || !DEVICE.member ||
-               !DEVICE.work.runtime.transport.ready || S.radio_errors) {
+               !DEVICE.work.runtime.transport.ready || (S.radio_errors & (uint8_t)~4u)) {
                 fault(JS_TERMINAL); return;
             }
 #if defined(CC2530_PARENT_RECOVERY)
