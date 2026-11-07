@@ -5,6 +5,7 @@
 #define CC2530_RADIO_AUTOACK_H
 
 #include "cc2530_mmio.h"
+#include "board.h"
 #include "sdcc_volatile.h"
 #include "banked_link.h"
 
@@ -168,7 +169,7 @@ const radio_autoack_diagnostics_t MCU_XDATA *radio_autoack_diagnostic(void) LINK
 #if defined(CC2530_MAC_ATTEMPT)
 #include "mac_time.h"
 #define RADIO_AUTOACK_CCA_ENERGY_ONLY 1u
-#define RADIO_AUTOACK_CCA_THRESHOLD_RAW 0xf8u
+#define RADIO_AUTOACK_CCA_THRESHOLD_RAW BOARD_CCA_THRESHOLD_RAW
 #define RADIO_AUTOACK_ATTEMPT_PREPARED 8u
 /* SWRU191F 23.8.2 p218: preamble starts 192 us after STXONCCA. The earliest
  * TX end after the pre-strobe sample adds SHR/PHR/FCS 16 plus 2 per body byte.

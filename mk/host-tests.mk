@@ -144,6 +144,10 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-replay-log-reference-tests-sanitize \
 	$(BUILD)/host-replay-policy-c-tests \
 	$(BUILD)/host-replay-policy-c-tests-sanitize \
+	$(BUILD)/host-router-candidates-tests \
+	$(BUILD)/host-router-candidates-tests-sanitize \
+	$(BUILD)/host-router-join-tests \
+	$(BUILD)/host-router-join-tests-sanitize \
 	$(BUILD)/host-security-counter-tests \
 	$(BUILD)/host-security-counter-tests-sanitize \
 	$(BUILD)/host-security-keys-tests \
@@ -548,6 +552,18 @@ $(BUILD)/host-parent-storage-tests: tests/test_security_keys.c tests/security_jo
 $(BUILD)/host-parent-storage-tests-sanitize: tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c -o $(BUILD)/host-parent-storage-tests-sanitize
 
+$(BUILD)/host-router-candidates-tests: tests/test_nwk_candidates.c src/mac_frame.c src/nwk_beacon.c src/nwk_candidates.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_ROUTER_JOIN tests/test_nwk_candidates.c src/mac_frame.c src/nwk_beacon.c src/nwk_candidates.c -o $(BUILD)/host-router-candidates-tests
+
+$(BUILD)/host-router-candidates-tests-sanitize: tests/test_nwk_candidates.c src/mac_frame.c src/nwk_beacon.c src/nwk_candidates.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_ROUTER_JOIN -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_nwk_candidates.c src/mac_frame.c src/nwk_beacon.c src/nwk_candidates.c -o $(BUILD)/host-router-candidates-tests-sanitize
+
+$(BUILD)/host-router-join-tests: tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_ROUTER_JOIN tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c -o $(BUILD)/host-router-join-tests
+
+$(BUILD)/host-router-join-tests-sanitize: tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_PARENT_RECOVERY -DCC2530_ROUTER_JOIN -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_security_keys.c tests/security_joint_model.c tests/security_aes_model.c tests/host_flash_engine.c tests/host_mmio.c tests/aes_reference.c src/flash_exec.c src/flash.c src/flash_write.c src/nv_record.c src/security_counter.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/nwk_frame.c src/aps_frame.c src/ed_wire.c src/security_keys.c -o $(BUILD)/host-router-join-tests-sanitize
+
 $(BUILD)/host-prng-fixture-tests_$(BOARD): tests/test_prng_fixture.c src/prng_fixture_state.c src/prng.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -DPRNG_FIXTURE_HOST_TEST tests/test_prng_fixture.c src/prng_fixture_state.c src/prng.c src/clock.c src/timebase.c tests/host_mmio.c src/startup.c src/status.c boards/$(BOARD).c -o $(BUILD)/host-prng-fixture-tests_$(BOARD)
 
@@ -679,6 +695,20 @@ $(BUILD)/host-zcl-identify-tests: tests/test_zcl_identify.c src/zcl_identify.c s
 
 $(BUILD)/host-zcl-identify-tests-sanitize: tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_identify.c src/zcl_identify.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-identify-tests-sanitize
+
+# External application host test (docs/EXTERNAL_APP.md), run from the
+# application with APP_DIR (absolute), APP_HOST_TEST (relative to APP_DIR) and
+# optional APP_HOST_DEFINES; the board is BOARD_EXTERNAL with CC2530_APP.
+APP_DIR ?=
+APP_HOST_TEST ?=
+APP_HOST_DEFINES ?=
+APP_HOST_FLAGS = $(filter-out -DCC2530_BOARD=%,$(HOST_FLAGS)) -DCC2530_BOARD=2 -DCC2530_APP $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY) $(APP_HOST_DEFINES) -I. -Isrc -I$(APP_DIR)/include -I$(APP_DIR)/src
+test-app-host: | $(BUILD)
+	@test -n "$(APP_DIR)" && test -n "$(APP_HOST_TEST)" || { echo "test-app-host needs APP_DIR and APP_HOST_TEST"; exit 2; }
+	$(HOST_CC) $(APP_HOST_FLAGS) $(APP_DIR)/$(APP_HOST_TEST) -lm -o $(BUILD)/host-app
+	$(HOST_CC) $(APP_HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(APP_DIR)/$(APP_HOST_TEST) -lm -o $(BUILD)/host-app-sanitize
+	"$(BUILD)/host-app"
+	"$(BUILD)/host-app-sanitize"
 
 $(BUILD)/host-zcl-sensor: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -I. -Isrc tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-sensor

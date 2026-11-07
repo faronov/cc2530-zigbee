@@ -1541,6 +1541,112 @@ static void parent_schema_upgrade(void)
 }
 #endif
 
+#if defined(CC2530_ROUTER_JOIN)
+static const uint8_t real_tc[8] = {0x22,2,3,4,5,6,7,8};
+
+/* Association source (router) is provisioned as the placeholder TC. */
+static void router_associated(void)
+{
+    security_joint_reset(1);
+    CHECK(security_keys_open() == SECURITY_KEYS_EMPTY);
+    memcpy(config.tc_ieee, router_ieee, 8);
+    CHECK(security_keys_provision(&config,install,10,20,&limits,3) == SECURITY_KEYS_OK);
+    CHECK(security_keys_router_parent(0x5678,3) == SECURITY_KEYS_STATE);
+    CHECK(security_keys_associate(0x1234,3) == SECURITY_KEYS_OK);
+    memcpy(config.tc_ieee, real_tc, 8);
+    CHECK(security_keys_router_parent(0,3) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_router_parent(0xfff8,3) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_router_parent(0x1234,3) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_router_parent(0x5678,0) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_router_parent(0x5678,3) == SECURITY_KEYS_OK);
+    CHECK(security_keys_router_parent(0x5678,3) == SECURITY_KEYS_STATE);
+    CHECK(!security_joint_flash_commands() && !security_counter_status()->generation);
+    state(SECURITY_KEYS_ASSOCIATED);
+    CHECK(status.router_known && status.router_active && !status.router_selected &&
+          status.router_address == 0x5678 && !memcmp(status.router_ieee, router_ieee, 8) &&
+          !memcmp(status.config.tc_ieee, router_ieee, 8));
+}
+static void relayed(uint16_t source)
+{
+    transport(1,nwk_key,255); packet.nwk.source = source;
+    seal_packet(bootstrap,2,0,NULL,0,0);
+}
+static void via_router(const uint8_t *link, uint8_t id, uint32_t ac, uint32_t nc)
+{
+    uint8_t n;
+    sealed_aps_secured = link != NULL;
+    CHECK(ed_wire_encode(&packet, frame, sizeof(frame), &n) == ZIGBEE_SECURITY_OK);
+    CHECK(ed_wire_nwk(frame, n, &nwk) == ZIGBEE_SECURITY_OK);
+    if (link) {
+        material(link, id, ac, 0, 0);
+        CHECK(ed_wire_crypt(0, 1, &effective, frame+nwk.payload_offset, nwk.payload_length,
+            inner, sizeof(inner), &info) == ZIGBEE_SECURITY_OK);
+        memcpy(frame+nwk.payload_offset, inner, info.length);
+        n = nwk.payload_offset+info.length;
+    }
+    material(nwk_key, 1, nc, 255, 0);
+    memcpy(effective.source, router_ieee, 8);
+    CHECK(ed_wire_crypt(0, 0, &effective, frame, n, raw, sizeof(raw), &info) == ZIGBEE_SECURITY_OK);
+    wire_length = info.length;
+}
+static void router_join(void)
+{
+    /* Coordinator-sourced copy, foreign relay, payload/nonce mismatch,
+     * short nonce, and a router or own nonce source never bind the TC. */
+    router_associated(); relayed(0); reject(SECURITY_KEYS_IDENTITY);
+    router_associated(); relayed(0x5679); reject(SECURITY_KEYS_IDENTITY);
+    router_associated(); transport(1,nwk_key,255); packet.nwk.source = 0x5678;
+    packet.payload[27] ^= 1; seal_packet(bootstrap,2,0,NULL,0,0); reject(SECURITY_KEYS_IDENTITY);
+    router_associated(); relayed(0x5678);
+    CHECK(raw[nwk.payload_offset+2] == 0x30); raw[nwk.payload_offset+2] = 0x10;
+    reject(SECURITY_KEYS_FORMAT);
+    router_associated(); memcpy(config.tc_ieee, router_ieee, 8); relayed(0x5678);
+    memcpy(config.tc_ieee, real_tc, 8); reject(SECURITY_KEYS_IDENTITY);
+    router_associated(); memcpy(config.tc_ieee, config.own_ieee, 8); relayed(0x5678);
+    memcpy(config.tc_ieee, real_tc, 8); reject(SECURITY_KEYS_IDENTITY);
+    router_associated(); relayed(0x5678); raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH);
+    state(SECURITY_KEYS_ASSOCIATED);
+    CHECK(!memcmp(status.config.tc_ieee, router_ieee, 8));
+
+    router_associated(); relayed(0x5678);
+    accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
+    CHECK(security_counter_status()->generation == 1);
+    reject(SECURITY_KEYS_IDENTITY);
+    reboot(NULL, SECURITY_KEYS_RECEIVED);
+    CHECK(!memcmp(status.config.tc_ieee, real_tc, 8) && status.router_active &&
+          status.router_address == 0x5678 && !memcmp(status.router_ieee, router_ieee, 8));
+    /* Bound: the router short no longer carries APS commands. */
+    relayed(0x5678); reject(SECURITY_KEYS_IDENTITY);
+    relayed(0); reject(SECURITY_KEYS_CONTEXT);
+    reboot(NULL, SECURITY_KEYS_RECEIVED);
+    CHECK(security_keys_request(7,8,raw,47,&written,&limits,3) == SECURITY_KEYS_OK);
+    state(SECURITY_KEYS_REQUESTED);
+    /* The parent must route the request onward to the TC (hardware-observed:
+     * radius 1 stopped at the router). */
+    outgoing_open(bootstrap,8);
+    CHECK(output.nwk.destination == 0 && output.nwk.radius == 30 &&
+          output.nwk.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
+    transport(4,new_tc,0); via_router(bootstrap,3,1,0);
+    accept(SECURITY_KEYS_EVENT_TC_KEY);
+    reboot(NULL, SECURITY_KEYS_PROVISIONAL);
+    CHECK(security_keys_verify(9,10,raw,54,&written,&limits,3) == SECURITY_KEYS_OK);
+    state(SECURITY_KEYS_WAIT_CONFIRM);
+    outgoing_open(NULL,15);
+    CHECK(output.nwk.destination == 0 && output.nwk.radius == 30 &&
+          output.nwk.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
+    base(ED_APS_COMMAND); packet.length = 11;
+    packet.payload[0] = 16; packet.payload[1] = 0; packet.payload[2] = 4;
+    memcpy(packet.payload+3,config.own_ieee,8);
+    via_router(new_tc,0,0,1);
+    accept(SECURITY_KEYS_EVENT_VERIFIED);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(!memcmp(status.config.tc_ieee, real_tc, 8) && status.router_active &&
+          status.router_address == 0x5678);
+    data(2, nwk_key, 255); reject(SECURITY_KEYS_IDENTITY); /* TC-direct while router-parented */
+    printf("router join: relayed TC binding PASS\n");
+}
+#endif
+
 int main(void)
 {
     setup(); handshake(); replay_and_rotation(); framing_and_identity();
@@ -1554,6 +1660,9 @@ int main(void)
     parent_schema_upgrade();
     remembered_parent();
     interrupted_router();
+#endif
+#if defined(CC2530_ROUTER_JOIN)
+    router_join();
 #endif
     printf("security keys: %u checks PASS; real AES/CCM/HMAC/counter/journal/flash host composition only\n",checks);
     return 0;

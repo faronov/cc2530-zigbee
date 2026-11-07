@@ -6,6 +6,9 @@
 #endif
 #include "flash_exec.h"
 #include "timebase.h"
+#if defined(CC2530_APP)
+#include "zcl_sensor.h"
+#endif
 #include <string.h>
 
 /* SWRU191F 16.3 WDCTL (MODE[3:2], INT[1:0]); 4.10 SLEEPSTA.RST[4:3]. */
@@ -130,6 +133,9 @@ void main(void)
     reset_cause=MMIO_READ(SOC_SLEEPSTA)&SLEEPSTA_RST_MASK;
 #endif
     join_smoke_initialize();
+#if defined(CC2530_APP)
+    zcl_sensor_boot();
+#endif
 #if defined(CC2530_AUTONOMOUS)
     admit();
 #endif

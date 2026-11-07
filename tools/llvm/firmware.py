@@ -53,15 +53,40 @@ def fixture(args, out):
     return elf, hexfile, {"scope": "bootstrap fixture; not full-join stack/admission qualification"}
 
 
+def load_app(app_dir, board):
+    """External application manifest (docs/EXTERNAL_APP.md) -> build.sh environment."""
+    manifest = json.loads((app_dir / "cc2530-app.json").read_text())
+    if manifest.get("schema") != "cc2530-app/1":
+        raise SystemExit("cc2530-app.json: schema must be cc2530-app/1")
+    defines, include, units = manifest.get("defines", []), manifest.get("include", []), manifest.get("units", {})
+    if not all(isinstance(d, str) and re.fullmatch(r"-[DU][A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_]+)?", d) for d in defines):
+        raise SystemExit("cc2530-app.json: defines must be plain -DNAME[=VALUE] or -UNAME flags")
+    if any(re.search(r"CC2530_BOARD\b|CC2530_APP\b", d) for d in defines):
+        raise SystemExit("cc2530-app.json: CC2530_BOARD and CC2530_APP come from --board/--app")
+    safe = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]*")
+    if not units or not all(isinstance(u, str) and isinstance(f, str) and safe.fullmatch(u) and safe.fullmatch(f)
+                            and ".." not in f.split("/") for u, f in units.items()):
+        raise SystemExit("cc2530-app.json: units must map stack unit names to relative application paths")
+    if not all(isinstance(i, str) and safe.fullmatch(i) and ".." not in i.split("/") for i in include):
+        raise SystemExit("cc2530-app.json: include entries must be relative application directories")
+    flags = [*defines, "-DCC2530_APP", *("-Iapp/" + i for i in include)]
+    if board == "external":
+        flags += ["-UCC2530_BOARD", "-DCC2530_BOARD=2"]
+    env = {"APP_DIR": str(app_dir), "APP_DEFINES": " ".join(flags),
+           "APP_UNITS": " ".join(f"{u}={f}" for u, f in sorted(units.items()))}
+    return manifest, env
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tools", type=Path, required=True)
     parser.add_argument("--llvm-src", type=Path, required=True)
     parser.add_argument("--llvm-revision", help="explicit full LLVM SHA for compiler CI; default: toolchain.json pin")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--board", choices=("generic", "lg_esl29_rev03"), required=True)
+    parser.add_argument("--board", choices=("generic", "lg_esl29_rev03", "external"), required=True)
     parser.add_argument("--image", choices=("join", "bringup", "timebase_fixture"), default="join")
-    parser.add_argument("--variant", choices=tiers.VARIANTS + ("autonomous", "autonomous-pm2", "autonomous-pm2-sht3x"), default="production")
+    parser.add_argument("--variant", choices=tiers.VARIANTS + ("autonomous", "autonomous-pm2", "autonomous-pm2-sht3x", "app"), default="production")
+    parser.add_argument("--app", type=Path, help="external application directory (cc2530-app.json); requires --variant app")
     args = parser.parse_args()
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
     pin = json.loads((HERE / "toolchain.json").read_text())
@@ -74,8 +99,13 @@ def main():
         raise SystemExit("standard build requires the exact clean pinned or explicitly requested LLVM source revision")
     if revision not in compiler["version"]:
         raise SystemExit("compiler executable version does not identify the requested source revision")
-    if args.image == "join" and args.board != "lg_esl29_rev03":
-        raise SystemExit("the admitted join profile is LG-only; generic supports bringup/timebase_fixture")
+    if args.image == "join" and args.board == "generic":
+        raise SystemExit("the admitted join profile needs a real board; generic supports bringup/timebase_fixture")
+    if (args.app is not None) != (args.variant == "app"):
+        raise SystemExit("--app and --variant app go together")
+    if args.board == "external" and args.app is None:
+        raise SystemExit("the external board is supplied by an external application (--app)")
+    app_manifest, app_env = load_app(args.app.resolve(), args.board) if args.app else (None, {})
     if args.image != "join" and args.variant != "production":
         raise SystemExit("non-production variants are supported only by the join image")
     identity = {"compiler": compiler, "firmware": tiers.firmware_identity(REPO),
@@ -86,6 +116,8 @@ def main():
                 "abi": profile["abi_flags"] if args.image == "join" else "",
                 "static_frames": profile["sf_flags"] if args.image == "join" else "",
                 "fixture_flags": fixture_flags(args.board) if args.image != "join" else None}
+    if args.app:
+        identity["app"] = {"manifest": app_manifest, "tree": tiers.firmware_identity(args.app.resolve())}
     generation = args.output / tiers.digest(identity)[:24]
     receipt_path = generation / "receipt.json"
     if generation.exists():
@@ -100,7 +132,7 @@ def main():
         if args.image == "join":
             env = os.environ | {"TOOLS": str(args.tools), "LLVM_SRC": str(args.llvm_src),
                                 "ABI_FLAGS": profile["abi_flags"], "SF_FLAGS": profile["sf_flags"],
-                                "FIRMWARE_VARIANT": args.variant, "PYTHON": sys.executable}
+                                "FIRMWARE_VARIANT": args.variant, "PYTHON": sys.executable} | app_env
             run(["bash", HERE / "build.sh", generation / "fw"], env=env)
             run(["bash", HERE / "audit.sh", generation / "fw"], env=env)
             ok, admission = tiers.admission(generation, profile)()

@@ -74,17 +74,24 @@
 #error CC2530_SHT3X requires CC2530_CHIP_SENSE
 #endif
 
-/* Reportable attributes: temperature, humidity, BatteryVoltage and
- * BatteryPercentageRemaining; Basic ModelIdentifier is BASIC. */
-#define ZCL_SENSOR_REPORTS 4u
-#define ZCL_SENSOR_BASIC 4u
-#define ZCL_SENSOR_SECOND 62500UL
-
 enum { ZCL_SENSOR_IDLE = 0, ZCL_SENSOR_REPORT, ZCL_SENSOR_HANDLED, ZCL_SENSOR_DISCARDED };
 
 typedef struct {
     uint16_t min, max, change, last, age;
 } zcl_sensor_reporting_t;
+
+/* The single application device, owned by join_smoke. */
+extern MCU_XDATA bdb_join_t join_smoke_device;
+
+#if defined(CC2530_APP)
+/* An external application replaces this server (docs/EXTERNAL_APP.md). */
+#include "app_zcl.h"
+#else
+/* Reportable attributes: temperature, humidity, BatteryVoltage and
+ * BatteryPercentageRemaining; Basic ModelIdentifier is BASIC. */
+#define ZCL_SENSOR_REPORTS 4u
+#define ZCL_SENSOR_BASIC 4u
+#define ZCL_SENSOR_SECOND 62500UL
 
 /* RAM-only application state. tc_ieee is the verified logical TC identity,
  * not the selected MAC parent or an Extended PAN ID. */
@@ -114,10 +121,10 @@ typedef struct {
 #endif
 } zcl_sensor_state_t;
 
-/* The single application device, owned by join_smoke. In READY its
- * association record is dead (see bdb_join.h) and holds this state. */
-extern MCU_XDATA bdb_join_t join_smoke_device;
+/* In READY the device's association record is dead (see bdb_join.h) and
+ * holds this state. */
 #define ZCL_SENSOR_STATE (*(zcl_sensor_state_t MCU_XDATA *)&join_smoke_device.record)
+#endif
 
 /* Call once on the first READY observation: claims the record overlay, binds
  * the three reportable clusters locally to coordinator endpoint 1, loads the

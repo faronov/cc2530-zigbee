@@ -144,6 +144,9 @@ static uint8_t observe(mac_link_driver_t MCU_XDATA * SDCC_VOLATILE d)
             d->event.data.scan.body = o->frame->body;
             d->event.data.scan.length = o->frame->length;
             d->event.data.scan.crc_valid = crc;
+#if defined(CC2530_ROUTER_JOIN)
+            nwk_candidates_rssi = (int8_t)o->frame->rssi_raw;
+#endif
             goto frame;
         }
         if (!o->tx.source.kind && (type == MAC_FRAME_COMMAND || type == MAC_FRAME_DATA) &&

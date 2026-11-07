@@ -29,6 +29,47 @@ this is not full primary/secondary steering or router-parent support.
 Neither an open beacon nor the publicly shared initial key proves that the
 network belongs to the intended HA installation.
 
+### Router-parent initial join (`CC2530_ROUTER_JOIN`)
+
+`CC2530_ROUTER_JOIN` (requires `CC2530_PARENT_RECOVERY` and
+`CC2530_DEFAULT_TC_KEY`; no image in this repository enables it, an
+[external application](EXTERNAL_APP.md) opts in) lets a fresh
+join use a permitting router as parent. All other images keep the
+direct-coordinator policy above.
+
+- Discovery: the fresh scan is unfiltered. When the four-entry collector is
+  full, an eligible beacon replaces the weakest entry only when its score
+  (raw RSSI, +10 for the PAN coordinator) is strictly higher, so there is no
+  overflow. Any eligible beacon with a different Extended PAN marks the table
+  mixed, even when it is not kept. A mixed table fails with `NO_PARENT`
+  without the lost-beacon rescan. The best score gets link cost 1 and the
+  others 3. Recovery tables stay parent-filtered and still report `FULL`.
+- Unbound router state: after association through a router (short address not
+  0000), `security_keys_router_parent()` stages the K3 router record with the
+  `UNBOUND` flag and router IEEE = configured TC placeholder. While unbound:
+  - only frames with NWK source = the parent short are accepted;
+  - the relayed Transport Key must use an extended APS nonce whose source is
+    not this node or the parent, and must match the command's source field;
+  - the first network key binds that source as the TC IEEE and clears
+    `UNBOUND`.
+  After that, Request Key / Verify / Confirm run through the router exactly as
+  in parent recovery. While the parent is a router, Request Key and Verify Key
+  leave with NWK radius 30 and route discovery enabled. With radius 1 the
+  parent consumes the frame instead of routing it to the TC; this was seen on
+  hardware as three unanswered Request Keys and `TC_FAILED`. A direct
+  coordinator parent keeps radius 1, so existing images are byte-identical.
+- Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
+  still commits the replay state with a full NV save.
+- Host coverage: `host-router-join-tests` (relayed Transport Key, TC learning,
+  rejects for coordinator-sourced, short-nonce, own/parent source, mismatched
+  source and replays, then the full exchange to VERIFIED),
+  `host-router-candidates-tests` (eviction, coordinator bonus, mixed, filtered
+  overflow) and `make test-join-smoke-host JOIN_SMOKE_ROUTER_JOIN=1`.
+  Hardware: the FlowerX application
+  ([faronov/flower-cc2530](https://github.com/faronov/flower-cc2530)) joined
+  ZHA (ZBT-1 EZSP) through a Zigbee-RS router parent to READY, and the quirk
+  interview completed.
+
 After contextual Association Response and genuine take/release, the key owner
 is provisioned with the discovered network and the observed source IEEE.
 A short-selected coordinator still reports `SOURCE_UNBOUND`: learning an
@@ -1130,6 +1171,15 @@ the `sht3x.lua` I2C part on open-drain P1.6/P1.7 nets with pull-ups reads
 back 21.50 °C and 47.00 %RH. The image also joins and sleeps (PM2). That
 run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the pinned compiler
 ([study §25](LLVM_MCS51_PORT_STUDY.md#25-fixed-defect-acc-bit-branch-without-an-implicit-use-of-a)).
+
+### External applications
+
+An external application can replace `zcl_sensor` and the board file while it
+reuses this join, security and READY engine
+([EXTERNAL_APP.md](EXTERNAL_APP.md)). The first one is the FlowerX soil
+sensor in [faronov/flower-cc2530](https://github.com/faronov/flower-cc2530).
+Its pins, sensor cycle, conversions, CCA threshold and hardware status are
+documented there.
 
 ### Report attempt and response ownership
 

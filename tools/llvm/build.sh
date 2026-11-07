@@ -9,7 +9,10 @@
 # autonomous (parent-recovery without a debugger: built-in admission, reset retry,
 # M7a RX-off-when-idle READY receiver and ADC chip temperature/VDD sensing) or
 # autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls) or
-# autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor).
+# autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
+# app (an external application, docs/EXTERNAL_APP.md: firmware.py --app passes
+# APP_DIR, its complete APP_DEFINES and APP_UNITS "unit=path ..." that replace
+# srcmap units with files of the application's tracked tree, copied to src/app).
 # The deployable autonomous* variants add CC2530_LEAN: drivers keep their exact
 # MMIO sequences, deadlines and poll budgets but drop self-verification.
 set -euo pipefail
@@ -26,6 +29,7 @@ case $VARIANT in
   autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
+  app) VDEFS="${APP_DEFINES:?APP_DEFINES required}"; : "${APP_DIR:?APP_DIR required}" "${APP_UNITS:?APP_UNITS required}" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac
 LLVM_SRC=${LLVM_SRC:?LLVM_SRC required}
@@ -35,6 +39,11 @@ RTSRC=$LLVM_SRC/llvm/lib/Target/MCS51
 mkdir -p $OUT/src $OUT/obj $OUT/rt/mcs51 $OUT/link
 OUT=$(cd $OUT && pwd)
 (cd "$REPO" && git ls-files -z --cached | tar --null -T - -cf -) | tar -x -C $OUT/src
+if [ "$VARIANT" = app ]; then
+  # Tracked application files only; a submodule (this stack) stays an empty directory.
+  mkdir $OUT/src/app
+  (cd "$APP_DIR" && git ls-files -z --cached | tar --null --no-recursion -T - -cf -) | tar -x -C $OUT/src/app
+fi
 
 TARGET="-target mcs51 -mcpu=cc2530"
 ABI=${ABI_FLAGS?ABI_FLAGS required (may be empty)}
@@ -54,9 +63,19 @@ printf '%s\n' "$DEFS" > $OUT/defines.txt
 CFLAGS="$TARGET -std=c99 -Oz $SF $ABI -ffunction-sections -fdata-sections -Itoolchain/clang/include $DEFS"
 echo "$T/clang $CFLAGS -c SRC -o OBJ   (cwd = firmware source root)" > $OUT/compile-command.txt
 cd $OUT/src
+SRCMAP=$H/inputs/srcmap-stk.txt
+if [ "$VARIANT" = app ]; then
+  SRCMAP=$OUT/srcmap.txt
+  cp $H/inputs/srcmap-stk.txt $SRCMAP
+  for pair in $APP_UNITS; do
+    unit=${pair%%=*}; path=${pair#*=}
+    [ -f "app/$path" ] && grep -q "^$unit " $SRCMAP || { echo "app unit $pair: no such unit or tracked file"; exit 2; }
+    sed -i "s|^$unit .*\$|$unit app/$path|" $SRCMAP
+  done
+fi
 while read -r unit src; do
   echo "$unit $src"
-done < $H/inputs/srcmap-stk.txt | xargs -P "${JOBS:-8}" -L1 sh -c \
+done < $SRCMAP | xargs -P "${JOBS:-8}" -L1 sh -c \
   '"$0" '"$CFLAGS"' -c "$2" -o "'"$OUT"'/obj/$1.o" 2> "'"$OUT"'/obj/$1.err" || { echo "FAIL $1"; cat "'"$OUT"'/obj/$1.err" >&2; exit 255; }' $T/clang
 n=$(ls $OUT/obj/*.o | wc -l); [ "$n" = 45 ] || { echo "object count $n != 45"; exit 2; }
 $T/clang $TARGET -c $OUT/src/src/flash_exec_mcs51.s -o $OUT/link/flash_exec_mcs51.o

@@ -76,9 +76,13 @@ bdb_join_result_t bdb_join_start(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, NW
     ctx->workspace = BDB_JOIN_WORK_NONE;
     if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK) return BDB_JOIN_STATE;
     ctx->workspace = BDB_JOIN_WORK_SCAN;
-    /* Both fresh-join policies accept only the PAN coordinator (0x0000). */
-    if (mac_scan_start(&ctx->work.scan, owner, &ctx->config.scan, now) != MAC_SCAN_OK ||
-        nwk_candidates_parent(&ctx->work.scan.candidates, 0) != NWK_CANDIDATES_OK)
+    /* Both fresh-join policies accept only the PAN coordinator (0x0000),
+     * unless router-parent joining keeps every open parent of one network. */
+    if (mac_scan_start(&ctx->work.scan, owner, &ctx->config.scan, now) != MAC_SCAN_OK
+#if !defined(CC2530_ROUTER_JOIN)
+        || nwk_candidates_parent(&ctx->work.scan.candidates, 0) != NWK_CANDIDATES_OK
+#endif
+        )
         return BDB_JOIN_SCAN_FAILED;
     ctx->phase = BDB_JOIN_SCANNING;
     return BDB_JOIN_OK;

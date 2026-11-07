@@ -68,6 +68,14 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
 #define ROUTER_KNOWN 1u
 #define ROUTER_ACTIVE 2u
 #define ROUTER_ATTEMPT 4u
+#if defined(CC2530_ROUTER_JOIN)
+/* Associated through a router before the TC is known: TC holds the router
+ * IEEE as a placeholder until the relayed Transport Key names the TC. */
+#define ROUTER_UNBOUND 8u
+#define ROUTER_FLAG_MASK 15u
+#else
+#define ROUTER_FLAG_MASK 7u
+#endif
 #endif
 #define ACTIVE 4u
 #define NEWER 8u
@@ -170,14 +178,32 @@ static uint8_t parent_router(void)
 }
 static uint8_t parent_ieee_offset(void) { return parent_router() ? ROUTER : TC; }
 static uint16_t parent_address(void) { return parent_router() ? u16(w.record+ROUTER_ADDR) : 0; }
+#if defined(CC2530_ROUTER_JOIN)
+static uint8_t unbound(void) { return router_record() && (w.record[ROUTER_FLAGS] & ROUTER_UNBOUND); }
+#endif
 static uint8_t valid_router(void)
 {
     uint8_t i, f = w.record[ROUTER_FLAGS];
-    if (!all(w.record+132, 12, 0) || (f & (uint8_t)~7u) ||
+#if defined(CC2530_ROUTER_JOIN)
+    uint8_t p = phase(), u = (f & ROUTER_UNBOUND) != 0;
+#endif
+    if (!all(w.record+132, 12, 0) || (f & (uint8_t)~ROUTER_FLAG_MASK) ||
         (!(f & ROUTER_ATTEMPT) && w.record[ROUTER_UPDATE])) return 0;
     if (!(f & ROUTER_KNOWN)) return all(w.record+ROUTER, 19, 0);
+#if defined(CC2530_ROUTER_JOIN)
+    /* Initial join through a router: the admitted parent precedes the first
+     * verification; UNBOUND exists only while ASSOCIATED. */
+    if (u ? (verified() || f != (ROUTER_KNOWN | ROUTER_ACTIVE | ROUTER_UNBOUND) ||
+             p != SECURITY_KEYS_ASSOCIATED || !same(w.record+ROUTER, w.record+TC, 8)) :
+        (!verified() && (f != (ROUTER_KNOWN | ROUTER_ACTIVE) || p < SECURITY_KEYS_RECEIVED ||
+             (p > SECURITY_KEYS_WAIT_CONFIRM && p != SECURITY_KEYS_LEFT))))
+        return 0;
+    if (!identity(w.record+ROUTER) ||
+        same(w.record+ROUTER, w.record+OWN, 8) || (!u && same(w.record+ROUTER, w.record+TC, 8)) ||
+#else
     if (!verified() || !identity(w.record+ROUTER) ||
         same(w.record+ROUTER, w.record+OWN, 8) || same(w.record+ROUTER, w.record+TC, 8) ||
+#endif
         !u16(w.record+ROUTER_ADDR) || u16(w.record+ROUTER_ADDR) >= 0xfff8u ||
         u16(w.record+ROUTER_ADDR) == u16(w.record+ADDR)) return 0;
     for (i = 0; i < 2; i++)
@@ -601,6 +627,29 @@ security_keys_result_t security_keys_associate(uint16_t short_address, uint16_t 
     return finish(save());
 }
 
+#if defined(CC2530_ROUTER_JOIN)
+security_keys_result_t security_keys_router_parent(uint16_t router_address, uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (phase() != SECURITY_KEYS_ASSOCIATED || router_record()) return finish(SECURITY_KEYS_STATE);
+    if (!router_address || router_address >= 0xfff8u || router_address == u16(w.record+ADDR) || !nv_polls)
+        return finish(SECURITY_KEYS_ARGUMENT);
+    /* The association source is the router; TC stays its placeholder. */
+    memcpy(w.record+ROUTER, w.record+TC, 8);
+    put16(w.record+ROUTER_ADDR, router_address);
+    memset(w.record+ROUTER_NF, 0, 144u-ROUTER_NF);
+    w.record[ROUTER_FLAGS] = ROUTER_KNOWN | ROUTER_ACTIVE | ROUTER_UNBOUND;
+    w.record[MAGIC+1] = 3; w.size = 144; w.polls = nv_polls;
+    if (KEY_CALL(LW_COUNTER_CREATE, security_counter_restage(w.record, 144)) == SECURITY_COUNTER_OK)
+        return finish(SECURITY_KEYS_OK);
+    return finish(save());
+}
+#endif
+
 static uint8_t broadcast(uint16_t address)
 {
     return address == 0xffffu || address == 0xfffdu;
@@ -645,7 +694,11 @@ static security_keys_result_t transport(void)
     if (w.key_id != (type == 1 ? 2 : 3)) return SECURITY_KEYS_SELECTOR;
     if (w.packet.length != (type == 1 ? 35 : 34)) return SECURITY_KEYS_FORMAT;
     offset = type == 1 ? 19 : 18;
-    if (!same(w.packet.payload+offset+8, w.record+TC, 8) ||
+    if (!same(w.packet.payload+offset+8,
+#if defined(CC2530_ROUTER_JOIN)
+              unbound() ? w.meta.source :
+#endif
+              w.record+TC, 8) ||
         !same(w.packet.payload+offset, w.record+OWN, 8) ||
         w.packet.nwk.destination != u16(w.record+ADDR))
         return SECURITY_KEYS_IDENTITY;
@@ -671,6 +724,12 @@ static security_keys_result_t transport(void)
     if (!network()) {
         if (phase() != SECURITY_KEYS_ASSOCIATED) return SECURITY_KEYS_CONTEXT;
         i = 0; w.record[FLAGS] = 1; set_phase(SECURITY_KEYS_RECEIVED);
+#if defined(CC2530_ROUTER_JOIN)
+        if (unbound()) {
+            memcpy(w.record+TC, w.meta.source, 8);
+            w.record[ROUTER_FLAGS] &= (uint8_t)~ROUTER_UNBOUND;
+        }
+#endif
     } else {
         if (!verified()) return SECURITY_KEYS_CONTEXT;
         newest = active_slot() ^ ((w.record[FLAGS] & NEWER) ? 1 : 0);
@@ -692,7 +751,14 @@ static void adopt(uint8_t slot)
 }
 static security_keys_result_t aps_command(void)
 {
-    if (!w.packet.length || w.packet.nwk.source != 0) return SECURITY_KEYS_IDENTITY;
+    if (!w.packet.length || w.packet.nwk.source !=
+#if defined(CC2530_ROUTER_JOIN)
+        /* While unbound only the parent's relay can carry the first key. */
+        (unbound() ? parent_address() : 0u)
+#else
+        0
+#endif
+        ) return SECURITY_KEYS_IDENTITY;
     if (w.packet.payload[0] == 5) return transport();
     if (w.packet.payload[0] == 16) {
         if (!w.aps_secured || !w.pending || phase() != SECURITY_KEYS_WAIT_CONFIRM)
@@ -832,6 +898,14 @@ static security_keys_result_t open_aps(void)
     if (w.meta.counter == 0xffffffffUL) return SECURITY_KEYS_REPLAY;
     w.key_id = w.meta.key_identifier;
     if (w.key_id != 0 && w.key_id != 2 && w.key_id != 3) return SECURITY_KEYS_SELECTOR;
+#if defined(CC2530_ROUTER_JOIN)
+    if (unbound()) {
+        /* The relayed Transport Key names the TC only in its extended nonce. */
+        if (!w.meta.extended_nonce || !identity(w.meta.source) ||
+            same(w.meta.source, w.record+OWN, 8) || same(w.meta.source, w.record+ROUTER, 8))
+            return SECURITY_KEYS_IDENTITY;
+    } else
+#endif
     if (w.meta.extended_nonce && !same(w.meta.source, w.record+TC, 8)) return SECURITY_KEYS_IDENTITY;
     w.pending = 0;
     if (phase() == SECURITY_KEYS_WAIT_CONFIRM && w.key_id == 0 &&
@@ -848,6 +922,9 @@ static security_keys_result_t open_aps(void)
         if (w.meta.counter < w.counter) return SECURITY_KEYS_REPLAY;
         r = key(LK, w.key_id, 0);
         if (r != SECURITY_KEYS_OK) return r;
+#if defined(CC2530_ROUTER_JOIN)
+        if (unbound()) memcpy(w.key.source, w.meta.source, 8);
+#endif
         w.key.extended_nonce = w.meta.extended_nonce;
         r = crypto_result(ed_wire_crypt(1, ZIGBEE_SECURITY_APS, &w.key,
             w.a+offset, length, w.b, 116, &w.info));
@@ -886,7 +963,12 @@ security_keys_result_t security_keys_receive(
     if (w.nwk.header.type == ED_NWK_COMMAND) {
         if (w.nwk.header.source == parent_address()) logical = parent_ieee_offset();
         else if (w.nwk.header.source != 0) return finish(SECURITY_KEYS_IDENTITY);
-    } else if (w.nwk.header.source != 0) return finish(SECURITY_KEYS_IDENTITY);
+    } else if (w.nwk.header.source != 0
+#if defined(CC2530_ROUTER_JOIN)
+        /* Only the parent's unsecured relay of the tunnelled Transport Key. */
+        && (!unbound() || w.nwk.header.source != parent_address())
+#endif
+        ) return finish(SECURITY_KEYS_IDENTITY);
     if (
 #else
     if (w.nwk.header.source != 0 ||
@@ -1055,7 +1137,15 @@ static security_keys_result_t publish(uint8_t *out, uint16_t capacity, uint8_t *
 static void command_packet(uint8_t nwk_seq, uint8_t aps_counter)
 {
     w.packet.nwk.version = 2; w.packet.nwk.source = u16(w.record+ADDR);
-    w.packet.nwk.destination = 0; w.packet.nwk.radius = 1;
+    w.packet.nwk.destination = 0;
+    w.packet.nwk.radius = 1;
+#if defined(CC2530_ROUTER_JOIN)
+    /* Through a router parent the TC is not one hop away: radius 1 would
+     * make the parent drop the request instead of routing it. */
+    if (parent_address()) {
+        w.packet.nwk.radius = 30; w.packet.nwk.discover_route = NWK_DISCOVER_ROUTE_ENABLE;
+    }
+#endif
     w.packet.nwk.sequence = nwk_seq; w.packet.aps.type = ED_APS_COMMAND;
     w.packet.aps.counter = aps_counter;
 }
