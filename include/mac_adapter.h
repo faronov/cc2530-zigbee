@@ -100,8 +100,9 @@ const mac_attempt_record_t MCU_XDATA *mac_adapter_record(void) JOIN_FAR;
 #if defined(CC2530_MAC_RECONFIG)
 /* OFF only: after a completed closure/retirement or unprepare, with no held
  * frame, pending delivery or closure goal. Updates PAN, short address and
- * channel through the real same-owner radio service; IEEE and power must be
- * the initialization values (INVALID, no MMIO). The radio stays OFF.
+ * channel (and TXPOWER with CC2530_TX_POWER) through the real same-owner radio
+ * service; IEEE and otherwise power must be the initialization values
+ * (INVALID, no MMIO). The radio stays OFF.
  * This is not network membership, PIB validation or recovery.
  */
 mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDATA * SDCC_VOLATILE config,

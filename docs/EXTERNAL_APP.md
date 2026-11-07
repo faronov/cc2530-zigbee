@@ -35,7 +35,9 @@ headers from the application's include directory:
   - `zcl_sensor_boot()`, called once by `examples/join_smoke_main.c` before
     admission;
   - with `CC2530_APP_QUIET`, `zcl_sensor_quiet()`, which bounds the PM2 sleep
-    span and returns 0 to keep the device awake (sleep reason 5).
+    span and returns 0 to keep the device awake (sleep reason 5);
+  - with `CC2530_APP_SETTINGS`, `zcl_sensor_start(member)` (see
+    [below](#tx-power-and-application-settings)).
 
 The board file must define `board_description` and `board_early_off()`.
 `board_early_off()` runs from startup before C data initialization, so it may
@@ -47,7 +49,36 @@ example:
 - `CC2530_ROUTER_JOIN` ([ED_JOIN.md](ED_JOIN.md#router-parent-initial-join-cc2530_router_join));
 - `CC2530_ZDO_DESCRIPTORS` (`zdo_srv_descriptors[]`, see `zdo_srv.h`);
 - `CC2530_AUTONOMOUS`, `CC2530_LEAN`, `CC2530_RX_OFF_IDLE` and
-  `CC2530_PM2_IDLE` (see [M7_SLEEP.md](M7_SLEEP.md)).
+  `CC2530_PM2_IDLE` (see [M7_SLEEP.md](M7_SLEEP.md));
+- `CC2530_TX_POWER` and `CC2530_APP_SETTINGS` (below).
+
+## TX power and application settings
+
+Both options need `CC2530_PM2_IDLE`. `CC2530_TX_POWER` also needs
+`CC2530_MAC_RECONFIG`.
+
+- `CC2530_TX_POWER` lets the application choose the TXPOWER register value.
+  - `join_smoke_power` holds the requested raw value. The initial MAC
+    configuration uses it; the default is `0xF5`.
+  - The radio owners accept any raw value whose low nibble is 5 (SWRS081B
+    Table 2, `0x05` to `0xF5`).
+  - The new value is applied at the next quiescent sleep point. There, with the
+    adapter OFF, `mac_adapter_configure()` rewrites register `0x6190` and
+    verifies the full radio profile. The device then sleeps on its next pass.
+- `CC2530_APP_SETTINGS` keeps two application bytes in the security counter
+  record (`security_counter_app[2]`, see
+  [SECURITY_COUNTERS.md](SECURITY_COUNTERS.md#record-and-opaque-state)).
+  - After the record is opened and the device is resumed or recommissioned, the
+    stack calls `zcl_sensor_start(member)`. `member` is 1 for a resumed,
+    verified member and 0 otherwise. The bytes are loaded by then, so the
+    application may read them, change them and set `join_smoke_power`.
+  - Changed bytes are written by the next record save. For a resumed member the
+    stack checkpoints them straight after `zcl_sensor_start()`; later changes
+    are checkpointed at the next quiescent sleep point
+    (`security_keys_checkpoint()`). Each checkpoint is one NV record write, so
+    the application should change the bytes rarely.
+  - A record written with nonzero bytes is refused by images without the
+    option.
 
 ## Manifest and LLVM build
 

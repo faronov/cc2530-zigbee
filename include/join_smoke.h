@@ -88,6 +88,14 @@ extern volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 extern MCU_XDATA uint8_t join_smoke_parent_history[20];
 #endif
 extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
+#if defined(CC2530_TX_POWER)
+/* Requested raw TXPOWER (RADIO_AUTOACK_POWER_VALID), F5 after initialize.
+ * The application may change it at any time: admission uses it for the
+ * first radio configuration, every later join action carries the driver's
+ * copy, and a READY quiescent point (CC2530_PM2_IDLE) applies a change with
+ * mac_adapter_configure() before it may sleep. */
+extern MCU_XDATA uint8_t join_smoke_power;
+#endif
 
 /* Draft, not a flashable/accepted image. Whole-reset, single-use caller.
  * Load public admission storage and externally qualified random bytes while
