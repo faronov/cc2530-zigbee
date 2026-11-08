@@ -88,14 +88,26 @@ must retain the counter record and use the counter-preserving save path.
 
 Before an admitted replacement, the service reloads and compares the complete
 current snapshot and generation to its runtime copy. Unexpected generation
-or bytes fail ROLLBACK. Generic-journal RECOVERED selection always fails
-RECOVERY: **an older valid record must not authorize counter rollback**.
-The counter layer never sets `allow_recovery=1`.
+or bytes fail ROLLBACK.
+
+Generic-journal RECOVERED selection (one valid page, the other incomplete,
+format- or integrity-damaged) opens the valid record but **skips both
+domains by one full range** (256, saturating at FFFFFFFF) beyond its
+ceilings. The damaged page is at most one generation newer, and a single
+commit raises at most one ceiling by at most one range, so every counter it
+could have reserved stays below the new cursor. Nothing is allocated before
+a commit, so a reset before it just repeats the same skip. The first commit
+persists the skipped ceilings of BOTH domains and replaces the damaged page
+with `allow_recovery=1`, which restores a clean journal. A torn write and a
+decayed commit word look identical, so this rule never trusts the damaged
+page's contents. The opaque payload reverts to the older record (for example a
+previous key phase); counters never do. Unsupported versions, conflicting
+generations and corrupt-only storage stay fatal.
 
 During destructive work, counter state/result and the underlying NV result
 are explicitly BUSY/PENDING. A storage error may follow a physical commit;
 it is never interpreted as proof that nothing changed. All storage,
-degraded-selection, schema and rollback failures retain a failure and stop
+schema and rollback failures retain a failure and stop
 both domains. A later take/save/read cannot clear it or make further MMIO
 accesses. Invalid arguments/ownership preserve diagnostics and caller data.
 Every failing take/read preserves caller output. Range exhaustion remains
@@ -104,10 +116,10 @@ an explicit per-domain result; it does not reset the other domain.
 A separate, genuine full reset may recover a transient hardware-service
 fault **only if** a fresh scan accepts a complete clean journal. It then
 starts at the persisted ceilings, not the old volatile cursor.
-Persistent degraded/corrupt/unsupported state remains blocked.
+Persistent corrupt/unsupported state remains blocked.
 External recovery requires trustworthy history/floors or retirement of
 potentially reused identity/key material; there is no software recovery
-bypass that guesses zero or silently selects an older record.
+bypass that guesses zero or selects an older record without skipping.
 
 **A coherent cold rollback of both pages, or complete out-of-band erasure,
 cannot be detected by these two pages alone.** Their CRC is not authentication,

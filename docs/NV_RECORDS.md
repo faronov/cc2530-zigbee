@@ -8,8 +8,9 @@ endurance, counter-safety, key-storage or network-resume acceptance.
 No board image links it. **Never flash or upload `nv_record_test.ihx`.**
 
 The separate [outgoing counter owner](SECURITY_COUNTERS.md) now supplies a
-strict counter schema/reservation policy over these real APIs. It rejects
-RECOVERED rather than using an older record to allocate counters. This does
+strict counter schema/reservation policy over these real APIs. It accepts
+RECOVERED only by skipping both counter domains one full range past the older
+record's ceilings before allocating, then replaces the damaged page. This does
 not change the generic journal's recovery contract or establish physical
 durability, key state, membership or an independent cold anti-rollback anchor.
 

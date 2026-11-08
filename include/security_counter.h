@@ -48,7 +48,7 @@ typedef struct {
  * established unused identity/key history or trusted nondecreasing floors.
  * Never call it as automatic recovery, leave or factory reset. Those procedures
  * use save to preserve both ceilings, even when clearing the opaque payload.
- * This module has no erase/reset/rewind/recovery-bypass API.
+ * This module has no erase/reset/rewind API.
  *
  * Create only stages floors and payload in RAM (READY, generation 0); it does
  * no flash work. Restage replaces a staged payload, keeping its floors, and
@@ -56,8 +56,11 @@ typedef struct {
  * and requires an EMPTY journal, else ROLLBACK. A reset before that commit
  * leaves the journal EMPTY; recovery is a fresh explicit provisioning.
  *
- * Degraded journal selection, unknown versions, unexpected runtime generation/
- * snapshot, and all storage failures retain a failure and forbid allocation.
+ * Degraded journal selection (RECOVERED) opens the valid record with both
+ * domains skipped one full RANGE past its ceilings; the first commit persists
+ * both skipped ceilings and replaces the damaged page. Unknown versions,
+ * unexpected runtime generation/snapshot, and all storage failures retain a
+ * failure and forbid allocation.
  * A cold, coherent rollback of BOTH pages or complete erase cannot be detected
  * without an independent trusted anchor. No such hardware anchor is provided.
  * Recovery then requires external history/provisioning, never guessing zero.

@@ -120,7 +120,7 @@ static void interruption(void)
             } else { failures++; CHECK(opened==SECURITY_KEYS_STORAGE); }
         }
     }
-    CHECK(cuts==1582 && failures>0 && consumed>0);
+    CHECK(cuts==1582 && !failures && consumed>0);
     printf("baseline router RX: %u command/reset cuts, %u fail-closed outcomes, "
            "%u fully committed replay-rejecting outcomes PASS\n",cuts,failures,consumed);
 

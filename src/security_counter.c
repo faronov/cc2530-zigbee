@@ -84,6 +84,19 @@ static void floors(void)
         D.next[i] = D.until[i] = decode(security_counter_blob+8u+4u*i);
 }
 
+/* A degraded journal selected its only valid page; the other one is a torn
+ * write/erase or a decayed record. That record can be at most one generation
+ * newer, and one commit raises at most one ceiling by RANGE, so skipping RANGE
+ * in both domains stays above anything it reserved. The first commit persists
+ * the skip before any allocation; a reset before then repeats it. */
+static void skip(void)
+{
+    uint8_t i;
+    for (i = 0; i < 2; i++)
+        D.next[i] = D.until[i] = D.until[i] > 0xffffffffUL-SECURITY_COUNTER_RANGE ?
+            0xffffffffUL : D.until[i]+SECURITY_COUNTER_RANGE;
+}
+
 static security_counter_result_t current(void)
 {
     uint8_t i;
@@ -92,9 +105,9 @@ static security_counter_result_t current(void)
     if (!D.generation)
         return D.nv_result == NV_RECORD_EMPTY ? SECURITY_COUNTER_OK :
             fail(SECURITY_COUNTER_ROLLBACK);
-    if (D.nv_result == NV_RECORD_RECOVERED)
-        return fail(SECURITY_COUNTER_RECOVERY);
-    if (D.nv_result != NV_RECORD_OK)
+    /* The exact comparison below proves the selected page is this epoch's
+     * own latest commit, so a damaged other page is only rewritten. */
+    if (D.nv_result != NV_RECORD_OK && D.nv_result != NV_RECORD_RECOVERED)
         return fail(SECURITY_COUNTER_NV);
     if (nv_record_status()->generation != D.generation ||
         nv_record_status()->length != 16u+D.payload_length)
@@ -107,6 +120,10 @@ static security_counter_result_t current(void)
 
 static security_counter_result_t commit(uint16_t poll_limit)
 {
+    uint8_t i, recovery = D.nv_result == NV_RECORD_RECOVERED;
+    for (i = 0; i < 2; i++)
+        if (decode(security_counter_blob+8u+4u*i) < D.until[i])
+            encode(security_counter_blob+8u+4u*i, D.until[i]);
     D.state = SECURITY_COUNTER_BUSY;
     D.result = SECURITY_COUNTER_PENDING;
     D.nv_result = NV_RECORD_PENDING;
@@ -115,8 +132,8 @@ static security_counter_result_t commit(uint16_t poll_limit)
     security_counter_blob[7] = security_counter_app[1];
 #endif
     D.nv_result = (uint8_t)nv_record_replace(security_counter_blob,
-        16u+security_counter_blob[5], poll_limit, 0);
-    if (D.nv_result != NV_RECORD_OK)
+        16u+security_counter_blob[5], poll_limit, recovery);
+    if (D.nv_result != NV_RECORD_OK && !(recovery && D.nv_result == NV_RECORD_RECOVERED))
         return fail(D.nv_result == NV_RECORD_RECOVERY_REQUIRED ?
                     SECURITY_COUNTER_RECOVERY : SECURITY_COUNTER_NV);
     if (nv_record_status()->generation != D.generation+1)
@@ -150,9 +167,8 @@ D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
         D.state = SECURITY_COUNTER_UNPROVISIONED;
         return CW_RETURN(CW_COUNTER_OPEN,finish(SECURITY_COUNTER_EMPTY));
     }
-    if (D.nv_result != NV_RECORD_OK)
-        return CW_RETURN(CW_COUNTER_OPEN,fail(D.nv_result == NV_RECORD_RECOVERED ?
-                    SECURITY_COUNTER_RECOVERY : SECURITY_COUNTER_NV));
+    if (D.nv_result != NV_RECORD_OK && D.nv_result != NV_RECORD_RECOVERED)
+        return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_NV));
     if (nv_record_status()->length < 16 || security_counter_blob[0] != 'C' ||
         security_counter_blob[1] != 'T' || security_counter_blob[2] != 'R' ||
         security_counter_blob[3] != '1')
@@ -172,6 +188,7 @@ D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
         return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
 #endif
     floors();
+    if (D.nv_result == NV_RECORD_RECOVERED) skip();
     D.generation = nv_record_status()->generation;
     D.payload_length = security_counter_blob[5];
     D.state = SECURITY_COUNTER_READY;

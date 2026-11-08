@@ -508,13 +508,14 @@ entropy, durable security state or membership.
 
 The independent [outgoing counter owner](SECURITY_COUNTERS.md) adds real
 journal-backed exclusive ceilings, range allocation and opaque state saving.
-It preserves both domains across restart/state clearing, rejects degraded
-selection and runtime snapshot/generation changes, and never automatically
+It preserves both domains across restart/state clearing, opens a degraded
+selection only with both domains skipped one full range, rejects runtime
+snapshot/generation changes, and never automatically
 initializes empty media. Its112-byte opaque payload is not validated key or
 membership state. The isolated real flash composition uses9941 CODE and
 1120+64 XDATA; whole-stack fit and physical durability remain open. A coherent
 cold rollback of both pages needs an independent trusted anchor that is not
-provided here. There is no generic-journal recovery bypass or counter rewind.
+provided here. There is no counter rewind.
 
 The separate [install-code/AES-MMO service](INSTALL_CODE.md) checks the
 selected BDB16+2-byte CRC before hashing all18 octets through the real AES
