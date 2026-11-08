@@ -2005,7 +2005,8 @@ quiescent FIFO and new `radio_tx` services in that order. Caller-owned
 preload/clear operations have separately checked deadlines. Direct TX and
 controller-gated TX-on-CCA require fresh TXDONE and verified idle; a CCA-only
 sample reserves no future airtime. Only channels 11..26 and explicitly
-requested raw TXPOWER `05` are supported. Address/source-match RAM and board
+requested raw TXPOWER `05` are supported (`CC2530_TX_POWER` admits any raw
+`x5` value in the MAC owner, see [EXTERNAL_APP.md](EXTERNAL_APP.md#tx-power-and-application-settings)). Address/source-match RAM and board
 GPIO remain untouched; filtering/AUTOACK are disabled.
 
 This is a reset-exclusive, foreground-only owner, not a unified radio runtime.

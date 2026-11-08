@@ -501,6 +501,24 @@ security_keys_result_t security_keys_remember_parent(
     return finish(save());
 }
 
+#endif
+#if defined(CC2530_APP_SETTINGS)
+security_keys_result_t security_keys_checkpoint(uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    /* A resumed member may still hold REJOINING until its rejoin completes. */
+    if (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_CONTEXT);
+    w.polls = nv_polls;
+    return finish(save());
+}
+#endif
+#if defined(CC2530_PARENT_RECOVERY)
 security_keys_result_t security_keys_select_parent(
     uint8_t router, uint8_t update_id, uint16_t nv_polls) SECURITY_FAR
 {

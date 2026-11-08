@@ -169,5 +169,11 @@ void zcl_sensor_tick(void) JOIN_FAR;
  * fitting the 82-byte application slot, and never change reporting/bindings.
  * Received Read Reporting Configuration Responses are discarded. */
 uint8_t zcl_sensor_serve(void) JOIN_FAR;
+#if defined(CC2530_APP_SETTINGS)
+/* Once per run after storage opens, before the first radio configuration:
+ * member is a resumable VERIFIED membership (rejoin), else a fresh join. The
+ * application may change security_counter_app and join_smoke_power. */
+void zcl_sensor_start(uint8_t member) JOIN_FAR;
+#endif
 
 #endif

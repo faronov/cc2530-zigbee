@@ -22,6 +22,9 @@ MCU_XDATA uint8_t security_counter_blob[NV_RECORD_MAX];
 #else
 MCU_XDATA uint8_t security_counter_blob[NV_RECORD_MAX], security_counter_check[NV_RECORD_MAX];
 #endif
+#if defined(CC2530_APP_SETTINGS)
+MCU_XDATA uint8_t security_counter_app[2];
+#endif
 extern MCU_XDATA uint8_t security_counter_reserved_end;
 
 #if defined(CC2530_MAC_LINK_CHILD_WORKSPACE)
@@ -107,6 +110,10 @@ static security_counter_result_t commit(uint16_t poll_limit)
     D.state = SECURITY_COUNTER_BUSY;
     D.result = SECURITY_COUNTER_PENDING;
     D.nv_result = NV_RECORD_PENDING;
+#if defined(CC2530_APP_SETTINGS)
+    security_counter_blob[6] = security_counter_app[0];
+    security_counter_blob[7] = security_counter_app[1];
+#endif
     D.nv_result = (uint8_t)nv_record_replace(security_counter_blob,
         16u+security_counter_blob[5], poll_limit, 0);
     if (D.nv_result != NV_RECORD_OK)
@@ -152,10 +159,18 @@ D.nv_result = (uint8_t)nv_record_load(security_counter_blob, NV_RECORD_MAX);
         return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
     if (security_counter_blob[4] != 1)
         return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_VERSION));
+#if defined(CC2530_APP_SETTINGS)
+    if (security_counter_blob[5] > SECURITY_COUNTER_PAYLOAD_MAX ||
+        nv_record_status()->length != 16u+security_counter_blob[5])
+        return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
+    security_counter_app[0] = security_counter_blob[6];
+    security_counter_app[1] = security_counter_blob[7];
+#else
     if (security_counter_blob[5] > SECURITY_COUNTER_PAYLOAD_MAX ||
         nv_record_status()->length != 16u+security_counter_blob[5] ||
         security_counter_blob[6] || security_counter_blob[7])
         return CW_RETURN(CW_COUNTER_OPEN,fail(SECURITY_COUNTER_FORMAT));
+#endif
     floors();
     D.generation = nv_record_status()->generation;
     D.payload_length = security_counter_blob[5];
@@ -199,7 +214,13 @@ security_counter_result_t security_counter_create(
         return result;
     security_counter_blob[0] = 'C'; security_counter_blob[1] = 'T';
     security_counter_blob[2] = 'R'; security_counter_blob[3] = '1';
+#if defined(CC2530_APP_SETTINGS)
+    security_counter_blob[4] = 1;
+    security_counter_blob[6] = security_counter_app[0];
+    security_counter_blob[7] = security_counter_app[1];
+#else
     security_counter_blob[4] = 1; security_counter_blob[6] = security_counter_blob[7] = 0;
+#endif
     encode(security_counter_blob+8, nwk_floor);
     encode(security_counter_blob+12, aps_floor);
     floors();
@@ -310,6 +331,15 @@ for (i = 0; i < D.payload_length; i++)
     *length = D.payload_length;
     return CW_RETURN(CW_COUNTER_READ,finish(SECURITY_COUNTER_OK));
 }
+
+#if defined(CC2530_APP_SETTINGS)
+uint8_t security_counter_app_pending(void)
+{
+    return D.state == SECURITY_COUNTER_READY && D.generation &&
+        (security_counter_blob[6] != security_counter_app[0] ||
+         security_counter_blob[7] != security_counter_app[1]);
+}
+#endif
 
 const security_counter_status_t MCU_XDATA *security_counter_status(void)
 {
