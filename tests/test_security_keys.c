@@ -1250,7 +1250,14 @@ static void failures(void)
     security_joint_stall_aes(security_joint_aes_blocks()+1); reject(SECURITY_KEYS_CRYPTO);
     reject(SECURITY_KEYS_CRYPTO);
     reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    /* One damaged page recovers from the other with skipped ceilings. */
+    CHECK(security_joint_nv()[2044] == 'C' && security_joint_nv()[2048+2044] == 'C');
     security_joint_nv()[12] ^= 1;
+    security_joint_reset(0); CHECK(security_keys_open() == SECURITY_KEYS_OK);
+    CHECK(security_counter_status()->nv_result == NV_RECORD_RECOVERED);
+    state(SECURITY_KEYS_WAIT_CONFIRM); /* previous generation payload */
+    reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    security_joint_nv()[12] ^= 1; security_joint_nv()[2048+12] ^= 1;
     security_joint_reset(0); CHECK(security_keys_open() == SECURITY_KEYS_STORAGE);
     state(SECURITY_KEYS_FAILED);
     /* Inherited 32 erase attempts/page/power epoch is NOT weakened. */
@@ -1461,7 +1468,7 @@ static void interrupted_router(void)
             }
         }
     }
-    CHECK(cuts>0 && failures>0);
+    CHECK(cuts>0 && !failures); /* torn writes recover from the older page */
     printf("router history/select/request/admission: %u cut points, %u explicit storage failures PASS\n",cuts,failures);
 }
 
@@ -1469,7 +1476,7 @@ static void parent_schema_upgrade(void)
 {
     static uint8_t before[112], after[144], length, kind;
     static uint32_t until[2];
-    static unsigned command, commands, cuts, failures;
+    static unsigned command, commands, cuts, failures, recovered;
     security_keys_result_t result;
     unsigned i;
 
@@ -1505,7 +1512,7 @@ static void parent_schema_upgrade(void)
     reboot(NULL, SECURITY_KEYS_VERIFIED);
     CHECK(security_counter_status()->next[0] == security_counter_status()->until[0]);
 
-    cuts = failures = 0;
+    cuts = failures = recovered = 0;
     for (command = 1; command <= commands; command++) for (kind = 1; kind <= 3; kind++) {
         reboot(snapshot, SECURITY_KEYS_VERIFIED);
         security_joint_cut(&power_cut, command, kind, 13);
@@ -1523,6 +1530,7 @@ static void parent_schema_upgrade(void)
             CHECK(!memcmp(before, after, 111));
             CHECK(after[111] == (length == 112 ? 2 : 3));
             for (i = 0; i < 2; i++) CHECK(security_counter_status()->next[i] >= until[i]);
+            if (security_counter_status()->nv_result == NV_RECORD_RECOVERED) recovered++;
         } else {
             failures++;
             CHECK(result == SECURITY_KEYS_STORAGE);
@@ -1530,7 +1538,8 @@ static void parent_schema_upgrade(void)
             CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_STORAGE);
         }
     }
-    CHECK(cuts == 3u*commands && failures > 0);
+    /* A torn replacement falls back to the older page with skipped ceilings. */
+    CHECK(cuts == 3u*commands && !failures && recovered > 0);
 
     /* Unknown version and nonzero reserved extension fields fail closed even
      * with a valid journal CRC and intact outgoing ceilings. */

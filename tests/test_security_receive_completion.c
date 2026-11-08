@@ -320,7 +320,7 @@ static void completion_faults(void)
                 } else { failures++; CHECK(opened==SECURITY_KEYS_STORAGE); }
             }
         }
-        CHECK(cuts==1582 && failures && committed);
+        CHECK(cuts==1582 && !failures && committed);
         for(prior=0;prior<2;prior++) {
             reboot(image,SECURITY_KEYS_VERIFIED);
             completion_unsupported(400,alt_key,0); reject(SECURITY_KEYS_UNSUPPORTED);

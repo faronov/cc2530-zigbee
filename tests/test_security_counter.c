@@ -193,7 +193,7 @@ static void staged_create(void)
 
 static void formats(void)
 {
-    unsigned i, before;
+    unsigned i, before, recovered = 0;
     uint8_t baseline[4096];
     for (i = 0; i <= 112; i++) {
         starting(100, 1000, (uint8_t)i);
@@ -225,11 +225,19 @@ static void formats(void)
     memcpy(baseline, nv, sizeof(nv));
     for (i = 0; i < sizeof(nv); i++) {
         counter_reset(); memcpy(nv, baseline, sizeof(nv)); nv[i] ^= 1;
-        CHECK(security_counter_open() != SECURITY_COUNTER_OK);
+        if (security_counter_open() == SECURITY_COUNTER_OK) {
+            /* One damaged page: never below the newest ceiling (263, 11). */
+            CHECK(STATUS.nv_result == NV_RECORD_RECOVERED);
+            CHECK(STATUS.next[0] >= 263 && STATUS.next[1] >= 11+SECURITY_COUNTER_RANGE);
+            take(0, STATUS.next[0]);
+            recovered++;
+            continue;
+        }
         before = events;
         CHECK(security_counter_take(0, &counter_value, 3) != SECURITY_COUNTER_OK);
         CHECK(events == before && counter_value == 0xa5a5a5a5UL);
     }
+    CHECK(recovered);
     starting(7, 11, 0); counter_record(0, 1, 3, 11, 0);
     CHECK(security_counter_take(0, &counter_value, 3) == SECURITY_COUNTER_ROLLBACK);
     CHECK(counter_value == 0xa5a5a5a5UL);
@@ -280,9 +288,66 @@ static void bounds(void)
     CHECK(STATUS.nv_result == NV_RECORD_GENERATION_EXHAUSTED);
 }
 
+static void reopened(uint32_t nwk)
+{
+    counter_reset();
+    CHECK(security_counter_open() == SECURITY_COUNTER_OK && STATUS.nv_result == NV_RECORD_OK);
+    CHECK(nv_record_diagnostic.pages[0] == NV_PAGE_VALID && nv_record_diagnostic.pages[1] == NV_PAGE_VALID);
+    CHECK(STATUS.next[0] >= nwk);
+    take(0, STATUS.next[0]);
+}
+
+static void torn_recovery(void)
+{
+    unsigned i;
+    /* Newest page (0, gen3, ceiling 785) damaged: the skip reaches its ceiling. */
+    for (i = 0; i < 7; i++) {
+        starting(273, 265, 112);
+        counter_record(1, 2, 529, 265, 112);
+        counter_record(0, 3, 785, 265, 112);
+        if (i == 0) memset(nv+2044, 255, 4);
+        else if (i == 1) memset(nv+400, 255, 1648);
+        else if (i == 2) nv[2046] |= 0xf0;
+        else if (i == 3) nv[100] ^= 1;
+        else if (i == 4) nv[8] ^= 1;
+        else if (i == 5) nv[0] ^= 1;
+        else { memcpy(nv+2048, nv, 2048); counter_record(0, 1, 273, 265, 112); nv[100] ^= 1; }
+        counter_reset();
+        CHECK(security_counter_open() == SECURITY_COUNTER_OK && STATUS.nv_result == NV_RECORD_RECOVERED);
+        CHECK(STATUS.generation == (i == 6 ? 3u : 2u));
+        CHECK(STATUS.next[0] == (i == 6 ? 1041u : 785u) && STATUS.until[0] == STATUS.next[0]);
+        CHECK(STATUS.next[1] == 521 && STATUS.until[1] == 521);
+        CHECK(security_counter_read(counter_output, 112, &counter_length) == SECURITY_COUNTER_OK);
+        CHECK(counter_length == 112 && !memcmp(counter_output, counter_payload, 112));
+        /* A reset before the first commit repeats the same skip. */
+        counter_reset();
+        CHECK(security_counter_open() == SECURITY_COUNTER_OK && STATUS.next[1] == 521);
+        if (i & 1) {
+            CHECK(security_counter_save(counter_payload, 7, 3) == SECURITY_COUNTER_OK);
+            CHECK(STATUS.next[1] == 521);
+            reopened(STATUS.next[0]);
+            CHECK(STATUS.next[1] == 521 && STATUS.payload_length == 7);
+        } else {
+            take(0, STATUS.next[0]);
+            reopened(STATUS.next[0]);
+            CHECK(STATUS.next[1] == 521);
+        }
+        take(1, 521);
+    }
+    /* An unsupported version on the other page still stops allocation. */
+    starting(273, 265, 112);
+    counter_record(1, 2, 529, 265, 112);
+    nv[2048+4] = 2; set_u32(nv+2048+2040, crc_reference(nv+2048, 2040));
+    counter_reset();
+    CHECK(security_counter_open() == SECURITY_COUNTER_NV);
+    CHECK(security_counter_take(0, &counter_value, 3) == SECURITY_COUNTER_NV);
+    CHECK(counter_value == 0xa5a5a5a5UL);
+}
+
 static void interrupted(void)
 {
     unsigned boundary, kind, bit, before;
+    static unsigned recovered;
     uint8_t initial[4096];
     starting(273, 265, 112);
     counter_record(1, 2, 529, 265, 112);
@@ -305,8 +370,13 @@ static void interrupted(void)
                 CHECK(r == SECURITY_COUNTER_OK || r == SECURITY_COUNTER_RECOVERY);
                 if (r == SECURITY_COUNTER_OK) {
                     CHECK(STATUS.next[0] >= 529);
+                    if (STATUS.nv_result == NV_RECORD_RECOVERED) {
+                        CHECK(STATUS.next[0] >= 785 && STATUS.next[1] >= 521);
+                        recovered++;
+                    }
                     before = STATUS.next[0];
                     take(0, before);
+                    reopened(before+1);
                 } else {
                     before = events;
                     CHECK(security_counter_take(0, &counter_value, 3) == SECURITY_COUNTER_RECOVERY);
@@ -315,6 +385,7 @@ static void interrupted(void)
             }
         }
     }
+    CHECK(recovered);
     starting(5, 9, 112); mode = IGNORED;
     CHECK(security_counter_take(0, &counter_value, 3) == SECURITY_COUNTER_NV);
     CHECK(counter_value == 0xa5a5a5a5UL && STATUS.state == SECURITY_COUNTER_FAILED);
@@ -362,8 +433,9 @@ static void destructive_failures(void)
             {
                 security_counter_result_t r = security_counter_open();
                 if (r == SECURITY_COUNTER_OK) {
-                    CHECK(STATUS.next[0] == 529 && STATUS.next[1] == 265);
-                    take(0, 529); take(1, 265);
+                    uint32_t skip = STATUS.nv_result == NV_RECORD_RECOVERED ? SECURITY_COUNTER_RANGE : 0;
+                    CHECK(STATUS.next[0] == 529+skip && STATUS.next[1] == 265+skip);
+                    take(0, 529+skip); take(1, 265+skip);
                 } else {
                     CHECK(r == SECURITY_COUNTER_EMPTY || r == SECURITY_COUNTER_RECOVERY || r == SECURITY_COUNTER_NV);
                     before = events;
@@ -416,7 +488,7 @@ static void settings(void)
 
 int main(void)
 {
-    basic(); staged_create(); formats(); bounds(); interrupted(); destructive_failures();
+    basic(); staged_create(); formats(); bounds(); torn_recovery(); interrupted(); destructive_failures();
 #if defined(CC2530_APP_SETTINGS)
     settings();
 #endif

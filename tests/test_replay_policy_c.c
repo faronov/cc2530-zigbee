@@ -190,7 +190,7 @@ static void checkpoint_cuts(void)
             } else { failures++; CHECK(opened==SECURITY_KEYS_STORAGE); }
         }
     }
-    CHECK(cuts==1582 && failures && committed);
+    CHECK(cuts==1582 && !failures && committed);
     restore(); ordinary(1,alt_key,0); accept(SECURITY_KEYS_EVENT_DATA);
     update(2); security_joint_fail_read(4458);
     reject(SECURITY_KEYS_STORAGE);
