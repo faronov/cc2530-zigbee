@@ -2247,3 +2247,22 @@ Evidence:
   the same HEX read the counters at LH30's hard-coded XDATA addresses, which the lean
   layout had moved. Its final XDATA dump decodes to the same healthy state; LH32 takes the
   addresses from the ELF.
+
+## 29. Disassembler: DEC direct
+
+`MCS51Disassembler::getInstruction` picks the instruction length from a hand-written
+opcode switch before it runs the generated decoder. Opcode `0x15` (`DEC direct`) was
+missing from the two-byte cases, although the generated table decodes it. `llvm-objdump`
+therefore printed `<unknown>` for it and decoded its address byte as the next opcode, so a
+following byte such as `0x11`/`0x31` showed up as a phantom `acall`. The assembler and the
+code generator were correct; only the disassembly text was wrong.
+
+Pinned LLVM `2c3d9541c965dee8d3e35bdc81ea494e4ab02dc2` (tag
+`mcs51-disasm-dec-direct-20261110`, on top of §26) adds the case and a regression in
+`llvm/test/MC/MCS51/disassembly.s`. Every opcode followed by `nop` padding now decodes
+except the reserved `0xA5`. Generated code is unchanged.
+
+This repository's stack proofs decode CODE bytes themselves and do not read
+`llvm-objdump` text, so their results are unaffected. Tools that parse `llvm-objdump`
+output, such as the FlowerX GP `tools/stack.py`, reported recursion through the phantom
+calls on images containing `DEC direct`.

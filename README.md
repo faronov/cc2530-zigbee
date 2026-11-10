@@ -7,15 +7,17 @@
 
 An experimental CC2530 Zigbee end-device project, without proprietary TI stack
 libraries. Firmware uses **Clang MCS51, LLD and the runtime from exactly
-`ffada1d1b4198787559f99fe0ed448c32c46d2c7`** in
-[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/ffada1d1b4198787559f99fe0ed448c32c46d2c7).
+`2c3d9541c965dee8d3e35bdc81ea494e4ab02dc2`** in
+[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/2c3d9541c965dee8d3e35bdc81ea494e4ab02dc2).
 The machine-readable pin is [toolchain.json](tools/llvm/toolchain.json).
 SDCC firmware compilation, linker/overlay builds and production CI are retired;
 there is no compiler fallback.
 This is UNIFY-01 plus the exact upstream `eeef1bec` bit-toggle correction and
 its `bit-toggle.c` regression, plus the ACC-bit branch fix (implicit use of A, with the
 `acc-bit-branch-use.c` regression) and the same-bank bank-call trampoline bypass
-([study §26](docs/LLVM_MCS51_PORT_STUDY.md#26-same-bank-bank-call-trampoline-bypass));
+([study §26](docs/LLVM_MCS51_PORT_STUDY.md#26-same-bank-bank-call-trampoline-bypass))
+plus the `llvm-objdump` decoding of `DEC direct`
+([study §29](docs/LLVM_MCS51_PORT_STUDY.md#29-disassembler-dec-direct));
 the frozen UNIFY-01 and M6 revisions are unchanged.
 
 With that clean LLVM source checkout, its built tools, GNU Make, a host C compiler
