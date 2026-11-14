@@ -105,13 +105,19 @@ static void measure(void)
         sum = sample(0x3eu, 1, ZCL_SENSOR_TEMPERATURE_SAMPLES);
         MMIO_XWRITE(ATEST, atest); MMIO_XWRITE(TR0, 0);
     }
+    ST.sum = sum;
     if (sum <= 0) {
         ST.temperature = ZCL_SENSOR_INVALID_TEMPERATURE;
         ST.millivolts = 0;
         return;
     }
+#if defined(CC2530_CHIP_FACTORY)
+    ST.factory = (uint16_t)MMIO_XREAD(ZCL_SENSOR_FACTORY) << 8 | MMIO_XREAD(ZCL_SENSOR_FACTORY+1u);
+#else
+    ST.factory = 0xffffu;
+#endif
     ST.millivolts = ZCL_SENSOR_MILLIVOLTS(vdd);
-    ST.temperature = ZCL_SENSOR_CENTI(sum, ST.millivolts);
+    ST.temperature = ZCL_SENSOR_CENTI(sum, ST.millivolts, ST.factory);
 }
 #endif
 

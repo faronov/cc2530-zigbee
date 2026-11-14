@@ -11,7 +11,8 @@
 # autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls) or
 # autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
 # autonomous-pm2-epd / autonomous-pm2-sht3x-epd (opt-in: plus the UC8151D e-paper
-# display, CC2530_EPD) or
+# display, CC2530_EPD) or autonomous-pm2-epd-factory (EXPERIMENTAL: epd plus the
+# information-page die-sensor reference, CC2530_CHIP_FACTORY) or
 # app (an external application, docs/EXTERNAL_APP.md: firmware.py --app passes
 # APP_DIR, its complete APP_DEFINES and APP_UNITS "unit=path ..." that replace
 # srcmap units with files of the application's tracked tree, copied to src/app).
@@ -32,6 +33,7 @@ case $VARIANT in
   autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
   autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
   autonomous-pm2-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD" ;;
+  autonomous-pm2-epd-factory) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_CHIP_FACTORY" ;;
   autonomous-pm2-sht3x-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X -DCC2530_EPD" ;;
   app) VDEFS="${APP_DEFINES:?APP_DEFINES required}"; : "${APP_DIR:?APP_DIR required}" "${APP_UNITS:?APP_UNITS required}" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;

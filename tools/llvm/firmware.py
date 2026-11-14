@@ -86,7 +86,8 @@ def main():
     parser.add_argument("--board", choices=("generic", "lg_esl29_rev03", "external"), required=True)
     parser.add_argument("--image", choices=("join", "bringup", "timebase_fixture"), default="join")
     parser.add_argument("--variant", choices=tiers.VARIANTS + ("autonomous", "autonomous-pm2", "autonomous-pm2-sht3x",
-                        "autonomous-pm2-epd", "autonomous-pm2-sht3x-epd", "app"), default="production")
+                        "autonomous-pm2-epd", "autonomous-pm2-sht3x-epd",
+                        "autonomous-pm2-epd-factory", "app"), default="production")
     parser.add_argument("--app", type=Path, help="external application directory (cc2530-app.json); requires --variant app")
     args = parser.parse_args()
     args.tools, args.llvm_src, args.output = (p.resolve() for p in (args.tools, args.llvm_src, args.output))
