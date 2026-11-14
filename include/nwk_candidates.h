@@ -46,6 +46,9 @@ typedef struct {
     uint8_t short_pending;
     uint8_t extended_pending;
     nwk_beacon_t network;
+#if defined(CC2530_ROUTER_JOIN)
+    int8_t rssi; /* raw CC2530 RSSI of the latest admitted beacon */
+#endif
 } nwk_candidate_t;
 
 /* Caller-owned table. Public fields are read-only diagnostics after init.
@@ -63,7 +66,18 @@ typedef struct {
     nwk_candidate_t entries[NWK_CANDIDATES_CAPACITY];
     uint8_t filtered;
     uint16_t parent;
+#if defined(CC2530_ROUTER_JOIN)
+    /* Unfiltered tables keep the strongest eligible beacons instead of
+     * overflowing; mixed records any eligible EPID disagreement. */
+    uint8_t epid_seen, mixed;
+    uint8_t first_epid[8];
+#endif
 } nwk_candidates_t;
+
+#if defined(CC2530_ROUTER_JOIN)
+/* Raw RSSI of the beacon passed to the next nwk_candidates_consider call. */
+extern int8_t nwk_candidates_rssi;
+#endif
 
 /* Init/re-init clears only this table. Mask is a nonempty subset of bits 11..26
  * (bit number = channel number), not a tune/scan request or a scan completion.
@@ -108,6 +122,11 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
  * Foreground only, serialized with all three non-reentrant codecs under SDCC.
  * No allocation, timer, radio adapter, scan, association or membership state.
  */
+#if defined(CC2530_ROUTER_JOIN)
+/* Router-join preference: raw RSSI, +10 for the PAN coordinator. */
+int16_t nwk_candidates_score(const nwk_candidate_t * SDCC_VOLATILE candidate);
+#endif
+
 nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * SDCC_VOLATILE table,
                                            uint8_t index,
                                            nwk_candidate_t * SDCC_VOLATILE result);

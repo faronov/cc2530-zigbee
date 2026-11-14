@@ -40,6 +40,20 @@
 #define ZDO_SRV_DEVICE 0xffffu
 #define ZDO_SRV_DEVICE_VERSION 0u
 
+#if defined(CC2530_ZDO_DESCRIPTORS)
+/* Application-owned simple descriptors replacing the fixed single endpoint:
+ * records [length][endpoint][profile LE][device LE][version][input count]
+ * [input clusters LE...][output count=0] where length counts the bytes from
+ * endpoint through the output count; a zero length terminates the table.
+ * Match_Desc compares the request's input clusters with each record's input
+ * clusters (records declare no outputs). */
+#define ZDO_SRV_DESCRIPTOR_MAX 26u
+#define ZDO_SRV_STAGED (5u + ZDO_SRV_DESCRIPTOR_MAX + 1u)
+extern MCU_XDATA uint8_t zdo_srv_descriptors[];
+#else
+#define ZDO_SRV_STAGED 25u
+#endif
+
 typedef enum {
     ZDO_SRV_OK = 0,
     ZDO_SRV_ARGUMENT,

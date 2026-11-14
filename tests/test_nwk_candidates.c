@@ -24,6 +24,12 @@ static const MCU_CODE uint8_t long_beacon[] = {
     0x00, 0x22, 0x84, 0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe,
     0x56, 0x34, 0x12, 0xa5
 };
+#if defined(CC2530_ROUTER_JOIN)
+/* Unfiltered router-join tables keep the strongest beacons instead. */
+#define FULL_RESULT NWK_CANDIDATES_NOT_ELIGIBLE
+#else
+#define FULL_RESULT NWK_CANDIDATES_FULL
+#endif
 static nwk_candidates_t table, saved;
 static nwk_candidate_t entry, saved_entry;
 static mac_header_t header;
@@ -194,7 +200,7 @@ static uint16_t pressure_and_withdrawal(void)
 {
     CALL(fill());
     body[3] = 0x20;
-    CALL(unchanged(NWK_CANDIDATES_FULL, 26, 1, 15));
+    CALL(unchanged(FULL_RESULT, 26, 1, 15));
     body[3] = 0x12;
     body[2] = 0; /* Deliberately older sequence and Update ID: last observed wins. */
     body[13] = 0xf8; /* Router Capacity zero, depth15, ED Capacity one. */
@@ -257,7 +263,7 @@ static uint16_t identity_and_filters(void)
     CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
     body[14]--;
     body[5]++;
-    CALL(unchanged(NWK_CANDIDATES_FULL, 26, 1, 15));
+    CALL(unchanged(FULL_RESULT, 26, 1, 15));
     body[5]--;
     body[12] = 0x21; /* Structurally valid changed profile withdraws this identity only. */
     CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_WITHDRAWN);
@@ -360,6 +366,69 @@ static uint16_t errors(void)
     return 0;
 }
 
+#if defined(CC2530_ROUTER_JOIN)
+static uint16_t router_eviction(void)
+{
+    CHECK(nwk_candidates_init(&table, NWK_CANDIDATES_CHANNEL_MASK) == NWK_CANDIDATES_OK);
+    memcpy(body, short_beacon, 26);
+    for (i = 0; i < NWK_CANDIDATES_CAPACITY; i++) {
+        body[5] = (uint8_t)(0x10u + i); nwk_candidates_rssi = (int8_t)(2 * i);
+        CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+        CHECK(table.entries[i].rssi == (int8_t)(2 * i));
+    }
+    CHECK(table.epid_seen == 1 && !table.mixed && !memcmp(table.first_epid, short_beacon + 14, 8));
+    body[5] = 0x20; nwk_candidates_rssi = 0;     /* not stronger than the weakest */
+    CALL(unchanged(NWK_CANDIDATES_NOT_ELIGIBLE, 26, 1, 15));
+    nwk_candidates_rssi = -5;
+    CALL(unchanged(NWK_CANDIDATES_NOT_ELIGIBLE, 26, 1, 15));
+    nwk_candidates_rssi = 1;
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    CHECK(table.count == 4 && table.entries[0].coordinator[0] == 0x20 && table.entries[0].rssi == 1);
+    body[5] = 0x11; nwk_candidates_rssi = -10;   /* refresh lowers its RSSI */
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_UPDATED);
+    CHECK(table.entries[1].rssi == -10);
+    body[5] = 0x21; nwk_candidates_rssi = 0;
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    CHECK(table.count == 4 && table.entries[1].coordinator[0] == 0x21 && !table.mixed);
+    body[14] ^= 1; nwk_candidates_rssi = -100;   /* weak foreign EPID still marks mixed */
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_NOT_ELIGIBLE);
+    CHECK(table.mixed == 1 && table.count == 4);
+    CHECK(nwk_candidates_init(&table, NWK_CANDIDATES_CHANNEL_MASK) == NWK_CANDIDATES_OK);
+    memcpy(body, short_beacon, 26); nwk_candidates_rssi = 0;
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    body[14] ^= 1; body[8] &= 0x7f;             /* closed foreign network is ignored */
+    CALL(unchanged(NWK_CANDIDATES_NOT_ELIGIBLE, 26, 1, 15));
+    CHECK(!table.mixed);
+    table.mixed = 2;
+    CALL(unchanged(NWK_CANDIDATES_INVALID_TABLE, 26, 1, 15));
+    /* A parent-filtered (recovery) table keeps strict overflow reporting. */
+    CHECK(nwk_candidates_init(&table, NWK_CANDIDATES_CHANNEL_MASK) == NWK_CANDIDATES_OK);
+    CHECK(nwk_candidates_parent(&table, 0x5678) == NWK_CANDIDATES_OK);
+    memcpy(body, short_beacon, 26);
+    for (i = 0; i < NWK_CANDIDATES_CAPACITY; i++) {
+        body[3] = (uint8_t)(0x10u + i);
+        CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    }
+    body[3] = 0x20; nwk_candidates_rssi = 100;
+    CALL(unchanged(NWK_CANDIDATES_FULL, 26, 1, 15));
+    /* The PAN coordinator's +10 keeps a weaker coordinator over routers. */
+    CHECK(nwk_candidates_init(&table, NWK_CANDIDATES_CHANNEL_MASK) == NWK_CANDIDATES_OK);
+    memcpy(body, short_beacon, 26);
+    for (i = 0; i < NWK_CANDIDATES_CAPACITY; i++) {
+        body[5] = (uint8_t)(0x10u + i); nwk_candidates_rssi = (int8_t)(2 * i);
+        CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    }
+    memcpy(body, long_beacon, sizeof(long_beacon)); nwk_candidates_rssi = -5;
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, sizeof(long_beacon)) == NWK_CANDIDATES_ADDED);
+    CHECK(table.entries[0].address_mode == MAC_ADDRESS_EXTENDED && nwk_candidates_score(&table.entries[0]) == 5);
+    memcpy(body, short_beacon, 26); body[5] = 0x30; nwk_candidates_rssi = 7;
+    CHECK(nwk_candidates_consider(&table, 15, 1, body, 26) == NWK_CANDIDATES_ADDED);
+    CHECK(table.entries[0].address_mode == MAC_ADDRESS_EXTENDED && table.entries[1].coordinator[0] == 0x30);
+    nwk_candidates_rssi = 0;
+    return 0;
+}
+#endif
+
 static uint16_t self_test(void)
 {
     CALL(initialization());
@@ -368,6 +437,9 @@ static uint16_t self_test(void)
     CALL(pressure_and_withdrawal());
     CALL(identity_and_filters());
     CALL(errors());
+#if defined(CC2530_ROUTER_JOIN)
+    CALL(router_eviction());
+#endif
     return 0;
 }
 

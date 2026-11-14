@@ -48,7 +48,7 @@ typedef struct {
  * established unused identity/key history or trusted nondecreasing floors.
  * Never call it as automatic recovery, leave or factory reset. Those procedures
  * use save to preserve both ceilings, even when clearing the opaque payload.
- * This module has no erase/reset/rewind/recovery-bypass API.
+ * This module has no erase/reset/rewind API.
  *
  * Create only stages floors and payload in RAM (READY, generation 0); it does
  * no flash work. Restage replaces a staged payload, keeping its floors, and
@@ -56,8 +56,11 @@ typedef struct {
  * and requires an EMPTY journal, else ROLLBACK. A reset before that commit
  * leaves the journal EMPTY; recovery is a fresh explicit provisioning.
  *
- * Degraded journal selection, unknown versions, unexpected runtime generation/
- * snapshot, and all storage failures retain a failure and forbid allocation.
+ * Degraded journal selection (RECOVERED) opens the valid record with both
+ * domains skipped one full RANGE past its ceilings; the first commit persists
+ * both skipped ceilings and replaces the damaged page. Unknown versions,
+ * unexpected runtime generation/snapshot, and all storage failures retain a
+ * failure and forbid allocation.
  * A cold, coherent rollback of BOTH pages or complete erase cannot be detected
  * without an independent trusted anchor. No such hardware anchor is provided.
  * Recovery then requires external history/provisioning, never guessing zero.
@@ -68,6 +71,16 @@ typedef struct {
  * and atomic commit semantics. No physical power-cut/endurance acceptance,
  * cryptography, secure erase, secret diagnostics or successful persistence stub.
  */
+#if defined(CC2530_APP_SETTINGS)
+/* Application-owned settings in header bytes 6..7 (zero without
+ * CC2530_APP_SETTINGS; such firmware refuses a record with them nonzero).
+ * open loads them; create and every commit (save, take refill) store the
+ * current values. Opaque here: no validation, no rollback semantics. A change
+ * is persisted only by a later commit (security_keys_checkpoint). */
+extern MCU_XDATA uint8_t security_counter_app[2];
+/* Nonzero when a committed record holds other settings than these. */
+uint8_t security_counter_app_pending(void);
+#endif
 security_counter_result_t security_counter_open(void);
 security_counter_result_t security_counter_create(
     uint32_t nwk_floor, uint32_t aps_floor, const uint8_t MCU_XDATA * SDCC_VOLATILE data,
