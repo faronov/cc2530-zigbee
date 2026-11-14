@@ -34,7 +34,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
     MCU_ESCAPED_LOCAL zdo_node_request_t request;
 #if !defined(CC2530_MAC_LINK_WORKSPACE)
     zdo_srv_info_t candidate;
-    uint8_t staged[25];
+    uint8_t staged[ZDO_SRV_STAGED];
     MCU_ESCAPED_LOCAL uint8_t size;
     uint8_t simple;
 #else
@@ -43,6 +43,11 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
 #endif
     uint16_t address, cluster, end;
     uint8_t broadcast, drop = 0;
+#if defined(CC2530_ZDO_DESCRIPTORS)
+    const MCU_XDATA uint8_t *descriptor;
+    uint16_t index;
+    uint8_t count;
+#endif
 
     if (local == NULL || rx == NULL || body == NULL || response == NULL || info == NULL)
         return LW_RETURN(LW_ZDO_SERVER, ZDO_SRV_ARGUMENT);
@@ -110,6 +115,23 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                     reply.status = ZDO_NODE_INVALID_REQUEST; staged[2] = 0; size = 3;
                 } else {
                     cluster = (uint16_t)body[3] | ((uint16_t)body[4] << 8);
+#if defined(CC2530_ZDO_DESCRIPTORS)
+                    size = 5;
+                    for (descriptor = zdo_srv_descriptors; descriptor[0]; descriptor += descriptor[0] + 1u) {
+                        if (cluster != 0xffffu && (descriptor[2] != (uint8_t)cluster
+                                || descriptor[3] != (uint8_t)(cluster >> 8))) continue;
+                        for (index = 6u; index < end; index += 2u) {
+                            for (count = 0; count < descriptor[7]; ++count)
+                                if (descriptor[8u + 2u * count] == body[index]
+                                        && descriptor[9u + 2u * count] == body[index + 1u]) break;
+                            if (count < descriptor[7]) break;
+                        }
+                        if (index < end) staged[size++] = descriptor[1];
+                    }
+                    simple = (uint8_t)(size - 5u);
+                    if (!simple && broadcast) drop = 1;
+                    staged[4] = simple;
+#else
                     /* Only input clusters can match: Simple_Desc lists no outputs. */
                     if (local->endpoint && (cluster == local->profile || cluster == 0xffffu)) {
                         for (; end > 6u; end -= 2u) {
@@ -123,6 +145,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                     }
                     if (!simple && broadcast) drop = 1;
                     staged[4] = simple; staged[5] = local->endpoint; size = (uint8_t)(5u + simple);
+#endif
                 }
             }
             staged[1] = reply.status;
@@ -138,6 +161,22 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                 reply.status = ZDO_SRV_INVALID_EP;
             else if (body[1] != (uint8_t)local->address || body[2] != (uint8_t)(local->address >> 8))
                 reply.status = ZDO_NODE_INVALID_REQUEST;
+#if defined(CC2530_ZDO_DESCRIPTORS)
+            else {
+                for (descriptor = zdo_srv_descriptors; descriptor[0]; descriptor += descriptor[0] + 1u) {
+                    if (!simple) { staged[size++] = descriptor[1]; ++staged[4]; }
+                    else if (descriptor[1] == body[3]) break;
+                }
+                if (simple) {
+                    if (!descriptor[0] || descriptor[0] > ZDO_SRV_DESCRIPTOR_MAX)
+                        reply.status = ZDO_SRV_NOT_ACTIVE;
+                    else {
+                        size = (uint8_t)(5u + descriptor[0]);
+                        memcpy(staged + 4, descriptor, descriptor[0] + 1u);
+                    }
+                }
+            }
+#else
             else if (!simple) {
                 if (local->endpoint) { staged[4] = 1; staged[5] = local->endpoint; size = 6; }
             } else if (body[3] != local->endpoint) {
@@ -159,6 +198,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                 staged[23] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
                 staged[24] = 0; size = 25;
             }
+#endif
             staged[1] = reply.status;
         } else {
             if (rx->header.cluster_id == ZDO_NODE_REQUEST_CLUSTER) {

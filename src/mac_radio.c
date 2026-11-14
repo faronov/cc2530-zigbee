@@ -68,9 +68,7 @@ mac_radio_result_t mac_radio_init(const radio_autoack_config_t MCU_XDATA *config
     result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
     if (result != MAC_RADIO_READY) return result;
     if (configuration->channel < 11 || configuration->channel > 26 ||
-        (configuration->power != RADIO_AUTOACK_POWER_05 &&
-         configuration->power != RADIO_AUTOACK_POWER_D5 &&
-         configuration->power != RADIO_AUTOACK_POWER_F5)) return MAC_RADIO_INVALID_ARGUMENT;
+        !RADIO_AUTOACK_POWER_VALID(configuration->power)) return MAC_RADIO_INVALID_ARGUMENT;
     mac_radio_config = *configuration;
     status.phase = MAC_RADIO_STARTING;
     status.radio_result = 255;
@@ -278,8 +276,13 @@ mac_radio_result_t mac_radio_configure(const radio_autoack_config_t MCU_XDATA *c
     if (status.phase != MAC_RADIO_OFF) return MAC_RADIO_STATE;
     result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
     if (result != MAC_RADIO_READY) return result;
+#if defined(CC2530_TX_POWER)
+    if (configuration->channel < 11 || configuration->channel > 26 ||
+        !RADIO_AUTOACK_POWER_VALID(configuration->power)) return MAC_RADIO_INVALID_ARGUMENT;
+#else
     if (configuration->channel < 11 || configuration->channel > 26 ||
         configuration->power != mac_radio_config.power) return MAC_RADIO_INVALID_ARGUMENT;
+#endif
     for (i = 0; i < 8; i++)
         if (configuration->ieee[i] != mac_radio_config.ieee[i]) return MAC_RADIO_INVALID_ARGUMENT;
     result = sample(timeout, limit, 0);

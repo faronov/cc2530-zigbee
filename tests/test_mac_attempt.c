@@ -216,7 +216,7 @@ static void attempt_store(uint8_t a, uint8_t before, uint8_t value)
     if (a == 0xe1 && value == 0xea && XR(0x6189) == 0x4c) {
         assert(write_count == 1 && writes[0].address == a && writes[0].after == value);
         write_count = 0; logs(); trace('w', a, value);
-        assert(mode == 2 && XR(0x6197) == 0x0a && XR(0x6196) == 0xf8 &&
+        assert(mode == 2 && XR(0x6197) == 0x0a && XR(0x6196) == RADIO_AUTOACK_CCA_THRESHOLD_RAW &&
                XR(0x6199) == 1 && cca_cycles >= 4 && !(SOC_RFIRQF1 & 2));
         assert(tx_count == body_length+1u && tx_fifo[0] == body_length+2u);
         cca_cycles = 0; tx_attempts++;
@@ -282,7 +282,7 @@ static void attempt_xstore(uint16_t a, uint8_t value)
     }
 #endif
     if ((a == 0x6189 && (value == 0x4c || XR(a) == 0x4c)) ||
-        (a == 0x6196 && value == 0xf8) || (a == 0x6197 && value == 0x0a) ||
+        (a == 0x6196 && value == RADIO_AUTOACK_CCA_THRESHOLD_RAW) || (a == 0x6197 && value == 0x0a) ||
         (a == 0x618c && XR(0x6189) == 0x4c)) {
         assert(xwrite_count == 1 && xwrites[0].address == a && xwrites[0].value == value);
         xwrite_count = 0; logs(); trace('w', a, value);

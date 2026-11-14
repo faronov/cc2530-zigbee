@@ -24,6 +24,9 @@ extern MCU_XDATA uint8_t aes_reserved_end;
 extern MCU_XDATA uint8_t aes_reserved_end, _gptrput_PARM_2;
 #endif
 
+#if defined(CC2530_LEAN)
+static MCU_XDATA struct { uint32_t start, timeout; uint16_t limit; } w;
+#else
 typedef struct {
     uint32_t start, previous, deadline;
     uint16_t limit;
@@ -80,6 +83,7 @@ static aes_result_t source_range(uint32_t location)
     return owned((uint16_t)location, 16) ? AES_OK : AES_BUFFER_OWNERSHIP;
 }
 
+#endif
 #if defined(__SDCC)
 /* SWRU191F 8.1 p.93 and Table 2-3 p.39: one fetch at a time, >=9 SYS clocks. */
 static void arm_input(void) __naked
@@ -121,6 +125,7 @@ static void arm_output(void) { MMIO_WRITE(SOC_DMAARM, 2); __asm__ volatile("nop\
 static void arm_input(void) { MMIO_WRITE(SOC_DMAARM, 1); host_mmio_system_cycles(9); }
 static void arm_output(void) { MMIO_WRITE(SOC_DMAARM, 2); host_mmio_system_cycles(9); }
 #endif
+#if !defined(CC2530_LEAN)
 #define timebase_expired(now, ...) timebase_expired(LW_SHALLOW_READ(uint32_t, now), __VA_ARGS__)
 static aes_result_t observe(aes_diagnostics_t MCU_XDATA *d)
 {
@@ -195,6 +200,7 @@ static aes_result_t MCU_COMMON_CODE sample(aes_diagnostics_t MCU_XDATA *d, uint8
     return AES_OK;
 }
 #undef observe
+#endif
 static void input_descriptor(uint16_t source)
 {
     aes_dma0[0] = (uint8_t)(source >> 8); aes_dma0[1] = (uint8_t)source;
@@ -222,6 +228,71 @@ aes_result_t aes_power_restored(void)
     return AES_OK;
 }
 #endif
+#if defined(CC2530_LEAN)
+/* Deployable images: the exact checked MMIO sequence (same writes, order and
+ * values) without entry/argument/ownership checks or register-snapshot
+ * verification. Only completion, the deadline and the poll budget are tested;
+ * any failure still latches. Callers are internal and fixed.
+ */
+static aes_result_t lean_wait(aes_diagnostics_t MCU_XDATA *d, uint8_t last)
+{
+    for (;;) {
+        if (d->polls == w.limit) return AES_POLL_LIMIT;
+        d->polls++;
+        if ((MMIO_READ(SOC_S0CON) & 3u) == 3u) {
+            if (!last) {
+                if ((MMIO_READ(SOC_DMAIRQ) & 1u) && !(MMIO_READ(SOC_ENCCS) & 1u)) return AES_OK;
+            } else if ((MMIO_READ(SOC_DMAIRQ) & 3u) == 3u && !(MMIO_READ(SOC_DMAARM) & 3u) &&
+                       (MMIO_READ(SOC_ENCCS) & 9u) == 8u) return AES_OK;
+        }
+        if (((timebase_read_awake_ticks24() - w.start) & TIMEBASE_TICKS_MASK) >= w.timeout)
+            return AES_TIMEOUT;
+    }
+}
+aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
+                                  const MCU_GENERIC uint8_t *input,
+                                  uint8_t MCU_XDATA *output, uint32_t timeout,
+                                  uint16_t limit, aes_diagnostics_t MCU_XDATA *d)
+{
+    uint16_t address;
+    uint8_t i, phase, upper;
+    aes_result_t result;
+    if (aes_fault)
+        return (aes_result_t)aes_fault;
+    d->polls = 0;
+    w.start = timebase_read_awake_ticks24(); w.timeout = timeout; w.limit = limit;
+    upper = MMIO_READ(SOC_S0CON) & 0xfcu;
+    for (i = 0; i < 16; i++) { aes_key[i] = key[i]; aes_input[i] = input[i]; aes_iv[i] = 0; }
+    input_descriptor(MMIO_XADDRESS(aes_key));
+    for (i = 0; i < 32; i++) aes_dma1[i] = 0;
+    address = MMIO_XADDRESS(aes_output);
+    aes_dma1[0] = 0x70; aes_dma1[1] = 0xb2;
+    aes_dma1[2] = (uint8_t)(address >> 8); aes_dma1[3] = (uint8_t)address;
+    aes_dma1[5] = 16; aes_dma1[6] = 30; aes_dma1[7] = 0x11;
+    address = MMIO_XADDRESS(aes_dma0);
+    MMIO_WRITE(SOC_DMA0CFGH, address >> 8); MMIO_WRITE(SOC_DMA0CFGL, address);
+    address = MMIO_XADDRESS(aes_dma1);
+    MMIO_WRITE(SOC_DMA1CFGH, address >> 8); MMIO_WRITE(SOC_DMA1CFGL, address);
+    arm_output();
+    for (phase = 1; phase <= 3; phase++) {
+        if (phase != 1)
+            input_descriptor(phase == 2 ? MMIO_XADDRESS(aes_iv) : MMIO_XADDRESS(aes_input));
+        arm_input();
+        MMIO_WRITE(SOC_ENCCS, phase == 1 ? 0x45 : phase == 2 ? 0x47 : 0x41);
+        result = lean_wait(d, phase == 3);
+        if (result != AES_OK) {
+            aes_fault = result;
+            return result;
+        }
+        MMIO_WRITE(SOC_DMAIRQ, phase == 3 ? 0x1c : 0x1e);
+        /* S0CON is R/W, including reserved high bits (SWRU191F p.46). */
+        MMIO_WRITE(SOC_S0CON, upper);
+    }
+    for (i = 0; i < 16; i++) output[i] = aes_output[i];
+    aes_used = 1;
+    return AES_OK;
+}
+#else
 aes_result_t aes128_encrypt_block(const MCU_GENERIC uint8_t *key,
                                   const MCU_GENERIC uint8_t *input,
                                   uint8_t MCU_XDATA *output, uint32_t timeout,
@@ -405,4 +476,5 @@ failed:
     return result;
 }
 
+#endif
 MCU_XDATA uint8_t aes_reserved_end;

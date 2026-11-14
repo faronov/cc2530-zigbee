@@ -59,7 +59,7 @@ typedef char join_smoke_admission_size[
 #define JOIN_SMOKE_SLEEP_SYNC_POLLS 1000u
 /* Debugger evidence, not part of the 48-byte JSN1 status. reason: last skip
  * (1 device work, 2 link/radio owner, 3 hardware/interrupts, 4 deadline,
- * 5 CC2530_EPD display streaming or deadline) or
+ * 5 application sensor cycle awake, or CC2530_EPD display streaming or deadline) or
  * failure stage (6 pause, 7 wake, 8 resume, 9 AES, 10 radio idle re-latch);
  * failure keeps the stage of a JS_SLEEP fault. stray counts wakes without
  * STIF; late counts compares missed after the pause (Timer2 resumed, no
@@ -88,6 +88,14 @@ extern volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 extern MCU_XDATA uint8_t join_smoke_parent_history[20];
 #endif
 extern volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
+#if defined(CC2530_TX_POWER)
+/* Requested raw TXPOWER (RADIO_AUTOACK_POWER_VALID), F5 after initialize.
+ * The application may change it at any time: admission uses it for the
+ * first radio configuration, every later join action carries the driver's
+ * copy, and a READY quiescent point (CC2530_PM2_IDLE) applies a change with
+ * mac_adapter_configure() before it may sleep. */
+extern MCU_XDATA uint8_t join_smoke_power;
+#endif
 
 /* Draft, not a flashable/accepted image. Whole-reset, single-use caller.
  * Load public admission storage and externally qualified random bytes while

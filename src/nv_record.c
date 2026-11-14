@@ -252,7 +252,7 @@ publish:
     return CW_RETURN(CW_RECORD_LOAD,finish(result));
 }
 
-static nv_record_result_t program(uint8_t page, uint16_t offset, uint16_t limit)
+static nv_record_result_t MCU_COMMON_CODE program(uint8_t page, uint16_t offset, uint16_t limit)
 {
     nv_record_diagnostic.writer = FLASH_WRITE_PENDING;
     nv_record_diagnostic.writer = flash_nv_program(page, offset, nv_record_word, limit);

@@ -73,6 +73,12 @@ enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
 /* CALLER_BUSY: a network-wide permit (HIL LH16B). More permitting routers
  * than candidate capacity beacon before the coordinator; still READY. */
 #define BUSY_ROUTERS 6u
+#if defined(CC2530_ROUTER_JOIN)
+/* Routers fill the table; the coordinator's +10 keeps it in and selected. */
+#define BUSY_CANDIDATES NWK_CANDIDATES_CAPACITY
+#else
+#define BUSY_CANDIDATES 1u
+#endif
 static unsigned caller_extra_beacons;
 
 static void discovery_peer(void)
@@ -806,7 +812,13 @@ int main(int argc, char **argv)
                     assert(join_smoke_device.result==BDB_JOIN_NO_PARENT);
 #if defined(CC2530_DEFAULT_TC_KEY)
                     assert(!response_sent && !security_joint_flash_commands());
+#if defined(CC2530_ROUTER_JOIN)
+                    /* Strongest-beacon eviction never overflows; the extra
+                     * EPIDs make the scan mixed, which still refuses. */
+                    assert(!join_smoke_device.scan_result.overflow);
+#else
                     if(selected==CALLER_OVERFLOW) assert(join_smoke_device.scan_result.overflow);
+#endif
                 } else if(selected==CALLER_WRONG_TC) {
                     assert(join_smoke_status.phase==JS_FAULT && !join_smoke_status.saw_ready);
                     assert(response_sent && transport_sent && !join_smoke_device.member);
@@ -896,7 +908,7 @@ int main(int argc, char **argv)
                             !join_smoke_device.scan_result.unscanned);
                     if(selected==CALLER_BUSY)
                         assert(caller_extra_beacons==BUSY_ROUTERS && !join_smoke_device.scan_result.overflow &&
-                            join_smoke_device.scan_result.candidates==1);
+                            join_smoke_device.scan_result.candidates==BUSY_CANDIDATES);
 #endif
                 }
             }

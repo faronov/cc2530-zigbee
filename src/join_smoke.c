@@ -6,8 +6,12 @@
 #if defined(CC2530_EPD)
 #include "epd.h"
 #endif
+#include "security_counter.h"
 #include "bdb_join_internal.h"
 #include <string.h>
+#if (defined(CC2530_TX_POWER) || defined(CC2530_APP_SETTINGS)) && !defined(CC2530_PM2_IDLE)
+#error CC2530_TX_POWER and CC2530_APP_SETTINGS require CC2530_PM2_IDLE
+#endif
 #if defined(CC2530_RX_DIAG)
 #include "cc2530_rx_diag.h"
 #endif
@@ -27,6 +31,9 @@ MCU_XDATA mac_tx_interval_t join_smoke_tx;
 MCU_XDATA join_smoke_phase_t join_smoke_phase;
 MCU_XDATA radio_autoack_config_t join_smoke_initial;
 MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
+#if defined(CC2530_TX_POWER)
+MCU_XDATA uint8_t join_smoke_power;
+#endif
 MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 #if defined(CC2530_PARENT_RECOVERY)
@@ -222,6 +229,22 @@ void join_smoke_sleep(void)
     if(MMIO_XREAD(0x618b) || (MMIO_XREAD(0x6192)&0x7fu) || (MMIO_XREAD(0x6193)&0x27u) ||
        MMIO_READ(SOC_IEN0) || MMIO_READ(SOC_IEN1) || (MMIO_READ(SOC_IEN2)&0xfeu) ||
        (MMIO_READ(SOC_SLEEPCMD)&7u)!=4u || MMIO_READ(SOC_DMAARM)) goto skip;
+#if defined(CC2530_TX_POWER)
+    /* Quiescent point: a requested power change, then no sleep this poll. */
+    if(DRIVER.config.power!=join_smoke_power) {
+        DRIVER.config.power=join_smoke_power;
+        ADAPTER(mac_adapter_configure(&DRIVER.config,JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS));
+        goto skip;
+    }
+#endif
+#if defined(CC2530_APP_SETTINGS)
+    /* Changed application settings are committed here (flash write, radio OFF). */
+    if(security_counter_app_pending()) {
+        S.security_result=security_keys_checkpoint(FLASH_EXEC_POLL_MAX);
+        if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+        goto skip;
+    }
+#endif
     SL.reason=4;
     S.adapter_result=mac_adapter_now(JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS,&CLOCK);
     if(S.adapter_result!=MAC_ADAPTER_OK) { fault(JS_ADAPTER); return; }
@@ -236,6 +259,14 @@ void join_smoke_sleep(void)
 #if defined(CC2530_EPD)
     SL.reason=5;
     mark=epd_sleep_limit(CLOCK.symbols);
+    if(mark<span) span=mark;
+#endif
+#if defined(CC2530_APP_QUIET)
+    /* Application sensor cycle (zcl_sensor_quiet()): 0 keeps the device awake. */
+    SL.reason=5;
+    mark=zcl_sensor_quiet(CLOCK.symbols);
+    if(!mark) goto skip;
+    SL.reason=4;
     if(mark<span) span=mark;
 #endif
     if(span>JOIN_SMOKE_SLEEP_CAP) span=JOIN_SMOKE_SLEEP_CAP;
@@ -319,6 +350,9 @@ void join_smoke_initialize(void)
     S.announce=255;
     S.guards[0]=0x69; S.guards[1]=0x96;
     admission=JOIN_SMOKE_ADMISSION_POLLS; S.remaining[0]=0; S.remaining[1]=1;
+#if defined(CC2530_TX_POWER)
+    join_smoke_power=RADIO_AUTOACK_POWER_F5;
+#endif
 }
 
 void join_smoke_poll(void)
@@ -348,8 +382,11 @@ void join_smoke_poll(void)
         if(gate==JS_READY) { serve(); return; }
         if(DEVICE.phase==BDB_JOIN_READY) {
             snapshot();
+            /* A latched RXOVERF (RFERRF bit 2) is a handled receive loss: the
+             * driver salvages complete frames and flushes on the next receive.
+             * An unhandled one is DRIVER.fault. Other error bits stay fatal. */
             if(DRIVER.fault || DEVICE.workspace!=BDB_JOIN_WORK_RUNTIME || !DEVICE.member ||
-               !DEVICE.work.runtime.transport.ready || S.radio_errors) {
+               !DEVICE.work.runtime.transport.ready || (S.radio_errors & (uint8_t)~4u)) {
                 fault(JS_TERMINAL); return;
             }
 #if defined(CC2530_PARENT_RECOVERY)
@@ -434,9 +471,23 @@ void join_smoke_poll(void)
         if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
 #endif
     }
+#if defined(CC2530_APP_SETTINGS)
+    /* Settings are loaded (open) or zero (EMPTY). The application may change
+     * them and join_smoke_power; a resumed member commits a change now, before
+     * any radio work, others with their next record save. */
+    zcl_sensor_start(resumed);
+    if(resumed && security_counter_app_pending()) {
+        S.security_result=security_keys_checkpoint(FLASH_EXEC_POLL_MAX);
+        if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+    }
+#endif
     for(i=0;i<8;i++) INITIAL.ieee[i]=IN.identity.own_ieee[i];
     INITIAL.pan=INITIAL.short_address=0xffff;
+#if defined(CC2530_TX_POWER)
+    INITIAL.channel=IN.identity.channel; INITIAL.power=join_smoke_power;
+#else
     INITIAL.channel=IN.identity.channel; INITIAL.power=RADIO_AUTOACK_POWER_F5;
+#endif
     S.stage=2;
     ADAPTER(mac_adapter_init(&INITIAL,JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS));
     ADAPTER(mac_adapter_close(NULL));

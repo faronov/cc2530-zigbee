@@ -610,9 +610,7 @@ static radio_autoack_result_t operate(uint8_t operation,
         result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
         if (result != RADIO_AUTOACK_READY) return result;
         if (configuration->channel < 11 || configuration->channel > 26 ||
-            (configuration->power != RADIO_AUTOACK_POWER_05 &&
-             configuration->power != RADIO_AUTOACK_POWER_D5 &&
-             configuration->power != RADIO_AUTOACK_POWER_F5))
+            !RADIO_AUTOACK_POWER_VALID(configuration->power))
             return RADIO_AUTOACK_INVALID_ARGUMENT;
     } else if (operation == 1) {
         result = storage(MMIO_XADDRESS(output), sizeof(*output));
@@ -1505,7 +1503,8 @@ failed:
 }
 #endif
 #if defined(CC2530_MAC_RECONFIG)
-/* SWRU191F pp.214,256: frame-filter address RAM and FREQCTRL, written only
+/* SWRU191F pp.214,256: frame-filter address RAM and FREQCTRL (and TXPOWER
+ * with CC2530_TX_POWER, SWRS081B Table 2), written only
  * while idle. owned changes with each byte so every full-profile observation
  * compares the exact intended register set, including the unchanged rest.
  */
@@ -1515,6 +1514,9 @@ static uint8_t reconfigure_value(const radio_autoack_config_t MCU_XDATA *configu
     if (work.index == 9) return (uint8_t)(configuration->pan >> 8);
     if (work.index == 10) return (uint8_t)configuration->short_address;
     if (work.index == 11) return (uint8_t)(configuration->short_address >> 8);
+#if defined(CC2530_TX_POWER)
+    if (work.index == 23) return configuration->power;
+#endif
     return (uint8_t)(11u + 5u * (configuration->channel - 11u));
 }
 
@@ -1530,9 +1532,15 @@ radio_autoack_result_t radio_autoack_configure(
         return RADIO_AUTOACK_STATE;
     result = storage(MMIO_XADDRESS(configuration), sizeof(*configuration));
     if (result != RADIO_AUTOACK_READY) return result;
+#if defined(CC2530_TX_POWER)
+    if (configuration->channel < 11 || configuration->channel > 26 ||
+        !RADIO_AUTOACK_POWER_VALID(configuration->power))
+        return RADIO_AUTOACK_INVALID_ARGUMENT;
+#else
     if (configuration->channel < 11 || configuration->channel > 26 ||
         configuration->power != owned.power)
         return RADIO_AUTOACK_INVALID_ARGUMENT;
+#endif
     for (i = 0; i < 8; i++)
         if (configuration->ieee[i] != owned.ieee[i]) return RADIO_AUTOACK_INVALID_ARGUMENT;
     memset(&status, 0, sizeof(status)); work.limit = limit;
@@ -1543,7 +1551,12 @@ radio_autoack_result_t radio_autoack_configure(
     CHECK(poll()); CHECK(stopped());
     REQUIRE(status.flags1 & 4u, RADIO_AUTOACK_STATE_CHANGED);
     REQUIRE(!status.count && !(status.signals & 0xc0u), RADIO_AUTOACK_FIFO_ERROR);
-    for (work.index = 8; work.index != 23; work.index = work.index == 11 ? 22 : work.index + 1u) {
+#if defined(CC2530_TX_POWER)
+#define RECONFIG_END 24u
+#else
+#define RECONFIG_END 23u
+#endif
+    for (work.index = 8; work.index != RECONFIG_END; work.index = work.index == 11 ? 22 : work.index + 1u) {
         value = reconfigure_value(configuration);
         if (value == setting_value(work.index)) continue;
         ROOM();
@@ -1552,6 +1565,9 @@ radio_autoack_result_t radio_autoack_configure(
         else if (work.index == 10) owned.short_address = (owned.short_address & 0xff00u) | value;
         else if (work.index == 11)
             owned.short_address = (owned.short_address & 0x00ffu) | ((uint16_t)value << 8);
+#if defined(CC2530_TX_POWER)
+        else if (work.index == 23) owned.power = value;
+#endif
         else owned.channel = configuration->channel;
         MMIO_XWRITE(setting_address(work.index), value); status.writes++;
         CHECK(poll()); CHECK(stopped());

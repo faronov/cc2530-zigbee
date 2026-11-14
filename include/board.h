@@ -8,16 +8,25 @@
 
 #define BOARD_GENERIC 0u
 #define BOARD_LG_ESL29_REV03 1u
+#define BOARD_EXTERNAL 2u
 #define BOARD_POLICY_DISPLAY_OFF 0x01u
 
 #ifndef CC2530_BOARD
 #error The build must select CC2530_BOARD
 #endif
-#if CC2530_BOARD != BOARD_GENERIC && CC2530_BOARD != BOARD_LG_ESL29_REV03
+#if CC2530_BOARD != BOARD_GENERIC && CC2530_BOARD != BOARD_LG_ESL29_REV03 && \
+    CC2530_BOARD != BOARD_EXTERNAL
 #error Unsupported CC2530 board
+#endif
+/* An external board belongs to an external application (docs/EXTERNAL_APP.md):
+ * its app_config.h, included by cc2530_mmio.h, supplies BOARD_MANUFACTURER,
+ * BOARD_MODEL, BOARD_MODEL_LENGTH and optionally BOARD_CCA_THRESHOLD_RAW. */
+#if CC2530_BOARD == BOARD_EXTERNAL && !defined(CC2530_APP)
+#error CC2530_BOARD=BOARD_EXTERNAL requires an external application (CC2530_APP)
 #endif
 
 /* ZCL Basic identity strings; metadata only, no hardware access. */
+#if CC2530_BOARD != BOARD_EXTERNAL
 #define BOARD_MANUFACTURER "cc2530-zigbee"
 #if CC2530_BOARD == BOARD_LG_ESL29_REV03
 #define BOARD_MODEL "LG-ESL29"
@@ -25,6 +34,19 @@
 #else
 #define BOARD_MODEL "generic"
 #define BOARD_MODEL_LENGTH 7u
+#endif
+#endif
+#if !defined(BOARD_MANUFACTURER) || !defined(BOARD_MODEL) || !defined(BOARD_MODEL_LENGTH)
+#error The board must define BOARD_MANUFACTURER, BOARD_MODEL and BOARD_MODEL_LENGTH
+#endif
+
+/* MAC CSMA energy-only CCA threshold, raw CCACTRL0 (two's complement RSSI,
+ * about dBm+73, SWRS081B). F8 (about -81 dBm, clear below -83 with the
+ * hysteresis of two) is the TI reference value. A board whose idle noise floor
+ * keeps F8 busy may raise it up to FE (-75 dBm, the IEEE 802.15.4-2006 6.9.9
+ * maximum: sensitivity -85 dBm plus 10 dB). */
+#ifndef BOARD_CCA_THRESHOLD_RAW
+#define BOARD_CCA_THRESHOLD_RAW 0xf8u
 #endif
 
 /* CC2530_CHIP_SENSE reporting (zcl_sensor.h). BatteryPercentageRemaining is
@@ -52,7 +74,7 @@ typedef struct {
 
 extern const MCU_CODE board_description_t board_description;
 
-#if CC2530_BOARD == BOARD_LG_ESL29_REV03
+#if CC2530_BOARD == BOARD_LG_ESL29_REV03 || CC2530_BOARD == BOARD_EXTERNAL
 /* Called before C data initialization; only direct MMIO operations are allowed. */
 void board_early_off(void);
 #endif
