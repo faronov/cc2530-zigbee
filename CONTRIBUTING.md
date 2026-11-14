@@ -48,7 +48,7 @@ working firmware features or changes the project's support claims.
 ## Development checks
 
 Firmware has one supported build path: pinned Clang MCS51/LLD and runtime from
-`ffada1d1b4198787559f99fe0ed448c32c46d2c7`. `make` builds the LG join profile;
+`2c3d9541c965dee8d3e35bdc81ea494e4ab02dc2`. `make` builds the LG join profile;
 `BOARD=generic IMAGE=bringup` or `IMAGE=timebase_fixture` retains generic
 bootstrap coverage. Use `LLVM_TOOLS` and `LLVM_SRC` to select that exact clean
 toolchain, not a floating branch or SDCC fallback.

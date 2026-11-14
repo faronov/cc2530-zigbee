@@ -33,6 +33,17 @@
 #error Select SDCC for firmware or CC2530_HOST_TEST for host tests
 #endif
 
+/* An external application (docs/EXTERNAL_APP.md) supplies app_config.h:
+ * macros only, no includes. CC2530_APP_REGISTER_LIST names the SFRs it owns
+ * beyond the shared list; they stay out of every other image so the
+ * simulator's peripheral ownership (tests/boot_join_smoke.py) is unchanged. */
+#if defined(CC2530_APP)
+#include "app_config.h"
+#endif
+#ifndef CC2530_APP_REGISTER_LIST
+#define CC2530_APP_REGISTER_LIST(X)
+#endif
+
 /* Public CC2530 SFR addresses; declarations do not enable peripherals. */
 #define CC2530_REGISTER_LIST(X) \
     X(SOC_P0, 0x80) \
@@ -92,7 +103,8 @@
     X(SOC_T2MOVF2, 0xa6) \
     X(SOC_T2IRQF, 0xa1) \
     X(SOC_T2IRQM, 0xa7) \
-    X(SOC_T2EVTCFG, 0x9c)
+    X(SOC_T2EVTCFG, 0x9c) \
+    CC2530_APP_REGISTER_LIST(X)
 
 #define SFR_ADDRESS(name, address) name##_ADDRESS = address,
 enum cc2530_sfr_address { CC2530_REGISTER_LIST(SFR_ADDRESS) };

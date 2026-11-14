@@ -110,8 +110,7 @@ mac_adapter_result_t mac_adapter_init(const radio_autoack_config_t MCU_XDATA * S
     result = storage(MMIO_XADDRESS(config), sizeof(*config));
     if (result != MAC_ADAPTER_OK) return result;
     if (config->channel < 11 || config->channel > 26 ||
-        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5 &&
-         config->power != RADIO_AUTOACK_POWER_F5))
+        !RADIO_AUTOACK_POWER_VALID(config->power))
         return MAC_ADAPTER_INVALID;
     memset(&status, 0, sizeof(status)); memset(&observation, 0, sizeof(observation));
     memset(&mac_adapter_receipt, 0, sizeof(mac_adapter_receipt));
@@ -417,8 +416,7 @@ mac_adapter_result_t mac_adapter_configure(const radio_autoack_config_t MCU_XDAT
     result = idle_off(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
     if (config->channel < 11 || config->channel > 26 ||
-        (config->power != RADIO_AUTOACK_POWER_05 && config->power != RADIO_AUTOACK_POWER_D5 &&
-         config->power != RADIO_AUTOACK_POWER_F5))
+        !RADIO_AUTOACK_POWER_VALID(config->power))
         return MAC_ADAPTER_INVALID;
     radio = mac_attempt_configure(config, timeout, limit);
     if (radio == MAC_RADIO_INVALID_ARGUMENT) return MAC_ADAPTER_INVALID;

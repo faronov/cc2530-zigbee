@@ -12,6 +12,10 @@
 #include "mac_link_workspace_internal.h"
 #endif
 
+#if defined(CC2530_ROUTER_JOIN)
+int8_t nwk_candidates_rssi;
+#endif
+
 static uint8_t valid_mask(uint32_t mask)
 {
     return mask != 0u && (mask & ~NWK_CANDIDATES_CHANNEL_MASK) == 0u;
@@ -24,6 +28,9 @@ static uint8_t valid_table(const nwk_candidates_t * SDCC_VOLATILE table)
         && table->rejoin <= 1
 #endif
         && table->filtered <= 1
+#if defined(CC2530_ROUTER_JOIN)
+        && table->epid_seen <= 1 && table->mixed <= 1
+#endif
         && table->count <= NWK_CANDIDATES_CAPACITY && valid_mask(table->channel_mask);
 }
 
@@ -125,6 +132,9 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
     candidate.gts_permit = beacon.gts_permit;
     candidate.short_pending = beacon.short_count;
     candidate.extended_pending = beacon.extended_count;
+#if defined(CC2530_ROUTER_JOIN)
+    candidate.rssi = nwk_candidates_rssi;
+#endif
     /* IEEE 2006 7.5.1.1 ignores SO on RX with BO15. No offset/depth/update
      * ranking or compatibility claim; R22 3.6.1.4 requires much more to join.
      */
@@ -154,6 +164,23 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
     }
     if (!eligible)
         return LW_RETURN(LW_SCAN, NWK_CANDIDATES_NOT_ELIGIBLE);
+#if defined(CC2530_ROUTER_JOIN)
+    if (!table->epid_seen) {
+        memcpy(table->first_epid, candidate.network.extended_pan_id, 8);
+        table->epid_seen = 1;
+    } else if (memcmp(table->first_epid, candidate.network.extended_pan_id, 8))
+        table->mixed = 1;
+    if (table->count == NWK_CANDIDATES_CAPACITY && !table->filtered) {
+        uint8_t weakest = 0;
+        for (i = 1; i < table->count; i++)
+            if (nwk_candidates_score(&table->entries[i]) < nwk_candidates_score(&table->entries[weakest]))
+                weakest = i;
+        if (nwk_candidates_score(&candidate) <= nwk_candidates_score(&table->entries[weakest]))
+            return LW_RETURN(LW_SCAN, NWK_CANDIDATES_NOT_ELIGIBLE);
+        table->entries[weakest] = candidate;
+        return LW_RETURN(LW_SCAN, NWK_CANDIDATES_ADDED);
+    }
+#endif
     if (table->count == NWK_CANDIDATES_CAPACITY)
         return LW_RETURN(LW_SCAN, NWK_CANDIDATES_FULL);
     table->entries[table->count] = candidate;
@@ -163,6 +190,17 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
 #undef frame
 #undef beacon
 #undef candidate
+
+#if defined(CC2530_ROUTER_JOIN)
+int16_t nwk_candidates_score(const nwk_candidate_t * SDCC_VOLATILE c)
+{
+    int16_t score = c->rssi;
+    if ((c->superframe & MAC_SUPERFRAME_PAN_COORDINATOR) ||
+        (c->address_mode == MAC_ADDRESS_SHORT && !c->coordinator[0] && !c->coordinator[1]))
+        score += 10;
+    return score;
+}
+#endif
 
 nwk_candidates_result_t nwk_candidates_get(const nwk_candidates_t * SDCC_VOLATILE table,
                                            uint8_t index,

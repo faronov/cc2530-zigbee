@@ -12,7 +12,12 @@
 # autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
 # autonomous-pm2-epd / autonomous-pm2-sht3x-epd (opt-in: plus the UC8151D e-paper
 # display, CC2530_EPD) or autonomous-pm2-epd-factory (EXPERIMENTAL: epd plus the
-# information-page die-sensor reference, CC2530_CHIP_FACTORY).
+# information-page die-sensor reference, CC2530_CHIP_FACTORY) or
+# app (an external application, docs/EXTERNAL_APP.md: firmware.py --app passes
+# APP_DIR, its complete APP_DEFINES and APP_UNITS "unit=path ..." that replace
+# srcmap units with files of the application's tracked tree, copied to src/app).
+# The deployable autonomous* variants add CC2530_LEAN: drivers keep their exact
+# MMIO sequences, deadlines and poll budgets but drop self-verification.
 set -euo pipefail
 H=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$H/../.." && pwd)
@@ -24,12 +29,13 @@ case $VARIANT in
   rx-diag) VDEFS="-DCC2530_RX_DIAG" ;;
   parent-recovery) VDEFS="-DCC2530_PARENT_RECOVERY" ;;
   parent-recovery-policy-c) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C" ;;
-  autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
-  autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
-  autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
-  autonomous-pm2-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD" ;;
-  autonomous-pm2-epd-factory) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_CHIP_FACTORY" ;;
-  autonomous-pm2-sht3x-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X -DCC2530_EPD" ;;
+  autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
+  autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
+  autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
+  autonomous-pm2-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD" ;;
+  autonomous-pm2-epd-factory) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_CHIP_FACTORY" ;;
+  autonomous-pm2-sht3x-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X -DCC2530_EPD" ;;
+  app) VDEFS="${APP_DEFINES:?APP_DEFINES required}"; : "${APP_DIR:?APP_DIR required}" "${APP_UNITS:?APP_UNITS required}" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac
 LLVM_SRC=${LLVM_SRC:?LLVM_SRC required}
@@ -39,6 +45,11 @@ RTSRC=$LLVM_SRC/llvm/lib/Target/MCS51
 mkdir -p $OUT/src $OUT/obj $OUT/rt/mcs51 $OUT/link
 OUT=$(cd $OUT && pwd)
 (cd "$REPO" && git ls-files -z --cached | tar --null -T - -cf -) | tar -x -C $OUT/src
+if [ "$VARIANT" = app ]; then
+  # Tracked application files only; a submodule (this stack) stays an empty directory.
+  mkdir $OUT/src/app
+  (cd "$APP_DIR" && git ls-files -z --cached | tar --null --no-recursion -T - -cf -) | tar -x -C $OUT/src/app
+fi
 
 TARGET="-target mcs51 -mcpu=cc2530"
 ABI=${ABI_FLAGS?ABI_FLAGS required (may be empty)}
@@ -58,9 +69,19 @@ printf '%s\n' "$DEFS" > $OUT/defines.txt
 CFLAGS="$TARGET -std=c99 -Oz $SF $ABI -ffunction-sections -fdata-sections -Itoolchain/clang/include $DEFS"
 echo "$T/clang $CFLAGS -c SRC -o OBJ   (cwd = firmware source root)" > $OUT/compile-command.txt
 cd $OUT/src
+SRCMAP=$H/inputs/srcmap-stk.txt
+if [ "$VARIANT" = app ]; then
+  SRCMAP=$OUT/srcmap.txt
+  cp $H/inputs/srcmap-stk.txt $SRCMAP
+  for pair in $APP_UNITS; do
+    unit=${pair%%=*}; path=${pair#*=}
+    [ -f "app/$path" ] && grep -q "^$unit " $SRCMAP || { echo "app unit $pair: no such unit or tracked file"; exit 2; }
+    sed -i "s|^$unit .*\$|$unit app/$path|" $SRCMAP
+  done
+fi
 while read -r unit src; do
   echo "$unit $src"
-done < $H/inputs/srcmap-stk.txt | xargs -P "${JOBS:-8}" -L1 sh -c \
+done < $SRCMAP | xargs -P "${JOBS:-8}" -L1 sh -c \
   '"$0" '"$CFLAGS"' -c "$2" -o "'"$OUT"'/obj/$1.o" 2> "'"$OUT"'/obj/$1.err" || { echo "FAIL $1"; cat "'"$OUT"'/obj/$1.err" >&2; exit 255; }' $T/clang
 n=$(ls $OUT/obj/*.o | wc -l); [ "$n" = 45 ] || { echo "object count $n != 45"; exit 2; }
 $T/clang $TARGET -c $OUT/src/src/flash_exec_mcs51.s -o $OUT/link/flash_exec_mcs51.o
