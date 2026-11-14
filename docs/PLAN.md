@@ -1252,7 +1252,9 @@ Deliver:
   not verified ([SHT3x](ED_JOIN.md#optional-sht3x-temperature-and-humidity)).
 - Board-specific software-I2C ownership; UART and I2C cannot own the same pins.
 - A cooperative streamed display driver: short transfer slices, scheduled
-  waits, timeouts and safe power-off.
+  waits, timeouts and safe power-off. Opt-in UC8151D driver (host-tested,
+  sequence verified on H2, firmware not yet run on the panel):
+  [e-paper display](ED_JOIN.md#optional-e-paper-display).
 - Explicit panel configuration, separate from motherboard strap readings.
 
 Exit:
