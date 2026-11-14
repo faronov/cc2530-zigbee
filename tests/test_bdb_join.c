@@ -320,11 +320,11 @@ static void observe_transmission(void)
         if (expected_reply_length == 13) CHECK(!peer_in.payload[12]);
         if (expected_reply_cluster == 0x8005u) CHECK(peer_in.payload[4] == 1 && peer_in.payload[5] == 1);
         if (expected_reply_cluster == 0x8004u)
-            CHECK(peer_in.payload[4] == 20 && peer_in.payload[5] == 1 && peer_in.payload[6] == 0x04 &&
+            CHECK(peer_in.payload[4] == 18 && peer_in.payload[5] == 1 && peer_in.payload[6] == 0x04 &&
                   peer_in.payload[7] == 0x01 && peer_in.payload[8] == 0xff && peer_in.payload[9] == 0xff &&
-                  peer_in.payload[11] == 6 &&
-                  !memcmp(peer_in.payload+12, "\x00\x00\x01\x00\x02\x00\x03\x00\x02\x04\x05\x04", 12) &&
-                  !peer_in.payload[24]);
+                  peer_in.payload[11] == 5 &&
+                  !memcmp(peer_in.payload+12, "\x00\x00\x01\x00\x03\x00\x02\x04\x05\x04", 10) &&
+                  !peer_in.payload[22]);
         if (expected_reply_cluster == 0x8004u || expected_reply_cluster == 0x8005u)
             CHECK(peer_in.payload[2] == 0x78 && peer_in.payload[3] == 0x56);
         reply_seen = 1;
@@ -1603,7 +1603,7 @@ static void published(void)
     drain(); CHECK(device.phase == BDB_JOIN_READY && !runtime.zdo.response_pending);
 }
 
-/* Descriptor queries list the six application input clusters; endpoint
+/* Descriptor queries list the five application input clusters; endpoint
  * frames (unicast or broadcast, any cluster, even malformed) and Bind/Unbind
  * requests are published for zcl_sensor (tests/test_zcl_sensor.c). */
 static void basic_cluster(void)
@@ -1617,7 +1617,7 @@ static void basic_cluster(void)
         peer_out.payload[0] = (uint8_t)(0x90+i); peer_out.payload[1] = 0x78; peer_out.payload[2] = 0x56;
         peer_out.payload[3] = 1; peer_out.length = i ? 4 : 3;
         expected_reply_cluster = peer_out.aps.cluster_id | 0x8000u;
-        expected_reply_status = 0; expected_reply_length = i ? 25 : 6; reply_seen = 0;
+        expected_reply_status = 0; expected_reply_length = i ? 23 : 6; reply_seen = 0;
         seal_peer(0, 0, NULL, 1);
         deliver();
         for (iterations = 0; iterations < 128 &&

@@ -517,9 +517,6 @@ static void values(void)
     CHECK(ZCL_SENSOR_CENTI(11524, 3000, 0x5a08u) == ZCL_SENSOR_FACTORY_CENTI + BOARD_CHIP_TEMPERATURE_OFFSET);
     CHECK(ZCL_SENSOR_CENTI(11524+36*10, 3000, 0x5a08u) == ZCL_SENSOR_FACTORY_CENTI + 1000 + BOARD_CHIP_TEMPERATURE_OFFSET);
     CHECK(ZCL_SENSOR_COUNTS(11532, 3100, 0x5a08u) == 0 && ZCL_SENSOR_COUNTS(11522, 3000, 0x5a80u) == -62);
-    CHECK(ZCL_SENSOR_DEGREES(2549) == 25 && ZCL_SENSOR_DEGREES(2550) == 26 && ZCL_SENSOR_DEGREES(0) == 0);
-    CHECK(ZCL_SENSOR_DEGREES(-2549) == -25 && ZCL_SENSOR_DEGREES(-2550) == -26 && ZCL_SENSOR_DEGREES(-49) == 0);
-    CHECK(ZCL_SENSOR_DEGREES(ZCL_SENSOR_INVALID_TEMPERATURE) == ZCL_SENSOR_INVALID_TEMPERATURE);
     CHECK(ZCL_SENSOR_DECIVOLTS(0) == 0xff && ZCL_SENSOR_DECIVOLTS(2949) == 29 && ZCL_SENSOR_DECIVOLTS(2950) == 30);
     CHECK(ZCL_SENSOR_HALF_PERCENT(0) == 0xff && ZCL_SENSOR_HALF_PERCENT(1) == 0);
     CHECK(ZCL_SENSOR_HALF_PERCENT(BOARD_BATTERY_EMPTY_MV) == 0);
@@ -555,11 +552,9 @@ static void reads(void)
     zcl(0x0001, power, sizeof(power),
         "\x18\x33\x01\x20\x00\x00\x20\x1e\x21\x00\x00\x20\xc3\xfd\xff\x00\x21\x02\x00\x00\x00\x86", 22);
     zcl(0x0003, "\x00\x35\x00\x00\x00\xfd\xff", 7, "\x18\x35\x01\x00\x00\x00\x21\x00\x00\xfd\xff\x00\x21\x02\x00", 15);
-    /* Device Temperature: whole degrees of the temperature value (21.50 -> 22). */
-    zcl(0x0002, "\x00\x37\x00\x00\x00\xfd\xff\x01\x00", 9,
-        "\x18\x37\x01\x00\x00\x00\x29\x16\x00\xfd\xff\x00\x21\x01\x00\x01\x00\x86", 18);
-    zcl(0x0002, "\x00\x38\x06\x00\x00\x00\x29\x01\x00\x02\x00\x01\x00", 13, "\x18\x38\x07\x8c\x00\x00\x00", 7);
-    zcl(0x0002, "\x00\x39\x08\x00\x00\x00", 6, "\x18\x39\x09\x8c\x00\x00\x00", 7);
+    /* Device Temperature Configuration is not served: UNSUPPORTED_CLUSTER. */
+    zcl(0x0002, "\x00\x37\x00\x00\x00\xfd\xff\x01\x00", 9, "\x18\x37\x0b\x00\xc3", 5);
+    zcl(0x0002, "\x00\x38\x06\x00\x00\x00\x29\x01\x00\x02\x00\x01\x00", 13, "\x18\x38\x0b\x06\xc3", 5);
     /* Disable-default-response does not suppress a Read Attributes Response;
      * a trailing odd octet is ignored. */
     memcpy(expected, "\x18\x34\x01\x05\x00\x00\x42", 7); expected[7] = sizeof(model)-1;
@@ -1012,7 +1007,7 @@ static void chip(void)
 #endif
     CHECK(ST.report[2].last == 30 && ST.report[3].last == 200);
     zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\x1e\x21\x00\x00\x20\xc8", 13);
-    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x19\x00", 9);
+    zcl(0x0002, device, sizeof(device), "\x18\x41\x0b\x00\xc3", 5);
     memcpy(expected, "\x18\x42\x01\x00\x00\x00\x29", 7);
 #if !defined(CC2530_SHT3X)
     expected[7] = (uint8_t)ST.temperature; expected[8] = (uint8_t)((uint16_t)ST.temperature >> 8);
@@ -1036,7 +1031,6 @@ static void chip(void)
     CHECK(adc.conversions == 13 && !ST.measured && !adc.unsensed && !adc.overlapped);
     CHECK(abs(ST.millivolts - 2500) <= 2 && abs(ST.temperature + 1100) <= 3);
     zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\x19\x21\x00\x00\x20\x64", 13);
-    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\xf5\xff", 9);
     /* A long gap measures once, saturating the second count meanwhile. */
     adc_set(3300, 4100, 0);
     CTX.last += 1000ul*ZCL_SENSOR_SECOND; zcl_sensor_tick();
@@ -1049,7 +1043,6 @@ static void chip(void)
     CHECK(adc.conversions == 1 && !adc.temperature && !adc.tr0 && adc.atest == 0x5a);
     CHECK(ST.temperature == ZCL_SENSOR_INVALID_TEMPERATURE && !ST.millivolts);
     zcl(0x0001, power, sizeof(power), "\x18\x40\x01\x20\x00\x00\x20\xff\x21\x00\x00\x20\xff", 13);
-    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x00\x80", 9);
 #if !defined(CC2530_SHT3X)
     zcl(0x0402, "\x00\x42\x00\x00\x00", 5, "\x18\x42\x01\x00\x00\x00\x29\x00\x80", 9);
 #endif
@@ -1125,7 +1118,7 @@ static void sht3x(void)
     CHECK(ZCL_SENSOR_SHT3X_HUMIDITY(0) == 0 && ZCL_SENSOR_SHT3X_HUMIDITY(0xffffu) == 10000);
     /* Init claims only the two pins, clocks the bus clear (a STOP without
      * START), starts, polls through three busy NACKs, reads once and starts
-     * the next measurement. The die temperature stays in 0x0002. */
+     * the next measurement. The die temperature is still measured. */
     sensed(3000, 2500, 0); sht_set(2134, 4567, 1); sht.busy = 3;
     SOC_P1SEL = 0xffu; SOC_P1 = 0xffu; SOC_P1DIR = 0x02u;
     reset(5ul << 22);
@@ -1136,7 +1129,8 @@ static void sht3x(void)
     CHECK(abs(ST.climate - 2134) <= 1 && abs((int)ST.humidity - 4567) <= 1);
     CHECK(ST.report[0].last == (uint16_t)ST.climate && ST.report[1].last == ST.humidity);
     climate_read(ST.climate, ST.humidity);
-    zcl(0x0002, device, sizeof(device), "\x18\x41\x01\x00\x00\x00\x29\x19\x00", 9);
+    CHECK(abs(ST.temperature - 2500) <= 3);
+    zcl(0x0002, device, sizeof(device), "\x18\x41\x0b\x00\xc3", 5);
     /* Each measurement period returns the result started one period earlier. */
     sht.t = (uint16_t)((30.0 + 45.0) / 175.0 * 65535.0 + 0.5); sht.starts = sht.stops = 0; sht.busy = sht.wait = 0;
     CTX.last += ZCL_SENSOR_MEASURE*ZCL_SENSOR_SECOND; zcl_sensor_tick();
