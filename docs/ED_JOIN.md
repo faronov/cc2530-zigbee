@@ -1191,30 +1191,31 @@ run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the p
 ### Optional e-paper display
 
 The opt-in `autonomous-pm2-epd` and `autonomous-pm2-sht3x-epd` LLVM variants
-add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`). It
+add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`);
+`autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`. It
 requires the LG ESL29 board and `CC2530_CHIP_SENSE` (a build error
 otherwise). The fixed 45-unit LLVM link is kept: `boards/lg_esl29_rev03.c`
 includes [`src/epd.c`](../src/epd.c). The driver is in common code
 (`MCU_COMMON_CODE`), so it does not use banked space.
 
-- Panel (H2, LG ESL29 Rev0.3): 2.9" 128×296 UC8151D. The pins, SPI setup
-  and refresh sequence were verified on H2 with a RAM test pattern
-  ([`include/epd.h`](../include/epd.h)): P0.7 power (high on), P1.1 RST,
-  P1.2 BUSY (low busy), P0.2 DC, P0.4 CS, USART0 alternative 1 SPI master
-  (P0.3 MOSI, P0.5 SCK) at 1 MHz, MSB first, CS low for each octet.
-  Sequence: power, RST low 20 ms, high, BUSY; `06 17 17 17`, `04` (power on,
-  ~50 ms); `00 1F 0D`, `61 80 01 28`, `82 12`, `50 97`; `10` old and `13` new
-  plane (4,736 octets each, bit 1 white); `12` (refresh, ~4.9 s); `02`
-  (power off, ~40 ms); power cut. Panel setting `1F` (REG 0) selects the
-  panel's OTP waveforms; no LUT is loaded.
-- Content: temperature (`ZCL_SENSOR_STATE.temperature`, or `climate` with
-  SHT3x) as `21.5°C` (scale 6), humidity `47%` (scale 4, SHT3x only) and
-  AVDD `3.01V` (scale 2) from a 5×7 font. Invalid values show `--.-°C`,
-  `--%` and `-.--V`. Gate row 0 is the right edge; each row's octet 0 holds
-  the top 8 pixels. Rows are rendered on the fly, 16 octets at a time; there
-  is no framebuffer.
+- Panel: 2.9" 128×296 black/white on the H2 FPC: the stock UC8151D
+  (default) or an SSD1680. Pins, SPI setup and both command sequences are in
+  [`include/epd.h`](../include/epd.h); the UC8151D sequence and pins were
+  verified on H2 with a RAM test pattern. Each refresh streams an old and a
+  new plane (4,736 octets each, bit 1 white), then powers the panel down
+  (UC8151D `02`, SSD1680 deep sleep `10 01`) and cuts its power.
+- Content: the D3 layout ([EPAPER.md](EPAPER.md)): 7-segment temperature
+  (`ZCL_SENSOR_STATE.temperature`, or `climate` with SHT3x) and humidity
+  (SHT3x; a fixed 45 % placeholder otherwise), battery gauge and AVDD
+  voltage. Rows are rendered on the fly, 16 octets at a time; there is no
+  framebuffer. The old plane renders the view shown last (white before the
+  first refresh or after a failure).
+- Refresh: the UC8151D always refreshes fully with its OTP waveform. The
+  SSD1680 refreshes partially (own 80-frame LUT, ~1.7 s) while the shown view
+  is intact, with a full refresh (OTP, ~3 s) first, after a failure and after
+  every 10 partial ones.
 - Schedule: from READY, `epd_show()` runs after `zcl_sensor_tick()`. The
-  first refresh starts at once; later ones start only when the text changed
+  first refresh starts at once; later ones start only when the view changed
   and at least 600 s passed since the last refresh, checked every 10 s.
   `epd_step()` runs on every READY-gate poll. It streams at most 4 rows or
   makes one bounded wait check per call. During the panel's own refresh the
@@ -1223,15 +1224,17 @@ includes [`src/epd.c`](../src/epd.c). The driver is in common code
   SPI octet's TX_BYTE wait is bounded to 255 polls. A fault cuts the panel
   power through `board_early_off()` and counts `epd.failures`. The next try
   follows the normal schedule.
-- Not verified: the pixel bit order within an octet (MSB the top pixel) and
-  the full firmware on the panel. Panel current while off (P1.2's
-  reset-default pull-up) is not measured.
+- Not verified: the D3 firmware on either panel, and the panel current while
+  off (P1.2's reset-default pull-up). Not supported: IL3820 panels and
+  UC8151D partial refresh (both need an own LUT tuned on the panel).
 
-Host coverage: `host-epd` (and its sanitizer build) runs the board unit
-against a UC8151D model. It checks the command sequence and data, CS framing,
-DC level, SPI setup, BUSY ordering and both planes. An independent decoder
-checks the pixels, field boxes and orientation. The model also covers the
-schedule, the PM2 limit, a stuck BUSY, a stuck refresh and an SPI stall.
+Host coverage: `host-epd` and `host-epd-ssd1680` (and their sanitizer builds)
+run the board unit against a UC8151D or SSD1680 model. They check the command
+sequence and data, CS framing, DC level, SPI setup, BUSY ordering and both
+planes; the rendered planes match CRC-32 goldens of the reference layout
+(`tools/epd/d3_art.py`). The models also cover formatting, the schedule, the
+partial/full cycle, the PM2 limit, a stuck BUSY, a stuck refresh and an SPI
+stall.
 
 ### External applications
 
