@@ -112,7 +112,7 @@ static void serve(void)
 #if defined(CC2530_SHT3X)
     epd_show(DEVICE.last,ZCL_SENSOR_STATE.climate,ZCL_SENSOR_STATE.humidity,ZCL_SENSOR_STATE.millivolts);
 #else
-    epd_show(DEVICE.last,ZCL_SENSOR_STATE.temperature,EPD_NO_HUMIDITY,ZCL_SENSOR_STATE.millivolts);
+    epd_show(DEVICE.last,ZCL_SENSOR_STATE.temperature,EPD_PLACEHOLDER_HUMIDITY,ZCL_SENSOR_STATE.millivolts);
 #endif
 #endif
     RESULT=zcl_sensor_serve();

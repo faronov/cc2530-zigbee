@@ -83,7 +83,8 @@ byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
   reduced by a 33-tick (~1 ms) wake margin; spans under 197 ticks stay awake.
   5 (`CC2530_EPD` only) display: no sleep while a refresh streams or waits
   on a short panel step; during the panel's own refresh the span is limited
-  to the expected rest of 5 s, then to 250 ms steps
+  to the expected rest of the refresh (UC8151D 5 s, SSD1680 3 s full or
+  1.7 s partial), then to 250 ms steps
   ([e-paper display](ED_JOIN.md#optional-e-paper-display)).
 - Sleep: `mac_time_pause()` (stops Timer2 through T2CTRL.SYNC and the
   32 kHz edge, `mac_time.h`), Sleep Timer compare written ST2, ST1, ST0 after
