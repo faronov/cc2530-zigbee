@@ -1,10 +1,16 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
-/* E-paper driver (epd.h): the D3 layout on a UC8151D or SSD1680 panel. The
- * fixed LLVM link admits 45 translation units, so boards/lg_esl29_rev03.c includes this file under CC2530_EPD. */
+/* E-paper driver (epd.h): the D3 layout on a UC8151D or SSD1680 panel, or
+ * the L8 dashboard on an SSD1677 (epd_l8.c). The fixed LLVM link admits 45
+ * translation units, so boards/lg_esl29_rev03.c includes this file under
+ * CC2530_EPD. */
 #include "epd.h"
+#if defined(EPD_L8)
+#include "epd_l8_art.h"
+#else
 #include "epd_d3_art.h"
+#endif
 #include <string.h>
 
 #if defined(__SDCC)
@@ -40,6 +46,7 @@ static MCU_XDATA uint8_t stalled;
 static const MCU_CODE uint8_t segment[12] = {
     0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x40, 0x00
 };
+#if !defined(EPD_L8)
 /* d3_f4 glyphs after the digits. */
 #define F4_DOT 10u
 #define F4_MINUS 11u
@@ -50,6 +57,7 @@ static const MCU_CODE uint8_t segment[12] = {
  * temperature (slots 0..2) and humidity (3, 4) digits. */
 static const MCU_CODE uint16_t slot_x[EPD_DIGITS] = { 26, 70, 126, 236, 258 };
 static const MCU_CODE uint8_t slot_shape[2][4] = { { 32, 38, 66, 4 }, { 34, 18, 34, 2 } };
+#endif
 
 /* Command, data count, data; 0xff ends a list. BOOT follows the reset,
  * PANEL the BOOT BUSY wait and ends with the old plane's command, NEXT the
@@ -66,6 +74,20 @@ static const MCU_CODE uint8_t commands[] = {
     0x00, 2, 0x1f, 0x0d, 0x61, 3, 0x80, 0x01, 0x28, 0x82, 1, 0x12, 0x50, 1, 0x97, 0x10, 0, 0xff,
     0x13, 0, 0xff,
     0x12, 0, 0xff
+};
+#elif CC2530_EPD_PANEL == EPD_SSD1677
+#define READY() (!(MMIO_READ(SOC_P1) & BUSY))
+#define BOOT 0u
+#define PANEL 3u
+#define FULL 47u
+#define SLEEP 53u
+static const MCU_CODE uint8_t commands[] = {
+    0x12, 0, 0xff,
+    0x18, 1, 0x80, 0x0c, 5, 0xae, 0xc7, 0xc3, 0xc0, 0x80, 0x01, 3, 0xdf, 0x01, 0x02, 0x3c, 1, 0x01,
+    0x11, 1, 0x03, 0x44, 4, 0x00, 0x00, 0x1f, 0x03, 0x45, 4, 0x00, 0x00, 0xdf, 0x01,
+    0x4e, 2, 0x00, 0x00, 0x4f, 2, 0x00, 0x00, 0x24, 0, 0xff,
+    0x22, 1, 0xf7, 0x20, 0, 0xff,
+    0x10, 1, 0x01, 0xff
 };
 #else
 #define READY() (!(MMIO_READ(SOC_P1) & BUSY))
@@ -88,6 +110,9 @@ static const MCU_CODE uint8_t commands[] = {
 };
 #endif
 
+#if defined(EPD_L8)
+#include "epd_l8.c"
+#else
 void MCU_COMMON_CODE epd_format(epd_view_t MCU_XDATA *view, int16_t centi, uint16_t humidity, uint16_t millivolts) JOIN_FAR
 {
     uint8_t c[EPD_DIGITS], i, neg;
@@ -210,6 +235,7 @@ void MCU_COMMON_CODE epd_render(const epd_view_t MCU_XDATA *view, uint16_t row) 
         x0 += d3_f4[g][0];
     }
 }
+#endif
 
 /* One octet with CS low; a TX_BYTE wait past 255 polls latches stalled. */
 static void MCU_COMMON_CODE send(uint8_t data, uint8_t value)
@@ -289,6 +315,22 @@ static void MCU_COMMON_CODE enter(uint8_t state, uint32_t now)
 
 void MCU_COMMON_CODE epd_show(uint32_t now, int16_t centi, uint16_t humidity, uint16_t millivolts) JOIN_FAR
 {
+#if defined(EPD_L8)
+    l8_tick(now);
+    if (epd.state != EPD_IDLE) return;
+    if (epd.armed && (uint32_t)(now - epd.due) >= 0x80000000UL &&
+        !(epd_l8.dirty && epd.shown && now - epd_l8.written >= EPD_L8_SETTLE &&
+          now - epd_l8.started >= EPD_L8_SPACING)) return;
+    epd_format(&epd.next, centi, humidity, millivolts);
+    if (epd.armed && epd.shown && !epd_l8.dirty && !memcmp(&epd.next, &epd.old, sizeof(epd.old))) {
+        epd.due = now + EPD_CHECK;
+        return;
+    }
+    epd_l8.dirty = 0;
+    epd_l8.started = now;
+    epd.armed = 1;
+    epd.due = now + EPD_SECONDS(epd_l8.interval);
+#else
     if (epd.state != EPD_IDLE || (epd.armed && (uint32_t)(now - epd.due) >= 0x80000000UL)) return;
     epd_format(&epd.next, centi, humidity, millivolts);
     if (epd.armed && epd.shown && !memcmp(&epd.next, &epd.old, sizeof(epd.old))) {
@@ -297,6 +339,7 @@ void MCU_COMMON_CODE epd_show(uint32_t now, int16_t centi, uint16_t humidity, ui
     }
     epd.armed = 1;
     epd.due = now + EPD_INTERVAL;
+#endif
 #if EPD_PARTIALS
     epd.partial = epd.shown && epd.partials < EPD_PARTIALS;
 #endif
@@ -338,7 +381,11 @@ void MCU_COMMON_CODE epd_step(uint32_t now) JOIN_FAR
         case EPD_POWER:
             sequence(PANEL);
             epd.row = 0;
+#if defined(EPD_L8)
+            enter(EPD_NEW, now);
+#else
             enter(EPD_OLD, now);
+#endif
             return;
 #if EPD_PARTIALS
         case EPD_LOAD:
@@ -375,7 +422,9 @@ void MCU_COMMON_CODE epd_step(uint32_t now) JOIN_FAR
         if (epd.row != EPD_ROWS) return;
         epd.row = 0;
         if (epd.state == EPD_OLD) {
+#if defined(NEXT)
             sequence(NEXT);
+#endif
             enter(EPD_NEW, now);
 #if EPD_PARTIALS
         } else if (epd.partial) {

@@ -183,6 +183,10 @@ HOST_PROGRAMS := $(BUILD)/aes-reference \
 	$(BUILD)/host-epd-sanitize \
 	$(BUILD)/host-epd-ssd1680 \
 	$(BUILD)/host-epd-ssd1680-sanitize \
+	$(BUILD)/host-epd-ssd1677 \
+	$(BUILD)/host-epd-ssd1677-sanitize \
+	$(BUILD)/host-zcl-sensor-l8 \
+	$(BUILD)/host-zdo-srv-l8 \
 	$(BUILD)/host-zcl-temperature-tests \
 	$(BUILD)/host-zcl-temperature-tests-sanitize \
 	$(BUILD)/host-zcl-value-tests \
@@ -749,6 +753,9 @@ $(BUILD)/host-zcl-sensor-sanitize: tests/test_zcl_sensor.c src/zcl_sensor.c src/
 $(BUILD)/host-zcl-sensor-chip: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -DCC2530_CHIP_SENSE -I. -Isrc tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-sensor-chip
 
+$(BUILD)/host-zcl-sensor-l8: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c boards/lg_esl29_rev03.c src/epd.c src/epd_l8.c include/epd_l8_art.h $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -DCC2530_CHIP_SENSE -UCC2530_BOARD -DCC2530_BOARD=1 -DCC2530_EPD -DCC2530_EPD_PANEL=2 -I. -Isrc tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c boards/lg_esl29_rev03.c -o $(BUILD)/host-zcl-sensor-l8
+
 $(BUILD)/host-zcl-sensor-chip-sanitize: tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) $(JOIN_SMOKE_RECOVERY_DEFINES) -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -DCC2530_MAC_HANDOFF -DCC2530_MAC_INTERVAL -DCC2530_MAC_OBSERVED -DCC2530_MAC_ADAPTER -DCC2530_MAC_RECONFIG -DCC2530_MAC_LINK -DCC2530_MAC_LINK_RAM -DCC2530_MAC_LINK_WORKSPACE -DCC2530_MAC_LINK_CHILD_WORKSPACE -DCC2530_MAC_LINK_DIRECT $(if $(filter default-tc,$(JOIN_SMOKE_KEY_MODE)),-DCC2530_DEFAULT_TC_KEY)   -DCC2530_CHIP_SENSE -I. -Isrc -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zcl_sensor.c src/zcl_sensor.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-sensor-chip-sanitize
 
@@ -776,6 +783,12 @@ $(BUILD)/host-epd-ssd1680: tests/test_epd.c tests/epd_d3_golden.h boards/lg_esl2
 $(BUILD)/host-epd-ssd1680-sanitize: tests/test_epd.c tests/epd_d3_golden.h boards/lg_esl29_rev03.c src/epd.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -UCC2530_BOARD -DCC2530_BOARD=1 -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=1 -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_epd.c boards/lg_esl29_rev03.c -o $(BUILD)/host-epd-ssd1680-sanitize
 
+$(BUILD)/host-epd-ssd1677: tests/test_epd_l8.c tests/epd_l8_golden.h include/epd_l8_art.h boards/lg_esl29_rev03.c src/epd.c src/epd_l8.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -UCC2530_BOARD -DCC2530_BOARD=1 -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=2 -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT tests/test_epd_l8.c boards/lg_esl29_rev03.c -o $(BUILD)/host-epd-ssd1677
+
+$(BUILD)/host-epd-ssd1677-sanitize: tests/test_epd_l8.c tests/epd_l8_golden.h include/epd_l8_art.h boards/lg_esl29_rev03.c src/epd.c src/epd_l8.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -UCC2530_BOARD -DCC2530_BOARD=1 -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=2 -DCC2530_MAC_RADIO -DCC2530_MAC_ATTEMPT -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_epd_l8.c boards/lg_esl29_rev03.c -o $(BUILD)/host-epd-ssd1677-sanitize
+
 $(BUILD)/host-zcl-temperature-tests: tests/test_zcl_temperature.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_zcl_temperature.c src/zcl_temperature.c src/zcl_dispatch.c src/zcl_write.c src/zcl_attributes.c src/zcl_frame.c src/zcl_value.c -o $(BUILD)/host-zcl-temperature-tests
 
@@ -793,6 +806,9 @@ $(BUILD)/host-zdo-node-tests-sanitize: tests/test_zdo_node.c src/zdo_node.c src/
 
 $(BUILD)/host-zdo-srv-tests: tests/test_zdo_srv.c src/zdo_srv.c src/zdo_node.c src/aps_frame.c src/nwk_frame.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) tests/test_zdo_srv.c src/zdo_srv.c src/zdo_node.c src/aps_frame.c src/nwk_frame.c -o $(BUILD)/host-zdo-srv-tests
+
+$(BUILD)/host-zdo-srv-l8: tests/test_zdo_srv.c src/zdo_srv.c src/zdo_node.c src/aps_frame.c src/nwk_frame.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(HOST_FLAGS) -DCC2530_EPD -DCC2530_EPD_PANEL=2 tests/test_zdo_srv.c src/zdo_srv.c src/zdo_node.c src/aps_frame.c src/nwk_frame.c -o $(BUILD)/host-zdo-srv-l8
 
 $(BUILD)/host-zdo-srv-tests-sanitize: tests/test_zdo_srv.c src/zdo_srv.c src/zdo_node.c src/aps_frame.c src/nwk_frame.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zdo_srv.c src/zdo_srv.c src/zdo_node.c src/aps_frame.c src/nwk_frame.c -o $(BUILD)/host-zdo-srv-tests-sanitize

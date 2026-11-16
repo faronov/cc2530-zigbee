@@ -1,7 +1,8 @@
-# E-paper display (D3 layout)
+# E-paper display (D3 and L8 layouts)
 
 The opt-in `CC2530_EPD` build shows sensor values on a 2.9" 128×296
-black/white e-paper panel on the LG ESL29 (H2) FPC. Integration, schedule and
+black/white e-paper panel on the LG ESL29 (H2) FPC (D3 layout), or a
+Home Assistant dashboard on a 4.26" 800×480 SSD1677 panel ([L8](#l8-dashboard-426-ssd1677)). Integration, schedule and
 faults: [ED_JOIN.md](ED_JOIN.md#optional-e-paper-display). Pins, command
 sequences and timing: [`include/epd.h`](../include/epd.h).
 
@@ -54,6 +55,7 @@ and orientation (gate row 0 is the rightmost column).
 |---|---|---|---|
 | `EPD_UC8151` (default) | H2 stock UC8151D | full only, OTP waveform, ~4.9 s | sequence and pins verified on H2 with a RAM pattern; D3 firmware not yet on the panel |
 | `EPD_SSD1680` | Waveshare 2.9" V2 | full (OTP, 2.97 s); partial with an own 80-frame LUT (~1.7 s); a full refresh after 10 partials | bench sequence and timings on the panel, faint traces after a partial; firmware not yet on the panel |
+| `EPD_SSD1677` | Waveshare 4.26" 800×480 | full only, OTP waveform (`22 F7`) | L8 layout only; RAM pattern shown on the panel through H2; L8 firmware not yet on the panel |
 
 Not supported: IL3820 panels (no OTP waveform; they need an own LUT tuned on
 the panel) and partial refresh on the UC8151D (needs an own register LUT
@@ -61,7 +63,85 @@ tuned on the panel). Vendor LUTs and OTP dumps are not part of this
 repository.
 
 Variants: `autonomous-pm2-epd`, `autonomous-pm2-sht3x-epd`,
-`autonomous-pm2-epd-factory` (UC8151D) and `autonomous-pm2-epd-ssd1680`.
+`autonomous-pm2-epd-factory` (UC8151D), `autonomous-pm2-epd-ssd1680` and
+`autonomous-pm2-epd-ssd1677` (L8).
+
+## L8 dashboard (4.26" SSD1677)
+
+`CC2530_EPD_PANEL=EPD_SSD1677` selects the L8 layout
+([`src/epd_l8.c`](../src/epd_l8.c)): an 800×480 landscape frame, rendered
+row by row like D3 (100 octets per row, no frame buffer).
+
+- status bar: battery gauge (0..36 columns for 2.0 .. 3.0 V) and voltage,
+  Zigbee icon and the RSSI of the last received frame, local clock
+  (`Пн 21.04 14:32`, `-- --.-- --:--` until a time is written);
+- left half `ДОМА`: the device's temperature and humidity (7-segment);
+- right half `УЛИЦА`: outdoor temperature and humidity and a 96×96 weather
+  icon, all pushed by Home Assistant;
+- four slots: a label (scale 1) and a value (7-segment for digits, `-`,
+  `.`, `,` and `:`, glyphs otherwise);
+- a message line (scale 2).
+
+Text uses the t0-16b-uni 8×16 font (ASCII, Cyrillic, `Ёё` and `°`); other
+characters show `?`. [`tools/epd/l8_art.py`](../tools/epd/l8_art.py) is the
+reference design and writes [`include/epd_l8_art.h`](../include/epd_l8_art.h)
+and [`tests/epd_l8_golden.h`](../tests/epd_l8_golden.h); `host-epd-ssd1677`
+compares the C renderer with the goldens:
+
+```sh
+python3 tools/epd/l8_art.py --fonts U8G2/tools/font/bdf [--check] [--png out.png]
+```
+
+### Cluster 0xFC10
+
+A cluster in the manufacturer-specific range on the application endpoint
+(server). Frames with or without a manufacturer code are accepted. All
+attributes are readable; all but ClusterRevision are writable.
+
+| Id | Type | Attribute | Range / unknown |
+|---|---|---|---|
+| 0x0000 | uint32 | local time, seconds since 2000-01-01 00:00 | 0 unknown |
+| 0x0001 | uint16 | refresh interval, s | 60..28800, default 300 |
+| 0x0010 | int16 | outdoor temperature, 0.01 °C | 0x8000 unknown |
+| 0x0011 | uint16 | outdoor humidity, 0.01 %RH | ≤ 10000, 0xFFFF unknown |
+| 0x0012 | enum8 | weather: 0 none, 1 sunny, 2 clear night, 3 partly cloudy, 4 cloudy, 5 rainy, 6 snowy, 7 fog, 8 lightning, 9 windy | 0..9 |
+| 0x0020 + 2k | charStr | slot k label (k 0..3) | 22 glyphs |
+| 0x0021 + 2k | charStr | slot k value | 12 glyphs |
+| 0x0030 | charStr | message | 48 glyphs |
+| 0xFFFD | uint16 | ClusterRevision 1 | read-only (0x88) |
+
+Out-of-range values return 0x87. Strings are UTF-8 and cut to the field;
+reads return the stored text as UTF-8.
+
+The clock counts on from the last time write. A write that changes what is
+shown (a time write only when the time was unknown) redraws the panel once
+the last write is 10 s old and the last refresh started at least 30 s
+before, so a batch of writes gives one refresh. Otherwise the panel
+refreshes every interval when the view changed (indoor values, battery,
+RSSI, clock). Each refresh is a full one (OTP waveform).
+
+### Home Assistant and Zigbee2MQTT
+
+[`tools/ha/`](../tools/ha) holds the integrations for the device
+`cc2530-zigbee` / `LG-ESL29`. After flashing the L8 firmware, re-pair (or
+re-interview) the device so the coordinator sees cluster 0xFC10.
+
+- ZHA: copy [`zha_quirk_lg_esl29_l8.py`](../tools/ha/zha_quirk_lg_esl29_l8.py)
+  to the custom quirks directory (`zha: custom_quirks_path:`, for example
+  `/config/custom_zha_quirks/`) and reload ZHA. It adds the cluster as
+  `l8_display` and a refresh interval number entity.
+- HA package: copy [`lg_esl29_l8.yaml`](../tools/ha/lg_esl29_l8.yaml) to
+  `/config/packages/` (`homeassistant: packages: !include_dir_named packages`)
+  and edit the IEEE address, weather entity and slots in `script.l8_push`.
+  Its automation writes the clock, outdoor weather and slot values every 5
+  minutes, and the labels and interval at start and every 6 hours;
+  `script.l8_message` writes the message line.
+- Zigbee2MQTT: copy [`lg_esl29_l8.mjs`](../tools/ha/lg_esl29_l8.mjs) to
+  `external_converters/` and restart Z2M. It exposes every attribute as a
+  settable entity, writes the clock on device announce and adds a
+  `sync_time` action.
+
+The device is a sleepy end device: writes are delivered on its next poll.
 
 ## Font notices
 
@@ -96,7 +176,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 ```
 
-The `C` of `°C` and the `%` use t0-13b (Unicode); the degree ring is drawn:
+The `C` of `°C` and the `%` use t0-13b (Unicode); the degree ring is drawn.
+The L8 text uses t0-16b-uni from the same family. Both carry this notice:
 
 ```
 Copyright (C) 2012-2025 Uwe Waldmann

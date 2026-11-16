@@ -1192,7 +1192,10 @@ run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the p
 
 The opt-in `autonomous-pm2-epd` and `autonomous-pm2-sht3x-epd` LLVM variants
 add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`);
-`autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`. It
+`autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`;
+`autonomous-pm2-epd-ssd1677` sets `CC2530_EPD_PANEL=EPD_SSD1677`, the 4.26"
+800×480 panel with the Home Assistant L8 dashboard and cluster 0xFC10
+([EPAPER.md](EPAPER.md#l8-dashboard-426-ssd1677)). It
 requires the LG ESL29 board and `CC2530_CHIP_SENSE` (a build error
 otherwise). The fixed 45-unit LLVM link is kept: `boards/lg_esl29_rev03.c`
 includes [`src/epd.c`](../src/epd.c). The driver is in common code
