@@ -38,6 +38,11 @@ headers from the application's include directory:
     span and returns 0 to keep the device awake (sleep reason 5);
   - with `CC2530_APP_SETTINGS`, `zcl_sensor_start(member)` (see
     [below](#tx-power-and-application-settings)).
+- With `CC2530_APP_MGMT_LQI` the runtime publishes received Mgmt_Lqi_rsp
+  (ZDO cluster 0x8031) frames to the application like Bind requests. The
+  application may queue its own Mgmt_Lqi_req (for example to the parent, for
+  the parent's LQI of this device) in the ZDO response slot while that slot,
+  the query slot and the response TX are idle.
 
 The board file must define `board_description` and `board_early_off()`.
 `board_early_off()` runs from startup before C data initialization, so it may
