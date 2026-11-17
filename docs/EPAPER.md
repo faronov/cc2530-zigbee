@@ -148,8 +148,9 @@ re-interview) the device so the coordinator sees cluster 0xFC10.
 - HA package: copy [`lg_esl29_l8.yaml`](../tools/ha/lg_esl29_l8.yaml) to
   `/config/packages/` (`homeassistant: packages: !include_dir_named packages`)
   and edit the IEEE address, weather entity and slots in `script.l8_push`.
-  Its automation writes the clock, outdoor weather and slot values every 5
-  minutes, and the labels and interval at start and every 6 hours;
+  Its automation writes the clock, outdoor weather, slot labels, values and
+  interval at start and every 5 minutes (the device keeps them in RAM only,
+  so a reset shows dashes until the next push);
   `script.l8_message` writes the message line.
 - Zigbee2MQTT: copy [`lg_esl29_l8.mjs`](../tools/ha/lg_esl29_l8.mjs) to
   `external_converters/` and restart Z2M. It exposes every attribute as a

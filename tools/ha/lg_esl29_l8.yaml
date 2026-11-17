@@ -7,8 +7,9 @@
 # ieee, the weather entity and the four slots in script.l8_push.
 #
 # The display redraws once, 10 s after the last write that changed something,
-# so l8_push writes the clock and the values every 5 minutes (labels every
-# 6 hours); unchanged values and clock writes do not redraw. The device is
+# so l8_push writes the clock, the values, the labels and the interval every
+# 5 minutes: the device keeps them in RAM only and shows dashes after a
+# reset until the next push; unchanged writes do not redraw. The device is
 # a sleepy end device: each write waits for its next poll; failures are
 # ignored and retried by the next push.
 #
@@ -112,14 +113,9 @@ automation:
     triggers:
       - trigger: homeassistant
         event: start
-        id: full
-      - trigger: time_pattern
-        hours: "/6"
-        id: full
       - trigger: time_pattern
         minutes: "/5"
-        id: values
     actions:
       - action: script.l8_push
         data:
-          full: "{{ trigger.id == 'full' }}"
+          full: true
