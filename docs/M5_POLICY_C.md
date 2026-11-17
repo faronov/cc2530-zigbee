@@ -3,8 +3,9 @@
 Approved on 2026-10-12 for the receiver-on experimental profile, following the
 [architecture review](M5_REPLAY_PERSISTENCE_DECISION.md). The strict
 `parent-recovery` variant and qualified `e4c41c8` remain comparison references.
-`parent-recovery-policy-c` defines `CC2530_PARENT_RECOVERY` and
-`CC2530_REPLAY_POLICY_C`; ordinary production and strict variants do not.
+`parent-recovery-policy-c` and `autonomous-pm2-epd-ssd1677-router` define
+`CC2530_PARENT_RECOVERY` and `CC2530_REPLAY_POLICY_C`; ordinary production and
+strict variants do not.
 
 ## Checkpoint-trigger matrix
 

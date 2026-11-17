@@ -68,7 +68,10 @@ direct-coordinator policy above.
   hardware as three unanswered Request Keys and `TC_FAILED`. A direct
   coordinator parent keeps radius 1, so existing images are byte-identical.
 - Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
-  still commits the replay state with a full NV save.
+  still commits the replay state with a full NV save (one page erase), and
+  `NV_RECORD_ERASE_LIMIT` (32 erases per page per boot) then fails the key
+  store after about 64 frames. `autonomous-pm2-epd-ssd1677-router` therefore
+  defines `CC2530_REPLAY_POLICY_C`.
 - Host coverage: `host-router-join-tests` (relayed Transport Key, TC learning,
   rejects for coordinator-sourced, short-nonce, own/parent source, mismatched
   source and replays, then the full exchange to VERIFIED),

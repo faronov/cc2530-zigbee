@@ -88,7 +88,12 @@ Variants: `autonomous-pm2-epd`, `autonomous-pm2-sht3x-epd`,
 `autonomous-pm2-epd-factory` (UC8151D), `autonomous-pm2-epd-ssd1680`,
 `autonomous-pm2-epd-ssd1677` (L8) and `autonomous-pm2-epd-ssd1677-router`
 (L8 with a router-parent initial join, `CC2530_ROUTER_JOIN`,
-[ED_JOIN.md](ED_JOIN.md#router-parent-initial-join-cc2530_router_join)).
+[ED_JOIN.md](ED_JOIN.md#router-parent-initial-join-cc2530_router_join), and
+Policy C replay checkpoints, `CC2530_REPLAY_POLICY_C`,
+[M5_POLICY_C.md](M5_POLICY_C.md)). Without Policy C every frame relayed by
+the router parent erased an NV page; after 32 erases per page in one boot
+the key store failed with `NV_RECORD_ERASE_LIMIT_REACHED`, the device reset
+and lost the pushed dashboard (seen on H2 after about five HA pushes).
 
 ## L8 dashboard (4.26" SSD1677)
 
