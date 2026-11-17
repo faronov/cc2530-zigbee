@@ -4,10 +4,27 @@ ARGS = {"timebase_deadline_after": [(56, "deadline")], "timebase_expired": [(56,
 sites = []
 for f in sorted(glob.glob("*.s")):
     L = open(f).read().split("\n")
+    # The machine outliner may move argument setup into a helper; expand
+    # helper bodies (label up to its ret) in place of the lcall.
+    helpers = {}
+    for j, l in enumerate(L):
+        h = re.match(r"(OUTLINED_FUNCTION_\d+):", l)
+        if not h: continue
+        body = []
+        for b in L[j + 1:]:
+            if b.strip() == "ret": break
+            body.append(b)
+        helpers[h.group(1)] = body
+    def expand(lines):
+        out = []
+        for w in lines:
+            c = re.match(r"\s*lcall (OUTLINED_FUNCTION_\d+)$", w)
+            out.extend(helpers[c.group(1)] if c and c.group(1) in helpers else [w])
+        return out
     for i, l in enumerate(L):
         m = re.match(r"\s*lcall __mcs51_bankcall_(\w+)$", l)
         if not m or m.group(1) not in ARGS: continue
-        win = L[max(0, i - 30):i]
+        win = expand(L[max(0, i - 30):i])
         for base, name in ARGS[m.group(1)]:
             val = {}
             acc = None

@@ -153,27 +153,40 @@ memory['internal_data_direct'] = dict(r0_r7=[0x00, 0x08], pseudo_registers=[im[0
 
 # ---------------------------------------------------------------- startup
 def relocated_compare(obj_path, secname, base_sym):
-    """Linked bytes of an object section equal the object bytes outside relocated fields."""
+    """Linked bytes of an object section equal the object bytes outside relocated fields.
+
+    lld may relax a relocated LCALL/LJMP to ACALL/AJMP (one byte shorter), so the
+    object and the image are walked instruction by instruction."""
     o = ELFFile(open(obj_path, 'rb')); s = o.get_section_by_name(secname); raw = s.data()
-    masked = set()
+    masked, relocs = set(), set()
     for rs in o.iter_sections():
         if isinstance(rs, RelocationSection) and rs['sh_info'] == o.get_section_index(secname):
             for r in rs.iter_relocations():
-                off = r['r_offset']
+                off = r['r_offset']; relocs.add(off)
                 masked.update(range(off, off + 2))  # conservative: widest MCS51 field
     a = symbols['_' + base_sym]
-    diff = [i for i, b in enumerate(raw) if i not in masked and image[a + i] != b]
-    return dict(section=secname, bytes=len(raw), relocated_bytes=len(masked), mismatches=len(diff))
+    i = j = mismatches = relaxed = 0
+    while i < len(raw):
+        op = raw[i]; n = LI.LENGTHS[op]
+        if op in (0x12, 0x02) and i + 1 in relocs and image[a + j] & 0x1f == (0x11 if op == 0x12 else 0x01):
+            i += 3; j += 2; relaxed += 1; continue
+        mismatches += sum(1 for k in range(n) if i + k < len(raw) and i + k not in masked and image[a + j + k] != raw[i + k])
+        i += n; j += n
+    return dict(section=secname, bytes=len(raw), linked_bytes=j, relocated_bytes=len(masked), relaxed=relaxed,
+                mismatches=mismatches)
 st = relocated_compare(f'{OUT}/rt/mcs51/cc2530_startup.o', '.text.startup', '__mcs51_start')
 need(st['mismatches'] == 0, 'startup bytes differ from cc2530_startup.o')
 st0a = sym['__mcs51_start']['st_value']
-need(image[0] == 0x02 and (image[1] << 8 | image[2]) == st0a, 'reset vector does not ljmp __mcs51_start')
+need((image[0] == 0x02 and (image[1] << 8 | image[2]) == st0a) or
+     (image[0] & 0x1f == 0x01 and ((image[0] >> 5) << 8 | image[1]) == st0a and st0a < 0x800),
+     'reset vector does not jump to __mcs51_start')
 need(bytes(image[st0a + i] for i in range(3)) == bytes([0x75, 0x81, 0x7F]), 'startup does not set SP=0x7F')
 seq = []; pc = st0a
 for k in range(200):
     op = image[pc]; n = LI.LENGTHS[op]; raw = bytes(image[pc + i] for i in range(n))
     if op == 0x90: seq.append(raw[1] << 8 | raw[2])
     if op == 0x12 and (raw[1] << 8 | raw[2]) == sym['main']['st_value']: break
+    if op & 0x1f == 0x11 and ((pc + 2) & 0xF800 | (op >> 5) << 8 | raw[1]) == sym['main']['st_value']: break
     pc += n
 names = ['__mcs51_bit_start', '__mcs51_bit_end', '__mcs51_bit_load', '__mcs51_data_start', '__mcs51_data_end',
          '__mcs51_data_load', '__mcs51_pdata_start', '__mcs51_pdata_end', '__mcs51_pdata_load',
@@ -189,7 +202,7 @@ need(sym['__mcs51_data_load']['st_value'] == dseg['p_paddr'] and
      sym['__mcs51_data_end']['st_value'] - sym['__mcs51_data_start']['st_value'] == secs['.data']['sh_size'] and
      bytes(image[dseg['p_paddr'] + i] for i in range(secs['.data']['sh_size'])) == secs['.data'].data(),
      '.data load image mismatch')
-startup = dict(object_compare=st, reset_vector='ljmp __mcs51_start', sp_init=0x7F,
+startup = dict(object_compare=st, reset_vector='ljmp' if image[0] == 0x02 else 'ajmp', sp_init=0x7F,
                xdata_clear='0x0000-0x1EFF + IRAM 0x01-0xFF (covers .bss, PDATA pool and status 0x1E00)',
                copy_ranges={n: sym[n]['st_value'] for n in names},
                data_init=dict(load=dseg['p_paddr'], vma=secs['.data']['sh_addr'], size=secs['.data']['sh_size']))
@@ -202,9 +215,11 @@ calls = collections.Counter()
 addr2name = {}
 for a, n, nm in funcs: addr2name[a] = nm
 for pc, raw in code.items():
-    if raw[0] in (0x12, 0x02) and len(raw) == 3:
-        t = raw[1] << 8 | raw[2]; tgt = addr2name.get(t if t < 0x8000 else (pc & 0xFF0000) | t)
-        if tgt in linked: calls[tgt] += 1
+    if raw[0] in (0x12, 0x02) and len(raw) == 3: t = raw[1] << 8 | raw[2]
+    elif raw[0] & 0x1f in (0x11, 0x01) and len(raw) == 2: t = ((pc & 0xFFFF) + 2) & 0xF800 | (raw[0] >> 5) << 8 | raw[1]
+    else: continue
+    tgt = addr2name.get(t if t < 0x8000 else (pc & 0xFF0000) | t)
+    if tgt in linked: calls[tgt] += 1
 rtcmp = {}
 for n in linked:
     secn = rt.get_section(next(s for s in rt.get_section_by_name('.symtab').iter_symbols() if s.name == n)['st_shndx']).name
