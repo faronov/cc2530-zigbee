@@ -55,7 +55,7 @@ and orientation (gate row 0 is the rightmost column).
 |---|---|---|---|
 | `EPD_UC8151` (default) | H2 stock UC8151D | full only, OTP waveform, ~4.9 s | sequence and pins verified on H2 with a RAM pattern; D3 firmware not yet on the panel |
 | `EPD_SSD1680` | Waveshare 2.9" V2 | full (OTP, 2.97 s); partial with an own 80-frame LUT (~1.7 s); a full refresh after 10 partials | bench sequence and timings on the panel, faint traces after a partial; firmware not yet on the panel |
-| `EPD_SSD1677` | Waveshare 4.26" 800×480 | full only, OTP waveform (`22 F7`) | L8 layout only; RAM pattern shown on the panel through H2; L8 firmware not yet on the panel |
+| `EPD_SSD1677` | Waveshare 4.26" 800×480 | full only, OTP waveform (`22 F7`) | L8 layout only; L8 router firmware runs on H2 and draws the dashboard pushed by HA |
 
 Not supported: IL3820 panels (no OTP waveform; they need an own LUT tuned on
 the panel) and partial refresh on the UC8151D (needs an own register LUT
