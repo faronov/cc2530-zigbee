@@ -62,6 +62,28 @@ the panel) and partial refresh on the UC8151D (needs an own register LUT
 tuned on the panel). Vendor LUTs and OTP dumps are not part of this
 repository.
 
+### UC8151D partial refresh: plan
+
+A commercial Telink sensor with a 128×296 UC81xx panel (static analysis of
+its firmware; no values copied) does partial refresh as follows. The steps
+use only the UC8151 datasheet commands; the LUT itself must be our own,
+tuned on the panel.
+
+1. `PSR` (0x00) with the register-LUT bit set, so 0x20–0x24 are used
+   instead of the OTP waveform.
+2. Two LUT sets in RAM: a full one and a short single-phase partial one;
+   `0x20` VCOM, `0x21` WW, `0x22` BW, `0x23` WB, `0x24` BB are loaded
+   before each refresh type.
+3. Partial update: `0x50` CDI with a floating border (`0xD7` instead of
+   `0x97`, so the border is not driven), `0x91` PTIN, `0x90` PTL with the
+   window (HRST, HRED, VRST high/low, VRED high/low, PT_SCAN), the old frame
+   to `0x10`, the new frame to `0x13`, `0x12` refresh, `0x92` PTOUT.
+4. A full refresh with the full LUT and the normal border every N partials.
+
+The same sensor stores only the glyphs it needs (digits in a few sizes,
+`-`, `%`, `.`, a few marks) pre-rotated and column-major for the portrait
+panel, instead of a general font.
+
 Variants: `autonomous-pm2-epd`, `autonomous-pm2-sht3x-epd`,
 `autonomous-pm2-epd-factory` (UC8151D), `autonomous-pm2-epd-ssd1680`,
 `autonomous-pm2-epd-ssd1677` (L8) and `autonomous-pm2-epd-ssd1677-router`
