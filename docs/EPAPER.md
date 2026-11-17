@@ -63,8 +63,10 @@ tuned on the panel). Vendor LUTs and OTP dumps are not part of this
 repository.
 
 Variants: `autonomous-pm2-epd`, `autonomous-pm2-sht3x-epd`,
-`autonomous-pm2-epd-factory` (UC8151D), `autonomous-pm2-epd-ssd1680` and
-`autonomous-pm2-epd-ssd1677` (L8).
+`autonomous-pm2-epd-factory` (UC8151D), `autonomous-pm2-epd-ssd1680`,
+`autonomous-pm2-epd-ssd1677` (L8) and `autonomous-pm2-epd-ssd1677-router`
+(L8 with a router-parent initial join, `CC2530_ROUTER_JOIN`,
+[ED_JOIN.md](ED_JOIN.md#router-parent-initial-join-cc2530_router_join)).
 
 ## L8 dashboard (4.26" SSD1677)
 
@@ -77,9 +79,14 @@ row by row like D3 (100 octets per row, no frame buffer).
   (`Пн 21.04 14:32`, `-- --.-- --:--` until a time is written);
 - left half `ДОМА`: the device's temperature and humidity (7-segment);
 - right half `УЛИЦА`: outdoor temperature and humidity and a 96×96 weather
-  icon, all pushed by Home Assistant;
+  icon (a Material Design Icons weather icon, 48×48 drawn twice the size),
+  all pushed by Home Assistant;
+- temperatures and humidities use fixed-width digit cells: three for a
+  temperature (`21.4`, `-3.2`, and `5.3` behind a blank cell; at -10 °C and
+  below `-12` without a point) and two for a humidity (a blank cell in front
+  of a single digit), so the point and the unit stay in place;
 - four slots: a label (scale 1) and a value (7-segment for digits, `-`,
-  `.`, `,` and `:`, glyphs otherwise);
+  `.`, `,` and `:`, glyphs otherwise; a narrow `1`, so long values fit);
 - a message line (scale 2).
 
 Text uses the t0-16b-uni 8×16 font (ASCII, Cyrillic, `Ёё` and `°`); other
@@ -90,6 +97,14 @@ compares the C renderer with the goldens:
 
 ```sh
 python3 tools/epd/l8_art.py --fonts U8G2/tools/font/bdf [--check] [--png out.png]
+```
+
+The weather icons are a table in `l8_art.py`;
+[`tools/epd/l8_icons.py`](../tools/epd/l8_icons.py) documents and repeats
+it from the pinned `@mdi/svg` SVGs (needs cairosvg and Pillow):
+
+```sh
+python3 tools/epd/l8_icons.py [--svg DIR]
 ```
 
 ### Cluster 0xFC10
@@ -213,3 +228,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 The small text (`HUMIDITY`, `BATTERY` and the voltage) uses u8g2 squeezed bold 7, public
 domain.
+
+## Icon notice
+
+The L8 weather icons are rasterised from Material Design Icons
+(`@mdi/svg` 7.4.47) by [Pictogrammers](https://pictogrammers.com/),
+licensed under the Apache License, Version 2.0
+(<https://www.apache.org/licenses/LICENSE-2.0>). They are converted to
+48×48 bitmaps (modified). The other icons are drawn by the generator.

@@ -77,7 +77,9 @@ def value_codes(s):
 
 
 def temp_codes(centi):
-    """Tenths for -9.9 .. 99.9, whole degrees for -10 .. -99, otherwise --.-."""
+    """Tenths for -9.9 .. 99.9, whole degrees for -10 .. -99, otherwise --.-.
+    Three digit cells (0.0 .. 9.9 get a leading blank), so with fixed-width
+    digits the point and the unit stay put."""
     if centi is None or centi == -0x8000:
         return [SEG_MINUS, SEG_MINUS, SEG_DOT, SEG_MINUS]
     neg = centi < 0
@@ -86,6 +88,8 @@ def temp_codes(centi):
         neg = False
     if a <= (99 if neg else 999):
         s = ('-' if neg else '') + f'{a // 10}.{a % 10}'
+        if not neg and a < 100:
+            return [SEG_BLANK] + value_codes(s)
     elif neg and a <= 999:
         s = f'-{a // 10}'
     else:
@@ -96,7 +100,8 @@ def temp_codes(centi):
 def hum_codes(hum):
     if hum is None or hum == 0xffff:
         return [SEG_MINUS, SEG_MINUS]
-    return value_codes(str(min(99, (hum + 50) // 100)))
+    h = min(99, (hum + 50) // 100)
+    return ([SEG_BLANK] if h < 10 else []) + value_codes(str(h))
 
 
 def volt_codes(mv):
@@ -212,86 +217,136 @@ def label(font, s):
     return draw
 
 
-# Weather icons, 48x48 drawn at scale 2.
-def sun(d, cx=24, cy=24, r=9, ray=(13, 20), width=3):
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=1, width=width)
-    for k in range(8):
-        a = math.radians(k * 45)
-        d.line([(cx + ray[0] * math.cos(a), cy + ray[0] * math.sin(a)),
-                (cx + ray[1] * math.cos(a), cy + ray[1] * math.sin(a))], fill=1, width=width)
-
-
-def cloud(d, dx=0, dy=0, fill_inside=True):
-    parts = [(14, 24, 8), (25, 18, 11), (36, 25, 8)]
-    for cx, cy, r in parts:
-        d.ellipse([dx + cx - r, dy + cy - r, dx + cx + r, dy + cy + r], fill=1)
-    d.rectangle([dx + 6, dy + 24, dx + 44, dy + 33], fill=1)
-    for cx, cy, r in parts:
-        r -= 3
-        d.ellipse([dx + cx - r, dy + cy - r, dx + cx + r, dy + cy + r], fill=0)
-    d.rectangle([dx + 9, dy + 24, dx + 41, dy + 30], fill=0)
-
-
-def icon_sunny(d, w, h):
-    sun(d)
-
-
-def icon_night(d, w, h):
-    d.ellipse([8, 8, 40, 40], fill=1)
-    d.ellipse([18, 3, 46, 31], fill=0)
-    d.ellipse([11, 11, 37, 37], outline=0, width=0)
-
-
-def icon_partly(d, w, h):
-    sun(d, 17, 15, 7, (10, 14), 2)
-    d.rectangle([4, 20, 47, 47], fill=0)
-    d.ellipse([10, 12, 40, 42], fill=0)
-    cloud(d, 0, 8)
-
-
-def icon_cloudy(d, w, h):
-    cloud(d, 0, 2)
-
-
-def icon_rainy(d, w, h):
-    cloud(d, 0, -6)
-    for x in (14, 24, 34):
-        d.line([(x + 3, 32), (x - 3, 44)], fill=1, width=3)
-
-
-def icon_snowy(d, w, h):
-    cloud(d, 0, -6)
-    for x, y in ((14, 36), (24, 42), (34, 36)):
-        for a in (0, 60, 120):
-            r = math.radians(a)
-            d.line([(x - 4 * math.cos(r), y - 4 * math.sin(r)), (x + 4 * math.cos(r), y + 4 * math.sin(r))],
-                   fill=1, width=2)
-
-
-def icon_fog(d, w, h):
-    cloud(d, 0, -8)
-    for y, x0, x1 in ((32, 6, 42), (38, 2, 38), (44, 10, 46)):
-        d.rectangle([x0, y, x1, y + 2], fill=1)
-
-
-def icon_lightning(d, w, h):
-    cloud(d, 0, -6)
-    d.polygon([(26, 26), (16, 38), (23, 38), (19, 47), (31, 33), (24, 33), (28, 26)], fill=1)
-
-
-def icon_windy(d, w, h):
-    for y, x1, r in ((14, 34, 6), (24, 40, 0), (34, 30, 6)):
-        d.rectangle([4, y, x1, y + 2], fill=1)
-        if r:
-            d.arc([x1 - r, y - 2 * r + 2, x1 + r, y + 2], -90, 90, fill=1, width=3)
-
-
-def icon_none(d, w, h):
-    pass
-
-
-ICONS = (icon_none, icon_sunny, icon_night, icon_partly, icon_cloudy, icon_rainy, icon_snowy,
-         icon_fog, icon_lightning, icon_windy)
+# Weather icons 1..9 (WEATHER order), 48x48 drawn at scale 2.
+# Material Design Icons 7.4.47 (Apache-2.0), rasterised by tools/epd/l8_icons.py.
+MDI_ICONS = (
+    # weather-sunny
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x000001800000, 0x000001800000, 0x000003c00000, 0x000007e00000,
+     0x00000ff00000, 0x00000ff00000, 0x00001c380000, 0x000000000000,
+     0x000000000000, 0x007e00007f00, 0x01fc0ff03f80, 0x01f83ffc1f80,
+     0x01f87ffe1f00, 0x00f0ffff0f00, 0x00e1fe7f8f00, 0x0061f81f8600,
+     0x0063f00fc600, 0x0003e007c000, 0x0003e007c000, 0x0003c003c000,
+     0x0003c003c000, 0x0003e007c000, 0x0003e007c000, 0x0063f00fc600,
+     0x0061f81f8600, 0x00f1fe7f8f00, 0x00f0ffff0f00, 0x00f87ffe1f00,
+     0x01f83ffc1f80, 0x01fc0ff03f80, 0x00fe00007e00, 0x000000000000,
+     0x000000000000, 0x00001c380000, 0x00000ff00000, 0x00000fe00000,
+     0x000007e00000, 0x000003c00000, 0x000001800000, 0x000001800000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-night
+    (
+     0x000000000000, 0x000000000000, 0x000000300000, 0x000000300000,
+     0x000000300000, 0x000000780000, 0x000000780000, 0x000e00780000,
+     0x001f1fffe000, 0x003f0fffc000, 0x007f07ff8000, 0x00ff03ff0000,
+     0x01ff01fe0000, 0x01ff01fe0000, 0x03ff83ff0000, 0x03ef83cf0000,
+     0x07cf83870000, 0x07cf82010000, 0x0f8780000c00, 0x0f87c0000c00,
+     0x0f87c0000c00, 0x0f83e0001e00, 0x0f03e000ffc0, 0x0f01f0007f80,
+     0x0f01f8003f00, 0x0f00fc003f00, 0x0f807e003f00, 0x0f807f003300,
+     0x0f803f800000, 0x0f801fe00000, 0x07c00ff80000, 0x07c003ffc000,
+     0x03e001ffff00, 0x03f0007fff80, 0x01f0001fff80, 0x01f80003ff80,
+     0x00fe00007f00, 0x007f0000fe00, 0x003fc003fc00, 0x001ffc3ff800,
+     0x000ffffff000, 0x0003ffffc000, 0x0000ffff0000, 0x00003ffc0000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-partly-cloudy
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x000000380000, 0x002000fc0000, 0x007e00fc0000, 0x007e001c0000,
+     0x007800060000, 0x007000000000, 0x00607f800000, 0x0001ffe00000,
+     0x0003fff80000, 0x0007fffc0000, 0x000fe1fc0000, 0x001f807e0000,
+     0x001f003e1800, 0x003e001f1c00, 0x003e001f1f00, 0x043e001f0f00,
+     0x0c3c0fff0e00, 0x1c3c3fff0c00, 0x3c3effff0800, 0x3e3fffff8000,
+     0x0e3ffc3fc000, 0x061ff00fc000, 0x001fe007e000, 0x000fc003e000,
+     0x00ff8001f000, 0x01ff8001f000, 0x03ff0000f000, 0x07ff0000f000,
+     0x0fe00000ff80, 0x0f800000ffc0, 0x0f800000ffe0, 0x0f000000fff0,
+     0x0f00000001f0, 0x0f80000000f0, 0x0f80000000f0, 0x0fe0000001f0,
+     0x07fffffffff0, 0x03ffffffffe0, 0x01ffffffffc0, 0x00ffffffff80,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-cloudy
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x00001ff80000, 0x00007ffe0000,
+     0x0000ffff0000, 0x0001ffff8000, 0x0003fc3fc000, 0x0007e007e000,
+     0x000fc003f000, 0x000f8001f000, 0x00ff0000f800, 0x03fe00007800,
+     0x07fe00007800, 0x0ffe00007800, 0x1fe400003fc0, 0x1f8000003fe0,
+     0x3f0000003ff0, 0x3e0000003ff8, 0x3e00000001fc, 0x3c000000007c,
+     0x3c000000007c, 0x3e000000003c, 0x3e000000003c, 0x3f000000007c,
+     0x1f800000007c, 0x1fe0000001fc, 0x0ffffffffff8, 0x07fffffffff0,
+     0x03ffffffffe0, 0x00ffffffffc0, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-pouring
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x00001ff80000, 0x00007ffe0000, 0x0000ffff0000, 0x0001ffff8000,
+     0x0003fc3fc000, 0x0007e007e000, 0x000fc003f000, 0x000f8001f000,
+     0x00ff0000f800, 0x03fe00007800, 0x07fe00007800, 0x0ffe00007800,
+     0x1fe400003fc0, 0x1f8000003fe0, 0x3f0000003ff0, 0x3e0000003ff8,
+     0x3e00000001fc, 0x3c000000007c, 0x3c000000007c, 0x3e000000003c,
+     0x3e00e0e0e03c, 0x3f01f1f1f07c, 0x1f81f1f1f07c, 0x1fc1e1e1e1fc,
+     0x0fc3e3e3e1f8, 0x07c3e3e3e1f0, 0x03c3e3e3e1e0, 0x0003c3c3c000,
+     0x0007c7c7c000, 0x0007c7c7c000, 0x0007c7c7c000, 0x00078f878000,
+     0x00078f878000, 0x00030f830000, 0x00000f800000, 0x00001f000000,
+     0x00001f000000, 0x00001f000000, 0x00001e000000, 0x00000c000000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-snowy
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x00001ff80000, 0x00007ffe0000, 0x0000ffff0000, 0x0001ffff8000,
+     0x0003fc3fc000, 0x0007e007e000, 0x000fc003f000, 0x000f8001f000,
+     0x00ff0000f800, 0x03fe00007800, 0x07fe00007800, 0x0ffe00007800,
+     0x1fe400003fc0, 0x1f8000003fe0, 0x3f0000003ff0, 0x3e0000003ff8,
+     0x3e00000001fc, 0x3c000000007c, 0x3c000000007c, 0x3e000000003c,
+     0x3e000000003c, 0x3f000000007c, 0x1f800070007c, 0x1fe000f001fc,
+     0x0ffc70f03ff8, 0x07fcf9f03ff0, 0x03fcfdf03fe0, 0x00fcfff03fc0,
+     0x00007fefc000, 0x00003fffc000, 0x00001fffc000, 0x00007fff8000,
+     0x0001fffe0000, 0x0003fff80000, 0x0003fffc0000, 0x0003f7fe0000,
+     0x00000fff0000, 0x00000fbf0000, 0x00000f9f0000, 0x00000f0e0000,
+     0x00000f000000, 0x00000e000000, 0x000000000000, 0x000000000000,),
+    # weather-fog
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x00001ff80000, 0x00007ffe0000,
+     0x0000ffff0000, 0x0001ffff8000, 0x0003fc3fc000, 0x0007e007e000,
+     0x000fc003f000, 0x000f8001f000, 0x00ff0000f800, 0x03fe00007800,
+     0x07fe00007800, 0x0ffe00007800, 0x1fe400003fc0, 0x1f8000003fe0,
+     0x3f0000003ff0, 0x3e0000003ff8, 0x3e00000001fc, 0x3c000000007c,
+     0x3c000000007c, 0x3e000000003c, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x0ffffff3fff0, 0x0ffffff3fff0,
+     0x0ffffff3fff0, 0x0ffffff3fff0, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x0ff3fffffff0, 0x0ff3fffffff0,
+     0x0ff3fffffff0, 0x0ff3fffffff0, 0x000000000000, 0x000000000000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-lightning-rainy
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x00001ff80000, 0x00007ffe0000, 0x0000ffff0000, 0x0001ffff8000,
+     0x0003fc3fc000, 0x0007e007e000, 0x000fc003f000, 0x000f8001f000,
+     0x00ff0000f800, 0x03fe00007800, 0x07fe00007800, 0x0ffe00007800,
+     0x1fe400003fc0, 0x1f8000003fe0, 0x3f0000003ff0, 0x3e0000003ff8,
+     0x3e00000001fc, 0x3c000000007c, 0x3c003f80007c, 0x3e003f80003c,
+     0x3e003f00003c, 0x3f007f00007c, 0x1f807e00007c, 0x1fc0fe0001fc,
+     0x0fc0fc000ff8, 0x07c0fc020ff0, 0x03c1ff870fe0, 0x0001ff8f8fc0,
+     0x0003ff0f8000, 0x0003fe1fc000, 0x00001e3fe000, 0x00003c3fe000,
+     0x00003c3fe000, 0x0000383fe000, 0x0000383fe000, 0x0000303fe000,
+     0x0000301fc000, 0x0000200f8000, 0x000060000000, 0x000040000000,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+    # weather-windy-variant
+    (
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x00000ff00000, 0x00003ffc0000, 0x00007ffe0000, 0x0000ffff0000,
+     0x0001fe7f8000, 0x0003f00fc000, 0x0003e007c000, 0x0007c003e000,
+     0x00ffc003e000, 0x01ffc003e000, 0x03ff8001e000, 0x07ff8001e000,
+     0x0fe00001ff80, 0x0f800001ffc0, 0x0f800001ffe0, 0x0f000001fff0,
+     0x0f00000001f0, 0x0f80000000f0, 0x0f80000000f0, 0x0fe0000001f0,
+     0x07fffffffff0, 0x03ffffffffe0, 0x01ffffffffc0, 0x00ffffffff80,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,
+     0x03fffffffe00, 0x03ffffffff00, 0x03ffffffff80, 0x03ffffffffc0,
+     0x0000000007c0, 0x0000000003c0, 0x0000000003c0, 0x00000001e7c0,
+     0x00000001ffc0, 0x00000001ff80, 0x00000000ff00, 0x000000007e00,
+     0x000000000000, 0x000000000000, 0x000000000000, 0x000000000000,),
+)
 
 font_table_cache = [None, None]
 
@@ -321,7 +376,8 @@ def sprite_defs():
 
 
 def elements(v):
-    """(kind, x, y, clip, codes); kind 1/2 text scale, 'L'/'M' numbers."""
+    """(kind, x, y, clip, codes); kind 1/2 text scale, 'L'/'M' numbers (fixed-width
+    digits), 'S' slot values (size M, narrow digit 1)."""
     deg_c = glyph_codes('°C')
     pct = glyph_codes('%')
     e = [
@@ -336,7 +392,7 @@ def elements(v):
     for k, (lab, val) in enumerate(v.get('slots', [])):
         x0 = k * 200
         e.append((1, x0 + 16, 296, x0 + 192, glyph_codes(lab)))
-        e.append(('M', x0 + 16, 324, x0 + 192, value_codes(val)))
+        e.append(('S', x0 + 16, 324, x0 + 192, value_codes(val)))
     e.append((2, 16, 424, 784, glyph_codes(v.get('message', ''))))
     return e
 
@@ -384,13 +440,13 @@ def seg_spans(mask, dy, w, ht, h):
     return out
 
 
-def number_row(row, x, y, clip, codes, size, fy, font):
+def number_row(row, x, y, clip, codes, size, fy, font, narrow1=False):
     w, ht, h, gap = size
     dy = fy - y
     for c in codes:
         if c >= SEG_DIGIT:
             shift = 0
-            if c in (SEG_DOT, SEG_COLON, SEG_DIGIT + 1):
+            if c in (SEG_DOT, SEG_COLON) or (narrow1 and c == SEG_DIGIT + 1):
                 adv = 2 * h + 1
                 if c == SEG_DIGIT + 1:
                     shift = w - 2 * h
@@ -447,8 +503,8 @@ def render_row(v, fy, font, sprites, icons):
     if 0 <= r < 48 and v.get('weather'):
         row.bits(wx, double(icons[v['weather']][r], 48), 96)
     for kind, x, y, clip, codes in elements(v):
-        if kind in ('L', 'M'):
-            number_row(row, x, y, clip, codes, SIZE_L if kind == 'L' else SIZE_M, fy, font)
+        if kind in ('L', 'M', 'S'):
+            number_row(row, x, y, clip, codes, SIZE_L if kind == 'L' else SIZE_M, fy, font, kind == 'S')
         else:
             text_row(row, x, y, clip, codes, kind, fy, font)
     return bytes(row.o)
@@ -466,7 +522,7 @@ def load(fonts):
     font = font_table(parse_bdf(Path(fonts) / 't0-16b-uni.bdf'))
     font_table_cache[1] = font
     sprites = [(x, y, w, h, bitmap(w, h, draw)) for x, y, w, h, draw in sprite_defs()]
-    icons = [bitmap(48, 48, draw) for draw in ICONS]
+    icons = [[0] * 48] + [list(rows) for rows in MDI_ICONS]
     return font, sprites, icons
 
 
@@ -498,7 +554,9 @@ CASES = [
 NOTICE = """/* Generated by tools/epd/l8_art.py; do not edit.
  * Glyph pixels come from t0-16b-uni of the u8g2 collection. Copyright (C)
  * 2012-2025 Uwe Waldmann. MIT-style licence (see docs/EPAPER.md for the
- * full notice). The icons are drawn by the generator. */
+ * full notice). Weather icons: Material Design Icons by Pictogrammers,
+ * Apache License 2.0 (tools/epd/l8_icons.py). Other icons are drawn by the
+ * generator. */
 """
 ART = Path(__file__).resolve().parents[2] / 'include' / 'epd_l8_art.h'
 GOLDEN = Path(__file__).resolve().parents[2] / 'tests' / 'epd_l8_golden.h'

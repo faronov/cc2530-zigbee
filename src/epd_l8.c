@@ -20,14 +20,19 @@ MCU_XDATA epd_l8_t epd_l8;
 #define L8_DIGIT G('0')
 #define L8_MINUS G('-')
 #define L8_DOT G('.')
+/* A digit-wide blank (not a glyph code): pads temperatures and humidities
+ * to a fixed number of digit cells. */
+#define L8_BLANK 0xfeu
 #define L8_TEXT_MAX 72u
 #define CYRILLIC 95u
 #define YO 159u
 #define YO_SMALL 160u
 
 /* 7-segment number sizes: digit width w, height ht (w + 1 and ht + 1
- * pixels), half stroke h, gap between characters. */
-static const MCU_CODE uint8_t l8_size[2][4] = { { 52, 100, 7, 10 }, { 30, 56, 4, 6 } };
+ * pixels), half stroke h, gap between characters. Size 2 (slot values) is
+ * size 1 with a narrow digit 1. */
+#define L8_SLOT 2u
+static const MCU_CODE uint8_t l8_size[3][4] = { { 52, 100, 7, 10 }, { 30, 56, 4, 6 }, { 30, 56, 4, 6 } };
 static const MCU_CODE uint8_t l8_double[16] = {
     0x00, 0x03, 0x0c, 0x0f, 0x30, 0x33, 0x3c, 0x3f, 0xc0, 0xc3, 0xcc, 0xcf, 0xf0, 0xf3, 0xfc, 0xff
 };
@@ -155,23 +160,25 @@ static __attribute__((noinline)) void MCU_COMMON_CODE l8_digit(uint16_t x, uint8
 }
 
 /* A number at size: digits, '-', '.', ',' and ':' are 7-segment shapes
- * (1, dots and colons narrow), other glyphs doubled. */
+ * (digits one cell wide, at L8_SLOT the 1 narrow; dots and colons narrow;
+ * L8_BLANK an empty cell), other glyphs doubled. */
 static void l8_number(uint16_t x, uint16_t y, uint16_t clip, const uint8_t MCU_XDATA *codes, uint8_t n,
     uint8_t size, uint16_t fy)
 {
     const MCU_CODE uint8_t *z = l8_size[size];
-    uint8_t w = z[0], ht = z[1], h = z[2], c, adv, d, dy;
+    uint8_t w = z[0], ht = z[1], h = z[2], c, adv, d, dy, one;
     if (fy < y || fy - y > ht) return;
     dy = (uint8_t)(fy - y);
     for (; n && (c = *codes) != EPD_L8_END; n--, codes++) {
         d = (uint8_t)(c - L8_DIGIT);
-        if (d >= 10u && c != L8_MINUS && c != L8_DOT && c != G(',') && c != G(':')) {
+        if (d >= 10u && c != L8_MINUS && c != L8_BLANK && c != L8_DOT && c != G(',') && c != G(':')) {
             if (x + 16u > clip) return;
             if (dy < 32u) l8_put2(x, l8_glyph(c, dy >> 1));
             x += 16u;
             continue;
         }
-        adv = d == 1u || (d >= 10u && c != L8_MINUS) ? (uint8_t)(2u * h + 1u) : (uint8_t)(w + 1u);
+        one = d == 1u && size == L8_SLOT;
+        adv = one || (d >= 10u && c != L8_MINUS && c != L8_BLANK) ? (uint8_t)(2u * h + 1u) : (uint8_t)(w + 1u);
         if (x + adv > clip) return;
         if (c == L8_DOT || c == G(',')) {
             if (dy >= ht - 2u * h) l8_bar(x, 0, (uint8_t)(2u * h));
@@ -179,8 +186,8 @@ static void l8_number(uint16_t x, uint16_t y, uint16_t clip, const uint8_t MCU_X
             d = (uint8_t)(ht / 4u);
             if ((dy >= d - h && dy <= d + h) || (dy >= 3u * d - h && dy <= 3u * d + h))
                 l8_bar(x, 0, (uint8_t)(2u * h));
-        } else {
-            l8_digit(x, c == L8_MINUS ? 0x40u : segment[d], dy, z, (uint8_t)(d == 1u ? h : w - h));
+        } else if (c != L8_BLANK) {
+            l8_digit(x, c == L8_MINUS ? 0x40u : segment[d], dy, z, (uint8_t)(one ? h : w - h));
         }
         x += (uint8_t)(adv + z[3]);
     }
@@ -215,13 +222,13 @@ void epd_render(const epd_view_t MCU_XDATA *view, uint16_t row) JOIN_FAR
     l8_number(528, 206, 796, view->outdoor_humidity, sizeof(view->outdoor_humidity), 1, fy);
     for (i = 0, x = 16; i < EPD_L8_SLOTS; i++, x += 200u) {
         l8_text(x, 296, (uint16_t)(x + 176u), epd_l8.label[i], EPD_L8_LABEL, 1, fy);
-        l8_number(x, 324, (uint16_t)(x + 176u), epd_l8.value[i], EPD_L8_VALUE, 1, fy);
+        l8_number(x, 324, (uint16_t)(x + 176u), epd_l8.value[i], EPD_L8_VALUE, L8_SLOT, fy);
     }
     l8_text(16, 424, 784, epd_l8.message, EPD_L8_MESSAGE, 2, fy);
 }
 
 /* --- formatting into glyph codes --- */
-static uint8_t MCU_XDATA *l8_two(uint8_t MCU_XDATA *p, uint8_t v)
+static __attribute__((noinline)) uint8_t MCU_XDATA * MCU_COMMON_CODE l8_two(uint8_t MCU_XDATA *p, uint8_t v)
 {
     *p++ = (uint8_t)(L8_DIGIT + v / 10u);
     *p++ = (uint8_t)(L8_DIGIT + v % 10u);
@@ -229,7 +236,7 @@ static uint8_t MCU_XDATA *l8_two(uint8_t MCU_XDATA *p, uint8_t v)
 }
 
 /* v (< 1000) without leading zeros. */
-static uint8_t MCU_XDATA *l8_decimal(uint8_t MCU_XDATA *p, uint16_t v)
+static uint8_t MCU_XDATA * MCU_COMMON_CODE l8_decimal(uint8_t MCU_XDATA *p, uint16_t v)
 {
     if (v >= 100u) { *p++ = (uint8_t)(L8_DIGIT + v / 100u); v %= 100u; return l8_two(p, (uint8_t)v); }
     if (v >= 10u) return l8_two(p, (uint8_t)v);
@@ -238,8 +245,9 @@ static uint8_t MCU_XDATA *l8_decimal(uint8_t MCU_XDATA *p, uint16_t v)
 }
 
 /* Tenths for -9.9 .. 99.9, whole degrees for -10 .. -99, otherwise ---;
- * 0x8000 shows --.-. */
-static void l8_temperature(uint8_t MCU_XDATA *p, int16_t centi)
+ * 0x8000 shows --.-. Always three digit cells (0.0 .. 9.9 lead with
+ * L8_BLANK), so the point and the unit do not move. */
+static void MCU_COMMON_CODE l8_temperature(uint8_t MCU_XDATA *p, int16_t centi)
 {
     uint16_t a;
     uint8_t neg;
@@ -249,17 +257,13 @@ static void l8_temperature(uint8_t MCU_XDATA *p, int16_t centi)
         neg = centi < 0;
         a = neg ? (uint16_t)-(uint16_t)centi : (uint16_t)centi;
         a = (uint16_t)(a + 5u) / 10u;
-        if (!a) neg = 0;
-        if (a <= (neg ? 99u : 999u)) {
-            if (neg) *p++ = L8_MINUS;
-            p = l8_decimal(p, a / 10u);
-            *p++ = L8_DOT;
-            *p++ = (uint8_t)(L8_DIGIT + a % 10u);
-        } else if (neg && a <= 999u) {
-            *p++ = L8_MINUS;
-            p = l8_decimal(p, a / 10u);
-        } else {
+        if (a > 999u) {
             *p++ = L8_MINUS; *p++ = L8_MINUS; *p++ = L8_MINUS;
+        } else {
+            if (neg && a) *p++ = L8_MINUS;
+            else if (a < 100u) *p++ = L8_BLANK;
+            p = l8_decimal(p, a / 10u);
+            if (!neg || a < 100u) { *p++ = L8_DOT; *p++ = (uint8_t)(L8_DIGIT + a % 10u); }
         }
     }
     *p++ = EPD_L8_DEGREE; *p++ = G('C'); *p = EPD_L8_END;
@@ -268,7 +272,11 @@ static void l8_temperature(uint8_t MCU_XDATA *p, int16_t centi)
 static void l8_humidity(uint8_t MCU_XDATA *p, uint16_t humidity)
 {
     if (humidity == 0xffffu) { *p++ = L8_MINUS; *p++ = L8_MINUS; }
-    else p = l8_decimal(p, humidity >= 9850u ? 99u : (uint16_t)(humidity + 50u) / 100u);
+    else {
+        humidity = humidity >= 9850u ? 99u : (uint16_t)(humidity + 50u) / 100u;
+        if (humidity < 10u) *p++ = L8_BLANK;
+        p = l8_decimal(p, humidity);
+    }
     *p++ = G('%'); *p = EPD_L8_END;
 }
 
@@ -279,20 +287,22 @@ static const MCU_CODE uint8_t l8_no_clock[14] = {
 
 /* Local seconds since 2000-01-01 as weekday dd.mm hh:mm (every fourth year
  * a leap year). */
-static void l8_clock(uint8_t MCU_XDATA *p, uint32_t t)
+static __attribute__((noinline)) void l8_clock(uint8_t MCU_XDATA *p, uint32_t t)
 {
-    uint16_t days, n;
-    uint32_t rest;
+    uint16_t days, n, minutes;
+    const MCU_CODE uint8_t *w;
     uint8_t y = 0, m = 0;
     if (!t) {
         for (m = 0; m < sizeof(l8_no_clock); m++) p[m] = l8_no_clock[m];
         p[m] = EPD_L8_END;
         return;
     }
-    days = (uint16_t)(t / 86400UL);
-    rest = t % 86400UL;
-    *p++ = l8_weekday[days % 7u][0];
-    *p++ = l8_weekday[days % 7u][1];
+    t /= 60u;
+    days = (uint16_t)(t / 1440u);
+    minutes = (uint16_t)t - days * 1440u;
+    w = l8_weekday[days % 7u];
+    *p++ = w[0];
+    *p++ = w[1];
     *p++ = G(' ');
     for (;; y++) {
         n = (y & 3u) ? 365u : 366u;
@@ -308,9 +318,9 @@ static void l8_clock(uint8_t MCU_XDATA *p, uint32_t t)
     *p++ = L8_DOT;
     p = l8_two(p, (uint8_t)(m + 1u));
     *p++ = G(' ');
-    p = l8_two(p, (uint8_t)(rest / 3600UL));
+    p = l8_two(p, (uint8_t)(minutes / 60u));
     *p++ = G(':');
-    p = l8_two(p, (uint8_t)((uint16_t)(rest % 3600UL) / 60u));
+    p = l8_two(p, (uint8_t)(minutes % 60u));
     *p = EPD_L8_END;
 }
 

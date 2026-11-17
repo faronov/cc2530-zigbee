@@ -32,8 +32,9 @@ network belongs to the intended HA installation.
 ### Router-parent initial join (`CC2530_ROUTER_JOIN`)
 
 `CC2530_ROUTER_JOIN` (requires `CC2530_PARENT_RECOVERY` and
-`CC2530_DEFAULT_TC_KEY`; no image in this repository enables it, an
-[external application](EXTERNAL_APP.md) opts in) lets a fresh
+`CC2530_DEFAULT_TC_KEY`; in this repository only the opt-in
+`autonomous-pm2-epd-ssd1677-router` LLVM variant enables it, an
+[external application](EXTERNAL_APP.md) can opt in) lets a fresh
 join use a permitting router as parent. All other images keep the
 direct-coordinator policy above.
 
@@ -1195,7 +1196,9 @@ add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`);
 `autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`;
 `autonomous-pm2-epd-ssd1677` sets `CC2530_EPD_PANEL=EPD_SSD1677`, the 4.26"
 800×480 panel with the Home Assistant L8 dashboard and cluster 0xFC10
-([EPAPER.md](EPAPER.md#l8-dashboard-426-ssd1677)). It
+([EPAPER.md](EPAPER.md#l8-dashboard-426-ssd1677));
+`autonomous-pm2-epd-ssd1677-router` adds the router-parent initial join
+(`CC2530_ROUTER_JOIN`, above). It
 requires the LG ESL29 board and `CC2530_CHIP_SENSE` (a build error
 otherwise). The fixed 45-unit LLVM link is kept: `boards/lg_esl29_rev03.c`
 includes [`src/epd.c`](../src/epd.c). The driver is in common code
