@@ -127,4 +127,7 @@ make -C cc2530-zigbee test-app-host APP_DIR=$PWD BUILD=$PWD/build/host \
 
 This builds the test with the join-smoke host flags, `CC2530_APP` and
 `CC2530_BOARD=2`, plus `-I<app>/include -I<app>/src`. It runs both the plain
-binary and an ASan/UBSan binary.
+binary and an ASan/UBSan binary. `APP_HOST_SOURCES` adds translation units
+linked with the test: application paths are relative to `APP_DIR`, and stack
+sources take a `stack:` prefix, for example
+`APP_HOST_SOURCES="src/zcl_app.c stack:src/zcl_frame.c"`.
