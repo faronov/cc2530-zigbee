@@ -42,6 +42,8 @@ static host_mmio_cycles_hook_t crypto_cycles;
 static uint8_t sent_body[125], sent_length, sent_wait, command_wait;
 static uint8_t transport_sent, corrupt_sent, response_sent, app_sent, repeated_sent, drop_checked;
 static unsigned scenario, e2e_checks, e2e_steps, random_inputs, received_frames;
+/* Nonzero: CCA never clears on this channel (persistent Wi-Fi overlap). */
+static unsigned cca_busy_channel;
 static unsigned totals, total_peer_checks, total_steps, total_random;
 static uint32_t test_prng;
 static uint32_t bad_serial;
@@ -155,7 +157,8 @@ static void joint_store(uint8_t a, uint8_t before, uint8_t value)
                     (scenario == RETRY_CANCEL && device.phase == BDB_JOIN_NODE && !race_started) ||
                     (scenario == POLL_ACK_LOST_RESPONSE && device.phase == BDB_JOIN_ASSOCIATING &&
                      response_fcf == 0x12 && association_polls == 1));
-        cca_clear = !(scenario == POLL_BUSY && device.attempts == 1 && response_fcf == 0x12);
+        cca_clear = !(scenario == POLL_BUSY && device.attempts == 1 && response_fcf == 0x12) &&
+            !(cca_busy_channel && XR(0x618f) == 11u+5u*(cca_busy_channel-11u));
         if ((scenario == POLL_NO_ACK || scenario == POLL_BUSY) &&
             device.attempts == 1 && response_fcf == 0x12) poll_attempts++;
 #if defined(CC2530_RX_OFF_IDLE)

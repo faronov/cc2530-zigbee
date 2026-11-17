@@ -121,10 +121,15 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
     memcpy(work.policy.extended_pan_id, bdb_join_keys.config.extended_pan, 8);
     work.policy.minimum_known = 1; work.policy.minimum_update_id = bdb_join_keys.config.update_id;
 #else
-    if (ctx->work.scan.overflow || ctx->work.scan.unscanned) return BDB_JOIN_NO_PARENT;
 #if defined(CC2530_ROUTER_JOIN)
+    /* A channel that never clears CCA (Wi-Fi overlap) stays unscanned on
+     * every attempt; one non-mixed open network found elsewhere is taken. */
+    if (ctx->work.scan.overflow ||
+        (ctx->work.scan.unscanned && !ctx->work.scan.candidates.count)) return BDB_JOIN_NO_PARENT;
     /* A nonzero mask also blocks the lost-beacon rescan: ambiguity is final. */
     if (ctx->work.scan.candidates.mixed) { work.policy.potential_mask = 1; return BDB_JOIN_NO_PARENT; }
+#else
+    if (ctx->work.scan.overflow || ctx->work.scan.unscanned) return BDB_JOIN_NO_PARENT;
 #endif
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY) && defined(CC2530_ROUTER_JOIN)

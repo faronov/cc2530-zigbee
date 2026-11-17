@@ -69,7 +69,10 @@ static uint32_t recommission_used[2];
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
-       CALLER_WRONG_TC, CALLER_BUSY=28 };
+       CALLER_WRONG_TC, CALLER_BUSY=28, CALLER_CCA_BUSY };
+/* CALLER_CCA_BUSY: channel 25 never clears CCA, so it stays unscanned. Router
+ * join still takes the one open network on 15; strict policies refuse. */
+#define CCA_BUSY_CHANNEL 25u
 /* CALLER_BUSY: a network-wide permit (HIL LH16B). More permitting routers
  * than candidate capacity beacon before the coordinator; still READY. */
 #define BUSY_ROUTERS 6u
@@ -664,6 +667,10 @@ static void prepare_caller(unsigned selected)
          * per-scan work cap at host stepping speed. */
         join_smoke_phase.admission.join.scan.duration=0;
     }
+    if(selected==CALLER_CCA_BUSY) {
+        join_smoke_phase.admission.join.scan.channels=(1UL<<15)|(1UL<<CCA_BUSY_CHANNEL);
+        cca_busy_channel=CCA_BUSY_CHANNEL;
+    }
     if(selected==CALLER_CLOSED) {
         mac_frame_info_t beacon;
         assert(mac_frame_decode(link_beacon,link_beacon_length,&beacon)==MAC_CODEC_OK);
@@ -699,7 +706,7 @@ int main(int argc, char **argv)
     recovery_selected=selected;
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert((selected<=CALLER_WRONG_TC && selected!=7) || selected==CALLER_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || selected==CALLER_BUSY || selected==CALLER_CCA_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
 #else
     assert(selected<=CALLER_FLASH_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
     if(selected==7) return reference_e2e_main();
@@ -806,12 +813,17 @@ int main(int argc, char **argv)
                 } else if(selected==6
 #if defined(CC2530_DEFAULT_TC_KEY)
                     || selected==CALLER_AMBIGUOUS || selected==CALLER_CLOSED || selected==CALLER_OVERFLOW
+#if !defined(CC2530_ROUTER_JOIN)
+                    || selected==CALLER_CCA_BUSY
+#endif
 #endif
                     ) {
                     assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
                     assert(join_smoke_device.result==BDB_JOIN_NO_PARENT);
 #if defined(CC2530_DEFAULT_TC_KEY)
                     assert(!response_sent && !security_joint_flash_commands());
+                    if(selected==CALLER_CCA_BUSY)
+                        assert(join_smoke_device.scan_result.unscanned==1UL<<CCA_BUSY_CHANNEL);
 #if defined(CC2530_ROUTER_JOIN)
                     /* Strongest-beacon eviction never overflows; the extra
                      * EPIDs make the scan mixed, which still refuses. */
@@ -906,6 +918,9 @@ int main(int argc, char **argv)
                     if(selected==CALLER_ALL_CHANNELS)
                         assert(join_smoke_device.scan_result.sent==NWK_CANDIDATES_CHANNEL_MASK &&
                             !join_smoke_device.scan_result.unscanned);
+                    if(selected==CALLER_CCA_BUSY)
+                        assert(join_smoke_device.scan_result.unscanned==1UL<<CCA_BUSY_CHANNEL &&
+                            join_smoke_device.parent.candidate.channel==15);
                     if(selected==CALLER_BUSY)
                         assert(caller_extra_beacons==BUSY_ROUTERS && !join_smoke_device.scan_result.overflow &&
                             join_smoke_device.scan_result.candidates==BUSY_CANDIDATES);

@@ -45,6 +45,14 @@ direct-coordinator policy above.
   mixed, even when it is not kept. A mixed table fails with `NO_PARENT`
   without the lost-beacon rescan. The best score gets link cost 1 and the
   others 3. Recovery tables stay parent-filtered and still report `FULL`.
+- Unscanned channels: a channel whose Beacon Request never clears CCA
+  (`CHANNEL_ACCESS` after the CSMA retries) stays unscanned. The strict
+  policy fails such a scan with `NO_PARENT`. Router join only fails it
+  when the table is empty, and otherwise takes the single non-mixed network.
+  On H2, BDB primary channel 25 overlaps busy Wi-Fi and never cleared CCA.
+  That rejected every scan, even with four permitting routers on 15.
+  A network that beacons only on the unscanned channel goes unseen.
+  Join-smoke case 29 covers both policies, with channel 25 always CCA-busy.
 - Unbound router state: after association through a router (short address not
   0000), `security_keys_router_parent()` stages the K3 router record with the
   `UNBOUND` flag and router IEEE = configured TC placeholder. While unbound:
