@@ -1280,6 +1280,11 @@ security_keys_result_t security_keys_leave(
     }
     set_phase(SECURITY_KEYS_LEFT);
     w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
+#if defined(CC2530_ROUTER_JOIN)
+    /* UNBOUND is valid only while ASSOCIATED: forget the never-bound parent
+     * (no network key, so it holds no replay history). */
+    if (unbound()) memset(w.record+ROUTER, 0, 144u-ROUTER);
+#endif
     r = save();
     if (r == SECURITY_KEYS_OK) {
         if (network()) r = publish(out, capacity, written);
