@@ -2266,3 +2266,24 @@ This repository's stack proofs decode CODE bytes themselves and do not read
 `llvm-objdump` text, so their results are unaffected. Tools that parse `llvm-objdump`
 output, such as the FlowerX GP `tools/stack.py`, reported recursion through the phantom
 calls on images containing `DEC direct`.
+
+## 30. Size work: outliner, relaxation, switch tables
+
+Pinned LLVM `00b40cfd8bd0c4319f7b379168139517f3ae65f0` (branch `mcs51-size-opt`, on
+top of §29) ports the devbis/llvm-mcs51 size work and fixes found while bringing it up:
+
+- machine outlining for `-Oz`, with helpers kept collectible and placed by LLD in
+  their callers' bank; instructions that address SP directly are never outlined,
+  because the outlined call shifts SP by two (stack-argument reads were off by two);
+- LLD relaxation of same-bank `LCALL`/`LJMP` and same-section transfers to
+  `ACALL`/`AJMP`/short branches, with corrected size accounting, page-boundary
+  handling and bank-call trampolines kept in their full shape;
+- `BR_JT` switch tables (operand type, size and table limit fixed) and common-bank
+  spill; bit branches for single-bit tests; smaller 32-bit multiply runtime; masked
+  constant word shifts; a smaller LTO pipeline for `-Oz`;
+- diagnostics for bit accesses with a variable address.
+
+The LG join image with the e-paper dashboard application shrinks from about 244 KB to
+209 KB and fits again; the 193 MCS-51 lit tests pass. Proofs accept relaxed calls and
+outlined helpers (`gp_proof.py`). Parent LQI and the full join ran on hardware (H2) with
+this toolchain. FULL was not run.
