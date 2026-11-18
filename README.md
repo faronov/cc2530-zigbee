@@ -7,8 +7,8 @@
 
 An experimental CC2530 Zigbee end-device project, without proprietary TI stack
 libraries. Firmware uses **Clang MCS51, LLD and the runtime from exactly
-`00b40cfd8bd0c4319f7b379168139517f3ae65f0`** in
-[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/00b40cfd8bd0c4319f7b379168139517f3ae65f0).
+`8b581288615a174b86258eb90b5e702ca8a83d93`** in
+[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/8b581288615a174b86258eb90b5e702ca8a83d93).
 The machine-readable pin is [toolchain.json](tools/llvm/toolchain.json).
 SDCC firmware compilation, linker/overlay builds and production CI are retired;
 there is no compiler fallback.
@@ -19,7 +19,8 @@ its `bit-toggle.c` regression, plus the ACC-bit branch fix (implicit use of A, w
 plus the `llvm-objdump` decoding of `DEC direct`
 ([study §29](docs/LLVM_MCS51_PORT_STUDY.md#29-disassembler-dec-direct))
 and the size work of
-[study §30](docs/LLVM_MCS51_PORT_STUDY.md#30-size-work-outliner-relaxation-switch-tables);
+[study §30](docs/LLVM_MCS51_PORT_STUDY.md#30-size-work-outliner-relaxation-switch-tables)
+and word arguments in R2..R5 ([study §31](docs/LLVM_MCS51_PORT_STUDY.md#31-word-arguments-in-r2r5--mcs51-rn-words));
 the frozen UNIFY-01 and M6 revisions are unchanged.
 
 With that clean LLVM source checkout, its built tools, GNU Make, a host C compiler

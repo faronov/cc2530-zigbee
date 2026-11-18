@@ -2269,8 +2269,8 @@ calls on images containing `DEC direct`.
 
 ## 30. Size work: outliner, relaxation, switch tables
 
-Pinned LLVM `00b40cfd8bd0c4319f7b379168139517f3ae65f0` (branch `mcs51-size-opt`, on
-top of §29) ports the devbis/llvm-mcs51 size work and fixes found while bringing it up:
+LLVM `00b40cfd8bd0` (branch `mcs51-size-opt`, on top of §29) ports the devbis/llvm-mcs51
+size work and fixes found while bringing it up:
 
 - machine outlining for `-Oz`, with helpers kept collectible and placed by LLD in
   their callers' bank; instructions that address SP directly are never outlined,
@@ -2287,3 +2287,22 @@ The LG join image with the e-paper dashboard application shrinks from about 244 
 209 KB and fits again; the 193 MCS-51 lit tests pass. Proofs accept relaxed calls and
 outlined helpers (`gp_proof.py`). Parent LQI and the full join ran on hardware (H2) with
 this toolchain. FULL was not run.
+
+## 31. Word arguments in R2..R5 (`-mcs51-rn-words`)
+
+Pinned LLVM `8b581288615a174b86258eb90b5e702ca8a83d93` (branch `mcs51-size-opt`, on top
+of §30) adds `-mcs51-rn-words`, and `profile.json` enables it. The first word arguments
+and word results move from IP0..IP3 (direct 48..55) to R2R3/R4R5 (bank-0 direct 2..5).
+The AsmPrinter then emits the one-byte-shorter Rn forms, and `getInstSizeInBytes` reports
+those exact sizes to relaxation and the outliner.
+
+- The option requires `-mcs51-csr=none`. Without it, output is byte-identical to §30.
+- The hand-written `__ashlsi3`/`__lshrsi3`/`__ashrsi3` in `mcs51-runtime.c` read direct
+  48..53. Calls to them keep the old convention (`CC_MCS51_IMWords`). The first
+  rn-words image without this fix never transmitted: its MAC radio driver faulted
+  (join status reason `DRIVER`, result `RADIO`).
+- `gp_proof.py` accepts the R2..R5 argument bases.
+- LG join with the e-paper dashboard: 209,095 → 194,459 bytes (−7%). It passes
+  admission, and MCUEMU matches the previous frame sequence. On hardware (H2) it does a
+  fresh join, gets Transport Key, sends Device Announce, completes the ZHA interview and
+  reports, and polls at 4/s. The 215 MCS-51 lit tests pass. FULL was not run.

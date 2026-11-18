@@ -1,6 +1,10 @@
-import re, sys, json, glob
-ARGS = {"timebase_deadline_after": [(56, "deadline")], "timebase_expired": [(56, "expired")],
-        "aes128_encrypt_block": [(48, "key"), (52, "input")]}
+import re, sys, json, glob, os
+# Argument byte addresses: -mcs51-rn-words passes words 1-2 in R2R3/R4R5
+# (bank-0 addresses 2-5) and words 5-6 in IP0/IP1 (48-51).
+RN = "-mcs51-rn-words" in os.environ.get("ABI_FLAGS", "")
+ARGS = {"timebase_deadline_after": [(48 if RN else 56, "deadline")],
+        "timebase_expired": [(48 if RN else 56, "expired")],
+        "aes128_encrypt_block": [(2 if RN else 48, "key"), (52, "input")]}
 sites = []
 for f in sorted(glob.glob("*.s")):
     L = open(f).read().split("\n")
@@ -32,7 +36,7 @@ for f in sorted(glob.glob("*.s")):
                 w = w.strip()
                 if w == "clr a": acc = "0"
                 elif re.match(r"mov a,", w) or re.match(r"movx a,", w): acc = None
-                mm = re.match(r"mov (\d+), (.*)$", w)
+                mm = re.match(r"mov r?(\d+), (.*)$", w)
                 if mm and int(mm.group(1)) in range(base, base + 4):
                     v = mm.group(2); val[int(mm.group(1)) - base] = acc if v == "a" else v
             tag = val.get(2); top = val.get(3); lo = val.get(0)
