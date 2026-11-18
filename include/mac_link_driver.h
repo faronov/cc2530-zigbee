@@ -84,7 +84,9 @@ mac_link_driver_result_t mac_link_driver_random(mac_link_driver_t MCU_XDATA * SD
  * receiver is instead closed (normal close/drain) and reopened only while a
  * Data Request response window is held: ACK Frame Pending or no ACK, for
  * extraction.frame_wait (macMaxFrameTotalWaitTime) from DISARM. Our own TX
- * still opens RX for CCA/ACK through prepare. Other phases keep RX on.
+ * still opens RX for CCA/ACK through prepare; ACK-requesting TX uses
+ * KEEP_PENDING, so an ACK without Frame Pending retires through the soft
+ * stop/drain instead of a handoff. Other phases keep RX on.
  * gaps counts driver-initiated RX closures. OFF/configure/prepare intervals
  * never contribute coverage, including adapter-internal STOP_RX retirement.
  * CLOSED uses the latest event's real pre-stop watermark, including TX-only

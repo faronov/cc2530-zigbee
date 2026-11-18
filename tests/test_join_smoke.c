@@ -789,7 +789,7 @@ int main(int argc, char **argv)
                         SOC_RFERRF=4; caller_radio_fault=1;
                     }
                     handoff_started=mac_adapter_diagnostic()->phase==MAC_ADAPTER_RETIRING &&
-                        mac_adapter_diagnostic()->policy==MAC_ADAPTER_KEEP_AUTOACK &&
+                        mac_adapter_diagnostic()->policy>=MAC_ADAPTER_KEEP_AUTOACK &&
                         join_smoke_tx.engine.outcome==MAC_TX_ACKED;
                     if(handoff_started) handoff_configured=0;
                     caller_poll();

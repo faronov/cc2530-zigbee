@@ -374,7 +374,14 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
         result = mac_adapter_prepare(d->owner, kind == BDB_JOIN_ACTION_SCAN ? MAC_ADAPTER_KEEP_RAW :
             kind == BDB_JOIN_ACTION_ASSOCIATION ?
                 (child == MAC_JOIN_ACTION_TX ? MAC_ADAPTER_KEEP_AUTOACK : MAC_ADAPTER_STOP_RX) :
-            d->owner->engine.ack_requested ? MAC_ADAPTER_KEEP_AUTOACK : MAC_ADAPTER_STOP_RX,
+            !d->owner->engine.ack_requested ? MAC_ADAPTER_STOP_RX :
+#if defined(CC2530_RX_OFF_IDLE)
+            /* M7a: an RX-off-when-idle READY child stops at an ACK without
+             * Frame Pending instead of retaining RX until the driver's close. */
+            d->join->phase == BDB_JOIN_READY &&
+                !(d->join->config.association.capability & 0x08u) ? MAC_ADAPTER_KEEP_PENDING :
+#endif
+            MAC_ADAPTER_KEEP_AUTOACK,
             d->timeout, d->limit);
         d->adapter_result = result;
         if (d->adapter_result != MAC_ADAPTER_OK) { fault(d, MAC_LINK_DRIVER_RADIO); goto done; }

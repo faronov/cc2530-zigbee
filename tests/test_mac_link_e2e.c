@@ -69,7 +69,7 @@ static uint8_t queued_seen;
 /* RX_OFF_IDLE (M7a): READY releases 1-3 test the response window (late in
  * it), a frame aired as the window closes (drained) and a lost poll ACK. */
 static unsigned rx_releases, window_release, drain_release, drain_seen, drain_delivered;
-static unsigned lost_polls, lost_release, nodata_closes, hold_opens, tx_opens;
+static unsigned lost_polls, lost_release, nodata_closes, hold_opens, tx_opens, pending_stops, pending_keeps;
 static uint32_t drain_serial, lost_opens, poll_last, poll_max;
 static unsigned poll_count;
 static uint8_t rx_measure;
@@ -279,7 +279,7 @@ static void cold_start(void)
     queued_polls = released_frames = queued_seen = 0;
 #if defined(CC2530_RX_OFF_IDLE)
     rx_releases = window_release = drain_release = drain_seen = drain_delivered = 0;
-    lost_polls = lost_release = nodata_closes = hold_opens = tx_opens = 0;
+    lost_polls = lost_release = nodata_closes = hold_opens = tx_opens = pending_stops = pending_keeps = 0;
     drain_serial = lost_opens = poll_last = poll_max = 0;
     poll_count = rx_measure = 0;
 #endif
@@ -719,6 +719,16 @@ static void tick_driver(void)
         }
         CHECK(!memcmp(&before, &device.work.runtime.transport, sizeof(before)) &&
               !memcmp(&tx_before, &adapter_tx, sizeof(tx_before)));
+#if defined(CC2530_RX_OFF_IDLE)
+        /* KEEP_PENDING: an ACK without Frame Pending already stopped RX at
+         * retirement; with Frame Pending RX was retained for the hold. */
+        if (rx_off && driver.action.data.tx.control.kind == NWK_APS_ACTION_DISARM &&
+            adapter_tx.engine.outcome == MAC_TX_ACKED && adapter_tx.engine.ack_requested) {
+            CHECK(ad->policy == MAC_ADAPTER_KEEP_PENDING && ad->phase ==
+                  (adapter_tx.engine.pending ? MAC_ADAPTER_RX : MAC_ADAPTER_OFF));
+            if (adapter_tx.engine.pending) pending_keeps++; else pending_stops++;
+        }
+#endif
     }
     e2e_steps++;
     /* Finite foreground latency; no consumer timestamp is supplied here.
@@ -731,7 +741,7 @@ static void tick_driver(void)
          mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF) ? 1000u : 4u)*512u);
     handoff_tick();
     handoff_started = mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING &&
-        mac_adapter_diagnostic()->policy == MAC_ADAPTER_KEEP_AUTOACK &&
+        mac_adapter_diagnostic()->policy >= MAC_ADAPTER_KEEP_AUTOACK &&
         adapter_tx.engine.outcome == MAC_TX_ACKED;
     if (handoff_started) handoff_configured = 0;
     if (scenario == 7) blocked_action = driver.action;
@@ -865,10 +875,11 @@ static void rx_off_tail(void)
     CHECK(link_peer_parent >= parent+2u && poll_count <= 20u);
     CHECK(device.phase == BDB_JOIN_READY && device.member && !driver.fault && !mac_adapter_diagnostic()->fault);
     CHECK(hold_opens && tx_opens && nodata_closes && driver.rx_opens == hold_opens);
+    CHECK(pending_stops >= poll_count && pending_keeps);
     printf("E2E RX-off READY: RX on %lu/%lu symbols (%lu ppm), %u polls max gap %lu, %u TX opens, "
-           "%u hold opens, %u closes, %u releases PASS\n", (unsigned long)on, (unsigned long)total,
+           "%u hold opens, %u closes, %u releases, %u/%u ACK stops/keeps PASS\n", (unsigned long)on, (unsigned long)total,
            (unsigned long)((uint64_t)on*1000000u/total), poll_count, (unsigned long)poll_max,
-           tx_opens, hold_opens, nodata_closes, rx_releases);
+           tx_opens, hold_opens, nodata_closes, rx_releases, pending_stops, pending_keeps);
 }
 #else
 #define E2E_LIMIT(n) (n)
