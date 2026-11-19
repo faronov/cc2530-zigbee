@@ -40,5 +40,7 @@ void link_peer_verify(void);
 #if defined(CC2530_PARENT_RECOVERY)
 void link_peer_known_parent(security_keys_parent_t *parent);
 void link_peer_alternate(uint8_t exhausted);
+/* The DUT already selected the router: one Rejoin Request, no TC attempts. */
+extern uint8_t link_peer_router_first;
 #endif
 #endif

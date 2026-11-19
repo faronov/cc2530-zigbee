@@ -67,6 +67,15 @@ direct-coordinator policy above.
   parent consumes the frame instead of routing it to the TC; this was seen on
   hardware as three unanswered Request Keys and `TC_FAILED`. A direct
   coordinator parent keeps radius 1, so existing images are byte-identical.
+- Resume: the joined record holds the router as admitted (`ACTIVE`) but not
+  selected (`ATTEMPT`), and secure rejoin targets only a selected router.
+  `bdb_join_resume` therefore selects it (`security_keys_select_parent`,
+  current update ID) before recovery, so the router that admitted the device
+  is tried first, as a recovered router is. Previously, the first reset after a
+  router join rejoined the TC: on H2 it polled the coordinator and faulted
+  again before parent search returned to the router. Join-smoke case 30
+  (router join only) cold-boots such a record with a silent TC and requires
+  one Rejoin Request, to the router.
 - Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
   still commits the replay state with a full NV save (one page erase), and
   `NV_RECORD_ERASE_LIMIT` (32 erases per page per boot) then fails the key

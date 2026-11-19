@@ -33,10 +33,11 @@ static uint8_t recovering, rejoined, reannounced;
 #if defined(CC2530_PARENT_RECOVERY)
 static const uint8_t router_ieee[8] = {0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48};
 static uint8_t alternate, router_hop;
+uint8_t link_peer_router_first;
 static uint32_t router_counter;
 #define PEER_PARENT_ADDRESS (router_hop ? 0x4567u : 0u)
 #define PEER_PARENT_IEEE (router_hop ? router_ieee : identity.tc_ieee)
-#define PEER_REJOIN_COUNT (alternate ? BDB_JOIN_ATTEMPTS+1u : 1u)
+#define PEER_REJOIN_COUNT (alternate && !link_peer_router_first ? BDB_JOIN_ATTEMPTS+1u : 1u)
 #else
 #define PEER_PARENT_ADDRESS 0u
 #define PEER_PARENT_IEEE identity.tc_ieee
@@ -526,7 +527,7 @@ void link_peer_recover(bdb_join_config_t *config, const uint8_t *in, unsigned le
     security_joint_physical_flash(1);
     link_peer_config(config);
 #if defined(CC2530_PARENT_RECOVERY)
-    alternate = router_hop = 0; router_counter = 1000;
+    alternate = router_hop = link_peer_router_first = 0; router_counter = 1000;
 #endif
 }
 
@@ -567,7 +568,7 @@ void link_peer_setup(bdb_join_config_t *config)
     announced = described = requested = verified = permit = associated = extracted = 0;
     recovering = rejoined = reannounced = link_peer_mute_rejoin = 0; link_peer_rejoins = link_peer_polls = 0;
 #if defined(CC2530_PARENT_RECOVERY)
-    alternate = router_hop = 0; router_counter = 1000;
+    alternate = router_hop = link_peer_router_first = 0; router_counter = 1000;
 #endif
     aps_counter = nwk_sequence = network_sequence = link_peer_pending = 0;
     link_peer_tx = link_peer_checks = link_peer_parent = link_peer_app = 0;

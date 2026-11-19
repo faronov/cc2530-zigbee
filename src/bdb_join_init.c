@@ -113,6 +113,15 @@ bdb_join_result_t bdb_join_resume(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, N
         memcmp(config->association.extraction.coordinator, bdb_join_keys.config.tc_ieee, 8))
         return BDB_JOIN_ARGUMENT;
 #endif
+#if defined(CC2530_ROUTER_JOIN)
+    /* A router join admits its parent (ACTIVE) without selecting it. Select
+     * it now, as a recovered router, so the original parent is tried first
+     * rather than the TC. */
+    if (bdb_join_keys.router_active && !bdb_join_keys.router_selected &&
+        (security_keys_select_parent(1, bdb_join_keys.config.update_id, config->transport.nv_polls) != SECURITY_KEYS_OK ||
+         security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK || !bdb_join_keys.router_selected))
+        return BDB_JOIN_SECURITY;
+#endif
     if (bdb_join_runtime_init(ctx, owner, config, now) != BDB_JOIN_OK)
         return BDB_JOIN_ARGUMENT;
     ctx->config = *config; ctx->owner = owner; ctx->epoch = config->association.extraction.epoch;
