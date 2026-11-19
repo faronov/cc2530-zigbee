@@ -60,6 +60,7 @@ static uint8_t rejoin_mutate;
 static const uint8_t known_router[8] = {0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48};
 static uint8_t alternate_test;
 static uint8_t alternate_mute;
+static uint8_t alternate_tc; /* the TC answers while the router is selected */
 #endif
 static uint32_t nwk_floor_start = 1;
 static unsigned checks, iterations, transmissions;
@@ -188,7 +189,7 @@ static void observe_transmission(void)
         CHECK(security_keys_status(&status) == SECURITY_KEYS_OK);
         aux_source = (device.phase == BDB_JOIN_RECOVERING ? status.router_selected : status.router_active) ?
             known_router : NULL;
-        rejoin_mute = aux_source ? alternate_mute : 1;
+        rejoin_mute = aux_source ? alternate_mute : !alternate_tc;
     }
 #endif
     open_device(body, length, &aps_secured);
@@ -522,7 +523,7 @@ static void setup(void)
     phy_busy = phy_lose = mute_timeout = 0; lost_frames = muted = busy_events = 0;
     aux_source = NULL;
 #if defined(CC2530_PARENT_RECOVERY)
-    alternate_test = alternate_mute = 0;
+    alternate_test = alternate_mute = alternate_tc = 0;
 #endif
     last_device_nwk = last_device_aps = 0; transmissions = 0;
     peer_pan = identity.pan;
@@ -1988,7 +1989,7 @@ static void known_parent_controls(void)
              * Restored ATTEMPT is not an admitted ACTIVE parent. */
             CHECK(security_keys_status(&status)==SECURITY_KEYS_OK && status.router_selected && !status.router_active);
             power_cycle(); resume();
-            CHECK(device.parent_search==2 && !device.member);
+            CHECK(device.parent_search==3 && !device.member);
             alternate_test=1;
         }
         recover();
@@ -2062,7 +2063,14 @@ static void known_parent_bounds(void)
     CHECK(status.phase==SECURITY_KEYS_REJOINING && status.router_selected && !status.router_active);
     resume(); alternate_mute=0; recover(); recovered();
     CHECK(rejoin_requests==1 && status.router_active);
-    alternate_test=0; aux_source=NULL;
+
+    /* The saved router went silent: after its attempts, one TC fallback in
+     * the same window, whose Rejoin Response retires the router. */
+    power_cycle(); resume(); CHECK(device.parent_search==3);
+    alternate_mute=alternate_tc=1; recover(); recovered();
+    CHECK(rejoin_requests==BDB_JOIN_ATTEMPTS+1u && device.parent_search==2);
+    CHECK(status.router_known && !status.router_active && !status.router_selected);
+    alternate_test=alternate_mute=alternate_tc=0; aux_source=NULL;
 }
 #endif
 

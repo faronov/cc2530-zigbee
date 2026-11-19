@@ -903,7 +903,9 @@ static security_keys_result_t nwk_command(void)
         if (router_record()) {
             if (w.record[ROUTER_FLAGS] & ROUTER_ATTEMPT) {
                 w.record[ROUTER_FLAGS] |= ROUTER_ACTIVE;
-                w.record[UPDATE] = w.record[ROUTER_UPDATE];
+                /* A NWK Update accepted after selection may be newer. */
+                if ((uint8_t)(w.record[ROUTER_UPDATE]-w.record[UPDATE]-1u) < 127u)
+                    w.record[UPDATE] = w.record[ROUTER_UPDATE];
             }
             else w.record[ROUTER_FLAGS] &= (uint8_t)~ROUTER_ACTIVE;
         }
