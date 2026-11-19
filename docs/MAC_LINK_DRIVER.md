@@ -94,7 +94,7 @@ clear keeps the receiver OFF except:
 
 | Need | Receiver |
 | --- | --- |
-| Own TX | Prepare/CCA/TX/ACK wait as in the table above, with `KEEP_PENDING` for ACK-requesting TX: an ACK with Frame Pending hands off to normal RX as `KEEP_AUTOACK` (closed once the 74-symbol AUTOACK guard has passed, unless held below); an ACK without it retires through the soft stop/drain (`RETIRED` from OFF) |
+| Own TX | Prepare/CCA/TX/ACK wait as in the table above, with `KEEP_PENDING` for ACK-requesting TX: an ACK with Frame Pending hands off to normal RX as `KEEP_AUTOACK` (closed once the 74-symbol AUTOACK guard has passed, unless held below); an ACK without it retires through the soft stop (`RETIRED` once RX has stopped: from OFF, or from DRAINING before frames queued ahead of the stop are delivered) |
 | Data Request ACKed with Frame Pending | Held open for `extraction.frame_wait` (macMaxFrameTotalWaitTime, 1986 symbols in the shipped configuration) from DISARM, IEEE 802.15.4-2006 §7.5.6.3 |
 | Data Request without ACK (NO_ACK) | Reopened from OFF and held for the same window: the parent may have received the Request and still deliver (implicit ACK, [MAC_POLL](MAC_POLL.md#implicit-data-request-ack-lh21c)) |
 | Data Request ACKed without Frame Pending | Stopped at retirement (`KEEP_PENDING`) |
@@ -122,7 +122,10 @@ ACKs are lost reopens RX once and receives the implicitly acknowledged frame;
 no OFF→RX transition without own TX or a held window; every due close happens;
 and over a modeled minute of slow READY polling RX is on 0.22% of the time with
 a 7.0 s (438496-symbol measured) maximum poll gap. Every ACKed READY TX is
-prepared `KEEP_PENDING` and is OFF at DISARM without Frame Pending, RX with it. Mutations removing the
+prepared `KEEP_PENDING` and is OFF (or still DRAINING/CLOSING) at DISARM without Frame Pending, RX with it.
+A broadcast queued just before such a stop, whose delivery then takes 7000 symbols, must not hold
+`RETIRED`: on H2 draining busy-network frames inside STOPPING outlasted its 6144-symbol bound
+(`MAC_TX_STOP_FAILED`, BDB FAULT, watchdog reset every ~64 s). Mutations removing the
 close, the hold, the NO_ACK hold or reinstating the idle reopen each fail it.
 
 After a received ACK-requesting frame, the driver delays the next preparation

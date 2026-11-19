@@ -405,7 +405,12 @@ mac_link_driver_result_t mac_link_driver_step(mac_link_driver_t MCU_XDATA * SDCC
             result = mac_adapter_unprepare(d->owner, d->timeout, d->limit);
             d->adapter_result = result;
             if (d->adapter_result != MAC_ADAPTER_OK) { fault(d, MAC_LINK_DRIVER_RADIO); goto done; }
-        } else if ((phase != MAC_ADAPTER_OFF && phase != MAC_ADAPTER_RX) ||
+        } else if ((phase != MAC_ADAPTER_OFF && phase != MAC_ADAPTER_RX
+#if defined(CC2530_RX_OFF_IDLE)
+                    /* KEEP_PENDING retires before draining its stopped RX. */
+                    && phase != MAC_ADAPTER_DRAINING && phase != MAC_ADAPTER_CLOSING
+#endif
+                   ) ||
                    mac_adapter_diagnostic()->ready || mac_adapter_diagnostic()->goal) {
             fault(d, MAC_LINK_DRIVER_STATE); goto done;
         }
