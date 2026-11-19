@@ -682,6 +682,18 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             ctx->work.runtime.transport.ready = 0; install(ctx);
             return BDB_JOIN_OK;
         }
+        /* The saved router went first and is gone: deselect it and rejoin
+         * the TC once in the same window. A TC Rejoin Response retires it. */
+        if (ctx->recovery && ctx->parent_search == 3 &&
+            (ctx->result == BDB_JOIN_NO_PARENT || ctx->result == BDB_JOIN_REJOIN_REFUSED) &&
+            !expired(now, ctx->commission_until) &&
+            security_keys_status(&bdb_join_keys) == SECURITY_KEYS_OK &&
+            security_keys_select_parent(0, bdb_join_keys.config.update_id,
+                ctx->config.transport.nv_polls) == SECURITY_KEYS_OK) {
+            ctx->parent_search = 2; ctx->result = BDB_JOIN_OK;
+            ctx->work.runtime.transport.ready = 0; install(ctx);
+            return BDB_JOIN_OK;
+        }
 #endif
         if (!ctx->abandon || security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK || bdb_join_keys.phase == SECURITY_KEYS_LEFT)
             ctx->phase = BDB_JOIN_FAILED;

@@ -550,6 +550,15 @@ Late success/refusal retires any queued Rejoin Request before it can reseal
 or overwrite the durable response. A reset during selected-parent recovery
 retains ATTEMPT, counters and replay history but starts non-READY.
 
+A resume that starts with the router already selected tries it first; if its
+three attempts go unanswered or it refuses, the router is deselected and the
+TC gets one rejoin in the same window. A TC Rejoin Response retires the router
+(clears `ACTIVE`); its history stays known for later parent search. A router
+found by scan after the TC failed gets no second TC attempt. A Rejoin Response
+adopts the update ID recorded at selection only when it is newer, so a NWK
+Update accepted while the router stayed selected is never rolled back.
+`known_parent_bounds` (TC fallback) and `router_update_kept` cover both.
+
 `make test-parent-recovery`, `test-parent-storage` and `test-parent-candidates`
 cover eligible/absent/silent/unknown parents, wrong Extended PAN/key/IEEE,
 stale update, NO_ACK/CCA, refusal, delayed/duplicate responses, selected-parent
@@ -561,8 +570,7 @@ foreground serving exercise is ten seconds; the existing case0/16 long serving
 and case17 failure gates are unchanged. Fresh MCU acceptance is still required.
 
 Remaining scope: unknown-router IEEE learning, multiple-router eviction/replay
-policy, changing PAN/channel, fallback after loss of the newly admitted router,
-TC migration and sleepy operation. The unchanged journal erase guard limits
+policy, changing PAN/channel, TC migration and sleepy operation. The unchanged journal erase guard limits
 longer router service; see [durable-owner limitation](SECURITY_KEYS.md#optional-known-router-durable-ownership).
 
 ## First physical join gate

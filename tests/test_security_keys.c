@@ -1480,6 +1480,32 @@ static security_keys_result_t router_transition(uint8_t stage)
     return security_keys_receive(raw,wire_length,&output,&event,&limits,3);
 }
 
+/* A NWK Update accepted while the router stays selected outranks the update
+ * ID recorded at selection: a later Rejoin Response must not roll it back. */
+static void router_update_kept(void)
+{
+    uint8_t i, id;
+    reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    CHECK(security_keys_upgrade_parent(3)==SECURITY_KEYS_OK);
+    for(i=0;i<4;i++) CHECK(router_transition(i)==SECURITY_KEYS_OK);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_active && status.router_selected);
+    id=(uint8_t)(status.config.update_id+1u);
+    update_packet(id,config.pan); router_seal(101,0); accept(SECURITY_KEYS_EVENT_UPDATE);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(status.config.update_id==id && status.router_selected);
+    CHECK(router_transition(2)==SECURITY_KEYS_OK);
+    reboot(NULL,SECURITY_KEYS_REJOINING);
+    base(0); packet.nwk.type=ED_NWK_COMMAND; packet.nwk.source=0x4567;
+    packet.nwk.flags=NWK_FLAG_SOURCE_IEEE|NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee,router_ieee,8);
+    memcpy(packet.nwk.destination_ieee,config.own_ieee,8);
+    packet.length=4; packet.payload[0]=7; packet.payload[1]=0x34; packet.payload[2]=0x12;
+    router_seal(102,0); accept(SECURITY_KEYS_EVENT_REJOINED);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_active && status.config.update_id==id);
+}
+
 static void interrupted_router(void)
 {
     static const uint8_t old_flags[4]={0,1,5,5}, new_flags[4]={1,5,5,7};
@@ -1752,6 +1778,7 @@ int main(void)
 #if defined(CC2530_PARENT_RECOVERY)
     parent_schema_upgrade();
     remembered_parent();
+    router_update_kept();
     interrupted_router();
 #endif
 #if defined(CC2530_ROUTER_JOIN)
