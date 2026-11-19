@@ -68,6 +68,12 @@ parent-recovery images are byte-identical to the pre-M7a build.
   without Frame Pending straight to the soft stop instead: 17.9 ms per poll
   (hex `a8df2a4d`), Frame Pending polls unchanged. The E2E `RX_OFF_IDLE`
   minute dropped from 0.236% to 0.215% RX-on.
+  On H2 the first image (`a8df2a4d`) published `RETIRED` only after draining
+  frames queued before the stop; on busy channel 15 that drain (one frame per
+  slow READY step) took ~85 ms of the 98 ms STOPPING bound and then exceeded
+  it: `MAC_TX_STOP_FAILED`, BDB FAULT `TRANSMIT_FAILED`, reboot loop every
+  ~64 s. `KEEP_PENDING` now retires from DRAINING (reception already ended)
+  and drains afterwards.
 
 ## M7b — PM2 between polls (H2 HIL, debugger-powered)
 

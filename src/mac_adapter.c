@@ -317,7 +317,13 @@ mac_adapter_result_t mac_adapter_step(SDCC_VOLATILE uint32_t timeout, SDCC_VOLAT
             status.phase = MAC_ADAPTER_CLOSING; status.wait_through = 0;
         }
     }
-    if (status.phase == MAC_ADAPTER_RX && status.goal == CLOSE_RETIRE) {
+    /* KEEP_PENDING: the stop already ended reception, so retire before the
+     * drain; delivering queued frames inside STOPPING outlasted its bound. */
+    if ((status.phase == MAC_ADAPTER_RX
+#if defined(CC2530_RX_OFF_IDLE)
+         || (status.phase == MAC_ADAPTER_DRAINING && status.policy == MAC_ADAPTER_KEEP_PENDING)
+#endif
+        ) && status.goal == CLOSE_RETIRE) {
         if (!settled) { retired = status.live; settled = 1; }
         if (!reached(status.live.symbols, retired.symbols + (retired.fine != 0u)))
             return MAC_ADAPTER_WAIT;
