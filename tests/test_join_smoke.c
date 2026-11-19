@@ -27,6 +27,13 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
 #define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || (s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_RECOVERY)
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
+#if defined(CC2530_ROUTER_JOIN)
+/* Router-joined NV: the router admitted (ACTIVE) but never selected. */
+enum { CALLER_ROUTER_ADMITTED=30 };
+#define ROUTER_ADMITTED_CASE(c) ((c)==CALLER_ROUTER_ADMITTED)
+#else
+#define ROUTER_ADMITTED_CASE(c) 0
+#endif
 #if defined(CC2530_REPLAY_POLICY_C)
 enum { CALLER_SUSTAINED=21, CALLER_COMPLETION=22, CALLER_REPORTING=23, CALLER_BINDING=24, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
 #define SUSTAINED_CASE(c) ((c)==CALLER_SUSTAINED)
@@ -50,7 +57,8 @@ static uint32_t service_begin, service_ms;
 #define BINDING_CASE(c) 0
 #define COMPLETION_INPUT_READY(c) 1
 #endif
-#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c))
+#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c) || \
+    ROUTER_ADMITTED_CASE(c))
 #define HISTORY_CASE(c) ((c)==CALLER_KNOWN_HISTORY)
 static unsigned recovery_selected;
 #else
@@ -584,11 +592,25 @@ static void prepare_caller(unsigned selected)
         /* Modeled cold boot: only the flash written by the DUT survives. */
         security_joint_reset(1);
         memcpy(security_joint_nv(),recovery_nv,sizeof(recovery_nv));
+#if defined(CC2530_PARENT_RECOVERY)
+        if(ROUTER_ADMITTED_CASE(selected)) {
+            /* The known router becomes the admitted parent, as a fresh join
+             * through it leaves the record: KNOWN|ACTIVE, no ATTEMPT. */
+            uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+            assert(security_keys_open()==SECURITY_KEYS_OK);
+            assert(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK &&
+                length==144 && record[130]==1);
+            record[130]=3;
+            assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+            security_joint_reset(0);
+        }
+#endif
         link_peer_capability=selected==CALLER_SLEEPY_RECOVERY?0x80:0x88;
         link_peer_recover(&join_config,recovery_state,recovery_length);
         link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
 #if defined(CC2530_PARENT_RECOVERY)
         if(ALTERNATE_CASE(selected)) link_peer_alternate(selected==CALLER_DISCOVERY_EXHAUSTED);
+        link_peer_router_first=ROUTER_ADMITTED_CASE(selected);
 #endif
     } else {
     /* Construct the external synthetic peer, then start a genuinely fresh
@@ -901,6 +923,14 @@ int main(int argc, char **argv)
                         assert(join_smoke_device.recovery==3 && link_peer_rejoins==BDB_JOIN_ATTEMPTS+1u);
                         assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.router_active &&
                             keys.router_known && keys.phase==SECURITY_KEYS_VERIFIED);
+                    }
+                    if(ROUTER_ADMITTED_CASE(selected)) {
+                        /* The admitted router is tried first: no TC attempt, no scan. */
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==1);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.router_active &&
+                            keys.router_selected && keys.router_address==0x4567 &&
+                            keys.phase==SECURITY_KEYS_VERIFIED);
                     }
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
