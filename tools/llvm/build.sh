@@ -67,6 +67,11 @@ echo "ABI_FLAGS=$ABI SF_FLAGS=$SF" > $OUT/profile-flags.txt
 # Runtime library and startup (same ABI flags as the firmware).
 $T/clang $TARGET -O2 -ffreestanding -fno-builtin -ffunction-sections -fdata-sections $ABI \
   -c $RTSRC/mcs51-runtime.c -o $OUT/rt/mcs51/mcs51-runtime.o
+# Runtime helpers (memcpy, memset, division, shifts) go to common flash, where
+# every bank calls them directly instead of through a bank-call trampoline.
+$T/llvm-objcopy $($T/llvm-objdump -h $OUT/rt/mcs51/mcs51-runtime.o | awk '$2 ~ /^\.text\./ &&
+  $2 !~ /^\.text\.(__mcs51_|autobankthunks\.)/ {print "--rename-section=" $2 "=.mcs51.common." substr($2, 7)}') \
+  $OUT/rt/mcs51/mcs51-runtime.o
 $T/llvm-ar rcs $OUT/rt/mcs51/libmcs51builtins.a $OUT/rt/mcs51/mcs51-runtime.o
 $T/clang $TARGET -c $RTSRC/cc2530_startup.s -o $OUT/rt/mcs51/cc2530_startup.o
 cp $RTSRC/cc2530.ld $OUT/rt/mcs51/cc2530.ld
