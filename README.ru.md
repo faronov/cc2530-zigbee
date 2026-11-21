@@ -1,7 +1,7 @@
 # Открытый Zigbee для CC2530
 
 **Текущая сборка — только LLVM MCS51**, закреплённый commit
-`3f477911581f59c9762dd944d153242b7790d633`. Это UNIFY-01 с upstream-фиксом
+`ddc974b4607677930befe13218f866f5c8110c90`. Это UNIFY-01 с upstream-фиксом
 `eeef1bec` для инверсии битов и фиксом ветвлений по битам ACC (неявное
 использование A), оба с regression test, и обход bank-call trampoline для вызовов
 внутри одного банка (стек −6…−12 байт), а также декодирование `DEC direct` в
@@ -9,7 +9,9 @@
 переходов, switch-таблицы, LTO-конвейер для -Oz; [study §30](docs/LLVM_MCS51_PORT_STUDY.md#30-size-work-outliner-relaxation-switch-tables)),
 а также передача word-аргументов в R2..R5 ([study §31](docs/LLVM_MCS51_PORT_STUDY.md#31-word-arguments-in-r2r5--mcs51-rn-words))
 и указатели на объекты стека через зеркало IRAM в XDATA CC2530
-([study §32](docs/LLVM_MCS51_PORT_STUDY.md#32-fixed-defect-near-pointers-to-iram-objects));
+([study §32](docs/LLVM_MCS51_PORT_STUDY.md#32-fixed-defect-near-pointers-to-iram-objects))
+и функции рантайма в общем банке, которые вызываются без трамплинов
+([study §33](docs/LLVM_MCS51_PORT_STUDY.md#33-runtime-helpers-in-common-flash));
 FULL не запускался. Команды и пути:
 [README](README.md#current-build-llvm-mcs51-only). SDCC больше не является
 компилятором прошивки или запасным вариантом; его исходный архив нужен только

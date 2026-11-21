@@ -2328,3 +2328,28 @@ casts and the generic CPU keep the address value. The 216 MCS-51 lit tests pass.
 dashboard built with the unfixed source and this compiler completes all Home Assistant
 writes on H2 and refreshes without the corruption. FULL was not run.
 
+
+## 33. Runtime helpers in common flash
+
+Pinned LLVM `ddc974b4607677930befe13218f866f5c8110c90` (on top of §32). LLD packed the
+runtime library (`memcpy`, `memset`, `memcmp`, 16- and 32-bit division and
+multiplication, 32-bit shifts) into banks like any other `.text.*` section, so every
+call from another bank went through a bank-call trampoline (`push FMAP`,
+`mov FMAP,#bank`, `lcall`, `pop FMAP`, `ret`: 11 bytes and three extra stack bytes per
+call).
+
+- `tools/llvm/build.sh` renames the runtime object's `.text.*` sections (except the
+  `__mcs51_*` helpers and the compiler's trampolines, which already stay in common) to
+  `.mcs51.common.*`, so the linker script places them in common flash.
+- LLD bypassed a `.direct.` trampoline (callee without incoming stack arguments) only
+  for a call from the callee's own bank. It now also calls a callee in common flash
+  directly from common and from any bank (`MCS51.cpp`, test
+  `mcs51-common-thunk-bypass.s`). Function addresses and trampolines without the marker
+  keep the trampoline.
+
+In the esl-dashboard L5 image, the 345 runtime calls that went through trampolines
+(188 `memcpy`, 101 `memset`, 26 `memcmp`, 30 division/multiplication/shift calls) now
+call directly. Common flash grows from 23,424 to 24,968 bytes, the total image shrinks
+by 7 bytes (the unused trampolines stay), and the static stack demand stays 89 bytes.
+The 19 MCS-51 LLD tests pass. The image joins ZHA on H2 and completes the Home Assistant
+dashboard writes. FULL was not run.

@@ -32,7 +32,7 @@ on:
         default: faronov/llvm-project
       llvm_ref:
         description: LLVM-MCS51 branch, tag or commit
-        default: 3f477911581f59c9762dd944d153242b7790d633
+        default: ddc974b4607677930befe13218f866f5c8110c90
       firmware_repository:
         description: Firmware source repository
         default: faronov/cc2530-zigbee
@@ -110,7 +110,7 @@ jobs:
           TIER: ${{ inputs.tier || (github.event_name == 'pull_request' && 'smoke' || 'fast') }}
           VARIANT: ${{ inputs.variant || 'parent-recovery' }}
           LLVM_REPOSITORY: ${{ inputs.llvm_repository || 'faronov/llvm-project' }}
-          LLVM_REF: ${{ inputs.llvm_ref || '3f477911581f59c9762dd944d153242b7790d633' }}
+          LLVM_REF: ${{ inputs.llvm_ref || 'ddc974b4607677930befe13218f866f5c8110c90' }}
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.event.pull_request.head.sha || github.sha }}
         run: |
