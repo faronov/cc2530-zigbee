@@ -2306,3 +2306,25 @@ those exact sizes to relaxation and the outliner.
   admission, and MCUEMU matches the previous frame sequence. On hardware (H2) it does a
   fresh join, gets Transport Key, sends Device Announce, completes the ZHA interview and
   reports, and polls at 4/s. The 215 MCS-51 lit tests pass. FULL was not run.
+
+## 32. Fixed defect: near pointers to IRAM objects
+
+Pinned LLVM `3f477911581f59c9762dd944d153242b7790d633` (on top of §31). C gives a local
+whose address is taken (`f(&n)`) an IDATA stack slot and passes a default (near, 16-bit)
+pointer to it. ISel widened the one-byte IDATA address with a zero high byte, so the
+callee, which writes through MOVX, reached XDATA page 0 (PDATA and the static frames)
+instead of the stack object. The caller then read a stale value and the stray write
+corrupted a static frame.
+
+Found on hardware: the esl-dashboard 0xFC10 string store took the field capacity
+through `l8_field(id, &capacity)`. The capacity stayed stale, the text loop padded END
+octets far past the field, and the overwritten state then failed refreshes (a false SPI
+stall) and Zigbee writes from Home Assistant.
+
+The CC2530 maps its internal RAM into XDATA at 0x1F00-0x1FFF, so with `-mcpu=cc2530` a
+DATA or IDATA address widened to a default pointer now carries the high byte 0x1F
+(`MCS51ISelDAGToDAG.cpp`, test `cc2530-iram-near-pointer.ll`). Explicit `__xdata`
+casts and the generic CPU keep the address value. The 216 MCS-51 lit tests pass. The
+dashboard built with the unfixed source and this compiler completes all Home Assistant
+writes on H2 and refreshes without the corruption. FULL was not run.
+
