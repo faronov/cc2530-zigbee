@@ -27,6 +27,13 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
 #define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || (s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_RECOVERY)
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
+#if defined(CC2530_ROUTER_JOIN)
+/* Router-joined NV: the router admitted (ACTIVE) but never selected. */
+enum { CALLER_ROUTER_ADMITTED=30 };
+#define ROUTER_ADMITTED_CASE(c) ((c)==CALLER_ROUTER_ADMITTED)
+#else
+#define ROUTER_ADMITTED_CASE(c) 0
+#endif
 #if defined(CC2530_REPLAY_POLICY_C)
 enum { CALLER_SUSTAINED=21, CALLER_COMPLETION=22, CALLER_REPORTING=23, CALLER_BINDING=24, SERVICE_SECONDS=600, SERVICE_FRAMES=120 };
 #define SUSTAINED_CASE(c) ((c)==CALLER_SUSTAINED)
@@ -50,7 +57,8 @@ static uint32_t service_begin, service_ms;
 #define BINDING_CASE(c) 0
 #define COMPLETION_INPUT_READY(c) 1
 #endif
-#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c))
+#define ALTERNATE_CASE(c) ((c)==CALLER_ALTERNATE || (c)==CALLER_DISCOVERY_EXHAUSTED || SUSTAINED_CASE(c) || COMPLETION_CASE(c) || \
+    ROUTER_ADMITTED_CASE(c))
 #define HISTORY_CASE(c) ((c)==CALLER_KNOWN_HISTORY)
 static unsigned recovery_selected;
 #else
@@ -69,7 +77,10 @@ static uint32_t recommission_used[2];
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
 enum { CALLER_ALL_CHANNELS=11, CALLER_AMBIGUOUS, CALLER_CLOSED, CALLER_OVERFLOW,
-       CALLER_WRONG_TC, CALLER_BUSY=28 };
+       CALLER_WRONG_TC, CALLER_BUSY=28, CALLER_CCA_BUSY };
+/* CALLER_CCA_BUSY: channel 25 never clears CCA, so it stays unscanned. Router
+ * join still takes the one open network on 15; strict policies refuse. */
+#define CCA_BUSY_CHANNEL 25u
 /* CALLER_BUSY: a network-wide permit (HIL LH16B). More permitting routers
  * than candidate capacity beacon before the coordinator; still READY. */
 #define BUSY_ROUTERS 6u
@@ -581,11 +592,25 @@ static void prepare_caller(unsigned selected)
         /* Modeled cold boot: only the flash written by the DUT survives. */
         security_joint_reset(1);
         memcpy(security_joint_nv(),recovery_nv,sizeof(recovery_nv));
+#if defined(CC2530_PARENT_RECOVERY)
+        if(ROUTER_ADMITTED_CASE(selected)) {
+            /* The known router becomes the admitted parent, as a fresh join
+             * through it leaves the record: KNOWN|ACTIVE, no ATTEMPT. */
+            uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+            assert(security_keys_open()==SECURITY_KEYS_OK);
+            assert(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK &&
+                length==144 && record[130]==1);
+            record[130]=3;
+            assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+            security_joint_reset(0);
+        }
+#endif
         link_peer_capability=selected==CALLER_SLEEPY_RECOVERY?0x80:0x88;
         link_peer_recover(&join_config,recovery_state,recovery_length);
         link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
 #if defined(CC2530_PARENT_RECOVERY)
         if(ALTERNATE_CASE(selected)) link_peer_alternate(selected==CALLER_DISCOVERY_EXHAUSTED);
+        link_peer_router_first=ROUTER_ADMITTED_CASE(selected);
 #endif
     } else {
     /* Construct the external synthetic peer, then start a genuinely fresh
@@ -664,6 +689,10 @@ static void prepare_caller(unsigned selected)
          * per-scan work cap at host stepping speed. */
         join_smoke_phase.admission.join.scan.duration=0;
     }
+    if(selected==CALLER_CCA_BUSY) {
+        join_smoke_phase.admission.join.scan.channels=(1UL<<15)|(1UL<<CCA_BUSY_CHANNEL);
+        cca_busy_channel=CCA_BUSY_CHANNEL;
+    }
     if(selected==CALLER_CLOSED) {
         mac_frame_info_t beacon;
         assert(mac_frame_decode(link_beacon,link_beacon_length,&beacon)==MAC_CODEC_OK);
@@ -699,7 +728,7 @@ int main(int argc, char **argv)
     recovery_selected=selected;
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
-    assert((selected<=CALLER_WRONG_TC && selected!=7) || selected==CALLER_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
+    assert((selected<=CALLER_WRONG_TC && selected!=7) || selected==CALLER_BUSY || selected==CALLER_CCA_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
 #else
     assert(selected<=CALLER_FLASH_BUSY || SLEEPY_CASE(selected) || RECOVERY_CASE(selected) || HISTORY_CASE(selected) || REPORTING_CASE(selected) || BINDING_CASE(selected));
     if(selected==7) return reference_e2e_main();
@@ -782,7 +811,7 @@ int main(int argc, char **argv)
                         SOC_RFERRF=4; caller_radio_fault=1;
                     }
                     handoff_started=mac_adapter_diagnostic()->phase==MAC_ADAPTER_RETIRING &&
-                        mac_adapter_diagnostic()->policy==MAC_ADAPTER_KEEP_AUTOACK &&
+                        mac_adapter_diagnostic()->policy>=MAC_ADAPTER_KEEP_AUTOACK &&
                         join_smoke_tx.engine.outcome==MAC_TX_ACKED;
                     if(handoff_started) handoff_configured=0;
                     caller_poll();
@@ -806,12 +835,17 @@ int main(int argc, char **argv)
                 } else if(selected==6
 #if defined(CC2530_DEFAULT_TC_KEY)
                     || selected==CALLER_AMBIGUOUS || selected==CALLER_CLOSED || selected==CALLER_OVERFLOW
+#if !defined(CC2530_ROUTER_JOIN)
+                    || selected==CALLER_CCA_BUSY
+#endif
 #endif
                     ) {
                     assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
                     assert(join_smoke_device.result==BDB_JOIN_NO_PARENT);
 #if defined(CC2530_DEFAULT_TC_KEY)
                     assert(!response_sent && !security_joint_flash_commands());
+                    if(selected==CALLER_CCA_BUSY)
+                        assert(join_smoke_device.scan_result.unscanned==1UL<<CCA_BUSY_CHANNEL);
 #if defined(CC2530_ROUTER_JOIN)
                     /* Strongest-beacon eviction never overflows; the extra
                      * EPIDs make the scan mixed, which still refuses. */
@@ -890,6 +924,14 @@ int main(int argc, char **argv)
                         assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.router_active &&
                             keys.router_known && keys.phase==SECURITY_KEYS_VERIFIED);
                     }
+                    if(ROUTER_ADMITTED_CASE(selected)) {
+                        /* The admitted router is tried first: no TC attempt, no scan. */
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==1);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.router_active &&
+                            keys.router_selected && keys.router_address==0x4567 &&
+                            keys.phase==SECURITY_KEYS_VERIFIED);
+                    }
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY)
                     security_keys_status_t keys;
@@ -906,6 +948,9 @@ int main(int argc, char **argv)
                     if(selected==CALLER_ALL_CHANNELS)
                         assert(join_smoke_device.scan_result.sent==NWK_CANDIDATES_CHANNEL_MASK &&
                             !join_smoke_device.scan_result.unscanned);
+                    if(selected==CALLER_CCA_BUSY)
+                        assert(join_smoke_device.scan_result.unscanned==1UL<<CCA_BUSY_CHANNEL &&
+                            join_smoke_device.parent.candidate.channel==15);
                     if(selected==CALLER_BUSY)
                         assert(caller_extra_beacons==BUSY_ROUTERS && !join_smoke_device.scan_result.overflow &&
                             join_smoke_device.scan_result.candidates==BUSY_CANDIDATES);

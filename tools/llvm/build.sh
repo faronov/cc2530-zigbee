@@ -12,7 +12,11 @@
 # autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
 # autonomous-pm2-epd / autonomous-pm2-sht3x-epd (opt-in: plus the UC8151D e-paper
 # display, CC2530_EPD) or autonomous-pm2-epd-ssd1680 (the same with an SSD1680
-# panel, CC2530_EPD_PANEL=1) or autonomous-pm2-epd-factory (EXPERIMENTAL: epd plus the
+# panel, CC2530_EPD_PANEL=1) or autonomous-pm2-epd-ssd1677 (the 800x480 SSD1677
+# panel with the L8 dashboard and its 0xFC10 cluster, CC2530_EPD_PANEL=2) or
+# autonomous-pm2-epd-ssd1677-router (the same plus a router-parent initial join,
+# CC2530_ROUTER_JOIN, docs/ED_JOIN.md, with Policy C: docs/M5_POLICY_C.md) or
+# autonomous-pm2-epd-factory (EXPERIMENTAL: epd plus the
 # information-page die-sensor reference, CC2530_CHIP_FACTORY) or
 # app (an external application, docs/EXTERNAL_APP.md: firmware.py --app passes
 # APP_DIR, its complete APP_DEFINES and APP_UNITS "unit=path ..." that replace
@@ -35,6 +39,8 @@ case $VARIANT in
   autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
   autonomous-pm2-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD" ;;
   autonomous-pm2-epd-ssd1680) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=1" ;;
+  autonomous-pm2-epd-ssd1677) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=2" ;;
+  autonomous-pm2-epd-ssd1677-router) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=2 -DCC2530_ROUTER_JOIN -DCC2530_REPLAY_POLICY_C" ;;
   autonomous-pm2-epd-factory) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_CHIP_FACTORY" ;;
   autonomous-pm2-sht3x-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X -DCC2530_EPD" ;;
   app) VDEFS="${APP_DEFINES:?APP_DEFINES required}"; : "${APP_DIR:?APP_DIR required}" "${APP_UNITS:?APP_UNITS required}" ;;

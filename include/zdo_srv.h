@@ -19,6 +19,7 @@
 #define ZDO_SRV_NOT_ACTIVE 0x83u
 #define ZDO_SRV_BIND_REQUEST 0x0021u
 #define ZDO_SRV_UNBIND_REQUEST 0x0022u
+#define ZDO_SRV_MGMT_LQI_REQUEST 0x0031u
 #define ZDO_SRV_MGMT_BIND_REQUEST 0x0033u
 #define ZDO_SRV_MGMT_LEAVE_REQUEST 0x0034u
 /* R22 2.3.2.4 Tables 2-34..2-38, nibbles in transmission order: power mode
@@ -32,7 +33,13 @@
 #define ZDO_SRV_IDENTIFY_CLUSTER 0x0003u
 #define ZDO_SRV_TEMPERATURE_CLUSTER 0x0402u
 #define ZDO_SRV_HUMIDITY_CLUSTER 0x0405u
+#if defined(CC2530_EPD) && defined(CC2530_EPD_PANEL) && CC2530_EPD_PANEL == 2
+/* The L8 display's manufacturer-specific cluster (epd.h, EPD_SSD1677). */
+#define ZDO_SRV_DISPLAY_CLUSTER 0xfc10u
+#define ZDO_SRV_INPUT_CLUSTERS 6u
+#else
 #define ZDO_SRV_INPUT_CLUSTERS 5u
+#endif
 /* No Home Automation device type is claimed: the endpoint's minimal
  * application servers (zcl_sensor.h) have not been conformance-tested
  * against any HA/BDB device definition. */
@@ -50,7 +57,7 @@
 #define ZDO_SRV_STAGED (5u + ZDO_SRV_DESCRIPTOR_MAX + 1u)
 extern MCU_XDATA uint8_t zdo_srv_descriptors[];
 #else
-#define ZDO_SRV_STAGED 25u
+#define ZDO_SRV_STAGED (15u + 2u * ZDO_SRV_INPUT_CLUSTERS)
 #endif
 
 typedef enum {

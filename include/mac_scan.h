@@ -35,10 +35,13 @@ typedef mac_tx_t mac_scan_tx_t;
  * before the fifth CCA. This fits all macMaxCSMABackoffs+1 attempts.
  */
 #define MAC_SCAN_TX_SYMBOLS 16384u
+/* Symbols, not polls, bound a busy CSMA request: the register model needs
+ * about 190 polls for five failed CCAs, LG hardware fewer than 64. */
+#define MAC_SCAN_TX_STEPS 256u
 #else
 #define MAC_SCAN_TX_SYMBOLS 4096u
-#endif
 #define MAC_SCAN_TX_STEPS 64u
+#endif
 #if defined(CC2530_MAC_LINK)
 /* Encloses the LINK MAC_TX_STOP_SYMBOLS/STEPS retirement bound. */
 #define MAC_SCAN_STOP_SYMBOLS 8192u

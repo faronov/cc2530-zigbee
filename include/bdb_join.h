@@ -169,6 +169,8 @@ typedef struct {
     /* 0 commissioning; 1 resumed, 2 Rejoin Response accepted, 3 recovered READY. */
     uint8_t recovery;
 #if defined(CC2530_PARENT_RECOVERY)
+    /* 0 TC first; 1 known-router scan pending; 2 final attempt (scanned
+     * router or TC fallback); 3 saved router first, TC fallback pending. */
     uint8_t parent_search;
 #endif
 } bdb_join_t;

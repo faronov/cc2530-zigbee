@@ -22,7 +22,12 @@ enum { MAC_ADAPTER_COLD = 0, MAC_ADAPTER_RX, MAC_ADAPTER_OFF,
        MAC_ADAPTER_PREPARED, MAC_ADAPTER_SCHEDULED, MAC_ADAPTER_REPORT,
        MAC_ADAPTER_WAIT_MAC, MAC_ADAPTER_COLLECT, MAC_ADAPTER_RETIRING,
        MAC_ADAPTER_CLOSING, MAC_ADAPTER_DRAINING, MAC_ADAPTER_FAULT };
-enum { MAC_ADAPTER_STOP_RX = 0, MAC_ADAPTER_KEEP_RAW, MAC_ADAPTER_KEEP_AUTOACK };
+/* KEEP_PENDING (CC2530_RX_OFF_IDLE only): KEEP_AUTOACK when the ACK has
+ * Frame Pending set (IEEE 802.15.4-2006 7.5.6.3), otherwise retire as STOP_RX.
+ * The soft stop completes any reception and its AUTOACK; frames still queued
+ * are drained and delivered before RETIRED. */
+enum { MAC_ADAPTER_STOP_RX = 0, MAC_ADAPTER_KEEP_RAW, MAC_ADAPTER_KEEP_AUTOACK,
+       MAC_ADAPTER_KEEP_PENDING };
 enum { MAC_ADAPTER_TX_EVENT = 1, MAC_ADAPTER_RX_EVENT, MAC_ADAPTER_CLOSED_EVENT };
 
 typedef struct {
@@ -58,6 +63,7 @@ mac_adapter_result_t mac_adapter_now(SDCC_VOLATILE uint32_t timeout, SDCC_VOLATI
  * across retries/transactions; do not reset its DSN or change the owner object.
  * KEEP_AUTOACK requires an ACK-requesting transaction and a successful guarded
  * first-ACK handoff; uncertainty is terminal, never an implicit stop/resume gap.
+ * KEEP_PENDING also requires an ACK-requesting transaction.
  */
 mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * SDCC_VOLATILE tx,
     SDCC_VOLATILE uint8_t policy, SDCC_VOLATILE uint32_t timeout, SDCC_VOLATILE uint16_t limit) JOIN_FAR;

@@ -6,6 +6,10 @@
 #include <string.h>
 #include "zcl_sensor.h"
 #include "zcl_temperature.h"
+#if defined(CC2530_EPD)
+#include "epd.h"
+#include "radio_autoack.h"
+#endif
 
 /* The application ZCL/Bind server against its real device overlay. The
  * runtime publication and the caller's queueing are covered by
@@ -275,7 +279,7 @@ static void reply(uint16_t cluster, const void *expected, uint8_t length)
     CHECK(CTX.response.aps.cluster_id == cluster && !CTX.response.nwk.destination);
     CHECK(CTX.response.nwk.version == 2 && CTX.response.nwk.radius == 30 && !CTX.response.aps.flags);
     CHECK(CTX.response.nwk.discover_route == NWK_DISCOVER_ROUTE_ENABLE);
-    if (cluster & 0x8000u) CHECK(!CTX.response.aps.profile_id && !CTX.response.aps.destination_endpoint);
+    if ((cluster & 0xff00u) == 0x8000u) CHECK(!CTX.response.aps.profile_id && !CTX.response.aps.destination_endpoint);
     else CHECK(CTX.response.aps.profile_id == 0x0104 && CTX.response.aps.source_endpoint == 1 &&
                CTX.response.aps.destination_endpoint == 9);
     CTX.response_pending = 0;
@@ -1067,6 +1071,42 @@ static void chip(void)
 }
 #endif
 
+#if defined(EPD_L8)
+/* The board links the panel driver; the display cluster is served from its
+ * store. */
+volatile uint8_t SOC_P0, SOC_P0DIR, SOC_P0SEL, SOC_P0INP, SOC_APCFG, SOC_PERCFG, SOC_P2DIR;
+volatile uint8_t SOC_P1, SOC_P1DIR, SOC_P1SEL;
+volatile uint8_t SOC_U0CSR, SOC_U0DBUF, SOC_U0BAUD, SOC_U0UCR, SOC_U0GCR;
+MCU_XDATA radio_autoack_attempt_t mac_attempt_raw;
+
+#define PRIVET "\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82"
+static void l8(void)
+{
+    reset(0);
+    join_smoke_device.last = 777;
+    /* Plain and manufacturer-specific frames; the reply keeps the code. */
+    zcl(0xfc10, "\x00\x10\x00\x01\x00\x00\x00\xfd\xff\x02\x00", 11,
+        "\x18\x10\x01\x01\x00\x00\x21\x2c\x01\x00\x00\x00\x23\x00\x00\x00\x00"
+        "\xfd\xff\x00\x21\x01\x00\x02\x00\x86", 26);
+    zcl(0xfc10, "\x04\x34\x12\x11\x02\x30\x00\x42\x0c" PRIVET, 21, "\x1c\x34\x12\x11\x04\x00", 6);
+    CHECK(epd_l8.dirty && epd_l8.written == 777 && epd_l8.message[0] == 95u + 0x0fu &&
+          epd_l8.message[6] == EPD_L8_END);
+    zcl(0xfc10, "\x04\x34\x12\x12\x00\x30\x00", 7, "\x1c\x34\x12\x12\x01\x30\x00\x00\x42\x0c" PRIVET, 22);
+    /* Range, read-only, type and unknown failures; the rest applies. */
+    zcl(0xfc10, "\x00\x13\x02\x01\x00\x21\x3b\x00\xfd\xff\x21\x02\x00\x10\x00\x21\x00\x00"
+        "\x02\x00\x20\x00\x12\x00\x30\x06\x10\x00\x29\x0c\xfe", 31,
+        "\x18\x13\x04\x87\x01\x00\x88\xfd\xff\x8d\x10\x00\x86\x02\x00", 15);
+    CHECK(epd_l8.interval == 300 && epd_l8.weather == 6 && epd_l8.outdoor == -500);
+    zcl(0xfc10, "\x00\x14\x02\x00\x00\x23\x80\x51\x01\x00\x01\x00\x21\x10\x0e", 15, "\x18\x14\x04\x00", 4);
+    CHECK(epd_l8.time == 86400ul && epd_l8.tick == 777 && epd_l8.interval == 3600);
+    /* Not reportable; no cluster-specific commands. */
+    zcl(0xfc10, "\x00\x15\x06\x00\x10\x00\x29\x01\x00\x10\x0e\x0a\x00", 13, "\x18\x15\x07\x8c\x00\x10\x00", 7);
+    zcl(0xfc10, "\x01\x16\x00", 3, "\x18\x16\x0b\x00\x81", 5);
+    /* Other clusters still refuse manufacturer-specific frames. */
+    zcl(0x0402, "\x04\x34\x12\x17\x00\x00\x00", 7, "\x1c\x34\x12\x17\x0b\x00\x81", 7);
+}
+#endif
+
 #if defined(CC2530_CHIP_FACTORY)
 /* chip() ran with a biased sensor and its factory word: every measurement
  * loaded the word and read true temperatures. An erased word falls back to
@@ -1203,6 +1243,11 @@ int main(int argc, char **argv)
     chip();
 #if defined(CC2530_CHIP_FACTORY)
     factory();
+#endif
+#if defined(EPD_L8)
+    l8();
+    printf("ZCL sensor chip sense + display cluster FC10: %lu checks PASS (host only).\n", checks);
+    return 0;
 #endif
 #if defined(CC2530_SHT3X)
     sht3x();

@@ -42,6 +42,8 @@ static host_mmio_cycles_hook_t crypto_cycles;
 static uint8_t sent_body[125], sent_length, sent_wait, command_wait;
 static uint8_t transport_sent, corrupt_sent, response_sent, app_sent, repeated_sent, drop_checked;
 static unsigned scenario, e2e_checks, e2e_steps, random_inputs, received_frames;
+/* Nonzero: CCA never clears on this channel (persistent Wi-Fi overlap). */
+static unsigned cca_busy_channel;
 static unsigned totals, total_peer_checks, total_steps, total_random;
 static uint32_t test_prng;
 static uint32_t bad_serial;
@@ -67,7 +69,9 @@ static uint8_t queued_seen;
 /* RX_OFF_IDLE (M7a): READY releases 1-3 test the response window (late in
  * it), a frame aired as the window closes (drained) and a lost poll ACK. */
 static unsigned rx_releases, window_release, drain_release, drain_seen, drain_delivered;
-static unsigned lost_polls, lost_release, nodata_closes, hold_opens, tx_opens;
+static unsigned lost_polls, lost_release, nodata_closes, hold_opens, tx_opens, pending_stops, pending_keeps;
+/* A broadcast queued as a KEEP_PENDING stop retires, delivered slowly. */
+static unsigned retire_drain_sent, retire_drain_delayed, retire_drain_disarms;
 static uint32_t drain_serial, lost_opens, poll_last, poll_max;
 static unsigned poll_count;
 static uint8_t rx_measure;
@@ -155,7 +159,8 @@ static void joint_store(uint8_t a, uint8_t before, uint8_t value)
                     (scenario == RETRY_CANCEL && device.phase == BDB_JOIN_NODE && !race_started) ||
                     (scenario == POLL_ACK_LOST_RESPONSE && device.phase == BDB_JOIN_ASSOCIATING &&
                      response_fcf == 0x12 && association_polls == 1));
-        cca_clear = !(scenario == POLL_BUSY && device.attempts == 1 && response_fcf == 0x12);
+        cca_clear = !(scenario == POLL_BUSY && device.attempts == 1 && response_fcf == 0x12) &&
+            !(cca_busy_channel && XR(0x618f) == 11u+5u*(cca_busy_channel-11u));
         if ((scenario == POLL_NO_ACK || scenario == POLL_BUSY) &&
             device.attempts == 1 && response_fcf == 0x12) poll_attempts++;
 #if defined(CC2530_RX_OFF_IDLE)
@@ -276,7 +281,8 @@ static void cold_start(void)
     queued_polls = released_frames = queued_seen = 0;
 #if defined(CC2530_RX_OFF_IDLE)
     rx_releases = window_release = drain_release = drain_seen = drain_delivered = 0;
-    lost_polls = lost_release = nodata_closes = hold_opens = tx_opens = 0;
+    lost_polls = lost_release = nodata_closes = hold_opens = tx_opens = pending_stops = pending_keeps = 0;
+    retire_drain_sent = retire_drain_delayed = retire_drain_disarms = 0;
     drain_serial = lost_opens = poll_last = poll_max = 0;
     poll_count = rx_measure = 0;
 #endif
@@ -393,6 +399,14 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
          * Association Request's STOP_RX retirement exceeded 1024 symbols. */
         advance_clocks(1500u*512u); drain_delayed = 1;
     }
+#if defined(CC2530_RX_OFF_IDLE)
+    if (IS_RX_OFF_IDLE && retire_drain_sent && !retire_drain_delayed &&
+        mac_adapter_diagnostic()->phase == MAC_ADAPTER_DRAINING && mac_adapter_diagnostic()->held) {
+        /* H2: delivering drained network frames through the stack outlasted
+         * the 6144-symbol STOPPING bound; RETIRED must not wait for it. */
+        advance_clocks(7000u*512u); retire_drain_delayed = 1;
+    }
+#endif
     if (scenario == EARLY_KEY && !transport_sent && dev->phase == BDB_JOIN_INSTALLING) {
         /* The frame is prepared by the peer oracle while the device is still
          * INSTALLING; early_key() puts it on air before WAIT_KEY. */
@@ -426,6 +440,24 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
         foreign_sent = 1;
         return;
     }
+#if defined(CC2530_RX_OFF_IDLE)
+    if (IS_RX_OFF_IDLE && lost_release && !retire_drain_sent && dev->phase == BDB_JOIN_READY &&
+        mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING &&
+        mac_adapter_diagnostic()->policy == MAC_ADAPTER_KEEP_PENDING &&
+        tx->engine.outcome == MAC_TX_ACKED && !tx->engine.pending) {
+        /* A network broadcast queued just before the retirement stop. */
+        uint8_t broadcast[57];
+        unsigned i;
+        broadcast[0] = 0x41; broadcast[1] = 0x88; broadcast[2] = 0x4d;
+        broadcast[3] = (uint8_t)link_identity.pan; broadcast[4] = (uint8_t)(link_identity.pan >> 8);
+        broadcast[5] = broadcast[6] = 0xff; broadcast[7] = 0x22; broadcast[8] = 0x2f;
+        for (i = 9; i < sizeof(broadcast); i++) broadcast[i] = (uint8_t)(i * 7u);
+        air_frame(broadcast, sizeof(broadcast), 1);
+        CHECK(!ack_active && packets);
+        retire_drain_sent = 1;
+        return;
+    }
+#endif
     if (scenario == BROADCAST_DRAIN && !broadcast_sent &&
         command_wait == MAC_COMMAND_ASSOCIATION_REQUEST && dev->phase == BDB_JOIN_ASSOCIATING &&
         mac_adapter_diagnostic()->normal_rx && mac_adapter_diagnostic()->transmitted &&
@@ -716,6 +748,20 @@ static void tick_driver(void)
         }
         CHECK(!memcmp(&before, &device.work.runtime.transport, sizeof(before)) &&
               !memcmp(&tx_before, &adapter_tx, sizeof(tx_before)));
+#if defined(CC2530_RX_OFF_IDLE)
+        /* KEEP_PENDING: an ACK without Frame Pending already stopped RX at
+         * retirement (frames queued before the stop drain after it); with
+         * Frame Pending RX was retained for the hold. */
+        if (rx_off && driver.action.data.tx.control.kind == NWK_APS_ACTION_DISARM &&
+            adapter_tx.engine.outcome == MAC_TX_ACKED && adapter_tx.engine.ack_requested) {
+            CHECK(ad->policy == MAC_ADAPTER_KEEP_PENDING && !ad->goal &&
+                  (adapter_tx.engine.pending ? ad->phase == MAC_ADAPTER_RX :
+                   ad->phase == MAC_ADAPTER_OFF || ad->phase == MAC_ADAPTER_DRAINING ||
+                   ad->phase == MAC_ADAPTER_CLOSING));
+            if (ad->phase == MAC_ADAPTER_DRAINING || ad->phase == MAC_ADAPTER_CLOSING) retire_drain_disarms++;
+            if (adapter_tx.engine.pending) pending_keeps++; else pending_stops++;
+        }
+#endif
     }
     e2e_steps++;
     /* Finite foreground latency; no consumer timestamp is supplied here.
@@ -728,7 +774,7 @@ static void tick_driver(void)
          mac_adapter_diagnostic()->phase == MAC_ADAPTER_OFF) ? 1000u : 4u)*512u);
     handoff_tick();
     handoff_started = mac_adapter_diagnostic()->phase == MAC_ADAPTER_RETIRING &&
-        mac_adapter_diagnostic()->policy == MAC_ADAPTER_KEEP_AUTOACK &&
+        mac_adapter_diagnostic()->policy >= MAC_ADAPTER_KEEP_AUTOACK &&
         adapter_tx.engine.outcome == MAC_TX_ACKED;
     if (handoff_started) handoff_configured = 0;
     if (scenario == 7) blocked_action = driver.action;
@@ -862,10 +908,12 @@ static void rx_off_tail(void)
     CHECK(link_peer_parent >= parent+2u && poll_count <= 20u);
     CHECK(device.phase == BDB_JOIN_READY && device.member && !driver.fault && !mac_adapter_diagnostic()->fault);
     CHECK(hold_opens && tx_opens && nodata_closes && driver.rx_opens == hold_opens);
+    CHECK(pending_stops >= poll_count && pending_keeps);
+    CHECK(retire_drain_sent && retire_drain_delayed && retire_drain_disarms == 1u);
     printf("E2E RX-off READY: RX on %lu/%lu symbols (%lu ppm), %u polls max gap %lu, %u TX opens, "
-           "%u hold opens, %u closes, %u releases PASS\n", (unsigned long)on, (unsigned long)total,
+           "%u hold opens, %u closes, %u releases, %u/%u ACK stops/keeps PASS\n", (unsigned long)on, (unsigned long)total,
            (unsigned long)((uint64_t)on*1000000u/total), poll_count, (unsigned long)poll_max,
-           tx_opens, hold_opens, nodata_closes, rx_releases);
+           tx_opens, hold_opens, nodata_closes, rx_releases, pending_stops, pending_keeps);
 }
 #else
 #define E2E_LIMIT(n) (n)

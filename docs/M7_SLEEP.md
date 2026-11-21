@@ -58,12 +58,22 @@ parent-recovery images are byte-identical to the pre-M7a build.
   shows keepalives no longer start fast polling; the 3.76% window held an
   own ZCL report whose APS ACK (a NWK data frame) opened the window, which
   the later APS ACK exclusion addresses (host-tested, not yet on hardware).
-- Per-poll receiver time (simulated, MCUEMU, FSMSTAT0 sampled every 50 µs,
-  LH22 image): about 22.75 ms per poll without Frame Pending. TX and ACK end
-  2.6 ms after RX start; the rest is the adapter retire/close sequence, about
-  3 ms per main-loop iteration. At the 7 s slow period that is about 0.33%
-  RX-on, small next to the always-awake CPU, so shortening this tail is
-  deferred until M7b.
+- Per-poll receiver time (simulated, MCUEMU, FSMSTAT0 sampled every 50 µs):
+  about 22.75 ms per poll without Frame Pending on the LH22 image and
+  29.55 ms on the image before `KEEP_PENDING` (hex `8ac46fe1`). TX ends
+  1.4 ms and the ACK 2.7 ms after RX start; the rest was the adapter
+  report/collect/retire sequence (about 1.8 ms per main-loop iteration),
+  then the handoff to normal RX and the driver's close about 11 ms later.
+  `KEEP_PENDING` (READY, RX-off-when-idle, ACK-requesting TX) retires an ACK
+  without Frame Pending straight to the soft stop instead: 17.9 ms per poll
+  (hex `a8df2a4d`), Frame Pending polls unchanged. The E2E `RX_OFF_IDLE`
+  minute dropped from 0.236% to 0.215% RX-on.
+  On H2 the first image (`a8df2a4d`) published `RETIRED` only after draining
+  frames queued before the stop; on busy channel 15 that drain (one frame per
+  slow READY step) took ~85 ms of the 98 ms STOPPING bound and then exceeded
+  it: `MAC_TX_STOP_FAILED`, BDB FAULT `TRANSMIT_FAILED`, reboot loop every
+  ~64 s. `KEEP_PENDING` now retires from DRAINING (reception already ended)
+  and drains afterwards.
 
 ## M7b — PM2 between polls (H2 HIL, debugger-powered)
 

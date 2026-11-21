@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
+#
+# Home Assistant package for the LG ESL29 L8 dashboard (4.26" SSD1677,
+# cluster 0xFC10, docs/EPAPER.md). Requires the ZHA quirk
+# tools/ha/zha_quirk_lg_esl29_l8.py. Copy to <config>/packages/ and edit the
+# ieee, the weather entity and the four slots in script.l8_push.
+#
+# The display redraws once, 10 s after the last write that changed something,
+# so l8_push writes the clock, the values, the labels and the interval every
+# 5 minutes: the device keeps them in RAM only and shows dashes after a
+# reset until the next push; unchanged writes do not redraw. The device is
+# a sleepy end device: each write waits for its next poll; failures are
+# ignored and retried by the next push.
+#
+# Strings are sent as UTF-8; Latin, Cyrillic, Ёё and ° are shown, other
+# characters become '?'. Labels hold 22 glyphs, values 12, the message 48.
+# The ZHA service turns the bare words on/off/yes/no/true/false/enable/
+# disable into booleans, so do not use them alone as a value.
+
+script:
+  l8_push:
+    alias: L8 dashboard push
+    mode: queued
+    max: 3
+    fields:
+      full:
+        description: Also write the labels and the refresh interval.
+        example: true
+        selector:
+          boolean:
+    variables:
+      ieee: "00:12:4b:00:19:87:7a:fe"
+      weather_entity: weather.forecast_home
+      interval: 300
+      labels: ["Сеть", "Котёл", "Солнце", "RAV4"]
+      values: >-
+        {{ [
+          (states('sensor.sungrow_meter_total_power') | float(0) / 1000) | round(2) ~ ' кВт',
+          (states('sensor.garage_boiler_meter_power_total') | float(0) / 1000) | round(1) ~ ' кВт',
+          (states('sensor.sungrow_total_dc_power') | float(0) / 1000) | round(2) ~ ' кВт',
+          states('sensor.rav4_plug_in_hybri_battery_level') | int(0) ~ ' %'
+        ] }}
+      condition: "{{ states(weather_entity) }}"
+      temperature: "{{ state_attr(weather_entity, 'temperature') }}"
+      humidity: "{{ state_attr(weather_entity, 'humidity') }}"
+      codes:
+        sunny: 1
+        clear-night: 2
+        partlycloudy: 3
+        cloudy: 4
+        rainy: 5
+        pouring: 5
+        snowy: 6
+        snowy-rainy: 6
+        hail: 6
+        fog: 7
+        lightning: 8
+        lightning-rainy: 8
+        windy: 9
+        windy-variant: 9
+      writes: >-
+        {% set ns = namespace(w=[[0, (as_timestamp(now()) + now().utcoffset().total_seconds() - 946684800) | int]]) %}
+        {% if full %}
+          {% set ns.w = ns.w + [[1, interval]] %}
+          {% for k in range(4) %}{% set ns.w = ns.w + [[32 + 2 * k, labels[k]]] %}{% endfor %}
+        {% endif %}
+        {% for k in range(4) %}{% set ns.w = ns.w + [[33 + 2 * k, values[k]]] %}{% endfor %}
+        {% set ns.w = ns.w + [
+          [16, (temperature | float * 100) | round | int if is_number(temperature) else -32768],
+          [17, (humidity | float * 100) | round | int if is_number(humidity) else 65535],
+          [18, codes.get(condition, 0)]] %}
+        {{ ns.w }}
+    sequence:
+      - repeat:
+          for_each: "{{ writes }}"
+          sequence:
+            - action: zha.set_zigbee_cluster_attribute
+              continue_on_error: true
+              data:
+                ieee: "{{ ieee }}"
+                endpoint_id: 1
+                cluster_id: 64528
+                cluster_type: in
+                attribute: "{{ repeat.item[0] }}"
+                value: "{{ repeat.item[1] }}"
+
+  l8_message:
+    alias: L8 dashboard message
+    mode: queued
+    max: 3
+    fields:
+      text:
+        description: Bottom line, up to 48 glyphs; empty clears it.
+        example: Вынести мусор - вторник
+        selector:
+          text:
+    sequence:
+      - action: zha.set_zigbee_cluster_attribute
+        continue_on_error: true
+        data:
+          ieee: "00:12:4b:00:19:87:7a:fe"
+          endpoint_id: 1
+          cluster_id: 64528
+          cluster_type: in
+          attribute: 48
+          value: "{{ text | default('') }}"
+
+automation:
+  - id: l8_dashboard_push
+    alias: L8 dashboard push
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+    actions:
+      - action: script.l8_push
+        data:
+          full: true

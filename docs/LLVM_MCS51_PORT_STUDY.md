@@ -2266,3 +2266,65 @@ This repository's stack proofs decode CODE bytes themselves and do not read
 `llvm-objdump` text, so their results are unaffected. Tools that parse `llvm-objdump`
 output, such as the FlowerX GP `tools/stack.py`, reported recursion through the phantom
 calls on images containing `DEC direct`.
+
+## 30. Size work: outliner, relaxation, switch tables
+
+LLVM `00b40cfd8bd0` (branch `mcs51-size-opt`, on top of §29) ports the devbis/llvm-mcs51
+size work and fixes found while bringing it up:
+
+- machine outlining for `-Oz`, with helpers kept collectible and placed by LLD in
+  their callers' bank; instructions that address SP directly are never outlined,
+  because the outlined call shifts SP by two (stack-argument reads were off by two);
+- LLD relaxation of same-bank `LCALL`/`LJMP` and same-section transfers to
+  `ACALL`/`AJMP`/short branches, with corrected size accounting, page-boundary
+  handling and bank-call trampolines kept in their full shape;
+- `BR_JT` switch tables (operand type, size and table limit fixed) and common-bank
+  spill; bit branches for single-bit tests; smaller 32-bit multiply runtime; masked
+  constant word shifts; a smaller LTO pipeline for `-Oz`;
+- diagnostics for bit accesses with a variable address.
+
+The LG join image with the e-paper dashboard application shrinks from about 244 KB to
+209 KB and fits again; the 193 MCS-51 lit tests pass. Proofs accept relaxed calls and
+outlined helpers (`gp_proof.py`). Parent LQI and the full join ran on hardware (H2) with
+this toolchain. FULL was not run.
+
+## 31. Word arguments in R2..R5 (`-mcs51-rn-words`)
+
+Pinned LLVM `8b581288615a174b86258eb90b5e702ca8a83d93` (branch `mcs51-size-opt`, on top
+of §30) adds `-mcs51-rn-words`, and `profile.json` enables it. The first word arguments
+and word results move from IP0..IP3 (direct 48..55) to R2R3/R4R5 (bank-0 direct 2..5).
+The AsmPrinter then emits the one-byte-shorter Rn forms, and `getInstSizeInBytes` reports
+those exact sizes to relaxation and the outliner.
+
+- The option requires `-mcs51-csr=none`. Without it, output is byte-identical to §30.
+- The hand-written `__ashlsi3`/`__lshrsi3`/`__ashrsi3` in `mcs51-runtime.c` read direct
+  48..53. Calls to them keep the old convention (`CC_MCS51_IMWords`). The first
+  rn-words image without this fix never transmitted: its MAC radio driver faulted
+  (join status reason `DRIVER`, result `RADIO`).
+- `gp_proof.py` accepts the R2..R5 argument bases.
+- LG join with the e-paper dashboard: 209,095 → 194,459 bytes (−7%). It passes
+  admission, and MCUEMU matches the previous frame sequence. On hardware (H2) it does a
+  fresh join, gets Transport Key, sends Device Announce, completes the ZHA interview and
+  reports, and polls at 4/s. The 215 MCS-51 lit tests pass. FULL was not run.
+
+## 32. Fixed defect: near pointers to IRAM objects
+
+Pinned LLVM `3f477911581f59c9762dd944d153242b7790d633` (on top of §31). C gives a local
+whose address is taken (`f(&n)`) an IDATA stack slot and passes a default (near, 16-bit)
+pointer to it. ISel widened the one-byte IDATA address with a zero high byte, so the
+callee, which writes through MOVX, reached XDATA page 0 (PDATA and the static frames)
+instead of the stack object. The caller then read a stale value and the stray write
+corrupted a static frame.
+
+Found on hardware: the esl-dashboard 0xFC10 string store took the field capacity
+through `l8_field(id, &capacity)`. The capacity stayed stale, the text loop padded END
+octets far past the field, and the overwritten state then failed refreshes (a false SPI
+stall) and Zigbee writes from Home Assistant.
+
+The CC2530 maps its internal RAM into XDATA at 0x1F00-0x1FFF, so with `-mcpu=cc2530` a
+DATA or IDATA address widened to a default pointer now carries the high byte 0x1F
+(`MCS51ISelDAGToDAG.cpp`, test `cc2530-iram-near-pointer.ll`). Explicit `__xdata`
+casts and the generic CPU keep the address value. The 216 MCS-51 lit tests pass. The
+dashboard built with the unfixed source and this compiler completes all Home Assistant
+writes on H2 and refreshes without the corruption. FULL was not run.
+

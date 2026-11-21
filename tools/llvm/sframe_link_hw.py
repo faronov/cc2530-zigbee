@@ -56,6 +56,12 @@ def frames(elf_path):
 # ---- pass 1
 P1 = BASE_LD.replace(PDATA_BSS, '    *(.mcs51.pdata.bss .mcs51.pdata.bss.*)\n')
 P1 = re.sub(r'ASSERT\([^;]*"CC2530 PDATA globals exceed the MPAGE zero page"\)', '', P1, flags=re.S)
+# The packed frames may not fit the real XRAM; pass 2 enforces it at the final
+# addresses.
+XRAM = '  XRAM      (rw) : ORIGIN = 0x0000, LENGTH = 0x2000\n'
+assert P1.count(XRAM) == 1
+P1 = P1.replace(XRAM, XRAM.replace('0x2000', '0x6000'))
+P1 = re.sub(r'ASSERT\([^;]*"CC2530 \.bss overlaps the DATA-space SRAM alias"\)', '', P1, flags=re.S)
 EXTRA_P1 = ['-Wl,--noinhibit-exec']
 msg1, log1, elf1 = link(TAG + '-p1', P1, EXTRA_P1)
 if 'rc=0' not in msg1: sys.exit('pass 1 failed:\n' + log1[-3000:])
