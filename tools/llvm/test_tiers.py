@@ -62,6 +62,32 @@ class Selection(unittest.TestCase):
             self.assertNotIn("--limit", [str(c) for c in steps[f"sim-case{case}"].cmd])
         self.assertIn("complete case 0", unselected)
 
+    def test_short_runs_short_cases_and_case0_through_security_path(self):
+        for variant in ("production", "parent-recovery-policy-c"):
+            steps, unselected = names("short", variant=variant)
+            order = list(steps)
+            prefix = steps["sim-case0-prefix"]
+            cmd = [str(c) for c in prefix.cmd]
+            self.assertGreater(int(cmd[cmd.index("--limit") + 1]), tiers.SECURITY_STEP)
+            self.assertIn("NOT commissioning", prefix.proves)
+            self.assertNotIn("sim-case0", steps)
+            self.assertNotIn("sim-summary", steps)
+            for case in PROFILE["simulator"]["short_cases"]:
+                self.assertNotIn("--limit", [str(c) for c in steps[f"sim-case{case}"].cmd])
+                self.assertLess(order.index("sim-case0-prefix"), order.index(f"sim-case{case}"))
+            self.assertIn("complete case 0", unselected)
+            long_cases = set(PROFILE["simulator"]["full_cases"]) - set(PROFILE["simulator"]["short_cases"])
+            long_cases |= set(PROFILE["simulator"]["variant_cases"].get(variant, []))
+            for case in long_cases:
+                self.assertNotIn(f"sim-case{case}", steps)
+                self.assertIn(f"{case}", unselected["long scenarios"])
+
+    def test_short_refuses_case0_prefix_short_of_security_path(self):
+        weakened = json.loads(json.dumps(PROFILE))
+        weakened["simulator"]["short_prefixes"]["0"] = tiers.SECURITY_STEP
+        with self.assertRaises(SystemExit):
+            tiers.plan("short", args("short"), weakened)
+
     def test_full_always_runs_complete_case0_and_every_case(self):
         for extra in ({}, {"case0_budget": 60}):
             steps, unselected = names("full", **extra)
@@ -107,8 +133,10 @@ class Selection(unittest.TestCase):
     def test_tier_sets_are_nested(self):
         fast, _ = names("fast")
         smoke, _ = names("smoke")
+        short, _ = names("short")
         full, _ = names("full")
         self.assertTrue(set(fast) - {"lit"} <= set(smoke))
+        self.assertTrue(set(smoke) <= set(short))
         self.assertTrue(set(fast) - {"lit"} <= set(full))
 
     def test_policy_c_requires_sustained_case_and_preserves_strict_selection(self):

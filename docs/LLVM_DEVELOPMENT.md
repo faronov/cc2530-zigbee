@@ -75,6 +75,7 @@ production compiler or fresh migration acceptance.
 | --- | --- | --- | --- |
 | After an ordinary compiler or firmware edit | `make test-llvm-fast` | ≈21 s | No, never |
 | Before opening or updating a PR | `make test-llvm-smoke` | ≈3.5–5 min | No, never; a 3-step prefix only |
+| Before merging an integration branch | `make test-llvm-short` | ≈30 min on a 4-core CI runner (estimated) | No; a 396-step prefix through the AES/flash path |
 | Before an integration/release/hardware candidate | `make test-llvm-full` | ≈4.8 h (case 0 ≈4.8 h) | Yes, mandatory |
 
 All targets take these variables:
@@ -91,6 +92,7 @@ archive (see `tools/llvm/prepare_simulator.py`), and needs `LLVM_SIM_ARCHIVE`.
 make llvm-simulator LLVM_SIM_ARCHIVE=build/sdcc_4.2.0+dfsg.orig.tar.xz
 make test-llvm-fast  PYTHON=.venv/bin/python LLVM_TOOLS=../build-rc/bin LLVM_SRC=../llvm-rc LLVM_TREE=../build-rc
 make test-llvm-smoke PYTHON=.venv/bin/python LLVM_TOOLS=../build-rc/bin LLVM_SRC=../llvm-rc LLVM_TREE=../build-rc
+make test-llvm-short PYTHON=.venv/bin/python LLVM_TOOLS=../build-rc/bin LLVM_SRC=../llvm-rc LLVM_TREE=../build-rc
 # FULL: hours. Suspend after a case-0 budget, then resume against the same identity:
 make test-llvm-full ... LLVM_TIER_ARGS="--case0-budget 17400"
 make test-llvm-full ... LLVM_TIER_ARGS="--resume --case0-budget 17400"
@@ -99,7 +101,7 @@ make test-llvm-full ... LLVM_TIER_ARGS="--resume --case0-budget 17400"
 The direct CI entry point is the same script:
 
 ```sh
-python3 -B tools/llvm/tiers.py --tier {fast,smoke,full} --output DIR \
+python3 -B tools/llvm/tiers.py --tier {fast,smoke,short,full} --output DIR \
     --tools BIN --llvm-src SRC --simulator S51 \
     [--llvm-build TREE | --lit-evidence RECEIPT] [--evidence STORE] \
     [--case0-budget SEC] [--resume] [--plan-only] [--variant {production,rx-diag,parent-recovery,parent-recovery-policy-c}]
@@ -182,7 +184,17 @@ one.** SMOKE is FAST plus the following:
 
 The case-0 prefix is a regression check only. Its report says `complete: false`, and it never
 claims READY or commissioning. The AES/flash write path is first reached at case-0 step 395 and
-in case 10, so it is FULL-only. The receipt lists it under `unselected`.
+in case 10, so SMOKE leaves it to SHORT and FULL. The receipt lists it under `unselected`.
+
+**SHORT (short FULL).** SHORT is the FAST steps plus `vectors`, the scenarios that complete in
+under half an hour (8, 6, 1, 5, 9, 4, 2, 3; `short_cases`) and a 396-step case-0 prefix
+(`short_prefixes`) through step 395, the first AES/flash security path. The prefix starts first
+because it is the longest step. From the per-case times of FULL 38785958832 (case 8 ≈23 min,
+case 6 ≈14 min) and the event count of case 0 up to step 395 (≈20 min), SHORT takes about half
+an hour with four workers. It refuses a profile whose case-0 prefix stops before step 395. It
+never runs complete commissioning: case 0, case 10, cases 16 and 17 and the parent-recovery and
+Policy C cases (18–24) run to completion only in FULL, and the receipt lists them under
+`unselected`. On GitHub, dispatch `llvm-tiers.yml` with `tier=short`.
 
 **FULL: 25 steps.** FULL is the FAST steps plus `vectors`, every admitted scenario (0, 16, 10,
 8, 6, 1, 5, 9, 4, 2, 3, 17) run to its expected terminal, and `sim-summary`, which checks every

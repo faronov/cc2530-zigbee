@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""FAST / SMOKE / FULL validation tiers for the experimental LLVM-MCS51 CC2530 image.
+"""FAST / SMOKE / SHORT / FULL validation tiers for the experimental LLVM-MCS51 CC2530 image.
 
   fast   compiler lit (or identity-bound lit evidence), semantic simulator matrices,
          upstream runtime verifiers, bank-call ABI matrix, 45-TU firmware build+link,
@@ -8,6 +8,11 @@
          resource admission. No firmware join simulation.
   smoke  fast + short firmware scenarios (smoke_cases) + a bounded case-0 prefix.
          The prefix is a regression check and never claims commissioning.
+  short  short FULL (about 30 minutes): fast + the short scenarios (short_cases)
+         run to completion + bounded prefixes (short_prefixes); the case-0
+         prefix runs through step 395, the first AES/flash security path. It
+         never claims commissioning; complete case 0 and the long recovery
+         scenarios stay in FULL.
   full   fast + every admitted scenario run to completion, including complete
          case 0 through authenticated READY/serving. Case 0 cannot be deselected.
 
@@ -37,7 +42,9 @@ from join_smoke_service import service_valid, reporting_valid, bindings_valid
 REPO = HERE.parents[1]
 PROFILE_PATH = HERE / "profile.json"
 SCHEMA = "cc2530-llvm-tier-receipt/1"
-TIERS = ("fast", "smoke", "full")
+TIERS = ("fast", "smoke", "short", "full")
+# Case-0 step that first reaches the AES/flash security path.
+SECURITY_STEP = 395
 # Firmware build variants (build.sh FIRMWARE_VARIANT). rx-diag is the opt-in
 # CC2530_RX_DIAG diagnostic image: a distinct identity, never production.
 VARIANTS = ("production", "rx-diag", "parent-recovery", "parent-recovery-policy-c")
@@ -311,8 +318,16 @@ def plan(tier, args, profile):
     sim = profile["simulator"]
     if tier == "full" and (0 not in sim["full_cases"] or sim["terminals"].get("0") != "serving"):
         raise SystemExit("FULL must contain complete case 0 through 'serving'; refusing a weakened profile")
-    order = sim["full_cases"] + sim.get("variant_cases", {}).get(args.variant, []) if tier == "full" else sim["smoke_cases"]
-    cases = sorted(set(order if tier == "full" else order + [sim["smoke_prefix"]["case"]]))
+    if tier == "full":
+        order, prefixes = sim["full_cases"] + sim.get("variant_cases", {}).get(args.variant, []), {}
+    elif tier == "short":
+        order, prefixes = sim["short_cases"], {int(c): n for c, n in sim["short_prefixes"].items()}
+        if prefixes.get(0, 0) <= SECURITY_STEP:
+            raise SystemExit(f"short FULL must run the case-0 prefix through step {SECURITY_STEP}; "
+                             "refusing a weakened profile")
+    else:
+        order, prefixes = sim["smoke_cases"], {sim["smoke_prefix"]["case"]: sim["smoke_prefix"]["limit"]}
+    cases = sorted(set(order) | set(prefixes))
     steps.append(Step("vectors", "deterministic host reference transcripts for the selected scenarios",
                       cmd=[py, "-B", HERE / "tiers.py", "vectors", "--output", out / "vectors",
                            "--cases", ",".join(map(str, cases)), "--variant", args.variant], timeout=900))
@@ -320,6 +335,7 @@ def plan(tier, args, profile):
     replay_env = env | {"SIM_TIMEOUT": str(args.sim_timeout), "PYTHONUNBUFFERED": "1",
                         "LLVM_SIM_DIAG": str(out / "diag")}
     deadline = time.time() + args.case0_budget if tier == "full" and args.case0_budget else 0
+    complete_from = len(steps)
     for case in order:
         term = sim["terminals"][str(case)]
         cmd = [py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
@@ -334,17 +350,28 @@ def plan(tier, args, profile):
                           + (" (authenticated READY/serving)" if case == 0 else ""),
                           cmd=cmd, env=e, deps=["admission", "vectors"], timeout=args.case_timeout,
                           check=sim_check(out / f"sims/case{case}.json", case, term), suspendable=suspend))
-    if tier == "smoke":
-        p = sim["smoke_prefix"]
-        steps.append(Step(f"sim-case{p['case']}-prefix", f"bounded case-{p['case']} prefix ({p['limit']} steps): "
-                          "boot, XMAP banking, MAC RX/TX start; regression only, NOT commissioning",
+    prefix_from = len(steps)
+    for case, limit in prefixes.items():
+        what = ("boot, XMAP banking, MAC RX/TX start" if limit <= SECURITY_STEP else
+                f"through the AES/flash security path at step {SECURITY_STEP}") if case == 0 else "start"
+        steps.append(Step(f"sim-case{case}-prefix", f"bounded case-{case} prefix ({limit} steps): "
+                          f"{what}; regression only, NOT commissioning",
                           cmd=[py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
-                               "--simulator", args.simulator, "--case", str(p["case"]), "--limit", str(p["limit"]),
-                               "--report", out / f"sims/case{p['case']}-prefix.json"],
-                          env=replay_env, deps=["admission", "vectors"], timeout=1800,
-                          check=sim_check(out / f"sims/case{p['case']}-prefix.json", p["case"], None, p["limit"])))
+                               "--simulator", args.simulator, "--case", str(case), "--limit", str(limit),
+                               "--report", out / f"sims/case{case}-prefix.json"],
+                          env=replay_env, deps=["admission", "vectors"], timeout=1800 if tier == "smoke" else 3600,
+                          check=sim_check(out / f"sims/case{case}-prefix.json", case, None, limit)))
+    if tier == "short":
+        # The case-0 prefix is the longest step: start it first.
+        steps[complete_from:] = steps[prefix_from:] + steps[complete_from:prefix_from]
+    if tier == "smoke":
         unselected["complete case 0"] = "SMOKE never runs complete commissioning; use FULL"
-        unselected["AES/flash security path"] = "first reached at case-0 step 395 and in case 10; FULL only"
+        unselected["AES/flash security path"] = f"first reached at case-0 step {SECURITY_STEP} and in case 10; SHORT/FULL"
+    elif tier == "short":
+        long_cases = sorted((set(sim["full_cases"]) | set(sim.get("variant_cases", {}).get(args.variant, [])))
+                            - set(order))
+        unselected["complete case 0"] = "SHORT never runs complete commissioning; use FULL (several hours)"
+        unselected["long scenarios"] = f"cases {', '.join(map(str, long_cases))} run to completion only in FULL"
     else:
         steps.append(Step("sim-summary", "all admitted scenarios complete with expected terminal and stack <= 128",
                           cmd=[py, "-B", HERE / "sim_summary.py", out / "sims", out / "sims/summary.json", args.variant],
