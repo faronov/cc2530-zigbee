@@ -333,6 +333,41 @@ failed:
 #undef T
 #undef Z
 #undef SPIN
+
+/* Steps stay below half the 24-bit Sleep Timer range, so a compare written in
+ * the future is never mistaken for one in the past. A step whose compare is too
+ * close to write safely, or an early wake, is waited out awake. Nothing is
+ * restored afterwards: the caller resets. */
+#define PAUSE_STEP 0x400000UL
+void join_smoke_pause(uint32_t ticks)
+{
+    uint32_t step, start;
+    MMIO_WRITE(SOC_IEN0,0);
+    MMIO_WRITE(SOC_IEN1,0);
+    MMIO_WRITE(SOC_IEN2,0);
+    MMIO_WRITE(SOC_DMAARM,0x9f);   /* abort every DMA channel */
+    while(ticks) {
+        step=ticks>PAUSE_STEP?PAUSE_STEP:ticks;
+        while(!(MMIO_READ(SOC_STLOAD)&1u)) {}
+        start=timebase_read_awake_ticks24();
+        if(step>=JOIN_SMOKE_SLEEP_MIN+JOIN_SMOKE_SLEEP_MARGIN) {
+            wake=(start+step)&TIMEBASE_TICKS_MASK;
+            MMIO_WRITE(SOC_ST2,(uint8_t)(wake>>16));
+            MMIO_WRITE(SOC_ST1,(uint8_t)(wake>>8));
+            MMIO_WRITE(SOC_ST0,(uint8_t)wake);
+            if(((wake-timebase_read_awake_ticks24())&TIMEBASE_TICKS_MASK)>=JOIN_SMOKE_SLEEP_MIN) {
+                MMIO_WRITE(SOC_SLEEPCMD,0x06);
+                enter_pm2();
+                MMIO_WRITE(SOC_IEN0,0);
+                MMIO_WRITE(SOC_SLEEPCMD,0x04);
+                while(MMIO_READ(SOC_CLKCONSTA)!=MMIO_READ(SOC_CLKCONCMD)) {}
+            }
+        }
+        while(((timebase_read_awake_ticks24()-start)&TIMEBASE_TICKS_MASK)<step) {}
+        ticks-=step;
+    }
+}
+#undef PAUSE_STEP
 #endif
 
 void join_smoke_initialize(void)

@@ -29,7 +29,8 @@
 /* RX-off-when-idle (capability bit3 clear) parents hold our frames for
  * macTransactionPersistenceTime (~7.68 s on 2.4 GHz with defaults), so a
  * MAC Data Request must fetch them: 250 ms while commissioning, recovering,
- * awaiting a reply or for BURST after READY / ACTIVE after unicast receipt;
+ * awaiting a reply, for BURST after a join reaches READY (the coordinator's
+ * interview), for ACTIVE after a recovery reaches READY or after unicast receipt;
  * otherwise every 4 s, well inside the parent's persistence time. With
  * CC2530_RX_OFF_IDLE (M7a) the idle receiver is off, so the slow period is
  * 7.0 s: poll_at counts from poll queueing, and the ~0.68 s left to 7.68 s
