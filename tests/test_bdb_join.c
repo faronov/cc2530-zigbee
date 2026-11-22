@@ -1792,6 +1792,20 @@ static void recovered(void)
     CHECK(announced && parent_set && runtime.zdo.parent_known && (runtime.zdo.parent_information & 2u));
     CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_VERIFIED);
     CHECK(status.config.address == device_address && !leave_sent && !device.result);
+    {
+        /* A recovery reaches READY with the 10 s ACTIVE fast-poll window; only
+         * a join (not interviewed yet) gets the 180 s BURST. The RX-off-idle
+         * capability enables poll(); poll_at keeps this step from polling. */
+        uint8_t capability = device.config.association.capability;
+        device.config.association.capability = (uint8_t)(capability & ~8u);
+        device.poll_phase = BDB_JOIN_RECOVERING; device.poll_at = now+1u;
+        CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+        CHECK(device.poll_fast == now+BDB_JOIN_POLL_ACTIVE && device.phase == BDB_JOIN_READY);
+        device.recovery = 0; device.poll_phase = BDB_JOIN_RECOVERING; device.poll_at = now+1u;
+        CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
+        CHECK(device.poll_fast == now+BDB_JOIN_POLL_BURST && !runtime.transport.poll);
+        device.recovery = 3; device.config.association.capability = capability;
+    }
 }
 
 static void application_resumes(void)

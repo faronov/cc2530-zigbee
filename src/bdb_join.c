@@ -386,7 +386,8 @@ static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM
         !((ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase <= BDB_JOIN_READY) || ctx->phase == BDB_JOIN_RECOVERING)) {
         ctx->poll_phase = ctx->phase; return;
     }
-    if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY) ctx->poll_fast = now+BDB_JOIN_POLL_BURST;
+    if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY)
+        ctx->poll_fast = now+(ctx->recovery ? BDB_JOIN_POLL_ACTIVE : BDB_JOIN_POLL_BURST);
     ctx->poll_phase = ctx->phase;
     if (expired(now, ctx->poll_fast)) ctx->poll_fast = now;
     period = ctx->phase != BDB_JOIN_READY || ctx->poll_fast != now || t->queued || t->waiting ||

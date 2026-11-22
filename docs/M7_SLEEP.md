@@ -147,6 +147,20 @@ byte-identical to the pre-M7b build. `join_smoke_sleep()` runs after each
   52-64 s asleep each; 865 sleeps, `lost` 97, no failure or late compare.
   `stray` 5 are debugger HALT wakes. Current is not measured (M7c).
 
+## Fault pause and recovery poll window
+
+- A fault in an autonomous build stops the radio, pauses and resets through
+  the watchdog; the reset rejoins from NV. Startup clears all RAM, so the pause
+  follows the reset cause: 5 s after power-on, 2 s after a leave and 5 minutes
+  after a watchdog reset (one join attempt per five minutes while the network
+  is missing, instead of one per minute). PM2 builds sleep through the pause
+  (`join_smoke_pause()`: Sleep Timer compare in steps of at most 128 s, every
+  other interrupt and DMA channel off) instead of spinning with the CPU on.
+- The 180 s fast-poll window (`BDB_JOIN_POLL_BURST`, 250 ms polls) serves the
+  coordinator's interview after a join. A recovery from NV is not interviewed
+  again, so it reaches READY with the 10 s `BDB_JOIN_POLL_ACTIVE` window. On H2
+  (ZHA, router parent) a reset kept 250 ms polls for 180 s before this change.
+
 ## M7c — measurements (planned)
 
 Pending a current meter: average/peak current per state, poll energy, 12 h and
