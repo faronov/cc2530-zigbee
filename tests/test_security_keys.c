@@ -1396,6 +1396,60 @@ static void remembered_parent(void)
     CHECK(security_keys_select_parent(0, status.config.update_id, 3) == SECURITY_KEYS_OK);
     reboot(NULL, SECURITY_KEYS_VERIFIED);
     CHECK(status.router_active && !status.router_selected); /* candidate != admitted parent */
+#if defined(CC2530_APP_MGMT_LQI)
+    {
+        /* Mgmt_Lqi is the one ZDO unicast the router parent may exchange. */
+        /* ...plus the APS ack of a response that requested one. */
+        static const struct { uint16_t destination, cluster, profile; uint8_t aps, type, flags, ok; } tx[] = {
+            {0x4567, 0x0031, 0, 0, 0, 0, 1}, {0x4567, 0x0031, 0, 1, 0, 0, 0}, {0x4567, 0x0032, 0, 0, 0, 0, 0},
+            {0x4567, 0x0031, 0x0104, 0, 0, 0, 0}, {0x4568, 0x0031, 0, 0, 0, 0, 0}, {0x4567, 0x8031, 0, 0, 0, 0, 0},
+            {0x4567, 0x0031, 0, 0, 0, APS_FLAG_ACK_REQUEST, 0},
+            {0x4567, 0x8031, 0, 0, ED_APS_ACK, 0, 1}, {0x4567, 0x8031, 0, 1, ED_APS_ACK, 0, 0},
+            {0x4567, 0x0031, 0, 0, ED_APS_ACK, 0, 0}, {0x4567, 0x8032, 0, 0, ED_APS_ACK, 0, 0},
+            {0x4568, 0x8031, 0, 0, ED_APS_ACK, 0, 0},
+        };
+        /* profile, endpoint, delivery: each alone must not pass as Mgmt_Lqi_rsp */
+        static const struct { uint16_t profile; uint8_t endpoint, delivery; } shape[] = {
+            {0x0104, 0, APS_DELIVERY_UNICAST}, {0, 1, APS_DELIVERY_UNICAST}, {0, 0, APS_DELIVERY_BROADCAST},
+        };
+        static const struct { uint16_t source, cluster; uint8_t aps, flags; security_keys_result_t r; } rx[] = {
+            {0x4567, 0x8031, 0, 0, SECURITY_KEYS_OK}, {0x4567, 0x8031, 0, APS_FLAG_ACK_REQUEST, SECURITY_KEYS_OK},
+            {0x4567, 0x8032, 0, 0, SECURITY_KEYS_IDENTITY}, {0x4567, 0x0031, 0, 0, SECURITY_KEYS_IDENTITY},
+            {0x4568, 0x8031, 0, 0, SECURITY_KEYS_IDENTITY}, {0x4567, 0x8031, 1, 0, SECURITY_KEYS_IDENTITY},
+            {0x4567, 0x8031, 1, APS_FLAG_ACK_REQUEST, SECURITY_KEYS_IDENTITY},
+        };
+        uint8_t i;
+        uint32_t count = 1;
+        for (i = 0; i < sizeof(tx)/sizeof(tx[0]); i++) {
+            base(0); packet.nwk.source = 0x1234; packet.nwk.destination = tx[i].destination;
+            packet.aps.cluster_id = tx[i].cluster; packet.aps.profile_id = tx[i].profile;
+            packet.aps.source_endpoint = packet.aps.destination_endpoint = 0;
+            packet.aps.type = tx[i].type; packet.aps.flags = tx[i].flags;
+            packet.length = tx[i].type ? 0 : 2; packet.payload[0] = 7;
+            CHECK((security_keys_send(&packet, tx[i].aps, raw, sizeof(raw), &written, &limits, 3) ==
+                SECURITY_KEYS_OK) == tx[i].ok);
+        }
+        for (i = 0; i < sizeof(rx)/sizeof(rx[0]); i++) {
+            base(0); packet.nwk.source = rx[i].source; packet.aps.cluster_id = rx[i].cluster;
+            packet.aps.flags = rx[i].flags; packet.length = 5; packet.payload[0] = 7;
+            router_seal_counted(count++, rx[i].aps, alt_key, 0, 30u+i);
+            if (rx[i].r == SECURITY_KEYS_OK) {
+                accept(SECURITY_KEYS_EVENT_DATA);
+                CHECK(output.nwk.source == 0x4567 && output.aps.cluster_id == 0x8031);
+            } else reject(rx[i].r);
+        }
+        for (i = 0; i < sizeof(shape)/sizeof(shape[0]); i++) {
+            base(0); packet.nwk.source = 0x4567; packet.aps.cluster_id = 0x8031;
+            packet.aps.profile_id = shape[i].profile; packet.aps.delivery_mode = shape[i].delivery;
+            packet.aps.source_endpoint = packet.aps.destination_endpoint = shape[i].endpoint;
+            packet.length = 5; packet.payload[0] = 7;
+            router_seal_counted(count++, 0, alt_key, 0, 40u+i); reject(SECURITY_KEYS_IDENTITY);
+        }
+        /* The TC path is unchanged: TC data relayed by the parent still passes. */
+        base(0); packet.nwk.source = 0; packet.aps.cluster_id = 0x8031; packet.length = 5;
+        router_seal_counted(count++, 0, alt_key, 0, 0); accept(SECURITY_KEYS_EVENT_DATA);
+    }
+#endif
 }
 
 static security_keys_result_t router_transition(uint8_t stage)
@@ -1424,6 +1478,32 @@ static security_keys_result_t router_transition(uint8_t stage)
     packet.payload[1]=0x34; packet.payload[2]=0x12;
     router_seal(100,0);
     return security_keys_receive(raw,wire_length,&output,&event,&limits,3);
+}
+
+/* A NWK Update accepted while the router stays selected outranks the update
+ * ID recorded at selection: a later Rejoin Response must not roll it back. */
+static void router_update_kept(void)
+{
+    uint8_t i, id;
+    reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    CHECK(security_keys_upgrade_parent(3)==SECURITY_KEYS_OK);
+    for(i=0;i<4;i++) CHECK(router_transition(i)==SECURITY_KEYS_OK);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_active && status.router_selected);
+    id=(uint8_t)(status.config.update_id+1u);
+    update_packet(id,config.pan); router_seal(101,0); accept(SECURITY_KEYS_EVENT_UPDATE);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(status.config.update_id==id && status.router_selected);
+    CHECK(router_transition(2)==SECURITY_KEYS_OK);
+    reboot(NULL,SECURITY_KEYS_REJOINING);
+    base(0); packet.nwk.type=ED_NWK_COMMAND; packet.nwk.source=0x4567;
+    packet.nwk.flags=NWK_FLAG_SOURCE_IEEE|NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee,router_ieee,8);
+    memcpy(packet.nwk.destination_ieee,config.own_ieee,8);
+    packet.length=4; packet.payload[0]=7; packet.payload[1]=0x34; packet.payload[2]=0x12;
+    router_seal(102,0); accept(SECURITY_KEYS_EVENT_REJOINED);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    CHECK(status.router_active && status.config.update_id==id);
 }
 
 static void interrupted_router(void)
@@ -1639,6 +1719,13 @@ static void router_join(void)
     router_associated(); relayed(0x5678); raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH);
     state(SECURITY_KEYS_ASSOCIATED);
     CHECK(!memcmp(status.config.tc_ieee, router_ieee, 8));
+    /* Quiet abandonment of a never-bound router join stays loadable
+     * (hardware: LEFT kept UNBOUND and every boot faulted FORMAT). */
+    router_associated();
+    CHECK(security_keys_leave(0x80,raw,0,&written,&limits,3) == SECURITY_KEYS_OK && !written);
+    reboot(NULL, SECURITY_KEYS_LEFT);
+    CHECK(!status.router_known && !status.router_active &&
+          !memcmp(status.config.tc_ieee, router_ieee, 8));
 
     router_associated(); relayed(0x5678);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
@@ -1691,6 +1778,7 @@ int main(void)
 #if defined(CC2530_PARENT_RECOVERY)
     parent_schema_upgrade();
     remembered_parent();
+    router_update_kept();
     interrupted_router();
 #endif
 #if defined(CC2530_ROUTER_JOIN)

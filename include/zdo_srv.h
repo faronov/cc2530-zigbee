@@ -19,6 +19,7 @@
 #define ZDO_SRV_NOT_ACTIVE 0x83u
 #define ZDO_SRV_BIND_REQUEST 0x0021u
 #define ZDO_SRV_UNBIND_REQUEST 0x0022u
+#define ZDO_SRV_MGMT_LQI_REQUEST 0x0031u
 #define ZDO_SRV_MGMT_BIND_REQUEST 0x0033u
 #define ZDO_SRV_MGMT_LEAVE_REQUEST 0x0034u
 /* R22 2.3.2.4 Tables 2-34..2-38, nibbles in transmission order: power mode
@@ -50,7 +51,7 @@
 #define ZDO_SRV_STAGED (5u + ZDO_SRV_DESCRIPTOR_MAX + 1u)
 extern MCU_XDATA uint8_t zdo_srv_descriptors[];
 #else
-#define ZDO_SRV_STAGED 25u
+#define ZDO_SRV_STAGED (15u + 2u * ZDO_SRV_INPUT_CLUSTERS)
 #endif
 
 typedef enum {

@@ -72,6 +72,9 @@ typedef struct {
 extern MCU_XDATA join_smoke_sleep_t join_smoke_sleep_status;
 void join_smoke_sleep(void);
 void join_smoke_sleep_isr(void);
+/* Fault pause: PM2 for ticks (32.768 kHz) with the Sleep Timer compare as the
+ * only wake source. The caller has stopped the radio and ends with a reset. */
+void join_smoke_pause(uint32_t ticks);
 #endif
 extern MCU_XDATA bdb_join_t join_smoke_device;
 extern MCU_XDATA mac_tx_interval_t join_smoke_tx;

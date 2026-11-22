@@ -24,7 +24,7 @@
 #define AUTONOMOUS_CHANNELS UINT32_C(0x02108800)
 #define PAUSE_LEAVE (2UL*32768UL)
 #define PAUSE_FIRST (5UL*32768UL)
-#define PAUSE_RETRY (60UL*32768UL)
+#define PAUSE_RETRY (300UL*32768UL)
 
 static MCU_XDATA uint8_t reset_cause, lfsr;
 static const uint8_t arm[8] = {0x4a,0xb5,0x4e,0xb1,0xa9,0x56,1,0xfe};
@@ -82,18 +82,24 @@ static void admit(void)
 
 /* Fault: radio off, pause, watchdog reset. A reset restarts from NV: VERIFIED
  * membership rejoins; LEFT or an incomplete join steers again. No RAM
- * survives reset, so the pause follows the reset cause: a fault after a
- * watchdog reset is a retry and waits longer. The pause keeps status readable. */
+ * survives reset (startup clears all of it), so the pause follows the reset
+ * cause: a fault after a watchdog reset is a retry and waits five minutes, so
+ * a missing network costs one join attempt per five minutes. PM2 builds sleep
+ * through the pause; the status stays in RAM until the reset. */
 __attribute__((noinline)) static void restart(void)
 {
-    uint32_t pause=PAUSE_FIRST, start;
+    uint32_t pause=PAUSE_FIRST;
     MMIO_CLEAR(SOC_IEN0,0x80);
     MMIO_WRITE(SOC_RFST,RFST_ISRFOFF);
     if(join_smoke_status.reason==JS_BDB && (join_smoke_status.bdb_reason==BDB_JOIN_LOCAL_LEAVE ||
        join_smoke_status.bdb_reason==BDB_JOIN_REMOTE_LEAVE)) pause=PAUSE_LEAVE;
     else if(reset_cause==SLEEPSTA_RST_WATCHDOG) pause=PAUSE_RETRY;
-    start=timebase_read_awake_ticks24();
+#if defined(CC2530_PM2_IDLE)
+    join_smoke_pause(pause);
+#else
+    uint32_t start=timebase_read_awake_ticks24();
     while(((timebase_read_awake_ticks24()-start)&TIMEBASE_TICKS_MASK)<pause) {}
+#endif
     MMIO_WRITE(SOC_WDCTL,WDCTL_RESET);
     for(;;) {}
 }

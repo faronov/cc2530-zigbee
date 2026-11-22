@@ -121,10 +121,15 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
     memcpy(work.policy.extended_pan_id, bdb_join_keys.config.extended_pan, 8);
     work.policy.minimum_known = 1; work.policy.minimum_update_id = bdb_join_keys.config.update_id;
 #else
-    if (ctx->work.scan.overflow || ctx->work.scan.unscanned) return BDB_JOIN_NO_PARENT;
 #if defined(CC2530_ROUTER_JOIN)
+    /* A channel that never clears CCA (Wi-Fi overlap) stays unscanned on
+     * every attempt; one non-mixed open network found elsewhere is taken. */
+    if (ctx->work.scan.overflow ||
+        (ctx->work.scan.unscanned && !ctx->work.scan.candidates.count)) return BDB_JOIN_NO_PARENT;
     /* A nonzero mask also blocks the lost-beacon rescan: ambiguity is final. */
     if (ctx->work.scan.candidates.mixed) { work.policy.potential_mask = 1; return BDB_JOIN_NO_PARENT; }
+#else
+    if (ctx->work.scan.overflow || ctx->work.scan.unscanned) return BDB_JOIN_NO_PARENT;
 #endif
 #endif
 #if defined(CC2530_DEFAULT_TC_KEY) && defined(CC2530_ROUTER_JOIN)
@@ -381,7 +386,8 @@ static void poll(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx, MCS51_PARAM
         !((ctx->phase >= BDB_JOIN_WAIT_KEY && ctx->phase <= BDB_JOIN_READY) || ctx->phase == BDB_JOIN_RECOVERING)) {
         ctx->poll_phase = ctx->phase; return;
     }
-    if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY) ctx->poll_fast = now+BDB_JOIN_POLL_BURST;
+    if (ctx->phase == BDB_JOIN_READY && ctx->poll_phase != BDB_JOIN_READY)
+        ctx->poll_fast = now+(ctx->recovery ? BDB_JOIN_POLL_ACTIVE : BDB_JOIN_POLL_BURST);
     ctx->poll_phase = ctx->phase;
     if (expired(now, ctx->poll_fast)) ctx->poll_fast = now;
     period = ctx->phase != BDB_JOIN_READY || ctx->poll_fast != now || t->queued || t->waiting ||
@@ -674,6 +680,18 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             !expired(now, ctx->commission_until) &&
             security_keys_status(&bdb_join_keys) == SECURITY_KEYS_OK && bdb_join_keys.router_known) {
             ctx->parent_search = 1; ctx->result = BDB_JOIN_OK;
+            ctx->work.runtime.transport.ready = 0; install(ctx);
+            return BDB_JOIN_OK;
+        }
+        /* The saved router went first and is gone: deselect it and rejoin
+         * the TC once in the same window. A TC Rejoin Response retires it. */
+        if (ctx->recovery && ctx->parent_search == 3 &&
+            (ctx->result == BDB_JOIN_NO_PARENT || ctx->result == BDB_JOIN_REJOIN_REFUSED) &&
+            !expired(now, ctx->commission_until) &&
+            security_keys_status(&bdb_join_keys) == SECURITY_KEYS_OK &&
+            security_keys_select_parent(0, bdb_join_keys.config.update_id,
+                ctx->config.transport.nv_polls) == SECURITY_KEYS_OK) {
+            ctx->parent_search = 2; ctx->result = BDB_JOIN_OK;
             ctx->work.runtime.transport.ready = 0; install(ctx);
             return BDB_JOIN_OK;
         }

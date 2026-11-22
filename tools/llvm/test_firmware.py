@@ -12,10 +12,10 @@ import firmware
 class LLVMOnlyBuild(unittest.TestCase):
     def test_pin_and_abi(self):
         pin = json.loads((firmware.HERE / "toolchain.json").read_text())
-        self.assertEqual(pin["revision"], "2c3d9541c965dee8d3e35bdc81ea494e4ab02dc2")
+        self.assertEqual(pin["revision"], "ddc974b4607677930befe13218f866f5c8110c90")
         profile = json.loads((firmware.HERE / "profile.json").read_text())
         self.assertEqual(profile["sf_flags"], "-mllvm -mcs51-static-frames")
-        self.assertEqual(profile["abi_flags"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args")
+        self.assertEqual(profile["abi_flags"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args -mllvm -mcs51-rn-words")
 
     def test_fixture_status_has_the_existing_typed_xdata_contract(self):
         header = (firmware.REPO / "include/bringup.h").read_text()
@@ -175,7 +175,7 @@ class LLVMOnlyBuild(unittest.TestCase):
                 firmware.main()
                 receipt = json.loads((output / "receipt.json").read_text())
                 self.assertEqual(receipt["identity"]["expected_llvm_revision"], revision)
-                self.assertEqual(receipt["identity"]["abi"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args")
+                self.assertEqual(receipt["identity"]["abi"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args -mllvm -mcs51-rn-words")
                 Path(receipt["elf"]).write_bytes(b"changed")
                 with self.assertRaisesRegex(SystemExit, "identity/seal/artifact"):
                     firmware.main()

@@ -12,6 +12,9 @@
 #include "security_counter.h"
 #include "zigbee_key_hash.h"
 #include "timebase.h"
+#if defined(CC2530_APP_MGMT_LQI)
+#include "zdo_srv.h"
+#endif
 #include <stddef.h>
 #include <string.h>
 #if defined(__clang__)
@@ -178,6 +181,28 @@ static uint8_t parent_router(void)
 }
 static uint8_t parent_ieee_offset(void) { return parent_router() ? ROUTER : TC; }
 static uint16_t parent_address(void) { return parent_router() ? u16(w.record+ROUTER_ADDR) : 0; }
+#if defined(CC2530_APP_MGMT_LQI)
+/* The one non-TC unicast: Mgmt_Lqi with the router parent as NWK-secured,
+ * APS-unsecured ZDO data. Every other peer stays TC-only. */
+#define PARENT_LQI 1
+/* aps_header_t up to the counter: unicast, ZDO endpoints/profile, no APS
+ * security. Sent: the request 0x0031, or the APS ack of a response.
+ * Received: the response 0x8031, which may request that ack (Tuya routers
+ * retry it otherwise). */
+static MCU_XDATA uint8_t lqi_header[9] = {0, 0, 0, 0, 0x31, 0, 0, 0, 0};
+static __attribute__((noinline)) uint8_t parent_lqi(uint8_t response)
+{
+    uint8_t type = w.packet.aps.type;
+    lqi_header[0] = type; lqi_header[2] = 0;
+    if (type == ED_APS_ACK) {
+        if (response) return 0;
+        response = 0x80u;
+    } else if (type != APS_FRAME_DATA) return 0;
+    else if (response) lqi_header[2] = w.packet.aps.flags & APS_FLAG_ACK_REQUEST;
+    lqi_header[5] = response;
+    return phase() == SECURITY_KEYS_VERIFIED && same((const uint8_t *)&w.packet.aps, lqi_header, 9);
+}
+#endif
 #if defined(CC2530_ROUTER_JOIN)
 static uint8_t unbound(void) { return router_record() && (w.record[ROUTER_FLAGS] & ROUTER_UNBOUND); }
 #endif
@@ -878,7 +903,9 @@ static security_keys_result_t nwk_command(void)
         if (router_record()) {
             if (w.record[ROUTER_FLAGS] & ROUTER_ATTEMPT) {
                 w.record[ROUTER_FLAGS] |= ROUTER_ACTIVE;
-                w.record[UPDATE] = w.record[ROUTER_UPDATE];
+                /* A NWK Update accepted after selection may be newer. */
+                if ((uint8_t)(w.record[ROUTER_UPDATE]-w.record[UPDATE]-1u) < 127u)
+                    w.record[UPDATE] = w.record[ROUTER_UPDATE];
             }
             else w.record[ROUTER_FLAGS] &= (uint8_t)~ROUTER_ACTIVE;
         }
@@ -981,12 +1008,22 @@ security_keys_result_t security_keys_receive(
     if (w.nwk.header.type == ED_NWK_COMMAND) {
         if (w.nwk.header.source == parent_address()) logical = parent_ieee_offset();
         else if (w.nwk.header.source != 0) return finish(SECURITY_KEYS_IDENTITY);
-    } else if (w.nwk.header.source != 0
+    } else if (w.nwk.header.source != 0) {
 #if defined(CC2530_ROUTER_JOIN)
-        /* Only the parent's unsecured relay of the tunnelled Transport Key. */
-        && (!unbound() || w.nwk.header.source != parent_address())
+        /* The parent's unsecured relay of the tunnelled Transport Key
+         * keeps the TC identity and is matched before Mgmt_Lqi. */
+        if (!unbound() || w.nwk.header.source != parent_address())
 #endif
-        ) return finish(SECURITY_KEYS_IDENTITY);
+        {
+#if defined(PARENT_LQI)
+            /* Must still prove to be Mgmt_Lqi_rsp before any APS processing. */
+            if (w.nwk.header.source == parent_address() && phase() == SECURITY_KEYS_VERIFIED)
+                logical = ROUTER;
+            else
+#endif
+                return finish(SECURITY_KEYS_IDENTITY);
+        }
+    }
     if (
 #else
     if (w.nwk.header.source != 0 ||
@@ -1059,7 +1096,11 @@ security_keys_result_t security_keys_receive(
     }
     r = crypto_result(ed_wire_decode(w.a, w.size, &w.packet));
     if (r != SECURITY_KEYS_OK) goto rejected;
-    if (w.packet.nwk.type != ED_NWK_COMMAND && !aps_addressing(0)) {
+    if (w.packet.nwk.type != ED_NWK_COMMAND && (!aps_addressing(0)
+#if defined(PARENT_LQI)
+        || (logical == ROUTER && (w.aps_secured || !parent_lqi(0x80u)))
+#endif
+        )) {
         r = SECURITY_KEYS_IDENTITY; goto rejected;
     }
     if (phase() == SECURITY_KEYS_REJOINING && w.packet.nwk.type != ED_NWK_COMMAND) {
@@ -1241,6 +1282,11 @@ security_keys_result_t security_keys_leave(
     }
     set_phase(SECURITY_KEYS_LEFT);
     w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
+#if defined(CC2530_ROUTER_JOIN)
+    /* UNBOUND is valid only while ASSOCIATED: forget the never-bound parent
+     * (no network key, so it holds no replay history). */
+    if (unbound()) memset(w.record+ROUTER, 0, 144u-ROUTER);
+#endif
     r = save();
     if (r == SECURITY_KEYS_OK) {
         if (network()) r = publish(out, capacity, written);
@@ -1284,7 +1330,12 @@ security_keys_result_t security_keys_send(
 #else
          0
 #endif
-         && !outbound_broadcast(w.packet.nwk.destination)) ||
+         && !outbound_broadcast(w.packet.nwk.destination)
+#if defined(PARENT_LQI)
+         && (aps_secure || w.packet.nwk.type || w.packet.nwk.destination != parent_address() ||
+             !parent_lqi(0))
+#endif
+         ) ||
         ((w.packet.nwk.flags & NWK_FLAG_SOURCE_IEEE) &&
          !same(w.packet.nwk.source_ieee, w.record+OWN, 8)) ||
         ((w.packet.nwk.flags & NWK_FLAG_DESTINATION_IEEE) &&

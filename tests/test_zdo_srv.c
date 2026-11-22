@@ -212,8 +212,8 @@ static uint16_t match_power_cases(void)
     CHECK(zdo_srv_handle(&local, &rx, input, 3, output + 1, 17, &info) == ZDO_SRV_OK);
     CHECK(info.kind == ZDO_SRV_DROP_BROADCAST && info.length == 0 && filled(output, sizeof(output), 0xc7));
 
-    for (n = 0; n < 5; n++) {
-        match_input(0x1234, n == 4 ? 0xffff : 0x0104, clusters[n], 0);
+    for (n = 0; n < sizeof(clusters) / sizeof(clusters[0]); n++) {
+        match_input(0x1234, n == sizeof(clusters) / sizeof(clusters[0]) - 1u ? 0xffff : 0x0104, clusters[n], 0);
         CHECK(match_reply(100, 0, 6, 11) == 0);
         CHECK(output[3] == 0x34 && output[4] == 0x12 && output[5] == 1 && output[6] == 1);
     }

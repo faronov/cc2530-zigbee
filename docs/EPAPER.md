@@ -60,8 +60,43 @@ the panel) and partial refresh on the UC8151D (needs an own register LUT
 tuned on the panel). Vendor LUTs and OTP dumps are not part of this
 repository.
 
+### UC8151D partial refresh: plan
+
+A commercial Telink sensor with a 128×296 UC81xx panel (static analysis of
+its firmware; no values copied) does partial refresh as follows. The steps
+use only the UC8151 datasheet commands; the LUT itself must be our own,
+tuned on the panel.
+
+1. `PSR` (0x00) with the register-LUT bit set, so 0x20–0x24 are used
+   instead of the OTP waveform.
+2. Two LUT sets in RAM: a full one and a short single-phase partial one;
+   `0x20` VCOM, `0x21` WW, `0x22` BW, `0x23` WB, `0x24` BB are loaded
+   before each refresh type.
+3. Partial update: `0x50` CDI with a floating border (`0xD7` instead of
+   `0x97`, so the border is not driven), `0x91` PTIN, `0x90` PTL with the
+   window (HRST, HRED, VRST high/low, VRED high/low, PT_SCAN), the old frame
+   to `0x10`, the new frame to `0x13`, `0x12` refresh, `0x92` PTOUT.
+4. A full refresh with the full LUT and the normal border every N partials.
+
+The same sensor stores only the glyphs it needs (digits in a few sizes,
+`-`, `%`, `.`, a few marks) pre-rotated and column-major for the portrait
+panel, instead of a general font.
+
 Variants: `autonomous-pm2-epd`, `autonomous-pm2-sht3x-epd`,
-`autonomous-pm2-epd-factory` (UC8151D) and `autonomous-pm2-epd-ssd1680`.
+`autonomous-pm2-epd-factory` (UC8151D), `autonomous-pm2-epd-ssd1680` and
+`autonomous-pm2-epd-router` (UC8151D with a router-parent initial join,
+`CC2530_ROUTER_JOIN`,
+[ED_JOIN.md](ED_JOIN.md#router-parent-initial-join-cc2530_router_join), and
+Policy C replay checkpoints, `CC2530_REPLAY_POLICY_C`,
+[M5_POLICY_C.md](M5_POLICY_C.md)). Without Policy C every frame relayed by
+a router parent erases an NV page; after 32 erases per page in one boot the
+key store fails with `NV_RECORD_ERASE_LIMIT_REACHED` and the device resets
+(seen on H2 after about five Home Assistant pushes).
+
+The Home Assistant dashboards (L8 on a Waveshare 4.26" SSD1677, L5 on a
+5.79" panel, cluster 0xFC10, ZHA quirk, HA package and Zigbee2MQTT
+converter) are an external application:
+[esl-dashboard-cc2530](https://github.com/faronov/esl-dashboard-cc2530).
 
 ## Font notices
 

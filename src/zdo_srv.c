@@ -181,7 +181,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
             } else if (body[3] != local->endpoint) {
                 reply.status = ZDO_SRV_NOT_ACTIVE;
             } else {
-                staged[4] = 18; staged[5] = local->endpoint;
+                staged[4] = (uint8_t)(8u + 2u * ZDO_SRV_INPUT_CLUSTERS); staged[5] = local->endpoint;
                 staged[6] = (uint8_t)local->profile; staged[7] = (uint8_t)(local->profile >> 8);
                 staged[8] = (uint8_t)ZDO_SRV_DEVICE; staged[9] = (uint8_t)(ZDO_SRV_DEVICE >> 8);
                 staged[10] = ZDO_SRV_DEVICE_VERSION; staged[11] = ZDO_SRV_INPUT_CLUSTERS;
@@ -193,7 +193,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                 staged[19] = (uint8_t)(ZDO_SRV_TEMPERATURE_CLUSTER >> 8);
                 staged[20] = (uint8_t)ZDO_SRV_HUMIDITY_CLUSTER;
                 staged[21] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
-                staged[22] = 0; size = 23;
+                staged[12u + 2u * ZDO_SRV_INPUT_CLUSTERS] = 0; size = (uint8_t)(13u + 2u * ZDO_SRV_INPUT_CLUSTERS);
             }
 #endif
             staged[1] = reply.status;

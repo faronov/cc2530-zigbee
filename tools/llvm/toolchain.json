@@ -1,7 +1,7 @@
 {
   "repository": "faronov/llvm-project",
-  "revision": "2c3d9541c965dee8d3e35bdc81ea494e4ab02dc2",
-  "status": "UNIFY-01 plus upstream eeef1bec bit-toggle fix, the ACC-bit branch A-use fix and the same-bank bank-call trampoline bypass and the DEC direct disassembler fix; development candidate; FULL NOT RUN",
+  "revision": "ddc974b4607677930befe13218f866f5c8110c90",
+  "status": "UNIFY-01 plus upstream eeef1bec bit-toggle fix, the ACC-bit branch A-use fix and the same-bank bank-call trampoline bypass the DEC direct disassembler fix and the size work of study §30 (machine outliner, relaxation, switch tables, -Oz LTO pipeline) and the -mcs51-rn-words ABI of study §31 and the IRAM near-pointer fix of study §32 and common-flash runtime helpers called without trampolines (study §33); development candidate; FULL NOT RUN",
   "runtime": "llvm/lib/Target/MCS51/mcs51-runtime.c",
   "F1a_F1b_F5": "EXCLUDED",
   "F2": "OPEN",

@@ -32,8 +32,9 @@ network belongs to the intended HA installation.
 ### Router-parent initial join (`CC2530_ROUTER_JOIN`)
 
 `CC2530_ROUTER_JOIN` (requires `CC2530_PARENT_RECOVERY` and
-`CC2530_DEFAULT_TC_KEY`; no image in this repository enables it, an
-[external application](EXTERNAL_APP.md) opts in) lets a fresh
+`CC2530_DEFAULT_TC_KEY`; in this repository only the opt-in
+`autonomous-pm2-epd-router` LLVM variant enables it, an
+[external application](EXTERNAL_APP.md) can opt in) lets a fresh
 join use a permitting router as parent. All other images keep the
 direct-coordinator policy above.
 
@@ -44,6 +45,14 @@ direct-coordinator policy above.
   mixed, even when it is not kept. A mixed table fails with `NO_PARENT`
   without the lost-beacon rescan. The best score gets link cost 1 and the
   others 3. Recovery tables stay parent-filtered and still report `FULL`.
+- Unscanned channels: a channel whose Beacon Request never clears CCA
+  (`CHANNEL_ACCESS` after the CSMA retries) stays unscanned. The strict
+  policy fails such a scan with `NO_PARENT`. Router join only fails it
+  when the table is empty, and otherwise takes the single non-mixed network.
+  On H2, BDB primary channel 25 overlaps busy Wi-Fi and never cleared CCA.
+  That rejected every scan, even with four permitting routers on 15.
+  A network that beacons only on the unscanned channel goes unseen.
+  Join-smoke case 29 covers both policies, with channel 25 always CCA-busy.
 - Unbound router state: after association through a router (short address not
   0000), `security_keys_router_parent()` stages the K3 router record with the
   `UNBOUND` flag and router IEEE = configured TC placeholder. While unbound:
@@ -58,8 +67,20 @@ direct-coordinator policy above.
   parent consumes the frame instead of routing it to the TC; this was seen on
   hardware as three unanswered Request Keys and `TC_FAILED`. A direct
   coordinator parent keeps radius 1, so existing images are byte-identical.
+- Resume: the joined record holds the router as admitted (`ACTIVE`) but not
+  selected (`ATTEMPT`), and secure rejoin targets only a selected router.
+  `bdb_join_resume` therefore selects it (`security_keys_select_parent`,
+  current update ID) before recovery, so the router that admitted the device
+  is tried first, as a recovered router is. Previously, the first reset after a
+  router join rejoined the TC: on H2 it polled the coordinator and faulted
+  again before parent search returned to the router. Join-smoke case 30
+  (router join only) cold-boots such a record with a silent TC and requires
+  one Rejoin Request, to the router.
 - Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
-  still commits the replay state with a full NV save.
+  still commits the replay state with a full NV save (one page erase), and
+  `NV_RECORD_ERASE_LIMIT` (32 erases per page per boot) then fails the key
+  store after about 64 frames. `autonomous-pm2-epd-router` therefore
+  defines `CC2530_REPLAY_POLICY_C`.
 - Host coverage: `host-router-join-tests` (relayed Transport Key, TC learning,
   rejects for coordinator-sourced, short-nonce, own/parent source, mismatched
   source and replays, then the full exchange to VERIFIED),
@@ -529,6 +550,15 @@ Late success/refusal retires any queued Rejoin Request before it can reseal
 or overwrite the durable response. A reset during selected-parent recovery
 retains ATTEMPT, counters and replay history but starts non-READY.
 
+A resume that starts with the router already selected tries it first; if its
+three attempts go unanswered or it refuses, the router is deselected and the
+TC gets one rejoin in the same window. A TC Rejoin Response retires the router
+(clears `ACTIVE`); its history stays known for later parent search. A router
+found by scan after the TC failed gets no second TC attempt. A Rejoin Response
+adopts the update ID recorded at selection only when it is newer, so a NWK
+Update accepted while the router stayed selected is never rolled back.
+`known_parent_bounds` (TC fallback) and `router_update_kept` cover both.
+
 `make test-parent-recovery`, `test-parent-storage` and `test-parent-candidates`
 cover eligible/absent/silent/unknown parents, wrong Extended PAN/key/IEEE,
 stale update, NO_ACK/CCA, refusal, delayed/duplicate responses, selected-parent
@@ -540,8 +570,7 @@ foreground serving exercise is ten seconds; the existing case0/16 long serving
 and case17 failure gates are unchanged. Fresh MCU acceptance is still required.
 
 Remaining scope: unknown-router IEEE learning, multiple-router eviction/replay
-policy, changing PAN/channel, fallback after loss of the newly admitted router,
-TC migration and sleepy operation. The unchanged journal erase guard limits
+policy, changing PAN/channel, TC migration and sleepy operation. The unchanged journal erase guard limits
 longer router service; see [durable-owner limitation](SECURITY_KEYS.md#optional-known-router-durable-ownership).
 
 ## First physical join gate
@@ -1192,7 +1221,11 @@ run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the p
 
 The opt-in `autonomous-pm2-epd` and `autonomous-pm2-sht3x-epd` LLVM variants
 add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`);
-`autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`. It
+`autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`;
+`autonomous-pm2-epd-router` adds the router-parent initial join
+(`CC2530_ROUTER_JOIN`, above). The Home Assistant L8/L5 dashboards on the
+Waveshare 4.26" and 5.79" panels are an external application,
+[esl-dashboard-cc2530](https://github.com/faronov/esl-dashboard-cc2530). It
 requires the LG ESL29 board and `CC2530_CHIP_SENSE` (a build error
 otherwise). The fixed 45-unit LLVM link is kept: `boards/lg_esl29_rev03.c`
 includes [`src/epd.c`](../src/epd.c). The driver is in common code

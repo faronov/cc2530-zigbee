@@ -1,7 +1,7 @@
 {
   "name": "llvm-mcs51-cc2530-dev",
   "status": "LLVM-only development compiler candidate; UNIFY-01 FULL NOT RUN",
-  "abi_flags": "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args",
+  "abi_flags": "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args -mllvm -mcs51-rn-words",
   "sf_flags": "-mllvm -mcs51-static-frames",
   "compiler_tools": ["clang", "ld.lld", "llvm-objcopy", "llvm-ar", "llvm-objdump"],
   "compiler_sources": [
@@ -37,6 +37,8 @@
                   "16": "serving", "17": "fault", "18": "serving", "19": "fault", "20": "serving", "21": "serving", "22": "serving", "23": "serving", "24": "serving"},
     "smoke_cases": [2, 3, 9],
     "smoke_prefix": {"case": 0, "limit": 3},
+    "short_cases": [1, 9, 2, 3],
+    "short_prefixes": {"0": 396, "5": 500, "8": 500, "6": 600, "4": 400},
     "full_cases": [0, 16, 10, 8, 6, 1, 5, 9, 4, 2, 3, 17],
     "variant_cases": {"parent-recovery": [20, 18, 19], "parent-recovery-policy-c": [20, 18, 19, 21, 22, 23, 24]}
   }

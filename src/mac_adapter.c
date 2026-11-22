@@ -141,13 +141,17 @@ mac_adapter_result_t mac_adapter_prepare(const mac_tx_interval_t MCU_XDATA * SDC
 {
     mac_adapter_result_t result = bounds(timeout, limit);
     if (result != MAC_ADAPTER_OK) return result;
+#if defined(CC2530_RX_OFF_IDLE)
+    if (!tx || policy > MAC_ADAPTER_KEEP_PENDING) return MAC_ADAPTER_INVALID;
+#else
     if (!tx || policy > MAC_ADAPTER_KEEP_AUTOACK) return MAC_ADAPTER_INVALID;
+#endif
     result = storage(MMIO_XADDRESS(tx), sizeof(*tx));
     if (result != MAC_ADAPTER_OK) return result;
     if (status.phase != MAC_ADAPTER_OFF || status.ready || status.held ||
         (owner && owner != tx) || tx->engine.phase != MAC_TX_DRAW || !tx->engine.generation ||
         !tx->engine.length || tx->engine.length > 125 ||
-        (policy == MAC_ADAPTER_KEEP_AUTOACK && !tx->engine.ack_requested))
+        (policy >= MAC_ADAPTER_KEEP_AUTOACK && !tx->engine.ack_requested))
         return MAC_ADAPTER_STATE;
     status.mac_result = mac_tx_interval_copy(tx, mac_adapter_receipt.frame.body, 125, &status.length);
     if (status.mac_result != MAC_TX_OK) return fail(MAC_ADAPTER_PROTOCOL_ERROR);
@@ -287,7 +291,11 @@ mac_adapter_result_t mac_adapter_step(SDCC_VOLATILE uint32_t timeout, SDCC_VOLAT
         return MAC_ADAPTER_WAIT;
     if (status.held) return frame();
     if (status.phase == MAC_ADAPTER_RETIRING && !status.stop_started) {
-        if (requested.control.outcome == MAC_TX_ACKED && status.policy == MAC_ADAPTER_KEEP_AUTOACK) {
+        if (requested.control.outcome == MAC_TX_ACKED && (status.policy == MAC_ADAPTER_KEEP_AUTOACK
+#if defined(CC2530_RX_OFF_IDLE)
+            || (status.policy == MAC_ADAPTER_KEEP_PENDING && requested.control.pending)
+#endif
+            )) {
 #if defined(CC2530_MAC_LINK)
             if (!status.normal_rx) {
 #endif
@@ -309,7 +317,13 @@ mac_adapter_result_t mac_adapter_step(SDCC_VOLATILE uint32_t timeout, SDCC_VOLAT
             status.phase = MAC_ADAPTER_CLOSING; status.wait_through = 0;
         }
     }
-    if (status.phase == MAC_ADAPTER_RX && status.goal == CLOSE_RETIRE) {
+    /* KEEP_PENDING: the stop already ended reception, so retire before the
+     * drain; delivering queued frames inside STOPPING outlasted its bound. */
+    if ((status.phase == MAC_ADAPTER_RX
+#if defined(CC2530_RX_OFF_IDLE)
+         || (status.phase == MAC_ADAPTER_DRAINING && status.policy == MAC_ADAPTER_KEEP_PENDING)
+#endif
+        ) && status.goal == CLOSE_RETIRE) {
         if (!settled) { retired = status.live; settled = 1; }
         if (!reached(status.live.symbols, retired.symbols + (retired.fine != 0u)))
             return MAC_ADAPTER_WAIT;
