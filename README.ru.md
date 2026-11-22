@@ -20,9 +20,10 @@ FULL не запускался. Команды и пути:
 
 В LLVM-only ветку перенесены исходники M5/M6 из архивного `1dd413b`:
 secure rejoin, завершение защищённого приёма, Read Reporting Configuration
-и Mgmt_Bind. Default остаётся `production`; расширенное хранилище родителей
-и экспериментальная Policy C включаются только явными вариантами
-`LLVM_VARIANT=parent-recovery` и `LLVM_VARIANT=parent-recovery-policy-c`.
+и Mgmt_Bind. Образ join по умолчанию собирается как
+`LLVM_VARIANT=parent-recovery-policy-c`: расширенное хранилище родителей и
+[Policy C](docs/M5_POLICY_C.md) (решение от 2026-11-22). Строгое хранение
+replay — `LLVM_VARIANT=parent-recovery`, простой образ — `LLVM_VARIANT=production`.
 Проверки host/sanitizer доступны через `make test-m5-m6-host`.
 Принятый M6 FULL относится к прежней паре firmware/compiler и не квалифицирует
 эту новую интеграцию автоматически.

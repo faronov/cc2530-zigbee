@@ -316,7 +316,8 @@ class Identity(unittest.TestCase):
                 lines = profile.read_text().splitlines()
                 self.assertEqual(lines[1], "default-tc")
                 self.assertEqual("-DCC2530_PARENT_RECOVERY" in lines[2], variant == "1")
-                self.assertNotIn("-DCC2530_REPLAY_POLICY_C", lines[2])
+                # Policy C is the default and follows parent recovery.
+                self.assertEqual("-DCC2530_REPLAY_POLICY_C" in lines[2], variant == "1")
                 before = profile.stat().st_mtime_ns
                 subprocess.run(command + [f"JOIN_SMOKE_PARENT_RECOVERY={variant}"],
                                cwd=tiers.REPO, check=True, capture_output=True)

@@ -1,11 +1,15 @@
-# M5 Policy C: experimental known-router profile
+# M5 Policy C: known-router replay profile
 
 Approved on 2026-10-12 for the receiver-on experimental profile, following the
-[architecture review](M5_REPLAY_PERSISTENCE_DECISION.md). The strict
-`parent-recovery` variant and qualified `e4c41c8` remain comparison references.
-`parent-recovery-policy-c` and `autonomous-pm2-epd-router` define
-`CC2530_PARENT_RECOVERY` and `CC2530_REPLAY_POLICY_C`; ordinary production and
-strict variants do not.
+[architecture review](M5_REPLAY_PERSISTENCE_DECISION.md). Since 2026-11-22
+(project owner's decision) Policy C is the default: the join image
+(`LLVM_VARIANT=parent-recovery-policy-c`), every `autonomous*` variant, host
+join-smoke (`JOIN_SMOKE_REPLAY_POLICY_C=1`) and the CI variant define
+`CC2530_PARENT_RECOVERY` and `CC2530_REPLAY_POLICY_C`, and the cold-reset
+replay exposure below is accepted. The append-only replay journal is not
+pursued. The strict `parent-recovery` variant and qualified `e4c41c8` remain
+selectable comparison references; the plain `production` image defines
+neither.
 
 ## Checkpoint-trigger matrix
 

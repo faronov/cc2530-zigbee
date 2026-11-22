@@ -5,7 +5,14 @@ Date: 2026-10-13. Source baseline:
 Compiler: `1a01afb49d99ec754e62ab0f65f182de87b4cee3`.
 Review branch: `m5-confirm-key-review`.
 
-**Decision C: UNRESOLVED. Firmware implementation remains BLOCKED.**
+**Decision (2026-11-22): the `Confirm counter+1` deviation is accepted.**
+The project does not seek CSA certification. Without an authoritative
+interpretation, D is not implemented and the question is not sent; the
+firmware keeps storing the received Confirm counter + 1 as the verified key's
+incoming floor, which rejects a replayed Confirm and stays nonconforming to
+Core's zero assignment (a TC that restarts its outgoing counter after Confirm
+would be rejected; EmberZNet/ZHA does not, as observed on H2). The review
+below, written when Decision C was UNRESOLVED, is unchanged.
 The incoming-counter reset is normative, but no accessible authoritative
 interpretation establishes D's Confirm-specific rejection before operational
 APS counter completion. The [normative decision gate](#normative-decision-gate)

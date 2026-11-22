@@ -6,6 +6,6 @@
   "F1a_F1b_F5": "EXCLUDED",
   "F2": "OPEN",
   "F3": "OPEN",
-  "Confirm-Key C": "UNRESOLVED",
+  "Confirm-Key C": "ACCEPTED DEVIATION (received+1), docs/M5_CONFIRM_KEY_FRESHNESS.md",
   "MachineVerifier blind spots": "OPEN"
 }
