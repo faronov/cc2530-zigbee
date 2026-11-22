@@ -9,10 +9,10 @@
   smoke  fast + short firmware scenarios (smoke_cases) + a bounded case-0 prefix.
          The prefix is a regression check and never claims commissioning.
   short  short FULL (about 30 minutes): fast + the short scenarios (short_cases)
-         run to completion + bounded prefixes (short_prefixes); the case-0
-         prefix runs through step 395, the first AES/flash security path. It
-         never claims commissioning; complete case 0 and the long recovery
-         scenarios stay in FULL.
+         run to completion + bounded prefixes of the long ones (short_prefixes);
+         the case-0 prefix runs through step 395, the first AES/flash security
+         path. It never claims commissioning; complete case 0 and every long
+         scenario run to completion only in FULL.
   full   fast + every admitted scenario run to completion, including complete
          case 0 through authenticated READY/serving. Case 0 cannot be deselected.
 
@@ -353,7 +353,7 @@ def plan(tier, args, profile):
     prefix_from = len(steps)
     for case, limit in prefixes.items():
         what = ("boot, XMAP banking, MAC RX/TX start" if limit <= SECURITY_STEP else
-                f"through the AES/flash security path at step {SECURITY_STEP}") if case == 0 else "start"
+                f"through the AES/flash security path at step {SECURITY_STEP}") if case == 0 else "first steps"
         steps.append(Step(f"sim-case{case}-prefix", f"bounded case-{case} prefix ({limit} steps): "
                           f"{what}; regression only, NOT commissioning",
                           cmd=[py, "-B", HERE / "llvm_join_replay.py", "--elf", elf, "--vectors", out / "vectors",
