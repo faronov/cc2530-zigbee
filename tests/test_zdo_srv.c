@@ -14,17 +14,10 @@ MCU_XDATA uint32_t zdo_srv_checks;
 static const MCU_CODE zdo_srv_local_t config = {
     {0x5678, 0x1234, 0x2345, 2, 0, 8, 0x8c, 0x52, 0, 22, 0}, 0x1234, 0x0104, 1
 };
-#if defined(ZDO_SRV_DISPLAY_CLUSTER)
-static const MCU_CODE uint8_t simple_expected[] = {
-    0x5a, 0, 0x34, 0x12, 20, 1, 0x04, 0x01, 0xff, 0xff, 0, 6,
-    0, 0, 1, 0, 3, 0, 0x02, 0x04, 0x05, 0x04, 0x10, 0xfc, 0
-};
-#else
 static const MCU_CODE uint8_t simple_expected[] = {
     0x5a, 0, 0x34, 0x12, 18, 1, 0x04, 0x01, 0xff, 0xff, 0, 5,
     0, 0, 1, 0, 3, 0, 0x02, 0x04, 0x05, 0x04, 0
 };
-#endif
 static const MCU_CODE uint8_t query[] = {0x5a, 0x34, 0x12};
 static const MCU_CODE uint8_t expected[] = {
     0x5a, 0, 0x34, 0x12, 0x02, 0x40, 0x8c, 0x78, 0x56,
@@ -206,11 +199,7 @@ static void match_input(uint16_t address, uint16_t profile, uint16_t in_cluster,
 
 static uint16_t match_power_cases(void)
 {
-    static const MCU_CODE uint16_t clusters[] = {0x0000, 0x0001, 0x0003, 0x0402,
-#if defined(ZDO_SRV_DISPLAY_CLUSTER)
-        0xfc10,
-#endif
-        0x0405};
+    static const MCU_CODE uint16_t clusters[] = {0x0000, 0x0001, 0x0003, 0x0402, 0x0405};
     uint8_t n, mode;
     reset(); rx.header.cluster_id = ZDO_SRV_POWER_DESC_REQUEST;
     CHECK(endpoint_reply(ZDO_SRV_POWER_DESC_REQUEST, 100, 0, 6) == 0);
