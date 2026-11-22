@@ -33,7 +33,7 @@ network belongs to the intended HA installation.
 
 `CC2530_ROUTER_JOIN` (requires `CC2530_PARENT_RECOVERY` and
 `CC2530_DEFAULT_TC_KEY`; in this repository only the opt-in
-`autonomous-pm2-epd-ssd1677-router` LLVM variant enables it, an
+`autonomous-pm2-epd-router` LLVM variant enables it, an
 [external application](EXTERNAL_APP.md) can opt in) lets a fresh
 join use a permitting router as parent. All other images keep the
 direct-coordinator policy above.
@@ -79,7 +79,7 @@ direct-coordinator policy above.
 - Flash wear: without `CC2530_REPLAY_POLICY_C`, every router-secured frame
   still commits the replay state with a full NV save (one page erase), and
   `NV_RECORD_ERASE_LIMIT` (32 erases per page per boot) then fails the key
-  store after about 64 frames. `autonomous-pm2-epd-ssd1677-router` therefore
+  store after about 64 frames. `autonomous-pm2-epd-router` therefore
   defines `CC2530_REPLAY_POLICY_C`.
 - Host coverage: `host-router-join-tests` (relayed Transport Key, TC learning,
   rejects for coordinator-sourced, short-nonce, own/parent source, mismatched
@@ -1222,11 +1222,10 @@ run found an LLVM MCS-51 branch defect in the first CRC code, now fixed in the p
 The opt-in `autonomous-pm2-epd` and `autonomous-pm2-sht3x-epd` LLVM variants
 add `CC2530_EPD` to `autonomous-pm2` (and `autonomous-pm2-sht3x`);
 `autonomous-pm2-epd-ssd1680` also sets `CC2530_EPD_PANEL=EPD_SSD1680`;
-`autonomous-pm2-epd-ssd1677` sets `CC2530_EPD_PANEL=EPD_SSD1677`, the 4.26"
-800×480 panel with the Home Assistant L8 dashboard and cluster 0xFC10
-([EPAPER.md](EPAPER.md#l8-dashboard-426-ssd1677));
-`autonomous-pm2-epd-ssd1677-router` adds the router-parent initial join
-(`CC2530_ROUTER_JOIN`, above). It
+`autonomous-pm2-epd-router` adds the router-parent initial join
+(`CC2530_ROUTER_JOIN`, above). The Home Assistant L8/L5 dashboards on the
+Waveshare 4.26" and 5.79" panels are an external application,
+[esl-dashboard-cc2530](https://github.com/faronov/esl-dashboard-cc2530). It
 requires the LG ESL29 board and `CC2530_CHIP_SENSE` (a build error
 otherwise). The fixed 45-unit LLVM link is kept: `boards/lg_esl29_rev03.c`
 includes [`src/epd.c`](../src/epd.c). The driver is in common code

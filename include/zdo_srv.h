@@ -33,13 +33,7 @@
 #define ZDO_SRV_IDENTIFY_CLUSTER 0x0003u
 #define ZDO_SRV_TEMPERATURE_CLUSTER 0x0402u
 #define ZDO_SRV_HUMIDITY_CLUSTER 0x0405u
-#if defined(CC2530_EPD) && defined(CC2530_EPD_PANEL) && CC2530_EPD_PANEL == 2
-/* The L8 display's manufacturer-specific cluster (epd.h, EPD_SSD1677). */
-#define ZDO_SRV_DISPLAY_CLUSTER 0xfc10u
-#define ZDO_SRV_INPUT_CLUSTERS 6u
-#else
 #define ZDO_SRV_INPUT_CLUSTERS 5u
-#endif
 /* No Home Automation device type is claimed: the endpoint's minimal
  * application servers (zcl_sensor.h) have not been conformance-tested
  * against any HA/BDB device definition. */

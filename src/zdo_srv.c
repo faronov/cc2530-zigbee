@@ -139,11 +139,7 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                             if (cluster == ZDO_SRV_BASIC_CLUSTER || cluster == ZDO_SRV_POWER_CLUSTER
                                     || cluster == ZDO_SRV_IDENTIFY_CLUSTER
                                     || cluster == ZDO_SRV_TEMPERATURE_CLUSTER
-                                    || cluster == ZDO_SRV_HUMIDITY_CLUSTER
-#if defined(ZDO_SRV_DISPLAY_CLUSTER)
-                                    || cluster == ZDO_SRV_DISPLAY_CLUSTER
-#endif
-                                    ) simple = 1;
+                                    || cluster == ZDO_SRV_HUMIDITY_CLUSTER) simple = 1;
                         }
                     }
                     if (!simple && broadcast) drop = 1;
@@ -197,10 +193,6 @@ zdo_srv_result_t zdo_srv_handle(const zdo_srv_local_t * SDCC_VOLATILE local,
                 staged[19] = (uint8_t)(ZDO_SRV_TEMPERATURE_CLUSTER >> 8);
                 staged[20] = (uint8_t)ZDO_SRV_HUMIDITY_CLUSTER;
                 staged[21] = (uint8_t)(ZDO_SRV_HUMIDITY_CLUSTER >> 8);
-#if defined(ZDO_SRV_DISPLAY_CLUSTER)
-                staged[22] = (uint8_t)ZDO_SRV_DISPLAY_CLUSTER;
-                staged[23] = (uint8_t)(ZDO_SRV_DISPLAY_CLUSTER >> 8);
-#endif
                 staged[12u + 2u * ZDO_SRV_INPUT_CLUSTERS] = 0; size = (uint8_t)(13u + 2u * ZDO_SRV_INPUT_CLUSTERS);
             }
 #endif

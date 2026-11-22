@@ -2,9 +2,6 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "zcl_sensor.h"
-#if defined(CC2530_EPD)
-#include "epd.h"
-#endif
 #include <stddef.h>
 #include <string.h>
 
@@ -21,10 +18,6 @@
 #define SILENT 0xfeu
 #define MODEL 6u
 #define IDENTIFY 4u
-#if defined(EPD_L8)
-/* Attributes of the display cluster 0xFC10 (epd_l8_type/get/set). */
-#define L8 0xfdu
-#endif
 
 typedef char zcl_sensor_overlay[sizeof(zcl_sensor_state_t) <= sizeof(join_smoke_device.record) ? 1 : -1];
 
@@ -58,10 +51,6 @@ static const MCU_CODE char model[] = BOARD_MODEL;
 static uint8_t find(void)
 {
     const MCU_CODE zcl_attribute_t *a = attributes;
-#if defined(EPD_L8)
-    if (RX.aps.cluster_id == EPD_L8_CLUSTER)
-        return ST.entry = (ST.type = epd_l8_type(ST.id)) ? L8 : NONE;
-#endif
     for (ST.entry = 0; ST.entry < sizeof(attributes)/sizeof(attributes[0]); ST.entry++, a++)
         if (a->cluster == RX.aps.cluster_id && a->id == ST.id) {
             ST.type = a->type;
@@ -308,9 +297,6 @@ static uint8_t size(void)
 {
     if (ST.entry == 5u) return sizeof(manufacturer);
     if (ST.entry == MODEL) return sizeof(model);
-#if defined(EPD_L8)
-    if (ST.entry == L8) return epd_l8_get(ST.id, ST.out, 0);
-#endif
     return width(ST.type);
 }
 
@@ -320,12 +306,6 @@ static void put(void)
     const MCU_CODE char *text = ST.entry == MODEL ? model : manufacturer;
     uint8_t MCU_XDATA *p;
     uint8_t n = size();
-#if defined(EPD_L8)
-    if (ST.entry == L8) {
-        ST.at += epd_l8_get(ST.id, ST.out+ST.at, 1);
-        return;
-    }
-#endif
     if (ST.entry == 5u || ST.entry == MODEL) {
         p = ST.out+ST.at; ST.at += n;
         *p++ = (uint8_t)(n-1u);
@@ -385,7 +365,7 @@ static uint8_t statuses(uint8_t command)
 }
 
 /* Validates every record before the second pass writes and reports. Only
- * IdentifyTime (and the display cluster) is writable. */
+ * IdentifyTime is writable. */
 static uint8_t write(void)
 {
     uint8_t n;
@@ -400,13 +380,10 @@ static uint8_t write(void)
             if (!n || left() < n) return 0x80;
             if (ST.entry == NONE) ST.status = 0x86;
             else if (ST.kind != ST.type) ST.status = 0x8d;
-#if defined(EPD_L8)
-            else if (ST.entry == L8) ST.status = epd_l8_set(ST.id, IN+ST.in, ST.apply, DEV.last);
-#endif
             else if (ST.entry != IDENTIFY) ST.status = 0x88;
             else ST.status = 0;
             if (ST.apply) {
-                if (!ST.status) { if (ST.entry == IDENTIFY) ST.identify = LE(ST.in); }
+                if (!ST.status) ST.identify = LE(ST.in);
                 else { emit(ST.status); emit16(ST.id); }
             }
             ST.in += n;
@@ -527,12 +504,7 @@ static uint8_t zcl(void)
     OUT[ST.header] = (uint8_t)(command+1u);
     ST.id = 0xfffdu;
     if ((control & 8u) || find() == NONE) ST.status = 0xc3;
-#if defined(EPD_L8)
-    /* The display cluster takes both manufacturer-specific and plain frames. */
-    else if ((control & 4u) && RX.aps.cluster_id != EPD_L8_CLUSTER) ST.status = 0x81;
-#else
     else if (control & 4u) ST.status = 0x81;
-#endif
     else if (control & 1u) ST.status = specific(command);
     else if (command == 0x00u) ST.status = read();
     else if (command == 0x02u) ST.status = write();
