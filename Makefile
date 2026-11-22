@@ -58,7 +58,7 @@ LLVM_TIER = $(PYTHON) -B tools/llvm/tiers.py --tools "$(abspath $(LLVM_TOOLS))" 
 	$(if $(LLVM_TREE),--llvm-build "$(abspath $(LLVM_TREE))") \
 	$(if $(LLVM_LIT_EVIDENCE),--lit-evidence "$(abspath $(LLVM_LIT_EVIDENCE))") $(LLVM_TIER_ARGS)
 
-.PHONY: all firmware llvm test test-fast test-smoke test-full test-llvm-fast test-llvm-smoke test-llvm-full test-host test-m5-m6-host test-join-smoke-host test-app-host llvm-simulator FORCE
+.PHONY: all firmware llvm test test-fast test-smoke test-short test-full test-llvm-fast test-llvm-smoke test-llvm-short test-llvm-full test-host test-m5-m6-host test-join-smoke-host test-app-host llvm-simulator FORCE
 all: firmware
 firmware llvm:
 	$(PYTHON) -B tools/llvm/firmware.py --tools "$(abspath $(LLVM_TOOLS))" --llvm-src "$(abspath $(LLVM_SRC))" \
@@ -69,6 +69,8 @@ test-fast test-llvm-fast:
 	$(LLVM_TIER) --tier fast --output "$(LLVM_TIER_OUT)/fast"
 test-smoke test-llvm-smoke:
 	$(LLVM_TIER) --tier smoke --output "$(LLVM_TIER_OUT)/smoke"
+test-short test-llvm-short:
+	$(LLVM_TIER) --tier short --output "$(LLVM_TIER_OUT)/short"
 test-full test-llvm-full:
 	$(LLVM_TIER) --tier full --output "$(LLVM_TIER_OUT)/full"
 llvm-simulator: $(LLVM_S51)

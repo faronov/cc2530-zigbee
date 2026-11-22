@@ -3,7 +3,9 @@ name: LLVM tiers
 # LLVM-only CC2530 firmware (docs/LLVM_DEVELOPMENT.md).
 #   push to main                     FAST
 #   pull request into main           FAST + SMOKE
-#   workflow_dispatch / call   fast | smoke | full (FULL = every scenario incl. complete case 0)
+#   workflow_dispatch / call   fast | smoke | short | full (SHORT = short FULL, about 30 minutes:
+#                              short scenarios complete, case 0 through its AES/flash step;
+#                              FULL = every scenario incl. complete case 0, several hours)
 # FULL never runs implicitly. Nightly FULL is not scheduled: GitHub runs schedules only
 # from the default branch (production main here, TC32 in faronov/llvm-project).
 # UNIFY-01 is a development/CI-validated candidate, not FULL-qualified.
@@ -18,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       tier:
-        description: fast, smoke or full (full includes complete case 0, several hours)
+        description: fast, smoke, short (short FULL, about 30 minutes, no commissioning) or full (complete case 0, several hours)
         type: choice
-        options: [fast, smoke, full]
+        options: [fast, smoke, short, full]
         default: fast
       variant:
         description: firmware variant (parent-recovery is strict; parent-recovery-policy-c uses RAM replay floors)
@@ -114,7 +116,7 @@ jobs:
           FIRMWARE_REPOSITORY: ${{ inputs.firmware_repository || github.repository }}
           FIRMWARE_REF: ${{ inputs.firmware_ref || github.event.pull_request.head.sha || github.sha }}
         run: |
-          case "$TIER" in fast|smoke|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
+          case "$TIER" in fast|smoke|short|full) ;; *) echo "unknown tier '$TIER'"; exit 1;; esac
           case "$VARIANT" in production|rx-diag|parent-recovery|parent-recovery-policy-c) ;; *) echo "unknown variant '$VARIANT'"; exit 1;; esac
           {
             echo "tier=$TIER"
@@ -232,6 +234,16 @@ jobs:
             --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
             --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
             --variant "${{ steps.select.outputs.variant }}" --output "$GITHUB_WORKSPACE/out/smoke"
+
+      - name: SHORT (short FULL)
+        if: steps.select.outputs.tier == 'short'
+        working-directory: fw
+        run: |
+          python3 -B tools/llvm/tiers.py --tier short --jobs 4 \
+            --tools "$GITHUB_WORKSPACE/llvm-build/bin" --llvm-src "$GITHUB_WORKSPACE/llvm" \
+            --llvm-build "$GITHUB_WORKSPACE/llvm-build" \
+            --simulator "$GITHUB_WORKSPACE/sim/sdcc-4.2.0+dfsg/sim/ucsim/s51.src/s51" \
+            --variant "${{ steps.select.outputs.variant }}" --output "$GITHUB_WORKSPACE/out/short"
 
       - name: Pack FULL inputs (exact toolchain, simulator and FAST lit receipt of this run)
         if: steps.select.outputs.tier == 'full'
