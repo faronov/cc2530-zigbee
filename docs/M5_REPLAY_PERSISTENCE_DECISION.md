@@ -1,6 +1,9 @@
 # M5 incoming replay persistence: decision for approval
 
-**Architecture review only; recommendation C is not approved or implemented.**
+**Decision (2026-11-22): recommendation C is the default** (approved on
+2026-10-12 for the experimental profile; see [Policy C](M5_POLICY_C.md)). The
+cold-reset exposure described below is accepted and the append journal is not
+pursued. The review text below is unchanged.
 Per-frame nonvolatile storage of ordinary incoming router NWK counters is not
 established as a requirement by the reviewed Core R22 / BDB 3.0.1 base texts.
 It is a stronger project guarantee than maintaining incoming counters in the

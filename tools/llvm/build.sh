@@ -5,16 +5,16 @@
 # built from the compiler source tree $LLVM_SRC with the same ABI flags.
 # usage: TOOLS=bin LLVM_SRC=src ABI_FLAGS=.. SF_FLAGS=.. [FIRMWARE_VARIANT=..] build.sh OUTDIR
 # (OUTDIR must not exist). FIRMWARE_VARIANT: production (default), rx-diag or
-# parent-recovery (strict), parent-recovery-policy-c (experimental RAM floors) or
-# autonomous (parent-recovery without a debugger: built-in admission, reset retry,
+# parent-recovery (strict replay persistence), parent-recovery-policy-c (Policy C
+# RAM router floors, the default join image, docs/M5_POLICY_C.md) or
+# autonomous (parent-recovery-policy-c without a debugger: built-in admission, reset retry,
 # M7a RX-off-when-idle READY receiver and ADC chip temperature/VDD sensing) or
 # autonomous-pm2 (autonomous plus M7b PM2 sleep between READY polls) or
 # autonomous-pm2-sht3x (opt-in: plus the SHT3x I2C temperature/humidity sensor) or
 # autonomous-pm2-epd / autonomous-pm2-sht3x-epd (opt-in: plus the UC8151D e-paper
 # display, CC2530_EPD) or autonomous-pm2-epd-ssd1680 (the same with an SSD1680
 # panel, CC2530_EPD_PANEL=1) or autonomous-pm2-epd-router (autonomous-pm2-epd
-# plus a router-parent initial join, CC2530_ROUTER_JOIN, docs/ED_JOIN.md, with
-# Policy C: docs/M5_POLICY_C.md) or
+# plus a router-parent initial join, CC2530_ROUTER_JOIN, docs/ED_JOIN.md) or
 # autonomous-pm2-epd-factory (EXPERIMENTAL: epd plus the
 # information-page die-sensor reference, CC2530_CHIP_FACTORY) or
 # app (an external application, docs/EXTERNAL_APP.md: firmware.py --app passes
@@ -33,14 +33,14 @@ case $VARIANT in
   rx-diag) VDEFS="-DCC2530_RX_DIAG" ;;
   parent-recovery) VDEFS="-DCC2530_PARENT_RECOVERY" ;;
   parent-recovery-policy-c) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C" ;;
-  autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
-  autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
-  autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
-  autonomous-pm2-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD" ;;
-  autonomous-pm2-epd-ssd1680) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=1" ;;
+  autonomous) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_CHIP_SENSE" ;;
+  autonomous-pm2) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE" ;;
+  autonomous-pm2-sht3x) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X" ;;
+  autonomous-pm2-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD" ;;
+  autonomous-pm2-epd-ssd1680) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_EPD_PANEL=1" ;;
   autonomous-pm2-epd-router) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_ROUTER_JOIN -DCC2530_REPLAY_POLICY_C" ;;
-  autonomous-pm2-epd-factory) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_CHIP_FACTORY" ;;
-  autonomous-pm2-sht3x-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X -DCC2530_EPD" ;;
+  autonomous-pm2-epd-factory) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_EPD -DCC2530_CHIP_FACTORY" ;;
+  autonomous-pm2-sht3x-epd) VDEFS="-DCC2530_PARENT_RECOVERY -DCC2530_REPLAY_POLICY_C -DCC2530_AUTONOMOUS -DCC2530_LEAN -DCC2530_RX_OFF_IDLE -DCC2530_PM2_IDLE -DCC2530_CHIP_SENSE -DCC2530_SHT3X -DCC2530_EPD" ;;
   app) VDEFS="${APP_DEFINES:?APP_DEFINES required}"; : "${APP_DIR:?APP_DIR required}" "${APP_UNITS:?APP_UNITS required}" ;;
   *) echo "unknown FIRMWARE_VARIANT '$VARIANT'"; exit 2 ;;
 esac

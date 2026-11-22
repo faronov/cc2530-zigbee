@@ -68,7 +68,8 @@ Frozen M6 firmware `1dd413b2bc5d69d7ec04b91137bb05c77bd13cca`, LLVM
 (31/31 gates, 19/19 MCU scenarios) are historical, unchanged evidence, not
 qualification of this compiler. F1a/F1b/F5 remain excluded pending review;
 F2 default-ABI exhaustion, F3 IDATA/XDATA contract and MachineVerifier blind
-spots remain OPEN; Confirm-Key C remains UNRESOLVED.
+spots remain OPEN; the Confirm-Key counter+1 deviation is accepted
+([decision](docs/M5_CONFIRM_KEY_FRESHNESS.md)).
 
 ### M5/M6 source integration
 
@@ -83,13 +84,13 @@ false report commits on queue rejection. The LLVM-only build, exact compiler
 pin, NV schema and Confirm-Key policy remain unchanged. Neither source
 integration nor this correction transfers historical FULL or hardware acceptance.
 
-The join image defaults to `LLVM_VARIANT=parent-recovery` (extended parent
-storage and known-router recovery; host join-smoke defaults to
-`JOIN_SMOKE_PARENT_RECOVERY=1`). `LLVM_VARIANT=production` still selects the
-plain image; experimental RAM replay floors require
-`LLVM_VARIANT=parent-recovery-policy-c`.
-Both use the standard `make firmware` path and sealed variant-bound receipts.
-Policy C's documented reset replay exposure is not enabled by default.
+The join image defaults to `LLVM_VARIANT=parent-recovery-policy-c` (extended
+parent storage, known-router recovery and [Policy C](docs/M5_POLICY_C.md) RAM
+router replay floors; host join-smoke defaults to `JOIN_SMOKE_PARENT_RECOVERY=1`
+and `JOIN_SMOKE_REPLAY_POLICY_C=1`). Policy C's documented reset replay
+exposure is accepted (decision of 2026-11-22). `LLVM_VARIANT=parent-recovery`
+selects strict replay persistence and `LLVM_VARIANT=production` the plain image.
+All use the standard `make firmware` path and sealed variant-bound receipts.
 See [Policy C](docs/M5_POLICY_C.md), [runtime reporting](docs/M6_RUNTIME_REPORTING_READ.md)
 and [Mgmt_Bind](docs/M6_MGMT_BIND.md). `make test-m5-m6-host` checks the restored
 native/sanitizer compositions without a target compiler.

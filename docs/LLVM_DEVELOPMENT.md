@@ -62,7 +62,8 @@ Frozen M6 firmware `1dd413b2bc5d69d7ec04b91137bb05c77bd13cca`, LLVM
 `1a01afb49d99ec754e62ab0f65f182de87b4cee3` and accepted run `38785958832`
 (31/31 gates, 19/19 scenarios) remain unchanged. F1a/F1b/F5 remain excluded
 pending independent review; F2/F3 and MachineVerifier blind spots remain OPEN,
-and Confirm-Key C UNRESOLVED.
+and the Confirm-Key counter+1 deviation is accepted
+([decision](M5_CONFIRM_KEY_FRESHNESS.md)).
 
 The study record is [LLVM_MCS51_PORT_STUDY](LLVM_MCS51_PORT_STUDY.md). The
 following tier mechanics/evidence are retained; old SDCC references and
@@ -436,7 +437,8 @@ This is a development-default proposal, not production promotion or FULL qualifi
 Accepted M6 run [38785958832](https://github.com/faronov/cc2530-zigbee/actions/runs/38785958832)
 remains bound to LLVM `1a01afb49d99ec754e62ab0f65f182de87b4cee3` and its original artifacts.
 No new FULL was run. F1a/F1b/F5 are excluded; F2 default-ABI stack exhaustion and F3 memory
-contracts remain open, as do the documented verifier limitations and Confirm-Key C.
+contracts remain open, as do the documented verifier limitations; the Confirm-Key
+counter+1 deviation is accepted.
 
 | Event | Repository | Tier |
 | --- | --- | --- |
