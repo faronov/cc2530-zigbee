@@ -97,8 +97,13 @@ __attribute__((noinline)) static void restart(void)
 #if defined(CC2530_PM2_IDLE)
     join_smoke_pause(pause);
 #else
-    uint32_t start=timebase_read_awake_ticks24();
-    while(((timebase_read_awake_ticks24()-start)&TIMEBASE_TICKS_MASK)<pause) {}
+    /* A Sleep Timer stalled for 65535 reads ends the pause early. */
+    uint32_t start=timebase_read_awake_ticks24(), last=start, now;
+    uint16_t spin=1;
+    while((((now=timebase_read_awake_ticks24())-start)&TIMEBASE_TICKS_MASK)<pause) {
+        if(now!=last) { last=now; spin=1; }
+        else if(!++spin) break;
+    }
 #endif
     MMIO_WRITE(SOC_WDCTL,WDCTL_RESET);
     for(;;) {}

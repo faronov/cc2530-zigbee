@@ -355,6 +355,21 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
             else if (result) ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE_RETRY;
             else { ctx->attempts = 0; ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE; }
         }
+        /* MAC Data Poll keepalive: the Data Request's MAC ACK is the only
+         * parent liveness signal. Unacknowledged polls count like failed End
+         * Device Timeout exchanges, at most one per retry interval (keepalive
+         * is otherwise unused here), so fast polling cannot shorten the loss
+         * window below the End Device Timeout keepalive's. */
+        which = ctx->work.runtime.transport.poll_result;
+        ctx->work.runtime.transport.poll_result = MAC_TX_OUTCOME_NONE;
+        if (ctx->phase == BDB_JOIN_READY && poll_keepalive(ctx)) {
+            if (which == MAC_TX_ACKED) { ctx->attempts = 0; ctx->keepalive = ctx->last; }
+            else if ((which == MAC_TX_NO_ACK || which == MAC_TX_CHANNEL_ACCESS) &&
+                     expired(ctx->last, ctx->keepalive)) {
+                ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE_RETRY;
+                if (++ctx->attempts == BDB_JOIN_KEEPALIVE_ATTEMPTS) fail(ctx, BDB_JOIN_PARENT_FAILED);
+            }
+        }
         if (ctx->phase == BDB_JOIN_READY && !poll_keepalive(ctx) && expired(ctx->last, ctx->keepalive) &&
             !ctx->work.runtime.zdo.query) {
             rc = zdo_runtime_request(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ZDO_RUNTIME_PARENT, ctx->last);

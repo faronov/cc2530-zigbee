@@ -303,6 +303,36 @@ static void serve_report(unsigned *reports, uint8_t *tsn, unsigned counts[4])
 }
 
 /* READY serves without a time bound, a fault or further qualified draws. */
+/* The poll-only keepalive parent disappears. Its missing Data Request MAC
+ * ACKs are the only evidence; BDB_JOIN_KEEPALIVE_ATTEMPTS consecutive ones
+ * end READY with PARENT_FAILED, as failed End Device Timeout exchanges do. */
+static void parent_lost(unsigned *calls)
+{
+    uint64_t cycles=0, credited=0, origin=model_clocks;
+    parent_absent=1;
+    while(join_smoke_status.phase==JS_READY && !join_smoke_status.reason) {
+        uint32_t step;
+        assert(cycles<(uint64_t)120u*32000000u);
+        caller_peer();
+        step=(join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
+            join_smoke_device.work.runtime.transport.active ||
+            join_smoke_device.work.runtime.transport.queued ? 4u : 20000u)*512u;
+        advance_clocks(step);
+        cycles+=step;
+        if(model_clocks-origin>cycles) cycles=model_clocks-origin;
+        ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
+        credited=cycles*32768u/32000000u;
+        handoff_tick();
+        caller_poll();
+        (*calls)++;
+    }
+    parent_absent=0;
+    printf("Join caller case%u: parent lost after %lu ms\n",caller_case,(unsigned long)(cycles/32000u));
+    assert(join_smoke_status.reason==JS_BDB && join_smoke_status.bdb_reason==BDB_JOIN_PARENT_FAILED);
+    /* Fast polls do not shorten it: one counted failure per retry interval. */
+    assert(cycles>=(uint64_t)(BDB_JOIN_KEEPALIVE_ATTEMPTS-1u)*BDB_JOIN_KEEPALIVE_RETRY*512u);
+}
+
 static void serve_ready(unsigned *calls)
 {
     unsigned served=0, reports=0, seen=link_peer_app, confirmed=0, counts[4]={0,0,0,0};
@@ -909,6 +939,7 @@ int main(int argc, char **argv)
                     else if(selected==CALLER_SLEEPY) assert(link_peer_parent>1u);
                     link_peer_verify();
                     if(caller_dump>=0) recovery_dump();
+                    if(selected==CALLER_SLEEPY_POLL_KEEPALIVE) parent_lost(&calls);
                     if(selected==CALLER_RECOVERY || selected==CALLER_SLEEPY_RECOVERY) {
                         security_keys_status_t keys;
                         assert(join_smoke_device.recovery==3 && link_peer_rejoins==1 && !response_sent);
