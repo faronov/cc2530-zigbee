@@ -61,6 +61,7 @@ Use the smallest relevant local check, then the existing
 | `make test-host` | Existing native frame/NV/counter checks and directed join callers; no target compiler |
 | `make test-m5-m6-host` | Focused M5/M6 security/rejoin/reporting/binding native and nonrecovering sanitizer checks |
 | `make test-join-smoke-host` | Existing native/sanitized shallow/deep join and ZCL scenarios |
+| `make test-fuzz-replay` / `make fuzz-parsers` | Over-the-air parser corpus replay with ASan/UBSan / libFuzzer run ([FUZZING.md](docs/FUZZING.md)) |
 | `python3 -B -m unittest discover -s tools/llvm -p 'test_*.py'` | Tier, identity and LLVM-only build guardrails |
 | `python3 -B tools/check_repository.py` | Publication, source and documentation constraints |
 | `make test-fast` / `make test-llvm-fast` | Existing compiler/ABI/runtime, clean firmware link and static admission |

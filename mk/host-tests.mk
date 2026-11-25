@@ -826,3 +826,31 @@ $(BUILD)/host-zigbee-security-tests: tests/test_zigbee_security.c src/timebase.c
 
 $(BUILD)/host-zigbee-security-tests-sanitize: tests/test_zigbee_security.c src/timebase.c src/aes.c src/ccm_star.c src/nwk_frame.c src/aps_frame.c src/zigbee_security.c tests/host_mmio.c tests/aes_reference.c tests/security_aes_model.c $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie tests/test_zigbee_security.c src/timebase.c src/aes.c src/ccm_star.c src/nwk_frame.c src/aps_frame.c src/zigbee_security.c tests/host_mmio.c tests/aes_reference.c tests/security_aes_model.c -o $(BUILD)/host-zigbee-security-tests-sanitize
+
+# Over-the-air parser fuzzing (docs/FUZZING.md). test-fuzz-replay replays the
+# committed hex corpus through tests/fuzz_parsers.c with ASan/UBSan and the
+# host compiler; fuzz-parsers unpacks it and runs libFuzzer (FUZZ_CC, a clang
+# with libFuzzer) for FUZZ_TIME seconds into $(BUILD)/fuzz-corpus.
+FUZZ_CC ?= clang
+FUZZ_TIME ?= 60
+FUZZ_SEED ?= 1
+FUZZ_CORPUS := tests/fuzz/parsers.hex
+FUZZ_SOURCES := tests/fuzz_parsers.c src/mac_frame.c src/nwk_beacon.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zdo_node.c src/zdo_srv.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/ed_wire.c src/zigbee_security.c tests/security_aes_model.c tests/host_mmio.c tests/aes_reference.c
+FUZZ_FLAGS := -std=c99 -g -Wall -Wextra -Werror -DCC2530_HOST_TEST -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER) -Itests
+
+$(BUILD)/host-parser-fuzz-replay: $(FUZZ_SOURCES) $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(HOST_CC) $(FUZZ_FLAGS) -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -fno-pie -no-pie $(FUZZ_SOURCES) -o $@
+
+$(BUILD)/host-parser-fuzz: $(FUZZ_SOURCES) $(HEADERS) Makefile mk/host-tests.mk | $(BUILD)
+	$(FUZZ_CC) $(FUZZ_FLAGS) -O1 -DFUZZ_LIBFUZZER -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined $(FUZZ_SOURCES) -o $@
+
+.PHONY: test-fuzz-replay fuzz-parsers
+test-fuzz-replay: $(BUILD)/host-parser-fuzz-replay
+	"$(BUILD)/host-parser-fuzz-replay" $(FUZZ_CORPUS)
+
+fuzz-parsers: $(BUILD)/host-parser-fuzz
+	rm -rf "$(BUILD)/fuzz-corpus" "$(BUILD)/fuzz-seeds" && mkdir -p "$(BUILD)/fuzz-corpus" "$(BUILD)/fuzz-seeds"
+	n=0; grep -v '^#' $(FUZZ_CORPUS) | while read -r hex; do n=$$((n+1)); \
+		printf '%s' "$$hex" | xxd -r -p > "$(BUILD)/fuzz-seeds/$$n"; done
+	"$(BUILD)/host-parser-fuzz" -max_total_time=$(FUZZ_TIME) -seed=$(FUZZ_SEED) -print_final_stats=1 \
+		"$(BUILD)/fuzz-corpus" "$(BUILD)/fuzz-seeds"
