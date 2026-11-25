@@ -93,6 +93,10 @@ jobs:
           make -j4 test-join-smoke-host BUILD=build/native-m5-m6 \
             JOIN_SMOKE_PARENT_RECOVERY=1 JOIN_SMOKE_REPLAY_POLICY_C=1
           python3 -B -m unittest discover -s tools/llvm -p 'test_*.py' -v
+      - name: Parser fuzzing (corpus replay, then 120 s of libFuzzer)
+        run: |
+          make test-fuzz-replay
+          make fuzz-parsers FUZZ_CC=clang FUZZ_TIME=120
 
   toolchain:
     name: Toolchain + ${{ inputs.tier || (github.event_name == 'pull_request' && 'fast + smoke' || 'fast') }}
