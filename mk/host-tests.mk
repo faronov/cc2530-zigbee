@@ -834,7 +834,7 @@ $(BUILD)/host-zigbee-security-tests-sanitize: tests/test_zigbee_security.c src/t
 FUZZ_CC ?= clang
 FUZZ_TIME ?= 60
 FUZZ_SEED ?= 1
-FUZZ_CORPUS := tests/fuzz/parsers.hex
+FUZZ_CORPUS := tests/fuzz/parsers.corpus
 FUZZ_SOURCES := tests/fuzz_parsers.c src/mac_frame.c src/nwk_beacon.c src/nwk_frame.c src/aps_frame.c src/zcl_frame.c src/zcl_value.c src/zdo_node.c src/zdo_srv.c src/timebase.c src/aes.c src/ccm_star.c src/zigbee_mmo.c src/zigbee_key_hash.c src/ed_wire.c src/zigbee_security.c tests/security_aes_model.c tests/host_mmio.c tests/aes_reference.c
 FUZZ_FLAGS := -std=c99 -g -Wall -Wextra -Werror -DCC2530_HOST_TEST -Iinclude -DCC2530_BOARD=$(BOARD_NUMBER) -Itests
 

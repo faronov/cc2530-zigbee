@@ -19,7 +19,7 @@ authentication, so only network members can supply them. `ed_wire_crypt`
 
 | Command | What it does |
 | --- | --- |
-| `make test-fuzz-replay` | Host compiler with ASan/UBSan replays the committed corpus [`tests/fuzz/parsers.hex`](../tests/fuzz/parsers.hex) (also run in CI) |
+| `make test-fuzz-replay` | Host compiler with ASan/UBSan replays the committed corpus [`tests/fuzz/parsers.corpus`](../tests/fuzz/parsers.hex) (also run in CI) |
 | `make fuzz-parsers [FUZZ_CC=clang] [FUZZ_TIME=60] [FUZZ_SEED=1]` | Unpacks that corpus into `$(BUILD)/fuzz-seeds` and runs libFuzzer for `FUZZ_TIME` seconds into `$(BUILD)/fuzz-corpus` (CI runs 120 s) |
 
 `FUZZ_CC` must be a clang with libFuzzer (`-fsanitize=fuzzer`). The corpus is
@@ -30,7 +30,7 @@ To extend it with new coverage, merge into a fresh directory and rewrite it:
 B=build/lg_esl29_rev03/join
 mkdir -p $B/fuzz-merged && $B/host-parser-fuzz -merge=1 $B/fuzz-merged $B/fuzz-seeds $B/fuzz-corpus
 (echo '# Parser fuzz corpus (docs/FUZZING.md): one fuzzer input per line, hex.'
- for f in $B/fuzz-merged/*; do xxd -p -c 4096 $f; done | sort) > tests/fuzz/parsers.hex
+ for f in $B/fuzz-merged/*; do xxd -p -c 4096 $f; done | sort) > tests/fuzz/parsers.corpus
 ```
 
 The corpus holds only fuzzer-generated inputs, never captured network frames
