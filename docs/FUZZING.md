@@ -19,7 +19,7 @@ authentication, so only network members can supply them. `ed_wire_crypt`
 
 | Command | What it does |
 | --- | --- |
-| `make test-fuzz-replay` | Host compiler with ASan/UBSan replays the committed corpus [`tests/fuzz/parsers.corpus`](../tests/fuzz/parsers.hex) (also run in CI) |
+| `make test-fuzz-replay` | Host compiler with ASan/UBSan replays the committed corpus [`tests/fuzz/parsers.corpus`](../tests/fuzz/parsers.corpus) (also run in CI) |
 | `make fuzz-parsers [FUZZ_CC=clang] [FUZZ_TIME=60] [FUZZ_SEED=1]` | Unpacks that corpus into `$(BUILD)/fuzz-seeds` and runs libFuzzer for `FUZZ_TIME` seconds into `$(BUILD)/fuzz-corpus` (CI runs 120 s) |
 
 `FUZZ_CC` must be a clang with libFuzzer (`-fsanitize=fuzzer`). The corpus is
