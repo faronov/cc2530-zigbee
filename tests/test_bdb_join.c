@@ -2420,6 +2420,23 @@ int main(void)
     pending = 0;
     CHECK(bdb_join_step(&device, now, NULL, &action) == BDB_JOIN_OK);
     CHECK(runtime.zdo.application_ready && runtime.zdo.application.length == 1);
+    {
+        /* Stored deadlines compare modulo half the clock (~9.5 h): records and
+         * the counter-wrap quarantine expire with time alone, no APS traffic.
+         * nwk_aps_cancel() on a copy only advances the transport clock. */
+        nwk_aps_t copy = runtime.transport;
+        uint32_t at = now;
+        unsigned window;
+        copy.duplicate[3].used = 1; copy.duplicate[3].until = at+10u;
+        copy.broadcast[6].used = 1; copy.broadcast[6].until = at+10u;
+        copy.wrap_wait = 1; copy.counter_until = at+10u;
+        for (window = 0; window <= 2u*NWK_APS_DUPLICATES; window++) {
+            at += 1ul << 20;
+            CHECK(nwk_aps_cancel(&copy, at) == NWK_APS_STATE);
+            CHECK(!copy.wrap_wait);
+        }
+        CHECK(!copy.duplicate[3].used && !copy.broadcast[6].used);
+    }
     CHECK(zdo_runtime_discard_application(NULL) == ZDO_RUNTIME_ARGUMENT);
     CHECK(zdo_runtime_discard_application(&runtime.zdo) == ZDO_RUNTIME_OK);
     for (i = 0; i < sizeof(runtime.zdo.application); i++) CHECK(!((uint8_t *)&runtime.zdo.application)[i]);

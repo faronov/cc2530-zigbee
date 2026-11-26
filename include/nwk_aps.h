@@ -22,7 +22,7 @@
 #endif
 
 #define NWK_APS_VERSION 2u
-#define NWK_APS_DUPLICATES 8u
+#define NWK_APS_DUPLICATES 8u   /* power of two: advance() sweeps 2x this many records */
 #define NWK_APS_RETRIES 3u
 #define NWK_APS_ACK_WAIT 100000UL
 #define NWK_APS_DUPLICATE_TIME 1000000UL

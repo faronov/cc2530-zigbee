@@ -1097,7 +1097,12 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
 - **Read Attributes:** Basic ZCLVersion/PowerSource/Manufacturer/Model,
   MeasuredValue/Min/Max for both measurement clusters, BatteryVoltage,
   BatteryPercentageRemaining, IdentifyTime and ClusterRevision. Other
-  attributes return UNSUPPORTED_ATTRIBUTE.
+  attributes return UNSUPPORTED_ATTRIBUTE. Min/MaxMeasuredValue follow the
+  measuring part: 21.00-25.00 °C and 45.00-55.00 %RH for the synthetic
+  values, -40.00-125.00 °C for the chip die or SHT3x temperature and
+  0.00-100.00 %RH for SHT3x humidity.
+- **Endpoints:** requests to the APS broadcast endpoint `FF` are served by
+  endpoint 1, which answers from endpoint 1.
 - **Values:** one sawtooth phase 0..40, one step per 2^22 MAC symbols
   (~67 s). Temperature runs 21.0-25.0 °C in 0.1 °C steps and humidity
   45.00-55.00 %RH in 0.25 % steps. The synthetic battery runs 100-80 % in
@@ -1109,7 +1114,11 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   minimum/maximum interval and reportable change. A maximum of `FFFF`
   disables reporting. The defaults are temperature 30/300 s/0.10 °C,
   humidity 30/300 s/0.25 %, voltage 60/3600 s/0.1 V and percentage
-  60/3600 s/1 %.
+  60/3600 s/1 %. Analog change fields (integers, floats, times) are consumed
+  even when the type is wrong for the attribute (`8D`). A negative
+  temperature change counts by its magnitude; `8000` is INVALID_VALUE. A
+  successful configuration or restore takes the current measurement as the
+  change baseline.
 - **Read Reporting Configuration:** returns the effective direction-0
   configuration from the four live reporting records. Temperature/humidity
   change fields are two bytes, battery change fields one byte. Unknown,
@@ -1120,7 +1129,8 @@ them ([`include/zcl_sensor.h`](../include/zcl_sensor.h)):
   reset age/baselines, change bindings or access NV. See
   [the bounded runtime contract](M6_RUNTIME_REPORTING_READ.md).
 - **ZDO Bind/Unbind:** a 64-bit destination is accepted only if it is the
-  trust center (coordinator), and only for the three clusters. A bind table
+  trust center (coordinator), only for the three clusters, and only for
+  destination endpoints `01`-`F0`. A bind table
   for any other target returns NOT_SUPPORTED, and unbinding an absent entry
   returns NO_ENTRY.
 - **Persistence:** bindings and reporting configuration are RAM-only. A reset
