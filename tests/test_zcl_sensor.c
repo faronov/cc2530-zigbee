@@ -237,13 +237,15 @@ static uint8_t sensor_poll(void)
     return zcl_sensor_serve();
 }
 
+static uint8_t receive_endpoint = 1;
+
 static uint8_t receive(uint16_t cluster, const void *payload, uint8_t length)
 {
     uint8_t result;
     memset(&CTX.application, 0, sizeof(CTX.application));
     CTX.application.nwk.source = 0x0000; CTX.application.nwk.destination = 0x4321;
     CTX.application.aps.profile_id = 0x0104; CTX.application.aps.cluster_id = cluster;
-    CTX.application.aps.source_endpoint = 9; CTX.application.aps.destination_endpoint = 1;
+    CTX.application.aps.source_endpoint = 9; CTX.application.aps.destination_endpoint = receive_endpoint;
     memcpy(CTX.application.payload, payload, length); CTX.application.length = length;
     CTX.application_ready = 1;
     result = sensor_poll();
@@ -655,6 +657,21 @@ static void identify(void)
     CHECK(!ST.identify);
 }
 
+/* The served MeasuredValue of temperature (0) or humidity (1). */
+static uint16_t measured(uint8_t entry)
+{
+#if defined(CC2530_SHT3X)
+    return entry ? ST.humidity : (uint16_t)ST.climate;
+#else
+    uint8_t phase = ZCL_SENSOR_PHASE(ZCL_SENSOR_SAMPLE(CTX.last));
+#if defined(CC2530_CHIP_SENSE)
+    return entry ? ZCL_SENSOR_HUMIDITY(phase) : (uint16_t)ST.temperature;
+#else
+    return entry ? ZCL_SENSOR_HUMIDITY(phase) : (uint16_t)ZCL_SENSOR_TEMPERATURE(phase);
+#endif
+#endif
+}
+
 static void configure(void)
 {
     static const uint16_t defaults[4][3] = {{30, 300, 10}, {30, 300, 25}, {60, 3600, 1}, {60, 3600, 2}};
@@ -663,9 +680,12 @@ static void configure(void)
     for (i = 0; i < 4; i++)
         CHECK(ST.report[i].min == defaults[i][0] && ST.report[i].max == defaults[i][1] &&
               ST.report[i].change == defaults[i][2] && !ST.report[i].age);
-    /* The ZHA temperature, humidity and battery configurations. */
+    /* The ZHA temperature, humidity and battery configurations. Changes then
+     * count from the configuration-time value (R8 2.5.11.2.3). */
+    ST.report[0].last = ST.report[1].last = 0x1234;
     zcl(0x0402, "\x00\x60\x06\x00\x00\x00\x29\x1e\x00\x84\x03\x32\x00", 13, "\x18\x60\x07\x00", 4);
     zcl(0x0405, "\x00\x61\x06\x00\x00\x00\x21\x1e\x00\x84\x03\x64\x00", 13, "\x18\x61\x07\x00", 4);
+    CHECK(ST.report[0].last == measured(0) && ST.report[1].last == measured(1));
     zcl(0x0001, "\x00\x62\x06\x00\x21\x00\x20\x10\x0e\x30\x2a\x01", 12, "\x18\x62\x07\x00", 4);
     CHECK(ST.report[0].min == 30 && ST.report[0].max == 900 && ST.report[0].change == 50);
     CHECK(ST.report[1].min == 30 && ST.report[1].max == 900 && ST.report[1].change == 100);
@@ -688,11 +708,50 @@ static void configure(void)
     CHECK(!ST.report[0].min && !ST.report[0].max && ST.report[0].change == 7);
     /* A non-integer reportable type has no parsed change field. */
     zcl(0x0001, "\x00\x67\x06\x00\x20\x00\x30\x01\x00\x02\x00", 11, "\x18\x67\x07\x8d\x00\x20\x00", 7);
+    /* An analog float's four-byte change is consumed before INVALID_DATA_TYPE;
+     * the next record still applies. */
+    zcl(0x0402, "\x00\x6a\x06\x00\x00\x00\x39\x01\x00\x02\x00\x00\x00\x80\x3f"
+        "\x00\x00\x00\x29\x03\x00\x04\x00\x05\x00", 25, "\x18\x6a\x07\x8d\x00\x00\x00", 7);
+    CHECK(ST.report[0].min == 3 && ST.report[0].max == 4 && ST.report[0].change == 5);
+    /* A negative int16 threshold is kept as sent; its non-value 8000 is invalid. */
+    zcl(0x0402, "\x00\x6b\x06\x00\x00\x00\x29\x00\x00\x00\x00\xf6\xff", 13, "\x18\x6b\x07\x00", 4);
+    CHECK(ST.report[0].change == 0xfff6u);
+    zcl(0x0402, "\x00\x6c\x06\x00\x00\x00\x29\x00\x00\x00\x00\x00\x80", 13,
+        "\x18\x6c\x07\x87\x00\x00\x00", 7);
+    CHECK(ST.report[0].change == 0xfff6u);
     /* Restore defaults and disable. */
+    ST.report[0].last = 0x1234;
     zcl(0x0402, "\x10\x68\x06\x00\x00\x00\x29\xff\xff\x00\x00\x00\x00", 13, "\x18\x68\x07\x00", 4);
     CHECK(ST.report[0].min == 30 && ST.report[0].max == 300 && ST.report[0].change == 10);
+    CHECK(ST.report[0].last == measured(0));
     zcl(0x0405, "\x00\x69\x06\x00\x00\x00\x21\x00\x00\xff\xff\x00\x00", 13, "\x18\x69\x07\x00", 4);
     CHECK(ST.report[1].max == 0xffff);
+}
+
+/* The APS broadcast endpoint FF reaches the one local endpoint, which
+ * answers from endpoint 1. */
+static void broadcast_endpoint(void)
+{
+    reset(0);
+    receive_endpoint = 0xff;
+    zcl(0x0003, "\x00\x74\x00\x00\x00", 5, "\x18\x74\x01\x00\x00\x00\x21\x00\x00", 9);
+    receive_endpoint = 2;
+    CHECK(receive(0x0003, "\x00\x75\x00\x00\x00", 5) == ZCL_SENSOR_DISCARDED);
+    receive_endpoint = 1;
+}
+
+/* Min/MaxMeasuredValue follow the variant's measuring part. */
+static void limits(void)
+{
+    uint8_t expected[23] = {0x18, 0x76, 0x01, 0x01, 0x00, 0x00, 0x29, 0, 0, 0x02, 0x00, 0x00, 0x29};
+    reset(0);
+    expected[7] = (uint8_t)ZCL_SENSOR_TEMPERATURE_MIN; expected[8] = (uint8_t)(ZCL_SENSOR_TEMPERATURE_MIN >> 8);
+    expected[13] = (uint8_t)ZCL_SENSOR_TEMPERATURE_MAX; expected[14] = (uint8_t)(ZCL_SENSOR_TEMPERATURE_MAX >> 8);
+    zcl(0x0402, "\x00\x76\x00\x01\x00\x02\x00", 7, expected, 15);
+    expected[1] = 0x77; expected[6] = expected[12] = 0x21;
+    expected[7] = (uint8_t)ZCL_SENSOR_HUMIDITY_MIN; expected[8] = (uint8_t)(ZCL_SENSOR_HUMIDITY_MIN >> 8);
+    expected[13] = (uint8_t)ZCL_SENSOR_HUMIDITY_MAX; expected[14] = (uint8_t)(ZCL_SENSOR_HUMIDITY_MAX >> 8);
+    zcl(0x0405, "\x00\x77\x00\x01\x00\x02\x00", 7, expected, 15);
 }
 
 static void bind(void)
@@ -721,6 +780,11 @@ static void bind(void)
     request[10] = 0x01; request[9] = 2;
     CHECK(zdo(0x0021, request, 22) == ZCL_SENSOR_HANDLED); reply(0x8021, "\x70\x82", 2);
     request[9] = 1; request[21] = 0xff;
+    CHECK(zdo(0x0021, request, 22) == ZCL_SENSOR_HANDLED); reply(0x8021, "\x70\x82", 2);
+    /* F1-FE are reserved, not application endpoints. */
+    request[21] = 0xf1;
+    CHECK(zdo(0x0021, request, 22) == ZCL_SENSOR_HANDLED); reply(0x8021, "\x70\x82", 2);
+    request[21] = 0xfe;
     CHECK(zdo(0x0021, request, 22) == ZCL_SENSOR_HANDLED); reply(0x8021, "\x70\x82", 2);
     request[21] = 1; request[1] ^= 1;
     CHECK(zdo(0x0021, request, 22) == ZCL_SENSOR_HANDLED); reply(0x8021, "\x70\x84", 2);
@@ -811,6 +875,11 @@ static void reports(void)
     ST.report[0].age = 0xfffe; ST.report[0].max = 0xffff;
     CTX.last += 5*ZCL_SENSOR_SECOND; sensor_poll();
     CHECK(ST.report[0].age == 0xffff);
+    /* A negative int16 change counts by magnitude: -10 reports a change of 20. */
+    zcl(0x0402, "\x00\x73\x06\x00\x00\x00\x29\x00\x00\x00\x00\xf6\xff", 13, "\x18\x73\x07\x00", 4);
+    ST.report[0].last = (uint16_t)(measured(0)-20u);
+    CHECK(report(0x0402, 0, 0x29, measured(0)));
+    idle();
 }
 
 #endif
@@ -1199,7 +1268,7 @@ int main(int argc, char **argv)
 #if defined(CC2530_SHT3X)
     sht_set(2500, 5000, 1);
 #endif
-    management_bind(); read_reporting(); values(); defaults_and_discards(); identify(); configure(); bind();
+    management_bind(); read_reporting(); values(); defaults_and_discards(); identify(); configure(); broadcast_endpoint(); limits(); bind();
     chip();
 #if defined(CC2530_CHIP_FACTORY)
     factory();
@@ -1216,7 +1285,7 @@ int main(int argc, char **argv)
            "cadence, invalid values (host only).\n", checks);
 #endif
 #else
-    management_bind(); read_reporting(); values(); reads(); defaults_and_discards(); identify(); configure(); bind(); reports();
+    management_bind(); read_reporting(); values(); reads(); defaults_and_discards(); identify(); configure(); broadcast_endpoint(); limits(); bind(); reports();
     printf("ZCL sensor: %lu checks PASS; SYNTHETIC values, Read/Write/Configure/Read Reporting, "
            "Identify, Bind/Unbind and report scheduling (host only).\n", checks);
 #endif

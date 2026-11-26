@@ -35,6 +35,18 @@ static nwk_aps_result_t advance(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
     if (!ctx || ctx->version != NWK_APS_VERSION || !ctx->owner) return NWK_APS_ARGUMENT;
     if ((uint32_t)(now-ctx->last) >= MAC_TX_HALF) return NWK_APS_CLOCK;
     ctx->last = now;
+    /* Stored deadlines are compared modulo half the symbol clock (~9.5 h),
+     * so records must be retired before they age that far. One of the 16
+     * duplicate/broadcast records is checked per 2^20-symbol (16.8 s) window,
+     * all of them every 2^24 symbols (4.5 min) while the transport is
+     * stepped at least once per window (READY polls are at most 7 s apart). */
+    {
+        uint8_t i = (uint8_t)(now >> 20) & (2u*NWK_APS_DUPLICATES-1u);
+        nwk_aps_duplicate_t * SDCC_VOLATILE entry = i < NWK_APS_DUPLICATES ?
+            &ctx->duplicate[i] : &ctx->broadcast[i-NWK_APS_DUPLICATES];
+        if (entry->used && reached(now, entry->until)) entry->used = 0;
+    }
+    if (ctx->wrap_wait && reached(now, ctx->counter_until)) ctx->wrap_wait = 0;
     return NWK_APS_OK;
 }
 

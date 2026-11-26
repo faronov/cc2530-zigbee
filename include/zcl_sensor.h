@@ -90,6 +90,23 @@
 #if defined(CC2530_SHT3X) && !defined(CC2530_CHIP_SENSE)
 #error CC2530_SHT3X requires CC2530_CHIP_SENSE
 #endif
+/* Min/MaxMeasuredValue follow the measuring part's specified range: SHT3x-DIS
+ * -40..125 C and 0..100 %RH, the CC2530 die -40..125 C (operating ambient);
+ * the synthetic generator spans 21..25 C and 45..55 %RH. */
+#if defined(CC2530_CHIP_SENSE)
+#define ZCL_SENSOR_TEMPERATURE_MIN 0xf060u   /* -4000 */
+#define ZCL_SENSOR_TEMPERATURE_MAX 12500u
+#else
+#define ZCL_SENSOR_TEMPERATURE_MIN 2100u
+#define ZCL_SENSOR_TEMPERATURE_MAX 2500u
+#endif
+#if defined(CC2530_SHT3X)
+#define ZCL_SENSOR_HUMIDITY_MIN 0u
+#define ZCL_SENSOR_HUMIDITY_MAX 10000u
+#else
+#define ZCL_SENSOR_HUMIDITY_MIN 4500u
+#define ZCL_SENSOR_HUMIDITY_MAX 5500u
+#endif
 
 enum { ZCL_SENSOR_IDLE = 0, ZCL_SENSOR_REPORT, ZCL_SENSOR_HANDLED, ZCL_SENSOR_DISCARDED };
 

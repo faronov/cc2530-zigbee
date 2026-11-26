@@ -195,6 +195,7 @@ static void configure_pending(void)
         0x00,0x70,0x06,0x00,0x00,0x00,0x29,0x05,0x00,0x0a,0x00,0x02,0x00
     };
     ed_packet_t previous_tx;
+    uint16_t baseline;
     report_reset();
     DEVICE.application_pending = 1;
     ZCL_SENSOR_STATE.basic = 0;
@@ -213,7 +214,11 @@ static void configure_pending(void)
     serve();
     CHECK(DEVICE.work.runtime.zdo.response_pending && !DEVICE.work.runtime.zdo.application_ready);
     CHECK(ZCL_SENSOR_STATE.report[0].min == 5 && ZCL_SENSOR_STATE.report[0].max == 10);
-    CHECK(ZCL_SENSOR_STATE.report[0].change == 2 && ZCL_SENSOR_STATE.report[0].last == 2340);
+    /* The accepted report (2340) is committed first; the configuration then
+     * installs the configuration-time measurement as baseline (R8 2.5.11.2.3). */
+    CHECK(ZCL_SENSOR_STATE.report[0].change == 2 && ZCL_SENSOR_STATE.report[0].last ==
+          (uint16_t)ZCL_SENSOR_TEMPERATURE(ZCL_SENSOR_PHASE(ZCL_SENSOR_SAMPLE(DEVICE.work.runtime.zdo.last))) &&
+          ZCL_SENSOR_STATE.report[0].last != 2340);
     CHECK(!ZCL_SENSOR_STATE.report[0].age && ZCL_SENSOR_STATE.tsn == 1);
     CHECK(DEVICE.application_pending && !ZCL_SENSOR_STATE.sent);
     CHECK(!memcmp(&previous_tx, &DEVICE.work.runtime.transport.outgoing, sizeof(previous_tx)));
@@ -230,10 +235,11 @@ static void configure_pending(void)
     DEVICE.work.runtime.zdo.application.payload[12] = 3;
     memset(DEVICE.work.runtime.zdo.application.payload+13, 0x22, 8);
     DEVICE.work.runtime.zdo.application.payload[21] = 1;
+    baseline = ZCL_SENSOR_STATE.report[0].last;
     serve();
     CHECK(!ZCL_SENSOR_STATE.bound[0] && DEVICE.work.runtime.zdo.response_pending);
     CHECK(DEVICE.application_pending && ZCL_SENSOR_STATE.tsn == 1);
-    CHECK(ZCL_SENSOR_STATE.report[0].last == 2340 && !ZCL_SENSOR_STATE.report[0].age);
+    CHECK(ZCL_SENSOR_STATE.report[0].last == baseline && !ZCL_SENSOR_STATE.report[0].age);
     CHECK(!memcmp(&previous_tx, &DEVICE.work.runtime.transport.outgoing, sizeof(previous_tx)));
 }
 

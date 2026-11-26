@@ -38,8 +38,10 @@ static const MCU_CODE zcl_attribute_t attributes[] = {
     { 0x0000u, 0x0004u, 0x42u, 0 }, { 0x0000u, 0x0005u, 0x42u, 0 },
     { 0x0000u, 0x0000u, 0x20u, 8 }, { 0x0000u, 0x0007u, 0x30u, 3 }, { 0x0000u, 0xfffdu, 0x21u, 3 },
     { 0x0001u, 0xfffdu, 0x21u, 2 }, { 0x0003u, 0xfffdu, 0x21u, 2 },
-    { 0x0402u, 0x0001u, 0x29u, 2100 }, { 0x0402u, 0x0002u, 0x29u, 2500 }, { 0x0402u, 0xfffdu, 0x21u, 3 },
-    { 0x0405u, 0x0001u, 0x21u, 4500 }, { 0x0405u, 0x0002u, 0x21u, 5500 }, { 0x0405u, 0xfffdu, 0x21u, 2 }
+    { 0x0402u, 0x0001u, 0x29u, ZCL_SENSOR_TEMPERATURE_MIN }, { 0x0402u, 0x0002u, 0x29u, ZCL_SENSOR_TEMPERATURE_MAX },
+    { 0x0402u, 0xfffdu, 0x21u, 3 },
+    { 0x0405u, 0x0001u, 0x21u, ZCL_SENSOR_HUMIDITY_MIN }, { 0x0405u, 0x0002u, 0x21u, ZCL_SENSOR_HUMIDITY_MAX },
+    { 0x0405u, 0xfffdu, 0x21u, 2 }
 };
 static const MCU_CODE uint16_t defaults[ZCL_SENSOR_REPORTS][3] = {
     { 30, 300, 10 }, { 30, 300, 25 }, { 60, 3600, 1 }, { 60, 3600, 2 }
@@ -251,6 +253,16 @@ static uint16_t value(uint8_t entry)
 
 /* Octets of the parsed fixed-size types: data, boolean, bitmap, integer and
  * enumeration (08..31). Other types, including strings, are 0. */
+/* Analog types carry a ReportableChange in Configure Reporting (R8 Table
+ * 2-11): integers 20-2F, floats 38-3A, times E0-E2; others have none. */
+static uint8_t change_width(uint8_t type)
+{
+    if ((uint8_t)(type-0x20u) < 0x10u) return (uint8_t)((type & 7u)+1u);
+    if ((uint8_t)(type-0x38u) < 3u) return (uint8_t)(2u << (type-0x38u));
+    if ((uint8_t)(type-0xe0u) < 3u) return 4;
+    return 0;
+}
+
 static uint8_t width(uint8_t type)
 {
     if (type < 0x08u) return 0;
@@ -410,11 +422,13 @@ static uint8_t configure(void)
             if (!ST.dir) {
                 if (left() < 5u) return 0x80;
                 ST.kind = take(); ST.min = take16(); ST.max = take16();
-                /* Integers (20..2F) are the parsed analog types. */
-                n = (uint8_t)(ST.kind-0x20u) < 0x10u ? width(ST.kind) : 0;
+                n = change_width(ST.kind);
+                if (left() < n) return 0x80;
                 if (ST.entry < ZCL_SENSOR_REPORTS) {
                     if (ST.kind != ST.type) ST.status = 0x8d;
                     else if (ST.max && ST.max != 0xffffu && ST.max < ST.min) ST.status = 0x87;
+                    /* The int16 non-value is no threshold. */
+                    else if (ST.kind == 0x29u && LE(ST.in) == 0x8000u) ST.status = 0x87;
                     else ST.status = 0;
                 }
             }
@@ -422,12 +436,15 @@ static uint8_t configure(void)
             if (ST.apply) {
                 if (ST.status) {
                     emit(ST.status); emit(ST.dir); emit16(ST.id);
-                } else if (!ST.max && ST.min == 0xffffu) {
-                    restore(ST.entry);
                 } else {
                     r = reporting(ST.entry);
-                    r->min = ST.min; r->max = ST.max;
-                    r->change = n > 1u ? LE(ST.in) : IN[ST.in];
+                    if (!ST.max && ST.min == 0xffffu) restore(ST.entry);
+                    else {
+                        r->min = ST.min; r->max = ST.max;
+                        r->change = n > 1u ? LE(ST.in) : IN[ST.in];
+                    }
+                    /* Changes count from the configuration-time value (R8 2.5.11.2.3). */
+                    r->last = value(ST.entry);
                 }
             }
             ST.in += n;
@@ -484,8 +501,11 @@ static uint8_t specific(uint8_t command)
 static uint8_t zcl(void)
 {
     uint8_t control, command;
+    /* The transport admits (and ACKs) the APS broadcast endpoint FF for the
+     * one local endpoint, which answers from its own endpoint. */
     if (RX.aps.profile_id != DEV.config.transport.profile ||
-        RX.aps.destination_endpoint != DEV.config.transport.endpoint) return ZCL_SENSOR_DISCARDED;
+        (RX.aps.destination_endpoint != DEV.config.transport.endpoint &&
+         RX.aps.destination_endpoint != 0xffu)) return ZCL_SENSOR_DISCARDED;
     ST.length = RX.length;
     if (!ST.length || ST.length > ED_PAYLOAD_MAX) return ZCL_SENSOR_DISCARDED;
     control = IN[0];
@@ -537,7 +557,8 @@ static uint8_t bind(void)
     ST.status = 0x84;
     if (!memcmp(IN+1, DEV.config.association.extraction.local, 8) && mode == 3u) {
         ST.status = 0x82;
-        if (IN[9] == DEV.config.transport.endpoint && IN[21] && IN[21] != 0xffu) {
+        /* Application destination endpoints are 01-F0; F1-FE are reserved. */
+        if (IN[9] == DEV.config.transport.endpoint && (uint8_t)(IN[21]-1u) < 0xf0u) {
             ST.dir = RX.aps.cluster_id == ZDO_SRV_BIND_REQUEST;
             ST.status = ST.dir ? 0x8cu : 0x88u;
             if (ST.entry != NONE && !memcmp(IN+13, ST.tc_ieee, 8) &&
@@ -613,12 +634,16 @@ static uint8_t management_bind(void)
 static uint8_t due(uint8_t entry)
 {
     zcl_sensor_reporting_t MCU_XDATA *r = reporting(entry);
+    uint16_t change;
     ST.value = value(entry);
     if (r->max == 0xffffu || r->age < r->min) return 0;
     if (r->max && r->age >= r->max) return 1;
     ST.delta = ST.value-r->last;
     if ((int16_t)ST.delta < 0) ST.delta = (uint16_t)-ST.delta;
-    if (!ST.delta || ST.delta < r->change) return 0;
+    /* A signed (int16) threshold counts by magnitude. */
+    change = r->change;
+    if (attributes[entry].type == 0x29u && (int16_t)change < 0) change = (uint16_t)-change;
+    if (!ST.delta || ST.delta < change) return 0;
     return 1;
 }
 
