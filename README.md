@@ -7,8 +7,8 @@
 
 An experimental CC2530 Zigbee end-device project, without proprietary TI stack
 libraries. Firmware uses **Clang MCS51, LLD and the runtime from exactly
-`688e14ed1bb5a4c3a8f089b7e37931ff2060a05e`** in
-[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/688e14ed1bb5a4c3a8f089b7e37931ff2060a05e).
+`c6dd5a0f34f6804fdaa77523816de9a447aa1a37`** in
+[faronov/llvm-project](https://github.com/faronov/llvm-project/tree/c6dd5a0f34f6804fdaa77523816de9a447aa1a37).
 The machine-readable pin is [toolchain.json](tools/llvm/toolchain.json).
 SDCC firmware compilation, linker/overlay builds and production CI are retired;
 there is no compiler fallback.
@@ -25,7 +25,7 @@ and near pointers to stack objects through the CC2530 IRAM mirror
 ([study §32](docs/LLVM_MCS51_PORT_STUDY.md#32-fixed-defect-near-pointers-to-iram-objects))
 and runtime helpers in common flash, called without bank-call trampolines
 ([study §33](docs/LLVM_MCS51_PORT_STUDY.md#33-runtime-helpers-in-common-flash))
-and four code-review fixes that leave the firmware unchanged
+and code-review fixes that leave the firmware unchanged
 ([study §34](docs/LLVM_MCS51_PORT_STUDY.md#34-fixed-defects-from-a-code-review));
 the frozen UNIFY-01 and M6 revisions are unchanged.
 

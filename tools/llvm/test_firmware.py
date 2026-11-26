@@ -12,7 +12,7 @@ import firmware
 class LLVMOnlyBuild(unittest.TestCase):
     def test_pin_and_abi(self):
         pin = json.loads((firmware.HERE / "toolchain.json").read_text())
-        self.assertEqual(pin["revision"], "688e14ed1bb5a4c3a8f089b7e37931ff2060a05e")
+        self.assertEqual(pin["revision"], "c6dd5a0f34f6804fdaa77523816de9a447aa1a37")
         profile = json.loads((firmware.HERE / "profile.json").read_text())
         self.assertEqual(profile["sf_flags"], "-mllvm -mcs51-static-frames")
         self.assertEqual(profile["abi_flags"], "-mllvm -mcs51-csr=none -mllvm -mcs51-wide-args -mllvm -mcs51-rn-words")

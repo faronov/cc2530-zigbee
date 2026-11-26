@@ -2,7 +2,7 @@
 
 LLVM MCS51 is now the only supported firmware compiler on `main`.
 The default is the development candidate
-`688e14ed1bb5a4c3a8f089b7e37931ff2060a05e`, not a floating branch.
+`c6dd5a0f34f6804fdaa77523816de9a447aa1a37`, not a floating branch.
 It adds the exact upstream `eeef1bec` bit-toggle fix and regression to UNIFY-01,
 plus the ACC-bit branch fix in [study §25](LLVM_MCS51_PORT_STUDY.md#25-fixed-defect-acc-bit-branch-without-an-implicit-use-of-a)
 the same-bank trampoline bypass in [study §26](LLVM_MCS51_PORT_STUDY.md#26-same-bank-bank-call-trampoline-bypass)
