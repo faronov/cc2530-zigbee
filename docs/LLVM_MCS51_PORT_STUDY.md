@@ -2356,10 +2356,11 @@ dashboard writes. FULL was not run.
 
 ## 34. Fixed defects from a code review
 
-Pinned LLVM `688e14ed1bb5a4c3a8f089b7e37931ff2060a05e` (on top of §33). An external
-review found four code-generation defects. None of them occurs in the firmware: the
-autonomous-pm2, router and esl-dashboard L5 images are byte-identical to those built
-with `ddc974b4607`. Each fix has an lit test that fails without it.
+Pinned LLVM `c6dd5a0f34f6804fdaa77523816de9a447aa1a37` (on top of §33; the first four
+fixes were released as `688e14ed1bb5`). An external review found eight compiler and
+linker defects. None of them occurs in the firmware: the autonomous-pm2, router and
+esl-dashboard L5 images are byte-identical to those built without the fixes. Each fix
+has an lit test that fails without it.
 
 - A run-time DATA/IDATA pointer converted to a near pointer always got the CC2530
   mirror high byte (§32), so null became `0x1f00`. Generic pointer lowering now keeps
@@ -2376,5 +2377,17 @@ with `ddc974b4607`. Each fix has an lit test that fails without it.
   PDATA (XDATA page 0) and CC2530 IDATA (XDATA `0x1f00`) moves to XDATA always copied
   forward. Overlap is now decided on physical addresses
   (`memmove-physical-overlap.ll`).
+- An atomic load or store wider than one byte through a generic pointer became
+  interruptible byte accesses in the runtime helpers. It is now an error; one-byte
+  atomics stay single accesses (`generic-atomic-unsupported.ll`).
+- LLD checked only `STT_FUNC` targets for bank crossing, so an ACALL/AJMP/LCALL/LJMP
+  to a local label or section symbol in another bank linked silently. Such transfers
+  outside the bank-call trampolines are now rejected (`mcs51-banked-local-label.s`).
+- Absolute addressing walked through a CC2530 DATA/IDATA-to-near cast and used the
+  IDATA symbol as an XDATA address (`*(char *)&idata_var`); it now materializes the
+  mirrored address (`cc2530-iram-near-pointer.ll`).
+- An explicit C call to `__ashlsi3`/`__lshrsi3`/`__ashrsi3` used the ordinary ABI,
+  not the helpers' IP-word convention (`shift-helper-explicit-call.ll`). Indirect
+  calls through a pointer to a helper are still not recognized.
 
 The 8051, MCS-51 MC, MCS-51 clang and MCS-51 LLD lit tests pass. FULL was not run.
