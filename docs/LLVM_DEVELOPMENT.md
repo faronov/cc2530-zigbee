@@ -2,7 +2,7 @@
 
 LLVM MCS51 is now the only supported firmware compiler on `main`.
 The default is the development candidate
-`ddc974b4607677930befe13218f866f5c8110c90`, not a floating branch.
+`688e14ed1bb5a4c3a8f089b7e37931ff2060a05e`, not a floating branch.
 It adds the exact upstream `eeef1bec` bit-toggle fix and regression to UNIFY-01,
 plus the ACC-bit branch fix in [study §25](LLVM_MCS51_PORT_STUDY.md#25-fixed-defect-acc-bit-branch-without-an-implicit-use-of-a)
 the same-bank trampoline bypass in [study §26](LLVM_MCS51_PORT_STUDY.md#26-same-bank-bank-call-trampoline-bypass)
@@ -10,7 +10,8 @@ the `DEC direct` disassembler fix in [study §29](LLVM_MCS51_PORT_STUDY.md#29-di
 the size work in [study §30](LLVM_MCS51_PORT_STUDY.md#30-size-work-outliner-relaxation-switch-tables)
 word arguments in R2..R5 in [study §31](LLVM_MCS51_PORT_STUDY.md#31-word-arguments-in-r2r5--mcs51-rn-words)
 the near-pointer fix for IRAM objects in [study §32](LLVM_MCS51_PORT_STUDY.md#32-fixed-defect-near-pointers-to-iram-objects)
-and runtime helpers in common flash in [study §33](LLVM_MCS51_PORT_STUDY.md#33-runtime-helpers-in-common-flash).
+runtime helpers in common flash in [study §33](LLVM_MCS51_PORT_STUDY.md#33-runtime-helpers-in-common-flash)
+and the code-review fixes in [study §34](LLVM_MCS51_PORT_STUDY.md#34-fixed-defects-from-a-code-review).
 The historical UNIFY-01 commit remains unchanged.
 **UNIFY-01 FULL NOT RUN; no production release approval is implied.**
 The migration was merged into `main` with owner approval in

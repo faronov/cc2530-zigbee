@@ -2353,3 +2353,28 @@ call directly. Common flash grows from 23,424 to 24,968 bytes, the total image s
 by 7 bytes (the unused trampolines stay), and the static stack demand stays 89 bytes.
 The 19 MCS-51 LLD tests pass. The image joins ZHA on H2 and completes the Home Assistant
 dashboard writes. FULL was not run.
+
+## 34. Fixed defects from a code review
+
+Pinned LLVM `688e14ed1bb5a4c3a8f089b7e37931ff2060a05e` (on top of §33). An external
+review found four code-generation defects. None of them occurs in the firmware: the
+autonomous-pm2, router and esl-dashboard L5 images are byte-identical to those built
+with `ddc974b4607`. Each fix has an lit test that fails without it.
+
+- A run-time DATA/IDATA pointer converted to a near pointer always got the CC2530
+  mirror high byte (§32), so null became `0x1f00`. Generic pointer lowering now keeps
+  null null unless the source is an object or a `nonnull` argument. Generic-to-near
+  conversion dropped the IDATA tag (`0x40:0x0048` became `0x0048`); on CC2530 it now
+  gives the mirror `0x1f48` (`cc2530-iram-near-pointer.ll`).
+- Releasing a frame of more than five bytes goes through A and overwrote a byte
+  return value. A is now parked in a free R register across the SP update
+  (`epilogue-preserve-a.ll`).
+- Interrupt handlers that write ACC, B or PSW through a sign-extended SFR address
+  (`mov -32,#1`) or a bit instruction (`setb -41`) did not save them
+  (`interrupt-sfr-bit-saves.ll`).
+- Dynamic `memmove` chose the copy direction only for equal address-space names, so
+  PDATA (XDATA page 0) and CC2530 IDATA (XDATA `0x1f00`) moves to XDATA always copied
+  forward. Overlap is now decided on physical addresses
+  (`memmove-physical-overlap.ll`).
+
+The 8051, MCS-51 MC, MCS-51 clang and MCS-51 LLD lit tests pass. FULL was not run.
