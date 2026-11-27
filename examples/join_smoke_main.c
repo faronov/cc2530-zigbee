@@ -93,11 +93,8 @@ __attribute__((noinline)) static void restart(void)
     MMIO_WRITE(SOC_RFST,RFST_ISRFOFF);
     if(join_smoke_status.reason==JS_BDB && (join_smoke_status.bdb_reason==BDB_JOIN_LOCAL_LEAVE ||
        join_smoke_status.bdb_reason==BDB_JOIN_REMOTE_LEAVE)) pause=PAUSE_LEAVE;
+    else if(join_smoke_status.reason==JS_RESET) pause=PAUSE_LEAVE;
     else if(reset_cause==SLEEPSTA_RST_WATCHDOG) pause=PAUSE_RETRY;
-#if defined(CC2530_PARENT_RECOVERY)
-    /* Radio off: a passed factory-reset window is cleared before the pause. */
-    join_smoke_tally_clear();
-#endif
 #if defined(CC2530_PM2_IDLE)
     join_smoke_pause(pause);
 #else

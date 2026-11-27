@@ -69,7 +69,11 @@ typedef struct {
 #if defined(CC2530_ROUTER_JOIN)
     /* Unfiltered tables keep the strongest eligible beacons instead of
      * overflowing; mixed records any eligible EPID disagreement. */
-    uint8_t epid_seen, mixed;
+    uint8_t mixed;
+#endif
+#if defined(CC2530_ROUTER_JOIN) || defined(CC2530_PARENT_RECOVERY)
+    /* The first eligible EPID; a rejoin scan presets it to its network's. */
+    uint8_t epid_seen;
     uint8_t first_epid[8];
 #endif
 } nwk_candidates_t;

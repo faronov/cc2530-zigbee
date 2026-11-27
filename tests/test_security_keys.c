@@ -1817,6 +1817,14 @@ static void router_join(void)
     router_associated(); relayed(0x5678); raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH);
     state(SECURITY_KEYS_ASSOCIATED);
     CHECK(!memcmp(status.config.tc_ieee, router_ieee, 8));
+    {
+        /* A factory-reset tally on a never-bound router join (UNBOUND while
+         * ASSOCIATED) reaches its limit without leaving: still loadable. */
+        uint8_t count, n;
+        for (n = 1; n <= 5; n++) CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == n);
+        reboot(NULL, SECURITY_KEYS_ASSOCIATED);
+        CHECK(!memcmp(status.config.tc_ieee, router_ieee, 8));
+    }
     /* Quiet abandonment of a never-bound router join stays loadable
      * (hardware: LEFT kept UNBOUND and every boot faulted FORMAT). */
     router_associated();

@@ -149,14 +149,36 @@ static void backoff(void)
     DRAW=BACKOFF;
 }
 
+#if defined(CC2530_PARENT_RECOVERY)
+/* Factory-reset tally (BDB 3.0.1 9). A user boot counts once it has run
+ * JOIN_SMOKE_RESET_SETTLE, so a brown-out loop that resets at the first
+ * transmissions never counts; JOIN_SMOKE_RESET_WINDOW later the tally is
+ * cleared. A 112-byte member record is upgraded to hold the tally. Storage
+ * trouble only disables the gesture. The limit leaves the network: restart. */
+static void tally(uint8_t increment)
+{
+    security_keys_result_t r;
+    join_smoke_reset_tally=0;
+    r=security_keys_tally(increment,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
+    if(r==SECURITY_KEYS_CONTEXT && increment &&
+       security_keys_upgrade_parent(FLASH_EXEC_POLL_MAX)==SECURITY_KEYS_OK)
+        r=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
+    if(r!=SECURITY_KEYS_OK || !increment) return;
+    if(!tally_count) { fault(JS_RESET); return; }
+    join_smoke_reset_tally=JOIN_SMOKE_TALLY_COUNTED;
+}
+#endif
+
 static uint8_t progress(void)
 {
     now=timebase_read_awake_ticks24();
     elapsed=(now-started)&TIMEBASE_TICKS_MASK;
     if(((now-previous)&TIMEBASE_TICKS_MASK)>=TIMEBASE_HALF_RANGE) { fault(JS_TIME); return 0; }
 #if defined(CC2530_PARENT_RECOVERY)
-    if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_COUNTED && elapsed>=JOIN_SMOKE_RESET_WINDOW)
-        join_smoke_reset_tally=JOIN_SMOKE_TALLY_PASSED;
+    if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_BOOT && elapsed>=JOIN_SMOKE_RESET_SETTLE) {
+        tally(1);
+        if(S.phase==JS_FAULT) return 0;
+    } else if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_COUNTED && elapsed>=JOIN_SMOKE_RESET_WINDOW) tally(0);
 #endif
     if(gate!=JS_READY) {
         if(elapsed>=JOIN_SMOKE_RAW_TICKS) { fault(JS_TIME); return 0; }
@@ -250,10 +272,6 @@ void join_smoke_sleep(void)
         if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
         goto skip;
     }
-#endif
-#if defined(CC2530_PARENT_RECOVERY)
-    /* Quiescent point: clear a passed factory-reset tally, then no sleep. */
-    if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_PASSED) { join_smoke_tally_clear(); goto skip; }
 #endif
     SL.reason=4;
     S.adapter_result=mac_adapter_now(JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS,&CLOCK);
@@ -392,15 +410,6 @@ void join_smoke_pause(uint32_t ticks)
 #undef PAUSE_STEP
 #endif
 
-#if defined(CC2530_PARENT_RECOVERY)
-void join_smoke_tally_clear(void)
-{
-    if(join_smoke_reset_tally!=JOIN_SMOKE_TALLY_PASSED) return;
-    join_smoke_reset_tally=0;
-    if(security_keys_tally(0,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK &&
-       gate==JS_READY) fault(JS_SECURITY);
-}
-#endif
 
 void join_smoke_initialize(void)
 {
@@ -516,12 +525,7 @@ void join_smoke_poll(void)
     S.stage=1;
     S.security_result=security_keys_open();
 #if defined(CC2530_PARENT_RECOVERY)
-    if(S.security_result==SECURITY_KEYS_OK && join_smoke_reset_tally==JOIN_SMOKE_TALLY_BOOT) {
-        S.security_result=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
-        if(S.security_result==SECURITY_KEYS_CONTEXT) S.security_result=SECURITY_KEYS_OK; /* 112-byte record */
-        else if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
-        join_smoke_reset_tally=JOIN_SMOKE_TALLY_COUNTED;
-    } else join_smoke_reset_tally=0;
+    if(S.security_result!=SECURITY_KEYS_OK) join_smoke_reset_tally=0;
 #endif
     /* Complete persisted membership resumes through secured rejoin. Default-TC:
      * LEFT or an incomplete join is recommissioned (journal and counter

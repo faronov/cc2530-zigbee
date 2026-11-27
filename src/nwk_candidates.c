@@ -29,7 +29,10 @@ static uint8_t valid_table(const nwk_candidates_t * SDCC_VOLATILE table)
 #endif
         && table->filtered <= 1
 #if defined(CC2530_ROUTER_JOIN)
-        && table->epid_seen <= 1 && table->mixed <= 1
+        && table->mixed <= 1
+#endif
+#if defined(CC2530_ROUTER_JOIN) || defined(CC2530_PARENT_RECOVERY)
+        && table->epid_seen <= 1
 #endif
         && table->count <= NWK_CANDIDATES_CAPACITY && valid_mask(table->channel_mask);
 }
@@ -154,7 +157,7 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
             || (table->rejoin && !candidate.coordinator[0] && !candidate.coordinator[1])
 #endif
             )
-#if defined(CC2530_PARENT_RECOVERY) && defined(CC2530_ROUTER_JOIN)
+#if defined(CC2530_PARENT_RECOVERY)
         /* A rejoin scan preset with the network's EPID keeps only it. */
         && (!table->rejoin || !table->epid_seen ||
             !memcmp(table->first_epid, candidate.network.extended_pan_id, 8))

@@ -290,9 +290,11 @@ parent enrollment, unsecured TC rejoin, key recovery or random address allocatio
 A VERIFIED member also accepts an unsolicited Rejoin Response from its parent
 (R22 3.6.1.9.3 address-conflict resolution): a new address is saved and
 REJOINED is reported, after which the upper layer rejoins and announces.
-`security_keys_retune` saves a channel/PAN ID/equal-or-newer update ID that a
-rejoin scan found the network on; it is called only after the protected
-Rejoin Response from that parent, never on the beacon alone.
+`security_keys_retune` saves the channel that a rejoin scan found the network
+on; the caller passes the saved PAN ID and update ID and calls it only after
+the protected Rejoin Response from that parent, never on the beacon alone.
+`security_keys_tally`, `security_keys_forget` and `security_keys_retune`
+refuse (FORMAT) to write a record that would not load again.
 
 The owner also handles authenticated NWK Leave and locally generated
 secured Leave indications. Source IEEE and radius 1 are required. A request
@@ -314,7 +316,8 @@ network keys, pending key, NWK floors and router history and replaces the
 unique link key with the public default, so a removed device keeps no network
 secrets; the outgoing counter ceilings in the journal are kept.
 `security_keys_tally` implements the power-cycle factory reset: a counted
-user boot at the limit makes the record LEFT without rejoin. The network key
+user boot at the limit makes a member (VERIFIED/REJOINING) record LEFT
+without rejoin; a record that is not a member only restarts the tally. The network key
 distribution also accepts an NWK-secured broadcast Transport Key (APS
 unsecured, destination IEEE zero) from the TC for a member, a newer key
 sequence modulo 256 (1..127 ahead), and a Switch Key unicast to this device. In the

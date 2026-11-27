@@ -589,14 +589,19 @@ security_keys_result_t security_keys_tally(uint8_t increment, uint8_t limit, uin
         w.record[TALLY] = 0;
     } else {
         *count = w.record[TALLY] = (uint8_t)(w.record[TALLY] < 255u ? w.record[TALLY]+1u : 255u);
-        /* BDB 3.0.1 9: the reset leaves the network; keys are replaced and
-         * the frame counter ceilings kept by the next commissioning. */
+        /* BDB 3.0.1 9: a member's reset leaves the network; keys are erased
+         * and the frame counter ceilings kept when it commissions again. A
+         * record that is not (yet) a member commissions again anyway. */
         if (*count >= limit) {
             w.record[TALLY] = 0;
-            if (phase() != SECURITY_KEYS_LEFT) set_phase(SECURITY_KEYS_LEFT);
-            w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
+            if (phase() == SECURITY_KEYS_VERIFIED || phase() == SECURITY_KEYS_REJOINING) {
+                set_phase(SECURITY_KEYS_LEFT);
+                w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
+            }
         }
     }
+    /* Never write a record that the next load would refuse. */
+    if (!valid_record()) return finish(SECURITY_KEYS_FORMAT);
     w.polls = nv_polls;
     return finish(save());
 }
@@ -614,6 +619,7 @@ security_keys_result_t security_keys_retune(uint8_t channel, uint16_t pan, uint8
         return finish(SECURITY_KEYS_CONTEXT);
     if ((uint8_t)(update_id-w.record[UPDATE]) >= 128u) return finish(SECURITY_KEYS_CONTEXT);
     w.record[CHANNEL] = channel; put16(w.record+PAN, pan); w.record[UPDATE] = update_id;
+    if (!valid_record()) return finish(SECURITY_KEYS_FORMAT);
     w.polls = nv_polls;
     return finish(save());
 }
@@ -698,6 +704,7 @@ security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR
 #if defined(CC2530_PARENT_RECOVERY)
     if (router_record()) memset(w.record+ROUTER, 0, TALLY-ROUTER);
 #endif
+    if (!valid_record()) return finish(SECURITY_KEYS_FORMAT);
     w.polls = nv_polls;
     return finish(save());
 }

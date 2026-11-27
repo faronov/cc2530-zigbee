@@ -89,11 +89,10 @@ static void scan_result(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 
 #if defined(CC2530_PARENT_RECOVERY)
 /* parent_search 4: the final rejoin goes to a parent found on another
- * channel/PAN ID (or with a newer update ID), not yet saved. */
+ * channel, not yet saved. */
 static void retarget(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
 {
     if (ctx->parent_search != 4) return;
-    bdb_join_keys.config.pan = ctx->parent.candidate.pan_id;
     bdb_join_keys.config.channel = ctx->parent.candidate.channel;
 }
 
@@ -112,10 +111,10 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
     if (ctx->recovery) {
         if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) return BDB_JOIN_SECURITY;
         /* R22 3.6.1.4.2: the rejoin scan covers every channel. The TC or
-         * the known router of the same Extended PAN ID (equal or newer
-         * update ID) qualifies on any channel and PAN ID, so a channel
-         * change or PAN ID update missed while asleep is followed. A busy
-         * channel only fails the scan when nothing was found. */
+         * the known router of the same Extended PAN ID and PAN ID (equal or
+         * newer update ID) qualifies on any channel, so a channel change
+         * missed while asleep is followed. A busy channel only fails the
+         * scan when nothing was found. */
         if (expired(ctx->last, ctx->commission_until) || ctx->work.scan.overflow ||
             (ctx->work.scan.unscanned && !ctx->work.scan.candidates.count))
             return BDB_JOIN_NO_PARENT;
@@ -124,6 +123,9 @@ static bdb_join_result_t scanned(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx)
         for (i = 0; i < ctx->work.scan.candidates.count; i++) {
             const nwk_candidate_t *c = &ctx->work.scan.candidates.entries[i];
             work.policy.link_cost[i] = ctx->config.link_cost;
+            /* A PAN ID change follows the NWK Update command; transmit
+             * paths address the saved PAN ID. */
+            if (c->pan_id != bdb_join_keys.config.pan) continue;
             if ((candidate_tc(c) && ctx->parent_search != 5) ||
                 (bdb_join_keys.router_known &&
                  ((c->address_mode == MAC_ADDRESS_SHORT &&
@@ -246,7 +248,8 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     /* A member that sees its address conflict rejoins (the parent assigns
      * a new one); only a joining device abandons. */
     if (rc == ZDO_RUNTIME_CONFLICT) {
-        fail(ctx, ctx->phase == BDB_JOIN_READY ? BDB_JOIN_PARENT_FAILED : BDB_JOIN_ADDRESS_CONFLICT); return;
+        fail(ctx, ctx->phase == BDB_JOIN_READY || ctx->recovery ? BDB_JOIN_PARENT_FAILED :
+            BDB_JOIN_ADDRESS_CONFLICT); return;
     }
     if (rc == ZDO_RUNTIME_LEAVE) { fail(ctx, BDB_JOIN_LOCAL_LEAVE); return; }
     if (rc == ZDO_RUNTIME_SECURITY || rc == ZDO_RUNTIME_TRANSMIT) {
@@ -374,10 +377,11 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_REJOINED) {
             ctx->recovery = 2;
 #if defined(CC2530_PARENT_RECOVERY)
-            /* The protected Rejoin Response proves the new channel/PAN. */
+            /* The protected Rejoin Response proves the new channel. */
             if (ctx->parent_search == 4) {
-                if (security_keys_retune(ctx->parent.candidate.channel, ctx->parent.candidate.pan_id,
-                        ctx->parent.candidate.network.update_id, ctx->config.transport.nv_polls) != SECURITY_KEYS_OK) {
+                if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK ||
+                    security_keys_retune(ctx->parent.candidate.channel, bdb_join_keys.config.pan,
+                        bdb_join_keys.config.update_id, ctx->config.transport.nv_polls) != SECURITY_KEYS_OK) {
                     fail(ctx, BDB_JOIN_SECURITY); return;
                 }
                 ctx->parent_search = 2;
@@ -556,12 +560,12 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
             else {
 #if defined(CC2530_PARENT_RECOVERY)
                 if (ctx->recovery) {
-                    /* Another channel/PAN or a newer update ID is only a
-                     * beacon claim: it is used from ctx->parent (retarget())
-                     * and saved once a protected Rejoin Response proves it. */
+                    /* Another channel is only a beacon claim: it is used
+                     * from ctx->parent (retarget()) and saved once a protected
+                     * Rejoin Response proves it. The beacon's update ID is
+                     * never saved from here. */
                     uint8_t tc = candidate_tc(&ctx->parent.candidate);
-                    uint8_t moved = ctx->parent.candidate.channel != bdb_join_keys.config.channel ||
-                        ctx->parent.candidate.pan_id != bdb_join_keys.config.pan;
+                    uint8_t moved = ctx->parent.candidate.channel != bdb_join_keys.config.channel;
                     /* The TC needs selecting only away from a selected router. */
                     if (((!tc || bdb_join_keys.router_selected) &&
                          security_keys_select_parent(!tc, tc ? bdb_join_keys.config.update_id :
@@ -569,8 +573,7 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                         bdb_join_runtime_init(ctx, ctx->owner, &ctx->config, now) != BDB_JOIN_OK) {
                         ctx->phase = BDB_JOIN_FAILED; ctx->result = BDB_JOIN_SECURITY;
                     } else {
-                        ctx->parent_search = moved || ctx->parent.candidate.network.update_id !=
-                            bdb_join_keys.config.update_id ? 4 : 2;
+                        ctx->parent_search = moved ? 4 : 2;
                         ctx->attempts = ctx->issued = 0;
                         if (moved) install(ctx);
                         else ctx->phase = BDB_JOIN_RECOVERING;
@@ -707,10 +710,10 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                                  bdb_join_keys.router_known ? bdb_join_keys.router_address : 0u) != NWK_CANDIDATES_OK) {
                             ctx->phase = BDB_JOIN_FAULT; ctx->result = BDB_JOIN_SCAN_FAILED;
                         } else {
-#if defined(CC2530_ROUTER_JOIN)
+                            /* Only the saved network's beacons: other
+                             * networks' coordinators must not fill the table. */
                             memcpy(ctx->work.scan.candidates.first_epid, bdb_join_keys.config.extended_pan, 8);
                             ctx->work.scan.candidates.epid_seen = 1;
-#endif
                             ctx->workspace = BDB_JOIN_WORK_SCAN; ctx->phase = BDB_JOIN_SCANNING;
                         }
                         return BDB_JOIN_OK;
