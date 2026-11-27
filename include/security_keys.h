@@ -105,10 +105,10 @@ typedef struct {
  * No key-export, authentication-boolean, reset, recovery or NV bypass API.
  */
 security_keys_result_t security_keys_open(void) SECURITY_FAR;
-/* LEFT, before recommissioning (which never rejoins): durably erase the network keys, the unique link key
+/* Before recommissioning (which never rejoins), a LEFT record: durably erase the network keys, the unique link key
  * (replaced by the public default), pending key, NWK floors and router
  * history before recommissioning, so a removed device keeps no network
- * secrets. Outgoing counter ceilings are kept. */
+ * secrets. Outgoing counter ceilings are kept. Other phases: OK, no write. */
 security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR;
 #if defined(CC2530_DEFAULT_TC_KEY)
 /* Explicit ordinary centralized commissioning profile; never an install-code

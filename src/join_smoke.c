@@ -39,6 +39,7 @@ volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 #if defined(CC2530_PARENT_RECOVERY)
 MCU_XDATA uint8_t join_smoke_parent_history[20];
 MCU_XDATA uint8_t join_smoke_reset_tally;
+static MCU_XDATA uint8_t tally_count;
 #endif
 #if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
@@ -394,10 +395,9 @@ void join_smoke_pause(uint32_t ticks)
 #if defined(CC2530_PARENT_RECOVERY)
 void join_smoke_tally_clear(void)
 {
-    uint8_t count;
     if(join_smoke_reset_tally!=JOIN_SMOKE_TALLY_PASSED) return;
     join_smoke_reset_tally=0;
-    if(security_keys_tally(0,JOIN_SMOKE_RESET_BOOTS,&count,FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK &&
+    if(security_keys_tally(0,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK &&
        gate==JS_READY) fault(JS_SECURITY);
 }
 #endif
@@ -517,8 +517,7 @@ void join_smoke_poll(void)
     S.security_result=security_keys_open();
 #if defined(CC2530_PARENT_RECOVERY)
     if(S.security_result==SECURITY_KEYS_OK && join_smoke_reset_tally==JOIN_SMOKE_TALLY_BOOT) {
-        uint8_t count;
-        S.security_result=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&count,FLASH_EXEC_POLL_MAX);
+        S.security_result=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
         if(S.security_result==SECURITY_KEYS_CONTEXT) S.security_result=SECURITY_KEYS_OK; /* 112-byte record */
         else if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
         join_smoke_reset_tally=JOIN_SMOKE_TALLY_COUNTED;
@@ -531,9 +530,7 @@ void join_smoke_poll(void)
     if(!resumed) {
 #if defined(CC2530_DEFAULT_TC_KEY)
         if(S.security_result==SECURITY_KEYS_OK) {
-            security_keys_status_t keys;
-            if(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.phase==SECURITY_KEYS_LEFT &&
-               security_keys_forget(FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+            if(security_keys_forget(FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
             S.security_result=security_keys_recommission();
             if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
         } else

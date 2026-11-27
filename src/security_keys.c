@@ -684,8 +684,9 @@ security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR
     security_keys_result_t r = load();
     if (r != SECURITY_KEYS_OK) return finish(r);
     if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
-    if (phase() != SECURITY_KEYS_LEFT) return finish(SECURITY_KEYS_STATE);
-    if (!w.record[FLAGS] && all(w.record+NK, 32, 0)) return finish(SECURITY_KEYS_OK);
+    /* Only a LEFT record holding network secrets is rewritten. */
+    if (phase() != SECURITY_KEYS_LEFT || (!w.record[FLAGS] && all(w.record+NK, 32, 0)))
+        return finish(SECURITY_KEYS_OK);
     /* The quiet pre-key LEFT form: no network keys, pending key, NWK floors,
      * key sequences, parent information or router history; the public
      * default link key replaces the unique one. Outgoing counter ceilings
