@@ -1468,6 +1468,21 @@ static void remembered_parent(void)
         router_seal_counted(count++, 0, alt_key, 0, 0); accept(SECURITY_KEYS_EVENT_DATA);
     }
 #endif
+    /* R22 3.6.1.9.3: an unsolicited Rejoin Response from the parent of a
+     * VERIFIED member assigns a new address (saved); the same address is no
+     * change. */
+    base(0); packet.nwk.type = ED_NWK_COMMAND; packet.nwk.source = parent.address;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee, router_ieee, 8);
+    memcpy(packet.nwk.destination_ieee, config.own_ieee, 8);
+    packet.length = 4; packet.payload[0] = 7; packet.payload[1] = 0x34; packet.payload[2] = 0x12;
+    router_seal_using(100, 0, alt_key, 0); reject(SECURITY_KEYS_CONTEXT);
+    packet.payload[1] = 0x56; packet.payload[2] = 0x34;
+    router_seal_using(101, 0, alt_key, 0); accept(SECURITY_KEYS_EVENT_REJOINED);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(status.config.address == 0x3456 && status.router_active);
+    packet.nwk.destination = 0x3456; packet.payload[3] = 1; packet.payload[1] = packet.payload[2] = 255;
+    router_seal_using(102, 0, alt_key, 0); reject(SECURITY_KEYS_CONTEXT);
 }
 
 static security_keys_result_t router_transition(uint8_t stage)

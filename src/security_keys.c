@@ -695,13 +695,18 @@ security_keys_result_t security_keys_router_parent(uint16_t router_address, uint
 
 static uint8_t broadcast(uint16_t address)
 {
+#if defined(CC2530_RX_OFF_IDLE)
+    /* R22 Table 3-69: FFFD addresses macRxOnWhenIdle devices only. */
+    return address == 0xffffu;
+#else
     return address == 0xffffu || address == 0xfffdu;
+#endif
 }
 static uint8_t outbound_broadcast(uint16_t address)
 {
     /* R22 Table3-69: an ED may address routers/coordinator, but is not a
      * recipient of FFFC. Keep the receive predicate deliberately narrower. */
-    return broadcast(address) || address == 0xfffcu;
+    return address == 0xffffu || address == 0xfffdu || address == 0xfffcu;
 }
 static uint8_t join_management(void)
 {
@@ -886,13 +891,15 @@ static security_keys_result_t nwk_command(void)
         }
         w.event = SECURITY_KEYS_EVENT_UPDATE;
     } else if (command == 7) {
-        if (phase() != SECURITY_KEYS_REJOINING) return SECURITY_KEYS_CONTEXT;
+        if (phase() != SECURITY_KEYS_REJOINING && phase() != SECURITY_KEYS_VERIFIED)
+            return SECURITY_KEYS_CONTEXT;
         if (w.packet.length != 4 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE ||
             w.packet.nwk.destination != u16(w.record+ADDR)) return SECURITY_KEYS_FORMAT;
         /* R22 3.4.7/3.6.1.4.2: refusal is authenticated input, not silence.
          * Retain REJOINING/binding but save its floor before reporting it. */
         if (w.packet.payload[3] > 2) return SECURITY_KEYS_FORMAT;
         if (w.packet.payload[3]) {
+            if (phase() != SECURITY_KEYS_REJOINING) return SECURITY_KEYS_CONTEXT;
             if (u16(w.packet.payload+1) != 0xffffu) return SECURITY_KEYS_FORMAT;
             w.event = SECURITY_KEYS_EVENT_REJOIN_REFUSED;
             return SECURITY_KEYS_OK;
@@ -903,6 +910,15 @@ static security_keys_result_t nwk_command(void)
         if (router_record() && (w.record[ROUTER_FLAGS] & ROUTER_KNOWN) &&
             u16(w.packet.payload+1) == u16(w.record+ROUTER_ADDR)) return SECURITY_KEYS_IDENTITY;
 #endif
+        if (phase() == SECURITY_KEYS_VERIFIED) {
+            /* R22 3.6.1.9.3: the parent resolves its child's address
+             * conflict with an unsolicited Rejoin Response carrying the new
+             * address. It is saved; the upper layer rejoins and announces. */
+            if (u16(w.packet.payload+1) == u16(w.record+ADDR)) return SECURITY_KEYS_CONTEXT;
+            memcpy(w.record+ADDR, w.packet.payload+1, 2);
+            w.event = SECURITY_KEYS_EVENT_REJOINED;
+            return SECURITY_KEYS_OK;
+        }
         memcpy(w.record+ADDR, w.packet.payload+1, 2);
 #if defined(CC2530_PARENT_RECOVERY)
         if (router_record()) {

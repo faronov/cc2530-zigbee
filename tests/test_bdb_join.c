@@ -1060,8 +1060,9 @@ static void terminal_control(void)
     announcement(0, 0x5678u, third_ieee);
     CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
     pending = 0; drive(); drain();
-    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_ADDRESS_CONFLICT && leave_sent);
-    retained(SECURITY_KEYS_LEFT);
+    /* A member whose address conflicts rejoins (R22 3.6.1.9.3); no Leave. */
+    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_PARENT_FAILED && !leave_sent);
+    retained(SECURITY_KEYS_VERIFIED);
 
     ready(); base_peer(1, 0, 0);
     peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE;

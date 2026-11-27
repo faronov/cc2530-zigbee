@@ -221,10 +221,18 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     zdo_runtime_result_t rc;
     rc = zdo_runtime_step(&ctx->work.runtime.zdo, &ctx->work.runtime.transport, ctx->last);
     ctx->receive_result = (uint8_t)rc;
-    if (rc == ZDO_RUNTIME_CONFLICT) { fail(ctx, BDB_JOIN_ADDRESS_CONFLICT); return; }
+    /* A member that sees its address conflict rejoins (the parent assigns
+     * a new one); only a joining device abandons. */
+    if (rc == ZDO_RUNTIME_CONFLICT) {
+        fail(ctx, ctx->phase == BDB_JOIN_READY ? BDB_JOIN_PARENT_FAILED : BDB_JOIN_ADDRESS_CONFLICT); return;
+    }
     if (rc == ZDO_RUNTIME_LEAVE) { fail(ctx, BDB_JOIN_LOCAL_LEAVE); return; }
     if (rc == ZDO_RUNTIME_SECURITY || rc == ZDO_RUNTIME_TRANSMIT) {
         fail(ctx, rc == ZDO_RUNTIME_SECURITY ? BDB_JOIN_SECURITY : BDB_JOIN_TRANSMIT_FAILED); return;
+    }
+    /* An unsolicited Rejoin Response gave a new address (saved): rejoin. */
+    if (ctx->phase == BDB_JOIN_READY && ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_REJOINED) {
+        fail(ctx, BDB_JOIN_PARENT_FAILED); return;
     }
     if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_LEAVE) {
         /* Still VERIFIED: a Leave with Rejoin or our parent leaving. */
