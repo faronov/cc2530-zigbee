@@ -169,7 +169,7 @@ errata-aware conformance before reviewing the corrections.
 | BDB-07 | Bind security processing to the established TC address; reject mismatched command sources and apply explicit unsolicited-link-key policies | sections 10.2.1-3,10.2.6 pp.74-75,79 | Planned / none | M4-M5 |
 | BDB-08 | Process/respond to the listed discovery, binding, Mgmt Bind/LQI and Mgmt Leave requests; reconcile optional-service status responses with the selected BDB tests | section 6.6 p.36 | Planned / none; maps to ED-02/03 and ZDO-01..04 | M5-M6 |
 | BDB-09 | Finding/binding is required for a simple device; initiator Identify support and binding capacity, awake-target group capacity, and mandatory reportable-attribute defaults depend on the chosen application | sections 6.5-7 pp.34-37; section 8 p.41 | Planned / none; device/ZCL selection still open | M6 |
-| BDB-10 | Provide an installer-accessible factory-reset mechanism; distinguish network reset from optional Basic-cluster attribute reset and preserve the outgoing NWK counter | sections 9,9.1,9.3-5 pp.69-71; R22 section 4.3.4 | Planned / none | M4-M6 |
+| BDB-10 | Provide an installer-accessible factory-reset mechanism; distinguish network reset from optional Basic-cluster attribute reset and preserve the outgoing NWK counter | sections 9,9.1,9.3-5 pp.69-71; R22 section 4.3.4 | Partial: autonomous known-router builds reset after five user boots each shorter than 10 s ([ED_JOIN](ED_JOIN.md)); counters kept; no Basic reset command | M4-M6 |
 
 ### Commissioning and recovery boundaries
 
