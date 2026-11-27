@@ -1468,10 +1468,14 @@ static void remembered_parent(void)
         router_seal_counted(count++, 0, alt_key, 0, 0); accept(SECURITY_KEYS_EVENT_DATA);
     }
 #endif
-    /* R22 3.6.1.9.3: an unsolicited Rejoin Response from the parent of a
-     * VERIFIED member assigns a new address (saved); the same address is no
-     * change. */
-    base(0); packet.nwk.type = ED_NWK_COMMAND; packet.nwk.source = parent.address;
+}
+
+/* R22 3.6.1.9.3: an unsolicited Rejoin Response from the parent of a
+ * VERIFIED member assigns a new address (saved); the same address is no
+ * change. Runs after remembered_parent() (router parent, alt_key slot). */
+static void unsolicited_rejoin(void)
+{
+    base(0); packet.nwk.type = ED_NWK_COMMAND; packet.nwk.source = 0x4567;
     packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
     memcpy(packet.nwk.source_ieee, router_ieee, 8);
     memcpy(packet.nwk.destination_ieee, config.own_ieee, 8);
@@ -1811,6 +1815,7 @@ int main(void)
 #if defined(CC2530_PARENT_RECOVERY)
     parent_schema_upgrade();
     remembered_parent();
+    unsolicited_rejoin();
     router_update_kept();
     interrupted_router();
 #endif

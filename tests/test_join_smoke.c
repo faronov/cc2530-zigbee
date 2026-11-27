@@ -27,7 +27,7 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
  * child after READY but keeps acknowledging its polls. */
 /* CALLER_SLEEPY_LEGACY: the parent never answers the End Device Timeout
  * Request; the RX-off child keeps alive by polling instead of leaving. */
-enum { CALLER_SLEEPY_ZOMBIE=31, CALLER_SLEEPY_LEGACY };
+enum { CALLER_SLEEPY_ZOMBIE=31, CALLER_SLEEPY_LEGACY, CALLER_CHANNEL_MOVED };
 #define POLL_KEEPALIVE_CASE(s) ((s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_ZOMBIE || (s)==CALLER_SLEEPY_LEGACY)
 /* CALLER_SLEEPY_RECOVERY: CALLER_RECOVERY for an RX-off-when-idle child. */
 #define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || POLL_KEEPALIVE_CASE(s) || (s)==CALLER_SLEEPY_RECOVERY)
@@ -76,7 +76,10 @@ static unsigned recovery_selected;
 #define BINDING_CASE(c) 0
 #define COMPLETION_INPUT_READY(c) 1
 #endif
-#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || (c)==CALLER_SLEEPY_RECOVERY || ALTERNATE_CASE(c))
+/* CALLER_CHANNEL_MOVED: CALLER_RECOVERY whose saved channel (20) is no longer
+ * the network's (15): the all-channel rejoin scan follows it. */
+#define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || (c)==CALLER_SLEEPY_RECOVERY || \
+    (c)==CALLER_CHANNEL_MOVED || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 static uint32_t recommission_used[2];
@@ -643,6 +646,16 @@ static void prepare_caller(unsigned selected)
             security_joint_reset(0);
         }
 #endif
+        if(selected==CALLER_CHANNEL_MOVED) {
+            uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+            assert(security_keys_open()==SECURITY_KEYS_OK);
+            assert(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK &&
+                record[104]==15);
+            record[104]=20;
+            assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+            security_joint_reset(0);
+            channel_strict=1;
+        }
         link_peer_capability=selected==CALLER_SLEEPY_RECOVERY?0x80:0x88;
         link_peer_recover(&join_config,recovery_state,recovery_length);
         link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
@@ -858,7 +871,10 @@ int main(int argc, char **argv)
                     caller_poll();
                     handoff_started=0;
                     if(RECOVERY_CASE(selected)) {
-                        assert((ALTERNATE_CASE(selected) || join_smoke_device.phase!=BDB_JOIN_SCANNING) &&
+                        /* A silent TC is followed by the all-channel rejoin scan. */
+                        assert((ALTERNATE_CASE(selected) || selected==CALLER_REJOIN_TIMEOUT ||
+                                selected==CALLER_CHANNEL_MOVED ||
+                                join_smoke_device.phase!=BDB_JOIN_SCANNING) &&
                             join_smoke_device.phase!=BDB_JOIN_ASSOCIATING && !response_sent);
                         if(join_smoke_status.phase!=JS_READY)
                             assert(!join_smoke_status.saw_ready && !link_peer_app &&
@@ -904,11 +920,13 @@ int main(int argc, char **argv)
                     || selected==CALLER_DISCOVERY_EXHAUSTED
 #endif
                     ) {
-                    /* Bounded: three genuine requests, then NO_PARENT. The durable
+                    /* Bounded: three genuine requests, the all-channel rejoin scan
+                     * finds the TC again and three more, then NO_PARENT. The durable
                      * membership is kept for a later attempt: no Leave, no erase. */
                     security_keys_status_t keys;
                     assert(join_smoke_status.phase==JS_FAULT && join_smoke_status.reason==JS_BDB);
-                    assert(join_smoke_device.result==BDB_JOIN_NO_PARENT && link_peer_rejoins==3);
+                    assert(join_smoke_device.result==BDB_JOIN_NO_PARENT &&
+                        link_peer_rejoins==(selected==CALLER_REJOIN_TIMEOUT ? 2u*BDB_JOIN_ATTEMPTS : 3u));
                     assert(!join_smoke_status.saw_ready && !link_peer_app && !link_peer_parent);
                     assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
                         (keys.phase==SECURITY_KEYS_VERIFIED || keys.phase==SECURITY_KEYS_REJOINING) &&
@@ -953,6 +971,13 @@ int main(int argc, char **argv)
                     link_peer_verify();
                     if(caller_dump>=0) recovery_dump();
                     if(POLL_KEEPALIVE_CASE(selected)) parent_lost(&calls,selected==CALLER_SLEEPY_ZOMBIE);
+                    if(selected==CALLER_CHANNEL_MOVED) {
+                        /* Saved only after the protected Rejoin Response. */
+                        security_keys_status_t keys;
+                        assert(join_smoke_device.recovery==3 && link_peer_rejoins==1);
+                        assert(security_keys_status(&keys)==SECURITY_KEYS_OK &&
+                            keys.phase==SECURITY_KEYS_VERIFIED && keys.config.channel==15);
+                    }
                     if(selected==CALLER_RECOVERY || selected==CALLER_SLEEPY_RECOVERY) {
                         security_keys_status_t keys;
                         assert(join_smoke_device.recovery==3 && link_peer_rejoins==1 && !response_sent);

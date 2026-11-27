@@ -29,7 +29,7 @@ typedef mac_tx_t mac_scan_tx_t;
 
 #define MAC_SCAN_VERSION 1u
 #define MAC_SCAN_MAX_LIFETIME UINT32_C(0x10000000)
-#define MAC_SCAN_MAX_WORK 4096u
+#define MAC_SCAN_MAX_WORK 16384u
 #if defined(CC2530_MAC_LINK)
 /* LG hardware spent about 1500 symbols per busy CSMA attempt; 4096 expired
  * before the fifth CCA. This fits all macMaxCSMABackoffs+1 attempts.

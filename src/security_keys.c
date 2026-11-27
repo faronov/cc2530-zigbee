@@ -568,6 +568,23 @@ security_keys_result_t security_keys_select_parent(
     w.polls = nv_polls;
     return finish(save());
 }
+
+security_keys_result_t security_keys_retune(uint8_t channel, uint16_t pan, uint8_t update_id,
+    uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (channel < 11u || channel > 26u || pan >= 0xfffeu || !nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_CONTEXT);
+    if ((uint8_t)(update_id-w.record[UPDATE]) >= 128u) return finish(SECURITY_KEYS_CONTEXT);
+    w.record[CHANNEL] = channel; put16(w.record+PAN, pan); w.record[UPDATE] = update_id;
+    w.polls = nv_polls;
+    return finish(save());
+}
 #endif
 
 #if defined(CC2530_DEFAULT_TC_KEY)

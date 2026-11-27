@@ -148,7 +148,18 @@ nwk_candidates_result_t nwk_candidates_consider(nwk_candidates_t * SDCC_VOLATILE
         && candidate.network.end_device_capacity != 0u
         && (!table->filtered || candidate.address_mode != MAC_ADDRESS_SHORT
             || (candidate.coordinator[0] == (uint8_t)table->parent
-                && candidate.coordinator[1] == (uint8_t)(table->parent >> 8)));
+                && candidate.coordinator[1] == (uint8_t)(table->parent >> 8))
+#if defined(CC2530_PARENT_RECOVERY)
+            /* A rejoin also takes the TC, wherever it is now. */
+            || (table->rejoin && !candidate.coordinator[0] && !candidate.coordinator[1])
+#endif
+            )
+#if defined(CC2530_PARENT_RECOVERY) && defined(CC2530_ROUTER_JOIN)
+        /* A rejoin scan preset with the network's EPID keeps only it. */
+        && (!table->rejoin || !table->epid_seen ||
+            !memcmp(table->first_epid, candidate.network.extended_pan_id, 8))
+#endif
+        ;
     for (i = 0; i < table->count; i++) {
         if (same_identity(&table->entries[i], &candidate)) {
             if (eligible) {

@@ -181,8 +181,10 @@ typedef struct {
     /* 0 commissioning; 1 resumed, 2 Rejoin Response accepted, 3 recovered READY. */
     uint8_t recovery;
 #if defined(CC2530_PARENT_RECOVERY)
-    /* 0 TC first; 1 known-router scan pending; 2 final attempt (scanned
-     * router or TC fallback); 3 saved router first, TC fallback pending. */
+    /* 0 TC first; 1 all-channel scan (TC or known router) pending; 2 final
+     * attempt; 3 saved router first, TC fallback pending; 4 final attempt on
+     * a parent found on another channel/PAN, saved once it answers; 5 as 1
+     * after a TC refusal, known router only. */
     uint8_t parent_search;
 #endif
 } bdb_join_t;

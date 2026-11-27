@@ -397,7 +397,8 @@ static void drive(void)
         } else if (action.data.scan.kind == MAC_SCAN_ACTION_RECEIVE) event.data.scan.kind = MAC_SCAN_EVENT_OPENED;
         else if (action.data.scan.kind == MAC_SCAN_ACTION_RESTORE) event.data.scan.kind = MAC_SCAN_EVENT_RESTORED;
         else if (device.work.scan.phase == MAC_SCAN_RX) {
-            if (!scan_beacon) {
+            /* The network beacons on channel 15 only. */
+            if (!scan_beacon && device.work.scan.channel == 15) {
                 event.data.scan.kind = MAC_SCAN_EVENT_BEACON; event.data.scan.body = beacon;
                 event.data.scan.length = beacon_length; event.data.scan.crc_valid = 1; scan_beacon = 1; now++;
             } else { event.data.scan.kind = MAC_SCAN_EVENT_CLOSED; now = device.work.scan.window_end; }
@@ -2098,10 +2099,11 @@ static void known_parent_bounds(void)
     CHECK(rejoin_requests==1 && status.router_active);
 
     /* The saved router went silent: after its attempts, one TC fallback in
-     * the same window, whose Rejoin Response retires the router. */
+     * the same window (an all-channel scan would follow it), whose Rejoin
+     * Response retires the router. */
     power_cycle(); resume(); CHECK(device.parent_search==3);
     alternate_mute=alternate_tc=1; recover(); recovered();
-    CHECK(rejoin_requests==BDB_JOIN_ATTEMPTS+1u && device.parent_search==2);
+    CHECK(rejoin_requests==BDB_JOIN_ATTEMPTS+1u && device.parent_search==0);
     CHECK(status.router_known && !status.router_active && !status.router_selected);
     alternate_test=alternate_mute=alternate_tc=0; aux_source=NULL;
 }
@@ -2125,7 +2127,7 @@ static void recovery_link_failures(void)
         failed_without_credentials_loss((mode == 3 || mode == 7) ? BDB_JOIN_REJOIN_REFUSED : BDB_JOIN_NO_PARENT);
         CHECK(status.phase == SECURITY_KEYS_REJOINING || mode == 1);
         CHECK(device.attempts == ((mode == 3 || mode == 7) ? 1 : BDB_JOIN_ATTEMPTS) && !announced);
-        if (mode == 0) CHECK(lost_frames == 4u*BDB_JOIN_ATTEMPTS && !rejoin_requests);
+        if (mode == 0) CHECK(lost_frames >= 4u*BDB_JOIN_ATTEMPTS && !rejoin_requests);
         if (mode == 1) CHECK(busy_events >= BDB_JOIN_ATTEMPTS && !rejoin_requests);
         if (mode >= 2) CHECK(rejoin_requests == ((mode == 3 || mode == 7) ? 1 : BDB_JOIN_ATTEMPTS));
         if (mode == 2) CHECK(muted == BDB_JOIN_ATTEMPTS && (uint32_t)(now-started) >= 2u*BDB_JOIN_REJOIN_WAIT);
