@@ -38,6 +38,8 @@ MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 #if defined(CC2530_PARENT_RECOVERY)
 MCU_XDATA uint8_t join_smoke_parent_history[20];
+MCU_XDATA uint8_t join_smoke_reset_tally;
+static MCU_XDATA uint8_t tally_count;
 #endif
 #if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
@@ -147,11 +149,38 @@ static void backoff(void)
     DRAW=BACKOFF;
 }
 
+#if defined(CC2530_PARENT_RECOVERY)
+/* Factory-reset tally (BDB 3.0.1 9). A user boot counts once it has run
+ * JOIN_SMOKE_RESET_SETTLE, so a brown-out loop that resets at the first
+ * transmissions never counts; JOIN_SMOKE_RESET_WINDOW later the tally is
+ * cleared. A 112-byte member record is upgraded to hold the tally. Storage
+ * trouble only disables the gesture. The limit leaves the network: restart. */
+static void tally(uint8_t increment)
+{
+    security_keys_result_t r;
+    join_smoke_reset_tally=0;
+    r=security_keys_tally(increment,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
+    if(r==SECURITY_KEYS_CONTEXT && increment &&
+       security_keys_upgrade_parent(FLASH_EXEC_POLL_MAX)==SECURITY_KEYS_OK)
+        r=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
+    if(r!=SECURITY_KEYS_OK || !increment) return;
+    /* The limit reports its count and restarts the stored tally. */
+    if(tally_count>=JOIN_SMOKE_RESET_BOOTS) { fault(JS_RESET); return; }
+    join_smoke_reset_tally=JOIN_SMOKE_TALLY_COUNTED;
+}
+#endif
+
 static uint8_t progress(void)
 {
     now=timebase_read_awake_ticks24();
     elapsed=(now-started)&TIMEBASE_TICKS_MASK;
     if(((now-previous)&TIMEBASE_TICKS_MASK)>=TIMEBASE_HALF_RANGE) { fault(JS_TIME); return 0; }
+#if defined(CC2530_PARENT_RECOVERY)
+    if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_BOOT && elapsed>=JOIN_SMOKE_RESET_SETTLE) {
+        tally(1);
+        if(S.phase==JS_FAULT) return 0;
+    } else if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_COUNTED && elapsed>=JOIN_SMOKE_RESET_WINDOW) tally(0);
+#endif
     if(gate!=JS_READY) {
         if(elapsed>=JOIN_SMOKE_RAW_TICKS) { fault(JS_TIME); return 0; }
         if(steps==JOIN_SMOKE_STEPS) { fault(JS_WORK); return 0; }
@@ -251,7 +280,7 @@ void join_smoke_sleep(void)
     span=DEVICE.poll_at-CLOCK.symbols;
     if(span>=0x80000000UL) goto skip;
     /* bdb_join poll_keepalive(): otherwise the ED Timeout keepalive is due. */
-    if(!(Z.parent_known && (Z.parent_information&3u)==1u)) {
+    if(!(Z.parent_known && (Z.parent_information&1u))) {
         mark=DEVICE.keepalive-CLOCK.symbols;
         if(mark>=0x80000000UL) goto skip;
         if(mark<span) span=mark;
@@ -382,6 +411,7 @@ void join_smoke_pause(uint32_t ticks)
 #undef PAUSE_STEP
 #endif
 
+
 void join_smoke_initialize(void)
 {
     if(initialized) return;
@@ -495,6 +525,9 @@ void join_smoke_poll(void)
     started=timebase_read_awake_ticks24(); previous=started;
     S.stage=1;
     S.security_result=security_keys_open();
+#if defined(CC2530_PARENT_RECOVERY)
+    if(S.security_result!=SECURITY_KEYS_OK) join_smoke_reset_tally=0;
+#endif
     /* Complete persisted membership resumes through secured rejoin. Default-TC:
      * LEFT or an incomplete join is recommissioned (journal and counter
      * ceilings kept, never erased); otherwise existing storage is refused. */
@@ -502,6 +535,7 @@ void join_smoke_poll(void)
     if(!resumed) {
 #if defined(CC2530_DEFAULT_TC_KEY)
         if(S.security_result==SECURITY_KEYS_OK) {
+            if(security_keys_forget(FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
             S.security_result=security_keys_recommission();
             if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
         } else

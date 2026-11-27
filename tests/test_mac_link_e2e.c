@@ -40,8 +40,13 @@ static host_mmio_xwrite_hook_t crypto_xwrite;
 static host_mmio_xaddress_hook_t crypto_address;
 static host_mmio_cycles_hook_t crypto_cycles;
 static uint8_t sent_body[125], sent_length, sent_wait, command_wait;
-/* The parent is gone: nothing the device transmits is heard or acknowledged. */
-static uint8_t parent_absent;
+/* The parent is gone: nothing the device transmits is heard or acknowledged.
+ * parent_zombie: the parent still MAC-ACKs (hardware autoack) but forgot the
+ * child, so nothing reaches the network and no APS ACK comes back. */
+static uint8_t parent_absent, parent_zombie;
+/* Nonzero: the network is only on channel 15; nothing sent elsewhere is heard. */
+static uint8_t channel_strict;
+#define OFF_CHANNEL() (channel_strict && XR(0x618f) != 11u+5u*(15u-11u))
 static uint8_t transport_sent, corrupt_sent, response_sent, app_sent, repeated_sent, drop_checked;
 static unsigned scenario, e2e_checks, e2e_steps, random_inputs, received_frames;
 /* Nonzero: CCA never clears on this channel (persistent Wi-Fi overlap). */
@@ -157,7 +162,7 @@ static void joint_store(uint8_t a, uint8_t before, uint8_t value)
         }
         /* LH21C: the parent received the first association Data Request but
          * its ACK was lost on air. */
-        replies = !parent_absent && !((scenario == POLL_NO_ACK && device.attempts == 1 && response_fcf == 0x12) ||
+        replies = !parent_absent && !OFF_CHANNEL() && !((scenario == POLL_NO_ACK && device.attempts == 1 && response_fcf == 0x12) ||
                     (scenario == RETRY_CANCEL && device.phase == BDB_JOIN_NODE && !race_started) ||
                     (scenario == POLL_ACK_LOST_RESPONSE && device.phase == BDB_JOIN_ASSOCIATING &&
                      response_fcf == 0x12 && association_polls == 1));
@@ -381,7 +386,7 @@ static void peer_progress_for(bdb_join_t *dev, mac_tx_interval_t *tx)
          * execution time. All DUT calls keep the real timer running. */
         saved_clocks = mmio_clocks; mmio_clocks = 0;
         security_aes_peer_enter();
-        if (!parent_absent) link_peer_transmitted(sent_body, sent_length);
+        if (!parent_absent && !parent_zombie && !OFF_CHANNEL()) link_peer_transmitted(sent_body, sent_length);
         security_aes_peer_leave();
         mmio_clocks = saved_clocks;
 #if defined(CC2530_RX_OFF_IDLE)

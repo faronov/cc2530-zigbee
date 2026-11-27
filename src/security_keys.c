@@ -68,6 +68,9 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
 #define ROUTER_NF 122u
 #define ROUTER_FLAGS 130u
 #define ROUTER_UPDATE 131u
+/* Consecutive user (power-on/RESET_N) boots shorter than the factory-reset
+ * window; any value, only in 144-byte records. */
+#define TALLY 143u
 #define ROUTER_KNOWN 1u
 #define ROUTER_ACTIVE 2u
 #define ROUTER_ATTEMPT 4u
@@ -212,7 +215,7 @@ static uint8_t valid_router(void)
 #if defined(CC2530_ROUTER_JOIN)
     uint8_t p = phase(), u = (f & ROUTER_UNBOUND) != 0;
 #endif
-    if (!all(w.record+132, 12, 0) || (f & (uint8_t)~ROUTER_FLAG_MASK) ||
+    if (!all(w.record+132, 11, 0) || (f & (uint8_t)~ROUTER_FLAG_MASK) ||
         (!(f & ROUTER_ATTEMPT) && w.record[ROUTER_UPDATE])) return 0;
     if (!(f & ROUTER_KNOWN)) return all(w.record+ROUTER, 19, 0);
 #if defined(CC2530_ROUTER_JOIN)
@@ -568,6 +571,58 @@ security_keys_result_t security_keys_select_parent(
     w.polls = nv_polls;
     return finish(save());
 }
+
+security_keys_result_t security_keys_tally(uint8_t increment, uint8_t limit, uint8_t * SDCC_VOLATILE count,
+    uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_EXTERNAL(count, 1)) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (!count || !limit || increment > 1 || !nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (!router_record()) return finish(SECURITY_KEYS_CONTEXT);
+    if (!increment) {
+        *count = 0;
+        if (!w.record[TALLY]) return finish(SECURITY_KEYS_OK);
+        w.record[TALLY] = 0;
+    } else {
+        *count = w.record[TALLY] = (uint8_t)(w.record[TALLY] < 255u ? w.record[TALLY]+1u : 255u);
+        /* BDB 3.0.1 9: a member's reset leaves the network; keys are erased
+         * and the frame counter ceilings kept when it commissions again. A
+         * record that is not (yet) a member commissions again anyway. */
+        if (*count >= limit) {
+            w.record[TALLY] = 0;
+            if (phase() == SECURITY_KEYS_VERIFIED || phase() == SECURITY_KEYS_REJOINING) {
+                set_phase(SECURITY_KEYS_LEFT);
+                w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
+            }
+        }
+    }
+    /* Never write a record that the next load would refuse. */
+    if (!valid_record()) return finish(SECURITY_KEYS_FORMAT);
+    w.polls = nv_polls;
+    return finish(save());
+}
+
+security_keys_result_t security_keys_retune(uint8_t channel, uint16_t pan, uint8_t update_id,
+    uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (channel < 11u || channel > 26u || pan >= 0xfffeu || !nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (phase() != SECURITY_KEYS_VERIFIED && phase() != SECURITY_KEYS_REJOINING)
+        return finish(SECURITY_KEYS_CONTEXT);
+    if ((uint8_t)(update_id-w.record[UPDATE]) >= 128u) return finish(SECURITY_KEYS_CONTEXT);
+    w.record[CHANNEL] = channel; put16(w.record+PAN, pan); w.record[UPDATE] = update_id;
+    if (!valid_record()) return finish(SECURITY_KEYS_FORMAT);
+    w.polls = nv_polls;
+    return finish(save());
+}
 #endif
 
 #if defined(CC2530_DEFAULT_TC_KEY)
@@ -625,6 +680,33 @@ security_keys_result_t security_keys_provision(
         return finish(fault(SECURITY_KEYS_STORAGE));
     security_keys_phase = SECURITY_KEYS_PROVISIONED;
     return finish(SECURITY_KEYS_OK);
+}
+
+security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    /* Only a LEFT record holding network secrets is rewritten. */
+    if (phase() != SECURITY_KEYS_LEFT || (!w.record[FLAGS] && all(w.record+NK, 32, 0)))
+        return finish(SECURITY_KEYS_OK);
+    /* The quiet pre-key LEFT form: no network keys, pending key, NWK floors,
+     * key sequences, parent information or router history; the public
+     * default link key replaces the unique one. Outgoing counter ceilings
+     * live in the journal and are kept. */
+    memset(w.record+NK, 0, 32); memset(w.record+PK, 0, 24);
+    memcpy(w.record+LK, "ZigBeeAlliance09", 16);
+    w.record[SEQ] = w.record[SEQ+1] = 0; w.record[FLAGS] = 0;
+    w.record[PHASE] &= (uint8_t)~(PARENT_MASK | TIMEOUT_PENDING);
+#if defined(CC2530_PARENT_RECOVERY)
+    if (router_record()) memset(w.record+ROUTER, 0, TALLY-ROUTER);
+#endif
+    if (!valid_record()) return finish(SECURITY_KEYS_FORMAT);
+    w.polls = nv_polls;
+    return finish(save());
 }
 
 #if defined(CC2530_DEFAULT_TC_KEY)
@@ -695,13 +777,18 @@ security_keys_result_t security_keys_router_parent(uint16_t router_address, uint
 
 static uint8_t broadcast(uint16_t address)
 {
+#if defined(CC2530_RX_OFF_IDLE)
+    /* R22 Table 3-69: FFFD addresses macRxOnWhenIdle devices only. */
+    return address == 0xffffu;
+#else
     return address == 0xffffu || address == 0xfffdu;
+#endif
 }
 static uint8_t outbound_broadcast(uint16_t address)
 {
     /* R22 Table3-69: an ED may address routers/coordinator, but is not a
      * recipient of FFFC. Keep the receive predicate deliberately narrower. */
-    return broadcast(address) || address == 0xfffcu;
+    return address == 0xffffu || address == 0xfffdu || address == 0xfffcu;
 }
 static uint8_t join_management(void)
 {
@@ -730,11 +817,17 @@ static uint8_t reused(const uint8_t *material)
 }
 static security_keys_result_t transport(void)
 {
-    uint8_t type, offset, i, newest, sequence;
-    if (!w.aps_secured || w.pending || w.packet.length < 2) return SECURITY_KEYS_CONTEXT;
+    uint8_t type, offset, i, newest, sequence, spread;
+    if (w.pending || w.packet.length < 2) return SECURITY_KEYS_CONTEXT;
     type = w.packet.payload[1];
     if (type != 1 && type != 4) return SECURITY_KEYS_UNSUPPORTED;
-    if (w.key_id != (type == 1 ? 2 : 3)) return SECURITY_KEYS_SELECTOR;
+    /* R22 4.6.3.4: a TC may distribute the next network key to all devices
+     * as an NWK-secured broadcast without APS security (destination IEEE
+     * zero), e.g. EmberZNet's broadcast key update. Only a member takes it. */
+    spread = !w.aps_secured && type == 1 && verified() && w.secured &&
+        broadcast(w.packet.nwk.destination) && w.packet.length == 35 && all(w.packet.payload+19, 8, 0);
+    if (!w.aps_secured && !spread) return SECURITY_KEYS_CONTEXT;
+    if (w.aps_secured && w.key_id != (type == 1 ? 2 : 3)) return SECURITY_KEYS_SELECTOR;
     if (w.packet.length != (type == 1 ? 35 : 34)) return SECURITY_KEYS_FORMAT;
     offset = type == 1 ? 19 : 18;
     if (!same(w.packet.payload+offset+8,
@@ -742,8 +835,8 @@ static security_keys_result_t transport(void)
               unbound() ? w.meta.source :
 #endif
               w.record+TC, 8) ||
-        !same(w.packet.payload+offset, w.record+OWN, 8) ||
-        w.packet.nwk.destination != u16(w.record+ADDR))
+        (!spread && (!same(w.packet.payload+offset, w.record+OWN, 8) ||
+                     w.packet.nwk.destination != u16(w.record+ADDR))))
         return SECURITY_KEYS_IDENTITY;
     if (type == 4) {
         if (phase() != SECURITY_KEYS_REQUESTED) return SECURITY_KEYS_CONTEXT;
@@ -776,7 +869,8 @@ static security_keys_result_t transport(void)
     } else {
         if (!verified()) return SECURITY_KEYS_CONTEXT;
         newest = active_slot() ^ ((w.record[FLAGS] & NEWER) ? 1 : 0);
-        if (sequence != (uint8_t)(w.record[SEQ+newest]+1u)) return SECURITY_KEYS_SELECTOR;
+        /* A newer sequence modulo 256 (1..127 ahead): a TC may skip numbers. */
+        if ((uint8_t)(sequence-w.record[SEQ+newest]-1u) >= 127u) return SECURITY_KEYS_SELECTOR;
         i = active_slot() ^ 1u;
         w.record[FLAGS] |= (uint8_t)((1u << i) | NEWER);
     }
@@ -822,8 +916,10 @@ static security_keys_result_t aps_command(void)
         return SECURITY_KEYS_OK;
     }
     if (w.packet.payload[0] == 9) {
+        /* Switch Key: broadcast, or unicast to this device (R22 4.4.10). */
         if (!w.secured || w.pending || w.packet.length != 2 ||
-            !broadcast(w.packet.nwk.destination)) return SECURITY_KEYS_CONTEXT;
+            (!broadcast(w.packet.nwk.destination) && w.packet.nwk.destination != u16(w.record+ADDR)))
+            return SECURITY_KEYS_CONTEXT;
         if (w.aps_secured && w.key_id != 0) return SECURITY_KEYS_SELECTOR;
         if (w.packet.payload[1] == w.record[SEQ+active_slot()]) {
             w.event = SECURITY_KEYS_EVENT_SWITCH; return SECURITY_KEYS_OK;
@@ -857,11 +953,16 @@ static security_keys_result_t nwk_command(void)
             w.packet.nwk.destination != u16(w.record+ADDR) : w.packet.nwk.destination != 0xfffdu)
             return SECURITY_KEYS_IDENTITY;
         /* Reserved RX option bits ignored; no child admission is implemented.
-         * LEFT preserves keys/counters; upper layer handles rejoin indication. */
+         * R22 3.4.4, 3.6.1.10: a Leave request with Rejoin, or the Leave
+         * indication of the sender itself (our parent or the TC is leaving),
+         * is parent loss for a member: it stays VERIFIED and the upper layer
+         * rejoins. Otherwise LEFT, preserving keys/counters. */
+        w.event = SECURITY_KEYS_EVENT_LEAVE;
+        if (phase() == SECURITY_KEYS_VERIFIED &&
+            (!(w.packet.payload[1] & 0x40) || (w.packet.payload[1] & 0x20))) return SECURITY_KEYS_OK;
         set_phase(SECURITY_KEYS_LEFT);
         if (w.packet.payload[1] & 0x20) w.record[FLAGS] |= REJOIN_ALLOWED;
         else w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
-        w.event = SECURITY_KEYS_EVENT_LEAVE;
     } else if (command == 10) {
         if (w.packet.length != 13 || w.packet.payload[1] != 1 ||
             !(w.packet.nwk.flags & NWK_FLAG_SOURCE_IEEE) ||
@@ -881,13 +982,15 @@ static security_keys_result_t nwk_command(void)
         }
         w.event = SECURITY_KEYS_EVENT_UPDATE;
     } else if (command == 7) {
-        if (phase() != SECURITY_KEYS_REJOINING) return SECURITY_KEYS_CONTEXT;
+        if (phase() != SECURITY_KEYS_REJOINING && phase() != SECURITY_KEYS_VERIFIED)
+            return SECURITY_KEYS_CONTEXT;
         if (w.packet.length != 4 || (w.packet.nwk.flags & BOTH_IEEE) != BOTH_IEEE ||
             w.packet.nwk.destination != u16(w.record+ADDR)) return SECURITY_KEYS_FORMAT;
         /* R22 3.4.7/3.6.1.4.2: refusal is authenticated input, not silence.
          * Retain REJOINING/binding but save its floor before reporting it. */
         if (w.packet.payload[3] > 2) return SECURITY_KEYS_FORMAT;
         if (w.packet.payload[3]) {
+            if (phase() != SECURITY_KEYS_REJOINING) return SECURITY_KEYS_CONTEXT;
             if (u16(w.packet.payload+1) != 0xffffu) return SECURITY_KEYS_FORMAT;
             w.event = SECURITY_KEYS_EVENT_REJOIN_REFUSED;
             return SECURITY_KEYS_OK;
@@ -898,6 +1001,15 @@ static security_keys_result_t nwk_command(void)
         if (router_record() && (w.record[ROUTER_FLAGS] & ROUTER_KNOWN) &&
             u16(w.packet.payload+1) == u16(w.record+ROUTER_ADDR)) return SECURITY_KEYS_IDENTITY;
 #endif
+        if (phase() == SECURITY_KEYS_VERIFIED) {
+            /* R22 3.6.1.9.3: the parent resolves its child's address
+             * conflict with an unsolicited Rejoin Response carrying the new
+             * address. It is saved; the upper layer rejoins and announces. */
+            if (u16(w.packet.payload+1) == u16(w.record+ADDR)) return SECURITY_KEYS_CONTEXT;
+            memcpy(w.record+ADDR, w.packet.payload+1, 2);
+            w.event = SECURITY_KEYS_EVENT_REJOINED;
+            return SECURITY_KEYS_OK;
+        }
         memcpy(w.record+ADDR, w.packet.payload+1, 2);
 #if defined(CC2530_PARENT_RECOVERY)
         if (router_record()) {

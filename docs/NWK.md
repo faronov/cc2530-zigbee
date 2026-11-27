@@ -119,7 +119,8 @@ MAC header, PHY length, FCS and radio metadata. The module has no dependency
 on MAC, the Beacon decoder, platform services or a live network.
 
 The supported subset is Data type `0`, protocol version `2`, without NWK
-security, multicast control or a source-route subframe. The complete NPDU is
+security or multicast control. A received source-route subframe is skipped
+(see below). The complete NPDU is
 at most **116 bytes**: the 127-byte PHY packet limit minus R22's
 `nwkcMACFrameOverhead = 11`. Optional fields still consume that same bound.
 This is not a promise that a 116-byte NPDU fits every supported MAC header.
@@ -140,8 +141,14 @@ admission. This bare codec remains unchanged and rejects protected input.
 | 8 onward | Optional IEEE addresses | Eight destination octets first, then eight source octets, according to flags |
 | 8, 16 or 24 onward | Payload | Opaque remainder, including zero length; no APS/ZDO/ZCL validation |
 
-FCF bits 8 (multicast) and 10 (source route) return an unsupported-layout
-error; bit 9 (security) returns an unsupported-security error. Bits 11/12
+FCF bit 8 (multicast) returns an unsupported-layout error; bit 9 (security)
+returns an unsupported-security error. Bit 10 (source route, R22 3.3.1.9) is
+accepted on decode for a unicast destination: Relay Count, Relay Index and
+the relay list after the IEEE fields are skipped (the payload offset moves),
+the decoded header drops the flag so it stays encodable, and the encoder
+never emits one. A source-routed broadcast is an invalid header. Coordinators
+acting as concentrators (EmberZNet, Z-Stack) source-route to children of
+routers. Bits 11/12
 indicate destination/source IEEE address presence. Bit 13, End Device
 Initiator, is preserved as metadata; setting it correctly needs actual
 source-role and `nwkParentInformation` state, which this codec does not own.

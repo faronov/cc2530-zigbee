@@ -28,10 +28,12 @@ parent-recovery images are byte-identical to the pre-M7a build.
   [MAC_LINK_DRIVER](MAC_LINK_DRIVER.md#ready-receiver-lifecycle-m7a-cc2530_rx_off_idle).
 - Closes use the normal adapter close/drain, so frames already in the FIFO
   are delivered; a frame still on air at the stop is lost.
-- Slow READY poll: 7.0 s (was 4 s; the define-less images keep 4 s). The
-  parent's macTransactionPersistenceTime is about 7.68 s (0x01F4 × 960
-  symbols); `poll_at` counts from poll queueing, so 0.68 s remains for CSMA,
-  macMaxFrameRetries and foreground/NV latency. 7.5 s would leave <0.2 s.
+- Slow READY poll: 6.0 s (was 4 s, then 7.0 s; the define-less images keep
+  4 s). The parent's macTransactionPersistenceTime is about 7.68 s (0x01F4 ×
+  960 symbols); `poll_at` counts from poll queueing, so 1.68 s remains for
+  CSMA, macMaxFrameRetries and a ~1 s NV save, and about 1 s against parents
+  with a ~7 s indirect hold (TI Z-Stack, not measured). 7.0 s left only
+  0.68 s, less than one NV save.
   Keepalive (30 s ED timeout request, 2-minute requested timeout, 5 s × 6
   retries) is unchanged.
 - ACTIVE window (rxoff builds only): a received unicast still triggers an

@@ -175,6 +175,41 @@ static uint16_t shape_cases(void)
     return 0;
 }
 
+/* R22 3.3.1.9: a destination skips Relay Count, Relay Index and the relay
+ * list; the decoded header drops the flag. Broadcasts never carry one. */
+static uint16_t source_route_cases(void)
+{
+    static const MCU_CODE uint8_t routed[] = {
+        0x48, 0x14, 0x78, 0x56, 0x00, 0x00, 0x1e, 0xa5,
+        0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+        0x02, 0x00, 0x7d, 0x8a, 0x31, 0xd4, 0xa9, 0x55, 0x69
+    };
+    uint8_t n;
+    memcpy(body, routed, sizeof(routed));
+    CHECK(nwk_frame_decode(body, sizeof(routed), &decoded) == NWK_CODEC_OK);
+    CHECK(decoded.header.flags == 0x1000u && decoded.header.discover_route == 1);
+    CHECK(decoded.header.destination == 0x5678 && decoded.header.source == 0x0000);
+    CHECK(memcmp(decoded.header.source_ieee, routed + 8, 8) == 0);
+    CHECK(decoded.payload_offset == 22 && decoded.payload_length == 3);
+    header = decoded.header;
+    CHECK(nwk_frame_encode(&header, payload, 3, body, sizeof(body), &length) == NWK_CODEC_OK);
+    CHECK(length == 19 && body[1] == 0x10);
+    for (n = 16; n < 22; n++) {
+        memcpy(body, routed, sizeof(routed));
+        if (decode_failure(body, n, NWK_CODEC_TRUNCATED) != 0)
+            return (uint16_t)__LINE__;
+    }
+    /* An empty relay list (direct delivery) is accepted. */
+    memcpy(body, routed, 18); body[16] = 0;
+    memcpy(body + 18, payload, 3);
+    CHECK(nwk_frame_decode(body, 21, &decoded) == NWK_CODEC_OK && decoded.payload_offset == 18);
+    memcpy(body, routed, sizeof(routed)); body[16] = 0x80;
+    CHECK(decode_failure(body, sizeof(routed), NWK_CODEC_TRUNCATED) == 0);
+    memcpy(body, routed, sizeof(routed)); body[2] = 0xfd; body[3] = 0xff; body[0] = 0x08;
+    CHECK(decode_failure(body, sizeof(routed), NWK_CODEC_INVALID_HEADER) == 0);
+    return 0;
+}
+
 static uint16_t boundary_cases(void)
 {
     volatile uint8_t option, n;
@@ -233,7 +268,8 @@ static uint16_t rejected_cases(void)
         failure = encode_failure(&header, payload, 3, expected);
         if (failure != 0)
             return failure;
-        if (header.flags >= 0x100u) {
+        /* A received source route is decoded (source_route_cases()). */
+        if (header.flags >= 0x100u && header.flags != NWK_FLAG_SOURCE_ROUTE) {
             memcpy(body, golden[0], 11);
             body[1] = (uint8_t)(header.flags >> 8);
             failure = decode_failure(body, 11, expected);
@@ -317,6 +353,8 @@ static uint16_t self_test(void)
     uint16_t result = golden_cases();
     if (result == 0)
         result = shape_cases();
+    if (!result)
+        result = source_route_cases();
     if (result == 0)
         result = boundary_cases();
     if (result == 0)

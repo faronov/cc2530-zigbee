@@ -108,6 +108,8 @@ static zigbee_security_result_t read_nwk(const uint8_t * SDCC_VOLATILE frame, ui
     type = frame[0] & 3;
     if (type > ED_NWK_COMMAND) return ZIGBEE_SECURITY_HEADER;
     h = (uint8_t)(8u+((frame[1] & 8u) ? 8u : 0u)+((frame[1] & 16u) ? 8u : 0u));
+    /* A source route's Relay Count and Relay Index follow; the decoder skips the list. */
+    if (frame[1] & 4u) h += 2u;
     if (length < h) return ZIGBEE_SECURITY_LENGTH;
     memcpy(buffers.wire.header, frame, h);
     /* Data and Command share this header. Only this syntax copy is normalized;

@@ -122,8 +122,11 @@ nwk_aps_result_t nwk_aps_rejoin(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
 nwk_aps_result_t nwk_aps_poll(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint8_t rejoin, SDCC_VOLATILE uint32_t now) JOIN_FAR;
 nwk_aps_result_t nwk_aps_step(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uint32_t now,
     const NWK_APS_EVENT_T * SDCC_VOLATILE event, NWK_APS_ACTION_T * SDCC_VOLATILE action) JOIN_FAR;
+/* hold: the receiver cannot accept a new request yet (its response slot is
+ * busy). A new APS data frame that requests an APS ACK is then refused with
+ * FULL before any ACK, so the sender's APS retry delivers it later. */
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * SDCC_VOLATILE ctx, const uint8_t * SDCC_VOLATILE npdu,
-    SDCC_VOLATILE uint16_t length, SDCC_VOLATILE uint32_t now) JOIN_FAR;
+    SDCC_VOLATILE uint16_t length, SDCC_VOLATILE uint32_t now, SDCC_VOLATILE uint8_t hold) JOIN_FAR;
 nwk_aps_result_t nwk_aps_take(nwk_aps_t * SDCC_VOLATILE ctx, ed_packet_t * SDCC_VOLATILE packet, uint8_t * SDCC_VOLATILE event) JOIN_FAR;
 nwk_aps_result_t nwk_aps_confirm(nwk_aps_t * SDCC_VOLATILE ctx, uint8_t * SDCC_VOLATILE result) JOIN_FAR;
 /* Request cancellation; step must still establish physical quiescence. */

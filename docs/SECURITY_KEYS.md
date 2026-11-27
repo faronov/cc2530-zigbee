@@ -78,7 +78,8 @@ K3's exact 144-byte layout extends K2 without changing bytes0..110:
 | 122 | 8 | Two independent exclusive router NWK replay floors, little-endian |
 | 130 | 1 | KNOWN bit0, admitted ACTIVE bit1, selected ATTEMPT bit2 |
 | 131 | 1 | Staged selected-parent update ID, zero without ATTEMPT |
-| 132 | 12 | Reserved zero |
+| 132 | 11 | Reserved zero |
+| 143 | 1 | Factory-reset boot tally (`security_keys_tally`), any value |
 
 `security_keys_remember_parent` accepts explicit previously learned, trusted
 history only while VERIFIED and after migration. It binds one lifetime
@@ -286,6 +287,14 @@ return REJOINED. Failed/stale/unsolicited responses cannot change the binding.
 Ordinary traffic is blocked in REJOINING. The optional known-router profile
 extends the bound target as described above; it does not implement unknown
 parent enrollment, unsecured TC rejoin, key recovery or random address allocation.
+A VERIFIED member also accepts an unsolicited Rejoin Response from its parent
+(R22 3.6.1.9.3 address-conflict resolution): a new address is saved and
+REJOINED is reported, after which the upper layer rejoins and announces.
+`security_keys_retune` saves the channel that a rejoin scan found the network
+on; the caller passes the saved PAN ID and update ID and calls it only after
+the protected Rejoin Response from that parent, never on the beacon alone.
+`security_keys_tally`, `security_keys_forget` and `security_keys_retune`
+refuse (FORMAT) to write a record that would not load again.
 
 The owner also handles authenticated NWK Leave and locally generated
 secured Leave indications. Source IEEE and radius 1 are required. A request
@@ -294,10 +303,24 @@ Request=0, RemoveChildren=0, reserved bits zero, SourceIEEE present and no
 DestinationIEEE. LEFT is durable before publication and preserves key/counter
 history, including an abandoned pending TC key as inactive history. Such a
 key is not an outstanding Confirm context and is never promoted by Leave.
+A member (VERIFIED) that receives a Leave request with Rejoin, or the Leave
+indication of its parent or the TC (the sender is leaving), stays VERIFIED
+and reports LEAVE: the upper layer treats it as parent loss and rejoins
+(R22 3.4.4, 3.6.1.10). Only a Leave request without Rejoin makes it LEFT.
 The generic packet/received leave's rejoin option is retained; the dedicated
 failed-join `leave()` always clears it. Fixed-parent secured rejoin from LEFT
 requires that option and a previously verified TC key. No automatic
-reprovisioning/factory reset follows Leave inside this owner. In the
+reprovisioning/factory reset follows Leave inside this owner. Before the
+caller recommissions a LEFT record, `security_keys_forget` durably erases the
+network keys, pending key, NWK floors and router history and replaces the
+unique link key with the public default, so a removed device keeps no network
+secrets; the outgoing counter ceilings in the journal are kept.
+`security_keys_tally` implements the power-cycle factory reset: a counted
+user boot at the limit makes a member (VERIFIED/REJOINING) record LEFT
+without rejoin; a record that is not a member only restarts the tally. The network key
+distribution also accepts an NWK-secured broadcast Transport Key (APS
+unsecured, destination IEEE zero) from the TC for a member, a newer key
+sequence modulo 256 (1..127 ahead), and a Switch Key unicast to this device. In the
 default-TC profile, `security_keys_recommission(void)` lets the caller
 re-steer from a committed LEFT/PROVISIONED/EXCHANGING record: it refuses
 VERIFIED/REJOINING/FAILED and uncommitted state, drops the RAM key/floor/phase

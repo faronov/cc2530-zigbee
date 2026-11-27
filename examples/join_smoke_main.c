@@ -20,8 +20,8 @@
 #define RFST_ISRFOFF 0xefu
 /* Factory IEEE address in the information page, LSB first (SWRU191F 2.3.3). */
 #define INFO_IEEE 0x780cu
-/* BDB primary channel set (11, 15, 20, 25). */
-#define AUTONOMOUS_CHANNELS UINT32_C(0x02108800)
+/* BDB primary channel set (11, 15, 20, 25); bdb_join then scans the secondary set. */
+#define AUTONOMOUS_CHANNELS BDB_JOIN_PRIMARY_CHANNELS
 #define PAUSE_LEAVE (2UL*32768UL)
 #define PAUSE_FIRST (5UL*32768UL)
 #define PAUSE_RETRY (300UL*32768UL)
@@ -93,6 +93,7 @@ __attribute__((noinline)) static void restart(void)
     MMIO_WRITE(SOC_RFST,RFST_ISRFOFF);
     if(join_smoke_status.reason==JS_BDB && (join_smoke_status.bdb_reason==BDB_JOIN_LOCAL_LEAVE ||
        join_smoke_status.bdb_reason==BDB_JOIN_REMOTE_LEAVE)) pause=PAUSE_LEAVE;
+    else if(join_smoke_status.reason==JS_RESET) pause=PAUSE_LEAVE;
     else if(reset_cause==SLEEPSTA_RST_WATCHDOG) pause=PAUSE_RETRY;
 #if defined(CC2530_PM2_IDLE)
     join_smoke_pause(pause);
@@ -144,6 +145,10 @@ void main(void)
     reset_cause=MMIO_READ(SOC_SLEEPSTA)&SLEEPSTA_RST_MASK;
 #endif
     join_smoke_initialize();
+#if defined(CC2530_AUTONOMOUS) && defined(CC2530_PARENT_RECOVERY)
+    /* Power-on/brown-out (00) or RESET_N (01): a user boot for the tally. */
+    if(reset_cause<0x10u) join_smoke_reset_tally=JOIN_SMOKE_TALLY_BOOT;
+#endif
 #if defined(CC2530_APP)
     zcl_sensor_boot();
 #endif

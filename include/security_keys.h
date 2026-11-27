@@ -105,6 +105,11 @@ typedef struct {
  * No key-export, authentication-boolean, reset, recovery or NV bypass API.
  */
 security_keys_result_t security_keys_open(void) SECURITY_FAR;
+/* Before recommissioning (which never rejoins), a LEFT record: durably erase the network keys, the unique link key
+ * (replaced by the public default), pending key, NWK floors and router
+ * history before recommissioning, so a removed device keeps no network
+ * secrets. Outgoing counter ceilings are kept. Other phases: OK, no write. */
+security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR;
 #if defined(CC2530_DEFAULT_TC_KEY)
 /* Explicit ordinary centralized commissioning profile; never an install-code
  * failure fallback. The public default key protects only initial admission. */
@@ -184,6 +189,19 @@ security_keys_result_t security_keys_remember_parent(
  * This does not change the durable admitted parent or application readiness. */
 security_keys_result_t security_keys_select_parent(
     uint8_t router, uint8_t update_id, uint16_t nv_polls) SECURITY_FAR;
+/* VERIFIED/REJOINING: a protected Rejoin Response came from a parent that a
+ * rejoin scan found on another channel (same Extended PAN ID and PAN ID):
+ * save it. update_id must be equal or newer. Keys and floors unchanged.
+ * Never call it on the beacon alone. */
+security_keys_result_t security_keys_retune(uint8_t channel, uint16_t pan, uint8_t update_id,
+    uint16_t nv_polls) SECURITY_FAR;
+/* Factory reset by power cycles (BDB 3.0.1 9). increment 1 at a user boot:
+ * count the boot; at limit the tally restarts and a member record
+ * (VERIFIED/REJOINING) becomes LEFT (no rejoin). increment 0 once the boot
+ * outlived the window: clear the tally (no write if already clear). Any
+ * loaded 144-byte record; CONTEXT for a 112-byte one. */
+security_keys_result_t security_keys_tally(uint8_t increment, uint8_t limit, uint8_t * SDCC_VOLATILE count,
+    uint16_t nv_polls) SECURITY_FAR;
 #endif
 #if defined(CC2530_APP_SETTINGS)
 /* VERIFIED or REJOINING: rewrite the unchanged record so the commit also stores

@@ -44,7 +44,7 @@ static security_keys_config_t config = {
     {0x11,2,3,4,5,6,7,8}, {0x22,2,3,4,5,6,7,8},
     {0x33,2,3,4,5,6,7,8}, 0x1234, 0xffff, 15, 254
 };
-static unsigned checks;
+static unsigned checks, commands_before_forget;
 static jmp_buf power_cut;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "security keys check failed at line %d\n", __LINE__); abort(); } checks++; } while (0)
 
@@ -311,8 +311,8 @@ static void replay_and_rotation(void)
     reject(SECURITY_KEYS_SELECTOR); /* same bytes, different sequence */
     transport(1,alt_key,255); seal_packet(new_tc,2,3,nwk_key,255,7);
     reject(SECURITY_KEYS_SELECTOR); /* conflicting sequence */
-    transport(1,alt_key,1); seal_packet(new_tc,2,4,nwk_key,255,8);
-    reject(SECURITY_KEYS_SELECTOR); /* not next chronology */
+    transport(1,alt_key,127); seal_packet(new_tc,2,4,nwk_key,255,8);
+    reject(SECURITY_KEYS_SELECTOR); /* 128 ahead: not newer modulo 256 */
     transport(1,alt_key,0); seal_packet(new_tc,2,5,nwk_key,255,9);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
     state(SECURITY_KEYS_VERIFIED);
@@ -398,11 +398,29 @@ static void updates_and_leave(void)
     base(0); packet.nwk.type = ED_NWK_COMMAND;
     packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
     memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
+    /* Leave request with Rejoin, and the parent's own Leave indication: parent
+     * loss, the member stays VERIFIED and rejoins (R22 3.4.4, 3.6.1.10). */
     packet.length = 2; packet.payload[0] = 4; packet.payload[1] = 0x60;
     seal_packet(NULL,0,0,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_LEAVE);
+    state(SECURITY_KEYS_VERIFIED);
+    base(0); packet.nwk.type = ED_NWK_COMMAND;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
+    packet.nwk.destination = 0xfffd; packet.nwk.sequence = 2;
+    packet.length = 2; packet.payload[0] = 4; packet.payload[1] = 0x00;
+    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_LEAVE);
+    state(SECURITY_KEYS_VERIFIED);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    /* A Leave request without Rejoin is final. */
+    base(0); packet.nwk.type = ED_NWK_COMMAND;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
+    packet.nwk.sequence = 3;
+    packet.length = 2; packet.payload[0] = 4; packet.payload[1] = 0x40;
+    seal_packet(NULL,0,0,nwk_key,255,6); accept(SECURITY_KEYS_EVENT_LEAVE);
     state(SECURITY_KEYS_LEFT);
     reboot(NULL,SECURITY_KEYS_LEFT);
-    data(5,nwk_key,255); reject(SECURITY_KEYS_STATE);
+    data(7,nwk_key,255); reject(SECURITY_KEYS_STATE);
 }
 static void update_packet(uint8_t update_id, uint16_t pan)
 {
@@ -815,6 +833,22 @@ static void secured_rejoin(void)
     state(SECURITY_KEYS_LEFT);
     reboot(NULL,SECURITY_KEYS_LEFT);
 }
+/* R22 4.6.3.4: the TC's NWK-secured broadcast of the next network key
+ * (APS-unsecured, destination IEEE zero) reaches a member; the sequence may
+ * skip ahead (modulo 256, half range). Not unicast without APS security. */
+static void key_spread(void)
+{
+    reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    transport(1,alt_key,5); memset(packet.payload+19,0,8);
+    seal_packet(NULL,0,0,nwk_key,255,10); reject(SECURITY_KEYS_CONTEXT); /* unicast */
+    packet.nwk.destination = 0xffff;
+    seal_packet(NULL,0,0,nwk_key,255,11); accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
+    state(SECURITY_KEYS_VERIFIED);
+    CHECK(status.slot_valid == 3 && status.newer_pending && status.active_sequence == 255);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    data(0,alt_key,5); accept(SECURITY_KEYS_EVENT_DATA);
+}
+
 static void selectors_and_floors(void)
 {
     uint8_t good[116], n;
@@ -830,7 +864,9 @@ static void selectors_and_floors(void)
     transport(1,alt_key,0); seal_packet(new_tc,2,2,nwk_key,255,6);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
     base(ED_APS_COMMAND); packet.length = 2; packet.payload[0] = 9; packet.payload[1] = 0;
-    seal_packet(NULL,0,0,nwk_key,255,7); reject(SECURITY_KEYS_CONTEXT); /* unicast switch prohibited */
+    seal_packet(NULL,0,0,nwk_key,255,7); accept(SECURITY_KEYS_EVENT_SWITCH); /* unicast switch (R22 4.4.10) */
+    state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0 && !status.newer_pending);
+    /* Repeating it is idempotent, also as a broadcast. */
     packet.nwk.destination = 0xffff;
     seal_packet(NULL,0,0,nwk_key,255,8); accept(SECURITY_KEYS_EVENT_SWITCH);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0 && !status.newer_pending);
@@ -978,6 +1014,30 @@ static void local_leave(void)
         retained_leave_record(before);
     }
 }
+/* Before recommissioning, a LEFT member erases its network secrets: keys,
+ * pending key, NWK floors and router history, the unique link key becoming
+ * the public default; outgoing counter ceilings stay (BDB 3.0.1 9). */
+static void forget_after_leave(void)
+{
+    uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+    uint32_t until = security_counter_status()->until[0];
+    state(SECURITY_KEYS_LEFT);
+    CHECK(security_keys_forget(0) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_forget(3) == SECURITY_KEYS_OK);
+    reboot(NULL,SECURITY_KEYS_LEFT);
+    CHECK(security_counter_read(record,sizeof(record),&length) == SECURITY_COUNTER_OK);
+    for (unsigned i = 16; i < 48; i++) CHECK(!record[i]);
+    for (unsigned i = 64; i < 88; i++) CHECK(!record[i]);
+    CHECK(!memcmp(record+48,"ZigBeeAlliance09",16) && !record[106] && !record[107] && !record[108]);
+    CHECK(security_counter_status()->until[0] >= until);
+    commands_before_forget = security_joint_flash_commands();
+    CHECK(security_keys_forget(3) == SECURITY_KEYS_OK); /* already forgotten: no write */
+    CHECK(security_joint_flash_commands() == commands_before_forget);
+#if defined(CC2530_DEFAULT_TC_KEY)
+    CHECK(security_keys_recommission() == SECURITY_KEYS_OK);
+#endif
+}
+
 static void interrupted_leave(void)
 {
     static const uint8_t boundaries[] = {1,38,39,76};
@@ -1452,6 +1512,44 @@ static void remembered_parent(void)
 #endif
 }
 
+/* R22 3.6.1.9.3: an unsolicited Rejoin Response from the parent of a
+ * VERIFIED member assigns a new address (saved); the same address is no
+ * change. Runs after remembered_parent() (router parent, alt_key slot). */
+static void unsolicited_rejoin(void)
+{
+    base(0); packet.nwk.type = ED_NWK_COMMAND; packet.nwk.source = 0x4567;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
+    memcpy(packet.nwk.source_ieee, router_ieee, 8);
+    memcpy(packet.nwk.destination_ieee, config.own_ieee, 8);
+    packet.length = 4; packet.payload[0] = 7; packet.payload[1] = 0x34; packet.payload[2] = 0x12;
+    router_seal_using(100, 0, alt_key, 0); reject(SECURITY_KEYS_CONTEXT);
+    packet.payload[1] = 0x56; packet.payload[2] = 0x34;
+    router_seal_using(101, 0, alt_key, 0); accept(SECURITY_KEYS_EVENT_REJOINED);
+    reboot(NULL, SECURITY_KEYS_VERIFIED);
+    CHECK(status.config.address == 0x3456 && status.router_active);
+    packet.nwk.destination = 0x3456; packet.payload[3] = 1; packet.payload[1] = packet.payload[2] = 255;
+    router_seal_using(102, 0, alt_key, 0); reject(SECURITY_KEYS_CONTEXT);
+}
+
+/* BDB 3.0.1 9 factory reset by power cycles: the persisted tally counts
+ * user boots, a cleared tally restarts it, the limit makes the member LEFT
+ * (no rejoin) and restarts the tally. */
+static void factory_tally(void)
+{
+    uint8_t count = 0xa5, i;
+    CHECK(security_keys_tally(2,5,&count,3) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_tally(1,0,&count,3) == SECURITY_KEYS_ARGUMENT);
+    for (i = 1; i < 5; i++) {
+        CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == i);
+        reboot(NULL,SECURITY_KEYS_VERIFIED);
+    }
+    CHECK(security_keys_tally(0,5,&count,3) == SECURITY_KEYS_OK && !count);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    for (i = 1; i <= 5; i++) CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == i);
+    reboot(NULL,SECURITY_KEYS_LEFT);
+    CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == 1);
+}
+
 static security_keys_result_t router_transition(uint8_t stage)
 {
     security_keys_parent_t parent;
@@ -1627,7 +1725,7 @@ static void parent_schema_upgrade(void)
         reboot(snapshot, SECURITY_KEYS_VERIFIED);
         CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
         CHECK(security_counter_read(after, sizeof(after), &length) == SECURITY_COUNTER_OK);
-        after[kind ? 143 : 111] = kind ? 1 : 4;
+        after[kind ? 142 : 111] = kind ? 1 : 4; /* 143 is the reset tally */
         CHECK(security_counter_save(after, sizeof(after), 3) == SECURITY_COUNTER_OK);
         security_joint_reset(0);
         CHECK(security_keys_open() == SECURITY_KEYS_FORMAT);
@@ -1719,6 +1817,14 @@ static void router_join(void)
     router_associated(); relayed(0x5678); raw[wire_length-1] ^= 1; reject(SECURITY_KEYS_AUTH);
     state(SECURITY_KEYS_ASSOCIATED);
     CHECK(!memcmp(status.config.tc_ieee, router_ieee, 8));
+    {
+        /* A factory-reset tally on a never-bound router join (UNBOUND while
+         * ASSOCIATED) reaches its limit without leaving: still loadable. */
+        uint8_t count, n;
+        for (n = 1; n <= 5; n++) CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == n);
+        reboot(NULL, SECURITY_KEYS_ASSOCIATED);
+        CHECK(!memcmp(status.config.tc_ieee, router_ieee, 8));
+    }
     /* Quiet abandonment of a never-bound router join stays loadable
      * (hardware: LEFT kept UNBOUND and every boot faulted FORMAT). */
     router_associated();
@@ -1771,13 +1877,15 @@ int main(void)
     setup(); handshake(); replay_and_rotation(); framing_and_identity();
     updates_and_leave(); update_policy(); announce_and_retry(); protected_ack();
     timeout_management(); post_key_passthrough();
-    secured_rejoin(); selectors_and_floors();
-    schema_and_arguments(); local_leave(); interrupted_leave();
+    secured_rejoin(); selectors_and_floors(); key_spread();
+    schema_and_arguments(); local_leave(); forget_after_leave(); interrupted_leave();
     parent_information_edi(); outbound_router_broadcast();
     parent_information_volatile(); interrupted(); failures();
 #if defined(CC2530_PARENT_RECOVERY)
     parent_schema_upgrade();
     remembered_parent();
+    unsolicited_rejoin();
+    factory_tally();
     router_update_kept();
     interrupted_router();
 #endif

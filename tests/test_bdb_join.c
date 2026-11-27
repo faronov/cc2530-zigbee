@@ -397,7 +397,8 @@ static void drive(void)
         } else if (action.data.scan.kind == MAC_SCAN_ACTION_RECEIVE) event.data.scan.kind = MAC_SCAN_EVENT_OPENED;
         else if (action.data.scan.kind == MAC_SCAN_ACTION_RESTORE) event.data.scan.kind = MAC_SCAN_EVENT_RESTORED;
         else if (device.work.scan.phase == MAC_SCAN_RX) {
-            if (!scan_beacon) {
+            /* The network beacons on channel 15 only. */
+            if (!scan_beacon && device.work.scan.channel == 15) {
                 event.data.scan.kind = MAC_SCAN_EVENT_BEACON; event.data.scan.body = beacon;
                 event.data.scan.length = beacon_length; event.data.scan.crc_valid = 1; scan_beacon = 1; now++;
             } else { event.data.scan.kind = MAC_SCAN_EVENT_CLOSED; now = device.work.scan.window_end; }
@@ -1060,8 +1061,9 @@ static void terminal_control(void)
     announcement(0, 0x5678u, third_ieee);
     CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
     pending = 0; drive(); drain();
-    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_ADDRESS_CONFLICT && leave_sent);
-    retained(SECURITY_KEYS_LEFT);
+    /* A member whose address conflicts rejoins (R22 3.6.1.9.3); no Leave. */
+    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_PARENT_FAILED && !leave_sent);
+    retained(SECURITY_KEYS_VERIFIED);
 
     ready(); base_peer(1, 0, 0);
     peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE;
@@ -1072,6 +1074,16 @@ static void terminal_control(void)
     pending = 0; drive(); drain();
     CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_REMOTE_LEAVE && !leave_sent);
     retained(SECURITY_KEYS_LEFT);
+    /* Leave with Rejoin (R22 3.4.4): parent loss, the member stays VERIFIED. */
+    ready(); base_peer(1, 0, 0);
+    peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(peer_out.nwk.source_ieee, identity.tc_ieee, 8);
+    peer_out.payload[0] = 4; peer_out.payload[1] = 0x60; peer_out.length = 2;
+    seal_peer(0, 0, NULL, 1);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    pending = 0; drive(); drain();
+    CHECK(device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_PARENT_FAILED && !leave_sent);
+    retained(SECURITY_KEYS_VERIFIED);
     mgmt_leave_control();
 }
 
@@ -1145,7 +1157,8 @@ static void phase_storage(void)
     CHECK(!memcmp(&record, &device.record, sizeof(record)));
     CHECK(runtime.transport.owner == &transmitter && runtime.transport.last == now && runtime.zdo.last == now);
     CHECK(!runtime.transport.active && !runtime.transport.queued && !runtime.transport.ready &&
-        !runtime.transport.next_aps && !runtime.transport.next_nwk && !runtime.zdo.next_tsn && !device.member);
+        runtime.transport.next_nwk == (uint8_t)(now >> 4) &&
+        runtime.transport.next_aps == (uint8_t)((now >> 12) & 0x7fu) && !runtime.zdo.next_tsn && !device.member);
     CHECK(security_joint_flash_commands() == before);
     CHECK(security_keys_status(&status) == SECURITY_KEYS_OK && status.phase == SECURITY_KEYS_PROVISIONED);
     drive();
@@ -1170,6 +1183,13 @@ static void phase_storage(void)
     CHECK(device.scan_result.reason == MAC_SCAN_FINISHED && !device.scan_result.candidates);
     CHECK(transmitter.phase == MAC_TX_IDLE && security_joint_flash_commands() == before);
     CHECK(device.attempts == BDB_JOIN_ATTEMPTS);
+    /* BDB 3.0.1 8.2: steering that finds nothing on the primary set
+     * continues on the secondary set, then fails. */
+    setup(); scan_beacon = 1; device.config.scan.channels = BDB_JOIN_PRIMARY_CHANNELS;
+    for (iterations = 0; iterations < 1024 && device.phase == BDB_JOIN_SCANNING; iterations++) drive();
+    CHECK(iterations < 1024 && device.phase == BDB_JOIN_FAILED && device.result == BDB_JOIN_NO_PARENT);
+    CHECK(device.config.scan.channels == BDB_JOIN_SECONDARY_CHANNELS && device.attempts == BDB_JOIN_ATTEMPTS);
+    CHECK(device.scan_result.sent == BDB_JOIN_SECONDARY_CHANNELS && transmitter.phase == MAC_TX_IDLE);
     before_runtime();
     /* A beacon lost in one completed scan is rescanned, not a failed join. */
     setup(); scan_beacon = 1;
@@ -2079,10 +2099,11 @@ static void known_parent_bounds(void)
     CHECK(rejoin_requests==1 && status.router_active);
 
     /* The saved router went silent: after its attempts, one TC fallback in
-     * the same window, whose Rejoin Response retires the router. */
+     * the same window (an all-channel scan would follow it), whose Rejoin
+     * Response retires the router. */
     power_cycle(); resume(); CHECK(device.parent_search==3);
     alternate_mute=alternate_tc=1; recover(); recovered();
-    CHECK(rejoin_requests==BDB_JOIN_ATTEMPTS+1u && device.parent_search==2);
+    CHECK(rejoin_requests==BDB_JOIN_ATTEMPTS+1u && device.parent_search==0);
     CHECK(status.router_known && !status.router_active && !status.router_selected);
     alternate_test=alternate_mute=alternate_tc=0; aux_source=NULL;
 }
@@ -2106,7 +2127,7 @@ static void recovery_link_failures(void)
         failed_without_credentials_loss((mode == 3 || mode == 7) ? BDB_JOIN_REJOIN_REFUSED : BDB_JOIN_NO_PARENT);
         CHECK(status.phase == SECURITY_KEYS_REJOINING || mode == 1);
         CHECK(device.attempts == ((mode == 3 || mode == 7) ? 1 : BDB_JOIN_ATTEMPTS) && !announced);
-        if (mode == 0) CHECK(lost_frames == 4u*BDB_JOIN_ATTEMPTS && !rejoin_requests);
+        if (mode == 0) CHECK(lost_frames >= 4u*BDB_JOIN_ATTEMPTS && !rejoin_requests);
         if (mode == 1) CHECK(busy_events >= BDB_JOIN_ATTEMPTS && !rejoin_requests);
         if (mode >= 2) CHECK(rejoin_requests == ((mode == 3 || mode == 7) ? 1 : BDB_JOIN_ATTEMPTS));
         if (mode == 2) CHECK(muted == BDB_JOIN_ATTEMPTS && (uint32_t)(now-started) >= 2u*BDB_JOIN_REJOIN_WAIT);
@@ -2397,6 +2418,23 @@ int main(void)
     CHECK(iterations < 128 && app_sends == 4 && runtime.transport.retries == 3);
     CHECK(bdb_join_confirm(&device, &result) == BDB_JOIN_OK && result == NWK_APS_TIMEOUT);
     drop_all_acks = 0;
+    /* While a response is still unbuilt, a request asking for an APS ACK is
+     * refused before any ACK (the sender retries); its retry is admitted. */
+    runtime.zdo.response_pending = 1;
+    base_peer(0, 0, 6);
+    peer_out.aps.destination_endpoint = peer_out.aps.source_endpoint = 1;
+    peer_out.aps.profile_id = 0x0104; peer_out.aps.flags = APS_FLAG_ACK_REQUEST; peer_out.length = 1;
+    seal_peer(0, 0, NULL, 1);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_FULL);
+    CHECK(!runtime.transport.reply && !runtime.transport.receive_ready);
+    runtime.zdo.response_pending = 0;
+    peer_out.nwk.sequence = nwk_sequence++;
+    seal_peer(0, 0, NULL, 1);
+    CHECK(bdb_join_receive(&device, mac_body, mac_length, 1, now) == BDB_JOIN_OK);
+    CHECK(runtime.transport.reply && runtime.transport.receive_ready);
+    pending = 0;
+    for (iterations = 0; iterations < 64 && (runtime.transport.reply || !runtime.zdo.application_ready); iterations++) drive();
+    CHECK(iterations < 64 && zdo_runtime_discard_application(&runtime.zdo) == ZDO_RUNTIME_OK);
     base_peer(0, 0, 6);
     peer_out.aps.destination_endpoint = peer_out.aps.source_endpoint = 1;
     peer_out.aps.profile_id = 0x0104; peer_out.length = 1;

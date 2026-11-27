@@ -25,7 +25,9 @@ actual eligible beacon. The current bounded policy selects direct coordinator
 beacons only, including short address0000. Distinct eligible open networks,
 collector overflow or unscanned channels fail rather than silently choosing
 another network. Link cost remains explicit uncalibrated caller policy;
-this is not full primary/secondary steering or router-parent support.
+a join configured with exactly the BDB primary set (11/15/20/25) that finds
+nothing there scans the secondary set (the other 2.4-GHz channels) next
+(BDB 3.0.1 8.2).
 Neither an open beacon nor the publicly shared initial key proves that the
 network belongs to the intended HA installation.
 
@@ -569,8 +571,30 @@ report and protected application input),19 (discovery exhaustion). Case18's
 foreground serving exercise is ten seconds; the existing case0/16 long serving
 and case17 failure gates are unchanged. Fresh MCU acceptance is still required.
 
+Rejoin follows a changed channel: when the TC (and known router) do not
+answer on the saved channel, recovery scans every channel for the TC or the
+known router of the saved Extended PAN ID and PAN ID (equal or newer update
+ID; other networks' beacons are not collected) and rejoins it there; the new
+channel is saved only after its protected Rejoin Response (R22 3.6.1.4.2),
+the beacon's update ID never. A PAN ID change still follows the NWK Update
+command. A TC refusal scans for the known router only. A Leave with Rejoin, the parent's own Leave indication, an
+address conflict, an unsolicited Rejoin Response with a new address, a parent
+that stops delivering APS ACKs (three application frames) and the MAC poll
+keepalive's missing ACKs all lead to this rejoin rather than a Leave. A
+parent that never answers the End Device Timeout Request (pre-R21) keeps an
+RX-off child that then uses MAC Data Poll keepalive.
+
+Factory reset (BDB 3.0.1 9): five user boots (power-on or RESET_N), each
+running at least 1 s and ending within 10 s of start, make the member LEFT
+(a brown-out loop resetting at its first transmissions never counts); it
+restarts, erases its network secrets and commissions again with the
+outgoing counter ceilings kept. A 112-byte member record is upgraded to hold
+the tally. No NWK Leave is sent, so the TC keeps the old entry until the
+device is paired again.
+
 Remaining scope: unknown-router IEEE learning, multiple-router eviction/replay
-policy, changing PAN/channel, TC migration and sleepy operation. The unchanged journal erase guard limits
+policy, TC (unsecured) rejoin, TC migration to a new IEEE and pre-R21 TC
+link-key exchange skip. The unchanged journal erase guard limits
 longer router service; see [durable-owner limitation](SECURITY_KEYS.md#optional-known-router-durable-ownership).
 
 ## First physical join gate
