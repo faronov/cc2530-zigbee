@@ -311,8 +311,8 @@ static void replay_and_rotation(void)
     reject(SECURITY_KEYS_SELECTOR); /* same bytes, different sequence */
     transport(1,alt_key,255); seal_packet(new_tc,2,3,nwk_key,255,7);
     reject(SECURITY_KEYS_SELECTOR); /* conflicting sequence */
-    transport(1,alt_key,1); seal_packet(new_tc,2,4,nwk_key,255,8);
-    reject(SECURITY_KEYS_SELECTOR); /* not next chronology */
+    transport(1,alt_key,127); seal_packet(new_tc,2,4,nwk_key,255,8);
+    reject(SECURITY_KEYS_SELECTOR); /* 128 ahead: not newer modulo 256 */
     transport(1,alt_key,0); seal_packet(new_tc,2,5,nwk_key,255,9);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
     state(SECURITY_KEYS_VERIFIED);
@@ -833,6 +833,22 @@ static void secured_rejoin(void)
     state(SECURITY_KEYS_LEFT);
     reboot(NULL,SECURITY_KEYS_LEFT);
 }
+/* R22 4.6.3.4: the TC's NWK-secured broadcast of the next network key
+ * (APS-unsecured, destination IEEE zero) reaches a member; the sequence may
+ * skip ahead (modulo 256, half range). Not unicast without APS security. */
+static void key_spread(void)
+{
+    reboot(snapshot,SECURITY_KEYS_VERIFIED);
+    transport(1,alt_key,5); memset(packet.payload+19,0,8);
+    seal_packet(NULL,0,0,nwk_key,255,10); reject(SECURITY_KEYS_CONTEXT); /* unicast */
+    packet.nwk.destination = 0xffff;
+    seal_packet(NULL,0,0,nwk_key,255,11); accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
+    state(SECURITY_KEYS_VERIFIED);
+    CHECK(status.slot_valid == 3 && status.newer_pending && status.active_sequence == 255);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    data(0,alt_key,5); accept(SECURITY_KEYS_EVENT_DATA);
+}
+
 static void selectors_and_floors(void)
 {
     uint8_t good[116], n;
@@ -848,7 +864,9 @@ static void selectors_and_floors(void)
     transport(1,alt_key,0); seal_packet(new_tc,2,2,nwk_key,255,6);
     accept(SECURITY_KEYS_EVENT_NETWORK_KEY);
     base(ED_APS_COMMAND); packet.length = 2; packet.payload[0] = 9; packet.payload[1] = 0;
-    seal_packet(NULL,0,0,nwk_key,255,7); reject(SECURITY_KEYS_CONTEXT); /* unicast switch prohibited */
+    seal_packet(NULL,0,0,nwk_key,255,7); accept(SECURITY_KEYS_EVENT_SWITCH); /* unicast switch (R22 4.4.10) */
+    state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0 && !status.newer_pending);
+    /* Repeating it is idempotent, also as a broadcast. */
     packet.nwk.destination = 0xffff;
     seal_packet(NULL,0,0,nwk_key,255,8); accept(SECURITY_KEYS_EVENT_SWITCH);
     state(SECURITY_KEYS_VERIFIED); CHECK(status.active_sequence == 0 && !status.newer_pending);
@@ -1808,7 +1826,7 @@ int main(void)
     setup(); handshake(); replay_and_rotation(); framing_and_identity();
     updates_and_leave(); update_policy(); announce_and_retry(); protected_ack();
     timeout_management(); post_key_passthrough();
-    secured_rejoin(); selectors_and_floors();
+    secured_rejoin(); selectors_and_floors(); key_spread();
     schema_and_arguments(); local_leave(); interrupted_leave();
     parent_information_edi(); outbound_router_broadcast();
     parent_information_volatile(); interrupted(); failures();

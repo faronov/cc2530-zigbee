@@ -752,11 +752,17 @@ static uint8_t reused(const uint8_t *material)
 }
 static security_keys_result_t transport(void)
 {
-    uint8_t type, offset, i, newest, sequence;
-    if (!w.aps_secured || w.pending || w.packet.length < 2) return SECURITY_KEYS_CONTEXT;
+    uint8_t type, offset, i, newest, sequence, spread;
+    if (w.pending || w.packet.length < 2) return SECURITY_KEYS_CONTEXT;
     type = w.packet.payload[1];
     if (type != 1 && type != 4) return SECURITY_KEYS_UNSUPPORTED;
-    if (w.key_id != (type == 1 ? 2 : 3)) return SECURITY_KEYS_SELECTOR;
+    /* R22 4.6.3.4: a TC may distribute the next network key to all devices
+     * as an NWK-secured broadcast without APS security (destination IEEE
+     * zero), e.g. EmberZNet's broadcast key update. Only a member takes it. */
+    spread = !w.aps_secured && type == 1 && verified() && w.secured &&
+        broadcast(w.packet.nwk.destination) && w.packet.length == 35 && all(w.packet.payload+19, 8, 0);
+    if (!w.aps_secured && !spread) return SECURITY_KEYS_CONTEXT;
+    if (w.aps_secured && w.key_id != (type == 1 ? 2 : 3)) return SECURITY_KEYS_SELECTOR;
     if (w.packet.length != (type == 1 ? 35 : 34)) return SECURITY_KEYS_FORMAT;
     offset = type == 1 ? 19 : 18;
     if (!same(w.packet.payload+offset+8,
@@ -764,8 +770,8 @@ static security_keys_result_t transport(void)
               unbound() ? w.meta.source :
 #endif
               w.record+TC, 8) ||
-        !same(w.packet.payload+offset, w.record+OWN, 8) ||
-        w.packet.nwk.destination != u16(w.record+ADDR))
+        (!spread && (!same(w.packet.payload+offset, w.record+OWN, 8) ||
+                     w.packet.nwk.destination != u16(w.record+ADDR))))
         return SECURITY_KEYS_IDENTITY;
     if (type == 4) {
         if (phase() != SECURITY_KEYS_REQUESTED) return SECURITY_KEYS_CONTEXT;
@@ -798,7 +804,8 @@ static security_keys_result_t transport(void)
     } else {
         if (!verified()) return SECURITY_KEYS_CONTEXT;
         newest = active_slot() ^ ((w.record[FLAGS] & NEWER) ? 1 : 0);
-        if (sequence != (uint8_t)(w.record[SEQ+newest]+1u)) return SECURITY_KEYS_SELECTOR;
+        /* A newer sequence modulo 256 (1..127 ahead): a TC may skip numbers. */
+        if ((uint8_t)(sequence-w.record[SEQ+newest]-1u) >= 127u) return SECURITY_KEYS_SELECTOR;
         i = active_slot() ^ 1u;
         w.record[FLAGS] |= (uint8_t)((1u << i) | NEWER);
     }
@@ -844,8 +851,10 @@ static security_keys_result_t aps_command(void)
         return SECURITY_KEYS_OK;
     }
     if (w.packet.payload[0] == 9) {
+        /* Switch Key: broadcast, or unicast to this device (R22 4.4.10). */
         if (!w.secured || w.pending || w.packet.length != 2 ||
-            !broadcast(w.packet.nwk.destination)) return SECURITY_KEYS_CONTEXT;
+            (!broadcast(w.packet.nwk.destination) && w.packet.nwk.destination != u16(w.record+ADDR)))
+            return SECURITY_KEYS_CONTEXT;
         if (w.aps_secured && w.key_id != 0) return SECURITY_KEYS_SELECTOR;
         if (w.packet.payload[1] == w.record[SEQ+active_slot()]) {
             w.event = SECURITY_KEYS_EVENT_SWITCH; return SECURITY_KEYS_OK;
