@@ -67,6 +67,13 @@ nwk_aps_result_t nwk_aps_init(nwk_aps_t * SDCC_VOLATILE ctx, NWK_APS_TX_T * SDCC
     memset(ctx, 0, sizeof(*ctx));
     ctx->owner = owner; ctx->endpoint = config->endpoint; ctx->profile = config->profile;
     ctx->limits = config->limits; ctx->nv_polls = config->nv_polls; ctx->last = now;
+    /* nwkSequenceNumber and the APS counter start from the boot-dependent
+     * symbol clock, not 0, so a quick reboot does not repeat the previous
+     * session's numbers into peers' duplicate filters (R22: random initial
+     * value). The APS counter starts below 128 so no counter-wrap
+     * quarantine can fall into commissioning. */
+    ctx->next_nwk = (uint8_t)(now >> 4);
+    ctx->next_aps = (uint8_t)((now >> 12) & 0x7fu);
     ctx->ack_wait = config->ack_wait;
     ctx->broadcast_time = config->broadcast_time;
     ctx->duplicate_time = (config->ack_wait+NWK_APS_TX_LIFETIME+MAC_TX_STOP_SYMBOLS)*4u;
@@ -447,7 +454,7 @@ static void acknowledgment(nwk_aps_t * SDCC_VOLATILE ctx, const ed_packet_t * SD
 }
 
 nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uint8_t * MCS51_PARAM_VOLATILE npdu,
-    MCS51_PARAM_VOLATILE uint16_t length, MCS51_PARAM_VOLATILE uint32_t now)
+    MCS51_PARAM_VOLATILE uint16_t length, MCS51_PARAM_VOLATILE uint32_t now, MCS51_PARAM_VOLATILE uint8_t hold)
 {
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
@@ -540,7 +547,8 @@ nwk_aps_result_t nwk_aps_receive(nwk_aps_t * MCS51_PARAM_VOLATILE ctx, const uin
             if ((uint32_t)(entry->until-now) < (uint32_t)(ctx->duplicate[oldest].until-now)) oldest = i;
         }
     }
-    if (!duplicate && ctx->receive_ready) { result = NWK_APS_FULL; goto discard; }
+    if (!duplicate && (ctx->receive_ready ||
+        (hold && !p->nwk.type && (p->aps.flags & APS_FLAG_ACK_REQUEST)))) { result = NWK_APS_FULL; goto discard; }
     /* A full table forgets its soonest-expiring record; replay protection
      * remains the authenticated frame counter, not this retry filter. */
     if (free_slot == NWK_APS_DUPLICATES) free_slot = oldest;

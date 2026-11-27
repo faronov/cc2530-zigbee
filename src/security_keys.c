@@ -857,11 +857,16 @@ static security_keys_result_t nwk_command(void)
             w.packet.nwk.destination != u16(w.record+ADDR) : w.packet.nwk.destination != 0xfffdu)
             return SECURITY_KEYS_IDENTITY;
         /* Reserved RX option bits ignored; no child admission is implemented.
-         * LEFT preserves keys/counters; upper layer handles rejoin indication. */
+         * R22 3.4.4, 3.6.1.10: a Leave request with Rejoin, or the Leave
+         * indication of the sender itself (our parent or the TC is leaving),
+         * is parent loss for a member: it stays VERIFIED and the upper layer
+         * rejoins. Otherwise LEFT, preserving keys/counters. */
+        w.event = SECURITY_KEYS_EVENT_LEAVE;
+        if (phase() == SECURITY_KEYS_VERIFIED &&
+            (!(w.packet.payload[1] & 0x40) || (w.packet.payload[1] & 0x20))) return SECURITY_KEYS_OK;
         set_phase(SECURITY_KEYS_LEFT);
         if (w.packet.payload[1] & 0x20) w.record[FLAGS] |= REJOIN_ALLOWED;
         else w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
-        w.event = SECURITY_KEYS_EVENT_LEAVE;
     } else if (command == 10) {
         if (w.packet.length != 13 || w.packet.payload[1] != 1 ||
             !(w.packet.nwk.flags & NWK_FLAG_SOURCE_IEEE) ||

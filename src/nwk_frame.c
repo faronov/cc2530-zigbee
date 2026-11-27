@@ -75,7 +75,7 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     nwk_codec_result_t status;
     uint16_t control;
     MCU_ESCAPED_LOCAL uint8_t size;
-    uint8_t position;
+    uint8_t position, route, relays;
 #define length LW_SHALLOW_READ(uint16_t, length)
     if (body == NULL || result == NULL)
         return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_INVALID_ARGUMENT);
@@ -98,10 +98,27 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
      * it as enable and keep every decoded header encodable. */
     if (candidate.header.discover_route == 2u && candidate.header.destination < 0xfff8u)
         candidate.header.discover_route = NWK_DISCOVER_ROUTE_ENABLE;
+    /* R22 3.3.1.9: a source-routed unicast carries Relay Count, Relay Index
+     * and the relay list after the IEEE fields. The destination only skips
+     * it; the decoded header drops the flag and stays encodable. */
+    route = (uint8_t)(candidate.header.flags & NWK_FLAG_SOURCE_ROUTE ? 1u : 0u);
+    candidate.header.flags &= (uint16_t)~NWK_FLAG_SOURCE_ROUTE;
     status = header_shape(&candidate.header, &size);
     if (status != NWK_CODEC_OK)
         return CW_RETURN(CW_NWK_DECODE,status);
-    if (length < size)
+    if (route) {
+        if (candidate.header.destination >= 0xfff8u)
+            return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_INVALID_HEADER);
+        if (length < (uint16_t)size + 2u)
+            return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_TRUNCATED);
+        /* Relay Index is the forwarders' business; a list longer than any
+         * NPDU is truncation (and must not overflow the octet count). */
+        relays = body[size];
+        if (relays > (NWK_FRAME_MAX_BODY - NWK_FRAME_MIN_HEADER) / 2u)
+            return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_TRUNCATED);
+        route = (uint8_t)(2u + 2u * relays);
+    }
+    if (length < (uint16_t)size + route)
         return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_TRUNCATED);
     position = NWK_FRAME_MIN_HEADER;
     if (candidate.header.flags & NWK_FLAG_DESTINATION_IEEE) {
@@ -110,8 +127,8 @@ nwk_codec_result_t nwk_frame_decode(const uint8_t *body, uint16_t length,
     }
     if (candidate.header.flags & NWK_FLAG_SOURCE_IEEE)
         memcpy(candidate.header.source_ieee, body + position, 8);
-    candidate.payload_offset = size;
-    candidate.payload_length = (uint8_t)(length - size);
+    candidate.payload_offset = (uint8_t)(size + route);
+    candidate.payload_length = (uint8_t)(length - size - route);
     *result = candidate;
     return CW_RETURN(CW_NWK_DECODE,NWK_CODEC_OK);
 }

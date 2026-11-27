@@ -204,12 +204,13 @@ static uint8_t retryable(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx, uint8_t re
 }
 
 /* R22 3.6.10.3: the keepalive method follows nwkParentInformation. A polling
- * (RX-off-when-idle) child may rely on MAC Data Poll keepalive (bit 0); the
- * End Device Timeout Request keepalive is bit 1. */
+ * (RX-off-when-idle) child relies on MAC Data Poll keepalive whenever the
+ * parent supports it (bit 0): its polls already refresh the child entry, so
+ * End Device Timeout Requests (bit 1) are only the RX-on child's keepalive. */
 static uint8_t poll_keepalive(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx) BDB_RECOVERY_CODE;
 static uint8_t poll_keepalive(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
 {
-    return ctx->work.runtime.zdo.parent_known && (ctx->work.runtime.zdo.parent_information & 3u) == 1u &&
+    return ctx->work.runtime.zdo.parent_known && (ctx->work.runtime.zdo.parent_information & 1u) &&
         !(ctx->config.association.capability & 0x08u);
 }
 
@@ -226,7 +227,9 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         fail(ctx, rc == ZDO_RUNTIME_SECURITY ? BDB_JOIN_SECURITY : BDB_JOIN_TRANSMIT_FAILED); return;
     }
     if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_LEAVE) {
-        fail(ctx, BDB_JOIN_REMOTE_LEAVE);
+        /* Still VERIFIED: a Leave with Rejoin or our parent leaving. */
+        if (security_keys_status(&bdb_join_keys) != SECURITY_KEYS_OK) { fail(ctx, BDB_JOIN_SECURITY); return; }
+        fail(ctx, bdb_join_keys.phase == SECURITY_KEYS_VERIFIED ? BDB_JOIN_PARENT_FAILED : BDB_JOIN_REMOTE_LEAVE);
     } else if (ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_UPDATE) {
         if (ctx->phase != BDB_JOIN_READY) { fail(ctx, BDB_JOIN_RECOVERY_REQUIRED); return; }
         ctx->phase = BDB_JOIN_UPDATING; ctx->work.runtime.transport.ready = 0;
@@ -242,6 +245,14 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     if (ctx->application_pending && ctx->work.runtime.transport.completed) {
         if (!finished(ctx, &ctx->application_result)) { fail(ctx, BDB_JOIN_TRANSMIT_FAILED); return; }
         ctx->application_pending = 0; ctx->application_done = 1;
+        /* A parent that rebooted or aged us out may still MAC-ACK every Data
+         * Request (hardware autoack), so polls alone cannot show it is gone.
+         * Consecutive application frames without an APS ACK can (issued
+         * counts them in READY). */
+        if (ctx->phase == BDB_JOIN_READY) {
+            if (ctx->application_result != NWK_APS_TIMEOUT) ctx->issued = 0;
+            else if (++ctx->issued == BDB_JOIN_DELIVERY_FAILURES) fail(ctx, BDB_JOIN_PARENT_FAILED);
+        }
     }
     if (ctx->phase == BDB_JOIN_WAIT_KEY && ctx->work.runtime.zdo.security_event == SECURITY_KEYS_EVENT_NETWORK_KEY) {
         if (!ctx->timely) { fail(ctx, BDB_JOIN_KEY_TIMEOUT); return; }
@@ -287,13 +298,24 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
         ctx->phase = BDB_JOIN_PARENT; ctx->attempts = 0;
     } else if (ctx->phase == BDB_JOIN_PARENT) {
         if (zdo_runtime_take_result(&ctx->work.runtime.zdo, &which, &result) == ZDO_RUNTIME_OK) {
+            /* R22 3.6.10: a legacy parent that never answers the End Device
+             * Timeout Request, or one that offers neither keepalive, still
+             * keeps an RX-off child that polls. Such a child continues with
+             * MAC Data Poll keepalive instead of leaving an authenticated
+             * network; the NWK header's EDI bit stays as negotiated. */
+            if (which == ZDO_RUNTIME_PARENT && !(ctx->config.association.capability & 0x08u) &&
+                (result ? result == ZDO_RUNTIME_TIMEOUT && ctx->attempts == BDB_JOIN_ATTEMPTS :
+                 ctx->work.runtime.zdo.parent_known && !(ctx->work.runtime.zdo.parent_information & 3u))) {
+                ctx->work.runtime.zdo.parent_known = 1; ctx->work.runtime.zdo.parent_information |= 1u;
+                result = 0;
+            }
             if (!result && which == ZDO_RUNTIME_PARENT && ctx->work.runtime.zdo.parent_known &&
                 ((ctx->work.runtime.zdo.parent_information & 2u) || poll_keepalive(ctx))) {
                 if (ctx->recovery) {
                     if (!ctx->work.runtime.transport.announced) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
                     else {
                         ctx->phase = BDB_JOIN_READY; ctx->work.runtime.transport.ready = 1;
-                        ctx->attempts = 0; ctx->recovery = 3;
+                        ctx->attempts = ctx->issued = 0; ctx->recovery = 3;
                         ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE;
                     }
                 } else if (zdo_runtime_broadcast(&ctx->work.runtime.zdo, &ctx->work.runtime.transport,
@@ -310,7 +332,7 @@ static void runtime(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE ctx)
     } else if (ctx->phase == BDB_JOIN_PERMIT && finished(ctx, &result)) {
         if (result || !ctx->work.runtime.transport.ready) fail(ctx, BDB_JOIN_TRANSMIT_FAILED);
         else {
-            ctx->phase = BDB_JOIN_READY; ctx->attempts = 0;
+            ctx->phase = BDB_JOIN_READY; ctx->attempts = ctx->issued = 0;
             ctx->keepalive = ctx->last+BDB_JOIN_KEEPALIVE;
         }
     } else if (ctx->phase == BDB_JOIN_RECOVERING) {
@@ -469,7 +491,14 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
 #endif
                 ctx->scan_result.reason == MAC_SCAN_FINISHED &&
                 !ctx->scan_result.overflow && !ctx->scan_result.unscanned &&
-                !work.policy.potential_mask && ++ctx->attempts < BDB_JOIN_ATTEMPTS) {
+                !work.policy.potential_mask &&
+                (++ctx->attempts < BDB_JOIN_ATTEMPTS ||
+                 ctx->config.scan.channels == BDB_JOIN_PRIMARY_CHANNELS)) {
+                /* BDB 3.0.1 8.2: network steering scans bdbPrimaryChannelSet,
+                 * then bdbSecondaryChannelSet. */
+                if (ctx->attempts == BDB_JOIN_ATTEMPTS) {
+                    ctx->config.scan.channels = BDB_JOIN_SECONDARY_CHANNELS; ctx->attempts = 0;
+                }
                 ctx->workspace = BDB_JOIN_WORK_NONE;
                 if (mac_scan_init(&ctx->work.scan) != MAC_SCAN_OK) return BDB_JOIN_STATE;
                 ctx->workspace = BDB_JOIN_WORK_SCAN;
@@ -636,7 +665,8 @@ bdb_join_result_t bdb_join_step(bdb_join_t BDB_JOIN_RAM * MCS51_PARAM_VOLATILE c
                     (!ctx->work.runtime.transport.permit_sent && ctx->recovery != 3))
                     fail(ctx, BDB_JOIN_SECURITY);
                 else {
-                    ctx->phase = BDB_JOIN_READY; ctx->work.runtime.transport.ready = 1; ctx->attempts = 0;
+                    ctx->phase = BDB_JOIN_READY; ctx->work.runtime.transport.ready = 1;
+                    ctx->attempts = ctx->issued = 0;
                     ctx->keepalive = now+BDB_JOIN_KEEPALIVE;
                 }
             } else {
@@ -774,7 +804,9 @@ bdb_join_result_t bdb_join_receive(bdb_join_t BDB_JOIN_RAM * SDCC_VOLATILE ctx,
         return BDB_JOIN_MALFORMED;
     if (work.receive.mac.header.destination[0] == 255 && work.receive.mac.header.destination[1] == 255 && work.receive.nwk.header.destination < 0xfffbu)
         return BDB_JOIN_MALFORMED;
-    received = nwk_aps_receive(&ctx->work.runtime.transport, body+work.receive.mac.payload_offset, work.receive.mac.payload_length, now);
+    /* A request is not ACKed while its response could not be built yet. */
+    received = nwk_aps_receive(&ctx->work.runtime.transport, body+work.receive.mac.payload_offset, work.receive.mac.payload_length, now,
+        ctx->work.runtime.zdo.response_pending || ctx->work.runtime.zdo.application_ready);
     if (received == NWK_APS_OK) {
         /* Key deadlines judge the frame's arrival, not the end of the durable
          * key save that nwk_aps_receive has just completed. */

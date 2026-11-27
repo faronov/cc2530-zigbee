@@ -20,7 +20,15 @@
  * the last failure still precedes the requested 2-minute parent timeout. */
 #define BDB_JOIN_KEEPALIVE_RETRY 312500UL
 #define BDB_JOIN_KEEPALIVE_ATTEMPTS 6u
+/* READY: this many consecutive APS-acknowledged application frames that
+ * time out mean the parent no longer delivers (PARENT_FAILED). */
+#define BDB_JOIN_DELIVERY_FAILURES 3u
 #define BDB_JOIN_ATTEMPTS 3u
+/* BDB 3.0.1 Table 4: bdbcPrimaryChannelSet 11/15/20/25; the secondary set is
+ * the other 2.4-GHz channels. A fresh join configured with exactly the primary
+ * set scans the secondary set after it. */
+#define BDB_JOIN_PRIMARY_CHANNELS 0x02108800UL
+#define BDB_JOIN_SECONDARY_CHANNELS 0x05ef7000UL
 #define BDB_JOIN_STALL_STEPS 4096u
 /* R22 3.6.1.4.2: a secured Rejoin Request is failed when no Rejoin Response
  * arrives within aResponseWaitTime (32*aBaseSuperframeDuration symbols). */
@@ -33,12 +41,13 @@
  * interview), for ACTIVE after a recovery reaches READY or after unicast receipt;
  * otherwise every 4 s, well inside the parent's persistence time. With
  * CC2530_RX_OFF_IDLE (M7a) the idle receiver is off, so the slow period is
- * 7.0 s: poll_at counts from poll queueing, and the ~0.68 s left to 7.68 s
- * covers CSMA backoffs, macMaxFrameRetries and foreground/NV latency. It stays
- * far below the 30 s ED keepalive and the requested 2-minute parent timeout. */
+ * 6.0 s: poll_at counts from poll queueing, and the ~1.68 s left to 7.68 s
+ * covers CSMA backoffs, macMaxFrameRetries and a ~1 s NV save; parents with a
+ * ~7 s indirect hold (TI Z-Stack) keep ~1 s. It stays far below the 30 s ED
+ * keepalive and the requested 2-minute parent timeout. */
 #define BDB_JOIN_POLL_FAST 15625UL
 #if defined(CC2530_RX_OFF_IDLE)
-#define BDB_JOIN_POLL_SLOW 437500UL
+#define BDB_JOIN_POLL_SLOW 375000UL
 #else
 #define BDB_JOIN_POLL_SLOW 250000UL
 #endif
@@ -163,6 +172,8 @@ typedef struct {
     uint32_t last, until, keepalive, epoch, commission_until, work_at;
     uint32_t poll_at, poll_fast;
     uint16_t token, steps;
+    /* issued: request outstanding while commissioning/recovering; in READY,
+     * consecutive application frames without an APS ACK. */
     uint8_t version, phase, result, cleanup_error, attempts, issued, member;
     uint8_t got_tc, got_confirm, application_pending, application_done, application_result;
     uint8_t receive_result, abandon, timely;

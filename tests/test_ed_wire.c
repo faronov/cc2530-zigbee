@@ -74,6 +74,35 @@ static void roundtrip(uint8_t kind, uint8_t layer)
     CHECK(info.length == size && !memcmp(opened, input, size));
 }
 
+/* R22 3.3.1.9: a source-routed unicast (relay list after the fixed header)
+ * decodes like the plain frame and NWK-seals/opens with the relay list in
+ * the authenticated header. */
+static void source_route(void)
+{
+    static const uint8_t relays[6] = {2, 0, 0x7d, 0x8a, 0x31, 0xd4};
+    uint8_t routed[116], length, cipher_length;
+    setup(0);
+    CHECK(ed_wire_encode(&packet, plain, sizeof(plain), &n) == ZIGBEE_SECURITY_OK);
+    memcpy(routed, plain, 8); memcpy(routed+8, relays, 6); memcpy(routed+14, plain+8, n-8u);
+    routed[1] |= 4; length = (uint8_t)(n+6u);
+    memset(&decoded, 0xa5, sizeof(decoded));
+    CHECK(ed_wire_decode(routed, length, &decoded) == ZIGBEE_SECURITY_OK);
+    CHECK(!memcmp(&decoded, &packet, sizeof(packet)));
+    key.key_identifier = 1;
+    security_aes_reset();
+    CHECK(ed_wire_crypt(0, 0, &key, routed, length, sealed, sizeof(sealed), &info) == 0);
+    cipher_length = info.length;
+    CHECK(!memcmp(sealed, routed, 14) || (sealed[1] == (routed[1] | 2u) && !memcmp(sealed+2, routed+2, 12)));
+    security_aes_reset();
+    CHECK(ed_wire_crypt(1, 0, &key, sealed, cipher_length, opened, sizeof(opened), &info) == 0);
+    CHECK(info.length == length && !memcmp(opened, routed, length));
+    /* The relay list is authenticated. */
+    sealed[10] ^= 1;
+    security_aes_reset();
+    CHECK(ed_wire_crypt(1, 0, &key, sealed, cipher_length, opened, sizeof(opened), &info) != 0);
+    CHECK(ed_wire_decode(routed, 9, &decoded) != 0);
+}
+
 /* Alternate every public entry point across both buffer-union lifetimes.
  * Extended NWK addresses ensure a nested APS header read must not overwrite
  * the decoded packet or the encoded payload that is still live in its caller.
@@ -182,6 +211,7 @@ int main(void)
     CHECK(ed_wire_decode(plain, 0xffff, &decoded) != 0);
     CHECK(ed_wire_encode(NULL, plain, sizeof(plain), &n) != 0);
     returning_work();
+    source_route();
     printf("ED wire: %u checks PASS; original AES/CCM, extended headers, no admission claims.\n", checks);
     return 0;
 }

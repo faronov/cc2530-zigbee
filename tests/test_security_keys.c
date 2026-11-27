@@ -398,11 +398,29 @@ static void updates_and_leave(void)
     base(0); packet.nwk.type = ED_NWK_COMMAND;
     packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
     memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
+    /* Leave request with Rejoin, and the parent's own Leave indication: parent
+     * loss, the member stays VERIFIED and rejoins (R22 3.4.4, 3.6.1.10). */
     packet.length = 2; packet.payload[0] = 4; packet.payload[1] = 0x60;
     seal_packet(NULL,0,0,nwk_key,255,4); accept(SECURITY_KEYS_EVENT_LEAVE);
+    state(SECURITY_KEYS_VERIFIED);
+    base(0); packet.nwk.type = ED_NWK_COMMAND;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
+    packet.nwk.destination = 0xfffd; packet.nwk.sequence = 2;
+    packet.length = 2; packet.payload[0] = 4; packet.payload[1] = 0x00;
+    seal_packet(NULL,0,0,nwk_key,255,5); accept(SECURITY_KEYS_EVENT_LEAVE);
+    state(SECURITY_KEYS_VERIFIED);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    /* A Leave request without Rejoin is final. */
+    base(0); packet.nwk.type = ED_NWK_COMMAND;
+    packet.nwk.flags = NWK_FLAG_SOURCE_IEEE;
+    memcpy(packet.nwk.source_ieee,config.tc_ieee,8);
+    packet.nwk.sequence = 3;
+    packet.length = 2; packet.payload[0] = 4; packet.payload[1] = 0x40;
+    seal_packet(NULL,0,0,nwk_key,255,6); accept(SECURITY_KEYS_EVENT_LEAVE);
     state(SECURITY_KEYS_LEFT);
     reboot(NULL,SECURITY_KEYS_LEFT);
-    data(5,nwk_key,255); reject(SECURITY_KEYS_STATE);
+    data(7,nwk_key,255); reject(SECURITY_KEYS_STATE);
 }
 static void update_packet(uint8_t update_id, uint16_t pan)
 {

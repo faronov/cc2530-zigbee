@@ -46,6 +46,8 @@ static uint32_t router_counter;
 unsigned link_peer_rejoins, link_peer_polls;
 uint8_t link_peer_capability = 0x88;
 uint8_t link_peer_parent_information = 2;
+/* A legacy (pre-R21) parent ignores the End Device Timeout Request. */
+uint8_t link_peer_legacy_parent;
 uint8_t link_peer_mute_rejoin;
 uint8_t link_beacon[48], link_response[27], link_peer_body[125];
 uint8_t link_beacon_length, link_response_length, link_peer_length, link_peer_pending;
@@ -303,6 +305,7 @@ void link_peer_transmitted(const uint8_t *body, uint8_t length)
         CHECK(peer_in.length == 3 && peer_in.payload[0] == 0x0b && peer_in.payload[1] == 1 &&
               !peer_in.payload[2] && verified && (!recovering || reannounced));
         link_peer_parent++;
+        if (link_peer_legacy_parent) return;
         base_peer(1, 0, 0);
         peer_out.nwk.flags = NWK_FLAG_SOURCE_IEEE | NWK_FLAG_DESTINATION_IEEE;
         memcpy(peer_out.nwk.source_ieee,

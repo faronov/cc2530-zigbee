@@ -23,8 +23,14 @@ static const uint8_t run_packet[8] = {0x4a,0xb5,0x4e,0xb1,0x56,0xa9,1,0xfe};
 
 enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOVERY=16,
        CALLER_REJOIN_TIMEOUT, CALLER_SLEEPY=25, CALLER_SLEEPY_POLL_KEEPALIVE, CALLER_SLEEPY_RECOVERY };
+/* CALLER_SLEEPY_ZOMBIE: CALLER_SLEEPY_POLL_KEEPALIVE whose parent forgets the
+ * child after READY but keeps acknowledging its polls. */
+/* CALLER_SLEEPY_LEGACY: the parent never answers the End Device Timeout
+ * Request; the RX-off child keeps alive by polling instead of leaving. */
+enum { CALLER_SLEEPY_ZOMBIE=31, CALLER_SLEEPY_LEGACY };
+#define POLL_KEEPALIVE_CASE(s) ((s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_ZOMBIE || (s)==CALLER_SLEEPY_LEGACY)
 /* CALLER_SLEEPY_RECOVERY: CALLER_RECOVERY for an RX-off-when-idle child. */
-#define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || (s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_RECOVERY)
+#define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || POLL_KEEPALIVE_CASE(s) || (s)==CALLER_SLEEPY_RECOVERY)
 #if defined(CC2530_PARENT_RECOVERY)
 enum { CALLER_ALTERNATE=18, CALLER_DISCOVERY_EXHAUSTED, CALLER_KNOWN_HISTORY };
 #if defined(CC2530_ROUTER_JOIN)
@@ -303,16 +309,18 @@ static void serve_report(unsigned *reports, uint8_t *tsn, unsigned counts[4])
 }
 
 /* READY serves without a time bound, a fault or further qualified draws. */
-/* The poll-only keepalive parent disappears. Its missing Data Request MAC
- * ACKs are the only evidence; BDB_JOIN_KEEPALIVE_ATTEMPTS consecutive ones
- * end READY with PARENT_FAILED, as failed End Device Timeout exchanges do. */
-static void parent_lost(unsigned *calls)
+/* The poll keepalive parent disappears. Its missing Data Request MAC ACKs
+ * are the only evidence; BDB_JOIN_KEEPALIVE_ATTEMPTS consecutive ones end
+ * READY with PARENT_FAILED, as failed End Device Timeout exchanges do. A
+ * zombie parent still ACKs the polls; BDB_JOIN_DELIVERY_FAILURES reports
+ * without APS ACK end READY instead. */
+static void parent_lost(unsigned *calls, uint8_t zombie)
 {
     uint64_t cycles=0, credited=0, origin=model_clocks;
-    parent_absent=1;
+    if(zombie) parent_zombie=1; else parent_absent=1;
     while(join_smoke_status.phase==JS_READY && !join_smoke_status.reason) {
         uint32_t step;
-        assert(cycles<(uint64_t)120u*32000000u);
+        assert(cycles<(uint64_t)(zombie?1200u:120u)*32000000u);
         caller_peer();
         step=(join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
             join_smoke_device.work.runtime.transport.active ||
@@ -326,11 +334,11 @@ static void parent_lost(unsigned *calls)
         caller_poll();
         (*calls)++;
     }
-    parent_absent=0;
+    parent_absent=parent_zombie=0;
     printf("Join caller case%u: parent lost after %lu ms\n",caller_case,(unsigned long)(cycles/32000u));
     assert(join_smoke_status.reason==JS_BDB && join_smoke_status.bdb_reason==BDB_JOIN_PARENT_FAILED);
     /* Fast polls do not shorten it: one counted failure per retry interval. */
-    assert(cycles>=(uint64_t)(BDB_JOIN_KEEPALIVE_ATTEMPTS-1u)*BDB_JOIN_KEEPALIVE_RETRY*512u);
+    if(!zombie) assert(cycles>=(uint64_t)(BDB_JOIN_KEEPALIVE_ATTEMPTS-1u)*BDB_JOIN_KEEPALIVE_RETRY*512u);
 }
 
 static void serve_ready(unsigned *calls)
@@ -649,9 +657,12 @@ static void prepare_caller(unsigned selected)
     /* CALLER_SLEEPY: RX-off-when-idle child; the parent releases each queued
      * frame (Association Response excepted) only after a later Data Request. */
     link_peer_capability=SLEEPY_CASE(selected)?0x80:0x88;
-    /* CALLER_SLEEPY_POLL_KEEPALIVE: the parent offers only MAC Data Poll
-     * keepalive (Parent Information 0x01), as observed from a Telink parent. */
-    link_peer_parent_information=selected==CALLER_SLEEPY_POLL_KEEPALIVE?1:2;
+    /* CALLER_SLEEPY_POLL_KEEPALIVE: the parent offers MAC Data Poll
+     * keepalive as well (Parent Information 0x03, EmberZNet; Telink sends
+     * 0x01). The RX-off child keeps alive by polling: after the negotiation
+     * no further End Device Timeout Request is sent. */
+    link_peer_parent_information=POLL_KEEPALIVE_CASE(selected)?3:2;
+    link_peer_legacy_parent=selected==CALLER_SLEEPY_LEGACY;
     link_peer_setup(&join_config);
     if(selected==4) {
         /* Provisioning only stages; commit it so the DUT boots non-EMPTY. */
@@ -935,11 +946,13 @@ int main(int argc, char **argv)
                     }
                     if(SLEEPY_CASE(selected)) assert(link_peer_polls && released_frames);
                     serve_ready(&calls);
-                    if(selected==CALLER_SLEEPY_POLL_KEEPALIVE) assert(link_peer_parent==1u);
+                    if(selected==CALLER_SLEEPY_LEGACY) assert(link_peer_parent==BDB_JOIN_ATTEMPTS &&
+                        join_smoke_device.work.runtime.zdo.parent_information==1u);
+                    else if(POLL_KEEPALIVE_CASE(selected)) assert(link_peer_parent==1u);
                     else if(selected==CALLER_SLEEPY) assert(link_peer_parent>1u);
                     link_peer_verify();
                     if(caller_dump>=0) recovery_dump();
-                    if(selected==CALLER_SLEEPY_POLL_KEEPALIVE) parent_lost(&calls);
+                    if(POLL_KEEPALIVE_CASE(selected)) parent_lost(&calls,selected==CALLER_SLEEPY_ZOMBIE);
                     if(selected==CALLER_RECOVERY || selected==CALLER_SLEEPY_RECOVERY) {
                         security_keys_status_t keys;
                         assert(join_smoke_device.recovery==3 && link_peer_rejoins==1 && !response_sent);

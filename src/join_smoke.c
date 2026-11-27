@@ -251,7 +251,7 @@ void join_smoke_sleep(void)
     span=DEVICE.poll_at-CLOCK.symbols;
     if(span>=0x80000000UL) goto skip;
     /* bdb_join poll_keepalive(): otherwise the ED Timeout keepalive is due. */
-    if(!(Z.parent_known && (Z.parent_information&3u)==1u)) {
+    if(!(Z.parent_known && (Z.parent_information&1u))) {
         mark=DEVICE.keepalive-CLOCK.symbols;
         if(mark>=0x80000000UL) goto skip;
         if(mark<span) span=mark;

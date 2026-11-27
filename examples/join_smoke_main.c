@@ -20,8 +20,8 @@
 #define RFST_ISRFOFF 0xefu
 /* Factory IEEE address in the information page, LSB first (SWRU191F 2.3.3). */
 #define INFO_IEEE 0x780cu
-/* BDB primary channel set (11, 15, 20, 25). */
-#define AUTONOMOUS_CHANNELS UINT32_C(0x02108800)
+/* BDB primary channel set (11, 15, 20, 25); bdb_join then scans the secondary set. */
+#define AUTONOMOUS_CHANNELS BDB_JOIN_PRIMARY_CHANNELS
 #define PAUSE_LEAVE (2UL*32768UL)
 #define PAUSE_FIRST (5UL*32768UL)
 #define PAUSE_RETRY (300UL*32768UL)
