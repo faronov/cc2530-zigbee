@@ -164,7 +164,8 @@ static void tally(uint8_t increment)
        security_keys_upgrade_parent(FLASH_EXEC_POLL_MAX)==SECURITY_KEYS_OK)
         r=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&tally_count,FLASH_EXEC_POLL_MAX);
     if(r!=SECURITY_KEYS_OK || !increment) return;
-    if(!tally_count) { fault(JS_RESET); return; }
+    /* The limit reports its count and restarts the stored tally. */
+    if(tally_count>=JOIN_SMOKE_RESET_BOOTS) { fault(JS_RESET); return; }
     join_smoke_reset_tally=JOIN_SMOKE_TALLY_COUNTED;
 }
 #endif

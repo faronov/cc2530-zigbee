@@ -27,7 +27,7 @@ enum { CALLER_MISSING_KEY=8, CALLER_RADIO_FAULT, CALLER_FLASH_BUSY, CALLER_RECOV
  * child after READY but keeps acknowledging its polls. */
 /* CALLER_SLEEPY_LEGACY: the parent never answers the End Device Timeout
  * Request; the RX-off child keeps alive by polling instead of leaving. */
-enum { CALLER_SLEEPY_ZOMBIE=31, CALLER_SLEEPY_LEGACY, CALLER_CHANNEL_MOVED };
+enum { CALLER_SLEEPY_ZOMBIE=31, CALLER_SLEEPY_LEGACY, CALLER_CHANNEL_MOVED, CALLER_FACTORY_RESET };
 #define POLL_KEEPALIVE_CASE(s) ((s)==CALLER_SLEEPY_POLL_KEEPALIVE || (s)==CALLER_SLEEPY_ZOMBIE || (s)==CALLER_SLEEPY_LEGACY)
 /* CALLER_SLEEPY_RECOVERY: CALLER_RECOVERY for an RX-off-when-idle child. */
 #define SLEEPY_CASE(s) ((s)==CALLER_SLEEPY || POLL_KEEPALIVE_CASE(s) || (s)==CALLER_SLEEPY_RECOVERY)
@@ -78,8 +78,10 @@ static unsigned recovery_selected;
 #endif
 /* CALLER_CHANNEL_MOVED: CALLER_RECOVERY whose saved channel (20) is no longer
  * the network's (15): the all-channel rejoin scan follows it. */
+/* CALLER_FACTORY_RESET: CALLER_RECOVERY at the fifth counted user boot: once
+ * it has run JOIN_SMOKE_RESET_SETTLE the member is LEFT and restarts. */
 #define RECOVERY_CASE(c) ((c)==CALLER_RECOVERY || (c)==CALLER_REJOIN_TIMEOUT || (c)==CALLER_SLEEPY_RECOVERY || \
-    (c)==CALLER_CHANNEL_MOVED || ALTERNATE_CASE(c))
+    (c)==CALLER_CHANNEL_MOVED || (c)==CALLER_FACTORY_RESET || ALTERNATE_CASE(c))
 static unsigned caller_case, caller_stopped, caller_radio_fault;
 #if defined(CC2530_DEFAULT_TC_KEY)
 static uint32_t recommission_used[2];
@@ -656,6 +658,17 @@ static void prepare_caller(unsigned selected)
             security_joint_reset(0);
             channel_strict=1;
         }
+        if(selected==CALLER_FACTORY_RESET) {
+            /* Four counted user boots before this one (tally byte 143). */
+            uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+            assert(security_keys_open()==SECURITY_KEYS_OK);
+            if(security_keys_upgrade_parent(FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK) assert(0);
+            assert(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK && length==144);
+            record[143]=4;
+            assert(security_counter_save(record,length,FLASH_EXEC_POLL_MAX)==SECURITY_COUNTER_OK);
+            security_joint_reset(0);
+            join_smoke_reset_tally=JOIN_SMOKE_TALLY_BOOT;
+        }
         link_peer_capability=selected==CALLER_SLEEPY_RECOVERY?0x80:0x88;
         link_peer_recover(&join_config,recovery_state,recovery_length);
         link_peer_mute_rejoin=selected==CALLER_REJOIN_TIMEOUT;
@@ -937,6 +950,27 @@ int main(int argc, char **argv)
                         join_smoke_device.result==BDB_JOIN_KEY_TIMEOUT);
                     assert(!transport_sent && !join_smoke_device.member &&
                         !join_smoke_status.saw_ready && response_sent==1);
+                } else if(selected==CALLER_FACTORY_RESET) {
+                    /* The fifth counted user boot: once it has run
+                     * JOIN_SMOKE_RESET_SETTLE the member is LEFT and restarts. */
+                    uint64_t cycles=0, credited=0, origin=model_clocks;
+                    security_keys_status_t keys;
+                    uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+                    while(join_smoke_status.phase!=JS_FAULT) {
+                        uint32_t step=(join_smoke_tx.engine.phase!=MAC_TX_IDLE ||
+                            join_smoke_device.work.runtime.transport.active ? 4u : 2000u)*512u;
+                        assert(cycles<(uint64_t)5u*32000000u);
+                        caller_peer(); advance_clocks(step); cycles+=step;
+                        if(model_clocks-origin>cycles) cycles=model_clocks-origin;
+                        ticks=(uint32_t)(ticks+cycles*32768u/32000000u-credited)&TIMEBASE_TICKS_MASK;
+                        credited=cycles*32768u/32000000u;
+                        handoff_tick(); caller_poll(); calls++;
+                    }
+                    assert(join_smoke_status.reason==JS_RESET && !join_smoke_reset_tally);
+                    assert(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.phase==SECURITY_KEYS_LEFT);
+                    assert(security_counter_read(record,sizeof(record),&length)==SECURITY_COUNTER_OK &&
+                        length==144 && !record[143]);
+                    assert(!bdb_join_resumable());
                 } else if(selected==CALLER_RADIO_FAULT) {
                     assert(caller_radio_fault && join_smoke_status.phase==JS_FAULT &&
                         join_smoke_status.reason==JS_DRIVER);
