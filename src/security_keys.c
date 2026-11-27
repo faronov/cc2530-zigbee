@@ -68,6 +68,9 @@ typedef char workspace_schema[(LK == LINK_WORK_LK_OFFSET && PK == LINK_WORK_PK_O
 #define ROUTER_NF 122u
 #define ROUTER_FLAGS 130u
 #define ROUTER_UPDATE 131u
+/* Consecutive user (power-on/RESET_N) boots shorter than the factory-reset
+ * window; any value, only in 144-byte records. */
+#define TALLY 143u
 #define ROUTER_KNOWN 1u
 #define ROUTER_ACTIVE 2u
 #define ROUTER_ATTEMPT 4u
@@ -212,7 +215,7 @@ static uint8_t valid_router(void)
 #if defined(CC2530_ROUTER_JOIN)
     uint8_t p = phase(), u = (f & ROUTER_UNBOUND) != 0;
 #endif
-    if (!all(w.record+132, 12, 0) || (f & (uint8_t)~ROUTER_FLAG_MASK) ||
+    if (!all(w.record+132, 11, 0) || (f & (uint8_t)~ROUTER_FLAG_MASK) ||
         (!(f & ROUTER_ATTEMPT) && w.record[ROUTER_UPDATE])) return 0;
     if (!(f & ROUTER_KNOWN)) return all(w.record+ROUTER, 19, 0);
 #if defined(CC2530_ROUTER_JOIN)
@@ -569,6 +572,35 @@ security_keys_result_t security_keys_select_parent(
     return finish(save());
 }
 
+security_keys_result_t security_keys_tally(uint8_t increment, uint8_t limit, uint8_t * SDCC_VOLATILE count,
+    uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+    if (!KEY_EXTERNAL(count, 1)) return finish(SECURITY_KEYS_ARGUMENT);
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (!count || !limit || increment > 1 || !nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (!router_record()) return finish(SECURITY_KEYS_CONTEXT);
+    if (!increment) {
+        *count = 0;
+        if (!w.record[TALLY]) return finish(SECURITY_KEYS_OK);
+        w.record[TALLY] = 0;
+    } else {
+        *count = w.record[TALLY] = (uint8_t)(w.record[TALLY] < 255u ? w.record[TALLY]+1u : 255u);
+        /* BDB 3.0.1 9: the reset leaves the network; keys are replaced and
+         * the frame counter ceilings kept by the next commissioning. */
+        if (*count >= limit) {
+            w.record[TALLY] = 0;
+            if (phase() != SECURITY_KEYS_LEFT) set_phase(SECURITY_KEYS_LEFT);
+            w.record[FLAGS] &= (uint8_t)~REJOIN_ALLOWED;
+        }
+    }
+    w.polls = nv_polls;
+    return finish(save());
+}
+
 security_keys_result_t security_keys_retune(uint8_t channel, uint16_t pan, uint8_t update_id,
     uint16_t nv_polls) SECURITY_FAR
 {
@@ -642,6 +674,31 @@ security_keys_result_t security_keys_provision(
         return finish(fault(SECURITY_KEYS_STORAGE));
     security_keys_phase = SECURITY_KEYS_PROVISIONED;
     return finish(SECURITY_KEYS_OK);
+}
+
+security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR
+{
+#if defined(CC2530_MAC_LINK_WORKSPACE)
+    KEY_ENTER();
+#endif
+    security_keys_result_t r = load();
+    if (r != SECURITY_KEYS_OK) return finish(r);
+    if (!nv_polls) return finish(SECURITY_KEYS_ARGUMENT);
+    if (phase() != SECURITY_KEYS_LEFT) return finish(SECURITY_KEYS_STATE);
+    if (!w.record[FLAGS] && all(w.record+NK, 32, 0)) return finish(SECURITY_KEYS_OK);
+    /* The quiet pre-key LEFT form: no network keys, pending key, NWK floors,
+     * key sequences, parent information or router history; the public
+     * default link key replaces the unique one. Outgoing counter ceilings
+     * live in the journal and are kept. */
+    memset(w.record+NK, 0, 32); memset(w.record+PK, 0, 24);
+    memcpy(w.record+LK, "ZigBeeAlliance09", 16);
+    w.record[SEQ] = w.record[SEQ+1] = 0; w.record[FLAGS] = 0;
+    w.record[PHASE] &= (uint8_t)~(PARENT_MASK | TIMEOUT_PENDING);
+#if defined(CC2530_PARENT_RECOVERY)
+    if (router_record()) memset(w.record+ROUTER, 0, TALLY-ROUTER);
+#endif
+    w.polls = nv_polls;
+    return finish(save());
 }
 
 #if defined(CC2530_DEFAULT_TC_KEY)

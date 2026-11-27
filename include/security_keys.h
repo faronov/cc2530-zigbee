@@ -105,6 +105,11 @@ typedef struct {
  * No key-export, authentication-boolean, reset, recovery or NV bypass API.
  */
 security_keys_result_t security_keys_open(void) SECURITY_FAR;
+/* LEFT, before recommissioning (which never rejoins): durably erase the network keys, the unique link key
+ * (replaced by the public default), pending key, NWK floors and router
+ * history before recommissioning, so a removed device keeps no network
+ * secrets. Outgoing counter ceilings are kept. */
+security_keys_result_t security_keys_forget(uint16_t nv_polls) SECURITY_FAR;
 #if defined(CC2530_DEFAULT_TC_KEY)
 /* Explicit ordinary centralized commissioning profile; never an install-code
  * failure fallback. The public default key protects only initial admission. */
@@ -189,6 +194,12 @@ security_keys_result_t security_keys_select_parent(
  * equal or newer nwkUpdateId): save them. Keys and floors unchanged. Never
  * call it on the beacon alone. */
 security_keys_result_t security_keys_retune(uint8_t channel, uint16_t pan, uint8_t update_id,
+    uint16_t nv_polls) SECURITY_FAR;
+/* Factory reset by power cycles (BDB 3.0.1 9). increment 1 at a user boot:
+ * count the boot; at limit the record becomes LEFT (no rejoin) and the tally
+ * restarts. increment 0 once the boot outlived the window: clear the tally
+ * (no write if already clear). Any loaded 144-byte record. */
+security_keys_result_t security_keys_tally(uint8_t increment, uint8_t limit, uint8_t * SDCC_VOLATILE count,
     uint16_t nv_polls) SECURITY_FAR;
 #endif
 #if defined(CC2530_APP_SETTINGS)

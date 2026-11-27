@@ -94,6 +94,10 @@ __attribute__((noinline)) static void restart(void)
     if(join_smoke_status.reason==JS_BDB && (join_smoke_status.bdb_reason==BDB_JOIN_LOCAL_LEAVE ||
        join_smoke_status.bdb_reason==BDB_JOIN_REMOTE_LEAVE)) pause=PAUSE_LEAVE;
     else if(reset_cause==SLEEPSTA_RST_WATCHDOG) pause=PAUSE_RETRY;
+#if defined(CC2530_PARENT_RECOVERY)
+    /* Radio off: a passed factory-reset window is cleared before the pause. */
+    join_smoke_tally_clear();
+#endif
 #if defined(CC2530_PM2_IDLE)
     join_smoke_pause(pause);
 #else
@@ -144,6 +148,10 @@ void main(void)
     reset_cause=MMIO_READ(SOC_SLEEPSTA)&SLEEPSTA_RST_MASK;
 #endif
     join_smoke_initialize();
+#if defined(CC2530_AUTONOMOUS) && defined(CC2530_PARENT_RECOVERY)
+    /* Power-on/brown-out (00) or RESET_N (01): a user boot for the tally. */
+    if(reset_cause<0x10u) join_smoke_reset_tally=JOIN_SMOKE_TALLY_BOOT;
+#endif
 #if defined(CC2530_APP)
     zcl_sensor_boot();
 #endif

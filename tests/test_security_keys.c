@@ -44,7 +44,7 @@ static security_keys_config_t config = {
     {0x11,2,3,4,5,6,7,8}, {0x22,2,3,4,5,6,7,8},
     {0x33,2,3,4,5,6,7,8}, 0x1234, 0xffff, 15, 254
 };
-static unsigned checks;
+static unsigned checks, commands_before_forget;
 static jmp_buf power_cut;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "security keys check failed at line %d\n", __LINE__); abort(); } checks++; } while (0)
 
@@ -1014,6 +1014,30 @@ static void local_leave(void)
         retained_leave_record(before);
     }
 }
+/* Before recommissioning, a LEFT member erases its network secrets: keys,
+ * pending key, NWK floors and router history, the unique link key becoming
+ * the public default; outgoing counter ceilings stay (BDB 3.0.1 9). */
+static void forget_after_leave(void)
+{
+    uint8_t record[SECURITY_KEYS_RECORD_MAX], length;
+    uint32_t until = security_counter_status()->until[0];
+    state(SECURITY_KEYS_LEFT);
+    CHECK(security_keys_forget(0) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_forget(3) == SECURITY_KEYS_OK);
+    reboot(NULL,SECURITY_KEYS_LEFT);
+    CHECK(security_counter_read(record,sizeof(record),&length) == SECURITY_COUNTER_OK);
+    for (unsigned i = 16; i < 48; i++) CHECK(!record[i]);
+    for (unsigned i = 64; i < 88; i++) CHECK(!record[i]);
+    CHECK(!memcmp(record+48,"ZigBeeAlliance09",16) && !record[106] && !record[107] && !record[108]);
+    CHECK(security_counter_status()->until[0] >= until);
+    commands_before_forget = security_joint_flash_commands();
+    CHECK(security_keys_forget(3) == SECURITY_KEYS_OK); /* already forgotten: no write */
+    CHECK(security_joint_flash_commands() == commands_before_forget);
+#if defined(CC2530_DEFAULT_TC_KEY)
+    CHECK(security_keys_recommission() == SECURITY_KEYS_OK);
+#endif
+}
+
 static void interrupted_leave(void)
 {
     static const uint8_t boundaries[] = {1,38,39,76};
@@ -1507,6 +1531,25 @@ static void unsolicited_rejoin(void)
     router_seal_using(102, 0, alt_key, 0); reject(SECURITY_KEYS_CONTEXT);
 }
 
+/* BDB 3.0.1 9 factory reset by power cycles: the persisted tally counts
+ * user boots, a cleared tally restarts it, the limit makes the member LEFT
+ * (no rejoin) and restarts the tally. */
+static void factory_tally(void)
+{
+    uint8_t count = 0xa5, i;
+    CHECK(security_keys_tally(2,5,&count,3) == SECURITY_KEYS_ARGUMENT);
+    CHECK(security_keys_tally(1,0,&count,3) == SECURITY_KEYS_ARGUMENT);
+    for (i = 1; i < 5; i++) {
+        CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == i);
+        reboot(NULL,SECURITY_KEYS_VERIFIED);
+    }
+    CHECK(security_keys_tally(0,5,&count,3) == SECURITY_KEYS_OK && !count);
+    reboot(NULL,SECURITY_KEYS_VERIFIED);
+    for (i = 1; i <= 5; i++) CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == i);
+    reboot(NULL,SECURITY_KEYS_LEFT);
+    CHECK(security_keys_tally(1,5,&count,3) == SECURITY_KEYS_OK && count == 1);
+}
+
 static security_keys_result_t router_transition(uint8_t stage)
 {
     security_keys_parent_t parent;
@@ -1682,7 +1725,7 @@ static void parent_schema_upgrade(void)
         reboot(snapshot, SECURITY_KEYS_VERIFIED);
         CHECK(security_keys_upgrade_parent(3) == SECURITY_KEYS_OK);
         CHECK(security_counter_read(after, sizeof(after), &length) == SECURITY_COUNTER_OK);
-        after[kind ? 143 : 111] = kind ? 1 : 4;
+        after[kind ? 142 : 111] = kind ? 1 : 4; /* 143 is the reset tally */
         CHECK(security_counter_save(after, sizeof(after), 3) == SECURITY_COUNTER_OK);
         security_joint_reset(0);
         CHECK(security_keys_open() == SECURITY_KEYS_FORMAT);
@@ -1827,13 +1870,14 @@ int main(void)
     updates_and_leave(); update_policy(); announce_and_retry(); protected_ack();
     timeout_management(); post_key_passthrough();
     secured_rejoin(); selectors_and_floors(); key_spread();
-    schema_and_arguments(); local_leave(); interrupted_leave();
+    schema_and_arguments(); local_leave(); forget_after_leave(); interrupted_leave();
     parent_information_edi(); outbound_router_broadcast();
     parent_information_volatile(); interrupted(); failures();
 #if defined(CC2530_PARENT_RECOVERY)
     parent_schema_upgrade();
     remembered_parent();
     unsolicited_rejoin();
+    factory_tally();
     router_update_kept();
     interrupted_router();
 #endif

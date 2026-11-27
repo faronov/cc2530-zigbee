@@ -84,6 +84,19 @@ extern MCU_XDATA mac_epoch_stamp_t join_smoke_clock;
 extern MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 extern volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 #if defined(CC2530_PARENT_RECOVERY)
+/* Factory reset by power cycles (BDB 3.0.1 9): JOIN_SMOKE_RESET_BOOTS user
+ * boots (power-on or RESET_N), each ending within JOIN_SMOKE_RESET_WINDOW,
+ * make a member leave and commission again (counter ceilings kept). The
+ * caller sets JOIN_SMOKE_TALLY_BOOT before ARM at such a boot. */
+#define JOIN_SMOKE_RESET_BOOTS 5u
+#define JOIN_SMOKE_RESET_WINDOW (10UL*32768UL)
+#define JOIN_SMOKE_TALLY_COUNTED 1u
+#define JOIN_SMOKE_TALLY_PASSED 2u
+#define JOIN_SMOKE_TALLY_BOOT 3u
+extern MCU_XDATA uint8_t join_smoke_reset_tally;
+/* Quiescent point (radio off, no flash owner busy): a passed window clears
+ * the persisted tally. */
+void join_smoke_tally_clear(void);
 /* Optional independently trusted router history, loaded before ARM:
  * IEEE8, short2 LE, two exclusive NWK floors4 LE, key sequences2.
  * All-zero means absent. Stored through the real key/NV owner only after

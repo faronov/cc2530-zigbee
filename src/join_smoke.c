@@ -38,6 +38,7 @@ MCU_XDATA uint8_t join_smoke_draws[JOIN_SMOKE_DRAWS];
 volatile MCU_XDATA uint8_t join_smoke_mailbox[8];
 #if defined(CC2530_PARENT_RECOVERY)
 MCU_XDATA uint8_t join_smoke_parent_history[20];
+MCU_XDATA uint8_t join_smoke_reset_tally;
 #endif
 #if !defined(CC2530_CLANG) /* LLVM: fixed by --defsym join_smoke_status=0x1e00 */
 volatile MCU_XDATA MCU_AT(M0_STATUS_ADDRESS) join_smoke_status_t join_smoke_status;
@@ -152,6 +153,10 @@ static uint8_t progress(void)
     now=timebase_read_awake_ticks24();
     elapsed=(now-started)&TIMEBASE_TICKS_MASK;
     if(((now-previous)&TIMEBASE_TICKS_MASK)>=TIMEBASE_HALF_RANGE) { fault(JS_TIME); return 0; }
+#if defined(CC2530_PARENT_RECOVERY)
+    if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_COUNTED && elapsed>=JOIN_SMOKE_RESET_WINDOW)
+        join_smoke_reset_tally=JOIN_SMOKE_TALLY_PASSED;
+#endif
     if(gate!=JS_READY) {
         if(elapsed>=JOIN_SMOKE_RAW_TICKS) { fault(JS_TIME); return 0; }
         if(steps==JOIN_SMOKE_STEPS) { fault(JS_WORK); return 0; }
@@ -244,6 +249,10 @@ void join_smoke_sleep(void)
         if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
         goto skip;
     }
+#endif
+#if defined(CC2530_PARENT_RECOVERY)
+    /* Quiescent point: clear a passed factory-reset tally, then no sleep. */
+    if(join_smoke_reset_tally==JOIN_SMOKE_TALLY_PASSED) { join_smoke_tally_clear(); goto skip; }
 #endif
     SL.reason=4;
     S.adapter_result=mac_adapter_now(JOIN_SMOKE_SERVICE_TICKS,JOIN_SMOKE_SERVICE_POLLS,&CLOCK);
@@ -382,6 +391,17 @@ void join_smoke_pause(uint32_t ticks)
 #undef PAUSE_STEP
 #endif
 
+#if defined(CC2530_PARENT_RECOVERY)
+void join_smoke_tally_clear(void)
+{
+    uint8_t count;
+    if(join_smoke_reset_tally!=JOIN_SMOKE_TALLY_PASSED) return;
+    join_smoke_reset_tally=0;
+    if(security_keys_tally(0,JOIN_SMOKE_RESET_BOOTS,&count,FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK &&
+       gate==JS_READY) fault(JS_SECURITY);
+}
+#endif
+
 void join_smoke_initialize(void)
 {
     if(initialized) return;
@@ -495,6 +515,15 @@ void join_smoke_poll(void)
     started=timebase_read_awake_ticks24(); previous=started;
     S.stage=1;
     S.security_result=security_keys_open();
+#if defined(CC2530_PARENT_RECOVERY)
+    if(S.security_result==SECURITY_KEYS_OK && join_smoke_reset_tally==JOIN_SMOKE_TALLY_BOOT) {
+        uint8_t count;
+        S.security_result=security_keys_tally(1,JOIN_SMOKE_RESET_BOOTS,&count,FLASH_EXEC_POLL_MAX);
+        if(S.security_result==SECURITY_KEYS_CONTEXT) S.security_result=SECURITY_KEYS_OK; /* 112-byte record */
+        else if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
+        join_smoke_reset_tally=JOIN_SMOKE_TALLY_COUNTED;
+    } else join_smoke_reset_tally=0;
+#endif
     /* Complete persisted membership resumes through secured rejoin. Default-TC:
      * LEFT or an incomplete join is recommissioned (journal and counter
      * ceilings kept, never erased); otherwise existing storage is refused. */
@@ -502,6 +531,9 @@ void join_smoke_poll(void)
     if(!resumed) {
 #if defined(CC2530_DEFAULT_TC_KEY)
         if(S.security_result==SECURITY_KEYS_OK) {
+            security_keys_status_t keys;
+            if(security_keys_status(&keys)==SECURITY_KEYS_OK && keys.phase==SECURITY_KEYS_LEFT &&
+               security_keys_forget(FLASH_EXEC_POLL_MAX)!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
             S.security_result=security_keys_recommission();
             if(S.security_result!=SECURITY_KEYS_OK) { fault(JS_SECURITY); return; }
         } else
