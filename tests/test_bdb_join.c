@@ -1365,6 +1365,20 @@ static void transport_configuration(void)
         CHECK(!memcmp(&fresh.limits, &saved.limits, sizeof(saved.limits)));
         CHECK(!memcmp(&idle, &before, sizeof(idle)));
     }
+    {
+        /* A reboot at the same symbol time still starts elsewhere: each boot
+         * reserves the NWK frame counter at least one RANGE further. */
+        security_counter_status_t *counter = (security_counter_status_t *)security_counter_status();
+        uint32_t kept = counter->next[SECURITY_COUNTER_NWK];
+        uint8_t nwk, aps;
+        counter->next[SECURITY_COUNTER_NWK] = 0x7b01;
+        CHECK(nwk_aps_init(&fresh, &idle, &config.transport, now) == NWK_APS_OK);
+        nwk = fresh.next_nwk; aps = fresh.next_aps;
+        counter->next[SECURITY_COUNTER_NWK] = 0x7c01;
+        CHECK(nwk_aps_init(&fresh, &idle, &config.transport, now) == NWK_APS_OK);
+        CHECK(fresh.next_nwk == (uint8_t)(nwk + 97u) && fresh.next_aps == ((aps + 41u) & 0x7fu));
+        counter->next[SECURITY_COUNTER_NWK] = kept;
+    }
     CHECK(flash == security_joint_flash_commands() && aes == security_joint_aes_blocks());
 }
 
