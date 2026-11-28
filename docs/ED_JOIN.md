@@ -1691,6 +1691,17 @@ SDCC argument-evaluation pressure without a reentrant/software-stack ABI.
 Actual SDCC sizes remain19 bytes for the transport configuration,93 for
 the BDB configuration and1428 for the BDB context.
 
+`nwk_aps_init` starts nwkSequenceNumber at `(now >> 4) + 97*B` and the APS
+counter at `((now >> 12) + 41*B) & 0x7F`, where `B` is bits 8..15 of the
+persistent NWK frame counter's next value. A boot is deterministic (same
+symbol clock, same draws), so the clock alone repeated the previous session's
+numbers after a quick reset; the counter reservation advances at least one
+`SECURITY_COUNTER_RANGE` per boot. On H2 a Tuya router parent, seeing the
+child's repeated Device_annce sequence, dropped the child without a Leave
+(it relayed Route Requests for it and stopped forwarding its frames) until the
+APS-timeout parent-failure rejoin; with the offset two quick reboots start at
+247 and 88 and the parent keeps the child.
+
 | Module | CSEG before / after | XSEG before / after | DATA before / after |
 | --- | ---: | ---: | ---: |
 | BDB |16272 /16012|213 /198|46 /34|
