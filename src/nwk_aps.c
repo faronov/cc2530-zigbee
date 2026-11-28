@@ -2,6 +2,7 @@
  * Copyright (c) 2026, cc2530-zigbee contributors. See LICENSE.
  */
 #include "nwk_aps_internal.h"
+#include "security_counter.h"
 #include "sdcc_volatile.h"
 #include <stddef.h>
 #include <string.h>
@@ -53,6 +54,7 @@ static nwk_aps_result_t advance(nwk_aps_t * SDCC_VOLATILE ctx, SDCC_VOLATILE uin
 nwk_aps_result_t nwk_aps_init(nwk_aps_t * SDCC_VOLATILE ctx, NWK_APS_TX_T * SDCC_VOLATILE owner,
     const nwk_aps_config_t * SDCC_VOLATILE config, SDCC_VOLATILE uint32_t now)
 {
+    uint8_t boot;
 #if defined(CC2530_MAC_LINK_WORKSPACE)
     LW_ROOT(NWK_APS_STATE);
     if (!LW_IO(LW_NONE, ctx, sizeof(*ctx), 1) || !LW_IO(LW_NONE, owner, sizeof(*owner), 1) ||
@@ -67,13 +69,18 @@ nwk_aps_result_t nwk_aps_init(nwk_aps_t * SDCC_VOLATILE ctx, NWK_APS_TX_T * SDCC
     memset(ctx, 0, sizeof(*ctx));
     ctx->owner = owner; ctx->endpoint = config->endpoint; ctx->profile = config->profile;
     ctx->limits = config->limits; ctx->nv_polls = config->nv_polls; ctx->last = now;
-    /* nwkSequenceNumber and the APS counter start from the boot-dependent
-     * symbol clock, not 0, so a quick reboot does not repeat the previous
+    /* nwkSequenceNumber and the APS counter must not repeat the previous
      * session's numbers into peers' duplicate filters (R22: random initial
-     * value). The APS counter starts below 128 so no counter-wrap
-     * quarantine can fall into commissioning. */
-    ctx->next_nwk = (uint8_t)(now >> 4);
-    ctx->next_aps = (uint8_t)((now >> 12) & 0x7fu);
+     * value). Boot is deterministic (same symbol clock, same draws), so the
+     * offset comes from the persistent NWK frame counter, whose reservation
+     * advances by at least one RANGE per boot: 97 and 41 are odd, so
+     * consecutive boots start far apart. A parent seen to re-process its
+     * child's repeated Device_annce dropped the child without a Leave. The
+     * APS counter starts below 128 so no counter-wrap quarantine can fall
+     * into commissioning. */
+    boot = (uint8_t)(security_counter_status()->next[SECURITY_COUNTER_NWK] >> 8);
+    ctx->next_nwk = (uint8_t)((uint8_t)(now >> 4) + (uint8_t)(boot * 97u));
+    ctx->next_aps = (uint8_t)(((uint8_t)(now >> 12) + (uint8_t)(boot * 41u)) & 0x7fu);
     ctx->ack_wait = config->ack_wait;
     ctx->broadcast_time = config->broadcast_time;
     ctx->duplicate_time = (config->ack_wait+NWK_APS_TX_LIFETIME+MAC_TX_STOP_SYMBOLS)*4u;
